@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ApplicationIcon>..\..\Assets\logo.ico</ApplicationIcon>
+    <!-- Enable XAML compilation to catch errors at build time -->
+    <XamlDebuggingInformation>True</XamlDebuggingInformation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MaterialDesignThemes" Version="5.3.0" />
+    <PackageReference Include="MaterialDesignColors" Version="5.3.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.10" />
+    <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="..\..\Assets\logo.png">
+      <Link>Assets\logo.png</Link>
+    </Resource>
+    <Resource Include="..\..\Assets\logo.ico">
+      <Link>Assets\logo.ico</Link>
+    </Resource>
+  </ItemGroup>
+
+</Project>
+

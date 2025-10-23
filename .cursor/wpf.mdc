@@ -1,0 +1,344 @@
+---
+alwaysApply: true
+---
+
+
+# Modern WPF (Win11) Starting Point
+
+**Goal:** a clean, Windows-11-native-feeling WPF app using **MaterialDesignInXamlToolkit** and **MVVM**, with only popular, well-established OSS libraries.
+
+------
+
+## 1) Core Stack (all OSS & widely used)
+
+- **UI Theme & Components:**
+   **MaterialDesignInXamlToolkit** (`MaterialDesignThemes`, `MaterialDesignColors`)
+
+  > Modern material styling, palettes, typography, dialogs, snackbars, transitions.
+
+- **MVVM Framework:**
+
+  - **.NET Community Toolkit MVVM** (`CommunityToolkit.Mvvm`) – lightweight, source generators, easy onboarding, MIT license.
+
+- **Dependency Injection:**
+   **Microsoft.Extensions.DependencyInjection** (built-in package) — simple, standard DI container.
+
+- **Logging:**
+   **Serilog** (`Serilog`, `Serilog.Sinks.File`) — dead-simple structured logging.
+
+- **Icons:**
+   **MahApps.IconPacks** (`MahApps.Metro.IconPacks`) — large, free icon sets (Segoe Fluent, Material, FontAwesome).
+
+- **Charts (optional):**
+   **OxyPlot** (`OxyPlot.Wpf`) — proven, lightweight charting.
+
+- **Dialogs & File Pickers (optional):**
+   **Ookii.Dialogs.Wpf** — modern task dialogs, folder/file pickers that feel native.
+
+> Keep the list lean. Add later only if you truly need it.
+
+------
+
+## 2) Project Structure
+
+```
+YourApp/
+  src/
+    YourApp/                  # WPF project
+      App.xaml
+      Resources/              # styles, templates, colors
+      Views/                  # XAML views (one per VM)
+      ViewModels/             # one VM per View
+      Services/               # app services (IO, data, navigation)
+      Models/                 # POCOs/DTOs
+      Controls/               # custom user controls
+      Converters/             # IValueConverter(s)
+      Extensions/             # helper extensions
+      Startup/                # DI + bootstrapping
+  tests/
+    YourApp.Tests/            # unit tests (VMs, services)
+```
+
+**Rules of thumb**
+
+- **No code-behind** in views except trivial UI plumbing.
+- **One View ⇔ One ViewModel**.
+- **ViewModels have no UI types** (no `MessageBox`, no `Brush`); they expose state & commands.
+- **Services are injected** (testable, replaceable).
+
+------
+
+## 3) Assets
+
+> **Note:** Look in the `Assets/` folder in the root for the logo and ico files when needed.
+
+------
+
+## 4) Minimal Setup
+
+### NuGet
+
+```
+MaterialDesignThemes
+MaterialDesignColors
+CommunityToolkit.Mvvm
+Microsoft.Extensions.DependencyInjection
+Serilog
+Serilog.Sinks.File
+MahApps.Metro.IconPacks
+OxyPlot.Wpf             # optional
+Ookii.Dialogs.Wpf       # optional
+```
+
+### `App.xaml`
+
+```xml
+<Application x:Class="YourApp.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <!-- Subtle, Win11-like palette -->
+        <md:BundledTheme BaseTheme="Light"
+                         PrimaryColor="BlueGrey"
+                         SecondaryColor="BlueGrey" />
+        <md:MaterialDesignThemes />
+      </ResourceDictionary.MergedDictionaries>
+
+      <!-- Typography aligned with Win11’s calm aesthetic -->
+      <Style TargetType="TextBlock" BasedOn="{StaticResource MaterialDesignBody1TextBlock}" />
+      <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignContainedButton}" />
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>
+```
+
+### View (example)
+
+```xml
+<md:Card Padding="16" Margin="16">
+  <StackPanel>
+    <TextBlock Text="{Binding Title}" Style="{StaticResource MaterialDesignHeadline6TextBlock}" />
+    <TextBox Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+             materialDesign:HintAssist.Hint="Search..." />
+    <Button Command="{Binding RunCommand}" Content="Run" />
+  </StackPanel>
+</md:Card>
+```
+
+### ViewModel (CommunityToolkit sample)
+
+```csharp
+public partial class MainViewModel : ObservableObject
+{
+    [ObservableProperty] private string? title = "My App";
+    [ObservableProperty] private string? query;
+
+    private readonly ISearchService _search;
+
+    public MainViewModel(ISearchService search) => _search = search;
+
+    [RelayCommand]
+    private async Task Run() => await _search.RunAsync(Query);
+}
+```
+
+------
+
+## 5) Win11 Look & UX Guidelines (keep it calm)
+
+- **Palette:** prefer **BlueGrey**, **Grey**, or **Blue** with **low contrast accents**. Avoid loud secondary colors.
+- **Corners & Elevation:** use subtle shadows (Material cards) and gentle rounded corners.
+- **Spacing:** generous paddings/margins; 12–16 px rhythm.
+- **Typography:** stick to body/headline styles provided by the toolkit; avoid mixing many sizes.
+- **Motion:** use Material transitions sparingly; fast and subtle.
+- **Icons:** Fluent/Material outline icons from `MahApps.IconPacks`.
+
+------
+
+## 6) App Architecture (MVVM + DI)
+
+- **Composition Root:** in `App.xaml.cs`, build a `ServiceCollection`, register ViewModels/Services, and set `MainWindow`’s `DataContext` via DI.
+- **Services:** interfaces + concrete impls (`ISettingsService`, `ISearchService`, `IFileDialogService`).
+- **Navigation:**
+  - **Toolkit MVVM:** keep it simple—swap `ContentControl` bound to a "current VM" or use a small navigation service.
+- **Persistence:** `System.Text.Json` for settings in `%AppData%\<YourApp>\settings.json`.
+- **Logging:** `Serilog` to file (and debug) for quick triage.
+
+**Example DI (Programmatic)**
+
+```csharp
+var services = new ServiceCollection();
+services.AddSingleton<ISearchService, SearchService>();
+services.AddSingleton<MainViewModel>();
+var provider = services.BuildServiceProvider();
+
+var window = new MainWindow { DataContext = provider.GetRequiredService<MainViewModel>() };
+window.Show();
+```
+
+------
+
+## 7) When You Need More Controls
+
+- **Charts:** `OxyPlot.Wpf` (stable, lightweight).
+- **Ribbon:** `Fluent.Ribbon` (Office-style, mature).
+- **Docking:** `AvalonDock` (VS-like layouts).
+
+> Add only what you actually need to keep the app lean and consistent.
+
+------
+
+## 8) Testing & Quality
+
+- **Unit test ViewModels/Services** (no UI dependencies).
+- **ICommand covered** (RelayCommand/DelegateCommand logic).
+- **Analyze** with built-in Roslyn analyzers; keep warnings at zero.
+- **StyleCop.Analyzers** (optional) for consistent code style.
+
+------
+
+## 9) Build a First Screen Checklist
+
+-  Create `MainView` + `MainViewModel` (DI-constructed).
+-  Add palette via `BundledTheme` (BlueGrey or Blue).
+-  Replace MessageBoxes with Material dialogs/snackbars.
+-  Wire up one `RelayCommand` and one async service call.
+-  Log startup + one action with Serilog.
+-  Keep layout airy; verify keyboard navigation & Tab order.
+
+------
+
+## 10) Building & Packaging for Distribution
+
+Once your WPF app is ready, use a professional build process to create installable executables for Windows users.
+
+### The 3-Part Build Process
+
+**1. PowerShell Build Script**
+
+Creates a repeatable build process that handles multiple architectures (x86/x64) automatically.
+
+**What it does:**
+- Restores NuGet packages
+- Cleans previous builds
+- Builds and publishes self-contained executables for each platform
+- Invokes Inno Setup to create installer executables
+
+**Key `dotnet publish` flags:**
+
+```powershell
+dotnet publish YourProject.csproj `
+  -c Release `
+  -r win-x64 `                    # or win-x86
+  -o publish\x64 `
+  --self-contained true `          # Bundles .NET runtime
+  /p:PublishSingleFile=false       # Keep files separate for installer
+```
+
+**Benefits:** Single command builds everything; consistent, repeatable; easy CI/CD integration.
+
+**2. Inno Setup Script (.iss file)**
+
+Creates professional Windows installers from published files.
+
+**What Inno Setup does:**
+- Packages your published output into a single `.exe` installer
+- Handles installation to Program Files
+- Creates Start Menu shortcuts
+- Manages registry entries (for context menu integration, file associations, etc.)
+- Creates uninstaller automatically
+- Checks for prerequisites (.NET runtime)
+
+**Key sections:**
+
+```inno
+[Setup]
+AppName=Your App Name
+PrivilegesRequired=admin              ; If you need registry access
+ArchitecturesInstallIn64BitMode=x64   ; For x64 builds
+
+[Files]
+; Copy all published files
+Source: "..\publish\{#Platform}\*"; DestDir: "{app}"; Flags: recursesubdirs
+
+[Registry]
+; Example: Add context menu entries
+Root: HKCR; Subkey: "*\shell\YourApp\command"; ValueData: "{app}\YourApp.exe %*"
+
+[Code]
+; Check for .NET runtime and prompt download if missing
+```
+
+**3. Published Output Structure**
+
+```
+publish/
+├── x64/                    # 64-bit build
+│   └── YourApp.exe + dependencies
+├── x86/                    # 32-bit build  
+│   └── YourApp.exe + dependencies
+└── installer/
+    ├── YourApp-x64.exe     # Final installer for 64-bit
+    └── YourApp-x86.exe     # Final installer for 32-bit
+```
+
+### How to Implement
+
+**Step 1: Create PowerShell Build Script**
+
+Create `build-installer.ps1` in your project root:
+- Parameterize platform (x86, x64, Both) and configuration (Debug, Release)
+- Use `dotnet clean`, `dotnet restore`, `dotnet publish` for each platform
+- Output to `publish\{platform}` folders
+- Call Inno Setup compiler (ISCC.exe) at the end
+
+**Step 2: Create Inno Setup Script**
+
+Create `Installer.iss` in your project folder:
+- Download Inno Setup 6 from https://jrsoftware.org/isdl.php
+- Define your app details, version, publisher
+- Point `[Files]` section to your publish output
+- Add registry entries if needed (context menus, file associations)
+- Add .NET runtime check in `[Code]` section
+
+**Step 3: Run the Build**
+
+```powershell
+.\build-installer.ps1 -Platform Both -Configuration Release
+```
+
+### Example: Context Menu Integration
+
+If your app needs to appear in Windows Explorer's right-click menu:
+
+**Registry keys in Inno Setup:**
+
+```inno
+Root: HKCR; Subkey: "SystemFileAssociations\.ext\shell\YourApp"; 
+  ValueName: ""; ValueData: "Your Menu Text"
+Root: HKCR; Subkey: "SystemFileAssociations\.ext\shell\YourApp\command"; 
+  ValueData: "{app}\YourApp.exe %*"
+```
+
+This lets users right-click files and launch your app with selected files passed as arguments.
+
+### Key Advantages
+
+✓ **Professional installers** — Users get proper Windows installers with uninstall support  
+✓ **Multi-architecture** — Build x86 and x64 with one command  
+✓ **Self-contained** — No "install .NET first" confusion for users  
+✓ **Repeatable** — Same build every time, easy for CI/CD  
+✓ **Registry integration** — Add context menus, file associations, etc.
+
+### Files You Need
+
+1. `build-installer.ps1` — Build automation script
+2. `Installer.iss` — Inno Setup configuration
+3. Inno Setup 6 installed on build machine
+
+------
+
+**That's it.** You'll get a modern, calm, Win11-friendly WPF app with solid MVVM, minimal dependencies, and room to grow—plus a professional installer to distribute it.

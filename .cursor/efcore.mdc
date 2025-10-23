@@ -1,0 +1,229 @@
+---
+alwaysApply: false
+---
+Perfect! Here's the markdown guide you can copy:
+
+---
+
+# EF Core with SQLite Setup for WPF Applications
+
+Quick guide for implementing a similar EF Core structure in a WPF application using SQLite only.
+
+## 1. Package References
+
+Add these NuGet packages to your WPF project:
+
+```xml
+<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.0" />
+<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
+<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0" />
+<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+```
+
+## 2. DbContext Structure
+
+Create your DbContext classes in a `Data` folder:
+
+**IYourDbContext.cs** - Interface for testability and abstraction
+```csharp
+public interface IYourDbContext : IDisposable
+{
+    DbSet<YourEntity> YourEntities { get; }
+    
+    int SaveChanges();
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    DbSet<T> Set<T>() where T : class;
+    EntityEntry Entry(object entity);
+    DatabaseFacade Database { get; }
+}
+```
+
+**YourDbContextBase.cs** - Base class with common configuration
+```csharp
+public abstract class YourDbContextBase(DbContextOptions options, IConfiguration configuration) 
+    : DbContext(options)
+{
+    public DbSet<YourEntity> YourEntities => Set<YourEntity>();
+    
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+        modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
+    }
+    
+    public new DatabaseFacade Database => base.Database;
+}
+```
+
+**SqliteYourDbContext.cs** - SQLite-specific implementation
+```csharp
+public class SqliteYourDbContext(
+    DbContextOptions<SqliteYourDbContext> options, 
+    IConfiguration configuration) 
+    : YourDbContextBase(options, configuration), IYourDbContext
+{
+    private readonly IConfiguration _configuration = configuration;
+
+    protected override void OnConfiguring(DbContextOptionsBuilder options)
+    {
+        var connectionString = _configuration.GetConnectionString("DefaultConnection");
+        options.UseSqlite(connectionString, builder =>
+        {
+            builder.MigrationsHistoryTable("__EFMigrationsHistory");
+            builder.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+        });
+#if DEBUG
+        options.EnableSensitiveDataLogging();
+#endif
+    }
+}
+```
+
+## 3. Configuration File
+
+Add `appsettings.json` to your WPF project (set Copy to Output Directory = Copy if newer):
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=yourapp.db"
+  }
+}
+```
+
+## 4. WPF App.xaml.cs Setup
+
+Configure DI and EF Core in your App.xaml.cs:
+
+```csharp
+public partial class App : Application
+{
+    private IHost? _host;
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        _host = Host.CreateDefaultBuilder()
+            .ConfigureAppConfiguration((context, config) =>
+            {
+                config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+            })
+            .ConfigureServices((context, services) =>
+            {
+                // Register DbContext
+                services.AddDbContext<SqliteYourDbContext>();
+                services.AddScoped<IYourDbContext, SqliteYourDbContext>();
+                
+                // Register your services, factories, etc.
+                services.AddTransient<MainWindow>();
+            })
+            .Build();
+
+        // Apply migrations on startup
+        using (var scope = _host.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IYourDbContext>();
+            db.Database.Migrate();
+        }
+
+        var mainWindow = _host.Services.GetRequiredService<MainWindow>();
+        mainWindow.Show();
+
+        base.OnStartup(e);
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        _host?.Dispose();
+        base.OnExit(e);
+    }
+}
+```
+
+## 5. Using DbContext in Windows
+
+Inject `IYourDbContext` into your window constructors:
+
+```csharp
+public partial class MainWindow : Window
+{
+    private readonly IYourDbContext _dbContext;
+
+    public MainWindow(IYourDbContext dbContext)
+    {
+        _dbContext = dbContext;
+        InitializeComponent();
+    }
+}
+```
+
+## 6. Simplified Migration Script
+
+Create `migrations.ps1` in your solution root:
+
+```powershell
+param(
+    [string]$ProjectPath = "YourProject.Data",
+    [string]$StartupProject = "YourProject.Wpf",
+    [string]$MigrationName
+)
+
+Write-Host "Checking dotnet-ef tool..."
+dotnet tool update --global dotnet-ef | Out-Null
+
+if (-not $MigrationName) {
+    $MigrationName = Read-Host "Enter migration name (e.g., AddUsersTable)"
+}
+
+if ([string]::IsNullOrWhiteSpace($MigrationName)) {
+    Write-Error "Migration name cannot be empty."
+    exit 1
+}
+
+try {
+    Write-Host "Creating SQLite migration '$MigrationName'..."
+    dotnet ef migrations add $MigrationName `
+        --context "SqliteYourDbContext" `
+        -o "Data/Migrations" `
+        --project $ProjectPath `
+        --startup-project $StartupProject
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create migration."
+    }
+
+    Write-Host "Migration created successfully."
+}
+catch {
+    Write-Error $_
+    exit 1
+}
+```
+
+## 7. Running Migrations
+
+```powershell
+# From solution root
+.\migrations.ps1 -MigrationName "InitialCreate"
+
+# Or with explicit project paths
+.\migrations.ps1 -ProjectPath "YourCore" -StartupProject "YourWpf" -MigrationName "InitialCreate"
+```
+
+## Key Differences from Web Apps
+
+- Use `Host.CreateDefaultBuilder()` instead of `WebApplication.CreateBuilder()`
+- No HTTP context or middleware
+- Manual window instantiation from DI container
+- Migrations applied on app startup in `OnStartup()`
+- Configuration loaded from `appsettings.json` in app directory
+
+## Best Practices
+
+- Always use `IYourDbContext` interface for DI
+- Use scoped services when possible
+- Apply migrations automatically on startup or provide UI option
+- Keep the database file in user's AppData for production
+- Use primary constructors for cleaner DI
+
+---

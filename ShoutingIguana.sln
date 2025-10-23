@@ -1,0 +1,36 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShoutingIguana", "src\ShoutingIguana\ShoutingIguana.csproj", "{8B7F1F4E-9C3A-4D5E-8F2A-1B3C4D5E6F7A}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scripts", "Scripts", "{D8048F33-3205-44B1-97AA-962B136BDFC6}"
+	ProjectSection(SolutionItems) = preProject
+		build-installer.ps1 = build-installer.ps1
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{0EF35D29-65EE-4EFF-A2FD-8859B8D52D18}"
+	ProjectSection(SolutionItems) = preProject
+		.cursor\developer.mdc = .cursor\developer.mdc
+		.cursor\efcore.mdc = .cursor\efcore.mdc
+		.cursor\pdr.mdc = .cursor\pdr.mdc
+		.cursor\wpf.mdc = .cursor\wpf.mdc
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8B7F1F4E-9C3A-4D5E-8F2A-1B3C4D5E6F7A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B7F1F4E-9C3A-4D5E-8F2A-1B3C4D5E6F7A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B7F1F4E-9C3A-4D5E-8F2A-1B3C4D5E6F7A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8B7F1F4E-9C3A-4D5E-8F2A-1B3C4D5E6F7A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
+

@@ -1,0 +1,571 @@
+# PDR — Pluggable .NET SEO Crawler (MVP)
+
+**Working name:** Shouting Iguana
+ **Platform:** Windows desktop (WPF, .NET 9, x64 or x86)
+ **Core differentiator:** First-class, NuGet‑based plugin ecosystem (tasks, reports, exports, UI panels) with in‑app discovery and install; all built‑ins implemented as plugins.
+ **DB:** Per‑project SQLite file
+ **Licensing:** OSS‑friendly core (MIT) + optional proprietary modules later (not MVP).
+
+------
+
+## 1) Problem & Outcomes
+
+SEO teams need a lightweight, scriptable crawler for audits that can be extended in .NET without scripting bridges. The MVP must:
+
+- Crawl medium to large sites fast and reliably, resume after network hiccups, and export actionable CSV/Excel.
+- Provide a plugin system that feels like building a NuGet package: install, load, upgrade, uninstall.
+- Ship with a small but high‑value set of audit tasks covering the common Screaming Frog use cases.
+
+**Primary outcome:** Within 10 minutes a user can create a project, crawl, and export “broken links” + “titles/descriptions” CSV.
+ **Secondary outcome:** A .NET dev can scaffold a plugin, publish to a feed, and install it in‑app without restart.
+
+------
+
+## 2) In Scope (MVP)
+
+- Site & list‑mode crawling with full JavaScript rendering via Playwright for .NET (Chromium).
+- Tasks (analyzers) run per URL during crawl pipeline; each task contributes findings.
+- Built‑in tasks matching the initial list below (all implemented as plugins):
+  1. Broken links & errors (4xx/5xx) + source pages.
+  2. Redirect audits (chains/loops; protocol/host canonicalisation checks).
+  3. Titles & meta description audit (missing/dup/length).
+  4. Duplicate content detection (exact & near‑dup via hashing).
+  5. Status code/content type/crawl depth inventory.
+  6. Robots directives & indexability checks (robots.txt, meta robots, x‑robots‑tag).
+  7. Canonical tag validation.
+  8. XML sitemap generate & validate vs. crawl; orphan detection.
+  9. Image audits (alt text presence, size, status).
+  10. Internal linking basics (inlinks/outlinks, anchors, depth).
+  11. List‑mode crawling (CSV/GSC import).
+  12. Simple structured data presence/validation (subset of Schema.org).
+  13. Custom extraction (CSS/XPath/regex).
+- Exports to CSV and Excel (OpenXML).
+- NuGet plugin discovery, install/upgrade, enable/disable, uninstall.
+- Load plugins **without app restart** via custom `AssemblyLoadContext` (see §7); allow “soft reload”.
+- Per‑project SQLite database (resumable crawl, consistent exports).
+
+**Out of scope (MVP):** Authentication flows beyond Basic, API crawls, scheduler, cloud agents, advanced GA/GSC integrations.
+
+------
+
+## 3) Personas & Jobs-To-Be-Done
+
+- **SEO Analyst:** “Give me a fast audit and let me export to CSV/Excel.”
+- **Tech SEO/Engineer:** “Let me extend tasks in C# and ship a plugin.”
+- **Agency Lead:** “Run repeatable audits with a checklist; share project files.”
+
+------
+
+## 4) UX Overview (WPF)
+
+### 4.0 Window Structure
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Shouting Iguana - [Project Name]                    [─][□][×]  │
+├─────────────────────────────────────────────────────────────────┤
+│ File   Edit   View   Crawl   Tools   Help         <- MENU BAR  │
+├─────────────────────────────────────────────────────────────────┤
+│ [New] [Open] │ [▶ Start] [⏸ Pause] [⏹ Stop] │ [⚙]  <- TOOLBAR │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│                                                                 │
+│                    MAIN CONTENT AREA                            │
+│              (Project Home / Dashboard / Findings etc.)         │
+│                                                                 │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│ MyProject.db │ Crawling... │ URLs: 1,250 │ ✓ Proxy: proxy...  │ <- STATUS BAR
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 4.1 Application Menu Bar (Top of Window)
+
+Standard Windows application menu bar with the following structure:
+
+**File**
+- New Project... (Ctrl+N)
+- Open Project... (Ctrl+O)
+- Recent Projects → (submenu with last 10 projects)
+- Close Project (Ctrl+W) — closes current project, returns to welcome screen
+- ──────────── (separator)
+- Export → (submenu)
+  - Export to CSV...
+  - Export to Excel...
+  - Export All Findings...
+- ──────────── (separator)
+- Exit (Alt+F4)
+
+**Edit**
+- Copy (Ctrl+C) — context-aware: copies selected rows in findings grids
+- Select All (Ctrl+A)
+- ──────────── (separator)
+- Find in Findings... (Ctrl+F)
+- Clear Filters (Ctrl+Shift+F)
+
+**View**
+- Project Home (Ctrl+1)
+- Crawl Dashboard (Ctrl+2)
+- Findings (Ctrl+3)
+- Link Graph (Ctrl+4)
+- ──────────── (separator)
+- Extensions Manager (Ctrl+Shift+E)
+- ──────────── (separator)
+- Refresh (F5)
+- Toggle Full Screen (F11)
+
+**Crawl**
+- Start Crawl (F6) — disabled if no project open or crawl in progress
+- Pause Crawl (F7) — toggle pause/resume
+- Stop Crawl (F8)
+- ──────────── (separator)
+- Clear Queue
+- Reset Project Data... — warns about data loss
+
+**Tools**
+- Import URL List... — CSV import for list-mode crawling
+- Custom Extraction... — opens custom CSS/XPath/Regex rule editor
+- ──────────── (separator)
+- Test Proxy Connection... — validates current project proxy settings
+- Reinstall Playwright Browsers... — force reinstall Chromium
+- ──────────── (separator)
+- Options... (Ctrl+,) — opens global Settings dialog
+
+**Help**
+- Documentation (F1) — opens online docs or bundled help
+- Plugin Development Guide
+- ──────────── (separator)
+- Check for Updates...
+- View Logs... — opens log file location
+- Report Issue... — opens GitHub issues or email client
+- ──────────── (separator)
+- About Shouting Iguana... — version, license, credits
+
+### 4.2 Main Views (Accessible via View Menu or Navigation)
+
+- **Project Home**: create/open project, base URL, robots.txt obedience toggle (respect/ignore), concurrency, rate limits, user‑agent, include/exclude patterns, crawl depth/limits, proxy settings.
+- **Crawl Dashboard**: progress, queue size, active workers, errors, pause/resume, cancel.
+- **Findings**: tabbed grids per task (filter/sort/search), "Export CSV/Excel".
+- **Link Graph**: simple table (later visual).
+- **Extensions**: browse NuGet feeds, search, install/update, enable/disable, uninstall; view plugin details & required capabilities.
+- **Settings**: feeds (nuget.org + custom), concurrency defaults, network & retry policy, data retention, proxy configuration (per-project or global).
+
+### 4.3 Toolbar (Below Menu Bar, Optional)
+
+Quick-access toolbar with icon buttons for common actions:
+- New Project | Open Project | Save
+- ──────
+- Start Crawl (▶) | Pause (⏸) | Stop (⏹)
+- ──────
+- Export | Find
+- ──────
+- Settings
+
+*Note: Toolbar is optional for MVP; can be added post-launch based on user feedback.*
+
+### 4.4 Status Bar (Bottom of Window)
+
+- **Left**: Current project name, crawl status (Idle / Crawling / Paused / Completed)
+- **Center**: Quick stats (URLs crawled: X / Queue: Y / Errors: Z)
+- **Right**: Proxy status indicator (✓ Proxy: proxy.example.com:8080 | ✗ Direct Connection), Playwright status (Browser Ready / Installing...)
+
+### 4.5 Important UX Notes for Developers
+
+- **Menu Accelerators**: Implement standard Windows keyboard accelerators (underlined letters, e.g., Alt+F for File menu).
+- **Keyboard Shortcuts**: All shortcuts listed above must be implemented and functional; they should be visible in menu items.
+- **Context Menus**: Right-click in findings grids should show context menu with Copy, Export Selected, and View Details options.
+- **Disabled States**: Menu items and toolbar buttons should be visually disabled (grayed out) when not applicable (e.g., "Start Crawl" when no project is open).
+- **Menu State Awareness**: "Pause Crawl" should toggle to "Resume Crawl" when paused; menu text should be dynamic.
+- **Icons**: Use standard Windows/Material Design icons for toolbar and menu items where appropriate.
+- **Welcome Screen**: When no project is open, show a welcome screen in the main content area with quick-start options (New Project, Open Project, Recent Projects list).
+
+------
+
+## 5) Architecture
+
+### 5.1 Solution Structure (high level)
+
+- **App.Wpf** — WPF shell, DI, settings, extension UI host surfaces, Playwright browser installation orchestration.
+- **Core** — crawl engine, scheduler, pipeline, contracts (plugin interfaces), models, Playwright integration layer.
+- **Data** — persistence layer (EF Core SQLite or Dapper), migrations, repositories.
+- **Plugins.*** — built‑in plugins authored against contracts; shipped separately and installed on first run.
+- **Sdk** — `ShoutingIguana.PluginSdk` NuGet package: contracts, abstractions, analyzers base classes, attribute metadata, test helpers.
+- **Cli (optional later)** — headless run.
+
+### 5.1.1 Playwright Installation & Setup
+
+- **First‑Run Experience**: On application first launch, automatically detect if Playwright browsers are installed; if missing, run `playwright.ps1 install chromium` (or equivalent programmatic API call) with progress UI.
+- **Single .exe Deploy**: Application installer bundles `Microsoft.Playwright` NuGet package; post‑install hook triggers browser download (~150 MB Chromium) on first run or via explicit "Install Browsers" button in Settings.
+- **Installation Path**: Playwright browsers installed to `%USERPROFILE%\.cache\ms-playwright` (default); configurable in Settings for corporate/network drive scenarios.
+- **Offline Fallback**: Optional bundled browser cache for air‑gapped environments (future enhancement).
+- **Upgrade Handling**: On Playwright SDK version bump, prompt user to update browsers; allow manual reinstall via Settings.
+
+### 5.2 Crawl Engine
+
+- **Fetcher**: Playwright for .NET with Chromium browser; full JavaScript rendering; optional headless mode; configurable viewport; user‑agent override; proxy support (HTTP/HTTPS/SOCKS5) configurable per project or globally.
+- **Browser Management**: shared browser context pool; page lifecycle (navigate, wait for network idle, extract content); automatic resource cleanup; configurable timeouts.
+- **Robots**: prefetch & parse robots.txt per host; obey delay rules; per‑host politeness (throttle).
+- **Queue**: per‑host FIFO with global concurrency cap; priority for sitemap & seed URLs; back‑pressure when DB writes lag.
+- **Parser**: Playwright's DOM access for extraction; header/meta extractors; full access to rendered DOM after JavaScript execution.
+- **Link Extractor**: a, img, link, script, srcset, canonical, hreflang; normalise & dedupe from fully rendered page.
+- **Pipeline**: `IUrlTask` list executed per fetched URL; tasks can short‑circuit or add new URLs.
+- **Resilience**: Polly retry w/ jitter backoff for transient errors; circuit breaker per host; Playwright timeout handling.
+- **State**: every URL state persisted to SQLite; checkpointing to support resume after crash.
+- **Proxy Configuration**: per-project proxy settings (server, port, username, password); bypass list; proxy rotation support for future enhancement.
+
+### 5.3 Concurrency Model
+
+- Async/await throughout; cancellation tokens.
+- Worker pool (configurable `MaxDegreeOfParallelism`), per‑host caps; pause/resume; graceful shutdown saves queues to DB.
+
+### 5.4 Data Model (SQLite per project)
+
+Tables (indicative):
+
+- `Projects(id, name, base_url, created_utc, settings_json, proxy_config_json)`
+- `Urls(id, url, normalized_url, scheme, host, path, depth, discovered_from_url_id, first_seen_utc, last_crawled_utc, status, http_status, content_type, content_length, hash, robots_state, is_indexable, canonical_url, sitemap_source)`
+- `Links(id, from_url_id, to_url_id, anchor_text, rel, position)`
+- `Headers(id, url_id, name, value)`
+- `Meta(id, url_id, name, value)`
+- `Images(id, url_id, src_url_id, alt, width, height, bytes, http_status)`
+- `Findings(id, url_id, task_key, severity, code, message, data_json)`
+- `Tasks(id, key, version, enabled, config_json)`
+- `Queue(id, url, priority, host_key, depth, enqueued_utc, state)`
+- `Sitemaps(id, url_id, loc, lastmod, changefreq, priority)`
+- `Exports(id, created_utc, type, parameters_json, file_path)`
+
+Indices on `Urls(host, path)`, `Urls(status)`, `Links(to_url_id)`, `Findings(task_key, severity)`, `Queue(state, priority)`.
+
+------
+
+## 6) Exports
+
+- **CSV**: `CsvHelper`.
+- **Excel**: `ClosedXML` (EPPlus alternative), xlsx only.
+- **Export profiles**: each task exposes typed rows; export UI lets user choose columns & filters; profiles saved per project.
+
+------
+
+## 7) Plugin System (NuGet‑first)
+
+### 7.1 Goals
+
+- All built‑ins shipped as plugins to dog‑food the model.
+- Install/enable **without app restart** for runtime analyzers & exporters.
+- Unload on disable/uninstall to free files (no dangling handles).
+- Stable SDK surface (`ShoutingIguana.PluginSdk`) with semantic versioning.
+
+### 7.2 Loading Strategy
+
+- Each plugin is a NuGet package containing an assembly targeting `net9.0-windows`.
+- On install/enable: download to an **extensions store** (per‑user `%AppData%/ShoutingIguana/extensions/<package>/<version>`).
+- Load via dedicated `AssemblyLoadContext` (ALC) per plugin to allow **unloading**.
+- Dependency resolution: prefer plugin local deps; fall back to host via `Resolving` handler.
+- **Hot‑load**: after install, the extension registry scans the ALC and registers exported types; no restart needed.
+- **UI contributions**: for menu/panel additions, the shell raises a “extensions changed” event; views are created on demand so hot‑add works.
+- If a plugin injects global styles/resources that WPF can’t merge cleanly at runtime, prompt for **soft restart** (rare; acceptable edge case).
+
+### 7.3 Contracts (SDK)
+
+```csharp
+public interface IPlugin
+{
+    string Id { get; } // reverse-DNS style
+    string Name { get; }
+    Version Version { get; }
+    void Initialize(IHostContext ctx); // register tasks/exports/settings panes
+}
+
+public interface IUrlTask // per-URL analyzer
+{
+    string Key { get; } // e.g., "BrokenLinks"
+    string DisplayName { get; }
+    Task ExecuteAsync(UrlContext ctx, CancellationToken ct);
+}
+
+public interface IExportProvider
+{
+    string Key { get; }
+    string DisplayName { get; }
+    Task<ExportResult> ExportAsync(ExportContext ctx, CancellationToken ct);
+}
+
+public interface ISettingsPane // optional UI contribution
+{
+    string Title { get; }
+    object CreateView(); // returns a WPF UserControl
+}
+```
+
+**Metadata & permissions** via attributes (for discovery and store UI):
+
+```csharp
+[Plugin(
+  Id = "com.example.brokenlinks",
+  Name = "Broken Links Analyzer",
+  MinSdk = "1.0.0",
+  Capabilities = new[]{ Capability.Network, Capability.FileExport } )]
+public sealed class BrokenLinksPlugin : IPlugin { ... }
+```
+
+### 7.4 Lifecycle
+
+- **Install** → download → verify signature (optional future) → extract → register → load ALC → `IPlugin.Initialize`.
+- **Enable/Disable** → add/remove registrations; if disable, dispose and **unload ALC**.
+- **Upgrade** → install side‑by‑side; drain uses; swap registrations atomically; unload old ALC.
+- **Uninstall** → ensure ALC unloaded → delete folder.
+
+### 7.5 Versioning & Compatibility
+
+- `ShoutingIguana.PluginSdk` uses SemVer; breaking changes bump major.
+- Host enforces `[MinSdk]` and blocks incompatible installs; shows helpful message.
+
+### 7.6 Security & Safety
+
+- Plugins are **full‑trust** (MVP). Warn users on install.
+- Optional later: capability prompts, signed packages, allowlist feeds.
+- Isolation via ALC only (not a sandbox).
+
+------
+
+## 8) NuGet In‑App Experience
+
+- **Feeds**: nuget.org + user‑added feeds (e.g., internal Azure Artifacts).
+- **Search**: keyword, author, tags; filter by compatibility (MinSdk).
+- **Details**: README, versions, dependencies, permissions, changelog.
+- **Actions**: Install/Update/Enable/Disable/Uninstall; background progress pane; log.
+- **No‑restart install** for task/export plugins; show **Restart recommended** only when WPF resource injection is required.
+
+------
+
+## 9) Built‑in Plugins (MVP Backlog)
+
+Each is a separate package under the `ShoutingIguana.Plugins.*` namespace. All implement `IUrlTask` and persist findings.
+
+1. **Broken Links & Errors**
+
+- Detect non‑2xx links found on a page (followed & non‑followed); record **source pages**.
+- Bulk export: `from, to, http_status, anchor_text`.
+
+1. **Redirect Audit**
+
+- On fetch, capture redirect chain; flag loops; verify protocol/host canonicalisation rules vs. project settings.
+
+1. **Titles & Meta Descriptions**
+
+- Extract `<title>`, `<meta name="description">`; flag missing/duplicate/too short/long (configurable thresholds).
+
+1. **Duplicate Content**
+
+- Store content hash (SHA‑1) + near‑dup via simhash (64‑bit) on cleaned text.
+- Export pairs/groups exceeding similarity threshold.
+
+1. **Inventory**
+
+- URL index with `status_code`, `content_type`, `content_length`, `crawl_depth`.
+
+1. **Robots & Indexability**
+
+- robots.txt fetch & parse; meta robots; `X‑Robots‑Tag`; compute `is_indexable` (noindex/nofollow).
+
+1. **Canonical Validation**
+
+- Extract canonical; validate 200/OK target; detect self‑canonicals, chains, cross‑domain.
+
+1. **XML Sitemap**
+
+- Discover/generate; compare against crawl for missing/orphan; export submit‑ready XML.
+
+1. **Image Audit**
+
+- Extract images; track status/bytes; flag missing `alt`, large files (threshold), non‑200.
+
+1. **Internal Linking Basics**
+
+- Count inlinks/outlinks per URL; collect anchor text set; compute simple depth metric.
+
+1. **List‑Mode**
+
+- Import CSV of URLs; treat as seed set; opt to **not** follow new links.
+
+1. **Structured Data (Simple)**
+
+- Detect presence of JSON‑LD and microdata for key types (Article, Product, FAQPage); basic JSON schema check.
+
+1. **Custom Extraction**
+
+- User‑defined rules (CSS/XPath/Regex) with named fields; outputs a result table per rule set.
+
+------
+
+## 10) Performance & Resilience Targets (MVP)
+
+- **Crawl throughput:** 50–150 req/min aggregate across hosts with JavaScript rendering (default 2–4 concurrent browser pages), bounded by politeness and browser overhead.
+- **Resume time after crash:** < 5 seconds to reload last checkpoint.
+- **Memory ceiling:** < 2.0 GB on 10k URL crawl with browser contexts (Playwright adds ~500 MB baseline + per-page overhead).
+- **Browser startup:** < 3 seconds for initial browser launch; < 500 ms for new page creation in existing context.
+- **Stability:** Survive intermittent DNS/TCP failures; automatic retry with exponential backoff; per‑host circuit breaker; graceful browser crash recovery and restart.
+
+------
+
+## 11) Networking & Politeness
+
+- **Robots.txt obedience:** Per-project setting to respect or ignore robots.txt `Disallow` and `crawl-delay` directives. Default: respect (for ethical crawling). When disabled, crawler ignores robots.txt restrictions entirely but still fetches and stores the file for audit purposes.
+- Custom user‑agent string with project ID and contact URL.
+- Rate limiting per host; configurable global throttle (applied even when robots.txt is ignored).
+- Optional `HEAD` probing for large files or validation steps (configurable).
+
+------
+
+## 12) Configuration Model
+
+- Project‑scoped JSON persisted in DB; overridable defaults at app level.
+- All task plugins expose a `Settings` POCO (serialized to `Tasks.config_json`).
+- Validation via data annotations; UI auto‑generates editors for common types.
+
+### 12.1 Proxy Configuration
+
+- **Global Proxy Settings**: Default proxy configuration for all projects (server, port, protocol, credentials).
+- **Per‑Project Override**: Each project can override global proxy settings or disable proxy entirely.
+- **Proxy Types Supported**: HTTP, HTTPS, SOCKS5 (via Playwright native support).
+- **Authentication**: Optional username/password; credentials stored encrypted using Windows DPAPI.
+- **Bypass List**: Domain patterns to exclude from proxy (e.g., localhost, *.internal.com).
+- **UI Elements**: 
+  - Settings → Network → Global Proxy Configuration
+  - Project Home → Proxy Settings (inherits global or override)
+  - Test Connection button to validate proxy before crawl
+- **Configuration Structure**:
+  ```json
+  {
+    "proxy": {
+      "enabled": true,
+      "server": "http://proxy.example.com:8080",
+      "username": "user",
+      "password": "<encrypted>",
+      "bypass": ["localhost", "*.internal.com"]
+    }
+  }
+  ```
+
+------
+
+## 13) Testing Strategy
+
+- **Core**: unit tests for URL normalization, robots, queue, retry policies.
+- **Playwright Integration**: mock IBrowserPage for unit tests; integration tests with real Playwright against test HTML fixtures; verify proxy configuration propagation.
+- **Plugin SDK**: contract tests; sample plugin used by CI.
+- **Built‑ins**: golden‑site fixtures with JavaScript rendering; snapshot exports (CSV/XLSX).
+- **Soak**: long‑running crawl against test domains; watch for leaks; assert ALC unload on disable; verify browser context cleanup.
+- **Proxy Tests**: validate proxy connection, authentication, bypass list functionality.
+
+------
+
+## 14) Telemetry & Logging
+
+- Structured logs (Serilog) with per‑project rolling files.
+- Optional anonymous telemetry: feature usage, perf counters (opt‑in).
+
+------
+
+## 15) Risks & Mitigations
+
+- **Hot‑load complexity (WPF resources):** Keep plugin UI minimal in MVP; prefer data panes created on demand. Offer soft restart prompt if needed.
+- **Plugin dependency hell:** Per‑plugin ALC + strict SDK versioning + compatibility checks at install.
+- **SQLite contention under high concurrency:** Batch writes with channel buffering; WAL mode; tuned pragmas.
+- **Memory growth on giant crawls:** Playwright browser contexts consume ~50–100 MB each; limit concurrent browser pages; reuse contexts; aggressive disposal after page processing; monitor memory and throttle workers if threshold exceeded.
+- **Playwright Browser Installation:** Auto‑install on first run with progress UI; handle offline scenarios with helpful error messages; validate browser binaries before crawl; provide manual reinstall option in Settings.
+- **Proxy Connection Failures:** Test proxy connectivity before crawl start; provide clear error messages for auth failures; allow bypass/disable mid-crawl if proxy becomes unavailable.
+- **Legal/user safety:** Full‑trust plugin warning; allowlist feeds option.
+
+------
+
+## 16) Implementation Notes (Key Decisions)
+
+- **EF Core vs Dapper:** Start with Dapper for hot paths (URLs/Queue), EF Core for metadata/migrations, or go all‑Dapper + FluentMigrator (simpler).
+- **Browser Automation:** Playwright for .NET with Chromium; provides full JavaScript rendering, network interception, and native proxy support; abstract behind `IBrowserPage` interface for future flexibility.
+- **Proxy Management:** Leverage Playwright's built‑in proxy configuration (server, username, password, bypass); store proxy credentials encrypted in project settings; support per‑project and global proxy configurations.
+- **Hashing:** SHA‑1 for exact (speed/length), **SimHash** or **MinHash** for near‑dup; store 64‑bit.
+- **Retry policy:** `Polly` with `WaitAndRetryAsync` (jitter) + `CircuitBreakerAsync` per host.
+- **Exports:** `CsvHelper`, `ClosedXML`.
+- **Scheduling:** Simple in‑process; no cron/queue service in MVP.
+
+------
+
+## 17) Developer Experience (DX)
+
+- `dotnet new shoutingiguana-plugin` template scaffolds a plugin with contracts and example task.
+- Samples repo with 2–3 reference plugins.
+- Documentation: `wpf.md` for shell; `plugins.md` for contracts, lifecycle, packaging & versioning.
+
+------
+
+## 18) Acceptance Criteria (MVP)
+
+1. First launch → Playwright browsers auto‑install with progress UI → ready to crawl without manual setup.
+2. Create project with proxy settings → verify proxy is used (check connection test) → crawl example.com → export broken links CSV in < 15 minutes.
+3. Crawl a JavaScript‑heavy site (e.g., SPA) → verify rendered content is captured correctly → validate dynamic elements in findings.
+4. Install a sample plugin from nuget.org feed → it appears in Tasks list and runs **without restarting**.
+5. Disable that plugin → its menu/pane disappears; ALC unload verified (no file lock).
+6. Resume a crawl after forced crash and complete with consistent results; browser contexts properly cleaned up.
+7. Export Titles & Descriptions and Inventory to Excel with chosen columns.
+
+------
+
+## 19) Roadmap (Post‑MVP)
+
+- Additional browser engines (Firefox, WebKit) alongside Chromium.
+- Proxy rotation and pool management for large-scale crawls.
+- Schedulers, queues, and remote agents.
+- Signed plugins + capabilities prompts + sandboxing.
+- Graph visualizations; advanced link equity heuristics.
+- Project templates and audit checklists.
+
+------
+
+## 20) Appendix
+
+### 20.1 Minimal Interfaces (SDK)
+
+```csharp
+public sealed record UrlContext(
+    Uri Url,
+    IBrowserPage? Page,
+    HttpResponseMessage? Response,
+    string? RenderedHtml,
+    IReadOnlyDictionary<string,string> Headers,
+    ProjectSettings Project,
+    IDbSession Db,
+    IUrlEnqueue Enqueue,
+    IFindingSink Findings);
+
+public interface IBrowserPage // Abstraction over Playwright IPage
+{
+    Task<string> ContentAsync();
+    Task<IElementHandle?> QuerySelectorAsync(string selector);
+    Task<IElementHandle[]> QuerySelectorAllAsync(string selector);
+    Task<T> EvaluateAsync<T>(string expression);
+    IReadOnlyList<IRequest> Requests { get; }
+    IReadOnlyList<IResponse> Responses { get; }
+}
+
+public interface IFindingSink
+{
+    Task ReportAsync(string taskKey, Severity severity, string code, string message, object? data, CancellationToken ct);
+}
+
+public enum Severity { Info, Warning, Error }
+```
+
+### 20.2 SQLite Pragmas (defaults)
+
+- WAL=ON, synchronous=NORMAL, journal_size_limit=64MB, temp_store=MEMORY.
+
+### 20.3 File Layout
+
+- `%APPDATA%/ShoutingIguana/projects/<guid>/<name>.db`
+- `%APPDATA%/ShoutingIguana/extensions/<package>/<version>/`
+- `%LOCALAPPDATA%/ShoutingIguana/logs/`
+
+### 20.4 Assets & Resources
+
+- **Logo and Icon Files**: Located in the `Assets/` folder in the repository root. This folder contains the application logo and `.ico` files needed for the application icon, installer, and branding. Reference these assets when building the WPF application, creating installers, or updating application resources.
