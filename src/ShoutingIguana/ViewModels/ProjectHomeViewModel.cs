@@ -79,7 +79,7 @@ public partial class ProjectHomeViewModel : ObservableObject
     {
         IsWelcomeScreen = false;
         CurrentProject = null;
-        ProjectName = "New Project";
+        ProjectName = string.Empty;
         BaseUrl = string.Empty;
         MaxDepth = 5;
         MaxUrls = 1000;
@@ -168,6 +168,13 @@ public partial class ProjectHomeViewModel : ObservableObject
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(ProjectName))
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show("Project name is required", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning));
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(BaseUrl))
             {
                 await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -267,16 +274,34 @@ public partial class ProjectHomeViewModel : ObservableObject
     [RelayCommand]
     private async Task StartCrawlAsync()
     {
-        // If project hasn't been saved yet, save it first (without showing success message)
+        // Always save settings before starting crawl to ensure any changes are persisted
+        await SaveSettingsAsync(showSuccessMessage: false);
+        
+        // If save failed or was cancelled, don't proceed
         if (CurrentProject == null)
         {
-            await SaveSettingsAsync(showSuccessMessage: false);
-            
-            // If save failed or was cancelled, don't proceed
-            if (CurrentProject == null)
-            {
-                return;
-            }
+            return;
+        }
+
+        // Validate that the base URL is reachable before starting the crawl
+        try
+        {
+            _logger.LogInformation("Testing connectivity to {BaseUrl}", BaseUrl);
+            using var httpClient = new System.Net.Http.HttpClient();
+            httpClient.Timeout = TimeSpan.FromSeconds(5); // Quick test
+            await httpClient.GetAsync(BaseUrl);
+            _logger.LogInformation("Successfully connected to {BaseUrl}", BaseUrl);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to connect to {BaseUrl}", BaseUrl);
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+                MessageBox.Show(
+                    $"Cannot connect to {BaseUrl}\n\nError: {ex.Message}\n\nPlease check:\n• The URL is correct\n• The domain exists\n• You have internet connectivity\n• The site is not blocking requests",
+                    "Connection Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error));
+            return;
         }
 
         // Navigate to crawl dashboard with project context

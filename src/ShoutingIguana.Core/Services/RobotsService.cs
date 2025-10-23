@@ -90,9 +90,21 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
             _logger.LogInformation("Fetched robots.txt for {Host}", host);
             return robotsTxt;
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogDebug("Cannot fetch robots.txt for {Host}: {Message}", host, ex.Message);
+            _cache[host] = null!;
+            return null;
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogDebug("Timeout fetching robots.txt for {Host}", host);
+            _cache[host] = null!;
+            return null;
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch robots.txt for {Host}", host);
+            _logger.LogWarning("Unexpected error fetching robots.txt for {Host}: {Message}", host, ex.Message);
             _cache[host] = null!;
             return null;
         }

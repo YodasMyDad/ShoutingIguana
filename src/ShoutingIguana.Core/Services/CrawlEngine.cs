@@ -2,8 +2,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Polly;
-using Polly.Retry;
 using ShoutingIguana.Core.Configuration;
 using ShoutingIguana.Core.Models;
 using ShoutingIguana.Core.Repositories;
@@ -33,16 +31,18 @@ public class CrawlEngine(
     private int _activeWorkers;
     private int _errorCount;
     private Stopwatch? _stopwatch;
+    private string? _lastCrawledUrl;
+    private int _lastCrawledStatus;
 
     public bool IsCrawling { get; private set; }
     public event EventHandler<CrawlProgressEventArgs>? ProgressUpdated;
 
-    public async Task StartCrawlAsync(int projectId, CancellationToken cancellationToken = default)
+    public Task StartCrawlAsync(int projectId, CancellationToken cancellationToken = default)
     {
         if (IsCrawling)
         {
             _logger.LogWarning("Crawl is already running");
-            return;
+            return Task.CompletedTask;
         }
 
         IsCrawling = true;
@@ -71,8 +71,13 @@ public class CrawlEngine(
             {
                 IsCrawling = false;
                 _stopwatch?.Stop();
+                
+                // Send final progress update so UI knows crawl has finished
+                SendProgressUpdate(projectId);
             }
         }, _cts.Token);
+        
+        return Task.CompletedTask;
     }
 
     public async Task StopCrawlAsync()
@@ -175,10 +180,6 @@ public class CrawlEngine(
         httpClient.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
         httpClient.DefaultRequestHeaders.Add("User-Agent", settings.UserAgent);
 
-        var retryPolicy = Policy
-            .Handle<HttpRequestException>()
-            .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
-
         int emptyQueueCount = 0;
 
         while (!cancellationToken.IsCancellationRequested)
@@ -255,10 +256,7 @@ public class CrawlEngine(
                 }
 
                 // Fetch URL
-                var urlData = await retryPolicy.ExecuteAsync(async () =>
-                {
-                    return await FetchUrlAsync(httpClient, queueItem.Address, cancellationToken);
-                });
+                var urlData = await FetchUrlAsync(httpClient, queueItem.Address, cancellationToken);
 
                 // Save URL to database
                 var urlEntity = await SaveUrlAsync(projectId, queueItem, urlData);
@@ -277,6 +275,16 @@ public class CrawlEngine(
                 }
 
                 Interlocked.Increment(ref _urlsCrawled);
+                
+                // Increment error counter if fetch failed
+                if (!urlData.IsSuccess)
+                {
+                    Interlocked.Increment(ref _errorCount);
+                }
+                
+                // Update last crawled URL for progress display
+                _lastCrawledUrl = queueItem.Address;
+                _lastCrawledStatus = urlData.StatusCode;
             }
             catch (Exception ex)
             {
@@ -288,6 +296,10 @@ public class CrawlEngine(
                     await queueRepository.UpdateAsync(queueItem);
                 }
                 Interlocked.Increment(ref _errorCount);
+                
+                // Update last crawled URL for progress display
+                _lastCrawledUrl = queueItem.Address;
+                _lastCrawledStatus = 0; // Indicate failure
             }
             finally
             {
@@ -298,30 +310,55 @@ public class CrawlEngine(
 
     private async Task<UrlFetchResult> FetchUrlAsync(HttpClient httpClient, string url, CancellationToken cancellationToken)
     {
-        var response = await httpClient.GetAsync(url, cancellationToken);
-        
-        var result = new UrlFetchResult
+        try
         {
-            StatusCode = (int)response.StatusCode,
-            IsSuccess = response.IsSuccessStatusCode,
-            ContentType = response.Content.Headers.ContentType?.MediaType,
-            ContentLength = response.Content.Headers.ContentLength
-        };
+            var response = await httpClient.GetAsync(url, cancellationToken);
+            
+            var result = new UrlFetchResult
+            {
+                StatusCode = (int)response.StatusCode,
+                IsSuccess = response.IsSuccessStatusCode,
+                ContentType = response.Content.Headers.ContentType?.MediaType,
+                ContentLength = response.Content.Headers.ContentLength
+            };
 
-        // Extract headers
-        result.Headers = response.Headers
-            .Concat(response.Content.Headers)
-            .SelectMany(h => h.Value.Select(v => new KeyValuePair<string, string>(h.Key, v)))
-            .ToList();
+            // Extract headers
+            result.Headers = response.Headers
+                .Concat(response.Content.Headers)
+                .SelectMany(h => h.Value.Select(v => new KeyValuePair<string, string>(h.Key, v)))
+                .ToList();
 
-        // Only download content if it's HTML
-        if (result.ContentType?.Contains("text/html", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            result.Content = await response.Content.ReadAsStringAsync(cancellationToken);
-            result.IsHtml = true;
+            // Only download content if it's HTML and successful
+            if (result.IsSuccess && result.ContentType?.Contains("text/html", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                result.Content = await response.Content.ReadAsStringAsync(cancellationToken);
+                result.IsHtml = true;
+            }
+
+            return result;
         }
-
-        return result;
+        catch (HttpRequestException ex)
+        {
+            // Handle connection errors (DNS failure, connection refused, etc.)
+            _logger.LogWarning("Connection error for {Url}: {Message}", url, ex.Message);
+            return new UrlFetchResult
+            {
+                StatusCode = 0, // Use 0 to indicate connection failure
+                IsSuccess = false,
+                ErrorMessage = ex.Message
+            };
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Timeout
+            _logger.LogWarning("Timeout fetching {Url}", url);
+            return new UrlFetchResult
+            {
+                StatusCode = 0,
+                IsSuccess = false,
+                ErrorMessage = "Request timeout"
+            };
+        }
     }
 
     private async Task<Url> SaveUrlAsync(int projectId, CrawlQueueItem queueItem, UrlFetchResult fetchResult)
@@ -564,7 +601,10 @@ public class CrawlEngine(
                 QueueSize = queueSize,
                 ActiveWorkers = _activeWorkers,
                 ErrorCount = _errorCount,
-                Elapsed = _stopwatch?.Elapsed ?? TimeSpan.Zero
+                Elapsed = _stopwatch?.Elapsed ?? TimeSpan.Zero,
+                LastCrawledUrl = _lastCrawledUrl != null 
+                    ? $"{(_lastCrawledStatus >= 200 && _lastCrawledStatus < 300 ? "✓" : "✗")} {_lastCrawledUrl} ({GetStatusDescription(_lastCrawledStatus)})"
+                    : null
             };
 
             ProgressUpdated?.Invoke(this, args);
@@ -586,6 +626,28 @@ public class CrawlEngine(
         {
             return url.ToLowerInvariant();
         }
+    }
+
+    private static string GetStatusDescription(int statusCode)
+    {
+        return statusCode switch
+        {
+            0 => "Connection Failed",
+            200 => "200 OK",
+            201 => "201 Created",
+            204 => "204 No Content",
+            301 => "301 Moved Permanently",
+            302 => "302 Found",
+            304 => "304 Not Modified",
+            400 => "400 Bad Request",
+            401 => "401 Unauthorized",
+            403 => "403 Forbidden",
+            404 => "404 Not Found",
+            500 => "500 Internal Server Error",
+            502 => "502 Bad Gateway",
+            503 => "503 Service Unavailable",
+            _ => $"{statusCode}"
+        };
     }
 
     private static bool IsSameDomain(Uri baseUri, Uri targetUri)
@@ -610,6 +672,7 @@ public class CrawlEngine(
         public long? ContentLength { get; set; }
         public string? Content { get; set; }
         public bool IsHtml { get; set; }
+        public string? ErrorMessage { get; set; }
         public List<KeyValuePair<string, string>> Headers { get; set; } = new();
     }
 }

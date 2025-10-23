@@ -135,32 +135,55 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
 
             IsCrawling = _crawlEngine.IsCrawling;
             
-            // If crawl just finished, show completion message and navigate to findings
+            // If crawl just finished, check if it was successful
             if (wasCrawling && !IsCrawling)
             {
-                _logger.LogInformation("✓ Crawl completed! Crawled {UrlsCrawled} URLs, discovered {TotalDiscovered} total, {ErrorCount} errors", 
-                    UrlsCrawled, TotalDiscovered, ErrorCount);
+                // Check if crawl was successful (at least some URLs crawled without all being errors)
+                int successfulCrawls = UrlsCrawled - ErrorCount;
                 
-                RecentActivity = $"✓ Crawl completed! Crawled {UrlsCrawled} URLs in {ElapsedTime}. Navigating to results...";
-                
-                // Navigate to Findings view after a short delay to show completion message
-                _ = System.Threading.Tasks.Task.Run(async () =>
+                if (UrlsCrawled == 0 || (UrlsCrawled == 1 && ErrorCount == 1))
                 {
-                    await System.Threading.Tasks.Task.Delay(2000); // Show completion message for 2 seconds
+                    // Complete failure - base URL couldn't be crawled
+                    _logger.LogWarning("✗ Crawl failed! Could not crawl any URLs. {ErrorCount} errors", ErrorCount);
+                    RecentActivity = $"✗ Crawl failed! Could not reach the base URL. Please check the URL and try again.";
                     
-                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                    // Show error message
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
-                        try
-                        {
-                            _navigationService.NavigateTo<ShoutingIguana.Views.FindingsView>();
-                            _logger.LogInformation("Navigated to Findings view after crawl completion");
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Failed to navigate to Findings view after crawl completion");
-                        }
+                        System.Windows.MessageBox.Show(
+                            $"Crawl failed - could not connect to the base URL.\n\nURLs attempted: {UrlsCrawled}\nErrors: {ErrorCount}\n\nPlease verify the URL is correct and accessible.",
+                            "Crawl Failed",
+                            System.Windows.MessageBoxButton.OK,
+                            System.Windows.MessageBoxImage.Error);
                     });
-                });
+                }
+                else
+                {
+                    // At least some URLs were crawled successfully
+                    _logger.LogInformation("✓ Crawl completed! Crawled {UrlsCrawled} URLs, discovered {TotalDiscovered} total, {ErrorCount} errors", 
+                        UrlsCrawled, TotalDiscovered, ErrorCount);
+                    
+                    RecentActivity = $"✓ Crawl completed! Crawled {UrlsCrawled} URLs ({successfulCrawls} successful, {ErrorCount} errors) in {ElapsedTime}. Navigating to results...";
+                    
+                    // Navigate to Findings view after a short delay to show completion message
+                    _ = System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        await System.Threading.Tasks.Task.Delay(2000); // Show completion message for 2 seconds
+                        
+                        await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            try
+                            {
+                                _navigationService.NavigateTo<ShoutingIguana.Views.FindingsView>();
+                                _logger.LogInformation("Navigated to Findings view after crawl completion");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Failed to navigate to Findings view after crawl completion");
+                            }
+                        });
+                    });
+                }
             }
         });
     }

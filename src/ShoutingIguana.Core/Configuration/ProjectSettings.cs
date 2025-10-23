@@ -9,6 +9,6 @@ public class ProjectSettings
     public string UserAgent { get; set; } = "ShoutingIguana/1.0";
     public double CrawlDelaySeconds { get; set; } = 1.0;
     public int ConcurrentRequests { get; set; } = 4;
-    public int TimeoutSeconds { get; set; } = 30;
+    public int TimeoutSeconds { get; set; } = 10;
 }
 
