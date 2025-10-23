@@ -3,7 +3,7 @@
 
 #define MyAppName "Shouting Iguana"
 #define MyAppVersion "1.0.0"
-#define MyAppPublisher "Your Company"
+#define MyAppPublisher "Lee Messenger"
 #define MyAppExeName "ShoutingIguana.exe"
 
 ; Platform will be defined via command line: /DPlatform=x64 or /DPlatform=x86
@@ -13,32 +13,33 @@
 
 #if Platform == "x64"
   #define PlatformName "x64"
-  #define ArchitecturesMode "x64compatible"
-  #define ProgramFilesFolder "pf64"
 #else
   #define PlatformName "x86"
-  #define ArchitecturesMode ""
-  #define ProgramFilesFolder "pf32"
 #endif
 
 [Setup]
 AppId={{8F7A9B3C-2E1D-4F5C-9A8B-7D6E5F4C3B2A}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppVerName={#MyAppName}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={#ProgramFilesFolder}\{#MyAppName}
+DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 OutputDir=publish\installer
 OutputBaseFilename=ShoutingIguana-{#PlatformName}
 SetupIconFile=Assets\logo.ico
+WizardImageFile=Assets\logo.png
+UninstallDisplayIcon={app}\Assets\logo.ico
 LicenseFile=LICENSE
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
 #if Platform == "x64"
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
 ArchitecturesAllowed=x64compatible
+#else
+ArchitecturesAllowed=x86 x64compatible
 #endif
 
 [Languages]

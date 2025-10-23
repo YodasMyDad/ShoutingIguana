@@ -185,6 +185,8 @@ Quick-access toolbar with icon buttons for common actions:
 
 ### 5.1 Solution Structure (high level)
 
+There is already an existing starting point all setup based on the wpf.mdc file. Use the existing architecture as a starting point
+
 - **App.Wpf** — WPF shell, DI, settings, extension UI host surfaces, Playwright browser installation orchestration.
 - **Core** — crawl engine, scheduler, pipeline, contracts (plugin interfaces), models, Playwright integration layer.
 - **Data** — persistence layer (EF Core SQLite or Dapper), migrations, repositories.
