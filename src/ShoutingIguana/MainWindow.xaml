@@ -3,26 +3,72 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
         Title="Shouting Iguana"
-        Height="450"
-        Width="800"
+        Height="800"
+        Width="1200"
         Icon="Assets/logo.png"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource MaterialDesign.Brush.Background}">
     
-    <Grid>
-        <md:Card Padding="32"
-                 Margin="32"
-                 HorizontalAlignment="Center"
-                 VerticalAlignment="Center"
-                 md:ElevationAssist.Elevation="Dp4">
-            <StackPanel>
-                <TextBlock Text="{Binding WelcomeMessage}"
-                           Style="{StaticResource MaterialDesignHeadline3TextBlock}"
-                           HorizontalAlignment="Center"
-                           Margin="16" />
-            </StackPanel>
-        </md:Card>
-    </Grid>
+    <Window.InputBindings>
+        <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewProjectCommand}"/>
+        <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenProjectCommand}"/>
+        <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseProjectCommand}"/>
+        <KeyBinding Key="D1" Modifiers="Control" Command="{Binding NavigateToProjectHomeCommand}"/>
+        <KeyBinding Key="D2" Modifiers="Control" Command="{Binding NavigateToCrawlDashboardCommand}"/>
+        <KeyBinding Key="D3" Modifiers="Control" Command="{Binding NavigateToFindingsCommand}"/>
+        <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
+        <KeyBinding Key="F6" Command="{Binding StartCrawlCommand}"/>
+        <KeyBinding Key="F8" Command="{Binding StopCrawlCommand}"/>
+    </Window.InputBindings>
+    
+    <DockPanel>
+        <!-- Menu Bar -->
+        <Menu DockPanel.Dock="Top" Background="{DynamicResource MaterialDesign.Brush.Background}">
+            <MenuItem Header="_File">
+                <MenuItem Header="_New Project" Command="{Binding NewProjectCommand}" InputGestureText="Ctrl+N"/>
+                <MenuItem Header="_Open Project" Command="{Binding OpenProjectCommand}" InputGestureText="Ctrl+O"/>
+                <MenuItem Header="Recent Projects" x:Name="RecentProjectsMenu">
+                    <MenuItem Header="(No recent projects)"/>
+                </MenuItem>
+                <MenuItem Header="_Close Project" Command="{Binding CloseProjectCommand}" InputGestureText="Ctrl+W"/>
+                <Separator/>
+                <MenuItem Header="_Export to CSV..." Command="{Binding ExportToCsvCommand}"/>
+                <Separator/>
+                <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
+            </MenuItem>
+            <MenuItem Header="_View">
+                <MenuItem Header="Project _Home" Command="{Binding NavigateToProjectHomeCommand}" InputGestureText="Ctrl+1"/>
+                <MenuItem Header="_Crawl Dashboard" Command="{Binding NavigateToCrawlDashboardCommand}" InputGestureText="Ctrl+2"/>
+                <MenuItem Header="_Findings" Command="{Binding NavigateToFindingsCommand}" InputGestureText="Ctrl+3"/>
+                <Separator/>
+                <MenuItem Header="_Refresh" Command="{Binding RefreshCommand}" InputGestureText="F5"/>
+            </MenuItem>
+            <MenuItem Header="_Crawl">
+                <MenuItem Header="_Start Crawl" Command="{Binding StartCrawlCommand}" InputGestureText="F6"/>
+                <MenuItem Header="Sto_p Crawl" Command="{Binding StopCrawlCommand}" InputGestureText="F8"/>
+                <Separator/>
+                <MenuItem Header="C_lear Queue" Command="{Binding ClearQueueCommand}"/>
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="View _Logs..." Command="{Binding ViewLogsCommand}"/>
+                <MenuItem Header="_About Shouting Iguana..." Command="{Binding AboutCommand}"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- Status Bar -->
+        <StatusBar DockPanel.Dock="Bottom" Background="{DynamicResource MaterialDesign.Brush.Background}">
+            <StatusBarItem>
+                <TextBlock Text="{Binding ProjectName}" Margin="8,0"/>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem>
+                <TextBlock Text="{Binding StatusMessage}" Margin="8,0"/>
+            </StatusBarItem>
+        </StatusBar>
+
+        <!-- Content Area -->
+        <ContentControl Content="{Binding CurrentView}" />
+    </DockPanel>
     
 </Window>
 

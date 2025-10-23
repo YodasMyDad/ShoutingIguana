@@ -1,0 +1,69 @@
+<UserControl x:Class="ShoutingIguana.Views.FindingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
+             Background="{DynamicResource MaterialDesign.Brush.Background}">
+    
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <md:Card Padding="16" Margin="0,0,0,16" md:ElevationAssist.Elevation="Dp2">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal">
+                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             md:HintAssist.Hint="Search URLs..."
+                             Width="300"
+                             Margin="0,0,8,0"/>
+                    <Button Content="Search"
+                            Command="{Binding SearchCommand}"
+                            Style="{StaticResource MaterialDesignRaisedButton}"
+                            Margin="8,0"/>
+                    <TextBlock Text="{Binding TotalCount, StringFormat='Total: {0} URLs'}"
+                               VerticalAlignment="Center"
+                               Margin="16,0,0,0"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Grid.Column="1">
+                    <Button Content="Refresh"
+                            Command="{Binding RefreshCommand}"
+                            Style="{StaticResource MaterialDesignOutlinedButton}"
+                            Margin="8,0"/>
+                    <Button Content="Export CSV"
+                            Command="{Binding ExportToCsvCommand}"
+                            Style="{StaticResource MaterialDesignRaisedButton}"
+                            Margin="8,0"/>
+                </StackPanel>
+            </Grid>
+        </md:Card>
+
+        <!-- Data Grid -->
+        <md:Card Grid.Row="1" md:ElevationAssist.Elevation="Dp2">
+            <DataGrid ItemsSource="{Binding Urls}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      SelectionMode="Extended"
+                      Style="{StaticResource MaterialDesignDataGrid}">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="URL" Binding="{Binding Address}" Width="*"/>
+                    <DataGridTextColumn Header="Status" Binding="{Binding HttpStatus}" Width="80"/>
+                    <DataGridTextColumn Header="Content Type" Binding="{Binding ContentType}" Width="150"/>
+                    <DataGridTextColumn Header="Size" Binding="{Binding ContentLength}" Width="100"/>
+                    <DataGridTextColumn Header="Depth" Binding="{Binding Depth}" Width="80"/>
+                    <DataGridTextColumn Header="Crawled At" Binding="{Binding LastCrawledUtc, StringFormat='yyyy-MM-dd HH:mm:ss'}" Width="150"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </md:Card>
+    </Grid>
+</UserControl>
+

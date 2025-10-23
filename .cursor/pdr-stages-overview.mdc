@@ -1,0 +1,385 @@
+# Shouting Iguana — Three-Stage Development Roadmap
+
+This document provides an overview of how the original PDR has been broken down into three incremental, testable stages. Each stage builds on the previous one and delivers a working application that you can run and test before moving forward.
+
+---
+
+## Why Three Stages?
+
+The original PDR is **very complex** with many interdependent features:
+- Plugin system with hot-loading via AssemblyLoadContext
+- NuGet integration for in-app plugin discovery
+- 13 different analyzer plugins
+- Playwright for JavaScript rendering
+- Crawl engine with resume, pause, proxy support
+- Multiple export formats
+- Comprehensive WPF UI
+
+Attempting to build everything at once would be overwhelming and risky. Breaking it into stages allows you to:
+
+1. ✅ **Validate core assumptions early** (Does the crawl engine work? Does SQLite handle the load?)
+2. ✅ **Test incrementally** (Each stage is a complete, working app)
+3. ✅ **Course-correct** (If something doesn't work, you find out early)
+4. ✅ **Maintain motivation** (Ship working software every stage)
+5. ✅ **Reduce risk** (Complex features like hot-loading are isolated to Stage 3)
+
+---
+
+## Stage Breakdown
+
+### 📦 Stage 1: Core Foundation & Basic Crawling
+**Duration Estimate:** 2-3 weeks  
+**Focus:** Prove the fundamentals work
+
+**What You Build:**
+- WPF application with MaterialDesign theme
+- Project management (create, open, save projects)
+- SQLite database with EF Core
+- Basic HTTP crawler (no JavaScript yet)
+- Robots.txt support
+- Link extraction with AngleSharp
+- Simple URL inventory
+- CSV export
+- Crawl Dashboard with real-time progress
+
+**What You Can Test:**
+- Create a project for `http://example.com`
+- Configure crawl settings (depth, concurrency, robots.txt)
+- Start crawl and watch progress
+- View crawled URLs in Findings grid
+- Export URL inventory to CSV
+- Stop and restart crawls
+
+**Why This First:**
+- Establishes the infrastructure (WPF, DI, database, logging)
+- Proves the crawl engine fundamentals work
+- Gives you a working app to demo
+- No complex dependencies (Playwright, plugins)
+
+**Stage 1 Complete When:**
+- ✅ You can crawl a simple HTML site
+- ✅ All URLs, links, headers saved to database
+- ✅ CSV export produces correct data
+- ✅ UI is responsive and bug-free
+
+---
+
+### 🚀 Stage 2: Playwright Integration & Plugin Foundation
+**Duration Estimate:** 3-4 weeks  
+**Focus:** Add JavaScript rendering and prove plugins work
+
+**What You Build (Adds to Stage 1):**
+- Playwright integration with Chromium
+- Browser installation flow (first-run experience)
+- Plugin SDK package (contracts, interfaces, base classes)
+- Plugin registry (load plugins at startup)
+- 4 built-in plugins:
+  1. Inventory (basic URL data)
+  2. Broken Links (detect 404s, report sources)
+  3. Titles & Meta (extract, validate titles/descriptions)
+  4. Redirects (capture chains, detect issues)
+- Findings database table
+- Tabbed Findings View (one tab per plugin)
+- Excel export (ClosedXML)
+- Settings dialog (crawl, browser, plugin settings)
+
+**What You Can Test:**
+- Crawl a JavaScript-heavy site (React SPA)
+- Verify rendered content captured (not just raw HTML)
+- See findings from all 4 plugins
+- Export findings to Excel (multi-sheet workbook)
+- Enable/disable plugins (requires restart in Stage 2)
+- Configure browser settings (viewport, headless mode)
+
+**Why This Second:**
+- Playwright is a major dependency—isolate it for testing
+- Plugin SDK design is critical—validate with 4 real plugins
+- Simpler plugin loading (no hot-reload yet) reduces complexity
+- Proves the plugin execution pipeline works
+
+**Stage 2 Complete When:**
+- ✅ Playwright crawls JS-rendered pages successfully
+- ✅ Browser memory managed properly (<1.5 GB)
+- ✅ All 4 plugins generate correct findings
+- ✅ Excel export produces professional reports
+- ✅ Plugin enable/disable works (with restart)
+
+---
+
+### 🎯 Stage 3: Complete MVP with Hot-Loading & Full Features
+**Duration Estimate:** 4-5 weeks  
+**Focus:** Deliver the full MVP with all advanced features
+
+**What You Build (Adds to Stage 2):**
+- **AssemblyLoadContext plugin system** (hot-load, no restart)
+- **NuGet integration** (search, install, update, uninstall plugins)
+- **Extensions Manager UI** (full-featured plugin management)
+- **9 more built-in plugins:**
+  5. Duplicate Content (exact + near-dup via SimHash)
+  6. Robots & Indexability (noindex, robots.txt compliance)
+  7. Canonical Validation (detect chains, broken canonicals)
+  8. XML Sitemap (generate, compare with crawl, detect orphans)
+  9. Image Audit (alt text, size, broken images)
+  10. Internal Linking (inlinks, outlinks, anchor text)
+  11. List-Mode Crawling (CSV import, focused crawl)
+  12. Structured Data (JSON-LD detection, Schema.org validation)
+  13. Custom Extraction (user-defined CSS/XPath/Regex rules)
+- **Advanced crawl features:**
+  - Pause & Resume
+  - Crash recovery (checkpoint & restore)
+  - Proxy support (global + per-project, with auth)
+- **Full menu structure** (all menus, all shortcuts)
+- **Link Graph view** (simple table)
+- **Production polish** (error handling, logging, About dialog, Help)
+
+**What You Can Test:**
+- Install a plugin from NuGet feed **without restarting app**
+- Plugin's findings appear immediately in Findings View
+- Uninstall plugin → tab disappears, files deleted
+- Crawl with all 13 plugins enabled
+- Pause crawl mid-stream, resume later
+- Force-quit app during crawl, restart, and resume
+- Configure proxy, test connection, crawl through proxy
+- Import URL list (list-mode), crawl only those URLs
+- Create custom extraction rules, export custom data
+- Export sitemap XML, compare with crawl
+- Detect duplicate content (exact and near-dup)
+- Validate structured data (JSON-LD)
+
+**Why This Third:**
+- Hot-loading is complex (AssemblyLoadContext, dependency resolution)—do it last when everything else works
+- NuGet integration requires robust plugin loading—build on Stage 2's foundation
+- Advanced features (pause/resume, crash recovery, proxy) are polish—can be added incrementally
+- All 13 plugins validated against stable SDK
+
+**Stage 3 Complete When:**
+- ✅ All original PDR acceptance criteria pass
+- ✅ Hot-loading plugins works reliably
+- ✅ NuGet integration seamless
+- ✅ All 13 plugins work correctly
+- ✅ Pause/Resume, crash recovery, proxy all functional
+- ✅ Performance targets met (throughput, memory, resume time)
+- ✅ Application is polished, stable, and ready for users
+
+---
+
+## Stage Dependencies
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Stage 1: Foundation                                         │
+│  ───────────────────────                                     │
+│  • WPF app shell (MaterialDesign, MVVM, DI)                 │
+│  • SQLite database (EF Core, migrations)                    │
+│  • Basic HTTP crawler (HttpClient, AngleSharp)              │
+│  • Project management (create, open, save)                  │
+│  • Crawl Dashboard (progress, stats)                        │
+│  • Findings View (URL inventory grid)                       │
+│  • CSV export                                               │
+│  • Robots.txt support, link extraction, politeness          │
+│                                                              │
+│  TEST: Crawl example.com, export CSV ✓                      │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+                   (builds on Stage 1)
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Stage 2: Playwright & Plugins                               │
+│  ──────────────────────────────                              │
+│  • Playwright integration (Chromium, browser management)     │
+│  • Plugin SDK package (contracts, interfaces)                │
+│  • Plugin registry (load at startup, simple lifecycle)       │
+│  • 4 built-in plugins (Inventory, Broken Links, Titles,      │
+│    Redirects)                                                │
+│  • Findings database table                                   │
+│  • Tabbed Findings View (per plugin)                         │
+│  • Excel export (ClosedXML)                                  │
+│  • Settings dialog (crawl, browser, plugins)                 │
+│                                                              │
+│  TEST: Crawl JS site, see plugin findings, export Excel ✓   │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+                   (builds on Stage 2)
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Stage 3: Complete MVP                                       │
+│  ─────────────────────                                       │
+│  • AssemblyLoadContext plugin hot-loading (no restart)       │
+│  • NuGet integration (search, install, update, uninstall)    │
+│  • Extensions Manager UI (full-featured)                     │
+│  • 9 more built-in plugins (total 13)                        │
+│  • Pause/Resume crawl                                        │
+│  • Crash recovery (checkpoint & restore)                     │
+│  • Proxy support (global + per-project, with auth)           │
+│  • Full menu structure (all items, all shortcuts)            │
+│  • Link Graph view, list-mode, custom extraction            │
+│  • Production polish (error handling, About, Help)           │
+│                                                              │
+│  TEST: Full MVP acceptance criteria ✓                        │
+│  READY FOR RELEASE 🎉                                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Testing Philosophy
+
+**Each stage must be fully tested and working before moving to the next.**
+
+### Stage 1 Testing Checklist
+- [ ] Application starts without errors
+- [ ] Can create and open projects
+- [ ] Can crawl a simple HTML site (example.com)
+- [ ] Robots.txt respected (or ignored based on setting)
+- [ ] Links extracted and followed
+- [ ] URLs saved to database correctly
+- [ ] Crawl Dashboard shows accurate stats
+- [ ] Findings grid displays all URLs
+- [ ] CSV export produces correct file
+- [ ] Can handle errors (404s, timeouts)
+
+### Stage 2 Testing Checklist
+- [ ] Playwright browsers install on first run
+- [ ] Can crawl JavaScript-heavy site (React SPA)
+- [ ] Rendered content captured correctly
+- [ ] Browser memory stays under 1.5 GB
+- [ ] All 4 plugins load at startup
+- [ ] Each plugin generates findings
+- [ ] Findings View shows tabs for each plugin
+- [ ] Excel export creates multi-sheet workbook
+- [ ] Settings dialog saves changes
+- [ ] Plugin enable/disable works (with restart)
+
+### Stage 3 Testing Checklist
+- [ ] Can install plugin from NuGet without restart
+- [ ] Plugin loads and executes immediately
+- [ ] Can uninstall plugin, files deleted, ALC unloaded
+- [ ] All 13 plugins generate correct findings
+- [ ] Pause crawl → queue saved → Resume works
+- [ ] Force crash → reopen → Resume prompt works
+- [ ] Proxy configuration works (global + per-project)
+- [ ] Proxy auth works (username/password)
+- [ ] All menu items functional
+- [ ] All keyboard shortcuts work
+- [ ] List-mode import and crawl works
+- [ ] Custom extraction rules work
+- [ ] Sitemap generation and comparison works
+- [ ] Duplicate content detection works
+- [ ] Performance targets met (throughput, memory)
+- [ ] All original PDR acceptance criteria pass
+
+---
+
+## File Roadmap
+
+**Documentation Files:**
+- `pdr.mdc` — Original comprehensive PDR (reference)
+- `pdr-stages-overview.mdc` — This file (roadmap overview)
+- `pdr-stage1-foundation.mdc` — Stage 1 detailed spec
+- `pdr-stage2-plugins-and-playwright.mdc` — Stage 2 detailed spec
+- `pdr-stage3-complete-mvp.mdc` — Stage 3 detailed spec
+- `developer.mdc` — .NET development guidelines
+- `wpf.mdc` — WPF architecture and best practices
+- `efcore.mdc` — EF Core with SQLite setup guide
+
+**How to Use:**
+1. Read this overview to understand the big picture
+2. Start with Stage 1 PDR → implement → test until complete
+3. Move to Stage 2 PDR → implement → test until complete
+4. Move to Stage 3 PDR → implement → test until complete
+5. Ship MVP! 🚀
+
+---
+
+## Key Design Decisions Across Stages
+
+### Database Strategy
+- **SQLite** per project (single file, easy to backup/share)
+- **EF Core** for schema management and migrations
+- **WAL mode** for better concurrency
+- **Checkpointing** for crash recovery
+
+### UI Framework
+- **WPF** with MaterialDesign theme (modern Win11 look)
+- **CommunityToolkit.Mvvm** for MVVM (lightweight, source generators)
+- **Microsoft.Extensions.DependencyInjection** for DI
+
+### Crawl Engine
+- **Stage 1:** HttpClient (simple, fast, no JS)
+- **Stage 2+:** Playwright (full JS rendering, slower but complete)
+- **Fallback:** HttpClient for non-HTML resources (images, CSS)
+
+### Plugin System
+- **Stage 1:** No plugins
+- **Stage 2:** Plugins load at startup, restart required to change
+- **Stage 3:** Hot-loading via AssemblyLoadContext, no restart
+
+### Export Formats
+- **Stage 1:** CSV only (via CsvHelper)
+- **Stage 2+:** CSV + Excel (via ClosedXML)
+- **Stage 3:** CSV, Excel, Sitemap XML, custom formats
+
+---
+
+## Estimated Timeline
+
+| Stage | Duration | Deliverable |
+|-------|----------|-------------|
+| Stage 1 | 2-3 weeks | Basic HTTP crawler with CSV export |
+| Stage 2 | 3-4 weeks | Playwright + 4 plugins + Excel export |
+| Stage 3 | 4-5 weeks | Full MVP with hot-loading + 13 plugins |
+| **Total** | **9-12 weeks** | **Production-ready MVP** |
+
+*Timeline assumes one full-time developer. Adjust based on your availability and experience.*
+
+---
+
+## Risk Mitigation
+
+### Stage 1 Risks
+- **SQLite performance under load** → Test with 10k URL crawl, optimize pragmas
+- **Memory leaks in crawl engine** → Monitor memory, dispose resources properly
+
+### Stage 2 Risks
+- **Playwright memory consumption** → Limit concurrent pages, aggressive disposal
+- **Plugin SDK design wrong** → Build 4 diverse plugins to validate API surface
+
+### Stage 3 Risks
+- **AssemblyLoadContext complexity** → Prototype early, test unload thoroughly
+- **NuGet API changes** → Use stable V3 API, handle errors gracefully
+- **Too many features at once** → Implement incrementally, test each feature
+
+---
+
+## Success Metrics
+
+### Stage 1 Success
+✅ User can crawl a static HTML site and export CSV in under 10 minutes
+
+### Stage 2 Success
+✅ User can crawl a JavaScript-rendered SPA and see findings from 4 analyzers in Excel
+
+### Stage 3 Success (MVP Complete)
+✅ User can install a plugin from NuGet, crawl with 13 analyzers, use proxy, resume after crash, and export professional reports—**all matching the original PDR goals**
+
+---
+
+## Next Steps
+
+1. **Review all stage PDRs** to understand scope and dependencies
+2. **Set up development environment** (Visual Studio, .NET 9, SQL tools)
+3. **Start with Stage 1** implementation following `pdr-stage1-foundation.mdc`
+4. **Test Stage 1 thoroughly** before moving to Stage 2
+5. **Iterate** through each stage, testing at every step
+
+---
+
+## Questions Before You Start?
+
+Before diving into Stage 1, ensure you understand:
+- The overall architecture (Core, Data, WPF, Plugins)
+- The technology stack (WPF, EF Core, Playwright, MaterialDesign)
+- The testing philosophy (fully test each stage)
+- The plugin system evolution (none → basic → hot-loading)
+
+**Good luck building Shouting Iguana! 🦎**

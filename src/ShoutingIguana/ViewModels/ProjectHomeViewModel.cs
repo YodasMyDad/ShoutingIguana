@@ -1,0 +1,298 @@
+using System;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.Windows;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Ookii.Dialogs.Wpf;
+using ShoutingIguana.Core.Configuration;
+using ShoutingIguana.Core.Models;
+using ShoutingIguana.Core.Repositories;
+using ShoutingIguana.Services;
+
+namespace ShoutingIguana.ViewModels;
+
+public partial class ProjectHomeViewModel : ObservableObject
+{
+    private readonly ILogger<ProjectHomeViewModel> _logger;
+    private readonly INavigationService _navigationService;
+    private readonly IProjectContext _projectContext;
+    private readonly IServiceProvider _serviceProvider;
+
+    [ObservableProperty]
+    private string _projectName = string.Empty;
+
+    [ObservableProperty]
+    private string _baseUrl = string.Empty;
+
+    [ObservableProperty]
+    private int _maxDepth = 5;
+
+    [ObservableProperty]
+    private int _maxUrls = 1000;
+
+    [ObservableProperty]
+    private double _crawlDelay = 1.0;
+
+    [ObservableProperty]
+    private bool _respectRobotsTxt = true;
+
+    [ObservableProperty]
+    private string _userAgent = "ShoutingIguana/1.0";
+
+    [ObservableProperty]
+    private ObservableCollection<Project> _recentProjects = new();
+
+    [ObservableProperty]
+    private Project? _currentProject;
+
+    [ObservableProperty]
+    private bool _isWelcomeScreen = true;
+
+    public ProjectHomeViewModel(
+        ILogger<ProjectHomeViewModel> logger,
+        INavigationService navigationService,
+        IProjectContext projectContext,
+        IServiceProvider serviceProvider)
+    {
+        _logger = logger;
+        _navigationService = navigationService;
+        _projectContext = projectContext;
+        _serviceProvider = serviceProvider;
+    }
+
+    public async Task LoadAsync()
+    {
+        // Can only load recent projects if we have a database open
+        // For now, skip loading recent projects on startup
+        // This will be revisited when we implement a master database for tracking all projects
+        await Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private void NewProject()
+    {
+        IsWelcomeScreen = false;
+        CurrentProject = null;
+        ProjectName = "New Project";
+        BaseUrl = string.Empty;
+        MaxDepth = 5;
+        MaxUrls = 1000;
+        CrawlDelay = 1.0;
+        RespectRobotsTxt = true;
+        UserAgent = "ShoutingIguana/1.0";
+    }
+
+    [RelayCommand]
+    private async Task OpenRecentProjectAsync(Project project)
+    {
+        if (project == null)
+            return;
+
+        // For now, recent projects functionality is deferred
+        // This would require a master database to track all project files
+        await Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private async Task OpenProjectAsync()
+    {
+        var dialog = new VistaOpenFileDialog
+        {
+            Filter = "SQLite Database (*.db)|*.db|All files (*.*)|*.*",
+            Title = "Open Project",
+            InitialDirectory = GetProjectsDirectory()
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                // Switch to the selected database
+                var dbProvider = _serviceProvider.GetRequiredService<ShoutingIguana.Data.ProjectDbContextProvider>();
+                dbProvider.SetProjectPath(dialog.FileName);
+
+                // Create a scoped repository to load from the new database
+                using var scope = _serviceProvider.CreateScope();
+                var projectRepo = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
+                var projects = await projectRepo.GetRecentProjectsAsync(1);
+                var project = projects.FirstOrDefault();
+
+                if (project == null)
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                        MessageBox.Show("No project found in the selected database.", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+                    dbProvider.CloseProject();
+                    return;
+                }
+
+                // Update project context
+                _projectContext.OpenProject(dialog.FileName, project.Id, project.Name);
+
+                // Update UI
+                CurrentProject = project;
+                ProjectName = project.Name;
+                BaseUrl = project.BaseUrl;
+
+                // Load settings
+                var settings = JsonSerializer.Deserialize<ProjectSettings>(project.SettingsJson) ?? new ProjectSettings();
+                MaxDepth = settings.MaxCrawlDepth;
+                MaxUrls = settings.MaxUrlsToCrawl;
+                CrawlDelay = settings.CrawlDelaySeconds;
+                RespectRobotsTxt = settings.RespectRobotsTxt;
+                UserAgent = settings.UserAgent;
+
+                // Update last opened time
+                project.LastOpenedUtc = DateTime.UtcNow;
+                await projectRepo.UpdateAsync(project);
+
+                IsWelcomeScreen = false;
+                _logger.LogInformation("Opened project: {ProjectName} from {FilePath}", project.Name, dialog.FileName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to open project from {FilePath}", dialog.FileName);
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show($"Failed to open project: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task SaveSettingsAsync(bool showSuccessMessage = true)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(BaseUrl))
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show("Base URL is required", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning));
+                return;
+            }
+
+            if (!Uri.TryCreate(BaseUrl, UriKind.Absolute, out _))
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show("Invalid URL format", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning));
+                return;
+            }
+
+            var settings = new ProjectSettings
+            {
+                BaseUrl = BaseUrl,
+                MaxCrawlDepth = MaxDepth,
+                MaxUrlsToCrawl = MaxUrls,
+                CrawlDelaySeconds = CrawlDelay,
+                RespectRobotsTxt = RespectRobotsTxt,
+                UserAgent = UserAgent
+            };
+
+            // Perform save operation on background thread
+            await Task.Run(async () =>
+            {
+                if (CurrentProject == null)
+                {
+                    // Create new project with its own database file
+                    var projectsDir = GetProjectsDirectory();
+                    var sanitizedName = string.Join("_", ProjectName.Split(Path.GetInvalidFileNameChars()));
+                    var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                    var projectFileName = $"{sanitizedName}_{timestamp}.db";
+                    var projectPath = Path.Combine(projectsDir, projectFileName);
+
+                    // Switch to new database
+                    var dbProvider = _serviceProvider.GetRequiredService<ShoutingIguana.Data.ProjectDbContextProvider>();
+                    dbProvider.SetProjectPath(projectPath);
+
+                    // Create project in new database
+                    using var scope = _serviceProvider.CreateScope();
+                    var projectRepo = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
+                    
+                    var project = new Project
+                    {
+                        Name = ProjectName,
+                        BaseUrl = BaseUrl,
+                        CreatedUtc = DateTime.UtcNow,
+                        LastOpenedUtc = DateTime.UtcNow,
+                        SettingsJson = JsonSerializer.Serialize(settings)
+                    };
+
+                    CurrentProject = await projectRepo.CreateAsync(project);
+                    
+                    // Update project context
+                    _projectContext.OpenProject(projectPath, CurrentProject.Id, CurrentProject.Name);
+                    
+                    _logger.LogInformation("Created new project: {ProjectName} at {ProjectPath}", ProjectName, projectPath);
+                }
+                else
+                {
+                    // Update existing project
+                    using var scope = _serviceProvider.CreateScope();
+                    var projectRepo = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
+                    
+                    CurrentProject.Name = ProjectName;
+                    CurrentProject.BaseUrl = BaseUrl;
+                    CurrentProject.SettingsJson = JsonSerializer.Serialize(settings);
+                    CurrentProject.LastOpenedUtc = DateTime.UtcNow;
+                    await projectRepo.UpdateAsync(CurrentProject);
+                    
+                    // Update project context name
+                    if (_projectContext.CurrentProjectPath != null)
+                    {
+                        _projectContext.OpenProject(_projectContext.CurrentProjectPath, CurrentProject.Id, CurrentProject.Name);
+                    }
+                    
+                    _logger.LogInformation("Updated project: {ProjectName}", ProjectName);
+                }
+            });
+
+            if (showSuccessMessage)
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show("Settings saved successfully", "Success", MessageBoxButton.OK, MessageBoxImage.Information));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save project settings");
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+                MessageBox.Show($"Failed to save settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+        }
+    }
+
+    [RelayCommand]
+    private async Task StartCrawlAsync()
+    {
+        // If project hasn't been saved yet, save it first (without showing success message)
+        if (CurrentProject == null)
+        {
+            await SaveSettingsAsync(showSuccessMessage: false);
+            
+            // If save failed or was cancelled, don't proceed
+            if (CurrentProject == null)
+            {
+                return;
+            }
+        }
+
+        // Navigate to crawl dashboard with project context
+        _navigationService.NavigateTo<ShoutingIguana.Views.CrawlDashboardView>();
+        _logger.LogInformation("Navigating to crawl dashboard for project {ProjectId}", CurrentProject.Id);
+    }
+
+    private string GetProjectsDirectory()
+    {
+        var path = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "ShoutingIguana",
+            "projects");
+
+        Directory.CreateDirectory(path);
+        return path;
+    }
+}
+

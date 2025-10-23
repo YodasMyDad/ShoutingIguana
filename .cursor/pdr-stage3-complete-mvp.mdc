@@ -1,0 +1,914 @@
+# PDR Stage 3 — Complete MVP with Hot-Loading & Full Feature Set
+
+**Working name:** Shouting Iguana  
+**Platform:** Windows desktop (WPF, .NET 9)  
+**Goal:** Complete the MVP with hot-loadable plugins, NuGet integration, all remaining built-in plugins, and production-ready features.
+
+---
+
+## Stage 3 Overview
+
+**Builds on Stage 2** (which delivered Playwright crawling, plugin SDK, and 4 working plugins).
+
+This stage completes the MVP by adding:
+1. **AssemblyLoadContext-based plugin system** with hot-loading (no restart required)
+2. **NuGet feed integration** with in-app discovery, install, upgrade, uninstall
+3. **Full Extensions Manager UI** with search, details, and management
+4. **All remaining built-in plugins** (9 more, total 13)
+5. **Advanced crawl features**: pause/resume, crash recovery, proxy support, list-mode
+6. **Production polish**: full menu structure, keyboard shortcuts, error handling, help system
+
+**Key Outcome:** Full MVP as specified in original PDR—user can install plugins from NuGet without restart, crawl with all 13 analyzers, use proxy, resume after crash, and export comprehensive reports.
+
+---
+
+## 1) In Scope (Stage 3)
+
+### Hot-Loading Plugin System with AssemblyLoadContext
+
+#### Plugin Loading Architecture
+- **Per-Plugin ALC**: Each plugin loads in isolated `AssemblyLoadContext`
+  - Allows unloading assemblies without app restart
+  - Prevents DLL file locking
+  - Isolates dependencies between plugins
+  
+- **Dependency Resolution**
+  - Plugin's local dependencies loaded from plugin folder
+  - SDK types shared from host (single copy of `IPlugin`, etc.)
+  - Resolving handler for common dependencies (System.*, Microsoft.Extensions.*)
+  
+- **Loading Process**
+  1. User installs plugin from NuGet (download to temp)
+  2. Extract package to `%AppData%/ShoutingIguana/extensions/<package>/<version>`
+  3. Create new ALC for plugin
+  4. Load plugin assembly into ALC
+  5. Discover `IPlugin` type via reflection
+  6. Instantiate and call `Initialize(hostContext)`
+  7. Register tasks/exporters in runtime registry
+  8. Update UI (add tabs, menu items, etc.) without restart
+  
+- **Unloading Process**
+  1. User disables/uninstalls plugin
+  2. Unregister all tasks/exporters from registry
+  3. Dispose plugin instance
+  4. Unload ALC (triggers GC, frees DLL file)
+  5. Remove from active plugins list
+  6. Update UI to remove plugin contributions
+  
+- **Upgrade Process**
+  1. Download new version to side-by-side folder
+  2. If plugin active, wait for any in-flight tasks to complete
+  3. Unload old version (unload ALC)
+  4. Load new version (new ALC)
+  5. Re-register tasks/exporters
+  6. Update UI
+
+#### Limitations & Edge Cases
+- **WPF Resource Injection**: If plugin adds global ResourceDictionaries, prompt for **soft restart** (rare case)
+- **Active Tasks**: Can't unload plugin while tasks are executing; wait or cancel crawl
+- **Shared State**: Plugins can't share static state across ALCs (by design)
+
+### NuGet Integration
+
+#### Feed Configuration
+- **Default Feeds**
+  - nuget.org (public feed)
+  - Allow adding custom feeds (Azure Artifacts, private feeds)
+  - Store feed URLs + optional credentials (encrypted with DPAPI)
+  
+- **Feed Protocol**
+  - Use NuGet V3 API (`ServiceIndex.json`)
+  - Search: `SearchQueryService`
+  - Package metadata: `RegistrationBaseUrl`
+  - Download: `PackageBaseAddress`
+
+#### Package Discovery & Search
+- **Search UI** (in Extensions Manager)
+  - Search box with debounce (300ms)
+  - Filter by tags (e.g., `shoutingiguana-plugin`)
+  - Sort by relevance, downloads, publish date
+  - Results grid: Name, Description, Author, Version, Downloads
+  
+- **SDK Compatibility Check**
+  - Read `[Plugin(MinSdk = "1.0.0")]` attribute from package metadata
+  - Compare with host SDK version
+  - Block install if incompatible
+  - Show warning if newer SDK available
+
+#### Package Installation
+- **Install Flow**
+  1. User clicks "Install" on package
+  2. Show confirmation dialog with permissions/capabilities
+  3. Download `.nupkg` file to temp
+  4. Verify package integrity (hash check)
+  5. Extract to extensions folder
+  6. Load plugin via ALC (hot-load)
+  7. Show success notification
+  8. Plugin appears in Extensions Manager as "Enabled"
+  
+- **Progress Reporting**
+  - Download progress bar
+  - Status: Downloading, Extracting, Loading, Initializing
+  
+- **Error Handling**
+  - Network errors → retry with exponential backoff
+  - Incompatible SDK → show error, block install
+  - Load failures → show error dialog with logs, rollback
+
+#### Package Management
+- **Update Check**
+  - Background check for updates (on app startup)
+  - Badge on Extensions Manager icon when updates available
+  - "Update All" button
+  
+- **Uninstall**
+  - Unload plugin (via ALC)
+  - Delete extension folder
+  - Show confirmation dialog
+
+### Extensions Manager UI (Full-Featured)
+
+**Layout**:
+```
+┌─────────────────────────────────────────────────────────┐
+│ Extensions Manager                          [🔍 Search] │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│ ┌── Installed (4) ────────┐  ┌── Details ────────────┐│
+│ │ ☑ Broken Links      1.0  │  │ Broken Links Analyzer ││
+│ │ ☑ Titles & Meta     1.0  │  │ Version: 1.0.0        ││
+│ │ ☑ Redirects         1.0  │  │ Author: Shouting...   ││
+│ │ ☑ Inventory         1.0  │  │                       ││
+│ │                          │  │ Detects broken links  ││
+│ │                          │  │ and reports source    ││
+│ │                          │  │ pages with status.    ││
+│ └──────────────────────────┘  │                       ││
+│                                │ [Disable] [Uninstall] ││
+│ ┌── Browse (nuget.org) ───┐  └───────────────────────┘│
+│ │ 🔽 Duplicate Content     │                           │
+│ │ 🔽 Schema Validator      │                           │
+│ │ 🔽 Custom Extraction     │                           │
+│ │ ...                      │                           │
+│ └──────────────────────────┘                           │
+│                                                         │
+│ ⚙️ Manage Feeds...                     [🔄 Check Updates]│
+└─────────────────────────────────────────────────────────┘
+```
+
+**Features**:
+- **Left Panel**: Two sections (Installed, Browse)
+  - Installed: enabled plugins with checkboxes (toggle enabled state)
+  - Browse: search results from NuGet feed
+  
+- **Right Panel**: Selected plugin details
+  - Name, version, author, description
+  - README/changelog (from package metadata)
+  - Required capabilities (Network, FileSystem, Database, etc.)
+  - Actions: Install/Update/Enable/Disable/Uninstall
+  
+- **Top Bar**:
+  - Search box (searches Browse feed)
+  - Filter dropdown (All, Updates Available, Enabled, Disabled)
+  
+- **Bottom Bar**:
+  - "Manage Feeds" button → opens feed configuration dialog
+  - "Check for Updates" button → refreshes package metadata
+
+### Remaining Built-in Plugins (9 More)
+
+All plugins follow Stage 2 architecture (IPlugin, IUrlTask, IExportProvider).
+
+#### 5) **Duplicate Content Plugin** (`ShoutingIguana.Plugins.DuplicateContent`)
+- **Hash-based detection**
+  - Compute SHA-256 hash of cleaned HTML content (strip whitespace, tags)
+  - Store hash in Urls table
+  - Detect exact duplicates (same hash)
+  
+- **Near-duplicate detection** (SimHash)
+  - Compute 64-bit SimHash of content
+  - Compare with other URLs (Hamming distance)
+  - Flag pairs with distance < 3 (threshold)
+  
+- **Findings**:
+  - Exact duplicate → Error
+  - Near duplicate (>95% similar) → Warning
+  
+- **Export**: URL pairs/groups with similarity score
+
+#### 6) **Robots & Indexability Plugin** (`ShoutingIguana.Plugins.Robots`)
+- **Directives to check**:
+  - robots.txt (already fetched in Stage 1)
+  - `<meta name="robots" content="noindex,nofollow">`
+  - HTTP header `X-Robots-Tag: noindex`
+  
+- **Compute is_indexable** (store in Urls table)
+  - False if any directive says noindex
+  - False if blocked by robots.txt
+  - True otherwise
+  
+- **Findings**:
+  - Blocked by robots.txt but linked internally → Warning
+  - Noindex on important page (depth < 2) → Warning
+  - Conflicting directives → Error
+  
+- **Export**: URL, robots.txt status, meta robots, X-Robots-Tag, is_indexable
+
+#### 7) **Canonical Validation Plugin** (`ShoutingIguana.Plugins.Canonical`)
+- **Extract canonical URL**:
+  - `<link rel="canonical" href="...">`
+  - HTTP header `Link: <...>; rel="canonical"`
+  
+- **Validation rules**:
+  - Canonical target must return 200 OK
+  - No self-canonical unless it's the canonical version
+  - No canonical chains (canonical → canonical → ...)
+  - No cross-domain canonicals (unless intentional)
+  
+- **Findings**:
+  - Canonical to 404 → Error
+  - Canonical chain → Warning
+  - Missing canonical on important page → Info
+  
+- **Export**: URL, canonical_url, issues
+
+#### 8) **XML Sitemap Plugin** (`ShoutingIguana.Plugins.Sitemap`)
+- **Discovery**:
+  - Fetch `/sitemap.xml` or from robots.txt `Sitemap:` directive
+  - Parse XML sitemap (handle sitemap index)
+  
+- **Comparison with crawl**:
+  - URLs in sitemap but not crawled → "Orphan URLs"
+  - Crawled URLs not in sitemap → "Missing from sitemap"
+  - URLs in sitemap with noindex → Warning
+  
+- **Generation**:
+  - Generate sitemap XML from crawled URLs
+  - Include only indexable URLs (is_indexable=true)
+  - Export button → save XML file
+  
+- **Findings**:
+  - Orphan URL (in sitemap, not linked) → Warning
+  - Important page missing from sitemap → Warning
+  
+- **Export**: Sitemap XML file + comparison report (CSV)
+
+#### 9) **Image Audit Plugin** (`ShoutingIguana.Plugins.Images`)
+- **Extract images**:
+  - `<img src>`, `<picture><source>`, CSS background-images
+  - Store in Images table (already created in Stage 2)
+  
+- **Validations**:
+  - Missing alt text → Warning (accessibility issue)
+  - Alt text too long (>125 chars) → Warning
+  - Large file size (>500 KB) → Warning (performance)
+  - Broken images (404) → Error
+  - Incorrect dimensions (mismatch between HTML and actual)
+  
+- **Findings**: per image with issues
+  
+- **Export**: page_url, image_url, alt_text, size_kb, http_status, issues
+
+#### 10) **Internal Linking Plugin** (`ShoutingIguana.Plugins.InternalLinking`)
+- **Compute metrics**:
+  - Inlink count (how many pages link to this URL)
+  - Outlink count (how many links this page has)
+  - Unique anchor text set
+  - Internal PageRank-like score (simple algorithm)
+  
+- **Findings**:
+  - Orphan pages (no inlinks, depth > 1) → Warning
+  - Pages with no outlinks (dead ends) → Info
+  - Anchor text over-optimization (same text 100% of time) → Warning
+  
+- **Export**: URL, inlinks, outlinks, top_anchor_texts, link_score
+
+#### 11) **List-Mode Crawling Plugin** (`ShoutingIguana.Plugins.ListMode`)
+- **Import URL list**:
+  - Tools → Import URL List (CSV file)
+  - CSV format: one URL per line (or URL, priority columns)
+  - Add all URLs to queue with high priority
+  
+- **Settings**:
+  - "Don't follow discovered links" option (only crawl list)
+  - "Treat as seed URLs" (follow links)
+  
+- **Findings**: None (just facilitates crawl)
+  
+- **Export**: List crawl results (status per input URL)
+
+#### 12) **Structured Data Plugin** (`ShoutingIguana.Plugins.StructuredData`)
+- **Detect structured data**:
+  - JSON-LD (`<script type="application/ld+json">`)
+  - Microdata (itemscope, itemprop attributes)
+  - RDFa (less common, optional)
+  
+- **Key types to validate** (Schema.org):
+  - Article, NewsArticle, BlogPosting
+  - Product, Offer
+  - Organization, LocalBusiness
+  - FAQPage, HowTo
+  - BreadcrumbList
+  
+- **Validation**:
+  - Parse JSON-LD, validate against Schema.org (basic checks)
+  - Required properties present (@type, name, etc.)
+  - Valid URLs in properties
+  
+- **Findings**:
+  - Missing structured data on article pages → Info
+  - Invalid JSON-LD syntax → Error
+  - Missing required properties → Warning
+  
+- **Export**: URL, schema_type, validation_status, errors
+
+#### 13) **Custom Extraction Plugin** (`ShoutingIguana.Plugins.CustomExtraction`)
+- **User-defined rules**:
+  - Tools → Custom Extraction → Add Rule
+  - Rule editor dialog:
+    - Rule name
+    - Selector type: CSS, XPath, Regex
+    - Selector/pattern
+    - Field name (for export)
+  
+- **Execution**:
+  - For each URL, apply all rules
+  - Extract text/attributes based on selector
+  - Store in generic key-value store (or JSON in Findings)
+  
+- **Findings**: None (just data extraction)
+  
+- **Export**: Custom table with user-defined columns (URL + extracted fields)
+
+### Advanced Crawl Features
+
+#### Pause & Resume Crawl
+- **Pause Button**: Gracefully pause crawl mid-stream
+  - Stop dequeuing new URLs
+  - Wait for in-flight requests to complete
+  - Persist queue state to database
+  - Update UI: "Paused"
+  
+- **Resume Button**: Continue from paused state
+  - Load queue from database
+  - Resume dequeuing and fetching
+  - Update UI: "Crawling"
+  
+- **Implementation**:
+  - Use `CancellationToken` for pause signal
+  - Separate token for stop vs. pause
+  - Persist queue to `CrawlQueue` table on pause
+
+#### Resume After Crash
+- **Checkpoint Strategy**:
+  - Every 50 URLs, save checkpoint to database
+  - Checkpoint includes: queue state, crawl stats, last processed URL
+  
+- **Recovery on Startup**:
+  - On project open, check for incomplete crawl (queue.state = InProgress)
+  - Show prompt: "Resume previous crawl?"
+  - If yes, reload queue and continue
+  - If no, clear queue and reset state
+  
+- **Robustness**:
+  - Replay URL discovery from last checkpoint
+  - Handle duplicate URLs (skip already crawled)
+  - Log recovery events
+
+#### Proxy Support
+- **Global Proxy Settings** (Settings dialog → Network tab)
+  - Enable proxy (checkbox)
+  - Proxy type: HTTP, HTTPS, SOCKS5
+  - Server: hostname or IP
+  - Port: number
+  - Username/password (optional, encrypted with DPAPI)
+  - Bypass list: patterns to exclude from proxy (e.g., localhost, *.internal.com)
+  
+- **Per-Project Override**:
+  - Project Home → Proxy Settings section
+  - "Use global proxy" or "Override with custom proxy"
+  - Same fields as global settings
+  
+- **Playwright Integration**:
+  - Pass proxy config to `BrowserContext` on creation
+  - Playwright handles proxy auth natively
+  
+- **Connection Test**:
+  - Tools → Test Proxy Connection
+  - Attempt fetch to known URL (e.g., http://example.com)
+  - Show success/failure with details
+  
+- **Status Bar Indicator**:
+  - "✓ Proxy: proxy.example.com:8080" (green)
+  - "✗ Direct Connection" (gray)
+  
+- **Findings**:
+  - Log proxy errors (auth failure, connection refused)
+  - Warning if proxy misconfigured
+
+### Full Menu Structure (Production-Ready)
+
+**File Menu**
+- New Project... (Ctrl+N)
+- Open Project... (Ctrl+O)
+- Recent Projects → (submenu with last 10)
+- Close Project (Ctrl+W)
+- ──────
+- Export → 
+  - CSV...
+  - Excel...
+  - All Findings...
+- ──────
+- Exit (Alt+F4)
+
+**Edit Menu**
+- Copy (Ctrl+C)
+- Select All (Ctrl+A)
+- ──────
+- Find in Findings... (Ctrl+F)
+- Clear Filters (Ctrl+Shift+F)
+
+**View Menu**
+- Project Home (Ctrl+1)
+- Crawl Dashboard (Ctrl+2)
+- Findings (Ctrl+3)
+- Link Graph (Ctrl+4) — placeholder, simple table view
+- ──────
+- Extensions Manager (Ctrl+Shift+E)
+- ──────
+- Refresh (F5)
+- Toggle Full Screen (F11)
+
+**Crawl Menu**
+- Start Crawl (F6)
+- Pause Crawl (F7) — toggles to "Resume Crawl" when paused
+- Stop Crawl (F8)
+- ──────
+- Clear Queue
+- Reset Project Data... — warning dialog
+
+**Tools Menu**
+- Import URL List... (list-mode)
+- Custom Extraction...
+- ──────
+- Test Proxy Connection...
+- Reinstall Playwright Browsers...
+- ──────
+- Options... (Ctrl+,) — settings dialog
+
+**Help Menu**
+- Documentation (F1) — opens online docs or bundled help
+- Plugin Development Guide — opens SDK docs
+- ──────
+- Check for Updates...
+- View Logs...
+- Report Issue... — opens GitHub issues or email
+- ──────
+- About Shouting Iguana...
+
+### Keyboard Shortcuts (All Implemented)
+- **Ctrl+N**: New Project
+- **Ctrl+O**: Open Project
+- **Ctrl+W**: Close Project
+- **Ctrl+C**: Copy selected rows
+- **Ctrl+A**: Select all
+- **Ctrl+F**: Find in findings
+- **Ctrl+Shift+F**: Clear filters
+- **Ctrl+1**: Project Home
+- **Ctrl+2**: Crawl Dashboard
+- **Ctrl+3**: Findings
+- **Ctrl+4**: Link Graph
+- **Ctrl+Shift+E**: Extensions Manager
+- **Ctrl+,**: Settings
+- **F1**: Help
+- **F5**: Refresh
+- **F6**: Start Crawl
+- **F7**: Pause/Resume Crawl
+- **F8**: Stop Crawl
+- **F11**: Toggle Full Screen
+- **Alt+F4**: Exit
+
+### Context Menus
+- **Findings Grid** (right-click):
+  - Copy
+  - Copy URL
+  - Open URL in Browser
+  - Export Selected...
+  - View Details
+
+- **Extensions List** (right-click):
+  - Enable/Disable
+  - Update
+  - Uninstall
+  - View Details
+
+### Link Graph View (Simple Table)
+- **Deferred**: Visual graph in future version
+- **Stage 3**: Simple table view
+  - Columns: From URL, To URL, Anchor Text, Link Type
+  - Same filter/search as other views
+  - Export to CSV
+
+### Settings Dialog (Complete)
+
+**Tabs**:
+1. **General**
+   - Theme: Light/Dark (apply on change)
+   - Language (future)
+   
+2. **Crawling**
+   - Max concurrent requests (1-10)
+   - Timeout (seconds)
+   - Max crawl depth
+   - Max URLs per crawl
+   - Respect robots.txt (default)
+   - Crawl delay (seconds)
+   - User-agent string
+   
+3. **Browser**
+   - Enable JavaScript (default: true)
+   - Headless mode (default: true)
+   - Viewport size (width x height)
+   - Memory limit (MB)
+   - Browser path (optional override)
+   
+4. **Network**
+   - Global proxy settings (enable, server, port, auth, bypass)
+   - Retry policy (max retries, backoff)
+   - Connection timeout
+   
+5. **Plugins**
+   - List of installed plugins (enable/disable checkboxes)
+   - "Restart required" notice when changes made
+   - "Reload Plugins" button (triggers plugin rescan)
+   
+6. **Data**
+   - Project storage location
+   - Log retention (days)
+   - Auto-checkpoint interval (URLs)
+   - Database optimization (vacuum, rebuild indices)
+   
+7. **Feeds**
+   - NuGet feed list (add/remove/edit)
+   - Feed URL, name, auth
+
+### Enhanced Status Bar
+- **Left**: Project name, crawl status (Idle / Crawling / Paused / Completed / Failed)
+- **Center**: Quick stats (URLs: 1,250 | Queue: 45 | Errors: 3 | Speed: 15 req/min)
+- **Right**: 
+  - Proxy indicator (✓/✗)
+  - Browser status (Ready/Installing/Error)
+  - Plugin count badge (13 plugins)
+
+### About Dialog
+- App name, version, build date
+- Copyright, license (MIT)
+- Credits (libraries used, contributors)
+- Links: Website, GitHub, Documentation
+- "Check for Updates" button
+
+### Error Handling & User Feedback
+- **Global Exception Handler**:
+  - Catch all unhandled exceptions
+  - Log to Serilog
+  - Show friendly error dialog with option to view logs
+  - Don't crash app unless critical
+  
+- **Notifications**:
+  - Use Material snackbars for success/info messages
+  - Use dialogs for warnings/errors that need attention
+  
+- **Validation**:
+  - Input validation on all forms (highlight invalid fields)
+  - Helpful error messages (not generic "Invalid input")
+
+---
+
+## 2) Out of Scope (Stage 3 / MVP)
+
+- Authentication flows beyond Basic (OAuth, cookies, sessions)
+- API crawls (GraphQL, REST endpoints)
+- Scheduler / cron jobs (run crawls on schedule)
+- Cloud agents / distributed crawling
+- Advanced GA/GSC integrations
+- Visual link graph (deferred to post-MVP)
+- Dark theme (MaterialDesign supports it, but not priority)
+- Localization (English only for MVP)
+- Plugin sandboxing / security model (full-trust in MVP)
+- Signed plugin packages (future enhancement)
+
+---
+
+## 3) Testing Criteria (Stage 3 Complete = MVP Done)
+
+✅ **Hot-Loading Plugins**
+- Install new plugin from NuGet feed
+- Plugin loads immediately without app restart
+- Plugin's tasks execute on next crawl
+- Plugin's UI contributions appear (new tab in Findings)
+- Disable plugin → tab disappears without restart
+- Uninstall plugin → files deleted, ALC unloaded
+
+✅ **NuGet Integration**
+- Search for plugins on nuget.org
+- Filter results by tags, sort by downloads
+- View plugin details (README, version, author)
+- Install plugin from feed
+- Download progress shown
+- Plugin appears in Extensions Manager as installed
+- Check for updates → updates detected
+- Update plugin → old version unloaded, new loaded
+- Uninstall plugin → confirmation, files deleted
+
+✅ **Extensions Manager**
+- Open Extensions Manager (Ctrl+Shift+E)
+- See all 13 installed plugins
+- Toggle plugin enable/disable (no restart required)
+- Search plugins in Browse tab
+- Install plugin from Browse
+- Manage feeds (add custom feed)
+- Check for updates (background + manual)
+
+✅ **All 13 Plugins Working**
+- Crawl test site with all plugins enabled
+- Verify findings from each plugin:
+  1. Inventory ✓
+  2. Broken Links ✓
+  3. Titles & Meta ✓
+  4. Redirects ✓
+  5. Duplicate Content ✓ (exact + near-dup)
+  6. Robots & Indexability ✓
+  7. Canonical Validation ✓
+  8. XML Sitemap ✓ (discovery, comparison, generation)
+  9. Image Audit ✓
+  10. Internal Linking ✓
+  11. List-Mode ✓ (import CSV, crawl list)
+  12. Structured Data ✓ (JSON-LD detection, basic validation)
+  13. Custom Extraction ✓ (CSS/XPath/Regex)
+
+✅ **Pause & Resume**
+- Start crawl, pause mid-way
+- Verify queue saved to database
+- Resume crawl → continues from where it left off
+- Stats preserved (URLs crawled, errors)
+- Toggle pause/resume multiple times
+
+✅ **Crash Recovery**
+- Start crawl, force quit app mid-crawl (task manager)
+- Reopen project
+- Prompt: "Resume previous crawl?"
+- Click Yes → crawl continues
+- No duplicate URLs processed
+- Stats restored
+
+✅ **Proxy Support**
+- Configure global proxy in Settings
+- Test connection → success
+- Start crawl → verify proxy used (check logs, network traffic)
+- Override proxy per-project → verify project proxy used
+- Test proxy auth (username/password)
+- Test bypass list (localhost not proxied)
+- Test proxy failure → error message, fallback to direct
+
+✅ **Full Menu Structure**
+- All menu items present and functional
+- All keyboard shortcuts work (test each one)
+- Context menus appear on right-click
+- Menu items disabled when not applicable (e.g., Start Crawl when crawling)
+- Menu text updates dynamically (Pause ↔ Resume)
+
+✅ **Settings Dialog**
+- All tabs present (General, Crawling, Browser, Network, Plugins, Data, Feeds)
+- All settings persist after restart
+- Validation on invalid inputs
+- Changes apply correctly (e.g., concurrency change affects next crawl)
+- Plugin enable/disable works
+
+✅ **Link Graph View**
+- View → Link Graph (Ctrl+4)
+- Table displays links (from, to, anchor, type)
+- Filter and search work
+- Export to CSV
+
+✅ **List-Mode Crawling**
+- Tools → Import URL List
+- Import CSV with 50 URLs
+- Start crawl with "Don't follow links" option
+- Verify only list URLs crawled
+- Export results
+
+✅ **Custom Extraction**
+- Tools → Custom Extraction
+- Add rule: CSS selector `.product-price`
+- Crawl e-commerce site
+- Verify prices extracted
+- Export custom table with price column
+
+✅ **All Exports**
+- Export to CSV: all plugins' findings
+- Export to Excel: multi-sheet workbook, all plugins
+- Export All Findings: combined report
+- Export Sitemap: XML file
+- Export Custom Extraction: custom columns
+
+✅ **Error Handling**
+- Invalid base URL → validation error
+- Network error during crawl → retry, then log
+- Plugin load failure → error message, app continues
+- Corrupt database → recovery prompt
+- Out of memory → graceful degradation, warning
+
+✅ **Performance Targets (from original PDR)**
+- Crawl 50-150 req/min with JavaScript rendering
+- Resume after crash in < 5 seconds
+- Memory < 2.0 GB on 10k URL crawl
+- Browser startup < 3 seconds
+
+✅ **Acceptance Criteria (from original PDR)**
+1. First launch → Playwright auto-install → ready in < 5 min
+2. Create project with proxy → crawl example.com → export broken links CSV in < 15 min
+3. Crawl JS-heavy SPA → verify rendered content captured
+4. Install plugin from nuget.org → appears in Tasks without restart
+5. Disable plugin → menu/pane disappears, ALC unloaded
+6. Resume crawl after crash → completes successfully
+7. Export Titles & Descriptions and Inventory to Excel
+
+---
+
+## 4) Implementation Order (Stage 3)
+
+1. **Implement AssemblyLoadContext plugin loading**
+   - Create `PluginLoadContext` class
+   - Implement load/unload logic
+   - Test with sample plugin
+   
+2. **Build NuGet client service**
+   - Search, fetch metadata, download packages
+   - Extract packages to extensions folder
+   
+3. **Build Extensions Manager UI**
+   - Installed tab, Browse tab, Details panel
+   - Search, filter, install/uninstall actions
+   
+4. **Test hot-loading end-to-end**
+   - Install plugin without restart
+   - Verify task execution
+   - Uninstall and verify cleanup
+   
+5. **Implement pause/resume**
+   - Add pause token to crawl engine
+   - Persist queue on pause
+   - Test pause/resume multiple times
+   
+6. **Implement crash recovery**
+   - Checkpoint logic
+   - Recovery prompt on startup
+   - Test with forced crash
+   
+7. **Implement proxy support**
+   - Global and per-project proxy settings
+   - Playwright proxy configuration
+   - Connection test
+   - Test with real proxy
+   
+8. **Build remaining 9 plugins** (in parallel if possible)
+   - Duplicate Content
+   - Robots & Indexability
+   - Canonical Validation
+   - XML Sitemap
+   - Image Audit
+   - Internal Linking
+   - List-Mode
+   - Structured Data
+   - Custom Extraction
+   
+9. **Build Settings dialog** (all tabs)
+   
+10. **Implement all menu items and keyboard shortcuts**
+    
+11. **Build Link Graph view** (simple table)
+    
+12. **Implement list-mode import**
+    
+13. **Implement custom extraction rule editor**
+    
+14. **Polish UI**: icons, tooltips, help text
+    
+15. **Build About dialog**
+    
+16. **Comprehensive error handling and logging**
+    
+17. **Performance testing and optimization**
+    
+18. **Full acceptance test suite**
+    
+19. **Documentation** (README, plugin dev guide)
+    
+20. **Package for distribution** (installer via Inno Setup)
+
+---
+
+## 5) Success Criteria Summary
+
+**Stage 3 / MVP is complete when:**
+
+1. ✅ All 13 built-in plugins work correctly
+2. ✅ Plugins can be installed/uninstalled/updated from NuGet without restart
+3. ✅ Extensions Manager provides full plugin management
+4. ✅ Playwright crawling works reliably with memory management
+5. ✅ Pause/Resume crawl works seamlessly
+6. ✅ Crash recovery restores crawl state
+7. ✅ Proxy support (global + per-project) works with auth
+8. ✅ All menu items and keyboard shortcuts functional
+9. ✅ Settings dialog allows full configuration
+10. ✅ List-mode crawling works
+11. ✅ Custom extraction rules work
+12. ✅ All export formats (CSV, Excel, Sitemap XML) work
+13. ✅ Link Graph view displays link data
+14. ✅ Error handling graceful throughout app
+15. ✅ Performance targets met (throughput, memory, resume time)
+16. ✅ Original PDR acceptance criteria (Section 18) all pass
+17. ✅ Application is stable, polished, and ready for users
+
+**When all these pass, the MVP is COMPLETE and ready for release.**
+
+---
+
+## 6) Post-MVP Roadmap (Reference)
+
+**Future enhancements beyond MVP:**
+- Visual link graph (D3.js or similar)
+- Additional browser engines (Firefox, WebKit)
+- Proxy rotation and pool management
+- Scheduler and remote agents
+- Signed plugins with capability prompts
+- Plugin sandboxing
+- Authentication flows (OAuth, session management)
+- API crawls (GraphQL, REST)
+- Advanced GA/GSC integrations
+- Project templates and audit checklists
+- Dark theme
+- Localization
+
+---
+
+## 7) Developer Experience (Stage 3)
+
+### Plugin Development Template
+Create `dotnet new` template:
+
+```bash
+dotnet new install ShoutingIguana.Templates
+dotnet new shoutingiguana-plugin -n MyAwesomePlugin
+```
+
+Template scaffolds:
+- Project file with SDK reference
+- `Plugin.cs` with `IPlugin` implementation
+- `MyTask.cs` with `IUrlTask` implementation
+- `MyExporter.cs` with `IExportProvider` implementation
+- README with development guide
+- `.nuspec` for packaging
+
+### Publishing a Plugin
+1. Develop plugin against SDK
+2. Add `[Plugin]` attribute with metadata
+3. Test locally (copy to `plugins/` folder)
+4. Package: `dotnet pack`
+5. Publish to NuGet: `dotnet nuget push`
+6. Users discover and install from Extensions Manager
+
+### SDK Documentation
+- Comprehensive docs at `docs/plugin-sdk.md`
+- API reference (generated from XML comments)
+- Sample plugins repository (GitHub)
+- Tutorials: "Your First Plugin in 10 Minutes"
+
+---
+
+## 8) Final Deliverables (MVP Complete)
+
+**Code**:
+- ✅ All source code (Core, Data, WPF, Plugins, SDK)
+- ✅ 13 built-in plugins as separate assemblies
+- ✅ Unit tests for core logic
+- ✅ Integration tests for plugins
+
+**Installer**:
+- ✅ Inno Setup installer for x64 and x86
+- ✅ Includes all dependencies
+- ✅ Playwright browser auto-install on first run
+
+**Documentation**:
+- ✅ User guide (getting started, crawling, plugins, exports)
+- ✅ Plugin development guide (SDK, contracts, packaging)
+- ✅ Architecture documentation (for contributors)
+- ✅ README with screenshots
+
+**Distribution**:
+- ✅ Installers published on GitHub Releases
+- ✅ NuGet package for SDK published
+- ✅ Built-in plugins published to NuGet (optional, or bundled with app)
+
+---
+
+**🎉 With Stage 3 complete, you have a production-ready SEO crawler with a first-class plugin ecosystem, ready to compete with commercial tools like Screaming Frog! 🎉**

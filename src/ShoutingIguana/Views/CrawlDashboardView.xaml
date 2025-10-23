@@ -1,0 +1,76 @@
+<UserControl x:Class="ShoutingIguana.Views.CrawlDashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
+             Background="{DynamicResource MaterialDesign.Brush.Background}">
+    
+    <Grid Margin="32">
+        <md:Card Padding="32" md:ElevationAssist.Elevation="Dp4">
+            <StackPanel>
+                <TextBlock Text="Crawl Progress"
+                           Style="{StaticResource MaterialDesignHeadline4TextBlock}"
+                           Margin="0,0,0,24"/>
+
+                <ProgressBar Value="{Binding ProgressPercentage}"
+                             Height="8"
+                             Margin="0,16"/>
+
+                <TextBlock Text="{Binding ProgressPercentage, StringFormat={}{0:F1}%}"
+                           HorizontalAlignment="Center"
+                           Margin="0,8"/>
+
+                <Grid Margin="0,24">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="URLs Crawled:" Grid.Row="0" Grid.Column="0" Margin="8"/>
+                    <TextBlock Text="{Binding UrlsCrawled}" Grid.Row="0" Grid.Column="1" Margin="8" FontWeight="Bold"/>
+
+                    <TextBlock Text="Total Discovered:" Grid.Row="1" Grid.Column="0" Margin="8"/>
+                    <TextBlock Text="{Binding TotalDiscovered}" Grid.Row="1" Grid.Column="1" Margin="8" FontWeight="Bold"/>
+
+                    <TextBlock Text="Queue Size:" Grid.Row="2" Grid.Column="0" Margin="8"/>
+                    <TextBlock Text="{Binding QueueSize}" Grid.Row="2" Grid.Column="1" Margin="8" FontWeight="Bold"/>
+
+                    <TextBlock Text="Active Workers:" Grid.Row="3" Grid.Column="0" Margin="8"/>
+                    <TextBlock Text="{Binding ActiveWorkers}" Grid.Row="3" Grid.Column="1" Margin="8" FontWeight="Bold"/>
+
+                    <TextBlock Text="Errors:" Grid.Row="4" Grid.Column="0" Margin="8"/>
+                    <TextBlock Text="{Binding ErrorCount}" Grid.Row="4" Grid.Column="1" Margin="8" FontWeight="Bold"/>
+                </Grid>
+
+                <TextBlock Text="{Binding ElapsedTime, StringFormat='Elapsed Time: {0}'}"
+                           HorizontalAlignment="Center"
+                           Margin="0,16"
+                           Style="{StaticResource MaterialDesignSubtitle1TextBlock}"/>
+
+                <TextBlock Text="{Binding RecentActivity}"
+                           Margin="0,8"
+                           TextWrapping="Wrap"/>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,24,0,0">
+                    <Button Content="Start Crawl"
+                            Command="{Binding StartCrawlCommand}"
+                            IsEnabled="{Binding IsCrawling, Converter={StaticResource InverseBooleanConverter}}"
+                            Style="{StaticResource MaterialDesignRaisedButton}"
+                            Margin="8"/>
+                    <Button Content="Stop Crawl"
+                            Command="{Binding StopCrawlCommand}"
+                            IsEnabled="{Binding IsCrawling}"
+                            Style="{StaticResource MaterialDesignRaisedButton}"
+                            Margin="8"/>
+                </StackPanel>
+            </StackPanel>
+        </md:Card>
+    </Grid>
+</UserControl>
+

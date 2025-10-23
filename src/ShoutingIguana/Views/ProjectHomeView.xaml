@@ -1,0 +1,118 @@
+<UserControl x:Class="ShoutingIguana.Views.ProjectHomeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
+             Background="{DynamicResource MaterialDesign.Brush.Background}">
+    
+    <Grid>
+        <!-- Welcome Screen -->
+        <StackPanel Visibility="{Binding IsWelcomeScreen, Converter={StaticResource BooleanToVisibilityConverter}}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+            <md:Card Padding="48" Margin="16" md:ElevationAssist.Elevation="Dp4">
+                <StackPanel Width="450">
+                    <Image Source="/Assets/logo.png" 
+                           Width="80" 
+                           Height="80"
+                           Margin="0,0,0,16"
+                           HorizontalAlignment="Center"/>
+                    
+                    <TextBlock Text="Shouting Iguana" 
+                               Style="{StaticResource MaterialDesignHeadline3TextBlock}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,8"/>
+                    
+                    <TextBlock Text="Professional Web Crawler &amp; SEO Analysis Tool" 
+                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                               HorizontalAlignment="Center"
+                               Foreground="{DynamicResource MaterialDesign.Brush.Secondary}"
+                               Margin="0,0,0,32"/>
+                    
+                    <Button Content="New Project"
+                            Command="{Binding NewProjectCommand}"
+                            Style="{StaticResource MaterialDesignRaisedButton}"
+                            Margin="0,8"
+                            Height="48"/>
+                    
+                    <Button Content="Open Project"
+                            Command="{Binding OpenProjectCommand}"
+                            Style="{StaticResource MaterialDesignOutlinedButton}"
+                            Margin="0,8"
+                            Height="48"/>
+                    
+                    <TextBlock Text="Recent Projects"
+                               Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                               Margin="0,24,0,8"/>
+                    
+                    <TextBlock Text="(Recent projects will appear here after implementation)"
+                               Margin="0,4"
+                               FontStyle="Italic"
+                               Foreground="{DynamicResource MaterialDesign.Brush.Secondary}"/>
+                </StackPanel>
+            </md:Card>
+        </StackPanel>
+
+        <!-- Project Settings Screen -->
+        <ScrollViewer Visibility="{Binding IsWelcomeScreen, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
+                      VerticalScrollBarVisibility="Auto">
+            <md:Card Padding="32" Margin="32" md:ElevationAssist.Elevation="Dp4" MaxWidth="800">
+                <StackPanel>
+                    <TextBlock Text="Project Settings"
+                               Style="{StaticResource MaterialDesignHeadline4TextBlock}"
+                               Margin="0,0,0,24"/>
+
+                    <TextBox Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
+                             md:HintAssist.Hint="Project Name"
+                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                             Margin="0,8"/>
+
+                    <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}"
+                             md:HintAssist.Hint="Base URL (e.g., http://example.com)"
+                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                             Margin="0,8"/>
+
+                    <TextBlock Text="Crawl Settings"
+                               Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                               Margin="0,24,0,16"/>
+
+                    <TextBox Text="{Binding MaxDepth, UpdateSourceTrigger=PropertyChanged}"
+                             md:HintAssist.Hint="Max Depth"
+                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                             Margin="0,8"/>
+
+                    <TextBox Text="{Binding MaxUrls, UpdateSourceTrigger=PropertyChanged}"
+                             md:HintAssist.Hint="Max URLs to Crawl"
+                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                             Margin="0,8"/>
+
+                    <TextBox Text="{Binding CrawlDelay, UpdateSourceTrigger=PropertyChanged}"
+                             md:HintAssist.Hint="Crawl Delay (seconds)"
+                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                             Margin="0,8"/>
+
+                    <CheckBox Content="Respect robots.txt"
+                              IsChecked="{Binding RespectRobotsTxt}"
+                              Margin="0,16"/>
+
+                    <TextBox Text="{Binding UserAgent, UpdateSourceTrigger=PropertyChanged}"
+                             md:HintAssist.Hint="User Agent"
+                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                             Margin="0,8"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,24,0,0" HorizontalAlignment="Right">
+                        <Button Content="Save Settings"
+                                Command="{Binding SaveSettingsCommand}"
+                                Style="{StaticResource MaterialDesignOutlinedButton}"
+                                Margin="8,0"
+                                Visibility="{Binding CurrentProject, Converter={StaticResource NullToVisibilityConverter}}"/>
+                        <Button Content="Start Crawl"
+                                Command="{Binding StartCrawlCommand}"
+                                Style="{StaticResource MaterialDesignRaisedButton}"
+                                Margin="8,0"/>
+                    </StackPanel>
+                </StackPanel>
+            </md:Card>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
+
