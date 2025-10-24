@@ -34,6 +34,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _browserStatusText = "Initializing...";
 
+    [ObservableProperty]
+    private bool _isInitializing = true;
+
     public MainViewModel(
         ILogger<MainViewModel> logger, 
         INavigationService navigationService,

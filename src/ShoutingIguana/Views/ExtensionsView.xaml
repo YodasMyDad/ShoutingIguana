@@ -105,7 +105,7 @@
             <md:Card Grid.Row="2" 
                      md:ElevationAssist.Elevation="Dp2"
                      UniformCornerRadius="8"
-                     Padding="0">
+                     Padding="{StaticResource SpacingXS}">
                 <Grid>
                     <DataGrid ItemsSource="{Binding Plugins}"
                               Style="{StaticResource ModernDataGrid}"

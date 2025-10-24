@@ -87,6 +87,7 @@
                 </Button>
                 <Button Command="{Binding ExportToExcelCommand}"
                         Style="{StaticResource PrimaryButton}"
+                        Foreground="White"
                         AutomationProperties.Name="Export to Excel"
                         ToolTip="Export findings to Excel workbook">
                     <StackPanel Orientation="Horizontal">
@@ -94,8 +95,11 @@
                                      Width="16" 
                                      Height="16"
                                      VerticalAlignment="Center"
+                                     Foreground="White"
                                      Margin="0,0,6,0"/>
-                        <TextBlock Text="Excel" VerticalAlignment="Center"/>
+                        <TextBlock Text="Excel" 
+                                   VerticalAlignment="Center"
+                                   Foreground="White"/>
                     </StackPanel>
                 </Button>
             </StackPanel>
@@ -105,11 +109,12 @@
         <md:Card Grid.Row="1" 
                  md:ElevationAssist.Elevation="Dp2"
                  UniformCornerRadius="8"
-                 Padding="0">
+                 Padding="{StaticResource SpacingXS}">
             <TabControl ItemsSource="{Binding Tabs}" 
                         SelectedItem="{Binding SelectedTab}"
                         Style="{StaticResource MaterialDesignFilledTabControl}"
-                        Background="{StaticResource SurfaceBrush}">
+                        Background="{StaticResource SurfaceBrush}"
+                        Padding="0">
                 <TabControl.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal" Margin="12,8">

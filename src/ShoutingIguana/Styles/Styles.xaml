@@ -38,6 +38,15 @@
     <SolidColorBrush x:Key="FocusBrush" Color="#0078D4"/>
     
     <!-- ========================================
+         DEFAULT TEXTBLOCK STYLE
+         ======================================== -->
+    
+    <!-- Default/Implicit TextBlock style - MUST be defined early so controls can override it -->
+    <Style TargetType="TextBlock" BasedOn="{StaticResource MaterialDesignBody1TextBlock}">
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
+    
+    <!-- ========================================
          SPACING SYSTEM (4px base unit)
          ======================================== -->
     
@@ -94,27 +103,48 @@
         <Setter Property="Background" Value="{StaticResource PrimaryBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
         <Setter Property="Foreground" Value="White"/>
-        <Setter Property="Padding" Value="24,10"/>
+        <Setter Property="TextElement.Foreground" Value="White"/>
+        <Setter Property="Padding" Value="24,8"/>
         <Setter Property="MinWidth" Value="100"/>
-        <Setter Property="Height" Value="36"/>
+        <Setter Property="Height" Value="40"/>
         <Setter Property="md:ButtonAssist.CornerRadius" Value="4"/>
         <Setter Property="md:ElevationAssist.Elevation" Value="Dp2"/>
         <Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="FontSize" Value="14"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="md:ButtonProgressAssist.IsIndicatorVisible" Value="False"/>
         <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
         <Setter Property="RenderTransform">
             <Setter.Value>
                 <ScaleTransform ScaleX="1" ScaleY="1"/>
             </Setter.Value>
         </Setter>
+        <Style.Resources>
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="TextAlignment" Value="Center"/>
+            </Style>
+            <Style TargetType="md:PackIcon">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+        </Style.Resources>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="TextElement.Foreground" Value="White"/>
                 <Setter Property="RenderTransform">
                     <Setter.Value>
                         <ScaleTransform ScaleX="1.02" ScaleY="1.02"/>
                     </Setter.Value>
                 </Setter>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="TextElement.Foreground" Value="White"/>
+                <Setter Property="Opacity" Value="0.6"/>
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -123,13 +153,13 @@
     <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-        <Setter Property="Padding" Value="24,10"/>
+        <Setter Property="Padding" Value="24,8"/>
         <Setter Property="MinWidth" Value="100"/>
-        <Setter Property="Height" Value="36"/>
+        <Setter Property="Height" Value="40"/>
         <Setter Property="md:ButtonAssist.CornerRadius" Value="4"/>
         <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
         <Setter Property="RenderTransform">
             <Setter.Value>
@@ -152,20 +182,31 @@
         <Setter Property="Background" Value="{StaticResource ErrorBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource ErrorBrush}"/>
         <Setter Property="Foreground" Value="White"/>
-        <Setter Property="Padding" Value="24,10"/>
+        <Setter Property="Padding" Value="24,8"/>
         <Setter Property="MinWidth" Value="100"/>
-        <Setter Property="Height" Value="36"/>
+        <Setter Property="Height" Value="40"/>
         <Setter Property="md:ButtonAssist.CornerRadius" Value="4"/>
         <Setter Property="md:ElevationAssist.Elevation" Value="Dp2"/>
         <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
         <Setter Property="RenderTransform">
             <Setter.Value>
                 <ScaleTransform ScaleX="1" ScaleY="1"/>
             </Setter.Value>
         </Setter>
+        <Style.Resources>
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="TextAlignment" Value="Center"/>
+            </Style>
+            <Style TargetType="md:PackIcon">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+        </Style.Resources>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="RenderTransform">
@@ -182,6 +223,17 @@
         <Setter Property="Height" Value="48"/>
         <Setter Property="FontSize" Value="15"/>
         <Setter Property="Padding" Value="32,12"/>
+        <Style.Resources>
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="TextAlignment" Value="Center"/>
+            </Style>
+            <Style TargetType="md:PackIcon">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+        </Style.Resources>
     </Style>
     
     <!-- ========================================
@@ -219,12 +271,12 @@
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="md:TextFieldAssist.HasClearButton" Value="True"/>
         <Setter Property="md:TextFieldAssist.UnderlineBrush" Value="{StaticResource PrimaryBrush}"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
     </Style>
     
     <!-- CheckBox -->
     <Style x:Key="StandardCheckBox" TargetType="CheckBox" BasedOn="{StaticResource MaterialDesignCheckBox}">
-        <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
     </Style>
     
     <!-- ========================================
@@ -465,7 +517,17 @@
         <Setter Property="Padding" Value="12,8"/>
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="md:TextFieldAssist.UnderlineBrush" Value="{StaticResource PrimaryBrush}"/>
-        <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    </Style>
+    
+    <!-- ========================================
+         TABCONTROL STYLES
+         ======================================== -->
+    
+    <!-- Standard Tab Control (Material Design Filled style with proper text colors) -->
+    <Style x:Key="StandardTabControl" TargetType="TabControl" BasedOn="{StaticResource MaterialDesignFilledTabControl}">
+        <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
+        <Setter Property="Padding" Value="0,16,0,0"/>
     </Style>
     
     <!-- ========================================

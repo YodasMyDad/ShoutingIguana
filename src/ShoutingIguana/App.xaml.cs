@@ -117,6 +117,11 @@ public partial class App : Application
             var appSettingsService = _host.Services.GetRequiredService<IAppSettingsService>();
             appSettingsService.LoadAsync().GetAwaiter().GetResult();
 
+            // Create main window and view model first
+            var mainWindow = _host.Services.GetRequiredService<MainWindow>();
+            var mainViewModel = _host.Services.GetRequiredService<MainViewModel>();
+            mainWindow.DataContext = mainViewModel;
+            
             // Initialize Playwright and plugins in background (non-blocking)
             _startupCts = new CancellationTokenSource();
             var playwrightService = _host.Services.GetRequiredService<IPlaywrightService>();
@@ -194,17 +199,22 @@ public partial class App : Application
             }, _startupCts.Token);
             
             // Monitor tasks for unhandled errors (but don't block startup)
-            _ = Task.WhenAll(playwrightTask, pluginTask).ContinueWith(t =>
+            _ = Task.WhenAll(playwrightTask, pluginTask).ContinueWith(async t =>
             {
                 if (t.IsFaulted)
                 {
                     Log.Error(t.Exception, "Unhandled error in startup tasks");
                 }
+                
+                // Initialization complete - enable UI
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    mainViewModel.IsInitializing = false;
+                    Log.Information("Application initialization complete");
+                });
             }, TaskScheduler.Default);
 
-            // Create and show main window
-            var mainWindow = _host.Services.GetRequiredService<MainWindow>();
-            mainWindow.DataContext = _host.Services.GetRequiredService<MainViewModel>();
+            // Show main window
             mainWindow.Show();
 
             base.OnStartup(e);

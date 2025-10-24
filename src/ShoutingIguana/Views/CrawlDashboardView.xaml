@@ -299,6 +299,7 @@
                 <Button Command="{Binding StartCrawlCommand}"
                         IsEnabled="{Binding IsCrawling, Converter={StaticResource InverseBooleanConverter}}"
                         Style="{StaticResource PrimaryButton}"
+                        Foreground="White"
                         Padding="32,12"
                         Margin="0,0,12,0"
                         AutomationProperties.Name="Start Crawl"
@@ -308,14 +309,18 @@
                                      Width="18" 
                                      Height="18"
                                      VerticalAlignment="Center"
+                                     Foreground="White"
                                      Margin="0,0,8,0"/>
-                        <TextBlock Text="Start Crawl" VerticalAlignment="Center"/>
+                        <TextBlock Text="Start Crawl" 
+                                   VerticalAlignment="Center"
+                                   Foreground="White"/>
                     </StackPanel>
                 </Button>
                 
                 <Button Command="{Binding StopCrawlCommand}"
                         IsEnabled="{Binding IsCrawling}"
                         Style="{StaticResource DangerButton}"
+                        Foreground="White"
                         Padding="32,12"
                         AutomationProperties.Name="Stop Crawl"
                         ToolTip="Stop the current crawl">
@@ -324,8 +329,11 @@
                                      Width="18" 
                                      Height="18"
                                      VerticalAlignment="Center"
+                                     Foreground="White"
                                      Margin="0,0,8,0"/>
-                        <TextBlock Text="Stop Crawl" VerticalAlignment="Center"/>
+                        <TextBlock Text="Stop Crawl" 
+                                   VerticalAlignment="Center"
+                                   Foreground="White"/>
                     </StackPanel>
                 </Button>
             </StackPanel>

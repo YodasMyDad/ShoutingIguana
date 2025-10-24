@@ -13,286 +13,128 @@
         TextOptions.TextFormattingMode="Display"
         ResizeMode="CanResize">
     
-    <Grid Margin="{StaticResource SpacingL}">
+    <Grid Margin="24,24,24,16">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <TextBlock Grid.Row="0"
-                   Text="Application Settings"
-                   Style="{StaticResource DisplayTextStyle}"
-                   Margin="{StaticResource SpacingL}"
-                   AutomationProperties.HeadingLevel="Level1"/>
-
         <!-- Tabbed Settings -->
-        <TabControl Grid.Row="1" 
-                    Style="{StaticResource MaterialDesignFilledTabControl}"
-                    Background="{StaticResource SurfaceBrush}">
+        <TabControl Grid.Row="0" 
+                    Style="{StaticResource StandardTabControl}">
             
             <!-- Crawling Tab -->
             <TabItem Header="Crawling">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="{StaticResource SpacingL}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,40,32,32">
                     <StackPanel MaxWidth="700">
-                        <TextBlock Text="Crawl Behavior" 
-                                   Style="{StaticResource TitleTextStyle}"
-                                   Margin="0,0,0,8"
-                                   AutomationProperties.HeadingLevel="Level2"/>
-                        
-                        <TextBlock Text="Configure how the crawler behaves during web scraping operations."
-                                   Style="{StaticResource BodyTextStyle}"
-                                   Foreground="{StaticResource TextSecondaryBrush}"
-                                   TextWrapping="Wrap"
-                                   Margin="{StaticResource SpacingL}"/>
 
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" MinWidth="200"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
+                        <StackPanel MaxWidth="500">
+                            <TextBox Text="{Binding ConcurrentRequests, UpdateSourceTrigger=PropertyChanged}"
+                                     md:HintAssist.Hint="Concurrent Requests"
+                                     md:HintAssist.HelperText="Number of parallel requests (1-10)"
+                                     Style="{StaticResource StandardTextBox}"
+                                     Margin="0,0,0,28"
+                                     AutomationProperties.Name="Concurrent Requests"
+                                     ToolTip="Number of parallel requests to make (1-10)"/>
 
-                            <!-- Concurrent Requests -->
-                            <TextBlock Grid.Row="0" Grid.Column="0" 
-                                       Text="Concurrent Requests" 
-                                       VerticalAlignment="Center" 
-                                       Style="{StaticResource BodyTextStyle}"
-                                       Margin="0,0,16,20"/>
-                            <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,20">
-                                <TextBox Text="{Binding ConcurrentRequests, UpdateSourceTrigger=PropertyChanged}"
-                                         md:HintAssist.Hint="1-10"
-                                         Style="{StaticResource StandardTextBox}"
-                                         AutomationProperties.Name="Concurrent Requests"/>
-                                <TextBlock Text="Number of parallel requests (1-10)"
-                                           Style="{StaticResource CaptionTextStyle}"
-                                           Margin="0,4,0,0"/>
-                            </StackPanel>
+                            <TextBox Text="{Binding TimeoutSeconds, UpdateSourceTrigger=PropertyChanged}"
+                                     md:HintAssist.Hint="Timeout (seconds)"
+                                     md:HintAssist.HelperText="Request timeout in seconds (5-300)"
+                                     Style="{StaticResource StandardTextBox}"
+                                     Margin="0,0,0,28"
+                                     AutomationProperties.Name="Request Timeout"
+                                     ToolTip="Request timeout in seconds"/>
 
-                            <!-- Timeout -->
-                            <TextBlock Grid.Row="1" Grid.Column="0" 
-                                       Text="Timeout" 
-                                       VerticalAlignment="Center" 
-                                       Style="{StaticResource BodyTextStyle}"
-                                       Margin="0,0,16,20"/>
-                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,20">
-                                <TextBox Text="{Binding TimeoutSeconds, UpdateSourceTrigger=PropertyChanged}"
-                                         md:HintAssist.Hint="Seconds (5-300)"
-                                         Style="{StaticResource StandardTextBox}"
-                                         AutomationProperties.Name="Request Timeout"/>
-                                <TextBlock Text="Request timeout in seconds"
-                                           Style="{StaticResource CaptionTextStyle}"
-                                           Margin="0,4,0,0"/>
-                            </StackPanel>
+                            <TextBox Text="{Binding MaxCrawlDepth, UpdateSourceTrigger=PropertyChanged}"
+                                     md:HintAssist.Hint="Max Crawl Depth"
+                                     md:HintAssist.HelperText="Maximum link depth from start URL (1-20)"
+                                     Style="{StaticResource StandardTextBox}"
+                                     Margin="0,0,0,28"
+                                     AutomationProperties.Name="Maximum Crawl Depth"
+                                     ToolTip="Maximum number of clicks from start URL"/>
 
-                            <!-- Max Crawl Depth -->
-                            <TextBlock Grid.Row="2" Grid.Column="0" 
-                                       Text="Max Crawl Depth" 
-                                       VerticalAlignment="Center" 
-                                       Style="{StaticResource BodyTextStyle}"
-                                       Margin="0,0,16,20"/>
-                            <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,20">
-                                <TextBox Text="{Binding MaxCrawlDepth, UpdateSourceTrigger=PropertyChanged}"
-                                         md:HintAssist.Hint="1-20"
-                                         Style="{StaticResource StandardTextBox}"
-                                         AutomationProperties.Name="Maximum Crawl Depth"/>
-                                <TextBlock Text="Maximum link depth from start URL"
-                                           Style="{StaticResource CaptionTextStyle}"
-                                           Margin="0,4,0,0"/>
-                            </StackPanel>
+                            <TextBox Text="{Binding MaxUrlsToCrawl, UpdateSourceTrigger=PropertyChanged}"
+                                     md:HintAssist.Hint="Max URLs to Crawl"
+                                     md:HintAssist.HelperText="Maximum URLs to crawl (0 for unlimited)"
+                                     Style="{StaticResource StandardTextBox}"
+                                     Margin="0,0,0,28"
+                                     AutomationProperties.Name="Maximum URLs"
+                                     ToolTip="Maximum number of URLs to crawl (0 = unlimited)"/>
 
-                            <!-- Max URLs to Crawl -->
-                            <TextBlock Grid.Row="3" Grid.Column="0" 
-                                       Text="Max URLs to Crawl" 
-                                       VerticalAlignment="Center" 
-                                       Style="{StaticResource BodyTextStyle}"
-                                       Margin="0,0,16,20"/>
-                            <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,0,0,20">
-                                <TextBox Text="{Binding MaxUrlsToCrawl, UpdateSourceTrigger=PropertyChanged}"
-                                         md:HintAssist.Hint="0 = unlimited"
-                                         Style="{StaticResource StandardTextBox}"
-                                         AutomationProperties.Name="Maximum URLs"/>
-                                <TextBlock Text="Maximum URLs to crawl (0 for unlimited)"
-                                           Style="{StaticResource CaptionTextStyle}"
-                                           Margin="0,4,0,0"/>
-                            </StackPanel>
+                            <TextBox Text="{Binding CrawlDelaySeconds, UpdateSourceTrigger=PropertyChanged}"
+                                     md:HintAssist.Hint="Crawl Delay (seconds)"
+                                     md:HintAssist.HelperText="Delay between requests for politeness"
+                                     Style="{StaticResource StandardTextBox}"
+                                     Margin="0,0,0,28"
+                                     AutomationProperties.Name="Crawl Delay"
+                                     ToolTip="Delay between requests in seconds"/>
 
-                            <!-- Crawl Delay -->
-                            <TextBlock Grid.Row="4" Grid.Column="0" 
-                                       Text="Crawl Delay" 
-                                       VerticalAlignment="Center" 
-                                       Style="{StaticResource BodyTextStyle}"
-                                       Margin="0,0,16,20"/>
-                            <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,0,0,20">
-                                <TextBox Text="{Binding CrawlDelaySeconds, UpdateSourceTrigger=PropertyChanged}"
-                                         md:HintAssist.Hint="Seconds (0.0+)"
-                                         Style="{StaticResource StandardTextBox}"
-                                         AutomationProperties.Name="Crawl Delay"/>
-                                <TextBlock Text="Delay between requests (politeness)"
-                                           Style="{StaticResource CaptionTextStyle}"
-                                           Margin="0,4,0,0"/>
-                            </StackPanel>
+                            <TextBox Text="{Binding UserAgent, UpdateSourceTrigger=PropertyChanged}"
+                                     md:HintAssist.Hint="User Agent"
+                                     md:HintAssist.HelperText="Custom User-Agent header for requests"
+                                     Style="{StaticResource StandardTextBox}"
+                                     Margin="0,0,0,28"
+                                     AutomationProperties.Name="User Agent String"
+                                     ToolTip="Custom User-Agent header"/>
 
-                            <!-- Respect Robots.txt -->
-                            <TextBlock Grid.Row="5" Grid.Column="0" 
-                                       Text="Respect robots.txt" 
-                                       VerticalAlignment="Center" 
-                                       Style="{StaticResource BodyTextStyle}"
-                                       Margin="0,0,16,20"/>
-                            <StackPanel Grid.Row="5" Grid.Column="1" Margin="0,0,0,20">
-                                <CheckBox IsChecked="{Binding RespectRobotsTxt}"
-                                          Content="Follow robots.txt exclusion rules"
-                                          FontSize="14"
-                                          AutomationProperties.Name="Respect Robots.txt"/>
-                            </StackPanel>
-
-                            <!-- User Agent -->
-                            <TextBlock Grid.Row="6" Grid.Column="0" 
-                                       Text="User Agent" 
-                                       VerticalAlignment="Center" 
-                                       Style="{StaticResource BodyTextStyle}"
-                                       Margin="0,0,16,0"/>
-                            <StackPanel Grid.Row="6" Grid.Column="1">
-                                <TextBox Text="{Binding UserAgent, UpdateSourceTrigger=PropertyChanged}"
-                                         md:HintAssist.Hint="User-Agent string"
-                                         Style="{StaticResource StandardTextBox}"
-                                         AutomationProperties.Name="User Agent String"/>
-                                <TextBlock Text="Custom User-Agent header for requests"
-                                           Style="{StaticResource CaptionTextStyle}"
-                                           Margin="0,4,0,0"/>
-                            </StackPanel>
-                        </Grid>
+                            <CheckBox IsChecked="{Binding RespectRobotsTxt}"
+                                      Content="Follow robots.txt exclusion rules"
+                                      FontSize="14"
+                                      Margin="0,8,0,0"
+                                      AutomationProperties.Name="Respect Robots.txt"
+                                      ToolTip="Follow robots.txt exclusion rules"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- Browser Tab -->
             <TabItem Header="Browser">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="{StaticResource SpacingL}">
-                    <StackPanel MaxWidth="700">
-                        <TextBlock Text="Browser Settings" 
-                                   Style="{StaticResource TitleTextStyle}"
-                                   Margin="0,0,0,8"
-                                   AutomationProperties.HeadingLevel="Level2"/>
-                        
-                        <TextBlock Text="Configure Playwright browser behavior for JavaScript rendering."
-                                   Style="{StaticResource BodyTextStyle}"
-                                   Foreground="{StaticResource TextSecondaryBrush}"
-                                   TextWrapping="Wrap"
-                                   Margin="{StaticResource SpacingL}"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,40,32,32">
+                    <StackPanel MaxWidth="500">
+                        <CheckBox IsChecked="{Binding Headless}"
+                                  Content="Run browser in headless mode (recommended)"
+                                  FontSize="14"
+                                  Margin="0,0,0,28"
+                                  AutomationProperties.Name="Headless Mode"
+                                  ToolTip="Run browser in background without GUI (faster)"/>
 
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" MinWidth="200"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
+                        <TextBox Text="{Binding ViewportWidth, UpdateSourceTrigger=PropertyChanged}"
+                                 md:HintAssist.Hint="Viewport Width (pixels)"
+                                 md:HintAssist.HelperText="Browser viewport width in pixels (320-3840)"
+                                 Style="{StaticResource StandardTextBox}"
+                                 Margin="0,0,0,28"
+                                 AutomationProperties.Name="Viewport Width"
+                                 ToolTip="Browser viewport width in pixels"/>
 
-                            <!-- Headless Mode -->
-                            <TextBlock Grid.Row="0" Grid.Column="0" 
-                                       Text="Headless Mode" 
-                                       VerticalAlignment="Center" 
-                                       Style="{StaticResource BodyTextStyle}"
-                                       Margin="0,0,16,20"/>
-                            <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,20">
-                                <CheckBox IsChecked="{Binding Headless}"
-                                          Content="Run browser in background (faster, recommended)"
-                                          FontSize="14"
-                                          AutomationProperties.Name="Headless Mode"/>
-                                <TextBlock Text="Disable to see browser window (slower)"
-                                           Style="{StaticResource CaptionTextStyle}"
-                                           Margin="0,4,0,0"/>
-                            </StackPanel>
+                        <TextBox Text="{Binding ViewportHeight, UpdateSourceTrigger=PropertyChanged}"
+                                 md:HintAssist.Hint="Viewport Height (pixels)"
+                                 md:HintAssist.HelperText="Browser viewport height in pixels (240-2160)"
+                                 Style="{StaticResource StandardTextBox}"
+                                 Margin="0,0,0,28"
+                                 AutomationProperties.Name="Viewport Height"
+                                 ToolTip="Browser viewport height in pixels"/>
 
-                            <!-- Viewport Width -->
-                            <TextBlock Grid.Row="1" Grid.Column="0" 
-                                       Text="Viewport Width" 
-                                       VerticalAlignment="Center" 
-                                       Style="{StaticResource BodyTextStyle}"
-                                       Margin="0,0,16,20"/>
-                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,20">
-                                <TextBox Text="{Binding ViewportWidth, UpdateSourceTrigger=PropertyChanged}"
-                                         md:HintAssist.Hint="Pixels (320-3840)"
-                                         Style="{StaticResource StandardTextBox}"
-                                         AutomationProperties.Name="Viewport Width"/>
-                                <TextBlock Text="Browser viewport width in pixels"
-                                           Style="{StaticResource CaptionTextStyle}"
-                                           Margin="0,4,0,0"/>
-                            </StackPanel>
-
-                            <!-- Viewport Height -->
-                            <TextBlock Grid.Row="2" Grid.Column="0" 
-                                       Text="Viewport Height" 
-                                       VerticalAlignment="Center" 
-                                       Style="{StaticResource BodyTextStyle}"
-                                       Margin="0,0,16,20"/>
-                            <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,20">
-                                <TextBox Text="{Binding ViewportHeight, UpdateSourceTrigger=PropertyChanged}"
-                                         md:HintAssist.Hint="Pixels (240-2160)"
-                                         Style="{StaticResource StandardTextBox}"
-                                         AutomationProperties.Name="Viewport Height"/>
-                                <TextBlock Text="Browser viewport height in pixels"
-                                           Style="{StaticResource CaptionTextStyle}"
-                                           Margin="0,4,0,0"/>
-                            </StackPanel>
-
-                            <!-- Memory Limit -->
-                            <TextBlock Grid.Row="3" Grid.Column="0" 
-                                       Text="Memory Limit" 
-                                       VerticalAlignment="Center" 
-                                       Style="{StaticResource BodyTextStyle}"
-                                       Margin="0,0,16,0"/>
-                            <StackPanel Grid.Row="3" Grid.Column="1">
-                                <TextBox Text="{Binding MemoryLimitMb, UpdateSourceTrigger=PropertyChanged}"
-                                         md:HintAssist.Hint="MB (512+)"
-                                         Style="{StaticResource StandardTextBox}"
-                                         AutomationProperties.Name="Memory Limit"/>
-                                <TextBlock Text="Browser restarts automatically if memory exceeds this limit"
-                                           Style="{StaticResource CaptionTextStyle}"
-                                           Margin="0,4,0,0"/>
-                            </StackPanel>
-                        </Grid>
+                        <TextBox Text="{Binding MemoryLimitMb, UpdateSourceTrigger=PropertyChanged}"
+                                 md:HintAssist.Hint="Memory Limit (MB)"
+                                 md:HintAssist.HelperText="Browser restarts if memory exceeds this limit (512+)"
+                                 Style="{StaticResource StandardTextBox}"
+                                 Margin="0,0,0,28"
+                                 AutomationProperties.Name="Memory Limit"
+                                 ToolTip="Browser restarts automatically if memory exceeds this limit"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- Plugins Tab -->
             <TabItem Header="Plugins">
-                <Grid Margin="{StaticResource SpacingL}">
+                <Grid Margin="{StaticResource SpacingXL}">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" 
-                               Text="Installed Plugins" 
-                               Style="{StaticResource TitleTextStyle}"
-                               Margin="0,0,0,8"
-                               AutomationProperties.HeadingLevel="Level2"/>
-                    
-                    <TextBlock Grid.Row="1"
-                               Text="Manage analyzer plugins for the crawler."
-                               Style="{StaticResource BodyTextStyle}"
-                               Foreground="{StaticResource TextSecondaryBrush}"
-                               Margin="{StaticResource SpacingM}"/>
-
-                    <DataGrid Grid.Row="2"
+                    <DataGrid Grid.Row="0"
                               ItemsSource="{Binding Plugins}"
                               Style="{StaticResource ModernDataGrid}"
                               MaxHeight="300">
@@ -312,7 +154,7 @@
                         </DataGrid.Columns>
                     </DataGrid>
 
-                    <md:Card Grid.Row="3" 
+                    <md:Card Grid.Row="1" 
                              Padding="16" 
                              Margin="0,16,0,0" 
                              Background="#E3F2FD"
@@ -342,10 +184,10 @@
         </TabControl>
 
         <!-- Action Buttons -->
-        <StackPanel Grid.Row="2" 
+        <StackPanel Grid.Row="1" 
                     Orientation="Horizontal" 
                     HorizontalAlignment="Right" 
-                    Margin="{StaticResource SpacingL}">
+                    Margin="0,24,0,0">
             <Button Content="Restore Defaults"
                     Command="{Binding RestoreDefaultsCommand}"
                     Style="{StaticResource SecondaryButton}"

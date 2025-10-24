@@ -32,7 +32,9 @@
                 Background="{StaticResource SurfaceBrush}"
                 BorderThickness="0,0,0,1"
                 BorderBrush="{StaticResource BorderLightBrush}">
-            <Menu Background="Transparent" Padding="4,2">
+            <Menu Background="Transparent" 
+                  Padding="4,2"
+                  IsEnabled="{Binding IsInitializing, Converter={StaticResource InverseBooleanConverter}}">
             <MenuItem Header="_File">
                 <MenuItem Header="_New Project" Command="{Binding NewProjectCommand}" InputGestureText="Ctrl+N">
                     <MenuItem.Icon>

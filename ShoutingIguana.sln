@@ -17,6 +17,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scripts", "Scripts", "{D804
 	ProjectSection(SolutionItems) = preProject
 		build-installer.ps1 = build-installer.ps1
 		migrations.ps1 = migrations.ps1
+		cleanplaywright.ps1 = cleanplaywright.ps1
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{0EF35D29-65EE-4EFF-A2FD-8859B8D52D18}"

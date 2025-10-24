@@ -182,32 +182,34 @@ All styles are centralized in `Styles/Styles.xaml`. **Always use StaticResource 
 ### Button Styles
 
 ```xml
-<!-- Primary Action -->
+<!-- Primary Action (40px height, 24px horizontal padding) -->
 <Button Content="Start Crawl"
         Command="{Binding StartCommand}"
         Style="{StaticResource PrimaryButton}"/>
 
-<!-- Secondary Action -->
+<!-- Secondary Action (40px height, 24px horizontal padding) -->
 <Button Content="Cancel"
         Command="{Binding CancelCommand}"
         Style="{StaticResource SecondaryButton}"/>
 
-<!-- Destructive Action -->
+<!-- Destructive Action (40px height, 24px horizontal padding) -->
 <Button Content="Delete Project"
         Command="{Binding DeleteCommand}"
         Style="{StaticResource DangerButton}"/>
 
-<!-- Prominent Action (larger) -->
+<!-- Prominent Action (48px height, 32px horizontal padding) -->
 <Button Content="Create Project"
         Command="{Binding CreateCommand}"
         Style="{StaticResource LargeButton}"/>
 ```
 
 **Button Guidelines:**
-- Primary: Main action (1 per section max)
-- Secondary: Alternative/cancel actions
-- Danger: Destructive operations (delete, stop, clear)
-- Large: Hero actions on landing screens
+- Primary: Main action (1 per section max) - 40px height
+- Secondary: Alternative/cancel actions - 40px height
+- Danger: Destructive operations (delete, stop, clear) - 40px height
+- Large: Hero actions on landing screens - 48px height
+- All buttons use `Padding="24,12"` (or `32,12` for Large)
+- All buttons use `FocusVisualStyle="{x:Null}"` (Material Design handles focus)
 
 ### Card Styles
 
@@ -235,13 +237,25 @@ All styles are centralized in `Styles/Styles.xaml`. **Always use StaticResource 
 
 ### Input Styles
 
+**CRITICAL: Always use vertical stacking for forms. NEVER use two-column layouts with labels on the left.**
+
 ```xml
-<!-- Text Input -->
+<!-- Text Input with Hint (simple field without helper text) -->
 <TextBox Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
          md:HintAssist.Hint="Project Name"
          Style="{StaticResource StandardTextBox}"
+         Margin="0,0,0,20"
          AutomationProperties.Name="Project Name"
          ToolTip="Enter a descriptive name for your project"/>
+
+<!-- Text Input with Hint and Helper Text (needs MORE spacing - 28px) -->
+<TextBox Text="{Binding MaxDepth, UpdateSourceTrigger=PropertyChanged}"
+         md:HintAssist.Hint="Max Crawl Depth"
+         md:HintAssist.HelperText="Maximum link depth from start URL (1-20)"
+         Style="{StaticResource StandardTextBox}"
+         Margin="0,0,0,28"
+         AutomationProperties.Name="Maximum Crawl Depth"
+         ToolTip="Maximum number of clicks from start URL"/>
 
 <!-- ComboBox -->
 <ComboBox SelectedValue="{Binding SelectedSeverity}"
@@ -251,8 +265,76 @@ All styles are centralized in `Styles/Styles.xaml`. **Always use StaticResource 
 <!-- CheckBox -->
 <CheckBox Content="Respect robots.txt"
           IsChecked="{Binding RespectRobotsTxt}"
-          Style="{StaticResource StandardCheckBox}"
-          AutomationProperties.Name="Respect Robots.txt"/>
+          FontSize="14"
+          Margin="0,8,0,0"
+          AutomationProperties.Name="Respect Robots.txt"
+          ToolTip="Follow robots.txt exclusion rules"/>
+```
+
+**TabControl:**
+```xml
+<!-- Tabbed dialog (e.g., Settings) -->
+<TabControl Style="{StaticResource StandardTabControl}">
+    <TabItem Header="General">
+        <ScrollViewer Padding="32,40,32,32">
+            <!-- Tab content -->
+        </ScrollViewer>
+    </TabItem>
+    <TabItem Header="Advanced">
+        <!-- Tab content -->
+    </TabItem>
+</TabControl>
+```
+
+**TabControl Guidelines:**
+- Always use `StandardTabControl` style for proper text colors (white on selected blue tabs)
+- Selected tabs automatically get white text on blue background
+- Unselected tabs use standard text color
+- Don't add redundant headings inside tab content - the tab header is sufficient
+
+**Form Field Guidelines:**
+
+1. **Always use `md:HintAssist.Hint`** - Put the field name in the hint (e.g., "Project Name", "Max Depth")
+2. **Use `md:HintAssist.HelperText`** for validation/guidance - Show constraints below the field
+3. **Never use labels beside textboxes** - The floating hint IS the label
+4. **Stack fields vertically** - Use StackPanel with MaxWidth (400-500px)
+5. **Consistent spacing** - **28px margin** between fields when using HelperText (`Margin="0,0,0,28"`)
+   - **20px margin** for simple fields without HelperText (`Margin="0,0,0,20"`)
+   - The floating label needs space to animate up without overlapping helper text below
+6. **Top padding** - Use **40px top padding** on ScrollViewer (`Padding="32,40,32,32"`) to prevent label cutoff
+7. **Always include tooltips** - Provides extra context on hover
+8. **UpdateSourceTrigger=PropertyChanged** - For real-time validation
+
+**Bad Pattern (DO NOT USE):**
+```xml
+<!-- BAD: Two-column layout with separate labels -->
+<Grid>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto"/>
+        <ColumnDefinition Width="*"/>
+    </Grid.ColumnDefinitions>
+    <TextBlock Grid.Column="0" Text="Project Name"/>
+    <TextBox Grid.Column="1" Text="{Binding ProjectName}"/>
+</Grid>
+```
+
+**Good Pattern:**
+```xml
+<!-- GOOD: Vertical stacking with Material Design hints -->
+<ScrollViewer Padding="32,40,32,32">  <!-- Extra top padding prevents label cutoff -->
+    <StackPanel MaxWidth="500">
+        <TextBox Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
+                 md:HintAssist.Hint="Project Name"
+                 md:HintAssist.HelperText="Enter a descriptive name"
+                 Style="{StaticResource StandardTextBox}"
+                 Margin="0,0,0,28"/>  <!-- 28px when using HelperText -->
+        
+        <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}"
+                 md:HintAssist.Hint="Base URL"
+                 Style="{StaticResource StandardTextBox}"
+                 Margin="0,0,0,20"/>  <!-- 20px without HelperText -->
+    </StackPanel>
+</ScrollViewer>
 ```
 
 ### DataGrid Style
@@ -845,37 +927,78 @@ Register in App.xaml:
 </Grid>
 ```
 
-### Form Layout
+### Form Layout & Headings
+
+**Avoid excessive headings and spacing:**
 
 ```xml
-<Grid>
-    <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="16"/>
-        <ColumnDefinition Width="*"/>
-    </Grid.ColumnDefinitions>
-    <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-    </Grid.RowDefinitions>
+<!-- BAD: Too many headings, excessive spacing -->
+<StackPanel>
+    <TextBlock Text="Project Settings"           <!-- 28px huge heading -->
+               Style="{StaticResource DisplayTextStyle}"
+               Margin="0,0,0,8"/>
+    <TextBlock Text="Configure your web crawl"   <!-- Redundant subtitle -->
+               Margin="{StaticResource SpacingXL}"/>
+    <TextBlock Text="Basic Information"          <!-- Redundant section heading -->
+               Style="{StaticResource TitleTextStyle}"/>
+    <Separator Margin="{StaticResource SpacingM}"/> <!-- Takes up space -->
+    <!-- Fields here -->
+</StackPanel>
 
-    <TextBox Grid.Row="0" Grid.Column="0"
-             Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
-             md:HintAssist.Hint="Project Name"
-             Style="{StaticResource StandardTextBox}"
-             Margin="0,0,0,20"/>
+<!-- GOOD: Minimal headings, compact spacing -->
+<StackPanel>
+    <TextBlock Text="Project Settings"           <!-- Single title, smaller -->
+               Style="{StaticResource TitleTextStyle}"
+               Margin="0,0,0,24"/>
+    <!-- Fields start immediately -->
+    <TextBox md:HintAssist.Hint="Project Name" .../>
+    
+    <!-- Optional section divider for long forms -->
+    <TextBlock Text="Crawl Configuration"        <!-- Small section label -->
+               Style="{StaticResource BodyTextStyle}"
+               FontWeight="SemiBold"
+               Margin="0,24,0,16"/>
+</StackPanel>
+```
 
-    <TextBox Grid.Row="0" Grid.Column="2"
-             Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}"
-             md:HintAssist.Hint="Base URL"
-             Style="{StaticResource StandardTextBox}"
-             Margin="0,0,0,20"/>
+**Form Layout Rules:**
 
-    <CheckBox Grid.Row="1" Grid.Column="0"
-              Content="Respect robots.txt"
-              IsChecked="{Binding RespectRobotsTxt}"
-              Margin="0,8,0,0"/>
-</Grid>
+1. **One main heading per view** - Use `TitleTextStyle` (20px), not `DisplayTextStyle` (28px)
+2. **No redundant subtitles** - Get straight to the fields
+3. **Section labels** - If needed, use small `BodyTextStyle` with `FontWeight="SemiBold"`
+4. **No separators** - Visual clutter; use spacing instead
+5. **Field spacing** - **28px** between fields with HelperText, **20px** without HelperText
+6. **Section spacing** - 24px between sections
+7. **ScrollViewer padding** - Use `Padding="32,40,32,32"` (extra top padding prevents label cutoff)
+8. **MaxWidth on forms** - 400-500px prevents forms from stretching too wide
+
+**Vertical Stacking Example:**
+
+```xml
+<ScrollViewer Padding="32,40,32,32">  <!-- Extra top padding prevents label cutoff -->
+    <StackPanel MaxWidth="500">
+        <TextBox Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
+                 md:HintAssist.Hint="Project Name"
+                 md:HintAssist.HelperText="Enter a descriptive name"
+                 Style="{StaticResource StandardTextBox}"
+                 Margin="0,0,0,28"/>  <!-- 28px when using HelperText -->
+        
+        <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}"
+                 md:HintAssist.Hint="Base URL"
+                 Style="{StaticResource StandardTextBox}"
+                 Margin="0,0,0,20"/>  <!-- 20px without HelperText -->
+        
+        <!-- Section break -->
+        <TextBlock Text="Advanced Options"
+                   Style="{StaticResource BodyTextStyle}"
+                   FontWeight="SemiBold"
+                   Margin="0,24,0,16"/>
+        
+        <CheckBox Content="Enable feature"
+                  IsChecked="{Binding FeatureEnabled}"
+                  Margin="0,8,0,0"/>
+    </StackPanel>
+</ScrollViewer>
 ```
 
 ### Loading Overlay
@@ -1308,7 +1431,93 @@ Before committing code, verify:
 
 ------
 
-## 17) Common Pitfalls & Solutions
+## 17) Tabbed Dialogs & Settings
+
+### Tab Content Guidelines
+
+When using `TabControl`, **do not repeat the tab name as a heading inside the tab content**.
+
+```xml
+<!-- BAD: Redundant heading -->
+<TabItem Header="Browser">
+    <StackPanel>
+        <TextBlock Text="Browser Settings"     <!-- Tab already says "Browser" -->
+                   Style="{StaticResource TitleTextStyle}"/>
+        <TextBlock Text="Configure browser..."  <!-- Redundant description -->
+                   Style="{StaticResource BodyTextStyle}"/>
+        <!-- Fields -->
+    </StackPanel>
+</TabItem>
+
+<!-- GOOD: Get straight to content -->
+<TabItem Header="Browser">
+    <ScrollViewer Padding="{StaticResource SpacingXL}">
+        <StackPanel MaxWidth="500">
+            <!-- Fields start immediately -->
+            <CheckBox Content="Run in headless mode".../>
+            <TextBox md:HintAssist.Hint="Viewport Width".../>
+        </StackPanel>
+    </ScrollViewer>
+</TabItem>
+```
+
+### Dialog Layout
+
+```xml
+<Window>
+    <Grid Margin="24,24,24,16">  <!-- Less bottom margin for buttons -->
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>          <!-- Content -->
+            <RowDefinition Height="Auto"/>       <!-- Buttons -->
+        </Grid.RowDefinitions>
+        
+        <!-- Don't add window title as TextBlock - title bar shows it -->
+        
+        <TabControl Grid.Row="0" 
+                    Style="{StaticResource StandardTabControl}">  <!-- Use StandardTabControl for proper text colors -->
+            <TabItem Header="General">
+                <ScrollViewer Padding="32,40,32,32">  <!-- Extra top padding prevents label cutoff -->
+                    <StackPanel MaxWidth="500">
+                        <TextBox md:HintAssist.Hint="Field Name"
+                                 md:HintAssist.HelperText="Helper text here"
+                                 Style="{StaticResource StandardTextBox}"
+                                 Margin="0,0,0,28"/>  <!-- 28px for fields with helper text -->
+                        <!-- More fields -->
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+        
+        <!-- Action buttons at bottom -->
+        <StackPanel Grid.Row="1" 
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,24,0,0">  <!-- Space above buttons -->
+            <Button Content="Cancel" 
+                    Style="{StaticResource SecondaryButton}"
+                    Margin="0,0,12,0"/>
+            <Button Content="Save" 
+                    Style="{StaticResource PrimaryButton}"/>
+        </StackPanel>
+    </Grid>
+</Window>
+```
+
+**Dialog Rules:**
+
+1. **No redundant title heading** - Window title bar already shows it
+2. **No section headings in tabs** - Tab name already identifies the section
+3. **Proper Grid rows** - Content in Row 0 (*), Buttons in Row 1 (Auto)
+4. **TabControl padding** - Add `Padding="0,16,0,0"` to create gap between tab strip and content
+5. **Tab content padding** - Use `Padding="32,40,32,32"` on ScrollViewer
+   - Extra top padding (40px) prevents floating label cutoff
+   - Standard side/bottom padding (32px) for consistent spacing
+6. **Field spacing** - Use `Margin="0,0,0,28"` between fields with HelperText (prevents overlap)
+7. **Button spacing** - Use `Margin="0,24,0,0"` on button panel to separate from content
+8. **Dialog margins** - Use `Margin="24,24,24,16"` on root Grid (less bottom margin for buttons)
+9. **Card padding** - Use `SpacingXS` (4px) minimum to prevent clipping
+
+## 18) Common Pitfalls & Solutions
 
 ### Memory Leaks
 

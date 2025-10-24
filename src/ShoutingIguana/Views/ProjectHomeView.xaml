@@ -5,6 +5,76 @@
              Background="{StaticResource BackgroundBrush}">
     
     <Grid>
+        <!-- Loading Overlay (during initialization) -->
+        <Grid Style="{StaticResource LoadingOverlay}"
+              Visibility="{Binding DataContext.IsInitializing, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <md:Card Padding="{StaticResource SpacingXXL}" 
+                     md:ElevationAssist.Elevation="Dp8"
+                     UniformCornerRadius="12"
+                     MaxWidth="450"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center">
+                <md:Card.Effect>
+                    <DropShadowEffect Color="#000000" 
+                                      BlurRadius="32" 
+                                      ShadowDepth="8" 
+                                      Opacity="0.15"/>
+                </md:Card.Effect>
+                
+                <StackPanel>
+                    <!-- Icon -->
+                    <md:PackIcon Kind="Cog" 
+                                 Width="48" 
+                                 Height="48"
+                                 Foreground="{StaticResource PrimaryBrush}"
+                                 HorizontalAlignment="Center"
+                                 Margin="0,0,0,24">
+                        <md:PackIcon.RenderTransform>
+                            <RotateTransform />
+                        </md:PackIcon.RenderTransform>
+                        <md:PackIcon.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard RepeatBehavior="Forever">
+                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                         From="0" To="360" Duration="0:0:2"
+                                                         RepeatBehavior="Forever"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </md:PackIcon.Triggers>
+                    </md:PackIcon>
+                    
+                    <!-- Title -->
+                    <TextBlock Text="Initializing Application" 
+                               Style="{StaticResource TitleTextStyle}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,8"
+                               AutomationProperties.LiveSetting="Polite"/>
+                    
+                    <!-- Subtitle -->
+                    <TextBlock Text="Setting up Playwright and plugins..." 
+                               Style="{StaticResource BodyTextStyle}"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,24"/>
+                    
+                    <!-- Progress Bar -->
+                    <ProgressBar IsIndeterminate="True" 
+                                 Height="4"
+                                 Style="{StaticResource ModernProgressBar}"
+                                 Margin="0"/>
+                    
+                    <!-- Status Text -->
+                    <TextBlock Text="This may take a moment on first run" 
+                               Style="{StaticResource CaptionTextStyle}"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               HorizontalAlignment="Center"
+                               Margin="0,16,0,0"/>
+                </StackPanel>
+            </md:Card>
+        </Grid>
+        
         <!-- Welcome Screen -->
         <Grid Visibility="{Binding IsWelcomeScreen, Converter={StaticResource BooleanToVisibilityConverter}}"
               HorizontalAlignment="Center"
@@ -122,54 +192,34 @@
                      HorizontalAlignment="Center">
                 <StackPanel>
                     <TextBlock Text="Project Settings"
-                               Style="{StaticResource DisplayTextStyle}"
-                               Margin="0,0,0,8"
-                               AutomationProperties.HeadingLevel="Level1"/>
-                    
-                    <TextBlock Text="Configure your web crawl project"
-                               Style="{StaticResource BodyTextStyle}"
-                               Foreground="{StaticResource TextSecondaryBrush}"
-                               Margin="{StaticResource SpacingXL}"/>
-
-                    <!-- Basic Settings Section -->
-                    <TextBlock Text="Basic Information"
                                Style="{StaticResource TitleTextStyle}"
-                               Margin="{StaticResource SpacingM}"
-                               AutomationProperties.HeadingLevel="Level2"/>
-                    
-                    <Separator Style="{StaticResource HorizontalDivider}" Margin="{StaticResource SpacingM}"/>
+                               Margin="0,0,0,24"
+                               AutomationProperties.HeadingLevel="Level1"/>
 
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="16"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        
-                        <TextBox Grid.Column="0"
-                                 Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
+                    <StackPanel>
+                        <TextBox Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
                                  md:HintAssist.Hint="Project Name"
                                  Style="{StaticResource StandardTextBox}"
                                  Margin="0,0,0,20"
+                                 TabIndex="0"
                                  AutomationProperties.Name="Project Name"
                                  ToolTip="Enter a descriptive name for your project"/>
 
-                        <TextBox Grid.Column="2"
-                                 Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}"
+                        <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}"
                                  md:HintAssist.Hint="Base URL (e.g., https://example.com)"
                                  Style="{StaticResource StandardTextBox}"
                                  Margin="0,0,0,20"
+                                 TabIndex="1"
                                  AutomationProperties.Name="Base URL"
                                  ToolTip="Enter the starting URL for the crawl"/>
-                    </Grid>
+                    </StackPanel>
 
                     <!-- Crawl Settings Section -->
                     <TextBlock Text="Crawl Configuration"
-                               Style="{StaticResource TitleTextStyle}"
-                               Margin="{StaticResource SpacingM}"
+                               Style="{StaticResource BodyTextStyle}"
+                               FontWeight="SemiBold"
+                               Margin="0,24,0,16"
                                AutomationProperties.HeadingLevel="Level2"/>
-                    
-                    <Separator Style="{StaticResource HorizontalDivider}" Margin="{StaticResource SpacingM}"/>
 
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -245,7 +295,8 @@
                                              Height="18"
                                              VerticalAlignment="Center"
                                              Margin="0,0,8,0"/>
-                                <TextBlock Text="Start Crawl" VerticalAlignment="Center"/>
+                                <TextBlock Text="Start Crawl" 
+                                           VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
                     </StackPanel>
