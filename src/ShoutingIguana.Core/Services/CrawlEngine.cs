@@ -126,10 +126,6 @@ public class CrawlEngine(
             settings = System.Text.Json.JsonSerializer.Deserialize<ProjectSettings>(project.SettingsJson)
                 ?? new ProjectSettings();
 
-            // Initialize total discovered count from existing URLs
-            var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
-            _totalDiscovered = await urlRepository.CountByProjectIdAsync(projectId);
-
             // Seed the queue with base URL if empty
             var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
             queueSize = await queueRepository.CountQueuedAsync(projectId);
@@ -138,6 +134,10 @@ public class CrawlEngine(
                 _logger.LogInformation("Seeding queue with base URL: {BaseUrl}", settings.BaseUrl);
                 await EnqueueUrlAsync(projectId, settings.BaseUrl, 0, 1000, settings.BaseUrl);
             }
+
+            // Initialize total discovered count from current queue size
+            // This ensures progress percentage stays at or below 100%
+            _totalDiscovered = await queueRepository.CountQueuedAsync(projectId);
         }
 
         _logger.LogInformation("Starting {WorkerCount} workers for project {ProjectId}. Total discovered: {TotalDiscovered}", 

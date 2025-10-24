@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -15,12 +16,14 @@ using ShoutingIguana.Services;
 
 namespace ShoutingIguana.ViewModels;
 
-public partial class FindingsViewModel : ObservableObject
+public partial class FindingsViewModel : ObservableObject, IDisposable
 {
     private readonly ILogger<FindingsViewModel> _logger;
     private readonly ICsvExportService _csvExportService;
     private readonly IProjectContext _projectContext;
     private readonly IServiceProvider _serviceProvider;
+    private Timer? _searchDebounceTimer;
+    private bool _disposed;
 
     [ObservableProperty]
     private ObservableCollection<Url> _urls = new();
@@ -43,6 +46,21 @@ public partial class FindingsViewModel : ObservableObject
         _csvExportService = csvExportService;
         _projectContext = projectContext;
         _serviceProvider = serviceProvider;
+    }
+
+    partial void OnSearchTextChanged(string value)
+    {
+        // Cancel any pending search
+        _searchDebounceTimer?.Dispose();
+        
+        // Create a new timer that will fire after 300ms
+        _searchDebounceTimer = new Timer(_ =>
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                PerformSearch();
+            });
+        }, null, 300, Timeout.Infinite);
     }
 
     public async Task LoadUrlsAsync()
@@ -73,8 +91,7 @@ public partial class FindingsViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private void Search()
+    private void PerformSearch()
     {
         if (string.IsNullOrWhiteSpace(SearchText))
         {
@@ -132,6 +149,15 @@ public partial class FindingsViewModel : ObservableObject
     private async Task RefreshAsync()
     {
         await LoadUrlsAsync();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _searchDebounceTimer?.Dispose();
+        _disposed = true;
     }
 }
 

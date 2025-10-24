@@ -22,14 +22,10 @@
                     <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                              md:HintAssist.Hint="Search URLs..."
                              Width="300"
-                             Margin="0,0,8,0"/>
-                    <Button Content="Search"
-                            Command="{Binding SearchCommand}"
-                            Style="{StaticResource MaterialDesignRaisedButton}"
-                            Margin="8,0"/>
+                             Margin="0,0,16,0"/>
                     <TextBlock Text="{Binding TotalCount, StringFormat='Total: {0} URLs'}"
                                VerticalAlignment="Center"
-                               Margin="16,0,0,0"/>
+                               Margin="0"/>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Grid.Column="1">

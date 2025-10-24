@@ -53,9 +53,31 @@
                            Margin="0,16"
                            Style="{StaticResource MaterialDesignSubtitle1TextBlock}"/>
 
-                <TextBlock Text="{Binding RecentActivity}"
-                           Margin="0,8"
-                           TextWrapping="Wrap"/>
+                <Border Background="{DynamicResource MaterialDesign.Brush.Chip.Background}"
+                        BorderBrush="{DynamicResource MaterialDesign.Brush.TextBox.HoverBackground}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="12,8"
+                        Margin="0,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <md:PackIcon Kind="Web"
+                                     Grid.Column="0"
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,8,0"
+                                     Foreground="{DynamicResource MaterialDesign.Brush.Primary}"/>
+                        
+                        <TextBlock Text="{Binding RecentActivity}"
+                                   Grid.Column="1"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   Style="{StaticResource MaterialDesignBody2TextBlock}"/>
+                    </Grid>
+                </Border>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,24,0,0">
                     <Button Content="Start Crawl"
