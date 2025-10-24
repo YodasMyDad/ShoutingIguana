@@ -9,7 +9,7 @@ public class BrokenLinksPlugin : IPlugin
     public string Id => "com.shoutingiguana.brokenlinks";
     public string Name => "Broken Links";
     public Version Version => new(1, 0, 0);
-    public string Description => "Detects broken links and reports source pages";
+    public string Description => "Detects broken internal/external links, resources, and soft 404s with detailed diagnostics";
 
     public void Initialize(IHostContext context)
     {
@@ -17,7 +17,15 @@ public class BrokenLinksPlugin : IPlugin
         var serviceProvider = context.GetServiceProvider();
         var checker = new BrokenLinksChecker(serviceProvider, context.CreateLogger<BrokenLinksChecker>());
         
-        context.RegisterTask(new BrokenLinksTask(context.CreateLogger(nameof(BrokenLinksTask)), checker));
+        // TODO: Read configuration from appsettings
+        bool checkExternalLinks = false;
+        bool checkAnchorLinks = true;
+        
+        context.RegisterTask(new BrokenLinksTask(
+            context.CreateLogger(nameof(BrokenLinksTask)), 
+            checker, 
+            checkExternalLinks, 
+            checkAnchorLinks));
     }
 }
 

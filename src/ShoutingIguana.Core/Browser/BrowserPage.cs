@@ -32,6 +32,15 @@ public class BrowserPage(IPage page) : ShoutingIguana.PluginSdk.IBrowserPage
         return await _page.EvaluateAsync<T>(expression);
     }
 
+    public async Task<T> EvaluateAsync<T>(string pageFunction, ShoutingIguana.PluginSdk.IElementHandle element)
+    {
+        if (element is ElementHandleWrapper wrapper)
+        {
+            return await _page.EvaluateAsync<T>(pageFunction, wrapper._handle);
+        }
+        throw new ArgumentException("Element must be an ElementHandleWrapper", nameof(element));
+    }
+
     public async Task<string?> GetAttributeAsync(ShoutingIguana.PluginSdk.IElementHandle element, string name)
     {
         if (element is ElementHandleWrapper wrapper)
@@ -56,7 +65,7 @@ public class BrowserPage(IPage page) : ShoutingIguana.PluginSdk.IBrowserPage
 /// </summary>
 public class ElementHandleWrapper(Microsoft.Playwright.IElementHandle handle) : ShoutingIguana.PluginSdk.IElementHandle
 {
-    private readonly Microsoft.Playwright.IElementHandle _handle = handle;
+    internal readonly Microsoft.Playwright.IElementHandle _handle = handle;
 
     public async Task<string?> GetAttributeAsync(string name)
     {

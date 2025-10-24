@@ -8,7 +8,7 @@ public class RedirectsPlugin : IPlugin
     public string Id => "com.shoutingiguana.redirects";
     public string Name => "Redirects";
     public Version Version => new(1, 0, 0);
-    public string Description => "Analyzes redirect chains and identifies issues";
+    public string Description => "Analyzes redirect chains, loops, and canonicalization issues";
 
     public void Initialize(IHostContext context)
     {

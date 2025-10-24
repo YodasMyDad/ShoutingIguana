@@ -8,7 +8,7 @@ public class InventoryPlugin : IPlugin
     public string Id => "com.shoutingiguana.inventory";
     public string Name => "Inventory";
     public Version Version => new(1, 0, 0);
-    public string Description => "Basic URL inventory tracking";
+    public string Description => "Tracks indexability, URL structure, and orphaned pages";
 
     public void Initialize(IHostContext context)
     {

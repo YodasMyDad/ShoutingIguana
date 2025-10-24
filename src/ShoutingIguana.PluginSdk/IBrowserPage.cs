@@ -27,6 +27,11 @@ public interface IBrowserPage
     Task<T> EvaluateAsync<T>(string expression);
     
     /// <summary>
+    /// Evaluate JavaScript function with an element as parameter.
+    /// </summary>
+    Task<T> EvaluateAsync<T>(string pageFunction, IElementHandle element);
+    
+    /// <summary>
     /// Get attribute value from an element.
     /// </summary>
     Task<string?> GetAttributeAsync(IElementHandle element, string name);

@@ -9,7 +9,7 @@ public class ImageAuditPlugin : IPlugin
     public string Id => "com.shoutingiguana.imageaudit";
     public string Name => "Image Audit";
     public Version Version => new(1, 0, 0);
-    public string Description => "Audits images for alt text, dimensions, and accessibility issues";
+    public string Description => "Comprehensive image optimization, accessibility, and performance analysis";
 
     public void Initialize(IHostContext context)
     {

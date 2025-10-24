@@ -8,7 +8,7 @@ public class TitlesMetaPlugin : IPlugin
     public string Id => "com.shoutingiguana.titlesmeta";
     public string Name => "Titles & Meta";
     public Version Version => new(1, 0, 0);
-    public string Description => "Extracts and validates page titles and meta descriptions";
+    public string Description => "Title, meta, Open Graph, Twitter Cards, and heading structure validation";
 
     public void Initialize(IHostContext context)
     {
