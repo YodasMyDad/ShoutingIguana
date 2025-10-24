@@ -19,12 +19,22 @@ public class Url
     public long? ContentLength { get; set; }
     public bool? RobotsAllowed { get; set; }
     
+    // Stage 2: Meta data fields
+    public string? Title { get; set; }
+    public string? MetaDescription { get; set; }
+    public string? CanonicalUrl { get; set; }
+    public string? MetaRobots { get; set; }
+    public string? RedirectTarget { get; set; } // Final URL after redirects
+    
     // Navigation properties
     public Project Project { get; set; } = null!;
     public Url? DiscoveredFromUrl { get; set; }
     public ICollection<Link> LinksFrom { get; set; } = [];
     public ICollection<Link> LinksTo { get; set; } = [];
     public ICollection<Header> Headers { get; set; } = [];
+    public ICollection<Finding> Findings { get; set; } = [];
+    public ICollection<Redirect> Redirects { get; set; } = [];
+    public ICollection<Image> Images { get; set; } = [];
 }
 
 public enum UrlStatus

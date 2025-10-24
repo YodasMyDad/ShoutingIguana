@@ -23,7 +23,7 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
             var uri = new Uri(url);
             var host = $"{uri.Scheme}://{uri.Host}";
             
-            var robotsTxt = await GetRobotsTxtAsync(host);
+            var robotsTxt = await GetRobotsTxtAsync(host).ConfigureAwait(false);
             if (robotsTxt == null)
             {
                 // If no robots.txt, allow all
@@ -43,7 +43,7 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
     {
         try
         {
-            var robotsTxt = await GetRobotsTxtAsync(host);
+            var robotsTxt = await GetRobotsTxtAsync(host).ConfigureAwait(false);
             return robotsTxt?.GetCrawlDelay(userAgent);
         }
         catch (Exception ex)
@@ -63,7 +63,7 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
         try
         {
             var robotsUrl = $"{host}/robots.txt";
-            var response = await _httpClient.GetAsync(robotsUrl);
+            var response = await _httpClient.GetAsync(robotsUrl).ConfigureAwait(false);
             
             if (!response.IsSuccessStatusCode)
             {
@@ -72,7 +72,7 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
                 return null;
             }
 
-            var content = await response.Content.ReadAsStringAsync();
+            var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             var robotsTxt = new RobotsTxtFile(content);
             _cache[host] = robotsTxt;
             

@@ -14,7 +14,7 @@ public class CrawlQueueRepository(IShoutingIguanaDbContext context) : ICrawlQueu
             .Where(q => q.ProjectId == projectId && q.State == QueueState.Queued)
             .OrderByDescending(q => q.Priority)
             .ThenBy(q => q.EnqueuedUtc)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync().ConfigureAwait(false);
     }
 
     public async Task<IEnumerable<CrawlQueueItem>> GetQueuedItemsAsync(int projectId, int count = 10)
@@ -24,37 +24,37 @@ public class CrawlQueueRepository(IShoutingIguanaDbContext context) : ICrawlQueu
             .OrderByDescending(q => q.Priority)
             .ThenBy(q => q.EnqueuedUtc)
             .Take(count)
-            .ToListAsync();
+            .ToListAsync().ConfigureAwait(false);
     }
 
     public async Task<CrawlQueueItem> EnqueueAsync(CrawlQueueItem item)
     {
         _context.CrawlQueue.Add(item);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync().ConfigureAwait(false);
         return item;
     }
 
     public async Task<CrawlQueueItem> UpdateAsync(CrawlQueueItem item)
     {
         _context.Entry(item).State = EntityState.Modified;
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync().ConfigureAwait(false);
         return item;
     }
 
     public async Task<int> CountQueuedAsync(int projectId)
     {
         return await _context.CrawlQueue
-            .CountAsync(q => q.ProjectId == projectId && q.State == QueueState.Queued);
+            .CountAsync(q => q.ProjectId == projectId && q.State == QueueState.Queued).ConfigureAwait(false);
     }
 
     public async Task ClearQueueAsync(int projectId)
     {
         var items = await _context.CrawlQueue
             .Where(q => q.ProjectId == projectId && q.State == QueueState.Queued)
-            .ToListAsync();
+            .ToListAsync().ConfigureAwait(false);
         
         _context.CrawlQueue.RemoveRange(items);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync().ConfigureAwait(false);
     }
 }
 

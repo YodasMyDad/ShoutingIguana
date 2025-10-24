@@ -9,7 +9,7 @@ public class LinkRepository(IShoutingIguanaDbContext context) : ILinkRepository
     public async Task<Link> CreateAsync(Link link)
     {
         context.Links.Add(link);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync().ConfigureAwait(false);
         return link;
     }
 
@@ -17,26 +17,26 @@ public class LinkRepository(IShoutingIguanaDbContext context) : ILinkRepository
     {
         return await context.Links
             .Where(l => l.ProjectId == projectId)
-            .ToListAsync();
+            .ToListAsync().ConfigureAwait(false);
     }
 
     public async Task<IEnumerable<Link>> GetByFromUrlIdAsync(int fromUrlId)
     {
         return await context.Links
             .Where(l => l.FromUrlId == fromUrlId)
-            .ToListAsync();
+            .ToListAsync().ConfigureAwait(false);
     }
 
     public async Task<IEnumerable<Link>> GetByToUrlIdAsync(int toUrlId)
     {
         return await context.Links
             .Where(l => l.ToUrlId == toUrlId)
-            .ToListAsync();
+            .ToListAsync().ConfigureAwait(false);
     }
 
     public async Task<int> CountByProjectIdAsync(int projectId)
     {
-        return await context.Links.CountAsync(l => l.ProjectId == projectId);
+        return await context.Links.CountAsync(l => l.ProjectId == projectId).ConfigureAwait(false);
     }
 }
 

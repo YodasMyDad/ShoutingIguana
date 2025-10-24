@@ -7,6 +7,8 @@ public interface IProjectDbContextProvider
 {
     IShoutingIguanaDbContext GetDbContext();
     Task<IShoutingIguanaDbContext> GetDbContextAsync();
+    Task SetProjectPathAsync(string projectPath);
+    void CloseProject();
 }
 
 public class ProjectDbContextProvider(
@@ -14,19 +16,24 @@ public class ProjectDbContextProvider(
     ISqliteDbContextFactory dbContextFactory) : IProjectDbContextProvider
 {
     private string? _currentProjectPath;
-    private readonly object _lock = new();
+    private readonly SemaphoreSlim _lock = new(1, 1);
 
     public IShoutingIguanaDbContext GetDbContext()
     {
-        lock (_lock)
+        _lock.Wait();
+        try
         {
             if (_currentProjectPath == null)
             {
-                throw new InvalidOperationException("No project is currently open. Call SetProjectPath first.");
+                throw new InvalidOperationException("No project is currently open. Call SetProjectPathAsync first.");
             }
 
             // Create a NEW DbContext for each scope - DbContext should be short-lived
             return dbContextFactory.CreateDbContext(_currentProjectPath);
+        }
+        finally
+        {
+            _lock.Release();
         }
     }
 
@@ -35,9 +42,10 @@ public class ProjectDbContextProvider(
         return Task.FromResult(GetDbContext());
     }
 
-    public void SetProjectPath(string projectPath)
+    public async Task SetProjectPathAsync(string projectPath)
     {
-        lock (_lock)
+        await _lock.WaitAsync();
+        try
         {
             if (_currentProjectPath == projectPath)
             {
@@ -48,19 +56,39 @@ public class ProjectDbContextProvider(
             _currentProjectPath = projectPath;
 
             // Create a temporary context to ensure database is created and migrations applied
-            using var tempContext = dbContextFactory.CreateDbContext(projectPath);
-            tempContext.Database.Migrate();
+            // Run on background thread to avoid UI freeze
+            await Task.Run(() =>
+            {
+                using var tempContext = dbContextFactory.CreateDbContext(projectPath);
+                tempContext.Database.Migrate();
+            });
 
             logger.LogInformation("Switched to project database: {ProjectPath}", projectPath);
         }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+    
+    [Obsolete("Use SetProjectPathAsync instead to avoid UI freezes")]
+    public void SetProjectPath(string projectPath)
+    {
+        // Synchronous wrapper for backward compatibility - but prefer async version
+        SetProjectPathAsync(projectPath).GetAwaiter().GetResult();
     }
 
     public void CloseProject()
     {
-        lock (_lock)
+        _lock.Wait();
+        try
         {
             _currentProjectPath = null;
             logger.LogInformation("Closed project database");
+        }
+        finally
+        {
+            _lock.Release();
         }
     }
 }

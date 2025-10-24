@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Core.Repositories;
+using ShoutingIguana.Core.Services;
 using ShoutingIguana.Services;
 using ShoutingIguana.Views;
 
@@ -18,6 +19,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly INavigationService _navigationService;
     private readonly IProjectContext _projectContext;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IPlaywrightService _playwrightService;
     private bool _disposed;
 
     [ObservableProperty]
@@ -29,19 +31,28 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _projectName = "No project loaded";
 
+    [ObservableProperty]
+    private string _browserStatusText = "Initializing...";
+
     public MainViewModel(
         ILogger<MainViewModel> logger, 
         INavigationService navigationService,
         IProjectContext projectContext,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IPlaywrightService playwrightService)
     {
         _logger = logger;
         _navigationService = navigationService;
         _projectContext = projectContext;
         _serviceProvider = serviceProvider;
+        _playwrightService = playwrightService;
         
         _navigationService.NavigationRequested += OnNavigationRequested;
         _projectContext.ProjectChanged += OnProjectChanged;
+        _playwrightService.StatusChanged += OnBrowserStatusChanged;
+        
+        // Set initial browser status
+        UpdateBrowserStatus(_playwrightService.Status);
         
         // Start with project home view
         _navigationService.NavigateTo<ProjectHomeView>();
@@ -57,7 +68,39 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnNavigationRequested(object? sender, UserControl view)
     {
+        // Dispose old view's DataContext if it implements IDisposable
+        if (CurrentView?.DataContext is IDisposable disposable)
+        {
+            try
+            {
+                disposable.Dispose();
+                _logger.LogDebug("Disposed previous view's DataContext: {Type}", disposable.GetType().Name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error disposing previous view's DataContext");
+            }
+        }
+        
         CurrentView = view;
+    }
+
+    private void OnBrowserStatusChanged(object? sender, BrowserStatusEventArgs e)
+    {
+        UpdateBrowserStatus(e.Status);
+    }
+
+    private void UpdateBrowserStatus(BrowserStatus status)
+    {
+        BrowserStatusText = status switch
+        {
+            BrowserStatus.NotInitialized => "Not Initialized",
+            BrowserStatus.Initializing => "Initializing...",
+            BrowserStatus.Installing => "Installing...",
+            BrowserStatus.Ready => "✓ Ready",
+            BrowserStatus.Error => "✗ Error",
+            _ => "Unknown"
+        };
     }
 
     [RelayCommand]
@@ -65,10 +108,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         await NavigateToProjectHomeAsync();
         
-        // Give UI time to load the view
-        await Task.Delay(100);
-        
         // Trigger the new project action in ProjectHomeViewModel
+        // The view is already loaded since NavigateTo is synchronous
         if (CurrentView is ProjectHomeView projectHomeView)
         {
             if (projectHomeView.DataContext is ProjectHomeViewModel vm)
@@ -83,7 +124,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         await NavigateToProjectHomeAsync();
         // Trigger the open dialog in ProjectHomeViewModel
-        await Task.Delay(100); // Give UI time to load
         var projectHomeView = CurrentView as ProjectHomeView;
         if (projectHomeView?.DataContext is ProjectHomeViewModel vm)
         {
@@ -211,7 +251,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (CurrentView is not CrawlDashboardView)
         {
             await NavigateToCrawlDashboardAsync();
-            await Task.Delay(100); // Give UI time to load
         }
 
         // Start crawl
@@ -229,7 +268,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (CurrentView is not CrawlDashboardView)
         {
             await NavigateToCrawlDashboardAsync();
-            await Task.Delay(100);
         }
 
         // Stop crawl
@@ -291,13 +329,98 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (CurrentView is not FindingsView)
         {
             await NavigateToFindingsAsync();
-            await Task.Delay(100);
         }
 
         var findingsView = CurrentView as FindingsView;
         if (findingsView?.DataContext is FindingsViewModel vm)
         {
             await vm.ExportToCsvCommand.ExecuteAsync(null);
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExportToExcelAsync()
+    {
+        if (!_projectContext.HasOpenProject)
+        {
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+                MessageBox.Show("No project is open", "No Project", MessageBoxButton.OK, MessageBoxImage.Information));
+            return;
+        }
+
+        // Navigate to findings view and trigger export
+        if (CurrentView is not FindingsView)
+        {
+            await NavigateToFindingsAsync();
+        }
+
+        var findingsView = CurrentView as FindingsView;
+        if (findingsView?.DataContext is FindingsViewModel vm)
+        {
+            await vm.ExportToExcelCommand.ExecuteAsync(null);
+        }
+    }
+
+    [RelayCommand]
+    private async Task NavigateToExtensionsAsync()
+    {
+        _navigationService.NavigateTo<ExtensionsView>();
+        StatusMessage = "Extensions";
+        await Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private async Task ReinstallBrowsersAsync()
+    {
+        var result = await Application.Current.Dispatcher.InvokeAsync(() =>
+            MessageBox.Show(
+                "This will reinstall Playwright browsers. This may take a few minutes.\n\nContinue?",
+                "Reinstall Browsers",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question));
+
+        if (result == MessageBoxResult.Yes)
+        {
+            try
+            {
+                StatusMessage = "Installing browsers...";
+                await _playwrightService.InstallBrowsersAsync();
+                StatusMessage = "Browser installation complete";
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show("Browsers installed successfully", "Success", MessageBoxButton.OK, MessageBoxImage.Information));
+                _logger.LogInformation("Browsers reinstalled successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to reinstall browsers");
+                StatusMessage = "Browser installation failed";
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show($"Failed to install browsers: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void Options()
+    {
+        try
+        {
+            _logger.LogInformation("Opening settings dialog");
+            var settingsDialog = new Views.SettingsDialog(_serviceProvider)
+            {
+                Owner = Application.Current.MainWindow
+            };
+            
+            var result = settingsDialog.ShowDialog();
+            if (result == true)
+            {
+                _logger.LogInformation("Settings saved successfully");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error opening settings dialog");
+            MessageBox.Show($"Failed to open settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -308,6 +431,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         _navigationService.NavigationRequested -= OnNavigationRequested;
         _projectContext.ProjectChanged -= OnProjectChanged;
+        _playwrightService.StatusChanged -= OnBrowserStatusChanged;
         _disposed = true;
     }
 }

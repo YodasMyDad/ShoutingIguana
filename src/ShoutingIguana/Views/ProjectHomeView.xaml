@@ -2,117 +2,255 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
-             Background="{DynamicResource MaterialDesign.Brush.Background}">
+             Background="{StaticResource BackgroundBrush}">
     
     <Grid>
         <!-- Welcome Screen -->
-        <StackPanel Visibility="{Binding IsWelcomeScreen, Converter={StaticResource BooleanToVisibilityConverter}}"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-            <md:Card Padding="48" Margin="16" md:ElevationAssist.Elevation="Dp4">
-                <StackPanel Width="450">
+        <Grid Visibility="{Binding IsWelcomeScreen, Converter={StaticResource BooleanToVisibilityConverter}}"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center">
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+                    <GradientStop Color="#F3F3F3" Offset="0"/>
+                    <GradientStop Color="#FAFAFA" Offset="1"/>
+                </LinearGradientBrush>
+            </Grid.Background>
+            
+            <md:Card Padding="{StaticResource SpacingXXL}" 
+                     Margin="{StaticResource SpacingM}" 
+                     md:ElevationAssist.Elevation="Dp4"
+                     UniformCornerRadius="12"
+                     MaxWidth="500">
+                <md:Card.Effect>
+                    <DropShadowEffect Color="#000000" 
+                                      BlurRadius="24" 
+                                      ShadowDepth="4" 
+                                      Opacity="0.08"/>
+                </md:Card.Effect>
+                <md:Card.RenderTransform>
+                    <TranslateTransform/>
+                </md:Card.RenderTransform>
+                <md:Card.Triggers>
+                    <EventTrigger RoutedEvent="Loaded">
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                 From="20" To="0" Duration="0:0:0.4"
+                                                 DecelerationRatio="0.7"/>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 From="0" To="1" Duration="0:0:0.4"
+                                                 DecelerationRatio="0.7"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </md:Card.Triggers>
+                
+                <StackPanel>
                     <Image Source="/Assets/logo.png" 
-                           Width="80" 
-                           Height="80"
-                           Margin="0,0,0,16"
+                           Width="96" 
+                           Height="96"
+                           Margin="0,0,0,24"
                            HorizontalAlignment="Center"/>
                     
                     <TextBlock Text="Shouting Iguana" 
-                               Style="{StaticResource MaterialDesignHeadline3TextBlock}"
+                               Style="{StaticResource DisplayTextStyle}"
                                HorizontalAlignment="Center"
                                Margin="0,0,0,8"/>
                     
                     <TextBlock Text="Professional Web Crawler &amp; SEO Analysis Tool" 
-                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                               Style="{StaticResource BodyTextStyle}"
                                HorizontalAlignment="Center"
-                               Foreground="{DynamicResource MaterialDesign.Brush.Secondary}"
-                               Margin="0,0,0,32"/>
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,40"/>
                     
                     <Button Content="New Project"
                             Command="{Binding NewProjectCommand}"
-                            Style="{StaticResource MaterialDesignRaisedButton}"
-                            Margin="0,8"
-                            Height="48"/>
+                            Style="{StaticResource LargeButton}"
+                            Margin="0,0,0,12"
+                            AutomationProperties.Name="Create New Project"
+                            ToolTip="Create a new web crawling project"/>
                     
                     <Button Content="Open Project"
                             Command="{Binding OpenProjectCommand}"
-                            Style="{StaticResource MaterialDesignOutlinedButton}"
-                            Margin="0,8"
-                            Height="48"/>
+                            Style="{StaticResource SecondaryButton}"
+                            Height="48"
+                            Margin="0,0,0,32"
+                            AutomationProperties.Name="Open Existing Project"
+                            ToolTip="Open an existing project file"/>
                     
                     <TextBlock Text="Recent Projects"
-                               Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
-                               Margin="0,24,0,8"/>
+                               Style="{StaticResource TitleTextStyle}"
+                               FontSize="16"
+                               Margin="0,0,0,12"
+                               AutomationProperties.HeadingLevel="Level2"/>
                     
-                    <TextBlock Text="(Recent projects will appear here after implementation)"
-                               Margin="0,4"
-                               FontStyle="Italic"
-                               Foreground="{DynamicResource MaterialDesign.Brush.Secondary}"/>
+                    <Border Background="{StaticResource SurfaceAltBrush}"
+                            CornerRadius="6"
+                            Padding="{StaticResource SpacingM}"
+                            MinHeight="80">
+                        <StackPanel Orientation="Horizontal" 
+                                    HorizontalAlignment="Center" 
+                                    VerticalAlignment="Center">
+                            <md:PackIcon Kind="FolderOutline" 
+                                         Width="20" 
+                                         Height="20"
+                                         Foreground="{StaticResource TextTertiaryBrush}"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,8,0"/>
+                            <TextBlock Text="No recent projects"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Foreground="{StaticResource TextTertiaryBrush}"
+                                       FontStyle="Italic"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </md:Card>
-        </StackPanel>
+        </Grid>
 
         <!-- Project Settings Screen -->
         <ScrollViewer Visibility="{Binding IsWelcomeScreen, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
-                      VerticalScrollBarVisibility="Auto">
-            <md:Card Padding="32" Margin="32" md:ElevationAssist.Elevation="Dp4" MaxWidth="800">
+                      VerticalScrollBarVisibility="Auto"
+                      Padding="{StaticResource SpacingL}">
+            <md:Card Padding="{StaticResource SpacingXL}" 
+                     Margin="{StaticResource SpacingM}"
+                     md:ElevationAssist.Elevation="Dp2" 
+                     UniformCornerRadius="8"
+                     MaxWidth="900"
+                     HorizontalAlignment="Center">
                 <StackPanel>
                     <TextBlock Text="Project Settings"
-                               Style="{StaticResource MaterialDesignHeadline4TextBlock}"
-                               Margin="0,0,0,24"/>
+                               Style="{StaticResource DisplayTextStyle}"
+                               Margin="0,0,0,8"
+                               AutomationProperties.HeadingLevel="Level1"/>
+                    
+                    <TextBlock Text="Configure your web crawl project"
+                               Style="{StaticResource BodyTextStyle}"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Margin="{StaticResource SpacingXL}"/>
 
-                    <TextBox Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
-                             md:HintAssist.Hint="Project Name"
-                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                             Margin="0,8"/>
+                    <!-- Basic Settings Section -->
+                    <TextBlock Text="Basic Information"
+                               Style="{StaticResource TitleTextStyle}"
+                               Margin="{StaticResource SpacingM}"
+                               AutomationProperties.HeadingLevel="Level2"/>
+                    
+                    <Separator Style="{StaticResource HorizontalDivider}" Margin="{StaticResource SpacingM}"/>
 
-                    <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}"
-                             md:HintAssist.Hint="Base URL (e.g., http://example.com)"
-                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                             Margin="0,8"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
+                                 md:HintAssist.Hint="Project Name"
+                                 Style="{StaticResource StandardTextBox}"
+                                 Margin="0,0,0,20"
+                                 AutomationProperties.Name="Project Name"
+                                 ToolTip="Enter a descriptive name for your project"/>
 
-                    <TextBlock Text="Crawl Settings"
-                               Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
-                               Margin="0,24,0,16"/>
+                        <TextBox Grid.Column="2"
+                                 Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}"
+                                 md:HintAssist.Hint="Base URL (e.g., https://example.com)"
+                                 Style="{StaticResource StandardTextBox}"
+                                 Margin="0,0,0,20"
+                                 AutomationProperties.Name="Base URL"
+                                 ToolTip="Enter the starting URL for the crawl"/>
+                    </Grid>
 
-                    <TextBox Text="{Binding MaxDepth, UpdateSourceTrigger=PropertyChanged}"
-                             md:HintAssist.Hint="Max Depth"
-                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                             Margin="0,8"/>
+                    <!-- Crawl Settings Section -->
+                    <TextBlock Text="Crawl Configuration"
+                               Style="{StaticResource TitleTextStyle}"
+                               Margin="{StaticResource SpacingM}"
+                               AutomationProperties.HeadingLevel="Level2"/>
+                    
+                    <Separator Style="{StaticResource HorizontalDivider}" Margin="{StaticResource SpacingM}"/>
 
-                    <TextBox Text="{Binding MaxUrls, UpdateSourceTrigger=PropertyChanged}"
-                             md:HintAssist.Hint="Max URLs to Crawl"
-                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                             Margin="0,8"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                    <TextBox Text="{Binding CrawlDelay, UpdateSourceTrigger=PropertyChanged}"
-                             md:HintAssist.Hint="Crawl Delay (seconds)"
-                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                             Margin="0,8"/>
+                        <TextBox Grid.Row="0" Grid.Column="0"
+                                 Text="{Binding MaxDepth, UpdateSourceTrigger=PropertyChanged}"
+                                 md:HintAssist.Hint="Max Depth"
+                                 Style="{StaticResource StandardTextBox}"
+                                 Margin="0,0,0,20"
+                                 AutomationProperties.Name="Maximum Crawl Depth"
+                                 ToolTip="Maximum number of clicks from start URL (1-20)"/>
 
-                    <CheckBox Content="Respect robots.txt"
-                              IsChecked="{Binding RespectRobotsTxt}"
-                              Margin="0,16"/>
+                        <TextBox Grid.Row="0" Grid.Column="2"
+                                 Text="{Binding MaxUrls, UpdateSourceTrigger=PropertyChanged}"
+                                 md:HintAssist.Hint="Max URLs to Crawl"
+                                 Style="{StaticResource StandardTextBox}"
+                                 Margin="0,0,0,20"
+                                 AutomationProperties.Name="Maximum URLs"
+                                 ToolTip="Maximum number of URLs to crawl (0 = unlimited)"/>
 
-                    <TextBox Text="{Binding UserAgent, UpdateSourceTrigger=PropertyChanged}"
-                             md:HintAssist.Hint="User Agent"
-                             Style="{StaticResource MaterialDesignOutlinedTextBox}"
-                             Margin="0,8"/>
+                        <TextBox Grid.Row="1" Grid.Column="0"
+                                 Text="{Binding CrawlDelay, UpdateSourceTrigger=PropertyChanged}"
+                                 md:HintAssist.Hint="Crawl Delay (seconds)"
+                                 Style="{StaticResource StandardTextBox}"
+                                 Margin="0,0,0,20"
+                                 AutomationProperties.Name="Crawl Delay"
+                                 ToolTip="Delay between requests in seconds (politeness)"/>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,24,0,0" HorizontalAlignment="Right">
+                        <TextBox Grid.Row="1" Grid.Column="2"
+                                 Text="{Binding UserAgent, UpdateSourceTrigger=PropertyChanged}"
+                                 md:HintAssist.Hint="User Agent"
+                                 Style="{StaticResource StandardTextBox}"
+                                 Margin="0,0,0,20"
+                                 AutomationProperties.Name="User Agent String"
+                                 ToolTip="Custom User-Agent header"/>
+
+                        <CheckBox Grid.Row="2" Grid.Column="0"
+                                  Content="Respect robots.txt"
+                                  IsChecked="{Binding RespectRobotsTxt}"
+                                  Margin="0,8,0,0"
+                                  FontSize="14"
+                                  AutomationProperties.Name="Respect Robots.txt"
+                                  ToolTip="Follow robots.txt exclusion rules"/>
+                    </Grid>
+
+                    <!-- Action Buttons -->
+                    <StackPanel Orientation="Horizontal" 
+                                Margin="0,32,0,0" 
+                                HorizontalAlignment="Right">
                         <Button Content="Save Settings"
                                 Command="{Binding SaveSettingsCommand}"
-                                Style="{StaticResource MaterialDesignOutlinedButton}"
-                                Margin="8,0"
-                                Visibility="{Binding CurrentProject, Converter={StaticResource NullToVisibilityConverter}}"/>
-                        <Button Content="Start Crawl"
-                                Command="{Binding StartCrawlCommand}"
-                                Style="{StaticResource MaterialDesignRaisedButton}"
-                                Margin="8,0"/>
+                                Style="{StaticResource SecondaryButton}"
+                                Margin="0,0,12,0"
+                                Visibility="{Binding CurrentProject, Converter={StaticResource NullToVisibilityConverter}}"
+                                AutomationProperties.Name="Save Project Settings"
+                                ToolTip="Save changes to project settings"/>
+                        <Button Command="{Binding StartCrawlCommand}"
+                                Style="{StaticResource PrimaryButton}"
+                                AutomationProperties.Name="Start Crawl"
+                                ToolTip="Begin crawling with current settings">
+                            <StackPanel Orientation="Horizontal">
+                                <md:PackIcon Kind="Play" 
+                                             Width="18" 
+                                             Height="18"
+                                             VerticalAlignment="Center"
+                                             Margin="0,0,8,0"/>
+                                <TextBlock Text="Start Crawl" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </StackPanel>
             </md:Card>
         </ScrollViewer>
     </Grid>
 </UserControl>
-

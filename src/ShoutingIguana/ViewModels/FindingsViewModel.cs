@@ -20,92 +20,165 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
 {
     private readonly ILogger<FindingsViewModel> _logger;
     private readonly ICsvExportService _csvExportService;
+    private readonly IExcelExportService _excelExportService;
     private readonly IProjectContext _projectContext;
     private readonly IServiceProvider _serviceProvider;
-    private Timer? _searchDebounceTimer;
     private bool _disposed;
+    private FindingTabViewModel? _previousTab;
 
     [ObservableProperty]
-    private ObservableCollection<Url> _urls = new();
+    private ObservableCollection<FindingTabViewModel> _tabs = new();
 
     [ObservableProperty]
-    private string _searchText = string.Empty;
+    private FindingTabViewModel? _selectedTab;
 
     [ObservableProperty]
-    private int _totalCount;
-
-    private List<Url> _allUrls = [];
+    private string _detailsJson = string.Empty;
 
     public FindingsViewModel(
         ILogger<FindingsViewModel> logger,
         ICsvExportService csvExportService,
+        IExcelExportService excelExportService,
         IProjectContext projectContext,
         IServiceProvider serviceProvider)
     {
         _logger = logger;
         _csvExportService = csvExportService;
+        _excelExportService = excelExportService;
         _projectContext = projectContext;
         _serviceProvider = serviceProvider;
     }
 
-    partial void OnSearchTextChanged(string value)
+    partial void OnSelectedTabChanged(FindingTabViewModel? value)
     {
-        // Cancel any pending search
-        _searchDebounceTimer?.Dispose();
-        
-        // Create a new timer that will fire after 300ms
-        _searchDebounceTimer = new Timer(_ =>
+        // Unsubscribe from previous tab
+        if (_previousTab != null)
         {
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                PerformSearch();
-            });
-        }, null, 300, Timeout.Infinite);
+            _previousTab.PropertyChanged -= OnTabPropertyChanged;
+        }
+
+        // Subscribe to new tab
+        if (value != null)
+        {
+            value.PropertyChanged += OnTabPropertyChanged;
+            UpdateDetailsPanel();
+        }
+
+        _previousTab = value;
     }
 
-    public async Task LoadUrlsAsync()
+    private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(FindingTabViewModel.SelectedFinding))
+        {
+            UpdateDetailsPanel();
+        }
+    }
+
+    private void UpdateDetailsPanel()
+    {
+        if (SelectedTab?.SelectedFinding == null)
+        {
+            DetailsJson = string.Empty;
+            return;
+        }
+
+        var finding = SelectedTab.SelectedFinding;
+        
+        if (string.IsNullOrEmpty(finding.DataJson))
+        {
+            DetailsJson = "No additional data";
+        }
+        else
+        {
+            try
+            {
+                // Pretty-print JSON
+                using var jsonDoc = System.Text.Json.JsonDocument.Parse(finding.DataJson);
+                DetailsJson = System.Text.Json.JsonSerializer.Serialize(jsonDoc, new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+            }
+            catch
+            {
+                DetailsJson = finding.DataJson;
+            }
+        }
+    }
+
+    public async Task LoadFindingsAsync()
     {
         if (!_projectContext.HasOpenProject)
         {
-            _logger.LogWarning("Cannot load URLs: no project is open");
+            _logger.LogWarning("Cannot load findings: no project is open");
             return;
         }
 
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
+            var findingRepository = scope.ServiceProvider.GetRequiredService<IFindingRepository>();
             
             var projectId = _projectContext.CurrentProjectId!.Value;
-            var urls = await urlRepository.GetByProjectIdAsync(projectId);
-            _allUrls = urls.ToList();
-            Urls = new ObservableCollection<Url>(_allUrls);
-            TotalCount = _allUrls.Count;
-            _logger.LogInformation("Loaded {Count} URLs for project {ProjectId}", TotalCount, projectId);
+            var allFindings = await findingRepository.GetByProjectIdAsync(projectId);
+            
+            // Group findings by task key
+            var grouped = allFindings.GroupBy(f => f.TaskKey);
+
+            var tabs = new List<FindingTabViewModel>();
+            
+            foreach (var group in grouped.OrderBy(g => g.Key))
+            {
+                var tab = new FindingTabViewModel
+                {
+                    TaskKey = group.Key,
+                    DisplayName = FormatTaskDisplayName(group.Key)
+                };
+                tab.LoadFindings(group);
+                tabs.Add(tab);
+            }
+
+            // Clear old tabs to help GC
+            if (Tabs.Count > 0)
+            {
+                foreach (var oldTab in Tabs)
+                {
+                    oldTab.Findings.Clear();
+                    oldTab.FilteredFindings.Clear();
+                }
+            }
+
+            Tabs = new ObservableCollection<FindingTabViewModel>(tabs);
+            
+            // Select first tab
+            if (Tabs.Count > 0)
+            {
+                SelectedTab = Tabs[0];
+            }
+            
+            _logger.LogInformation("Loaded findings: {TabCount} tabs, {FindingCount} total findings", 
+                Tabs.Count, allFindings.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load URLs");
+            _logger.LogError(ex, "Failed to load findings");
             await Application.Current.Dispatcher.InvokeAsync(() =>
-                MessageBox.Show($"Failed to load URLs: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+                MessageBox.Show($"Failed to load findings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
         }
     }
 
-    private void PerformSearch()
+    private string FormatTaskDisplayName(string taskKey)
     {
-        if (string.IsNullOrWhiteSpace(SearchText))
+        // Convert "BrokenLinks" to "Broken Links", "TitlesMeta" to "Titles & Meta", etc.
+        return taskKey switch
         {
-            Urls = new ObservableCollection<Url>(_allUrls);
-        }
-        else
-        {
-            var filtered = _allUrls
-                .Where(u => u.Address.Contains(SearchText, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            Urls = new ObservableCollection<Url>(filtered);
-        }
-        
-        TotalCount = Urls.Count;
+            "BrokenLinks" => "Broken Links",
+            "TitlesMeta" => "Titles & Meta",
+            "Inventory" => "Inventory",
+            "Redirects" => "Redirects",
+            _ => taskKey
+        };
     }
 
     [RelayCommand]
@@ -124,7 +197,7 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             {
                 Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
                 DefaultExt = "csv",
-                FileName = $"shouting-iguana-export-{DateTime.Now:yyyyMMdd-HHmmss}.csv"
+                FileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.csv"
             };
 
             if (dialog.ShowDialog() == true)
@@ -132,9 +205,9 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
                 var projectId = _projectContext.CurrentProjectId!.Value;
                 await _csvExportService.ExportUrlInventoryAsync(projectId, dialog.FileName);
                 await Application.Current.Dispatcher.InvokeAsync(() =>
-                    MessageBox.Show($"Exported {TotalCount} URLs to {dialog.FileName}", "Export Successful", 
+                    MessageBox.Show($"Exported to {dialog.FileName}", "Export Successful", 
                         MessageBoxButton.OK, MessageBoxImage.Information));
-                _logger.LogInformation("Exported URLs to {FilePath}", dialog.FileName);
+                _logger.LogInformation("Exported findings to CSV: {FilePath}", dialog.FileName);
             }
         }
         catch (Exception ex)
@@ -146,9 +219,56 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private async Task ExportToExcelAsync()
+    {
+        if (!_projectContext.HasOpenProject)
+        {
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+                MessageBox.Show("No project is open", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+            return;
+        }
+
+        try
+        {
+            var dialog = new VistaSaveFileDialog
+            {
+                Filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*",
+                DefaultExt = "xlsx",
+                FileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                var projectId = _projectContext.CurrentProjectId!.Value;
+                var success = await _excelExportService.ExportFindingsAsync(projectId, dialog.FileName);
+                
+                if (success)
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                        MessageBox.Show($"Exported to {dialog.FileName}", "Export Successful", 
+                            MessageBoxButton.OK, MessageBoxImage.Information));
+                    _logger.LogInformation("Exported findings to Excel: {FilePath}", dialog.FileName);
+                }
+                else
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                        MessageBox.Show("Export failed. Check logs for details.", "Export Failed", 
+                            MessageBoxButton.OK, MessageBoxImage.Error));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to export to Excel");
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+                MessageBox.Show($"Failed to export: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+        }
+    }
+
+    [RelayCommand]
     private async Task RefreshAsync()
     {
-        await LoadUrlsAsync();
+        await LoadFindingsAsync();
     }
 
     public void Dispose()
@@ -156,8 +276,23 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         if (_disposed)
             return;
 
-        _searchDebounceTimer?.Dispose();
+        // Unsubscribe from current tab
+        if (_previousTab != null)
+        {
+            _previousTab.PropertyChanged -= OnTabPropertyChanged;
+        }
+
+        // Clear all tabs to help GC
+        if (Tabs.Count > 0)
+        {
+            foreach (var tab in Tabs)
+            {
+                tab.Findings.Clear();
+                tab.FilteredFindings.Clear();
+            }
+            Tabs.Clear();
+        }
+
         _disposed = true;
     }
 }
-

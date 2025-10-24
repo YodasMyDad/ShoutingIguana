@@ -6,11 +6,14 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- Material Design - Blue/Cyan palette for Win11-like aesthetic -->
+                <!-- Material Design - Custom palette for professional SEO tool aesthetic -->
                 <md:BundledTheme BaseTheme="Light"
                                  PrimaryColor="Blue"
-                                 SecondaryColor="Cyan" />
+                                 SecondaryColor="LightBlue" />
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesign3.Defaults.xaml" />
+                
+                <!-- Custom Styles -->
+                <ResourceDictionary Source="Styles/Styles.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <!-- Converters -->
@@ -18,10 +21,10 @@
             <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
             <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
             <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+            <converters:Int32ToVisibilityConverter x:Key="Int32ToVisibilityConverter"/>
 
-            <!-- Typography aligned with Win11's calm aesthetic -->
-            <Style TargetType="TextBlock" BasedOn="{StaticResource MaterialDesignBody1TextBlock}" />
-            <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}" />
+            <!-- Base Typography -->
+            <Style TargetType="TextBlock" BasedOn="{StaticResource BodyTextStyle}" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

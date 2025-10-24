@@ -2,64 +2,325 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
-             Background="{DynamicResource MaterialDesign.Brush.Background}">
+             xmlns:sdk="clr-namespace:ShoutingIguana.PluginSdk;assembly=ShoutingIguana.PluginSdk"
+             Background="{StaticResource BackgroundBrush}">
     
-    <Grid Margin="16">
+    <UserControl.Resources>
+        <!-- Severity Badge Selector -->
+        <Style x:Key="SeverityBadgeStyle" TargetType="Border">
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Severity}" Value="{x:Static sdk:Severity.Error}">
+                    <Setter Property="Background" Value="#FFEBEE"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="{x:Static sdk:Severity.Warning}">
+                    <Setter Property="Background" Value="#FFF8E1"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="{x:Static sdk:Severity.Info}">
+                    <Setter Property="Background" Value="#E3F2FD"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        
+        <Style x:Key="SeverityTextStyle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Severity}" Value="{x:Static sdk:Severity.Error}">
+                    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="{x:Static sdk:Severity.Warning}">
+                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="{x:Static sdk:Severity.Info}">
+                    <Setter Property="Foreground" Value="{StaticResource InfoBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+    
+    <Grid Margin="{StaticResource SpacingL}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="2*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="1*" MinHeight="200"/>
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <md:Card Padding="16" Margin="0,0,0,16" md:ElevationAssist.Elevation="Dp2">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+        <Grid Grid.Row="0" Margin="{StaticResource SpacingL}">
+            <TextBlock Text="Findings"
+                       Style="{StaticResource DisplayTextStyle}"
+                       VerticalAlignment="Center"
+                       AutomationProperties.HeadingLevel="Level1"/>
+            
+            <StackPanel Style="{StaticResource ToolbarPanel}">
+                <Button Command="{Binding RefreshCommand}"
+                        Style="{StaticResource SecondaryButton}"
+                        Margin="0,0,8,0"
+                        AutomationProperties.Name="Refresh Findings"
+                        ToolTip="Refresh findings from database">
+                    <StackPanel Orientation="Horizontal">
+                        <md:PackIcon Kind="Refresh" 
+                                     Width="16" 
+                                     Height="16"
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,6,0"/>
+                        <TextBlock Text="Refresh" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Command="{Binding ExportToCsvCommand}"
+                        Style="{StaticResource SecondaryButton}"
+                        Margin="0,0,8,0"
+                        AutomationProperties.Name="Export to CSV"
+                        ToolTip="Export findings to CSV file">
+                    <StackPanel Orientation="Horizontal">
+                        <md:PackIcon Kind="FileDelimited" 
+                                     Width="16" 
+                                     Height="16"
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,6,0"/>
+                        <TextBlock Text="CSV" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Command="{Binding ExportToExcelCommand}"
+                        Style="{StaticResource PrimaryButton}"
+                        AutomationProperties.Name="Export to Excel"
+                        ToolTip="Export findings to Excel workbook">
+                    <StackPanel Orientation="Horizontal">
+                        <md:PackIcon Kind="FileExcel" 
+                                     Width="16" 
+                                     Height="16"
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,6,0"/>
+                        <TextBlock Text="Excel" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
 
-                <StackPanel Orientation="Horizontal">
-                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                             md:HintAssist.Hint="Search URLs..."
-                             Width="300"
-                             Margin="0,0,16,0"/>
-                    <TextBlock Text="{Binding TotalCount, StringFormat='Total: {0} URLs'}"
-                               VerticalAlignment="Center"
-                               Margin="0"/>
-                </StackPanel>
+        <!-- Tabbed Findings View -->
+        <md:Card Grid.Row="1" 
+                 md:ElevationAssist.Elevation="Dp2"
+                 UniformCornerRadius="8"
+                 Padding="0">
+            <TabControl ItemsSource="{Binding Tabs}" 
+                        SelectedItem="{Binding SelectedTab}"
+                        Style="{StaticResource MaterialDesignFilledTabControl}"
+                        Background="{StaticResource SurfaceBrush}">
+                <TabControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal" Margin="12,8">
+                            <TextBlock Text="{Binding TabHeader}" 
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"
+                                       FontWeight="Medium"/>
+                            <Border Background="{StaticResource ErrorBrush}" 
+                                    CornerRadius="10" 
+                                    Padding="6,2"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding ErrorCount, Converter={StaticResource Int32ToVisibilityConverter}}">
+                                <TextBlock Text="{Binding ErrorCount}" 
+                                           Foreground="White" 
+                                           FontSize="10"
+                                           FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
+                    </DataTemplate>
+                </TabControl.ItemTemplate>
+                <TabControl.ContentTemplate>
+                    <DataTemplate>
+                        <Grid Margin="16">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
 
-                <StackPanel Orientation="Horizontal" Grid.Column="1">
-                    <Button Content="Refresh"
-                            Command="{Binding RefreshCommand}"
-                            Style="{StaticResource MaterialDesignOutlinedButton}"
-                            Margin="8,0"/>
-                    <Button Content="Export CSV"
-                            Command="{Binding ExportToCsvCommand}"
-                            Style="{StaticResource MaterialDesignRaisedButton}"
-                            Margin="8,0"/>
-                </StackPanel>
-            </Grid>
+                            <!-- Filters -->
+                            <Grid Grid.Row="0" Margin="0,0,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,16,0">
+                                    <TextBlock Text="Severity:" 
+                                               VerticalAlignment="Center" 
+                                               Margin="0,0,8,0"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <ComboBox MinWidth="120" MaxWidth="150"
+                                              SelectedValue="{Binding SelectedSeverity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              SelectedValuePath="Tag"
+                                              Style="{StaticResource StandardComboBox}"
+                                              AutomationProperties.Name="Filter by Severity">
+                                        <ComboBoxItem Content="All" Tag="{x:Null}"/>
+                                        <ComboBoxItem Content="Error" Tag="{x:Static sdk:Severity.Error}"/>
+                                        <ComboBoxItem Content="Warning" Tag="{x:Static sdk:Severity.Warning}"/>
+                                        <ComboBoxItem Content="Info" Tag="{x:Static sdk:Severity.Info}"/>
+                                    </ComboBox>
+                                </StackPanel>
+                                
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                         md:HintAssist.Hint="Search findings..."
+                                         MinWidth="200" MaxWidth="400"
+                                         Style="{StaticResource StandardTextBox}"
+                                         AutomationProperties.Name="Search Findings"/>
+                                         
+                                <Border Grid.Column="3"
+                                        Background="{StaticResource SurfaceAltBrush}"
+                                        CornerRadius="4"
+                                        Padding="12,8"
+                                        VerticalAlignment="Center">
+                                    <TextBlock VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               FontWeight="SemiBold">
+                                        <Run Text="Total:"/>
+                                        <Run Text="{Binding TotalCount, Mode=OneWay}" 
+                                             Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    </TextBlock>
+                                </Border>
+                            </Grid>
+
+                            <!-- Findings DataGrid -->
+                            <DataGrid Grid.Row="1"
+                                      ItemsSource="{Binding FilteredFindings}"
+                                      SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
+                                      Style="{StaticResource ModernDataGrid}">
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Copy URL" 
+                                                  Command="{Binding CopyUrlCommand}"
+                                                  AutomationProperties.Name="Copy URL to Clipboard">
+                                            <MenuItem.Icon>
+                                                <md:PackIcon Kind="ContentCopy" Width="16" Height="16"/>
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem Header="Copy Message" 
+                                                  Command="{Binding CopyMessageCommand}"
+                                                  AutomationProperties.Name="Copy Message to Clipboard">
+                                            <MenuItem.Icon>
+                                                <md:PackIcon Kind="ContentCopy" Width="16" Height="16"/>
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <Separator/>
+                                        <MenuItem Header="Open in Browser" 
+                                                  Command="{Binding OpenInBrowserCommand}"
+                                                  AutomationProperties.Name="Open URL in Default Browser">
+                                            <MenuItem.Icon>
+                                                <md:PackIcon Kind="OpenInNew" Width="16" Height="16"/>
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <Separator/>
+                                        <MenuItem Header="Export Selected..." 
+                                                  Command="{Binding ExportSelectedCommand}"
+                                                  AutomationProperties.Name="Export Selected Findings">
+                                            <MenuItem.Icon>
+                                                <md:PackIcon Kind="Export" Width="16" Height="16"/>
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                    </ContextMenu>
+                                </DataGrid.ContextMenu>
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Header="Severity" Width="110">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Border Style="{StaticResource SeverityBadgeStyle}">
+                                                    <TextBlock Text="{Binding Severity}" 
+                                                               Style="{StaticResource SeverityTextStyle}"/>
+                                                </Border>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Code" 
+                                                        Binding="{Binding Code}" 
+                                                        Width="150"
+                                                        FontFamily="Consolas"
+                                                        FontSize="13"/>
+                                    <DataGridTextColumn Header="Message" 
+                                                        Binding="{Binding Message}" 
+                                                        Width="*"
+                                                        MinWidth="200"/>
+                                    <DataGridTextColumn Header="URL" 
+                                                        Binding="{Binding Url.Address}" 
+                                                        Width="350"
+                                                        FontFamily="Consolas"
+                                                        FontSize="12"/>
+                                    <DataGridTextColumn Header="Date" 
+                                                        Binding="{Binding CreatedUtc, StringFormat='yyyy-MM-dd HH:mm:ss'}" 
+                                                        Width="160"
+                                                        FontFamily="Consolas"
+                                                        FontSize="12"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </DataTemplate>
+                </TabControl.ContentTemplate>
+            </TabControl>
         </md:Card>
 
-        <!-- Data Grid -->
-        <md:Card Grid.Row="1" md:ElevationAssist.Elevation="Dp2">
-            <DataGrid ItemsSource="{Binding Urls}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      CanUserAddRows="False"
-                      CanUserDeleteRows="False"
-                      SelectionMode="Extended"
-                      Style="{StaticResource MaterialDesignDataGrid}">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="URL" Binding="{Binding Address}" Width="*"/>
-                    <DataGridTextColumn Header="Status" Binding="{Binding HttpStatus}" Width="80"/>
-                    <DataGridTextColumn Header="Content Type" Binding="{Binding ContentType}" Width="150"/>
-                    <DataGridTextColumn Header="Size" Binding="{Binding ContentLength}" Width="100"/>
-                    <DataGridTextColumn Header="Depth" Binding="{Binding Depth}" Width="80"/>
-                    <DataGridTextColumn Header="Crawled At" Binding="{Binding LastCrawledUtc, StringFormat='yyyy-MM-dd HH:mm:ss'}" Width="150"/>
-                </DataGrid.Columns>
-            </DataGrid>
+        <!-- Splitter -->
+        <GridSplitter Grid.Row="2" 
+                      Height="8" 
+                      HorizontalAlignment="Stretch" 
+                      Background="Transparent"
+                      Cursor="SizeNS"
+                      Margin="0,8"/>
+
+        <!-- Details Panel -->
+        <md:Card Grid.Row="3" 
+                 md:ElevationAssist.Elevation="Dp2"
+                 UniformCornerRadius="8"
+                 Padding="20">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                
+                <Grid Grid.Row="0" Margin="{StaticResource SpacingS}">
+                    <TextBlock Text="Finding Details" 
+                               Style="{StaticResource TitleTextStyle}"
+                               VerticalAlignment="Center"
+                               AutomationProperties.HeadingLevel="Level2"/>
+                    
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="JSON"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                        <md:PackIcon Kind="CodeJson"
+                                     Width="20"
+                                     Height="20"
+                                     VerticalAlignment="Center"
+                                     Foreground="{StaticResource TextTertiaryBrush}"/>
+                    </StackPanel>
+                </Grid>
+                           
+                <Border Grid.Row="1"
+                        Background="{StaticResource SurfaceAltBrush}"
+                        CornerRadius="6"
+                        BorderThickness="1"
+                        BorderBrush="{StaticResource BorderLightBrush}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                                  HorizontalScrollBarVisibility="Auto"
+                                  Padding="12">
+                        <TextBox Text="{Binding DetailsJson, Mode=OneWay}"
+                                 IsReadOnly="True"
+                                 TextWrapping="Wrap"
+                                 FontFamily="Consolas"
+                                 FontSize="12"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Foreground="{StaticResource TextPrimaryBrush}"
+                                 AutomationProperties.Name="Finding Details JSON"/>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
         </md:Card>
     </Grid>
 </UserControl>
-

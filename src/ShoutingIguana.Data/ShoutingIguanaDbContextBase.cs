@@ -17,6 +17,9 @@ public abstract class ShoutingIguanaDbContextBase : DbContext
     public DbSet<Link> Links => Set<Link>();
     public DbSet<CrawlQueueItem> CrawlQueue => Set<CrawlQueueItem>();
     public DbSet<Header> Headers => Set<Header>();
+    public DbSet<Finding> Findings => Set<Finding>();
+    public DbSet<Redirect> Redirects => Set<Redirect>();
+    public DbSet<Image> Images => Set<Image>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

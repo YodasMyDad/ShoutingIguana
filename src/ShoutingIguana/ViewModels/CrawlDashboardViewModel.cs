@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -15,6 +16,8 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
     private readonly IProjectContext _projectContext;
     private readonly INavigationService _navigationService;
     private bool _disposed;
+    private CancellationTokenSource? _navigationCts;
+    private Task? _navigationTask;
 
     [ObservableProperty]
     private int _urlsCrawled;
@@ -112,7 +115,7 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
     private void OnProgressUpdated(object? sender, CrawlProgressEventArgs e)
     {
         // Use BeginInvoke for fire-and-forget to avoid blocking the progress reporter thread
-        System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
+        System.Windows.Application.Current.Dispatcher.BeginInvoke(async () =>
         {
             var wasCrawling = IsCrawling;
             
@@ -146,16 +149,6 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
                     // Complete failure - base URL couldn't be crawled
                     _logger.LogWarning("✗ Crawl failed! Could not crawl any URLs. {ErrorCount} errors", ErrorCount);
                     RecentActivity = $"✗ Crawl failed! Could not reach the base URL. Please check the URL and try again.";
-                    
-                    // Show error message
-                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        System.Windows.MessageBox.Show(
-                            $"Crawl failed - could not connect to the base URL.\n\nURLs attempted: {UrlsCrawled}\nErrors: {ErrorCount}\n\nPlease verify the URL is correct and accessible.",
-                            "Crawl Failed",
-                            System.Windows.MessageBoxButton.OK,
-                            System.Windows.MessageBoxImage.Error);
-                    });
                 }
                 else
                 {
@@ -166,23 +159,57 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
                     RecentActivity = $"✓ Crawl completed! Crawled {UrlsCrawled} URLs ({successfulCrawls} successful, {ErrorCount} errors) in {ElapsedTime}. Navigating to results...";
                     
                     // Navigate to Findings view after a short delay to show completion message
-                    _ = System.Threading.Tasks.Task.Run(async () =>
+                    // Cancel any pending navigation first
+                    if (_navigationTask != null)
                     {
-                        await System.Threading.Tasks.Task.Delay(2000); // Show completion message for 2 seconds
-                        
-                        await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                        _navigationCts?.Cancel();
+                        try
                         {
-                            try
+                            await _navigationTask; // Wait for previous navigation to complete
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // Expected when cancelling
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Previous navigation task threw exception");
+                        }
+                    }
+                    
+                    _navigationCts?.Dispose();
+                    _navigationCts = new CancellationTokenSource();
+                    var cts = _navigationCts; // Capture to avoid closure issues
+                    
+                    // Track the navigation task so we can properly await/cancel it
+                    _navigationTask = System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await System.Threading.Tasks.Task.Delay(2000, cts.Token); // Show completion message for 2 seconds
+                            
+                            await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                             {
-                                _navigationService.NavigateTo<ShoutingIguana.Views.FindingsView>();
-                                _logger.LogInformation("Navigated to Findings view after crawl completion");
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "Failed to navigate to Findings view after crawl completion");
-                            }
-                        });
-                    });
+                                try
+                                {
+                                    _navigationService.NavigateTo<ShoutingIguana.Views.FindingsView>();
+                                    _logger.LogInformation("Navigated to Findings view after crawl completion");
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, "Failed to navigate to Findings view after crawl completion");
+                                }
+                            });
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            _logger.LogDebug("Navigation cancelled");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Unexpected error in navigation task");
+                        }
+                    }, cts.Token);
                 }
             }
         });
@@ -194,6 +221,15 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
             return;
 
         _crawlEngine.ProgressUpdated -= OnProgressUpdated;
+        
+        // Cancel any pending navigation task
+        _navigationCts?.Cancel();
+        
+        // Don't wait for the navigation task to complete - let it finish or be cancelled naturally
+        // Waiting can cause timeout warnings during disposal, especially during view transitions
+        // The task will clean up on its own when cancelled
+        
+        _navigationCts?.Dispose();
         _disposed = true;
     }
 }

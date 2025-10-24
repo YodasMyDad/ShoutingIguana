@@ -10,7 +10,7 @@ public class ProjectRepository(IShoutingIguanaDbContext context) : IProjectRepos
 
     public async Task<Project?> GetByIdAsync(int id)
     {
-        return await _context.Projects.FindAsync(id);
+        return await _context.Projects.FindAsync(id).ConfigureAwait(false);
     }
 
     public async Task<IEnumerable<Project>> GetRecentProjectsAsync(int count = 5)
@@ -18,36 +18,36 @@ public class ProjectRepository(IShoutingIguanaDbContext context) : IProjectRepos
         return await _context.Projects
             .OrderByDescending(p => p.LastOpenedUtc)
             .Take(count)
-            .ToListAsync();
+            .ToListAsync().ConfigureAwait(false);
     }
 
     public async Task<Project> CreateAsync(Project project)
     {
         _context.Projects.Add(project);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync().ConfigureAwait(false);
         return project;
     }
 
     public async Task<Project> UpdateAsync(Project project)
     {
         _context.Entry(project).State = EntityState.Modified;
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync().ConfigureAwait(false);
         return project;
     }
 
     public async Task DeleteAsync(int id)
     {
-        var project = await _context.Projects.FindAsync(id);
+        var project = await _context.Projects.FindAsync(id).ConfigureAwait(false);
         if (project != null)
         {
             _context.Projects.Remove(project);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync().ConfigureAwait(false);
         }
     }
 
     public async Task<bool> ExistsAsync(int id)
     {
-        return await _context.Projects.AnyAsync(p => p.Id == id);
+        return await _context.Projects.AnyAsync(p => p.Id == id).ConfigureAwait(false);
     }
 }
 

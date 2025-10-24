@@ -1,0 +1,207 @@
+<UserControl x:Class="ShoutingIguana.Views.ExtensionsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
+             Background="{StaticResource BackgroundBrush}">
+    
+    <UserControl.Resources>
+        <!-- Status Badge Style -->
+        <Style x:Key="PluginStatusBadge" TargetType="Border">
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+    </UserControl.Resources>
+    
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="{StaticResource SpacingL}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <TextBlock Grid.Row="0"
+                       Text="Extensions" 
+                       Style="{StaticResource DisplayTextStyle}"
+                       Margin="{StaticResource SpacingL}"
+                       AutomationProperties.HeadingLevel="Level1"/>
+
+            <!-- Summary Metrics -->
+            <Grid Grid.Row="1" Margin="0,0,0,24">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Loaded Plugins Card -->
+                <md:Card Grid.Column="0" 
+                         Style="{StaticResource MetricCard}"
+                         BorderBrush="{StaticResource PrimaryBrush}"
+                         BorderThickness="4,0,0,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                            <md:PackIcon Kind="Puzzle" 
+                                         Width="20" 
+                                         Height="20"
+                                         Foreground="{StaticResource PrimaryBrush}"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,8,0"/>
+                            <TextBlock Text="Loaded Plugins"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <TextBlock Grid.Row="1"
+                                   Text="{Binding TotalPlugins}"
+                                   Style="{StaticResource DisplayTextStyle}"
+                                   FontSize="36"
+                                   Foreground="{StaticResource PrimaryBrush}"/>
+                    </Grid>
+                </md:Card>
+
+                <!-- Registered Tasks Card -->
+                <md:Card Grid.Column="2" 
+                         Style="{StaticResource MetricCard}"
+                         BorderBrush="{StaticResource SuccessBrush}"
+                         BorderThickness="4,0,0,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                            <md:PackIcon Kind="CheckboxMultipleMarked" 
+                                         Width="20" 
+                                         Height="20"
+                                         Foreground="{StaticResource SuccessBrush}"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,8,0"/>
+                            <TextBlock Text="Registered Tasks"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <TextBlock Grid.Row="1"
+                                   Text="{Binding TotalTasks}"
+                                   Style="{StaticResource DisplayTextStyle}"
+                                   FontSize="36"
+                                   Foreground="{StaticResource SuccessBrush}"/>
+                    </Grid>
+                </md:Card>
+            </Grid>
+
+            <!-- Plugins List -->
+            <md:Card Grid.Row="2" 
+                     md:ElevationAssist.Elevation="Dp2"
+                     UniformCornerRadius="8"
+                     Padding="0">
+                <Grid>
+                    <DataGrid ItemsSource="{Binding Plugins}"
+                              Style="{StaticResource ModernDataGrid}"
+                              Visibility="{Binding Plugins.Count, Converter={StaticResource Int32ToVisibilityConverter}}">
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy Plugin ID" 
+                                          Command="{Binding CopyPluginIdCommand}"
+                                          AutomationProperties.Name="Copy Plugin ID to Clipboard">
+                                    <MenuItem.Icon>
+                                        <md:PackIcon Kind="ContentCopy" Width="16" Height="16"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Copy Details" 
+                                          Command="{Binding CopyPluginDetailsCommand}"
+                                          AutomationProperties.Name="Copy Plugin Details to Clipboard">
+                                    <MenuItem.Icon>
+                                        <md:PackIcon Kind="ContentCopy" Width="16" Height="16"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator/>
+                                <MenuItem Header="Refresh" 
+                                          Command="{Binding RefreshPluginsCommand}"
+                                          AutomationProperties.Name="Refresh Plugins List">
+                                    <MenuItem.Icon>
+                                        <md:PackIcon Kind="Refresh" Width="16" Height="16"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" 
+                                                Binding="{Binding Name}" 
+                                                Width="220"
+                                                FontWeight="SemiBold"
+                                                FontSize="14"/>
+                            <DataGridTextColumn Header="Version" 
+                                                Binding="{Binding Version}" 
+                                                Width="100"
+                                                FontFamily="Consolas"/>
+                            <DataGridTextColumn Header="Description" 
+                                                Binding="{Binding Description}" 
+                                                Width="*"
+                                                MinWidth="250"/>
+                            <DataGridTemplateColumn Header="Status" Width="120">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#E8F5E9"
+                                                CornerRadius="12"
+                                                Padding="10,4"
+                                                HorizontalAlignment="Center">
+                                            <TextBlock Text="{Binding Status}"
+                                                       Foreground="{StaticResource SuccessBrush}"
+                                                       FontWeight="SemiBold"
+                                                       FontSize="12"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Tasks" 
+                                                Binding="{Binding TaskCount}" 
+                                                Width="80">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Plugin ID" 
+                                                Binding="{Binding Id}" 
+                                                Width="280"
+                                                FontFamily="Consolas"
+                                                FontSize="11">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{StaticResource TextTertiaryBrush}"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    
+                    <!-- Empty State -->
+                    <StackPanel Style="{StaticResource EmptyStateContainer}"
+                                Visibility="{Binding Plugins.Count, Converter={StaticResource MaterialDesign.InvertedInt32ToVisibilityConverter}}">
+                        <md:PackIcon Kind="PuzzleOutline"
+                                     Style="{StaticResource EmptyStateIcon}"/>
+                        <TextBlock Text="No Plugins Loaded"
+                                   Style="{StaticResource EmptyStateTitle}"/>
+                        <TextBlock Text="Plugins will appear here when they are loaded"
+                                   Style="{StaticResource EmptyStateMessage}"/>
+                    </StackPanel>
+                </Grid>
+            </md:Card>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

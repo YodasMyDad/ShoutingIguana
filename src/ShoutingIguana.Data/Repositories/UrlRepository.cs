@@ -12,14 +12,14 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
     {
         return await _context.Urls
             .Include(u => u.Headers)
-            .FirstOrDefaultAsync(u => u.Id == id);
+            .FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false);
     }
 
     public async Task<Url?> GetByAddressAsync(int projectId, string address)
     {
         var normalized = NormalizeUrl(address);
         return await _context.Urls
-            .FirstOrDefaultAsync(u => u.ProjectId == projectId && u.NormalizedUrl == normalized);
+            .FirstOrDefaultAsync(u => u.ProjectId == projectId && u.NormalizedUrl == normalized).ConfigureAwait(false);
     }
 
     public async Task<IEnumerable<Url>> GetByProjectIdAsync(int projectId)
@@ -28,38 +28,38 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
             .Where(u => u.ProjectId == projectId)
             .OrderBy(u => u.Depth)
             .ThenBy(u => u.FirstSeenUtc)
-            .ToListAsync();
+            .ToListAsync().ConfigureAwait(false);
     }
 
     public async Task<IEnumerable<Url>> GetByStatusAsync(int projectId, UrlStatus status)
     {
         return await _context.Urls
             .Where(u => u.ProjectId == projectId && u.Status == status)
-            .ToListAsync();
+            .ToListAsync().ConfigureAwait(false);
     }
 
     public async Task<Url> CreateAsync(Url url)
     {
         _context.Urls.Add(url);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync().ConfigureAwait(false);
         return url;
     }
 
     public async Task<Url> UpdateAsync(Url url)
     {
         _context.Entry(url).State = EntityState.Modified;
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync().ConfigureAwait(false);
         return url;
     }
 
     public async Task<int> CountByProjectIdAsync(int projectId)
     {
-        return await _context.Urls.CountAsync(u => u.ProjectId == projectId);
+        return await _context.Urls.CountAsync(u => u.ProjectId == projectId).ConfigureAwait(false);
     }
 
     public async Task<int> CountByStatusAsync(int projectId, UrlStatus status)
     {
-        return await _context.Urls.CountAsync(u => u.ProjectId == projectId && u.Status == status);
+        return await _context.Urls.CountAsync(u => u.ProjectId == projectId && u.Status == status).ConfigureAwait(false);
     }
 
     private static string NormalizeUrl(string url)

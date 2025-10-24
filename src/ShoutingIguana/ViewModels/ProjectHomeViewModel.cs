@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
@@ -23,11 +24,14 @@ public partial class ProjectHomeViewModel : ObservableObject
     private readonly INavigationService _navigationService;
     private readonly IProjectContext _projectContext;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartCrawlCommand))]
     private string _projectName = string.Empty;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartCrawlCommand))]
     private string _baseUrl = string.Empty;
 
     [ObservableProperty]
@@ -58,12 +62,14 @@ public partial class ProjectHomeViewModel : ObservableObject
         ILogger<ProjectHomeViewModel> logger,
         INavigationService navigationService,
         IProjectContext projectContext,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
         _navigationService = navigationService;
         _projectContext = projectContext;
         _serviceProvider = serviceProvider;
+        _httpClientFactory = httpClientFactory;
     }
 
     public async Task LoadAsync()
@@ -115,7 +121,7 @@ public partial class ProjectHomeViewModel : ObservableObject
             {
                 // Switch to the selected database
                 var dbProvider = _serviceProvider.GetRequiredService<ShoutingIguana.Data.ProjectDbContextProvider>();
-                dbProvider.SetProjectPath(dialog.FileName);
+                await dbProvider.SetProjectPathAsync(dialog.FileName);
 
                 // Create a scoped repository to load from the new database
                 using var scope = _serviceProvider.CreateScope();
@@ -213,7 +219,7 @@ public partial class ProjectHomeViewModel : ObservableObject
 
                     // Switch to new database
                     var dbProvider = _serviceProvider.GetRequiredService<ShoutingIguana.Data.ProjectDbContextProvider>();
-                    dbProvider.SetProjectPath(projectPath);
+                    await dbProvider.SetProjectPathAsync(projectPath);
 
                     // Create project in new database
                     using var scope = _serviceProvider.CreateScope();
@@ -271,7 +277,7 @@ public partial class ProjectHomeViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanStartCrawl))]
     private async Task StartCrawlAsync()
     {
         // Always save settings before starting crawl to ensure any changes are persisted
@@ -284,29 +290,58 @@ public partial class ProjectHomeViewModel : ObservableObject
         }
 
         // Validate that the base URL is reachable before starting the crawl
-        try
+        // This runs on a background thread to avoid blocking the UI
+        var validationSuccess = false;
+        
+        await Task.Run(async () =>
         {
-            _logger.LogInformation("Testing connectivity to {BaseUrl}", BaseUrl);
-            using var httpClient = new System.Net.Http.HttpClient();
-            httpClient.Timeout = TimeSpan.FromSeconds(5); // Quick test
-            await httpClient.GetAsync(BaseUrl);
-            _logger.LogInformation("Successfully connected to {BaseUrl}", BaseUrl);
-        }
-        catch (Exception ex)
+            try
+            {
+                _logger.LogInformation("Testing connectivity to {BaseUrl}", BaseUrl);
+                
+                // Update UI on dispatcher
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    // Show validation status (could be bound to UI)
+                    _logger.LogDebug("Validating connection...");
+                });
+                
+                var httpClient = _httpClientFactory.CreateClient();
+                httpClient.Timeout = TimeSpan.FromSeconds(5); // Quick test
+                httpClient.DefaultRequestHeaders.Add("User-Agent", UserAgent);
+                
+                await httpClient.GetAsync(BaseUrl);
+                _logger.LogInformation("Successfully connected to {BaseUrl}", BaseUrl);
+                validationSuccess = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to connect to {BaseUrl}", BaseUrl);
+                
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show(
+                        $"Cannot connect to {BaseUrl}\n\nError: {ex.Message}\n\nPlease check:\n• The URL is correct\n• The domain exists\n• You have internet connectivity\n• The site is not blocking requests",
+                        "Connection Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error));
+            }
+        });
+
+        if (!validationSuccess)
         {
-            _logger.LogWarning(ex, "Failed to connect to {BaseUrl}", BaseUrl);
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-                MessageBox.Show(
-                    $"Cannot connect to {BaseUrl}\n\nError: {ex.Message}\n\nPlease check:\n• The URL is correct\n• The domain exists\n• You have internet connectivity\n• The site is not blocking requests",
-                    "Connection Failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error));
             return;
         }
 
         // Navigate to crawl dashboard with project context
         _navigationService.NavigateTo<ShoutingIguana.Views.CrawlDashboardView>();
         _logger.LogInformation("Navigating to crawl dashboard for project {ProjectId}", CurrentProject.Id);
+    }
+    
+    private bool CanStartCrawl()
+    {
+        return !string.IsNullOrWhiteSpace(BaseUrl) && 
+               !string.IsNullOrWhiteSpace(ProjectName) &&
+               Uri.TryCreate(BaseUrl, UriKind.Absolute, out _);
     }
 
     private string GetProjectsDirectory()

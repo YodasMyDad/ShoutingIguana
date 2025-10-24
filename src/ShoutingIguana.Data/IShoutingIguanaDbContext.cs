@@ -12,6 +12,9 @@ public interface IShoutingIguanaDbContext : IDisposable
     DbSet<Link> Links { get; }
     DbSet<CrawlQueueItem> CrawlQueue { get; }
     DbSet<Header> Headers { get; }
+    DbSet<Finding> Findings { get; }
+    DbSet<Redirect> Redirects { get; }
+    DbSet<Image> Images { get; }
     
     int SaveChanges();
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
