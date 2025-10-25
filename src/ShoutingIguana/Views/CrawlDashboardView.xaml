@@ -7,6 +7,23 @@
                   KeyboardNavigation.TabNavigation="Local"
                   Focusable="False">
         <Grid Margin="{StaticResource SpacingL}" KeyboardNavigation.TabNavigation="Local">
+            <Grid.RenderTransform>
+                <TranslateTransform/>
+            </Grid.RenderTransform>
+            <Grid.Triggers>
+                <EventTrigger RoutedEvent="Loaded">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                             From="20" To="0" Duration="0:0:0.4"
+                                             DecelerationRatio="0.7"/>
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                             From="0" To="1" Duration="0:0:0.4"
+                                             DecelerationRatio="0.7"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Grid.Triggers>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -99,8 +116,10 @@
                                     Width="36" Height="36"
                                     CornerRadius="6"
                                     Margin="0,0,12,0">
-                                <TextBlock Text="📊"
+                                <TextBlock Text="{StaticResource Icon.ChartBar}"
+                                           Style="{StaticResource Icon}"
                                            FontSize="20"
+                                           Foreground="White"
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"/>
                             </Border>
@@ -162,7 +181,8 @@
                         BorderThickness="0,0,0,4"
                         SnapsToDevicePixels="True"
                         AutomationProperties.Name="URLs Crawled Metric"
-                        AutomationProperties.LiveSetting="Polite">
+                        AutomationProperties.LiveSetting="Polite"
+                        AutomationProperties.HelpText="Number of URLs successfully crawled">
                     <Border.Effect>
                         <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
                     </Border.Effect>
@@ -207,7 +227,10 @@
                         Padding="20"
                         BorderBrush="{StaticResource InfoBrush}"
                         BorderThickness="0,0,0,4"
-                        SnapsToDevicePixels="True">
+                        SnapsToDevicePixels="True"
+                        AutomationProperties.Name="Total Discovered URLs Metric"
+                        AutomationProperties.LiveSetting="Polite"
+                        AutomationProperties.HelpText="Total number of unique URLs discovered">
                     <Border.Effect>
                         <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
                     </Border.Effect>
@@ -250,7 +273,10 @@
                         Padding="20"
                         BorderBrush="{StaticResource PrimaryBrush}"
                         BorderThickness="0,0,0,4"
-                        SnapsToDevicePixels="True">
+                        SnapsToDevicePixels="True"
+                        AutomationProperties.Name="Crawl Queue Size Metric"
+                        AutomationProperties.LiveSetting="Polite"
+                        AutomationProperties.HelpText="Number of URLs waiting to be crawled">
                     <Border.Effect>
                         <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
                     </Border.Effect>
@@ -333,7 +359,10 @@
                         Padding="20"
                         BorderBrush="{StaticResource ErrorBrush}"
                         BorderThickness="0,0,0,4"
-                        SnapsToDevicePixels="True">
+                        SnapsToDevicePixels="True"
+                        AutomationProperties.Name="Error Count Metric"
+                        AutomationProperties.LiveSetting="Assertive"
+                        AutomationProperties.HelpText="Number of errors encountered during crawl">
                     <Border.Effect>
                         <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
                     </Border.Effect>

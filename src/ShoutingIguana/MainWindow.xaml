@@ -200,7 +200,8 @@
                 <Separator Margin="{StaticResource SpacingS}" Background="{StaticResource BorderLightBrush}"/>
                 <StatusBarItem AutomationProperties.Name="Browser Status"
                                AutomationProperties.LiveSetting="Polite">
-                    <StackPanel Orientation="Horizontal">
+                    <StackPanel Orientation="Horizontal" 
+                                ToolTip="Playwright browser engine status">
                         <TextBlock Text="{StaticResource Icon.Web}"
                                    Style="{StaticResource Icon}"
                                    Width="14" 

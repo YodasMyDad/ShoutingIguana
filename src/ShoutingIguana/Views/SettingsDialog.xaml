@@ -94,7 +94,6 @@
                                     <TextBox Text="{Binding ConcurrentRequests, UpdateSourceTrigger=PropertyChanged}"
                                              Style="{StaticResource ModernTextBox}"
                                              TabIndex="0"
-                                             AutomationProperties.LabeledBy="{Binding RelativeSource={RelativeSource Self}, Path=Parent.Children[0]}"
                                              AutomationProperties.Name="Concurrent Requests"
                                              ToolTip="Number of parallel requests (1-10)"/>
                                     <TextBlock Text="Number of parallel requests to make (1-10). Higher values speed up crawling but use more resources."
@@ -368,9 +367,8 @@
                     </DataGrid>
 
                     <Border Grid.Row="2" 
-                            Padding="16" 
-                            Background="#E3F2FD"
-                            CornerRadius="6">
+                            Style="{StaticResource InfoCard}"
+                            Padding="16">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                 <TextBlock Text="{StaticResource Icon.Info}"
@@ -379,7 +377,7 @@
                                            Height="20"
                                            FontSize="20"
                                            Foreground="{StaticResource InfoBrush}"
-                                           Margin="0,0,8,0"/>
+                                           Margin="0,0,0,8"/>
                                 <TextBlock Text="Stage 2 Limitation" 
                                            FontWeight="SemiBold"
                                            FontSize="14"

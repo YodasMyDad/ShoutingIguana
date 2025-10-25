@@ -42,6 +42,23 @@
     </UserControl.Resources>
     
     <Grid Margin="{StaticResource SpacingL}" KeyboardNavigation.TabNavigation="Local">
+        <Grid.RenderTransform>
+            <TranslateTransform/>
+        </Grid.RenderTransform>
+        <Grid.Triggers>
+            <EventTrigger RoutedEvent="Loaded">
+                <BeginStoryboard>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                         From="20" To="0" Duration="0:0:0.4"
+                                         DecelerationRatio="0.7"/>
+                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                         From="0" To="1" Duration="0:0:0.4"
+                                         DecelerationRatio="0.7"/>
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+        </Grid.Triggers>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="2*" MinHeight="300"/>
@@ -215,11 +232,13 @@
                                     <StackPanel Grid.Column="0" Margin="0">
                                         <TextBlock Text="Severity" 
                                                    Style="{StaticResource FormFieldLabel}"
-                                                   Margin="0,0,0,8"/>
+                                                   Margin="0,0,0,8"
+                                                   AutomationProperties.AutomationId="SeverityFilterLabel"/>
                                         <ComboBox MinWidth="150"
                                                   SelectedValue="{Binding SelectedSeverity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                   SelectedValuePath="Tag"
                                                   Style="{StaticResource ModernComboBox}"
+                                                  TabIndex="0"
                                                   AutomationProperties.Name="Filter by Severity"
                                                   ToolTip="Filter findings by severity level">
                                             <ComboBoxItem Content="All Severities" Tag="{x:Null}"/>
@@ -233,10 +252,13 @@
                                     <StackPanel Grid.Column="2">
                                         <TextBlock Text="Search" 
                                                    Style="{StaticResource FormFieldLabel}"
-                                                   Margin="0,0,0,8"/>
+                                                   Margin="0,0,0,8"
+                                                   AutomationProperties.AutomationId="SearchFilterLabel"/>
                                         <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                                                  Style="{StaticResource ModernTextBox}"
+                                                 TabIndex="1"
                                                  AutomationProperties.Name="Search Findings"
+                                                 AutomationProperties.HelpText="Search findings by message, code, or URL"
                                                  ToolTip="Search findings by message, code, or URL">
                                             <TextBox.Tag>Type to search...</TextBox.Tag>
                                         </TextBox>
@@ -271,20 +293,25 @@
                                       ItemsSource="{Binding FilteredFindings}"
                                       SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
                                       Style="{StaticResource ModernDataGrid}"
+                                      TabIndex="2"
                                       AutomationProperties.Name="Findings List"
-                                      AutomationProperties.HelpText="List of findings discovered during the crawl. Select a row to view details below.">
+                                      AutomationProperties.HelpText="List of findings discovered during the crawl. Select a row to view details below."
+                                      AutomationProperties.LiveSetting="Polite">
                                 <DataGrid.ContextMenu>
-                                    <ContextMenu>
+                                    <ContextMenu AutomationProperties.Name="Findings Context Menu">
                                         <MenuItem Header="Copy URL" 
                                                   Command="{Binding CopyUrlCommand}"
-                                                  AutomationProperties.Name="Copy URL to Clipboard">
+                                                  InputGestureText="Ctrl+C"
+                                                  AutomationProperties.Name="Copy URL to Clipboard"
+                                                  AutomationProperties.HelpText="Copy the selected finding's URL to clipboard">
                                             <MenuItem.Icon>
                                                 <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                         <MenuItem Header="Copy Message" 
                                                   Command="{Binding CopyMessageCommand}"
-                                                  AutomationProperties.Name="Copy Message to Clipboard">
+                                                  AutomationProperties.Name="Copy Message to Clipboard"
+                                                  AutomationProperties.HelpText="Copy the selected finding's message to clipboard">
                                             <MenuItem.Icon>
                                                 <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
                                             </MenuItem.Icon>
@@ -292,7 +319,9 @@
                                         <Separator/>
                                         <MenuItem Header="Open in Browser" 
                                                   Command="{Binding OpenInBrowserCommand}"
-                                                  AutomationProperties.Name="Open URL in Default Browser">
+                                                  InputGestureText="Ctrl+Enter"
+                                                  AutomationProperties.Name="Open URL in Default Browser"
+                                                  AutomationProperties.HelpText="Opens the selected finding's URL in your default web browser">
                                             <MenuItem.Icon>
                                                 <TextBlock Text="{StaticResource Icon.OpenInNew}" Style="{StaticResource Icon}"/>
                                             </MenuItem.Icon>
@@ -411,8 +440,8 @@
                 </Border>
                            
                 <Border Grid.Row="1"
-                        Background="#FAFAFA"
-                        Margin="12">
+                        Background="{StaticResource SurfaceVariantBrush}"
+                        Margin="{StaticResource SpacingM}">
                         <Border Background="{StaticResource SurfaceAltBrush}"
                                 CornerRadius="6"
                                 BorderThickness="1"

@@ -133,6 +133,7 @@
     <sys:String x:Key="Icon.Remove">&#xE738;</sys:String>
     <sys:String x:Key="Icon.Clear">&#xE894;</sys:String>
     <sys:String x:Key="Icon.Cog">&#xE713;</sys:String>
+    <sys:String x:Key="Icon.ChartBar">&#xE9D2;</sys:String>
     
     <!-- Icon Style -->
     <Style x:Key="Icon" TargetType="TextBlock">

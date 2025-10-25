@@ -8,6 +8,23 @@
                   KeyboardNavigation.TabNavigation="Local"
                   Focusable="False">
         <Grid Margin="{StaticResource SpacingL}" KeyboardNavigation.TabNavigation="Local">
+            <Grid.RenderTransform>
+                <TranslateTransform/>
+            </Grid.RenderTransform>
+            <Grid.Triggers>
+                <EventTrigger RoutedEvent="Loaded">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                             From="20" To="0" Duration="0:0:0.4"
+                                             DecelerationRatio="0.7"/>
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                             From="0" To="1" Duration="0:0:0.4"
+                                             DecelerationRatio="0.7"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Grid.Triggers>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -183,21 +200,26 @@
                 <Grid>
                     <DataGrid ItemsSource="{Binding Plugins}"
                               Style="{StaticResource ModernDataGrid}"
+                              TabIndex="0"
                               AutomationProperties.Name="Plugins List"
                               AutomationProperties.HelpText="List of installed plugins with their status and information"
+                              AutomationProperties.ItemType="Plugin"
                               KeyboardNavigation.TabNavigation="Local">
                         <DataGrid.ContextMenu>
-                            <ContextMenu>
+                            <ContextMenu AutomationProperties.Name="Plugins Context Menu">
                                 <MenuItem Header="Copy Plugin ID" 
                                           Command="{Binding CopyPluginIdCommand}"
-                                          AutomationProperties.Name="Copy Plugin ID to Clipboard">
+                                          InputGestureText="Ctrl+C"
+                                          AutomationProperties.Name="Copy Plugin ID to Clipboard"
+                                          AutomationProperties.HelpText="Copy the selected plugin's unique identifier to clipboard">
                                     <MenuItem.Icon>
                                         <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
                                     </MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem Header="Copy Details" 
                                           Command="{Binding CopyPluginDetailsCommand}"
-                                          AutomationProperties.Name="Copy Plugin Details to Clipboard">
+                                          AutomationProperties.Name="Copy Plugin Details to Clipboard"
+                                          AutomationProperties.HelpText="Copy the selected plugin's full details to clipboard">
                                     <MenuItem.Icon>
                                         <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
                                     </MenuItem.Icon>
@@ -205,7 +227,9 @@
                                 <Separator/>
                                 <MenuItem Header="Refresh" 
                                           Command="{Binding RefreshPluginsCommand}"
-                                          AutomationProperties.Name="Refresh Plugins List">
+                                          InputGestureText="F5"
+                                          AutomationProperties.Name="Refresh Plugins List"
+                                          AutomationProperties.HelpText="Reloads the list of installed plugins">
                                     <MenuItem.Icon>
                                         <TextBlock Text="{StaticResource Icon.Refresh}" Style="{StaticResource Icon}"/>
                                     </MenuItem.Icon>
