@@ -359,6 +359,17 @@
     </Style>
     
     <!-- ========================================
+         MENU STYLES
+         ======================================== -->
+    
+    <!-- MenuItem Style with comfortable padding and consistent font size -->
+    <Style TargetType="MenuItem">
+        <Setter Property="Padding" Value="12,6"/>
+        <Setter Property="Height" Value="32"/>
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
+    
+    <!-- ========================================
          CARD STYLES (Border-based)
          ======================================== 
          
