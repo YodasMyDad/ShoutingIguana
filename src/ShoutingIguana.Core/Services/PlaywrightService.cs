@@ -178,7 +178,7 @@ public class PlaywrightService(
         }
     }
 
-    public async Task<IPage> CreatePageAsync()
+    public async Task<IPage> CreatePageAsync(string userAgent)
     {
         var browser = await GetBrowserAsync();
         
@@ -188,7 +188,7 @@ public class PlaywrightService(
         var context = await browser.NewContextAsync(new BrowserNewContextOptions
         {
             ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
-            UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            UserAgent = userAgent
         });
 
         var page = await context.NewPageAsync();

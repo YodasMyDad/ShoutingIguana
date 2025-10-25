@@ -2,6 +2,8 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:config="clr-namespace:ShoutingIguana.Core.Configuration;assembly=ShoutingIguana.Core"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
              Background="{StaticResource BackgroundBrush}">
     
     <Grid>
@@ -260,14 +262,24 @@
                                  AutomationProperties.Name="Crawl Delay"
                                  ToolTip="Delay between requests in seconds (politeness)"/>
 
-                        <TextBox Grid.Row="1" Grid.Column="2"
-                                 Text="{Binding UserAgent, UpdateSourceTrigger=PropertyChanged}"
-                                 md:HintAssist.Hint="User Agent"
-                                 Style="{StaticResource StandardTextBox}"
-                                 Margin="0,0,0,20"
-                                 TabIndex="5"
-                                 AutomationProperties.Name="User Agent String"
-                                 ToolTip="Custom User-Agent header"/>
+                        <ComboBox Grid.Row="1" Grid.Column="2"
+                                  SelectedItem="{Binding SelectedUserAgentType}"
+                                  md:HintAssist.Hint="User Agent"
+                                  Style="{StaticResource MaterialDesignOutlinedComboBox}"
+                                  Margin="0,0,0,20"
+                                  TabIndex="5"
+                                  AutomationProperties.Name="User Agent Type"
+                                  ToolTip="Select browser user agent to use during crawl">
+                            <ComboBox.ItemsSource>
+                                <x:Array Type="{x:Type config:UserAgentType}">
+                                    <config:UserAgentType>Chrome</config:UserAgentType>
+                                    <config:UserAgentType>Firefox</config:UserAgentType>
+                                    <config:UserAgentType>Edge</config:UserAgentType>
+                                    <config:UserAgentType>Safari</config:UserAgentType>
+                                    <config:UserAgentType>Random</config:UserAgentType>
+                                </x:Array>
+                            </ComboBox.ItemsSource>
+                        </ComboBox>
 
                         <CheckBox Grid.Row="2" Grid.Column="0"
                                   Content="Respect robots.txt"

@@ -41,7 +41,8 @@ public interface IPlaywrightService
     /// <summary>
     /// Create a new browser page with configured settings.
     /// </summary>
-    Task<IPage> CreatePageAsync();
+    /// <param name="userAgent">User agent string to use for this page</param>
+    Task<IPage> CreatePageAsync(string userAgent);
     
     /// <summary>
     /// Properly close a page and dispose its context to prevent memory leaks.

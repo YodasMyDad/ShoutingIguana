@@ -74,15 +74,6 @@
                                      AutomationProperties.Name="Crawl Delay"
                                      ToolTip="Delay between requests in seconds"/>
 
-                            <TextBox Text="{Binding UserAgent, UpdateSourceTrigger=PropertyChanged}"
-                                     md:HintAssist.Hint="User Agent"
-                                     md:HintAssist.HelperText="Custom User-Agent header for requests"
-                                     Style="{StaticResource StandardTextBox}"
-                                     Margin="0,0,0,28"
-                                     TabIndex="5"
-                                     AutomationProperties.Name="User Agent String"
-                                     ToolTip="Custom User-Agent header"/>
-
                             <CheckBox IsChecked="{Binding RespectRobotsTxt}"
                                       Content="Follow robots.txt exclusion rules"
                                       FontSize="14"

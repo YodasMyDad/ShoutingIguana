@@ -27,6 +27,7 @@ public class PluginExecutor(
         string? renderedHtml,
         Dictionary<string, string> headers,
         Configuration.ProjectSettings projectSettings,
+        string userAgent,
         int projectId,
         CancellationToken cancellationToken)
     {
@@ -54,7 +55,7 @@ public class PluginExecutor(
                 ProjectId: projectId,
                 BaseUrl: projectSettings.BaseUrl,
                 MaxDepth: projectSettings.MaxCrawlDepth,
-                UserAgent: projectSettings.UserAgent,
+                UserAgent: userAgent,
                 RespectRobotsTxt: projectSettings.RespectRobotsTxt),
             Metadata: new UrlMetadata(
                 UrlId: urlEntity.Id,

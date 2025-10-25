@@ -13,17 +13,13 @@ public class CrawlEngine(
     IServiceProvider serviceProvider,
     IRobotsService robotsService,
     ILinkExtractor linkExtractor,
-    IHttpClientFactory httpClientFactory,
-    IPlaywrightService playwrightService,
-    IPluginRegistry pluginRegistry) : ICrawlEngine
+    IPlaywrightService playwrightService) : ICrawlEngine
 {
     private readonly ILogger<CrawlEngine> _logger = logger;
     private readonly IServiceProvider _serviceProvider = serviceProvider;
     private readonly IRobotsService _robotsService = robotsService;
     private readonly ILinkExtractor _linkExtractor = linkExtractor;
-    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
     private readonly IPlaywrightService _playwrightService = playwrightService;
-    private readonly IPluginRegistry _pluginRegistry = pluginRegistry;
     
     private CancellationTokenSource? _cts;
     private Task? _crawlTask;
@@ -183,10 +179,6 @@ public class CrawlEngine(
 
     private async Task WorkerAsync(int projectId, ProjectSettings settings, CancellationToken cancellationToken)
     {
-        var httpClient = _httpClientFactory.CreateClient();
-        httpClient.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
-        httpClient.DefaultRequestHeaders.Add("User-Agent", settings.UserAgent);
-
         int emptyQueueCount = 0;
 
         while (!cancellationToken.IsCancellationRequested)
@@ -251,10 +243,13 @@ public class CrawlEngine(
                 // Enforce politeness delay
                 await EnforcePolitenessDelayAsync(queueItem.HostKey, settings.CrawlDelaySeconds, cancellationToken).ConfigureAwait(false);
 
+                // Get user agent for this request
+                var userAgent = settings.GetUserAgentString();
+
                 // Check robots.txt
                 if (settings.RespectRobotsTxt)
                 {
-                    var allowed = await _robotsService.IsAllowedAsync(queueItem.Address, settings.UserAgent).ConfigureAwait(false);
+                    var allowed = await _robotsService.IsAllowedAsync(queueItem.Address, userAgent).ConfigureAwait(false);
                     if (!allowed)
                     {
                         _logger.LogInformation("URL blocked by robots.txt: {Url}", queueItem.Address);
@@ -269,7 +264,7 @@ public class CrawlEngine(
                 }
 
                 // Fetch URL with Playwright
-                var (urlData, page, renderedHtml, redirectChain) = await FetchUrlWithPlaywrightAsync(queueItem.Address, cancellationToken).ConfigureAwait(false);
+                var (urlData, page, renderedHtml, redirectChain) = await FetchUrlWithPlaywrightAsync(queueItem.Address, userAgent, cancellationToken).ConfigureAwait(false);
 
                 try
                 {
@@ -287,7 +282,7 @@ public class CrawlEngine(
                     {
                         var pluginExecutor = pluginScope.ServiceProvider.GetRequiredService<PluginExecutor>();
                         var headers = urlData.Headers.GroupBy(h => h.Key).ToDictionary(g => g.Key, g => g.First().Value);
-                        await pluginExecutor.ExecuteTasksAsync(urlEntity, page, renderedHtml, headers, settings, projectId, cancellationToken).ConfigureAwait(false);
+                        await pluginExecutor.ExecuteTasksAsync(urlEntity, page, renderedHtml, headers, settings, userAgent, projectId, cancellationToken).ConfigureAwait(false);
                     }
 
                     // Extract and enqueue links if successful and within depth
@@ -359,7 +354,7 @@ public class CrawlEngine(
     /// OWNERSHIP: The caller is ALWAYS responsible for disposing the returned page via ClosePageAsync(),
     /// even if an error occurs. The page is returned in both success and error cases.
     /// </summary>
-    private async Task<(UrlFetchResult result, Microsoft.Playwright.IPage? page, string? html, List<RedirectHop> redirectChain)> FetchUrlWithPlaywrightAsync(string url, CancellationToken cancellationToken)
+    private async Task<(UrlFetchResult result, Microsoft.Playwright.IPage? page, string? html, List<RedirectHop> redirectChain)> FetchUrlWithPlaywrightAsync(string url, string userAgent, CancellationToken cancellationToken)
     {
         Microsoft.Playwright.IPage? page = null;
         string? renderedHtml = null;
@@ -370,8 +365,8 @@ public class CrawlEngine(
             // Check cancellation before creating page
             cancellationToken.ThrowIfCancellationRequested();
             
-            // Create a new page (caller becomes responsible for disposal from this point)
-            page = await _playwrightService.CreatePageAsync();
+            // Create a new page with the specified user agent (caller becomes responsible for disposal from this point)
+            page = await _playwrightService.CreatePageAsync(userAgent);
             
             // Navigate to URL
             var response = await page.GotoAsync(url, new Microsoft.Playwright.PageGotoOptions

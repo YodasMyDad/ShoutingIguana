@@ -7,7 +7,6 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Core.Configuration;
 using ShoutingIguana.Core.Services;
-using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.ViewModels;
 
@@ -28,7 +27,6 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private int _maxUrlsToCrawl = 10000;
     [ObservableProperty] private bool _respectRobotsTxt = true;
     [ObservableProperty] private double _crawlDelaySeconds = 1.0;
-    [ObservableProperty] private string _userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
     // Browser settings
     [ObservableProperty] private bool _headless = true;
@@ -72,7 +70,6 @@ public partial class SettingsViewModel : ObservableObject
             MaxUrlsToCrawl = crawlSettings.MaxUrlsToCrawl;
             RespectRobotsTxt = crawlSettings.RespectRobotsTxt;
             CrawlDelaySeconds = crawlSettings.CrawlDelaySeconds;
-            UserAgent = crawlSettings.UserAgent;
             MemoryLimitMb = crawlSettings.MemoryLimitMb;
         }
 
@@ -125,7 +122,6 @@ public partial class SettingsViewModel : ObservableObject
                 MaxUrlsToCrawl = MaxUrlsToCrawl,
                 RespectRobotsTxt = RespectRobotsTxt,
                 CrawlDelaySeconds = CrawlDelaySeconds,
-                UserAgent = UserAgent,
                 MemoryLimitMb = MemoryLimitMb
             };
 
@@ -182,7 +178,6 @@ public partial class SettingsViewModel : ObservableObject
             MaxUrlsToCrawl = 10000;
             RespectRobotsTxt = true;
             CrawlDelaySeconds = 1.0;
-            UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
             // Restore default browser settings
             Headless = true;

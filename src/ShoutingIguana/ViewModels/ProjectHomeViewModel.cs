@@ -47,7 +47,7 @@ public partial class ProjectHomeViewModel : ObservableObject
     private bool _respectRobotsTxt = true;
 
     [ObservableProperty]
-    private string _userAgent = "ShoutingIguana/1.0";
+    private UserAgentType _selectedUserAgentType = UserAgentType.Chrome;
 
     [ObservableProperty]
     private ObservableCollection<Project> _recentProjects = new();
@@ -96,7 +96,7 @@ public partial class ProjectHomeViewModel : ObservableObject
                     MaxUrls = settings.MaxUrlsToCrawl;
                     CrawlDelay = settings.CrawlDelaySeconds;
                     RespectRobotsTxt = settings.RespectRobotsTxt;
-                    UserAgent = settings.UserAgent;
+                    SelectedUserAgentType = settings.UserAgentType;
 
                     IsWelcomeScreen = false;
                     _logger.LogInformation("Loaded project details for {ProjectName}", project.Name);
@@ -131,7 +131,7 @@ public partial class ProjectHomeViewModel : ObservableObject
         MaxUrls = 1000;
         CrawlDelay = 1.0;
         RespectRobotsTxt = true;
-        UserAgent = "ShoutingIguana/1.0";
+        SelectedUserAgentType = UserAgentType.Chrome;
     }
 
     [RelayCommand]
@@ -191,7 +191,7 @@ public partial class ProjectHomeViewModel : ObservableObject
                 MaxUrls = settings.MaxUrlsToCrawl;
                 CrawlDelay = settings.CrawlDelaySeconds;
                 RespectRobotsTxt = settings.RespectRobotsTxt;
-                UserAgent = settings.UserAgent;
+                SelectedUserAgentType = settings.UserAgentType;
 
                 // Update last opened time
                 project.LastOpenedUtc = DateTime.UtcNow;
@@ -242,7 +242,7 @@ public partial class ProjectHomeViewModel : ObservableObject
                 MaxUrlsToCrawl = MaxUrls,
                 CrawlDelaySeconds = CrawlDelay,
                 RespectRobotsTxt = RespectRobotsTxt,
-                UserAgent = UserAgent
+                UserAgentType = SelectedUserAgentType
             };
 
             // Perform save operation on background thread
@@ -348,7 +348,8 @@ public partial class ProjectHomeViewModel : ObservableObject
                 
                 var httpClient = _httpClientFactory.CreateClient();
                 httpClient.Timeout = TimeSpan.FromSeconds(5); // Quick test
-                httpClient.DefaultRequestHeaders.Add("User-Agent", UserAgent);
+                var testUserAgent = new ProjectSettings { UserAgentType = SelectedUserAgentType }.GetUserAgentString();
+                httpClient.DefaultRequestHeaders.Add("User-Agent", testUserAgent);
                 
                 await httpClient.GetAsync(BaseUrl);
                 _logger.LogInformation("Successfully connected to {BaseUrl}", BaseUrl);
