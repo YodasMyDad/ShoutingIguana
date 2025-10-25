@@ -238,6 +238,7 @@
                                  md:HintAssist.Hint="Max Depth"
                                  Style="{StaticResource StandardTextBox}"
                                  Margin="0,0,0,20"
+                                 TabIndex="2"
                                  AutomationProperties.Name="Maximum Crawl Depth"
                                  ToolTip="Maximum number of clicks from start URL (1-20)"/>
 
@@ -246,6 +247,7 @@
                                  md:HintAssist.Hint="Max URLs to Crawl"
                                  Style="{StaticResource StandardTextBox}"
                                  Margin="0,0,0,20"
+                                 TabIndex="3"
                                  AutomationProperties.Name="Maximum URLs"
                                  ToolTip="Maximum number of URLs to crawl (0 = unlimited)"/>
 
@@ -254,6 +256,7 @@
                                  md:HintAssist.Hint="Crawl Delay (seconds)"
                                  Style="{StaticResource StandardTextBox}"
                                  Margin="0,0,0,20"
+                                 TabIndex="4"
                                  AutomationProperties.Name="Crawl Delay"
                                  ToolTip="Delay between requests in seconds (politeness)"/>
 
@@ -262,6 +265,7 @@
                                  md:HintAssist.Hint="User Agent"
                                  Style="{StaticResource StandardTextBox}"
                                  Margin="0,0,0,20"
+                                 TabIndex="5"
                                  AutomationProperties.Name="User Agent String"
                                  ToolTip="Custom User-Agent header"/>
 
@@ -270,6 +274,7 @@
                                   IsChecked="{Binding RespectRobotsTxt}"
                                   Margin="0,8,0,0"
                                   FontSize="14"
+                                  TabIndex="6"
                                   AutomationProperties.Name="Respect Robots.txt"
                                   ToolTip="Follow robots.txt exclusion rules"/>
                     </Grid>
@@ -282,11 +287,14 @@
                                 Command="{Binding SaveSettingsCommand}"
                                 Style="{StaticResource SecondaryButton}"
                                 Margin="0,0,12,0"
+                                TabIndex="7"
                                 Visibility="{Binding CurrentProject, Converter={StaticResource NullToVisibilityConverter}}"
                                 AutomationProperties.Name="Save Project Settings"
                                 ToolTip="Save changes to project settings"/>
                         <Button Command="{Binding StartCrawlCommand}"
                                 Style="{StaticResource PrimaryButton}"
+                                TabIndex="8"
+                                IsDefault="True"
                                 AutomationProperties.Name="Start Crawl"
                                 ToolTip="Begin crawling with current settings">
                             <StackPanel Orientation="Horizontal">

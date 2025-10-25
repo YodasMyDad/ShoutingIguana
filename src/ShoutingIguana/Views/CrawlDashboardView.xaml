@@ -41,7 +41,6 @@
                     <ProgressBar Value="{Binding ProgressPercentage}"
                                  Maximum="100"
                                  Style="{StaticResource ModernProgressBar}"
-                                 Height="12"
                                  Margin="0,8,0,0"/>
                 </StackPanel>
             </md:Card>
@@ -299,9 +298,10 @@
                 <Button Command="{Binding StartCrawlCommand}"
                         IsEnabled="{Binding IsCrawling, Converter={StaticResource InverseBooleanConverter}}"
                         Style="{StaticResource PrimaryButton}"
-                        Foreground="White"
                         Padding="32,12"
                         Margin="0,0,12,0"
+                        TabIndex="0"
+                        IsDefault="True"
                         AutomationProperties.Name="Start Crawl"
                         ToolTip="Begin crawling">
                     <StackPanel Orientation="Horizontal">
@@ -320,8 +320,8 @@
                 <Button Command="{Binding StopCrawlCommand}"
                         IsEnabled="{Binding IsCrawling}"
                         Style="{StaticResource DangerButton}"
-                        Foreground="White"
                         Padding="32,12"
+                        TabIndex="1"
                         AutomationProperties.Name="Stop Crawl"
                         ToolTip="Stop the current crawl">
                     <StackPanel Orientation="Horizontal">
