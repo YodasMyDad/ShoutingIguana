@@ -15,6 +15,7 @@
             <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
             <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
             <converters:Int32ToVisibilityConverter x:Key="Int32ToVisibilityConverter"/>
+            <converters:InverseInt32ToVisibilityConverter x:Key="InverseInt32ToVisibilityConverter"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

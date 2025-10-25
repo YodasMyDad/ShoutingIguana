@@ -41,79 +41,129 @@
         </Style>
     </UserControl.Resources>
     
-    <Grid Margin="{StaticResource SpacingL}">
+    <Grid Margin="{StaticResource SpacingL}" KeyboardNavigation.TabNavigation="Local">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="2*"/>
+            <RowDefinition Height="2*" MinHeight="300"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="1*" MinHeight="200"/>
+            <RowDefinition Height="1*" MinHeight="220"/>
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Grid Grid.Row="0" Margin="{StaticResource SpacingL}">
-            <TextBlock Text="Findings"
-                       Style="{StaticResource DisplayTextStyle}"
-                       VerticalAlignment="Center"
-                       AutomationProperties.HeadingLevel="Level1"
-                       AutomationProperties.AutomationId="FindingsPageHeading"/>
-            
-            <StackPanel Style="{StaticResource ToolbarPanel}" AutomationProperties.Name="Findings Toolbar">
-                <Button Command="{Binding RefreshCommand}"
-                        Style="{StaticResource SecondaryButton}"
-                        Margin="0,0,8,0"
-                        AutomationProperties.Name="Refresh Findings"
-                        ToolTip="Refresh findings from database">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{StaticResource Icon.Refresh}"
+        <Border Grid.Row="0" 
+                Background="{StaticResource SurfaceBrush}"
+                CornerRadius="8"
+                Padding="24"
+                Margin="0,0,0,24"
+                SnapsToDevicePixels="True">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000" BlurRadius="8" ShadowDepth="2" Opacity="0.06"/>
+            </Border.Effect>
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="{StaticResource InfoBrush}"
+                            Width="44" Height="44"
+                            CornerRadius="8"
+                            Margin="0,0,16,0">
+                        <TextBlock Text="{StaticResource Icon.Search}"
                                    Style="{StaticResource Icon}"
-                                   Width="16" 
-                                   Height="16"
-                                   FontSize="16"
-                                   Margin="0,0,6,0"/>
-                        <TextBlock Text="Refresh" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Button Command="{Binding ExportToCsvCommand}"
-                        Style="{StaticResource SecondaryButton}"
-                        Margin="0,0,8,0"
-                        AutomationProperties.Name="Export to CSV"
-                        ToolTip="Export findings to CSV file">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{StaticResource Icon.FileCSV}"
-                                   Style="{StaticResource Icon}"
-                                   Width="16" 
-                                   Height="16"
-                                   FontSize="16"
-                                   Margin="0,0,6,0"/>
-                        <TextBlock Text="CSV" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Button Command="{Binding ExportToExcelCommand}"
-                        Style="{StaticResource PrimaryButton}"
-                        AutomationProperties.Name="Export to Excel"
-                        ToolTip="Export findings to Excel workbook">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{StaticResource Icon.FileExcel}"
-                                   Style="{StaticResource Icon}"
-                                   Width="16" 
-                                   Height="16"
-                                   FontSize="16"
-                                   Margin="0,0,6,0"/>
-                        <TextBlock Text="Excel" 
+                                   FontSize="22"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
                                    VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Findings"
+                                   Style="{StaticResource DisplayTextStyle}"
+                                   FontSize="24"
+                                   Margin="0"
+                                   AutomationProperties.HeadingLevel="Level1"
+                                   AutomationProperties.LiveSetting="Off"
+                                   AutomationProperties.AutomationId="FindingsPageHeading"/>
+                        <TextBlock Text="Issues and insights discovered during crawl"
+                                   Style="{StaticResource BodyTextStyle}"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Margin="0,4,0,0"/>
                     </StackPanel>
-                </Button>
-            </StackPanel>
-        </Grid>
+                </StackPanel>
+                
+                <StackPanel Style="{StaticResource ToolbarPanel}" 
+                            AutomationProperties.Name="Findings Toolbar"
+                            KeyboardNavigation.TabNavigation="Local">
+                    <Button Command="{Binding RefreshCommand}"
+                            Style="{StaticResource SecondaryButton}"
+                            Margin="0,0,6,0"
+                            AutomationProperties.Name="Refresh Findings"
+                            ToolTip="Refresh findings from database (F5)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{StaticResource Icon.Refresh}"
+                                       Style="{StaticResource Icon}"
+                                       Width="16" 
+                                       Height="16"
+                                       FontSize="16"
+                                       Margin="0,0,6,0"/>
+                            <TextBlock Text="Refresh" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Command="{Binding ExportToCsvCommand}"
+                            Style="{StaticResource SecondaryButton}"
+                            Margin="0,0,6,0"
+                            AutomationProperties.Name="Export to CSV"
+                            ToolTip="Export findings to CSV file">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{StaticResource Icon.FileCsv}"
+                                       Style="{StaticResource Icon}"
+                                       Width="16" 
+                                       Height="16"
+                                       FontSize="16"
+                                       Margin="0,0,6,0"/>
+                            <TextBlock Text="CSV" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Command="{Binding ExportToExcelCommand}"
+                            Style="{StaticResource PrimaryButton}"
+                            AutomationProperties.Name="Export to Excel"
+                            ToolTip="Export findings to Excel workbook">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{StaticResource Icon.FileExcel}"
+                                       Style="{StaticResource Icon}"
+                                       Width="16" 
+                                       Height="16"
+                                       FontSize="16"
+                                       Margin="0,0,6,0"/>
+                            <TextBlock Text="Excel" 
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
 
         <!-- Tabbed Findings View -->
         <Border Grid.Row="1" 
                 Style="{StaticResource Card}"
-                Padding="4">
-            <TabControl ItemsSource="{Binding Tabs}" 
-                        SelectedItem="{Binding SelectedTab}"
-                        Style="{StaticResource StandardTabControl}"
-                        Background="{StaticResource SurfaceBrush}">
+                Padding="{StaticResource SpacingXs}"
+                SnapsToDevicePixels="True">
+            <Grid>
+                <!-- Empty State (visible when no tabs) -->
+                <StackPanel Style="{StaticResource EmptyStateContainer}"
+                            Visibility="{Binding Tabs.Count, Converter={StaticResource InverseInt32ToVisibilityConverter}}"
+                            x:Name="EmptyStatePanel">
+                    <TextBlock Text="{StaticResource Icon.Search}"
+                               Style="{StaticResource EmptyStateIcon}"/>
+                    <TextBlock Text="No Findings Yet"
+                               Style="{StaticResource EmptyStateTitle}"/>
+                    <TextBlock Text="Start a crawl to begin analyzing your website. Findings from all enabled plugins will appear here."
+                               Style="{StaticResource EmptyStateMessage}"/>
+                </StackPanel>
+                
+                <!-- Tabbed Content (visible when tabs exist) -->
+                <TabControl ItemsSource="{Binding Tabs}" 
+                            SelectedItem="{Binding SelectedTab}"
+                            Style="{StaticResource StandardTabControl}"
+                            Background="{StaticResource SurfaceBrush}"
+                            KeyboardNavigation.TabNavigation="Local"
+                            Visibility="{Binding Tabs.Count, Converter={StaticResource Int32ToVisibilityConverter}}">
                 <TabControl.ItemContainerStyle>
                     <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
                         <Setter Property="Height" Value="48"/>
@@ -148,64 +198,73 @@
                             </Grid.RowDefinitions>
 
                             <!-- Filters -->
-                            <Grid Grid.Row="0" Margin="0,0,0,20">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="16"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="16"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                
-                                <!-- Severity Filter -->
-                                <StackPanel Grid.Column="0" Margin="0">
-                                    <TextBlock Text="Severity" 
-                                               Style="{StaticResource FormFieldLabel}"
-                                               Margin="0,0,0,6"/>
-                                    <ComboBox MinWidth="140"
-                                              SelectedValue="{Binding SelectedSeverity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                              SelectedValuePath="Tag"
-                                              Style="{StaticResource ModernComboBox}"
-                                              AutomationProperties.Name="Filter by Severity"
-                                              ToolTip="Filter findings by severity level">
-                                        <ComboBoxItem Content="All" Tag="{x:Null}"/>
-                                        <ComboBoxItem Content="Error" Tag="{x:Static sdk:Severity.Error}"/>
-                                        <ComboBoxItem Content="Warning" Tag="{x:Static sdk:Severity.Warning}"/>
-                                        <ComboBoxItem Content="Info" Tag="{x:Static sdk:Severity.Info}"/>
-                                    </ComboBox>
-                                </StackPanel>
-                                
-                                <!-- Search Box -->
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Search" 
-                                               Style="{StaticResource FormFieldLabel}"
-                                               Margin="0,0,0,6"/>
-                                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                                             MinWidth="250"
-                                             Style="{StaticResource ModernTextBox}"
-                                             AutomationProperties.Name="Search Findings"
-                                             ToolTip="Search findings by message, code, or URL"/>
-                                </StackPanel>
-                                         
-                                <!-- Total Count -->
-                                <Border Grid.Column="4"
-                                        Background="{StaticResource SurfaceAltBrush}"
-                                        CornerRadius="6"
-                                        Padding="16,10"
-                                        Height="40"
-                                        VerticalAlignment="Bottom">
-                                    <TextBlock VerticalAlignment="Center"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                               FontWeight="SemiBold"
-                                               FontSize="13">
-                                        <Run Text="Total:"/>
-                                        <Run Text="{Binding TotalCount, Mode=OneWay}" 
-                                             Foreground="{StaticResource TextPrimaryBrush}"
-                                             FontSize="14"
-                                             FontWeight="Bold"/>
-                                    </TextBlock>
-                                </Border>
-                            </Grid>
+                            <Border Background="{StaticResource SurfaceAltBrush}"
+                                    CornerRadius="6"
+                                    Padding="16"
+                                    Margin="0,0,0,16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- Severity Filter -->
+                                    <StackPanel Grid.Column="0" Margin="0">
+                                        <TextBlock Text="Severity" 
+                                                   Style="{StaticResource FormFieldLabel}"
+                                                   Margin="0,0,0,8"/>
+                                        <ComboBox MinWidth="150"
+                                                  SelectedValue="{Binding SelectedSeverity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  SelectedValuePath="Tag"
+                                                  Style="{StaticResource ModernComboBox}"
+                                                  AutomationProperties.Name="Filter by Severity"
+                                                  ToolTip="Filter findings by severity level">
+                                            <ComboBoxItem Content="All Severities" Tag="{x:Null}"/>
+                                            <ComboBoxItem Content="⚠ Error" Tag="{x:Static sdk:Severity.Error}"/>
+                                            <ComboBoxItem Content="⚡ Warning" Tag="{x:Static sdk:Severity.Warning}"/>
+                                            <ComboBoxItem Content="ℹ Info" Tag="{x:Static sdk:Severity.Info}"/>
+                                        </ComboBox>
+                                    </StackPanel>
+                                    
+                                    <!-- Search Box -->
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Search" 
+                                                   Style="{StaticResource FormFieldLabel}"
+                                                   Margin="0,0,0,8"/>
+                                        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource ModernTextBox}"
+                                                 AutomationProperties.Name="Search Findings"
+                                                 ToolTip="Search findings by message, code, or URL">
+                                            <TextBox.Tag>Type to search...</TextBox.Tag>
+                                        </TextBox>
+                                    </StackPanel>
+                                             
+                                    <!-- Total Count Badge -->
+                                    <Border Grid.Column="4"
+                                            Background="{StaticResource PrimaryBrush}"
+                                            CornerRadius="8"
+                                            Padding="20,12"
+                                            VerticalAlignment="Bottom"
+                                            Height="40">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Total: "
+                                                       Foreground="White"
+                                                       FontWeight="Medium"
+                                                       FontSize="13"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding TotalCount, Mode=OneWay}" 
+                                                       Foreground="White"
+                                                       FontSize="18"
+                                                       FontWeight="Bold"
+                                                       VerticalAlignment="Center"
+                                                       Margin="4,0,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Border>
 
                             <!-- Findings DataGrid -->
                             <DataGrid Grid.Row="1"
@@ -275,7 +334,8 @@
                         </Grid>
                     </DataTemplate>
                 </TabControl.ContentTemplate>
-            </TabControl>
+                </TabControl>
+            </Grid>
         </Border>
 
         <!-- Splitter -->
@@ -289,53 +349,89 @@
         <!-- Details Panel -->
         <Border Grid.Row="3" 
                 Style="{StaticResource Card}"
-                Padding="20">
-            <Grid>
+                Padding="0"
+                SnapsToDevicePixels="True">
+            <Grid KeyboardNavigation.TabNavigation="Local">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 
-                <Grid Grid.Row="0" Margin="{StaticResource SpacingS}">
-                    <TextBlock Text="Finding Details" 
-                               Style="{StaticResource TitleTextStyle}"
-                               VerticalAlignment="Center"
-                               AutomationProperties.HeadingLevel="Level2"
-                               AutomationProperties.AutomationId="FindingDetailsHeading"/>
-                    
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <TextBlock Text="JSON"
-                                   Style="{StaticResource CaptionTextStyle}"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,8,0"/>
-                        <TextBlock Text="{StaticResource Icon.CodeJson}"
-                                   Style="{StaticResource Icon}"
-                                   Width="20"
-                                   Height="20"
-                                   FontSize="20"
-                                   Foreground="{StaticResource TextTertiaryBrush}"/>
-                    </StackPanel>
-                </Grid>
+                <!-- Details Header -->
+                <Border Grid.Row="0" 
+                        Background="{StaticResource SurfaceAltBrush}"
+                        BorderBrush="{StaticResource BorderLightBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="24,16">
+                    <Grid>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Background="{StaticResource PrimaryBrush}"
+                                    Width="32" Height="32"
+                                    CornerRadius="6"
+                                    Margin="0,0,12,0">
+                                <TextBlock Text="{StaticResource Icon.CodeJson}"
+                                           Style="{StaticResource Icon}"
+                                           FontSize="16"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Finding Details" 
+                                           Style="{StaticResource TitleTextStyle}"
+                                           FontSize="16"
+                                           Margin="0"
+                                           AutomationProperties.HeadingLevel="Level2"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           AutomationProperties.AutomationId="FindingDetailsHeading"/>
+                                <TextBlock Text="JSON representation of the selected finding"
+                                           Style="{StaticResource CaptionTextStyle}"
+                                           Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+                        
+                        <Button Command="{Binding CopyDetailsCommand}"
+                                Style="{StaticResource SecondaryButton}"
+                                Height="32"
+                                Padding="16,6"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                ToolTip="Copy JSON to clipboard">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{StaticResource Icon.Copy}"
+                                           Style="{StaticResource Icon}"
+                                           Width="14"
+                                           Height="14"
+                                           FontSize="14"
+                                           Margin="0,0,6,0"/>
+                                <TextBlock Text="Copy" VerticalAlignment="Center" FontSize="13"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Border>
                            
                 <Border Grid.Row="1"
-                        Background="{StaticResource SurfaceAltBrush}"
-                        CornerRadius="6"
-                        BorderThickness="1"
-                        BorderBrush="{StaticResource BorderLightBrush}">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" 
-                                  HorizontalScrollBarVisibility="Auto"
-                                  Padding="12">
-                        <TextBox Text="{Binding DetailsJson, Mode=OneWay}"
-                                 IsReadOnly="True"
-                                 TextWrapping="Wrap"
-                                 FontFamily="Consolas"
-                                 FontSize="12"
-                                 Background="Transparent"
-                                 BorderThickness="0"
-                                 Foreground="{StaticResource TextPrimaryBrush}"
-                                 AutomationProperties.Name="Finding Details JSON"
-                                 AutomationProperties.HelpText="JSON representation of the selected finding. Read-only."/>
-                    </ScrollViewer>
+                        Background="#FAFAFA"
+                        Margin="12">
+                        <Border Background="{StaticResource SurfaceAltBrush}"
+                                CornerRadius="6"
+                                BorderThickness="1"
+                                BorderBrush="{StaticResource BorderLightBrush}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                                          HorizontalScrollBarVisibility="Auto"
+                                          Padding="16">
+                                <TextBox Text="{Binding DetailsJson, Mode=OneWay}"
+                                         IsReadOnly="True"
+                                         TextWrapping="Wrap"
+                                         FontFamily="Consolas"
+                                         FontSize="12"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Foreground="{StaticResource TextPrimaryBrush}"
+                                         AutomationProperties.Name="Finding Details JSON"
+                                         AutomationProperties.HelpText="JSON representation of the selected finding. Read-only."/>
+                            </ScrollViewer>
+                        </Border>
                 </Border>
             </Grid>
         </Border>

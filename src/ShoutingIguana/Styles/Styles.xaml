@@ -16,7 +16,18 @@
          - Icons via Segoe MDL2 Assets (Windows built-in icon font)
          - Consistent color palette and spacing system
          - WCAG AA compliant contrast ratios
+         - High contrast theme support for accessibility
     -->
+
+    <!-- ========================================
+         HIGH CONTRAST THEME SUPPORT
+         ======================================== -->
+    
+    <!-- High Contrast Colors (override when system high contrast is enabled) -->
+    <SolidColorBrush x:Key="HighContrastTextBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}"/>
+    <SolidColorBrush x:Key="HighContrastBackgroundBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}"/>
+    <SolidColorBrush x:Key="HighContrastHighlightBrush" Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}"/>
+    <SolidColorBrush x:Key="HighContrastHighlightTextBrush" Color="{DynamicResource {x:Static SystemColors.HighlightTextColorKey}}"/>
 
     <!-- ========================================
          COLOR PALETTE - Modern Windows 11 Style
@@ -57,19 +68,19 @@
          SPACING SYSTEM (4px base unit)
          ======================================== -->
     
-    <Thickness x:Key="SpacingXS">4</Thickness>
+    <Thickness x:Key="SpacingXs">4</Thickness>
     <Thickness x:Key="SpacingS">8</Thickness>
     <Thickness x:Key="SpacingM">16</Thickness>
     <Thickness x:Key="SpacingL">24</Thickness>
-    <Thickness x:Key="SpacingXL">32</Thickness>
-    <Thickness x:Key="SpacingXXL">48</Thickness>
+    <Thickness x:Key="SpacingXl">32</Thickness>
+    <Thickness x:Key="SpacingXxl">48</Thickness>
     
-    <sys:Double x:Key="SpacingXSValue">4</sys:Double>
+    <sys:Double x:Key="SpacingXsValue">4</sys:Double>
     <sys:Double x:Key="SpacingSValue">8</sys:Double>
     <sys:Double x:Key="SpacingMValue">16</sys:Double>
     <sys:Double x:Key="SpacingLValue">24</sys:Double>
-    <sys:Double x:Key="SpacingXLValue">32</sys:Double>
-    <sys:Double x:Key="SpacingXXLValue">48</sys:Double>
+    <sys:Double x:Key="SpacingXlValue">32</sys:Double>
+    <sys:Double x:Key="SpacingXxlValue">48</sys:Double>
     
     <!-- ========================================
          ICON SYSTEM - Segoe MDL2 Assets
@@ -115,7 +126,7 @@
     <sys:String x:Key="Icon.CheckList">&#xE9D5;</sys:String>
     <sys:String x:Key="Icon.Puzzle">&#xE8D4;</sys:String>
     <sys:String x:Key="Icon.Image">&#xE91B;</sys:String>
-    <sys:String x:Key="Icon.FileCSV">&#xE8A5;</sys:String>
+    <sys:String x:Key="Icon.FileCsv">&#xE8A5;</sys:String>
     <sys:String x:Key="Icon.FileExcel">&#xE9F9;</sys:String>
     <sys:String x:Key="Icon.Exit">&#xE7C8;</sys:String>
     <sys:String x:Key="Icon.History">&#xE81C;</sys:String>
@@ -133,40 +144,103 @@
     </Style>
     
     <!-- ========================================
-         TYPOGRAPHY SCALE
+         TYPOGRAPHY SCALE - Windows 11 Variable Font System
          ======================================== -->
+    
+    <!-- Font Family with Fallback -->
+    <FontFamily x:Key="VariableFontFamily">Segoe UI Variable Display, Segoe UI, Segoe WP, Tahoma, Arial, sans-serif</FontFamily>
+    <FontFamily x:Key="BodyFontFamily">Segoe UI Variable Text, Segoe UI, Segoe WP, Tahoma, Arial, sans-serif</FontFamily>
     
     <!-- Default TextBlock style - No Foreground to allow natural inheritance from parent controls -->
     <Style TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource BodyFontFamily}"/>
         <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="Normal"/>
     </Style>
     
-    <!-- Display (28px) - Main headlines -->
+    <!-- Display (28px, weight 600) - Main headlines / Page titles -->
     <Style x:Key="DisplayTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource VariableFontFamily}"/>
         <Setter Property="FontSize" Value="28"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
     </Style>
     
-    <!-- Title (20px) - Section headers -->
+    <!-- Title (20px, weight 600) - Section headers -->
     <Style x:Key="TitleTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource VariableFontFamily}"/>
         <Setter Property="FontSize" Value="20"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
     </Style>
     
-    <!-- Body (14px) - Standard text -->
-    <Style x:Key="BodyTextStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="14"/>
+    <!-- Subtitle (16px, weight 500) - Subsection headers -->
+    <Style x:Key="SubtitleTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource VariableFontFamily}"/>
+        <Setter Property="FontSize" Value="16"/>
+        <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
     </Style>
     
-    <!-- Caption (12px) - Metadata -->
+    <!-- Body (14px, weight 400) - Standard text -->
+    <Style x:Key="BodyTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource BodyFontFamily}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+    </Style>
+    
+    <!-- Body Emphasis (14px, weight 450) - Emphasized body text -->
+    <Style x:Key="BodyEmphasisTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource BodyFontFamily}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+    </Style>
+    
+    <!-- Caption (12px, weight 400) - Metadata -->
     <Style x:Key="CaptionTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource BodyFontFamily}"/>
         <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
     </Style>
     
+    <!-- Caption Light (12px, weight 350) - De-emphasized metadata -->
+    <Style x:Key="CaptionLightTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource BodyFontFamily}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="Light"/>
+        <Setter Property="Foreground" Value="{StaticResource TextTertiaryBrush}"/>
+    </Style>
+    
+    <!-- ========================================
+         ENHANCED FOCUS VISUAL STYLE - WCAG 2.4.7 Compliant
+         ======================================== -->
+    
+    <Style x:Key="ModernFocusVisual">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Rectangle Margin="1"
+                             StrokeThickness="2"
+                             Stroke="{StaticResource PrimaryBrush}"
+                             StrokeDashArray="0"
+                             SnapsToDevicePixels="True"
+                             RadiusX="2"
+                             RadiusY="2">
+                        <Rectangle.Effect>
+                            <DropShadowEffect Color="#0078D4" 
+                                            BlurRadius="6" 
+                                            ShadowDepth="0" 
+                                            Opacity="0.5"/>
+                        </Rectangle.Effect>
+                    </Rectangle>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ========================================
          BUTTON STYLES
          ======================================== -->
@@ -183,7 +257,7 @@
         <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -210,7 +284,7 @@
                             <Setter TargetName="border" Property="Background" Value="{StaticResource PrimaryLightBrush}"/>
                             <Setter TargetName="border" Property="RenderTransform">
                                 <Setter.Value>
-                                    <ScaleTransform ScaleX="1.02" ScaleY="1.02"/>
+                                    <ScaleTransform ScaleX="1.01" ScaleY="1.01"/>
                                 </Setter.Value>
                             </Setter>
                             <Setter TargetName="border" Property="RenderTransformOrigin" Value="0.5,0.5"/>
@@ -244,7 +318,7 @@
         <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -268,7 +342,7 @@
                             <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
                             <Setter TargetName="border" Property="RenderTransform">
                                 <Setter.Value>
-                                    <ScaleTransform ScaleX="1.02" ScaleY="1.02"/>
+                                    <ScaleTransform ScaleX="1.01" ScaleY="1.01"/>
                                 </Setter.Value>
                             </Setter>
                             <Setter TargetName="border" Property="RenderTransformOrigin" Value="0.5,0.5"/>
@@ -302,7 +376,7 @@
         <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -329,7 +403,7 @@
                             <Setter TargetName="border" Property="Background" Value="#E04347"/>
                             <Setter TargetName="border" Property="RenderTransform">
                                 <Setter.Value>
-                                    <ScaleTransform ScaleX="1.02" ScaleY="1.02"/>
+                                    <ScaleTransform ScaleX="1.01" ScaleY="1.01"/>
                                 </Setter.Value>
                             </Setter>
                             <Setter TargetName="border" Property="RenderTransformOrigin" Value="0.5,0.5"/>
@@ -380,8 +454,9 @@
     <Style x:Key="Card" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
         <Setter Property="CornerRadius" Value="8"/>
-        <Setter Property="Padding" Value="24"/>
+        <Setter Property="Padding" Value="{StaticResource SpacingL}"/>
         <Setter Property="Margin" Value="0"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="Effect">
             <Setter.Value>
                 <DropShadowEffect Color="#000000" BlurRadius="8" ShadowDepth="2" Opacity="0.1"/>
@@ -393,7 +468,7 @@
     
     <!-- Metric Card (for dashboard stats) -->
     <Style x:Key="MetricCard" TargetType="Border" BasedOn="{StaticResource Card}">
-        <Setter Property="Padding" Value="16"/>
+        <Setter Property="Padding" Value="{StaticResource SpacingM}"/>
         <Setter Property="Effect">
             <Setter.Value>
                 <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.08"/>
@@ -516,6 +591,7 @@
                 <Style TargetType="DataGridRow">
                     <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
                     <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
                     <Style.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
@@ -782,7 +858,7 @@
     
     <Style x:Key="LoadingOverlay" TargetType="Grid">
         <Setter Property="Background" Value="#80FFFFFF"/>
-        <Setter Property="Panel.ZIndex" Value="999"/>
+        <Setter Property="ZIndex" Value="999"/>
     </Style>
     
     <!-- ========================================
@@ -822,7 +898,6 @@
     
     <Style x:Key="EmptyStateIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
         <Setter Property="FontSize" Value="64"/>
-        <Setter Property="HorizontalAlignment" Value="Center"/>
         <Setter Property="Foreground" Value="{StaticResource TextTertiaryBrush}"/>
         <Setter Property="Margin" Value="0,0,0,16"/>
     </Style>
@@ -887,7 +962,12 @@
     
     <!-- Input Container (for grouping label + input + helper text) -->
     <Style x:Key="InputContainer" TargetType="StackPanel">
-        <Setter Property="Margin" Value="0,0,0,20"/>
+        <Setter Property="Margin" Value="0,0,0,16"/>
+    </Style>
+    
+    <!-- Compact Input Container (for denser forms) -->
+    <Style x:Key="InputContainerCompact" TargetType="StackPanel">
+        <Setter Property="Margin" Value="0,0,0,12"/>
     </Style>
     
     <!-- ========================================
@@ -902,7 +982,8 @@
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
+        <Setter Property="KeyboardNavigation.TabNavigation" Value="Local"/>
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
         <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
         <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
@@ -981,9 +1062,14 @@
                         <Trigger Property="IsFocused" Value="True">
                             <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
                             <Setter TargetName="border" Property="BorderThickness" Value="2"/>
+                            <Setter TargetName="border" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#0078D4" BlurRadius="8" ShadowDepth="0" Opacity="0.3"/>
+                                </Setter.Value>
+                            </Setter>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="border" Property="Opacity" Value="0.6"/>
+                            <Setter TargetName="border" Property="Opacity" Value="0.5"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -1034,7 +1120,8 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="HorizontalContentAlignment" Value="Left"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
+        <Setter Property="KeyboardNavigation.TabNavigation" Value="Local"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
@@ -1057,9 +1144,15 @@
                         <Trigger Property="IsFocused" Value="True">
                             <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
                             <Setter TargetName="border" Property="BorderThickness" Value="2"/>
+                            <Setter TargetName="border" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect Color="#0078D4" BlurRadius="8" ShadowDepth="0" Opacity="0.3"/>
+                                </Setter.Value>
+                            </Setter>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="border" Property="Opacity" Value="0.6"/>
+                            <Setter TargetName="border" Property="Opacity" Value="0.5"/>
+                            <Setter Property="Foreground" Value="{StaticResource TextTertiaryBrush}"/>
                         </Trigger>
                         <Trigger Property="Validation.HasError" Value="True">
                             <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource ErrorBrush}"/>
@@ -1072,21 +1165,92 @@
     </Style>
     
     <!-- ========================================
-         ENHANCED FOCUS VISUAL STYLE
+         TOOLTIP STYLE
          ======================================== -->
     
-    <Style x:Key="ModernFocusVisual">
-        <Setter Property="Control.Template">
+    <Style TargetType="ToolTip">
+        <Setter Property="Background" Value="{StaticResource TextPrimaryBrush}"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="12,8"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="MaxWidth" Value="300"/>
+        <Setter Property="HasDropShadow" Value="True"/>
+        <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate>
-                    <Rectangle Margin="2"
-                             StrokeThickness="2"
-                             Stroke="{StaticResource PrimaryBrush}"
-                             StrokeDashArray="1 2"
-                             SnapsToDevicePixels="True"/>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#000000" BlurRadius="8" ShadowDepth="2" Opacity="0.3"/>
+                        </Border.Effect>
+                        <ContentPresenter TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- ========================================
+         ANIMATION DURATIONS & EASING
+         ======================================== -->
+    
+    <Duration x:Key="FastAnimation">0:0:0.15</Duration>
+    <Duration x:Key="MediumAnimation">0:0:0.2</Duration>
+    <Duration x:Key="SlowAnimation">0:0:0.3</Duration>
+    
+    <!-- Easing Functions -->
+    <CubicEase x:Key="EaseOut" EasingMode="EaseOut"/>
+    <CubicEase x:Key="EaseInOut" EasingMode="EaseInOut"/>
+    <QuadraticEase x:Key="QuadraticEaseOut" EasingMode="EaseOut"/>
+    
+    <!-- ========================================
+         ANIMATION STORYBOARDS
+         ======================================== -->
+    
+    <!-- Note: Button scale animations are implemented directly in button style triggers -->
+    <!-- Future animations can be added here as reusable storyboard resources -->
+
+    <!-- ========================================
+         RESPONSIVE LAYOUT HELPERS
+         ======================================== -->
+    
+    <!-- Min/Max Width Constraints for Main Content -->
+    <sys:Double x:Key="ContentMinWidth">650</sys:Double>
+    <sys:Double x:Key="ContentMaxWidth">1200</sys:Double>
+    <sys:Double x:Key="FormMaxWidth">900</sys:Double>
+    <sys:Double x:Key="DialogMaxWidth">1000</sys:Double>
+    
+    <!-- Page Container Style -->
+    <Style x:Key="PageContainer" TargetType="Grid">
+        <Setter Property="Margin" Value="{StaticResource SpacingL}"/>
+    </Style>
+    
+    <!-- Responsive Card Grid (for dashboard cards) -->
+    <Style x:Key="ResponsiveCardGrid" TargetType="Grid">
+        <Setter Property="Margin" Value="0"/>
+    </Style>
+
+    <!-- ========================================
+         ENHANCED ACCESSIBILITY
+         ======================================== -->
+    
+    <!-- Screen Reader Only Style (for hidden labels) -->
+    <Style x:Key="ScreenReaderOnly" TargetType="TextBlock">
+        <Setter Property="Width" Value="1"/>
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Margin" Value="-1"/>
+        <Setter Property="Clip">
+            <Setter.Value>
+                <RectangleGeometry Rect="0,0,1,1"/>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Opacity" Value="0"/>
     </Style>
 
 </ResourceDictionary>

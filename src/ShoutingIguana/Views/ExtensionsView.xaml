@@ -4,53 +4,95 @@
              Background="{StaticResource BackgroundBrush}">
     
     
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Margin="{StaticResource SpacingL}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  KeyboardNavigation.TabNavigation="Local"
+                  Focusable="False">
+        <Grid Margin="{StaticResource SpacingL}" KeyboardNavigation.TabNavigation="Local">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
+                <RowDefinition Height="*" MinHeight="400"/>
             </Grid.RowDefinitions>
 
             <!-- Header -->
-            <Grid Grid.Row="0" Margin="{StaticResource SpacingL}">
-                <TextBlock Text="Extensions" 
-                           Style="{StaticResource DisplayTextStyle}"
-                           VerticalAlignment="Center"
-                           AutomationProperties.HeadingLevel="Level1"
-                           AutomationProperties.AutomationId="ExtensionsPageHeading"/>
-            </Grid>
+            <Border Grid.Row="0"
+                    Background="{StaticResource SurfaceBrush}"
+                    CornerRadius="8"
+                    Padding="24"
+                    Margin="0,0,0,24"
+                    SnapsToDevicePixels="True">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="8" ShadowDepth="2" Opacity="0.06"/>
+                </Border.Effect>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="{StaticResource PrimaryBrush}"
+                            Width="44" Height="44"
+                            CornerRadius="8"
+                            Margin="0,0,16,0">
+                        <TextBlock Text="{StaticResource Icon.Puzzle}"
+                                   Style="{StaticResource Icon}"
+                                   FontSize="22"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Extensions" 
+                                   Style="{StaticResource DisplayTextStyle}"
+                                   FontSize="24"
+                                   Margin="0"
+                                   AutomationProperties.HeadingLevel="Level1"
+                                   AutomationProperties.LiveSetting="Off"
+                                   AutomationProperties.AutomationId="ExtensionsPageHeading"/>
+                        <TextBlock Text="Manage analysis plugins and tasks"
+                                   Style="{StaticResource BodyTextStyle}"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
 
             <!-- Summary Metrics -->
             <Grid Grid.Row="1" Margin="0,0,0,24">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="24"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="24"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Loaded Plugins Card -->
                 <Border Grid.Column="0" 
-                        Style="{StaticResource MetricCard}"
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
                         BorderBrush="{StaticResource PrimaryBrush}"
-                        BorderThickness="4,0,0,0">
+                        BorderThickness="0,0,0,4"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock Text="{StaticResource Icon.Puzzle}"
-                                       Style="{StaticResource Icon}"
-                                       Width="20" 
-                                       Height="20"
-                                       FontSize="20"
-                                       Foreground="{StaticResource PrimaryBrush}"
-                                       Margin="0,0,8,0"/>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                            <Border Background="{StaticResource PrimaryBrush}"
+                                    Width="32" Height="32"
+                                    CornerRadius="6"
+                                    Margin="0,0,10,0">
+                                <TextBlock Text="{StaticResource Icon.Puzzle}"
+                                           Style="{StaticResource Icon}"
+                                           FontSize="16"
+                                           Foreground="White"/>
+                            </Border>
                             <TextBlock Text="Loaded Plugins"
                                        Style="{StaticResource BodyTextStyle}"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
@@ -58,32 +100,42 @@
                                    Text="{Binding TotalPlugins}"
                                    Style="{StaticResource DisplayTextStyle}"
                                    FontSize="36"
+                                   FontWeight="Bold"
                                    Foreground="{StaticResource PrimaryBrush}"/>
                     </Grid>
                 </Border>
 
                 <!-- Registered Tasks Card -->
                 <Border Grid.Column="2" 
-                        Style="{StaticResource MetricCard}"
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
                         BorderBrush="{StaticResource SuccessBrush}"
-                        BorderThickness="4,0,0,0">
+                        BorderThickness="0,0,0,4"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock Text="{StaticResource Icon.CheckList}"
-                                       Style="{StaticResource Icon}"
-                                       Width="20" 
-                                       Height="20"
-                                       FontSize="20"
-                                       Foreground="{StaticResource SuccessBrush}"
-                                       Margin="0,0,8,0"/>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                            <Border Background="{StaticResource SuccessBrush}"
+                                    Width="32" Height="32"
+                                    CornerRadius="6"
+                                    Margin="0,0,10,0">
+                                <TextBlock Text="{StaticResource Icon.CheckList}"
+                                           Style="{StaticResource Icon}"
+                                           FontSize="16"
+                                           Foreground="White"/>
+                            </Border>
                             <TextBlock Text="Registered Tasks"
                                        Style="{StaticResource BodyTextStyle}"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
@@ -91,20 +143,49 @@
                                    Text="{Binding TotalTasks}"
                                    Style="{StaticResource DisplayTextStyle}"
                                    FontSize="36"
+                                   FontWeight="Bold"
                                    Foreground="{StaticResource SuccessBrush}"/>
                     </Grid>
+                </Border>
+                
+                <!-- Stage 2 Info Card -->
+                <Border Grid.Column="4"
+                        Background="#E3F2FD"
+                        CornerRadius="8"
+                        Padding="20"
+                        SnapsToDevicePixels="True">
+                    <StackPanel VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="{StaticResource Icon.Info}"
+                                       Style="{StaticResource Icon}"
+                                       FontSize="16"
+                                       Foreground="{StaticResource InfoBrush}"
+                                       Margin="0,0,8,0"/>
+                            <TextBlock Text="Stage 2"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource InfoBrush}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock Text="Hot-loading available in Stage 3"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
                 </Border>
             </Grid>
 
             <!-- Plugins List -->
             <Border Grid.Row="2" 
                     Style="{StaticResource Card}"
-                    Padding="4">
+                    Padding="{StaticResource SpacingXs}"
+                    SnapsToDevicePixels="True">
                 <Grid>
                     <DataGrid ItemsSource="{Binding Plugins}"
                               Style="{StaticResource ModernDataGrid}"
                               AutomationProperties.Name="Plugins List"
-                              AutomationProperties.HelpText="List of installed plugins with their status and information">
+                              AutomationProperties.HelpText="List of installed plugins with their status and information"
+                              KeyboardNavigation.TabNavigation="Local">
                         <DataGrid.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Copy Plugin ID" 
@@ -186,15 +267,37 @@
                     </DataGrid>
                     
                     <!-- Empty State -->
-                    <StackPanel Style="{StaticResource EmptyStateContainer}"
-                                Visibility="Collapsed">
-                        <TextBlock Text="{StaticResource Icon.Puzzle}"
-                                   Style="{StaticResource EmptyStateIcon}"/>
-                        <TextBlock Text="No Plugins Loaded"
-                                   Style="{StaticResource EmptyStateTitle}"/>
-                        <TextBlock Text="Plugins will appear here when they are loaded"
-                                   Style="{StaticResource EmptyStateMessage}"/>
-                    </StackPanel>
+                    <Border Style="{StaticResource InfoCard}"
+                            Padding="48"
+                            Visibility="Collapsed"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            MaxWidth="500">
+                        <StackPanel HorizontalAlignment="Center">
+                            <Border Background="{StaticResource InfoBrush}"
+                                    Width="80" Height="80"
+                                    CornerRadius="40"
+                                    Margin="0,0,0,24"
+                                    HorizontalAlignment="Center">
+                                <TextBlock Text="{StaticResource Icon.Puzzle}"
+                                           Style="{StaticResource Icon}"
+                                           FontSize="40"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="No Plugins Loaded"
+                                       Style="{StaticResource TitleTextStyle}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,12"/>
+                            <TextBlock Text="Plugins will automatically load when the application starts. If you don't see any plugins, check the application logs for errors."
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="400"/>
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </Border>
         </Grid>

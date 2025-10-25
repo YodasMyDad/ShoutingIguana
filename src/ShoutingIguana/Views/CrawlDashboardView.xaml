@@ -3,9 +3,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="{StaticResource BackgroundBrush}">
     
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Margin="{StaticResource SpacingL}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  KeyboardNavigation.TabNavigation="Local"
+                  Focusable="False">
+        <Grid Margin="{StaticResource SpacingL}" KeyboardNavigation.TabNavigation="Local">
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -14,43 +17,129 @@
                     </Grid.RowDefinitions>
 
             <!-- Header -->
-            <Grid Grid.Row="0" Margin="{StaticResource SpacingL}">
-                <TextBlock Text="Crawl Progress"
-                           Style="{StaticResource DisplayTextStyle}"
-                           VerticalAlignment="Center"
-                           AutomationProperties.HeadingLevel="Level1"
-                           AutomationProperties.AutomationId="CrawlProgressHeading"/>
-            </Grid>
-
-            <!-- Progress Bar Card -->
-            <Border Grid.Row="1" 
-                    Style="{StaticResource StandardCard}"
-                    Margin="0,0,0,24">
-                <StackPanel>
-                    <Grid Margin="0,0,0,12">
-                        <TextBlock Text="Overall Progress"
-                                   Style="{StaticResource TitleTextStyle}"
-                                   VerticalAlignment="Center"
-                                   AutomationProperties.HeadingLevel="Level2"/>
-                        <TextBlock Text="{Binding ProgressPercentage, StringFormat={}{0:F1}%}"
+            <Border Grid.Row="0"
+                    Background="{StaticResource SurfaceBrush}"
+                    CornerRadius="8"
+                    Padding="24"
+                    Margin="0,0,0,24"
+                    SnapsToDevicePixels="True">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="8" ShadowDepth="2" Opacity="0.06"/>
+                </Border.Effect>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="{StaticResource SuccessBrush}"
+                            Width="44" Height="44"
+                            CornerRadius="8"
+                            Margin="0,0,16,0">
+                        <TextBlock Text="{StaticResource Icon.CheckCircle}"
+                                   Style="{StaticResource Icon}"
+                                   FontSize="22"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Crawl Progress"
                                    Style="{StaticResource DisplayTextStyle}"
                                    FontSize="24"
-                                   HorizontalAlignment="Right"
-                                   VerticalAlignment="Center"
-                                   Foreground="{StaticResource PrimaryBrush}"
-                                   AutomationProperties.Name="Progress Percentage"/>
-                    </Grid>
-                    
-                    <ProgressBar Value="{Binding ProgressPercentage}"
-                                 Maximum="100"
-                                 Style="{StaticResource ModernProgressBar}"
-                                 Margin="0,8,0,0"
-                                 AutomationProperties.Name="Crawl Progress Bar"/>
+                                   Margin="0"
+                                   AutomationProperties.HeadingLevel="Level1"
+                                   AutomationProperties.LiveSetting="Polite"
+                                   AutomationProperties.AutomationId="CrawlProgressHeading"/>
+                        <TextBlock Text="Real-time crawling statistics and activity"
+                                   Style="{StaticResource BodyTextStyle}"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 
+            <!-- Empty State (when not crawling and no data) -->
+            <Border Grid.Row="1" 
+                    Style="{StaticResource InfoCard}"
+                    Margin="0,0,0,24"
+                    SnapsToDevicePixels="True"
+                    Visibility="{Binding TotalDiscovered, Converter={StaticResource InverseInt32ToVisibilityConverter}}"
+                    x:Name="EmptyStateCard">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="{StaticResource Icon.Info}"
+                                   Style="{StaticResource Icon}"
+                                   Width="20" Height="20"
+                                   FontSize="20"
+                                   Foreground="{StaticResource InfoBrush}"
+                                   Margin="0,0,8,0"/>
+                        <TextBlock Text="Ready to Crawl" 
+                                   Style="{StaticResource TitleTextStyle}"
+                                   FontSize="16"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="Configure your project settings and click 'Start Crawl' to begin analyzing your website."
+                               TextWrapping="Wrap"
+                               Style="{StaticResource BodyTextStyle}"
+                               Margin="28,0,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Progress Bar Card -->
+            <Border Grid.Row="2" 
+                    Style="{StaticResource StandardCard}"
+                    Padding="32"
+                    Margin="0,0,0,24"
+                    SnapsToDevicePixels="True">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    
+                    <Grid Grid.Row="0" Margin="0,0,0,20">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Background="{StaticResource PrimaryBrush}"
+                                    Width="36" Height="36"
+                                    CornerRadius="6"
+                                    Margin="0,0,12,0">
+                                <TextBlock Text="📊"
+                                           FontSize="20"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="Overall Progress"
+                                       Style="{StaticResource TitleTextStyle}"
+                                       FontSize="18"
+                                       VerticalAlignment="Center"
+                                       AutomationProperties.HeadingLevel="Level2"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding ProgressPercentage, StringFormat={}{0:F1}%}"
+                                   Style="{StaticResource DisplayTextStyle}"
+                                   FontSize="36"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource PrimaryBrush}"
+                                   FontWeight="Bold"
+                                   AutomationProperties.Name="Progress Percentage"/>
+                    </Grid>
+                    
+                    <StackPanel Grid.Row="1">
+                        <ProgressBar Value="{Binding ProgressPercentage}"
+                                     Maximum="100"
+                                     Height="16"
+                                     Style="{StaticResource ModernProgressBar}"
+                                     AutomationProperties.Name="Crawl Progress Bar"/>
+                        <Grid Margin="0,8,0,0">
+                            <TextBlock Text="0%"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       HorizontalAlignment="Left"/>
+                            <TextBlock Text="100%"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       HorizontalAlignment="Right"/>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
             <!-- Metric Cards Grid -->
-            <Grid Grid.Row="2" Margin="0,0,0,24">
+            <Grid Grid.Row="3" Margin="0,0,0,24">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="16"/>
@@ -66,287 +155,380 @@
 
                 <!-- URLs Crawled Card -->
                 <Border Grid.Row="0" Grid.Column="0" 
-                        Style="{StaticResource MetricCard}"
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
                         BorderBrush="{StaticResource SuccessBrush}"
-                        BorderThickness="4,0,0,0">
+                        BorderThickness="0,0,0,4"
+                        SnapsToDevicePixels="True"
+                        AutomationProperties.Name="URLs Crawled Metric"
+                        AutomationProperties.LiveSetting="Polite">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock Text="{StaticResource Icon.CheckCircle}"
-                                       Style="{StaticResource Icon}"
-                                       Width="20" 
-                                       Height="20"
-                                       FontSize="20"
-                                       Foreground="{StaticResource SuccessBrush}"
-                                       Margin="0,0,8,0"/>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                            <Border Background="{StaticResource SuccessBrush}"
+                                    Width="32" Height="32"
+                                    CornerRadius="6"
+                                    Margin="0,0,10,0">
+                                <TextBlock Text="{StaticResource Icon.CheckCircle}"
+                                           Style="{StaticResource Icon}"
+                                           FontSize="16"
+                                           Foreground="White"/>
+                            </Border>
                             <TextBlock Text="URLs Crawled"
                                        Style="{StaticResource BodyTextStyle}"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
                         <TextBlock Grid.Row="1"
                                    Text="{Binding UrlsCrawled}"
                                    Style="{StaticResource DisplayTextStyle}"
-                                   FontSize="32"
-                                   Foreground="{StaticResource SuccessBrush}"/>
+                                   FontSize="36"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource SuccessBrush}"
+                                   AutomationProperties.LiveSetting="Polite"
+                                   AutomationProperties.Name="URLs Crawled Count"/>
                     </Grid>
                 </Border>
 
                 <!-- Total Discovered Card -->
                 <Border Grid.Row="0" Grid.Column="2" 
-                        Style="{StaticResource MetricCard}"
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
                         BorderBrush="{StaticResource InfoBrush}"
-                        BorderThickness="4,0,0,0">
+                        BorderThickness="0,0,0,4"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock Text="{StaticResource Icon.Link}"
-                                       Style="{StaticResource Icon}"
-                                       Width="20" 
-                                       Height="20"
-                                       FontSize="20"
-                                       Foreground="{StaticResource InfoBrush}"
-                                       Margin="0,0,8,0"/>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                            <Border Background="{StaticResource InfoBrush}"
+                                    Width="32" Height="32"
+                                    CornerRadius="6"
+                                    Margin="0,0,10,0">
+                                <TextBlock Text="{StaticResource Icon.Link}"
+                                           Style="{StaticResource Icon}"
+                                           FontSize="16"
+                                           Foreground="White"/>
+                            </Border>
                             <TextBlock Text="Total Discovered"
                                        Style="{StaticResource BodyTextStyle}"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
                         <TextBlock Grid.Row="1"
                                    Text="{Binding TotalDiscovered}"
                                    Style="{StaticResource DisplayTextStyle}"
-                                   FontSize="32"
+                                   FontSize="36"
+                                   FontWeight="Bold"
                                    Foreground="{StaticResource InfoBrush}"/>
                     </Grid>
                 </Border>
 
                 <!-- Queue Size Card -->
                 <Border Grid.Row="0" Grid.Column="4" 
-                        Style="{StaticResource MetricCard}"
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
                         BorderBrush="{StaticResource PrimaryBrush}"
-                        BorderThickness="4,0,0,0">
+                        BorderThickness="0,0,0,4"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock Text="{StaticResource Icon.List}"
-                                       Style="{StaticResource Icon}"
-                                       Width="20" 
-                                       Height="20"
-                                       FontSize="20"
-                                       Foreground="{StaticResource PrimaryBrush}"
-                                       Margin="0,0,8,0"/>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                            <Border Background="{StaticResource PrimaryBrush}"
+                                    Width="32" Height="32"
+                                    CornerRadius="6"
+                                    Margin="0,0,10,0">
+                                <TextBlock Text="{StaticResource Icon.List}"
+                                           Style="{StaticResource Icon}"
+                                           FontSize="16"
+                                           Foreground="White"/>
+                            </Border>
                             <TextBlock Text="Queue Size"
                                        Style="{StaticResource BodyTextStyle}"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
                         <TextBlock Grid.Row="1"
                                    Text="{Binding QueueSize}"
                                    Style="{StaticResource DisplayTextStyle}"
-                                   FontSize="32"
+                                   FontSize="36"
+                                   FontWeight="Bold"
                                    Foreground="{StaticResource PrimaryBrush}"/>
                     </Grid>
                 </Border>
 
                 <!-- Active Workers Card -->
                 <Border Grid.Row="2" Grid.Column="0" 
-                        Style="{StaticResource MetricCard}">
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock Text="{StaticResource Icon.Cog}"
-                                       Style="{StaticResource Icon}"
-                                       Width="20" 
-                                       Height="20"
-                                       FontSize="20"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                       Margin="0,0,8,0"/>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                            <Border Background="{StaticResource TextSecondaryBrush}"
+                                    Width="32" Height="32"
+                                    CornerRadius="6"
+                                    Margin="0,0,10,0">
+                                <TextBlock Text="{StaticResource Icon.Cog}"
+                                           Style="{StaticResource Icon}"
+                                           FontSize="16"
+                                           Foreground="White"/>
+                            </Border>
                             <TextBlock Text="Active Workers"
                                        Style="{StaticResource BodyTextStyle}"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
                         <TextBlock Grid.Row="1"
                                    Text="{Binding ActiveWorkers}"
                                    Style="{StaticResource DisplayTextStyle}"
-                                   FontSize="32"/>
+                                   FontSize="36"
+                                   FontWeight="Bold"/>
                 </Grid>
                 </Border>
 
                 <!-- Errors Card -->
                 <Border Grid.Row="2" Grid.Column="2" 
-                        Style="{StaticResource MetricCard}"
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
                         BorderBrush="{StaticResource ErrorBrush}"
-                        BorderThickness="4,0,0,0">
+                        BorderThickness="0,0,0,4"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock Text="{StaticResource Icon.AlertCircle}"
-                                       Style="{StaticResource Icon}"
-                                       Width="20" 
-                                       Height="20"
-                                       FontSize="20"
-                                       Foreground="{StaticResource ErrorBrush}"
-                                       Margin="0,0,8,0"/>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                            <Border Background="{StaticResource ErrorBrush}"
+                                    Width="32" Height="32"
+                                    CornerRadius="6"
+                                    Margin="0,0,10,0">
+                                <TextBlock Text="{StaticResource Icon.AlertCircle}"
+                                           Style="{StaticResource Icon}"
+                                           FontSize="16"
+                                           Foreground="White"/>
+                            </Border>
                             <TextBlock Text="Errors"
                                        Style="{StaticResource BodyTextStyle}"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
                         <TextBlock Grid.Row="1"
                                    Text="{Binding ErrorCount}"
                                    Style="{StaticResource DisplayTextStyle}"
-                                   FontSize="32"
+                                   FontSize="36"
+                                   FontWeight="Bold"
                                    Foreground="{StaticResource ErrorBrush}"/>
                     </Grid>
                 </Border>
 
                 <!-- Elapsed Time Card -->
                 <Border Grid.Row="2" Grid.Column="4" 
-                        Style="{StaticResource MetricCard}">
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock Text="{StaticResource Icon.Clock}"
-                                       Style="{StaticResource Icon}"
-                                       Width="20" 
-                                       Height="20"
-                                       FontSize="20"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                       Margin="0,0,8,0"/>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                            <Border Background="{StaticResource TextSecondaryBrush}"
+                                    Width="32" Height="32"
+                                    CornerRadius="6"
+                                    Margin="0,0,10,0">
+                                <TextBlock Text="{StaticResource Icon.Clock}"
+                                           Style="{StaticResource Icon}"
+                                           FontSize="16"
+                                           Foreground="White"/>
+                            </Border>
                             <TextBlock Text="Elapsed Time"
                                        Style="{StaticResource BodyTextStyle}"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
                         <TextBlock Grid.Row="1"
                                    Text="{Binding ElapsedTime}"
-                                   Style="{StaticResource TitleTextStyle}"
-                                   FontSize="18"/>
+                                   Style="{StaticResource DisplayTextStyle}"
+                                   FontSize="24"
+                                   FontWeight="Bold"
+                                   FontFamily="Consolas"/>
                     </Grid>
                 </Border>
             </Grid>
 
             <!-- Recent Activity Card -->
-            <Border Grid.Row="3" 
+            <Border Grid.Row="4" 
                     Style="{StaticResource StandardCard}"
-                    Margin="0,0,0,24">
+                    Padding="24"
+                    Margin="0,0,0,32"
+                    SnapsToDevicePixels="True">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     
-                    <TextBlock Grid.Row="0"
-                               Text="Recent Activity"
-                               Style="{StaticResource TitleTextStyle}"
-                               Margin="0,0,0,12"
-                               AutomationProperties.HeadingLevel="Level2"/>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+                        <Border Background="{StaticResource InfoBrush}"
+                                Width="32" Height="32"
+                                CornerRadius="6"
+                                Margin="0,0,12,0">
+                            <TextBlock Text="{StaticResource Icon.Web}"
+                                       Style="{StaticResource Icon}"
+                                       FontSize="16"
+                                       Foreground="White"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Recent Activity"
+                                       Style="{StaticResource TitleTextStyle}"
+                                       FontSize="16"
+                                       Margin="0"
+                                       AutomationProperties.HeadingLevel="Level2"
+                                       AutomationProperties.LiveSetting="Polite"/>
+                            <TextBlock Text="Most recently crawled URL"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
                     
                     <Border Grid.Row="1"
                             Background="{StaticResource SurfaceAltBrush}"
+                            BorderBrush="{StaticResource BorderLightBrush}"
+                            BorderThickness="1"
                             CornerRadius="6"
-                            Padding="16,12">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        
-                        <TextBlock Text="{StaticResource Icon.Web}"
-                                   Style="{StaticResource Icon}"
-                                   Grid.Column="0"
-                                   Width="18"
-                                   Height="18"
-                                   FontSize="18"
-                                   Margin="0,0,12,0"
-                                   Foreground="{StaticResource PrimaryBrush}"/>
-                        
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding RecentActivity}"
+                            Padding="16"
+                            SnapsToDevicePixels="True">
+                        <TextBlock Text="{Binding RecentActivity}"
                                    VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis"
-                                       Style="{StaticResource BodyTextStyle}"
-                                       FontFamily="Consolas"/>
-                    </Grid>
-                </Border>
+                                   Style="{StaticResource BodyTextStyle}"
+                                   FontFamily="Consolas"
+                                   FontSize="13"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   ToolTip="{Binding RecentActivity}"/>
+                    </Border>
                 </Grid>
             </Border>
 
             <!-- Action Buttons -->
-            <StackPanel Grid.Row="4" 
-                        Orientation="Horizontal" 
-                        HorizontalAlignment="Center">
-                <Button Command="{Binding StartCrawlCommand}"
-                        IsEnabled="{Binding IsCrawling, Converter={StaticResource InverseBooleanConverter}}"
-                        Style="{StaticResource PrimaryButton}"
-                        Padding="32,12"
-                        Margin="0,0,12,0"
-                        TabIndex="0"
-                        IsDefault="True"
-                        AutomationProperties.Name="Start Crawl"
-                        ToolTip="Begin crawling">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{StaticResource Icon.Play}"
-                                   Style="{StaticResource Icon}"
-                                   Width="18" 
-                                   Height="18"
-                                   FontSize="18"
-                                   Margin="0,0,8,0"/>
-                        <TextBlock Text="Start Crawl" 
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                
-                <Button Command="{Binding StopCrawlCommand}"
-                        IsEnabled="{Binding IsCrawling}"
-                        Style="{StaticResource DangerButton}"
-                        Padding="32,12"
-                        TabIndex="1"
-                        AutomationProperties.Name="Stop Crawl"
-                        ToolTip="Stop the current crawl">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{StaticResource Icon.Stop}"
-                                   Style="{StaticResource Icon}"
-                                   Width="18" 
-                                   Height="18"
-                                   FontSize="18"
-                                   Margin="0,0,8,0"/>
-                        <TextBlock Text="Stop Crawl" 
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-            </StackPanel>
+            <Border Grid.Row="5"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderLightBrush}"
+                    BorderThickness="0,1,0,0"
+                    Padding="24"
+                    CornerRadius="0,0,8,8"
+                    SnapsToDevicePixels="True">
+                <StackPanel Orientation="Horizontal" 
+                            HorizontalAlignment="Center"
+                            KeyboardNavigation.TabNavigation="Local">
+                    <Button Command="{Binding StartCrawlCommand}"
+                            IsEnabled="{Binding IsCrawling, Converter={StaticResource InverseBooleanConverter}}"
+                            Style="{StaticResource PrimaryButton}"
+                            Height="56"
+                            Padding="40,16"
+                            MinWidth="180"
+                            Margin="0,0,16,0"
+                            TabIndex="0"
+                            IsDefault="True"
+                            AutomationProperties.Name="Start Crawl"
+                            AutomationProperties.HelpText="Begin crawling the website with current configuration"
+                            ToolTip="Begin crawling (F6)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{StaticResource Icon.Play}"
+                                       Style="{StaticResource Icon}"
+                                       Width="20" 
+                                       Height="20"
+                                       FontSize="20"
+                                       Margin="0,0,10,0"/>
+                            <TextBlock Text="Start Crawl" 
+                                       VerticalAlignment="Center"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <Button Command="{Binding StopCrawlCommand}"
+                            IsEnabled="{Binding IsCrawling}"
+                            Style="{StaticResource DangerButton}"
+                            Height="56"
+                            Padding="40,16"
+                            MinWidth="180"
+                            TabIndex="1"
+                            AutomationProperties.Name="Stop Crawl"
+                            AutomationProperties.HelpText="Stops the current crawl operation immediately"
+                            ToolTip="Stop the current crawl (F8)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{StaticResource Icon.Stop}"
+                                       Style="{StaticResource Icon}"
+                                       Width="20" 
+                                       Height="20"
+                                       FontSize="20"
+                                       Margin="0,0,10,0"/>
+                            <TextBlock Text="Stop Crawl" 
+                                       VerticalAlignment="Center"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
     </Grid>
     </ScrollViewer>
 </UserControl>

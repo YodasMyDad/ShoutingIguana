@@ -5,16 +5,19 @@
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              Background="{StaticResource BackgroundBrush}">
     
-    <Grid>
+    <Grid KeyboardNavigation.TabNavigation="Local">
         <!-- Loading Overlay (during initialization) -->
         <Grid Style="{StaticResource LoadingOverlay}"
-              Visibility="{Binding DataContext.IsInitializing, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <Border Padding="48" 
+              Visibility="{Binding DataContext.IsInitializing, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}"
+              KeyboardNavigation.TabNavigation="None"
+              Focusable="False">
+            <Border Padding="{StaticResource SpacingXxl}" 
                     MaxWidth="450"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Background="{StaticResource SurfaceBrush}"
-                    CornerRadius="12">
+                    CornerRadius="12"
+                    SnapsToDevicePixels="True">
                 <Border.Effect>
                     <DropShadowEffect Color="#000000" 
                                       BlurRadius="32" 
@@ -53,28 +56,31 @@
                     <TextBlock Text="Initializing Application" 
                                Style="{StaticResource TitleTextStyle}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,8"
-                               AutomationProperties.LiveSetting="Polite"/>
+                               Margin="{StaticResource SpacingS}"
+                               AutomationProperties.LiveSetting="Polite"
+                               AutomationProperties.HeadingLevel="Level1"/>
                     
                     <!-- Subtitle -->
                     <TextBlock Text="Setting up Playwright and plugins..." 
                                Style="{StaticResource BodyTextStyle}"
                                Foreground="{StaticResource TextSecondaryBrush}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,24"/>
+                               Margin="{StaticResource SpacingL}"/>
                     
                     <!-- Progress Bar -->
                     <ProgressBar IsIndeterminate="True" 
                                  Height="4"
                                  Style="{StaticResource ModernProgressBar}"
-                                 Margin="0"/>
+                                 Margin="0"
+                                 AutomationProperties.Name="Initialization Progress"
+                                 AutomationProperties.LiveSetting="Polite"/>
                     
                     <!-- Status Text -->
                     <TextBlock Text="This may take a moment on first run" 
                                Style="{StaticResource CaptionTextStyle}"
                                Foreground="{StaticResource TextTertiaryBrush}"
                                HorizontalAlignment="Center"
-                               Margin="0,16,0,0"/>
+                               Margin="{StaticResource SpacingM}"/>
                 </StackPanel>
             </Border>
         </Grid>
@@ -82,13 +88,15 @@
         <!-- Welcome Screen -->
         <Grid Visibility="{Binding IsWelcomeScreen, Converter={StaticResource BooleanToVisibilityConverter}}"
               HorizontalAlignment="Center"
-              VerticalAlignment="Center">
+              VerticalAlignment="Center"
+              KeyboardNavigation.TabNavigation="Local">
             
-            <Border Padding="48" 
-                    Margin="16" 
+            <Border Padding="{StaticResource SpacingXxl}" 
+                    Margin="{StaticResource SpacingM}" 
                     MaxWidth="500"
                     Background="{StaticResource SurfaceBrush}"
-                    CornerRadius="12">
+                    CornerRadius="12"
+                    SnapsToDevicePixels="True">
                 <Border.Effect>
                     <DropShadowEffect Color="#000000" 
                                       BlurRadius="24" 
@@ -113,17 +121,20 @@
                     </EventTrigger>
                 </Border.Triggers>
                 
-                <StackPanel>
+                <StackPanel KeyboardNavigation.TabNavigation="Local">
                     <Image Source="/Assets/logo.png" 
                            Width="96" 
                            Height="96"
-                           Margin="0,0,0,24"
-                           HorizontalAlignment="Center"/>
+                           Margin="{StaticResource SpacingL}"
+                           HorizontalAlignment="Center"
+                           SnapsToDevicePixels="True"
+                           AutomationProperties.Name="Shouting Iguana Logo"/>
                     
                     <TextBlock Text="Shouting Iguana" 
                                Style="{StaticResource DisplayTextStyle}"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,8"/>
+                               Margin="{StaticResource SpacingS}"
+                               AutomationProperties.HeadingLevel="Level1"/>
                     
                     <TextBlock Text="Professional Web Crawler &amp; SEO Analysis Tool" 
                                Style="{StaticResource BodyTextStyle}"
@@ -136,28 +147,34 @@
                     <Button Content="New Project"
                             Command="{Binding NewProjectCommand}"
                             Style="{StaticResource LargeButton}"
-                            Margin="0,0,0,12"
+                            Margin="{StaticResource SpacingM}"
+                            TabIndex="0"
+                            IsDefault="True"
                             AutomationProperties.Name="Create New Project"
-                            ToolTip="Create a new web crawling project"/>
+                            AutomationProperties.HelpText="Creates a new web crawling project and opens project settings"
+                            ToolTip="Create a new web crawling project (Ctrl+N)"/>
                     
                     <Button Content="Open Project"
                             Command="{Binding OpenProjectCommand}"
                             Style="{StaticResource SecondaryButton}"
                             Height="48"
                             Margin="0,0,0,32"
+                            TabIndex="1"
                             AutomationProperties.Name="Open Existing Project"
-                            ToolTip="Open an existing project file"/>
+                            AutomationProperties.HelpText="Opens an existing project file from disk"
+                            ToolTip="Open an existing project file (Ctrl+O)"/>
                     
                     <TextBlock Text="Recent Projects"
                                Style="{StaticResource TitleTextStyle}"
                                FontSize="16"
-                               Margin="0,0,0,12"
+                               Margin="{StaticResource SpacingM}"
                                AutomationProperties.HeadingLevel="Level2"/>
                     
                     <Border Background="{StaticResource SurfaceAltBrush}"
                             CornerRadius="6"
-                            Padding="16"
-                            MinHeight="80">
+                            Padding="{StaticResource SpacingM}"
+                            MinHeight="80"
+                            SnapsToDevicePixels="True">
                         <StackPanel Orientation="Horizontal" 
                                     HorizontalAlignment="Center" 
                                     VerticalAlignment="Center">
@@ -182,187 +199,268 @@
         <!-- Project Settings Screen -->
         <ScrollViewer Visibility="{Binding IsWelcomeScreen, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                       VerticalScrollBarVisibility="Auto"
-                      Padding="{StaticResource SpacingL}">
-            <Border Padding="40" 
-                    Margin="16"
-                    MaxWidth="900"
+                      Padding="{StaticResource SpacingL}"
+                      KeyboardNavigation.TabNavigation="Local"
+                      Focusable="False">
+            <Border Padding="48" 
+                    Margin="{StaticResource SpacingM}"
+                    MaxWidth="950"
+                    MinWidth="650"
                     HorizontalAlignment="Center"
                     Background="{StaticResource SurfaceBrush}"
-                    CornerRadius="8">
+                    CornerRadius="12"
+                    SnapsToDevicePixels="True">
                 <Border.Effect>
-                    <DropShadowEffect Color="#000000" BlurRadius="8" ShadowDepth="2" Opacity="0.1"/>
+                    <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="4" Opacity="0.08"/>
                 </Border.Effect>
                 <StackPanel>
-                    <TextBlock Text="Project Settings"
-                               Style="{StaticResource TitleTextStyle}"
-                               Margin="0,0,0,32"
-                               AutomationProperties.HeadingLevel="Level1"/>
-
-                    <!-- Basic Information Section -->
-                    <TextBlock Text="Basic Information" 
-                               Style="{StaticResource FormSectionHeader}"
-                               Margin="0,0,0,16"
-                               AutomationProperties.HeadingLevel="Level2"/>
-
-                    <!-- Project Name -->
-                    <StackPanel Style="{StaticResource InputContainer}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Project Name" 
-                                       Style="{StaticResource FormFieldLabel}"/>
-                            <TextBlock Style="{StaticResource RequiredIndicator}"/>
-                        </StackPanel>
-                        <TextBox Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
-                                 Style="{StaticResource ModernTextBox}"
-                                 TabIndex="0"
-                                 AutomationProperties.Name="Project Name"/>
-                        <TextBlock Text="Enter a descriptive name for your project to easily identify it later."
-                                   Style="{StaticResource HelperText}"/>
-                    </StackPanel>
-
-                    <!-- Base URL -->
-                    <StackPanel Style="{StaticResource InputContainer}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Starting URL" 
-                                       Style="{StaticResource FormFieldLabel}"/>
-                            <TextBlock Style="{StaticResource RequiredIndicator}"/>
-                        </StackPanel>
-                        <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}"
-                                 Style="{StaticResource ModernTextBox}"
-                                 TabIndex="1"
-                                 AutomationProperties.Name="Starting URL"/>
-                        <TextBlock Text="The URL where the crawl will begin (e.g., https://example.com). Must be a valid HTTP or HTTPS URL."
-                                   Style="{StaticResource HelperText}"/>
-                    </StackPanel>
-
-                    <!-- Crawl Settings Section -->
-                    <TextBlock Text="Crawl Configuration"
-                               Style="{StaticResource FormSectionHeader}"
-                               AutomationProperties.HeadingLevel="Level2"/>
-
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="20"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-
-                        <!-- Max Depth -->
-                        <StackPanel Grid.Row="0" Grid.Column="0" Style="{StaticResource InputContainer}">
-                            <TextBlock Text="Maximum Depth" 
-                                       Style="{StaticResource FormFieldLabel}"/>
-                            <TextBox Text="{Binding MaxDepth, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource ModernTextBox}"
-                                     TabIndex="2"
-                                     AutomationProperties.Name="Maximum Crawl Depth"/>
-                            <TextBlock Text="Maximum clicks from start URL (1-20)."
-                                       Style="{StaticResource HelperText}"/>
-                        </StackPanel>
-
-                        <!-- Max URLs -->
-                        <StackPanel Grid.Row="0" Grid.Column="2" Style="{StaticResource InputContainer}">
-                            <TextBlock Text="Maximum URLs" 
-                                       Style="{StaticResource FormFieldLabel}"/>
-                            <TextBox Text="{Binding MaxUrls, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource ModernTextBox}"
-                                     TabIndex="3"
-                                     AutomationProperties.Name="Maximum URLs to Crawl"/>
-                            <TextBlock Text="Total URLs to crawl (0 = unlimited)."
-                                       Style="{StaticResource HelperText}"/>
-                        </StackPanel>
-
-                        <!-- Crawl Delay -->
-                        <StackPanel Grid.Row="1" Grid.Column="0" Style="{StaticResource InputContainer}">
-                            <TextBlock Text="Crawl Delay" 
-                                       Style="{StaticResource FormFieldLabel}"/>
-                            <TextBox Text="{Binding CrawlDelay, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource ModernTextBox}"
-                                     TabIndex="4"
-                                     AutomationProperties.Name="Crawl Delay in Seconds"/>
-                            <TextBlock Text="Delay between requests in seconds."
-                                       Style="{StaticResource HelperText}"/>
-                        </StackPanel>
-
-                        <!-- User Agent -->
-                        <StackPanel Grid.Row="1" Grid.Column="2" Style="{StaticResource InputContainer}">
-                            <TextBlock Text="Browser User Agent" 
-                                       Style="{StaticResource FormFieldLabel}"/>
-                            <ComboBox SelectedItem="{Binding SelectedUserAgentType}"
-                                      Style="{StaticResource ModernComboBox}"
-                                      TabIndex="5"
-                                      AutomationProperties.Name="Browser User Agent Type">
-                                <ComboBox.ItemsSource>
-                                    <x:Array Type="{x:Type config:UserAgentType}">
-                                        <config:UserAgentType>Chrome</config:UserAgentType>
-                                        <config:UserAgentType>Firefox</config:UserAgentType>
-                                        <config:UserAgentType>Edge</config:UserAgentType>
-                                        <config:UserAgentType>Safari</config:UserAgentType>
-                                        <config:UserAgentType>Random</config:UserAgentType>
-                                    </x:Array>
-                                </ComboBox.ItemsSource>
-                            </ComboBox>
-                            <TextBlock Text="Browser to emulate during crawl."
-                                       Style="{StaticResource HelperText}"/>
-                        </StackPanel>
-
-                        <!-- Checkboxes -->
-                        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,12,0,0">
-                            <CheckBox Content="Follow robots.txt exclusion rules"
-                                      IsChecked="{Binding RespectRobotsTxt}"
-                                      FontSize="14"
-                                      Margin="0,0,0,8"
-                                      TabIndex="6"
-                                      AutomationProperties.Name="Respect Robots.txt"/>
-                            <TextBlock Text="Recommended for ethical crawling. Respects website owner's crawling preferences."
-                                       Style="{StaticResource HelperText}"
-                                       Margin="32,0,0,16"/>
-
-                            <CheckBox Content="Discover URLs from sitemap.xml"
-                                      IsChecked="{Binding UseSitemapXml}"
-                                      FontSize="14"
-                                      Margin="0,0,0,8"
-                                      TabIndex="7"
-                                      AutomationProperties.Name="Use Sitemap XML"/>
-                            <TextBlock Text="Automatically checks robots.txt and common locations for sitemap.xml to discover URLs."
-                                       Style="{StaticResource HelperText}"
-                                       Margin="32,0,0,0"/>
+                    <!-- Header with Icon -->
+                    <Grid Margin="0,0,0,32">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                            <Border Background="{StaticResource PrimaryBrush}"
+                                    Width="44" Height="44"
+                                    CornerRadius="8"
+                                    Margin="0,0,16,0">
+                                <TextBlock Text="{StaticResource Icon.Settings}"
+                                           Style="{StaticResource Icon}"
+                                           FontSize="22"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Project Settings"
+                                           Style="{StaticResource TitleTextStyle}"
+                                           Margin="0"
+                                           AutomationProperties.HeadingLevel="Level1"/>
+                                <TextBlock Text="Configure your web crawling project"
+                                           Style="{StaticResource BodyTextStyle}"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
                         </StackPanel>
                     </Grid>
 
-                    <!-- Action Buttons -->
-                    <StackPanel Orientation="Horizontal" 
-                                Margin="0,40,0,0" 
-                                HorizontalAlignment="Right">
-                        <Button Content="Save Settings"
-                                Command="{Binding SaveSettingsCommand}"
-                                Style="{StaticResource SecondaryButton}"
-                                Margin="0,0,12,0"
-                                TabIndex="8"
-                                Visibility="{Binding CurrentProject, Converter={StaticResource NullToVisibilityConverter}}"
-                                AutomationProperties.Name="Save Project Settings"
-                                ToolTip="Save changes to project settings"/>
-                        <Button Command="{Binding StartCrawlCommand}"
-                                Style="{StaticResource PrimaryButton}"
-                                TabIndex="9"
-                                IsDefault="True"
-                                AutomationProperties.Name="Start Crawl"
-                                ToolTip="Begin crawling with current settings">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Play}"
-                                           Style="{StaticResource Icon}"
-                                           Width="18" 
-                                           Height="18"
-                                           FontSize="18"
-                                           Margin="0,0,8,0"/>
-                                <TextBlock Text="Start Crawl" 
-                                           VerticalAlignment="Center"/>
+                    <!-- Basic Information Section -->
+                    <Border Background="{StaticResource SurfaceAltBrush}"
+                            CornerRadius="8"
+                            Padding="24"
+                            Margin="0,0,0,24">
+                        <StackPanel>
+                            <TextBlock Text="Basic Information" 
+                                       Style="{StaticResource FormSectionHeader}"
+                                       Margin="0,0,0,16"
+                                       AutomationProperties.HeadingLevel="Level2"/>
+
+                            <!-- Project Name -->
+                            <StackPanel Margin="0,0,0,16">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="Project Name" 
+                                               Style="{StaticResource FormFieldLabel}"/>
+                                    <TextBlock Style="{StaticResource RequiredIndicator}"/>
+                                </StackPanel>
+                                <TextBox Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource ModernTextBox}"
+                                         TabIndex="0"
+                                         AutomationProperties.Name="Project Name"
+                                         ToolTip="Enter a descriptive name for your project"/>
+                                <TextBlock Text="Enter a descriptive name for your project to easily identify it later."
+                                           Style="{StaticResource HelperText}"/>
                             </StackPanel>
-                        </Button>
-                    </StackPanel>
+
+                            <!-- Base URL -->
+                            <StackPanel Margin="0,0,0,0">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="Starting URL" 
+                                               Style="{StaticResource FormFieldLabel}"/>
+                                    <TextBlock Style="{StaticResource RequiredIndicator}"/>
+                                </StackPanel>
+                                <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource ModernTextBox}"
+                                         TabIndex="1"
+                                         AutomationProperties.Name="Starting URL"
+                                         ToolTip="The URL where the crawl will begin"/>
+                                <TextBlock Text="The URL where the crawl will begin (e.g., https://example.com). Must be a valid HTTP or HTTPS URL."
+                                           Style="{StaticResource HelperText}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Crawl Configuration Section -->
+                    <Border Background="{StaticResource SurfaceAltBrush}"
+                            CornerRadius="8"
+                            Padding="24"
+                            Margin="0,0,0,24">
+                        <StackPanel>
+                            <TextBlock Text="Crawl Configuration"
+                                       Style="{StaticResource FormSectionHeader}"
+                                       Margin="0,0,0,16"
+                                       AutomationProperties.HeadingLevel="Level2"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Max Depth -->
+                                <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,16">
+                                    <TextBlock Text="Maximum Depth" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding MaxDepth, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="2"
+                                             AutomationProperties.Name="Maximum Crawl Depth"
+                                             ToolTip="Maximum clicks from start URL (1-20)"/>
+                                    <TextBlock Text="Maximum clicks from start URL (1-20)."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+
+                                <!-- Max URLs -->
+                                <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,16">
+                                    <TextBlock Text="Maximum URLs" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding MaxUrls, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="3"
+                                             AutomationProperties.Name="Maximum URLs to Crawl"
+                                             ToolTip="Total URLs to crawl (0 = unlimited)"/>
+                                    <TextBlock Text="Total URLs to crawl (0 = unlimited)."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+
+                                <!-- Crawl Delay -->
+                                <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,16">
+                                    <TextBlock Text="Crawl Delay" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding CrawlDelay, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="4"
+                                             AutomationProperties.Name="Crawl Delay in Seconds"
+                                             ToolTip="Delay between requests in seconds"/>
+                                    <TextBlock Text="Delay between requests in seconds."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+
+                                <!-- User Agent -->
+                                <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,16">
+                                    <TextBlock Text="Browser User Agent" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <ComboBox SelectedItem="{Binding SelectedUserAgentType}"
+                                              Style="{StaticResource ModernComboBox}"
+                                              TabIndex="5"
+                                              AutomationProperties.Name="Browser User Agent Type"
+                                              ToolTip="Browser to emulate during crawl">
+                                        <ComboBox.ItemsSource>
+                                            <x:Array Type="{x:Type config:UserAgentType}">
+                                                <config:UserAgentType>Chrome</config:UserAgentType>
+                                                <config:UserAgentType>Firefox</config:UserAgentType>
+                                                <config:UserAgentType>Edge</config:UserAgentType>
+                                                <config:UserAgentType>Safari</config:UserAgentType>
+                                                <config:UserAgentType>Random</config:UserAgentType>
+                                            </x:Array>
+                                        </ComboBox.ItemsSource>
+                                    </ComboBox>
+                                    <TextBlock Text="Browser to emulate during crawl."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+
+                                <!-- Checkboxes -->
+                                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,4,0,0">
+                                    <Border Background="{StaticResource SurfaceBrush}"
+                                            BorderBrush="{StaticResource BorderLightBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="12"
+                                            Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <CheckBox Content="Follow robots.txt exclusion rules"
+                                                      IsChecked="{Binding RespectRobotsTxt}"
+                                                      FontSize="14"
+                                                      Margin="0"
+                                                      TabIndex="6"
+                                                      AutomationProperties.Name="Respect Robots.txt"
+                                                      ToolTip="Recommended for ethical crawling"/>
+                                            <TextBlock Text="Recommended for ethical crawling. Respects website owner's crawling preferences."
+                                                       Style="{StaticResource HelperText}"
+                                                       Margin="32,6,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Background="{StaticResource SurfaceBrush}"
+                                            BorderBrush="{StaticResource BorderLightBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="12">
+                                        <StackPanel>
+                                            <CheckBox Content="Discover URLs from sitemap.xml"
+                                                      IsChecked="{Binding UseSitemapXml}"
+                                                      FontSize="14"
+                                                      Margin="0"
+                                                      TabIndex="7"
+                                                      AutomationProperties.Name="Use Sitemap XML"
+                                                      ToolTip="Automatically discover URLs from sitemap"/>
+                                            <TextBlock Text="Automatically checks robots.txt and common locations for sitemap.xml to discover URLs."
+                                                       Style="{StaticResource HelperText}"
+                                                       Margin="32,6,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Action Buttons -->
+                    <Border Background="{StaticResource SurfaceBrush}"
+                            BorderBrush="{StaticResource BorderLightBrush}"
+                            BorderThickness="0,1,0,0"
+                            Padding="0,20,0,0"
+                            Margin="0,32,0,0">
+                        <StackPanel Orientation="Horizontal" 
+                                    HorizontalAlignment="Right"
+                                    KeyboardNavigation.TabNavigation="Local">
+                            <Button Content="Save Settings"
+                                    Command="{Binding SaveSettingsCommand}"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Margin="0,0,12,0"
+                                    TabIndex="8"
+                                    Visibility="{Binding CurrentProject, Converter={StaticResource NullToVisibilityConverter}}"
+                                    AutomationProperties.Name="Save Project Settings"
+                                    AutomationProperties.HelpText="Saves the current project settings to disk without starting crawl"
+                                    ToolTip="Save changes to project settings"/>
+                            <Button Command="{Binding StartCrawlCommand}"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Height="48"
+                                    Padding="32,12"
+                                    TabIndex="9"
+                                    IsDefault="True"
+                                    AutomationProperties.Name="Start Crawl"
+                                    AutomationProperties.HelpText="Begins the web crawl with the configured settings"
+                                    ToolTip="Begin crawling with current settings (F6)">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Play}"
+                                               Style="{StaticResource Icon}"
+                                               Width="18" 
+                                               Height="18"
+                                               FontSize="18"
+                                               Margin="0,0,8,0"/>
+                                    <TextBlock Text="Start Crawl" 
+                                               VerticalAlignment="Center"
+                                               FontSize="15"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
         </ScrollViewer>

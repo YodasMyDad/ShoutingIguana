@@ -25,17 +25,20 @@
         <KeyBinding Key="F8" Command="{Binding StopCrawlCommand}"/>
     </Window.InputBindings>
     
-    <DockPanel>
+    <DockPanel KeyboardNavigation.TabNavigation="Cycle">
         <!-- Menu Bar -->
         <Border DockPanel.Dock="Top" 
                 Background="{StaticResource SurfaceBrush}"
                 BorderThickness="0,0,0,1"
-                BorderBrush="{StaticResource BorderLightBrush}">
+                BorderBrush="{StaticResource BorderLightBrush}"
+                SnapsToDevicePixels="True">
             <Menu Background="Transparent" 
-                  Padding="4,2"
+                  Padding="{StaticResource SpacingXs}"
                   IsEnabled="{Binding IsInitializing, Converter={StaticResource InverseBooleanConverter}}"
+                  KeyboardNavigation.TabNavigation="Cycle"
                   AutomationProperties.Name="Main Menu"
-                  AutomationProperties.HelpText="Main application menu with File, View, Crawl, Tools, and Help options">
+                  AutomationProperties.HelpText="Main application menu with File, View, Crawl, Tools, and Help options"
+                  AutomationProperties.IsRequiredForForm="False">
             <MenuItem Header="_File">
                 <MenuItem Header="_New Project" Command="{Binding NewProjectCommand}" InputGestureText="Ctrl+N">
                     <MenuItem.Icon>
@@ -67,7 +70,7 @@
                     </MenuItem.Icon>
                     <MenuItem Header="Export to _CSV..." Command="{Binding ExportToCsvCommand}">
                         <MenuItem.Icon>
-                            <TextBlock Text="{StaticResource Icon.FileCSV}" Style="{StaticResource Icon}"/>
+                            <TextBlock Text="{StaticResource Icon.FileCsv}" Style="{StaticResource Icon}"/>
                         </MenuItem.Icon>
                     </MenuItem>
                     <MenuItem Header="Export to _Excel..." Command="{Binding ExportToExcelCommand}">
@@ -160,12 +163,14 @@
         <Border DockPanel.Dock="Bottom" 
                 Background="{StaticResource SurfaceBrush}"
                 BorderThickness="0,1,0,0"
-                BorderBrush="{StaticResource BorderLightBrush}">
+                BorderBrush="{StaticResource BorderLightBrush}"
+                SnapsToDevicePixels="True">
             <StatusBar Background="Transparent" 
-                       Padding="8,6"
+                       Padding="{StaticResource SpacingS}"
+                       KeyboardNavigation.TabNavigation="None"
                        AutomationProperties.Name="Status Bar"
                        AutomationProperties.LiveSetting="Polite">
-                <StatusBarItem>
+                <StatusBarItem AutomationProperties.Name="Project Name">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{StaticResource Icon.Folder}"
                                    Style="{StaticResource Icon}"
@@ -173,21 +178,28 @@
                                    Height="14"
                                    FontSize="14"
                                    Foreground="{StaticResource TextSecondaryBrush}"
-                                   Margin="0,0,6,0"/>
+                                   Margin="0,0,6,0"
+                                   VerticalAlignment="Center"/>
                         <TextBlock Text="{Binding ProjectName}" 
                                    VerticalAlignment="Center"
                                    Foreground="{StaticResource TextPrimaryBrush}"
-                                   FontWeight="Medium"/>
+                                   FontWeight="Medium"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxWidth="200"
+                                   ToolTip="{Binding ProjectName}"/>
                     </StackPanel>
                 </StatusBarItem>
-                <Separator Margin="8,0" Background="{StaticResource BorderLightBrush}"/>
-                <StatusBarItem>
+                <Separator Margin="{StaticResource SpacingS}" Background="{StaticResource BorderLightBrush}"/>
+                <StatusBarItem AutomationProperties.Name="Status Message" 
+                               AutomationProperties.LiveSetting="Polite">
                     <TextBlock Text="{Binding StatusMessage}" 
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               TextTrimming="CharacterEllipsis"/>
                 </StatusBarItem>
-                <Separator Margin="8,0" Background="{StaticResource BorderLightBrush}"/>
-                <StatusBarItem>
+                <Separator Margin="{StaticResource SpacingS}" Background="{StaticResource BorderLightBrush}"/>
+                <StatusBarItem AutomationProperties.Name="Browser Status"
+                               AutomationProperties.LiveSetting="Polite">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{StaticResource Icon.Web}"
                                    Style="{StaticResource Icon}"
@@ -195,7 +207,8 @@
                                    Height="14"
                                    FontSize="14"
                                    Foreground="{StaticResource TextSecondaryBrush}"
-                                   Margin="0,0,6,0"/>
+                                   Margin="0,0,6,0"
+                                   VerticalAlignment="Center"/>
                         <TextBlock Text="Browser: " 
                                    VerticalAlignment="Center"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
@@ -203,7 +216,8 @@
                                    VerticalAlignment="Center"
                                    Margin="4,0,0,0"
                                    Foreground="{StaticResource TextPrimaryBrush}"
-                                   FontWeight="SemiBold"/>
+                                   FontWeight="SemiBold"
+                                   AutomationProperties.LiveSetting="Polite"/>
                     </StackPanel>
                 </StatusBarItem>
             </StatusBar>
@@ -211,7 +225,10 @@
 
         <!-- Content Area -->
         <ContentControl Content="{Binding CurrentView}" 
-                        AutomationProperties.Name="Main Content Area"/>
+                        KeyboardNavigation.TabNavigation="Local"
+                        Focusable="False"
+                        AutomationProperties.Name="Main Content Area"
+                        AutomationProperties.HelpText="Main application content changes based on selected view"/>
     </DockPanel>
     
 </Window>

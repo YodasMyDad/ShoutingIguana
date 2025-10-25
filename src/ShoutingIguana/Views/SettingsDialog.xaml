@@ -13,15 +13,49 @@
         TextOptions.TextFormattingMode="Display"
         ResizeMode="CanResize">
     
-    <Grid Margin="24,24,24,16">
+    <Grid Margin="0" KeyboardNavigation.TabNavigation="Cycle">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <!-- Header -->
+        <Border Grid.Row="0"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderLightBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="32,24">
+            <StackPanel Orientation="Horizontal">
+                <Border Background="{StaticResource PrimaryBrush}"
+                        Width="44" Height="44"
+                        CornerRadius="8"
+                        Margin="0,0,16,0">
+                    <TextBlock Text="{StaticResource Icon.Settings}"
+                               Style="{StaticResource Icon}"
+                               FontSize="22"
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Settings"
+                               Style="{StaticResource TitleTextStyle}"
+                               Margin="0"/>
+                    <TextBlock Text="Configure application behavior and preferences"
+                               Style="{StaticResource BodyTextStyle}"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Margin="0,4,0,0"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
         <!-- Tabbed Settings -->
-        <TabControl Grid.Row="0" 
-                    Style="{StaticResource StandardTabControl}">
+        <TabControl Grid.Row="1" 
+                    Style="{StaticResource StandardTabControl}"
+                    Background="{StaticResource BackgroundBrush}"
+                    KeyboardNavigation.TabNavigation="Local"
+                    Margin="24,0">
             
             <!-- Crawling Tab -->
             <TabItem>
@@ -37,108 +71,158 @@
                         <TextBlock Text="Crawling" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,32,32,16">
-                    <StackPanel MaxWidth="700">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,24">
+                    <StackPanel MaxWidth="750">
                         
                         <!-- Performance Section -->
-                        <TextBlock Text="Performance Settings" 
-                                   Style="{StaticResource FormSectionHeader}"
-                                   Margin="0,0,0,16"
-                                   AutomationProperties.HeadingLevel="Level2"/>
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,24">
+                            <StackPanel>
+                                <TextBlock Text="Performance Settings" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
 
-                        <!-- Concurrent Requests -->
-                        <StackPanel Style="{StaticResource InputContainer}">
-                            <TextBlock Text="Concurrent Requests" 
-                                       Style="{StaticResource FormFieldLabel}"
-                                       AutomationProperties.AutomationId="ConcurrentRequestsLabel"/>
-                            <TextBox Text="{Binding ConcurrentRequests, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource ModernTextBox}"
-                                     TabIndex="0"
-                                     AutomationProperties.LabeledBy="{Binding RelativeSource={RelativeSource Self}, Path=Parent.Children[0]}"
-                                     AutomationProperties.Name="Concurrent Requests"/>
-                            <TextBlock Text="Number of parallel requests to make (1-10). Higher values speed up crawling but use more resources."
-                                       Style="{StaticResource HelperText}"/>
-                        </StackPanel>
+                                <!-- Concurrent Requests -->
+                                <StackPanel Margin="0,0,0,16">
+                                    <TextBlock Text="Concurrent Requests" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"
+                                               AutomationProperties.AutomationId="ConcurrentRequestsLabel"/>
+                                    <TextBox Text="{Binding ConcurrentRequests, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="0"
+                                             AutomationProperties.LabeledBy="{Binding RelativeSource={RelativeSource Self}, Path=Parent.Children[0]}"
+                                             AutomationProperties.Name="Concurrent Requests"
+                                             ToolTip="Number of parallel requests (1-10)"/>
+                                    <TextBlock Text="Number of parallel requests to make (1-10). Higher values speed up crawling but use more resources."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
 
-                        <!-- Timeout -->
-                        <StackPanel Style="{StaticResource InputContainer}">
-                            <TextBlock Text="Request Timeout" 
-                                       Style="{StaticResource FormFieldLabel}"/>
-                            <TextBox Text="{Binding TimeoutSeconds, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource ModernTextBox}"
-                                     TabIndex="1"
-                                     AutomationProperties.Name="Request Timeout in Seconds"/>
-                            <TextBlock Text="Maximum time in seconds to wait for a page response (5-120 seconds recommended)."
-                                       Style="{StaticResource HelperText}"/>
-                        </StackPanel>
+                                <!-- Timeout -->
+                                <StackPanel Margin="0,0,0,16">
+                                    <TextBlock Text="Request Timeout" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding TimeoutSeconds, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="1"
+                                             AutomationProperties.Name="Request Timeout in Seconds"
+                                             ToolTip="Maximum time in seconds to wait for a response"/>
+                                    <TextBlock Text="Maximum time in seconds to wait for a page response (5-120 seconds recommended)."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
 
-                        <!-- Crawl Delay -->
-                        <StackPanel Style="{StaticResource InputContainer}">
-                            <TextBlock Text="Crawl Delay" 
-                                       Style="{StaticResource FormFieldLabel}"/>
-                            <TextBox Text="{Binding CrawlDelaySeconds, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource ModernTextBox}"
-                                     TabIndex="2"
-                                     AutomationProperties.Name="Crawl Delay in Seconds"/>
-                            <TextBlock Text="Delay between requests in seconds. Use to be polite to target servers (0-10 seconds)."
-                                       Style="{StaticResource HelperText}"/>
-                        </StackPanel>
+                                <!-- Crawl Delay -->
+                                <StackPanel Margin="0,0,0,0">
+                                    <TextBlock Text="Crawl Delay" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding CrawlDelaySeconds, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="2"
+                                             AutomationProperties.Name="Crawl Delay in Seconds"
+                                             ToolTip="Delay between requests in seconds"/>
+                                    <TextBlock Text="Delay between requests in seconds. Use to be polite to target servers (0-10 seconds)."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
 
                         <!-- Crawl Limits Section -->
-                        <TextBlock Text="Crawl Limits" 
-                                   Style="{StaticResource FormSectionHeader}"
-                                   AutomationProperties.HeadingLevel="Level2"/>
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,24">
+                            <StackPanel>
+                                <TextBlock Text="Crawl Limits" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
 
-                        <!-- Max Crawl Depth -->
-                        <StackPanel Style="{StaticResource InputContainer}">
-                            <TextBlock Text="Maximum Crawl Depth" 
-                                       Style="{StaticResource FormFieldLabel}"/>
-                            <TextBox Text="{Binding MaxCrawlDepth, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource ModernTextBox}"
-                                     TabIndex="3"
-                                     AutomationProperties.Name="Maximum Crawl Depth"/>
-                            <TextBlock Text="Maximum number of clicks from the start URL (1-20). Depth 1 = only pages directly linked from start URL."
-                                       Style="{StaticResource HelperText}"/>
-                        </StackPanel>
+                                <!-- Max Crawl Depth -->
+                                <StackPanel Margin="0,0,0,16">
+                                    <TextBlock Text="Maximum Crawl Depth" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding MaxCrawlDepth, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="3"
+                                             AutomationProperties.Name="Maximum Crawl Depth"
+                                             ToolTip="Maximum number of clicks from the start URL"/>
+                                    <TextBlock Text="Maximum number of clicks from the start URL (1-20). Depth 1 = only pages directly linked from start URL."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
 
-                        <!-- Max URLs -->
-                        <StackPanel Style="{StaticResource InputContainer}">
-                            <TextBlock Text="Maximum URLs to Crawl" 
-                                       Style="{StaticResource FormFieldLabel}"/>
-                            <TextBox Text="{Binding MaxUrlsToCrawl, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource ModernTextBox}"
-                                     TabIndex="4"
-                                     AutomationProperties.Name="Maximum URLs to Crawl"/>
-                            <TextBlock Text="Maximum total number of URLs to crawl. Set to 0 for unlimited (not recommended for large sites)."
-                                       Style="{StaticResource HelperText}"/>
-                        </StackPanel>
+                                <!-- Max URLs -->
+                                <StackPanel Margin="0,0,0,0">
+                                    <TextBlock Text="Maximum URLs to Crawl" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding MaxUrlsToCrawl, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="4"
+                                             AutomationProperties.Name="Maximum URLs to Crawl"
+                                             ToolTip="Maximum total URLs to crawl (0 = unlimited)"/>
+                                    <TextBlock Text="Maximum total number of URLs to crawl. Set to 0 for unlimited (not recommended for large sites)."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
 
                         <!-- Crawl Options Section -->
-                        <TextBlock Text="Crawl Options" 
-                                   Style="{StaticResource FormSectionHeader}"
-                                   AutomationProperties.HeadingLevel="Level2"/>
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Crawl Options" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
 
-                        <CheckBox IsChecked="{Binding RespectRobotsTxt}"
-                                  FontSize="14"
-                                  Margin="0,0,0,8"
-                                  TabIndex="5"
-                                  AutomationProperties.Name="Respect Robots.txt">
-                            <TextBlock Text="Follow robots.txt exclusion rules" TextWrapping="Wrap"/>
-                        </CheckBox>
-                        <TextBlock Text="Recommended for ethical crawling. Respects website owner's crawling preferences."
-                                   Style="{StaticResource HelperText}"
-                                   Margin="32,0,0,20"/>
+                                <Border Background="{StaticResource BackgroundBrush}"
+                                        BorderBrush="{StaticResource BorderLightBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="12"
+                                        Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <CheckBox IsChecked="{Binding RespectRobotsTxt}"
+                                                  FontSize="14"
+                                                  Margin="0"
+                                                  TabIndex="5"
+                                                  AutomationProperties.Name="Respect Robots.txt">
+                                            <TextBlock Text="Follow robots.txt exclusion rules" TextWrapping="Wrap"/>
+                                        </CheckBox>
+                                        <TextBlock Text="Recommended for ethical crawling. Respects website owner's crawling preferences."
+                                                   Style="{StaticResource HelperText}"
+                                                   Margin="32,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
 
-                        <CheckBox IsChecked="{Binding UseSitemapXml}"
-                                  FontSize="14"
-                                  Margin="0,0,0,8"
-                                  TabIndex="6"
-                                  AutomationProperties.Name="Use Sitemap XML">
-                            <TextBlock Text="Discover URLs from sitemap.xml" TextWrapping="Wrap"/>
-                        </CheckBox>
-                        <TextBlock Text="Automatically checks robots.txt and common locations for sitemap.xml to discover URLs."
-                                   Style="{StaticResource HelperText}"
-                                   Margin="32,0,0,20"/>
+                                <Border Background="{StaticResource BackgroundBrush}"
+                                        BorderBrush="{StaticResource BorderLightBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="12">
+                                    <StackPanel>
+                                        <CheckBox IsChecked="{Binding UseSitemapXml}"
+                                                  FontSize="14"
+                                                  Margin="0"
+                                                  TabIndex="6"
+                                                  AutomationProperties.Name="Use Sitemap XML">
+                                            <TextBlock Text="Discover URLs from sitemap.xml" TextWrapping="Wrap"/>
+                                        </CheckBox>
+                                        <TextBlock Text="Automatically checks robots.txt and common locations for sitemap.xml to discover URLs."
+                                                   Style="{StaticResource HelperText}"
+                                                   Margin="32,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -185,7 +269,7 @@
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="12"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
 
@@ -314,32 +398,64 @@
         </TabControl>
 
         <!-- Action Buttons -->
-        <StackPanel Grid.Row="1" 
-                    Orientation="Horizontal" 
-                    HorizontalAlignment="Right" 
-                    Margin="0,24,0,0">
-            <Button Content="Restore Defaults"
-                    Command="{Binding RestoreDefaultsCommand}"
-                    Style="{StaticResource SecondaryButton}"
-                    Margin="0,0,12,0"
-                    TabIndex="100"
-                    AutomationProperties.Name="Restore Default Settings"
-                    ToolTip="Reset all settings to default values"/>
-            <Button Content="Cancel"
-                    Command="{Binding CancelCommand}"
-                    Style="{StaticResource SecondaryButton}"
-                    Margin="0,0,12,0"
-                    TabIndex="101"
-                    AutomationProperties.Name="Cancel"
-                    ToolTip="Close without saving changes"
-                    IsCancel="True"/>
-            <Button Content="Save"
-                    Command="{Binding SaveCommand}"
-                    Style="{StaticResource PrimaryButton}"
-                    TabIndex="102"
-                    AutomationProperties.Name="Save Settings"
-                    ToolTip="Save changes and close"
-                    IsDefault="True"/>
-        </StackPanel>
+        <Border Grid.Row="2"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderLightBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="32,20">
+            <Grid>
+                <Button Command="{Binding RestoreDefaultsCommand}"
+                        Style="{StaticResource SecondaryButton}"
+                        HorizontalAlignment="Left"
+                        TabIndex="100"
+                        AutomationProperties.Name="Restore Default Settings"
+                        AutomationProperties.HelpText="Resets all settings to their default values"
+                        ToolTip="Reset all settings to default values">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{StaticResource Icon.Refresh}"
+                                   Style="{StaticResource Icon}"
+                                   Width="14"
+                                   Height="14"
+                                   FontSize="14"
+                                   Margin="0,0,6,0"/>
+                        <TextBlock Text="Restore Defaults" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Cancel"
+                            Command="{Binding CancelCommand}"
+                            Style="{StaticResource SecondaryButton}"
+                            Margin="0,0,12,0"
+                            TabIndex="101"
+                            AutomationProperties.Name="Cancel"
+                            AutomationProperties.HelpText="Closes the settings dialog without saving changes"
+                            ToolTip="Close without saving changes (Esc)"
+                            IsCancel="True"/>
+                    <Button Command="{Binding SaveCommand}"
+                            Style="{StaticResource PrimaryButton}"
+                            Height="48"
+                            Padding="32,12"
+                            TabIndex="102"
+                            AutomationProperties.Name="Save Settings"
+                            AutomationProperties.HelpText="Saves all settings changes and closes the dialog"
+                            ToolTip="Save changes and close (Enter)"
+                            IsDefault="True">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{StaticResource Icon.Save}"
+                                       Style="{StaticResource Icon}"
+                                       Width="16"
+                                       Height="16"
+                                       FontSize="16"
+                                       Margin="0,0,8,0"/>
+                            <TextBlock Text="Save Settings" 
+                                       VerticalAlignment="Center"
+                                       FontSize="15"
+                                       FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </Window>
