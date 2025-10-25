@@ -121,14 +121,16 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
             
             UrlsCrawled = e.UrlsCrawled;
             TotalDiscovered = e.TotalDiscovered;
-            QueueSize = e.QueueSize;
+            QueueSize = Math.Max(0, e.QueueSize); // Ensure queue size is never negative
             ActiveWorkers = e.ActiveWorkers;
             ErrorCount = e.ErrorCount;
             ElapsedTime = e.Elapsed.ToString(@"hh\:mm\:ss");
 
             if (TotalDiscovered > 0)
             {
-                ProgressPercentage = (double)UrlsCrawled / TotalDiscovered * 100;
+                // Calculate progress and cap at 100% to prevent display issues
+                var calculatedProgress = (double)UrlsCrawled / TotalDiscovered * 100;
+                ProgressPercentage = Math.Min(100.0, calculatedProgress);
             }
 
             if (!string.IsNullOrEmpty(e.LastCrawledUrl))

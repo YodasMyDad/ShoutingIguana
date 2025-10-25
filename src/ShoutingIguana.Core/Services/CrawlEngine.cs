@@ -162,11 +162,14 @@ public class CrawlEngine(
                     }
                 }
             }
-
-            // Initialize total discovered count from current queue size
-            // This ensures progress percentage stays at or below 100%
-            _totalDiscovered = await queueRepository.CountQueuedAsync(projectId).ConfigureAwait(false);
-            _queueSize = _totalDiscovered;
+            else
+            {
+                // Queue is not empty - this is a resume from a previous crawl
+                // Initialize counters from database to reflect existing state
+                _totalDiscovered = await queueRepository.CountQueuedAsync(projectId).ConfigureAwait(false);
+                _queueSize = _totalDiscovered;
+                _logger.LogInformation("Resuming crawl with {QueueSize} URLs already in queue", _queueSize);
+            }
         }
 
         _logger.LogInformation("Starting {WorkerCount} workers for project {ProjectId}. Total discovered: {TotalDiscovered}", 
