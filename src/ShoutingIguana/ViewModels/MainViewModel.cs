@@ -37,6 +37,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isInitializing = true;
 
+    [ObservableProperty]
+    private bool _hasOpenProject;
+
     public MainViewModel(
         ILogger<MainViewModel> logger, 
         INavigationService navigationService,
@@ -57,6 +60,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Set initial browser status
         UpdateBrowserStatus(_playwrightService.Status);
         
+        // Initialize project state
+        HasOpenProject = _projectContext.HasOpenProject;
+        
         // Start with project home view
         _navigationService.NavigateTo<ProjectHomeView>();
         StatusMessage = "Ready";
@@ -64,6 +70,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnProjectChanged(object? sender, EventArgs e)
     {
+        HasOpenProject = _projectContext.HasOpenProject;
         ProjectName = _projectContext.HasOpenProject 
             ? _projectContext.CurrentProjectName ?? "Unknown Project"
             : "No project loaded";

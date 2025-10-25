@@ -113,15 +113,20 @@
             <TabControl ItemsSource="{Binding Tabs}" 
                         SelectedItem="{Binding SelectedTab}"
                         Style="{StaticResource MaterialDesignFilledTabControl}"
-                        Background="{StaticResource SurfaceBrush}"
-                        Padding="0">
+                        Background="{StaticResource SurfaceBrush}">
+                <TabControl.ItemContainerStyle>
+                    <Style TargetType="TabItem">
+                        <Setter Property="Height" Value="48"/>
+                    </Style>
+                </TabControl.ItemContainerStyle>
                 <TabControl.ItemTemplate>
                     <DataTemplate>
-                        <StackPanel Orientation="Horizontal" Margin="12,12">
+                        <StackPanel Orientation="Horizontal" Margin="12,0">
                             <TextBlock Text="{Binding TabHeader}" 
                                        VerticalAlignment="Center"
                                        Margin="0,0,8,0"
-                                       FontWeight="Medium"/>
+                                       FontWeight="Medium"
+                                       Foreground="{DynamicResource MaterialDesignBody}"/>
                             <Border Background="{StaticResource ErrorBrush}" 
                                     CornerRadius="10" 
                                     Padding="6,2"

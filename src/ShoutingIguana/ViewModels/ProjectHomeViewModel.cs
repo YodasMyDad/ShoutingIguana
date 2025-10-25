@@ -74,10 +74,50 @@ public partial class ProjectHomeViewModel : ObservableObject
 
     public async Task LoadAsync()
     {
-        // Can only load recent projects if we have a database open
-        // For now, skip loading recent projects on startup
-        // This will be revisited when we implement a master database for tracking all projects
-        await Task.CompletedTask;
+        // Check if a project is currently open
+        if (_projectContext.HasOpenProject && _projectContext.CurrentProjectId.HasValue)
+        {
+            try
+            {
+                // Load the current project details
+                using var scope = _serviceProvider.CreateScope();
+                var projectRepo = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
+                var project = await projectRepo.GetByIdAsync(_projectContext.CurrentProjectId.Value);
+
+                if (project != null)
+                {
+                    CurrentProject = project;
+                    ProjectName = project.Name;
+                    BaseUrl = project.BaseUrl;
+
+                    // Load settings
+                    var settings = JsonSerializer.Deserialize<ProjectSettings>(project.SettingsJson) ?? new ProjectSettings();
+                    MaxDepth = settings.MaxCrawlDepth;
+                    MaxUrls = settings.MaxUrlsToCrawl;
+                    CrawlDelay = settings.CrawlDelaySeconds;
+                    RespectRobotsTxt = settings.RespectRobotsTxt;
+                    UserAgent = settings.UserAgent;
+
+                    IsWelcomeScreen = false;
+                    _logger.LogInformation("Loaded project details for {ProjectName}", project.Name);
+                }
+                else
+                {
+                    // Project not found, show welcome screen
+                    IsWelcomeScreen = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load project details");
+                IsWelcomeScreen = true;
+            }
+        }
+        else
+        {
+            // No project open, show welcome screen
+            IsWelcomeScreen = true;
+        }
     }
 
     [RelayCommand]

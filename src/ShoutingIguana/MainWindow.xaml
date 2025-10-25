@@ -18,9 +18,8 @@
         <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenProjectCommand}"/>
         <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseProjectCommand}"/>
         <KeyBinding Key="D1" Modifiers="Control" Command="{Binding NavigateToProjectHomeCommand}"/>
-        <KeyBinding Key="D2" Modifiers="Control" Command="{Binding NavigateToCrawlDashboardCommand}"/>
-        <KeyBinding Key="D3" Modifiers="Control" Command="{Binding NavigateToFindingsCommand}"/>
-        <KeyBinding Key="D4" Modifiers="Control" Command="{Binding NavigateToExtensionsCommand}"/>
+        <KeyBinding Key="D2" Modifiers="Control" Command="{Binding NavigateToFindingsCommand}"/>
+        <KeyBinding Key="D3" Modifiers="Control" Command="{Binding NavigateToExtensionsCommand}"/>
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
         <KeyBinding Key="F6" Command="{Binding StartCrawlCommand}"/>
         <KeyBinding Key="F8" Command="{Binding StopCrawlCommand}"/>
@@ -52,13 +51,15 @@
                     </MenuItem.Icon>
                     <MenuItem Header="(No recent projects)"/>
                 </MenuItem>
-                <MenuItem Header="_Close Project" Command="{Binding CloseProjectCommand}" InputGestureText="Ctrl+W">
+                <MenuItem Header="_Close Project" Command="{Binding CloseProjectCommand}" InputGestureText="Ctrl+W"
+                          Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <MenuItem.Icon>
                         <md:PackIcon Kind="Close" Width="16" Height="16"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <Separator/>
-                <MenuItem Header="_Export">
+                <Separator Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <MenuItem Header="_Export"
+                          Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <MenuItem.Icon>
                         <md:PackIcon Kind="Export" Width="16" Height="16"/>
                     </MenuItem.Icon>
@@ -81,35 +82,34 @@
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_View">
-                <MenuItem Header="Project _Home" Command="{Binding NavigateToProjectHomeCommand}" InputGestureText="Ctrl+1">
+                <MenuItem Header="Project _Home" Command="{Binding NavigateToProjectHomeCommand}" InputGestureText="Ctrl+1"
+                          Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <MenuItem.Icon>
                         <md:PackIcon Kind="Home" Width="16" Height="16"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="_Crawl Dashboard" Command="{Binding NavigateToCrawlDashboardCommand}" InputGestureText="Ctrl+2">
-                    <MenuItem.Icon>
-                        <md:PackIcon Kind="ChartLine" Width="16" Height="16"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="_Findings" Command="{Binding NavigateToFindingsCommand}" InputGestureText="Ctrl+3">
+                <MenuItem Header="_Findings" Command="{Binding NavigateToFindingsCommand}" InputGestureText="Ctrl+2"
+                          Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <MenuItem.Icon>
                         <md:PackIcon Kind="Magnify" Width="16" Height="16"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <Separator/>
-                <MenuItem Header="_Extensions" Command="{Binding NavigateToExtensionsCommand}" InputGestureText="Ctrl+4">
+                <Separator Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <MenuItem Header="_Extensions" Command="{Binding NavigateToExtensionsCommand}" InputGestureText="Ctrl+3">
                     <MenuItem.Icon>
                         <md:PackIcon Kind="Puzzle" Width="16" Height="16"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <Separator/>
-                <MenuItem Header="_Refresh" Command="{Binding RefreshCommand}" InputGestureText="F5">
+                <Separator Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <MenuItem Header="_Refresh" Command="{Binding RefreshCommand}" InputGestureText="F5"
+                          Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <MenuItem.Icon>
                         <md:PackIcon Kind="Refresh" Width="16" Height="16"/>
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
-            <MenuItem Header="_Crawl">
+            <MenuItem Header="_Crawl"
+                      Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <MenuItem Header="_Start Crawl" Command="{Binding StartCrawlCommand}" InputGestureText="F6">
                     <MenuItem.Icon>
                         <md:PackIcon Kind="Play" Width="16" Height="16"/>
