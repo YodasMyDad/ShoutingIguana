@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using ShoutingIguana.Core.Models;
 using ShoutingIguana.PluginSdk;
 
@@ -97,5 +100,43 @@ public partial class FindingTabViewModel : ObservableObject
     }
 
     public string TabHeader => $"{DisplayName} ({TotalCount})";
+
+    [RelayCommand]
+    private void CopyUrl()
+    {
+        if (SelectedFinding?.Url?.Address != null)
+        {
+            Clipboard.SetText(SelectedFinding.Url.Address);
+        }
+    }
+
+    [RelayCommand]
+    private void CopyMessage()
+    {
+        if (SelectedFinding?.Message != null)
+        {
+            Clipboard.SetText(SelectedFinding.Message);
+        }
+    }
+
+    [RelayCommand]
+    private void OpenInBrowser()
+    {
+        if (SelectedFinding?.Url?.Address != null)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = SelectedFinding.Url.Address,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception)
+            {
+                // Silently fail if browser cannot be opened
+            }
+        }
+    }
 }
 

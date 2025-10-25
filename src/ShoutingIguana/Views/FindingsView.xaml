@@ -225,14 +225,6 @@
                                                 <md:PackIcon Kind="OpenInNew" Width="16" Height="16"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
-                                        <Separator/>
-                                        <MenuItem Header="Export Selected..." 
-                                                  Command="{Binding ExportSelectedCommand}"
-                                                  AutomationProperties.Name="Export Selected Findings">
-                                            <MenuItem.Icon>
-                                                <md:PackIcon Kind="Export" Width="16" Height="16"/>
-                                            </MenuItem.Icon>
-                                        </MenuItem>
                                     </ContextMenu>
                                 </DataGrid.ContextMenu>
                                 <DataGrid.Columns>
