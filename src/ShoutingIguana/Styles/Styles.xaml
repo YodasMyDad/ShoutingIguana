@@ -80,7 +80,7 @@
     
     <!-- Icon Glyphs (Unicode characters from Segoe MDL2 Assets font) -->
     <sys:String x:Key="Icon.Play">&#xE768;</sys:String>
-    <sys:String x:Key="Icon.Stop">&#xE71A;</sys:String>
+    <sys:String x:Key="Icon.Stop">&#xEA39;</sys:String>
     <sys:String x:Key="Icon.Pause">&#xE769;</sys:String>
     <sys:String x:Key="Icon.Refresh">&#xE72C;</sys:String>
     <sys:String x:Key="Icon.Home">&#xE80F;</sys:String>
