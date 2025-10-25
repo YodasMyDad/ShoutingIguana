@@ -1,14 +1,14 @@
 <Window x:Class="ShoutingIguana.Views.SettingsDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
         Title="Settings"
-        Height="650"
-        Width="850"
-        MinHeight="500"
-        MinWidth="700"
+        Height="700"
+        Width="900"
+        MinHeight="600"
+        MinWidth="800"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource BackgroundBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
         ResizeMode="CanResize">
@@ -24,171 +24,291 @@
                     Style="{StaticResource StandardTabControl}">
             
             <!-- Crawling Tab -->
-            <TabItem Header="Crawling">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,40,32,32">
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{StaticResource Icon.Web}"
+                                   Style="{StaticResource Icon}"
+                                   Width="16" 
+                                   Height="16"
+                                   FontSize="16"
+                                   Margin="0,0,8,0"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Crawling" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,32,32,16">
                     <StackPanel MaxWidth="700">
+                        
+                        <!-- Performance Section -->
+                        <TextBlock Text="Performance Settings" 
+                                   Style="{StaticResource FormSectionHeader}"
+                                   Margin="0,0,0,16"
+                                   AutomationProperties.HeadingLevel="Level2"/>
 
-                        <StackPanel MaxWidth="500">
+                        <!-- Concurrent Requests -->
+                        <StackPanel Style="{StaticResource InputContainer}">
+                            <TextBlock Text="Concurrent Requests" 
+                                       Style="{StaticResource FormFieldLabel}"
+                                       AutomationProperties.AutomationId="ConcurrentRequestsLabel"/>
                             <TextBox Text="{Binding ConcurrentRequests, UpdateSourceTrigger=PropertyChanged}"
-                                     md:HintAssist.Hint="Concurrent Requests"
-                                     md:HintAssist.HelperText="Number of parallel requests (1-10)"
-                                     Style="{StaticResource StandardTextBox}"
-                                     Margin="0,0,0,28"
+                                     Style="{StaticResource ModernTextBox}"
                                      TabIndex="0"
-                                     AutomationProperties.Name="Concurrent Requests"
-                                     ToolTip="Number of parallel requests to make (1-10)"/>
-
-                            <TextBox Text="{Binding TimeoutSeconds, UpdateSourceTrigger=PropertyChanged}"
-                                     md:HintAssist.Hint="Timeout (seconds)"
-                                     md:HintAssist.HelperText="Request timeout in seconds (5-300)"
-                                     Style="{StaticResource StandardTextBox}"
-                                     Margin="0,0,0,28"
-                                     TabIndex="1"
-                                     AutomationProperties.Name="Request Timeout"
-                                     ToolTip="Request timeout in seconds"/>
-
-                            <TextBox Text="{Binding MaxCrawlDepth, UpdateSourceTrigger=PropertyChanged}"
-                                     md:HintAssist.Hint="Max Crawl Depth"
-                                     md:HintAssist.HelperText="Maximum link depth from start URL (1-20)"
-                                     Style="{StaticResource StandardTextBox}"
-                                     Margin="0,0,0,28"
-                                     TabIndex="2"
-                                     AutomationProperties.Name="Maximum Crawl Depth"
-                                     ToolTip="Maximum number of clicks from start URL"/>
-
-                            <TextBox Text="{Binding MaxUrlsToCrawl, UpdateSourceTrigger=PropertyChanged}"
-                                     md:HintAssist.Hint="Max URLs to Crawl"
-                                     md:HintAssist.HelperText="Maximum URLs to crawl (0 for unlimited)"
-                                     Style="{StaticResource StandardTextBox}"
-                                     Margin="0,0,0,28"
-                                     TabIndex="3"
-                                     AutomationProperties.Name="Maximum URLs"
-                                     ToolTip="Maximum number of URLs to crawl (0 = unlimited)"/>
-
-                            <TextBox Text="{Binding CrawlDelaySeconds, UpdateSourceTrigger=PropertyChanged}"
-                                     md:HintAssist.Hint="Crawl Delay (seconds)"
-                                     md:HintAssist.HelperText="Delay between requests for politeness"
-                                     Style="{StaticResource StandardTextBox}"
-                                     Margin="0,0,0,28"
-                                     TabIndex="4"
-                                     AutomationProperties.Name="Crawl Delay"
-                                     ToolTip="Delay between requests in seconds"/>
-
-                            <CheckBox IsChecked="{Binding RespectRobotsTxt}"
-                                      Content="Follow robots.txt exclusion rules"
-                                      FontSize="14"
-                                      Margin="0,8,0,0"
-                                      TabIndex="6"
-                                      AutomationProperties.Name="Respect Robots.txt"
-                                      ToolTip="Follow robots.txt exclusion rules"/>
-
-                            <CheckBox IsChecked="{Binding UseSitemapXml}"
-                                      Content="Discover URLs from sitemap.xml"
-                                      FontSize="14"
-                                      Margin="0,12,0,0"
-                                      TabIndex="7"
-                                      AutomationProperties.Name="Use Sitemap XML"
-                                      ToolTip="Check robots.txt and common locations for sitemap.xml and enqueue discovered URLs"/>
+                                     AutomationProperties.LabeledBy="{Binding RelativeSource={RelativeSource Self}, Path=Parent.Children[0]}"
+                                     AutomationProperties.Name="Concurrent Requests"/>
+                            <TextBlock Text="Number of parallel requests to make (1-10). Higher values speed up crawling but use more resources."
+                                       Style="{StaticResource HelperText}"/>
                         </StackPanel>
+
+                        <!-- Timeout -->
+                        <StackPanel Style="{StaticResource InputContainer}">
+                            <TextBlock Text="Request Timeout" 
+                                       Style="{StaticResource FormFieldLabel}"/>
+                            <TextBox Text="{Binding TimeoutSeconds, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource ModernTextBox}"
+                                     TabIndex="1"
+                                     AutomationProperties.Name="Request Timeout in Seconds"/>
+                            <TextBlock Text="Maximum time in seconds to wait for a page response (5-120 seconds recommended)."
+                                       Style="{StaticResource HelperText}"/>
+                        </StackPanel>
+
+                        <!-- Crawl Delay -->
+                        <StackPanel Style="{StaticResource InputContainer}">
+                            <TextBlock Text="Crawl Delay" 
+                                       Style="{StaticResource FormFieldLabel}"/>
+                            <TextBox Text="{Binding CrawlDelaySeconds, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource ModernTextBox}"
+                                     TabIndex="2"
+                                     AutomationProperties.Name="Crawl Delay in Seconds"/>
+                            <TextBlock Text="Delay between requests in seconds. Use to be polite to target servers (0-10 seconds)."
+                                       Style="{StaticResource HelperText}"/>
+                        </StackPanel>
+
+                        <!-- Crawl Limits Section -->
+                        <TextBlock Text="Crawl Limits" 
+                                   Style="{StaticResource FormSectionHeader}"
+                                   AutomationProperties.HeadingLevel="Level2"/>
+
+                        <!-- Max Crawl Depth -->
+                        <StackPanel Style="{StaticResource InputContainer}">
+                            <TextBlock Text="Maximum Crawl Depth" 
+                                       Style="{StaticResource FormFieldLabel}"/>
+                            <TextBox Text="{Binding MaxCrawlDepth, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource ModernTextBox}"
+                                     TabIndex="3"
+                                     AutomationProperties.Name="Maximum Crawl Depth"/>
+                            <TextBlock Text="Maximum number of clicks from the start URL (1-20). Depth 1 = only pages directly linked from start URL."
+                                       Style="{StaticResource HelperText}"/>
+                        </StackPanel>
+
+                        <!-- Max URLs -->
+                        <StackPanel Style="{StaticResource InputContainer}">
+                            <TextBlock Text="Maximum URLs to Crawl" 
+                                       Style="{StaticResource FormFieldLabel}"/>
+                            <TextBox Text="{Binding MaxUrlsToCrawl, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource ModernTextBox}"
+                                     TabIndex="4"
+                                     AutomationProperties.Name="Maximum URLs to Crawl"/>
+                            <TextBlock Text="Maximum total number of URLs to crawl. Set to 0 for unlimited (not recommended for large sites)."
+                                       Style="{StaticResource HelperText}"/>
+                        </StackPanel>
+
+                        <!-- Crawl Options Section -->
+                        <TextBlock Text="Crawl Options" 
+                                   Style="{StaticResource FormSectionHeader}"
+                                   AutomationProperties.HeadingLevel="Level2"/>
+
+                        <CheckBox IsChecked="{Binding RespectRobotsTxt}"
+                                  FontSize="14"
+                                  Margin="0,0,0,8"
+                                  TabIndex="5"
+                                  AutomationProperties.Name="Respect Robots.txt">
+                            <TextBlock Text="Follow robots.txt exclusion rules" TextWrapping="Wrap"/>
+                        </CheckBox>
+                        <TextBlock Text="Recommended for ethical crawling. Respects website owner's crawling preferences."
+                                   Style="{StaticResource HelperText}"
+                                   Margin="32,0,0,20"/>
+
+                        <CheckBox IsChecked="{Binding UseSitemapXml}"
+                                  FontSize="14"
+                                  Margin="0,0,0,8"
+                                  TabIndex="6"
+                                  AutomationProperties.Name="Use Sitemap XML">
+                            <TextBlock Text="Discover URLs from sitemap.xml" TextWrapping="Wrap"/>
+                        </CheckBox>
+                        <TextBlock Text="Automatically checks robots.txt and common locations for sitemap.xml to discover URLs."
+                                   Style="{StaticResource HelperText}"
+                                   Margin="32,0,0,20"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- Browser Tab -->
-            <TabItem Header="Browser">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,40,32,32">
-                    <StackPanel MaxWidth="500">
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{StaticResource Icon.Globe}"
+                                   Style="{StaticResource Icon}"
+                                   Width="16" 
+                                   Height="16"
+                                   FontSize="16"
+                                   Margin="0,0,8,0"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Browser" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,32,32,16">
+                    <StackPanel MaxWidth="700">
+                        
+                        <!-- Browser Mode Section -->
+                        <TextBlock Text="Browser Mode" 
+                                   Style="{StaticResource FormSectionHeader}"
+                                   Margin="0,0,0,16"
+                                   AutomationProperties.HeadingLevel="Level2"/>
+
                         <CheckBox IsChecked="{Binding Headless}"
-                                  Content="Run browser in headless mode (recommended)"
                                   FontSize="14"
-                                  Margin="0,0,0,28"
+                                  Margin="0,0,0,8"
                                   TabIndex="0"
-                                  AutomationProperties.Name="Headless Mode"
-                                  ToolTip="Run browser in background without GUI (faster)"/>
+                                  AutomationProperties.Name="Headless Mode">
+                            <TextBlock Text="Run browser in headless mode" TextWrapping="Wrap" FontWeight="SemiBold"/>
+                        </CheckBox>
+                        <TextBlock Text="Recommended for better performance. Browser runs in background without GUI, using less memory and CPU."
+                                   Style="{StaticResource HelperText}"
+                                   Margin="32,0,0,20"/>
 
-                        <TextBox Text="{Binding ViewportWidth, UpdateSourceTrigger=PropertyChanged}"
-                                 md:HintAssist.Hint="Viewport Width (pixels)"
-                                 md:HintAssist.HelperText="Browser viewport width in pixels (320-3840)"
-                                 Style="{StaticResource StandardTextBox}"
-                                 Margin="0,0,0,28"
-                                 TabIndex="1"
-                                 AutomationProperties.Name="Viewport Width"
-                                 ToolTip="Browser viewport width in pixels"/>
+                        <!-- Viewport Settings Section -->
+                        <TextBlock Text="Viewport Settings" 
+                                   Style="{StaticResource FormSectionHeader}"
+                                   AutomationProperties.HeadingLevel="Level2"/>
 
-                        <TextBox Text="{Binding ViewportHeight, UpdateSourceTrigger=PropertyChanged}"
-                                 md:HintAssist.Hint="Viewport Height (pixels)"
-                                 md:HintAssist.HelperText="Browser viewport height in pixels (240-2160)"
-                                 Style="{StaticResource StandardTextBox}"
-                                 Margin="0,0,0,28"
-                                 TabIndex="2"
-                                 AutomationProperties.Name="Viewport Height"
-                                 ToolTip="Browser viewport height in pixels"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                        <TextBox Text="{Binding MemoryLimitMb, UpdateSourceTrigger=PropertyChanged}"
-                                 md:HintAssist.Hint="Memory Limit (MB)"
-                                 md:HintAssist.HelperText="Browser restarts if memory exceeds this limit (512+)"
-                                 Style="{StaticResource StandardTextBox}"
-                                 Margin="0,0,0,28"
-                                 TabIndex="3"
-                                 AutomationProperties.Name="Memory Limit"
-                                 ToolTip="Browser restarts automatically if memory exceeds this limit"/>
+                            <!-- Viewport Width -->
+                            <StackPanel Grid.Column="0" Style="{StaticResource InputContainer}">
+                                <TextBlock Text="Viewport Width" 
+                                           Style="{StaticResource FormFieldLabel}"/>
+                                <TextBox Text="{Binding ViewportWidth, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource ModernTextBox}"
+                                         TabIndex="1"
+                                         AutomationProperties.Name="Viewport Width in Pixels"/>
+                                <TextBlock Text="Browser viewport width in pixels."
+                                           Style="{StaticResource HelperText}"/>
+                            </StackPanel>
+
+                            <!-- Viewport Height -->
+                            <StackPanel Grid.Column="2" Style="{StaticResource InputContainer}">
+                                <TextBlock Text="Viewport Height" 
+                                           Style="{StaticResource FormFieldLabel}"/>
+                                <TextBox Text="{Binding ViewportHeight, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource ModernTextBox}"
+                                         TabIndex="2"
+                                         AutomationProperties.Name="Viewport Height in Pixels"/>
+                                <TextBlock Text="Browser viewport height in pixels."
+                                           Style="{StaticResource HelperText}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Resource Management Section -->
+                        <TextBlock Text="Resource Management" 
+                                   Style="{StaticResource FormSectionHeader}"
+                                   AutomationProperties.HeadingLevel="Level2"/>
+
+                        <!-- Memory Limit -->
+                        <StackPanel Style="{StaticResource InputContainer}">
+                            <TextBlock Text="Memory Limit" 
+                                       Style="{StaticResource FormFieldLabel}"/>
+                            <TextBox Text="{Binding MemoryLimitMb, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource ModernTextBox}"
+                                     TabIndex="3"
+                                     AutomationProperties.Name="Memory Limit in Megabytes"/>
+                            <TextBlock Text="Browser will automatically restart if memory usage exceeds this limit (in MB). Helps prevent crashes on long crawls."
+                                       Style="{StaticResource HelperText}"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- Plugins Tab -->
-            <TabItem Header="Plugins">
-                <Grid Margin="{StaticResource SpacingXL}">
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{StaticResource Icon.Puzzle}"
+                                   Style="{StaticResource Icon}"
+                                   Width="16" 
+                                   Height="16"
+                                   FontSize="16"
+                                   Margin="0,0,8,0"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Plugins" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <Grid Margin="32,32,32,16">
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <DataGrid Grid.Row="0"
+                    <TextBlock Grid.Row="0"
+                               Text="Installed Plugins" 
+                               Style="{StaticResource FormSectionHeader}"
+                               Margin="0,0,0,16"
+                               AutomationProperties.HeadingLevel="Level2"/>
+
+                    <DataGrid Grid.Row="1"
                               ItemsSource="{Binding Plugins}"
                               Style="{StaticResource ModernDataGrid}"
-                              MaxHeight="300">
+                              MaxHeight="400"
+                              Margin="0,0,0,16">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Name" 
                                                 Binding="{Binding Name}" 
                                                 Width="*"
+                                                MinWidth="150"
                                                 FontWeight="SemiBold"/>
                             <DataGridTextColumn Header="Version" 
                                                 Binding="{Binding Version}" 
-                                                Width="120"
+                                                Width="100"
                                                 FontFamily="Consolas"/>
                             <DataGridCheckBoxColumn Header="Enabled" 
                                                     Binding="{Binding IsEnabled}" 
-                                                    Width="100"
+                                                    Width="80"
                                                     IsReadOnly="True"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
-                    <md:Card Grid.Row="1" 
-                             Padding="16" 
-                             Margin="0,16,0,0" 
-                             Background="#E3F2FD"
-                             md:ElevationAssist.Elevation="Dp0"
-                             UniformCornerRadius="6">
+                    <Border Grid.Row="2" 
+                            Padding="16" 
+                            Background="#E3F2FD"
+                            CornerRadius="6">
                         <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                <md:PackIcon Kind="InformationOutline"
-                                             Width="20"
-                                             Height="20"
-                                             Foreground="{StaticResource InfoBrush}"
-                                             VerticalAlignment="Center"
-                                             Margin="0,0,8,0"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="{StaticResource Icon.Info}"
+                                           Style="{StaticResource Icon}"
+                                           Width="20"
+                                           Height="20"
+                                           FontSize="20"
+                                           Foreground="{StaticResource InfoBrush}"
+                                           Margin="0,0,8,0"/>
                                 <TextBlock Text="Stage 2 Limitation" 
                                            FontWeight="SemiBold"
+                                           FontSize="14"
                                            Foreground="{StaticResource InfoBrush}"
                                            VerticalAlignment="Center"/>
                             </StackPanel>
                             <TextBlock Text="In Stage 2, all plugins are always enabled. Plugin enable/disable and hot-loading will be available in Stage 3."
                                        TextWrapping="Wrap"
+                                       FontSize="13"
                                        Foreground="{StaticResource TextPrimaryBrush}"
                                        Margin="28,0,0,0"/>
                         </StackPanel>
-                    </md:Card>
+                    </Border>
                 </Grid>
             </TabItem>
         </TabControl>

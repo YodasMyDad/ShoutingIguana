@@ -1,383 +1,560 @@
----
-alwaysApply: true
----
+# Shouting Iguana WPF Styling Guide
 
-# Modern WPF Development Guide for Shouting Iguana
+## Overview
 
-**Purpose:** This document defines the coding standards, design system, and architectural patterns for the Shouting Iguana WPF application. Follow these guidelines to maintain consistency and quality across the codebase.
+This document describes the styling architecture and best practices for the Shouting Iguana WPF application. The application uses a **custom, self-contained styling system** built entirely on native WPF controls without any external UI framework dependencies.
 
-------
+### Key Principles
 
-## 1) Core Technology Stack
+1. **Single Source of Truth**: All styles are defined in `Styles.xaml` - there are no external style dependencies
+2. **Windows 11 Aesthetic**: Modern, clean design inspired by Windows 11 design language
+3. **Consistency**: Unified color palette, spacing system, and typography throughout the application
+4. **Accessibility**: WCAG AA compliant color contrast ratios
+5. **Native WPF**: Uses only built-in WPF controls with custom templates
 
-### UI Theme & Components
-- **MaterialDesignInXamlToolkit** (`MaterialDesignThemes`, `MaterialDesignColors`)
-  - Material Design 3 styling, components, dialogs, transitions
-  - Custom palette configured for professional SEO tool aesthetic
+### Previous Architecture (Material Design)
 
-### MVVM Framework
-- **CommunityToolkit.Mvvm** - Lightweight MVVM with source generators
-  - Use `[ObservableProperty]` for properties
-  - Use `[RelayCommand]` for commands
-  - Minimal boilerplate, excellent performance
+The application previously used Material Design In XAML Toolkit (`MaterialDesignThemes` and `MaterialDesignColors` packages). This was removed due to:
+- Style conflicts and clashing between custom styles and Material Design base styles
+- Difficulty maintaining consistent look and feel
+- TabControl styles breaking due to conflicting base styles
+- Unnecessary dependency bloat
 
-### Dependency Injection
-- **Microsoft.Extensions.DependencyInjection** - Standard DI container
-- **Microsoft.Extensions.Hosting** - Host builder pattern for configuration
+## Architecture
 
-### Logging
-- **Serilog** with file, debug, and console sinks
-- Structured logging to `%LocalAppData%\ShoutingIguana\logs\`
-
-### Other Libraries
-- **Playwright** - Headless browser automation
-- **EPPlus** - Excel export functionality
-- **Entity Framework Core** - SQLite database access
-
-------
-
-## 2) Project Structure
+### File Structure
 
 ```
-ShoutingIguana/
-  App.xaml / App.xaml.cs         # Application entry point, DI setup
-  MainWindow.xaml                # Main window with menu, status bar
-  
-  Assets/                        # Images, icons (logo.png, logo.ico)
-  
-  Converters/                    # IValueConverter implementations
-    InverseBooleanConverter.cs
-    InverseBooleanToVisibilityConverter.cs
-    NullToVisibilityConverter.cs
-  
-  Services/                      # Application services
-    NavigationService.cs         # View navigation
-    ProjectContext.cs            # Current project state
-    CsvExportService.cs          # CSV export
-    ExcelExportService.cs        # Excel export
-  
-  Styles/                        # Design system
-    Styles.xaml                  # Complete design system (colors, typography, components)
-  
-  ViewModels/                    # One ViewModel per View
-    MainViewModel.cs
-    ProjectHomeViewModel.cs
-    CrawlDashboardViewModel.cs
-    FindingsViewModel.cs
-    ExtensionsViewModel.cs
-  
-  Views/                         # UserControls (one per screen)
-    ProjectHomeView.xaml
-    CrawlDashboardView.xaml
-    FindingsView.xaml
-    ExtensionsView.xaml
-    SettingsDialog.xaml
+src/ShoutingIguana/
+├── Styles/
+│   └── Styles.xaml          # Single source of truth for all styling
+├── App.xaml                 # Merges Styles.xaml and defines converters
+├── MainWindow.xaml          # Main application window
+└── Views/
+    ├── FindingsView.xaml
+    ├── ProjectHomeView.xaml
+    ├── CrawlDashboardView.xaml
+    ├── ExtensionsView.xaml
+    └── SettingsDialog.xaml
 ```
 
-### Folder Rules
+### Styles.xaml Structure
 
-- **Views/**: UserControls only, no business logic, minimal code-behind
-- **ViewModels/**: Pure C#, no UI types (no `Brush`, `MessageBox`, etc.)
-- **Services/**: Interfaces + implementations, fully testable
-- **Converters/**: Reusable IValueConverter implementations
-- **Styles/**: Design system resources only
+The `Styles.xaml` file is organized into logical sections:
 
-------
+1. **Color Palette** - Primary, background, text, semantic, and border colors
+2. **Spacing System** - Consistent spacing using 4px base unit
+3. **Icon System** - Segoe MDL2 Assets icon glyphs
+4. **Typography** - Text styles for different hierarchy levels
+5. **Button Styles** - Primary, Secondary, Danger, and Large buttons
+6. **Card Styles** - Border-based card components
+7. **Input Styles** - TextBox, CheckBox, ComboBox
+8. **DataGrid Styles** - Modern data grid with hover and selection states
+9. **TabControl Styles** - Custom tab navigation
+10. **Progress Bar** - Custom progress indicators
+11. **Badges & Status** - Severity and status indicators
+12. **Empty States** - Placeholder content for empty views
 
-## 3) Design System
+## Color Palette
 
-All styles are centralized in `Styles/Styles.xaml`. **Always use StaticResource references** - never hardcode colors, sizes, or spacing.
+All colors are defined as `SolidColorBrush` resources in `Styles.xaml`:
 
-### Color Palette
-
-```xml
-<!-- Primary Colors -->
-{StaticResource PrimaryBrush}        <!-- #0078D4 - Main brand color -->
-{StaticResource PrimaryLightBrush}   <!-- #2B88D8 - Lighter variant -->
-{StaticResource PrimaryDarkBrush}    <!-- #005A9E - Darker variant -->
-
-<!-- Background & Surface -->
-{StaticResource BackgroundBrush}     <!-- #F3F3F3 - Page background -->
-{StaticResource SurfaceBrush}        <!-- #FFFFFF - Card/panel background -->
-{StaticResource SurfaceVariantBrush} <!-- #FAFAFA - Alternate surface -->
-{StaticResource SurfaceAltBrush}     <!-- #F5F5F5 - Zebra striping -->
-
-<!-- Text (WCAG AA Compliant) -->
-{StaticResource TextPrimaryBrush}    <!-- #1F1F1F - Primary text -->
-{StaticResource TextSecondaryBrush}  <!-- #5A5A5A - Secondary text -->
-{StaticResource TextTertiaryBrush}   <!-- #757575 - Hints, disabled -->
-
-<!-- Semantic Colors -->
-{StaticResource SuccessBrush}        <!-- #107C10 - Success/positive -->
-{StaticResource WarningBrush}        <!-- #FFB900 - Warning/caution -->
-{StaticResource ErrorBrush}          <!-- #D13438 - Error/danger -->
-{StaticResource InfoBrush}           <!-- #0078D4 - Info/neutral -->
-
-<!-- UI Elements -->
-{StaticResource BorderBrush}         <!-- #E0E0E0 - Standard borders -->
-{StaticResource BorderLightBrush}    <!-- #EEEEEE - Subtle dividers -->
-{StaticResource DividerBrush}        <!-- #E0E0E0 - Separators -->
-{StaticResource HoverBrush}          <!-- #F0F0F0 - Hover states -->
-{StaticResource FocusBrush}          <!-- #0078D4 - Focus indicators -->
+### Primary Colors
+```xaml
+<SolidColorBrush x:Key="PrimaryBrush" Color="#0078D4"/>        <!-- Windows Blue -->
+<SolidColorBrush x:Key="PrimaryLightBrush" Color="#2B88D8"/>   <!-- Hover state -->
+<SolidColorBrush x:Key="PrimaryDarkBrush" Color="#005A9E"/>    <!-- Pressed state -->
 ```
 
-### Spacing System (4px base unit)
-
-```xml
-<!-- Thickness values -->
-{StaticResource SpacingXS}   <!-- 4px -->
-{StaticResource SpacingS}    <!-- 8px -->
-{StaticResource SpacingM}    <!-- 16px -->
-{StaticResource SpacingL}    <!-- 24px -->
-{StaticResource SpacingXL}   <!-- 32px -->
-{StaticResource SpacingXXL}  <!-- 48px -->
-
-<!-- Double values (for Width, Height, FontSize) -->
-{StaticResource SpacingXSValue}   <!-- 4 -->
-{StaticResource SpacingSValue}    <!-- 8 -->
-{StaticResource SpacingMValue}    <!-- 16 -->
-{StaticResource SpacingLValue}    <!-- 24 -->
-{StaticResource SpacingXLValue}   <!-- 32 -->
-{StaticResource SpacingXXLValue}  <!-- 48 -->
+### Background Colors
+```xaml
+<SolidColorBrush x:Key="BackgroundBrush" Color="#F3F3F3"/>        <!-- Page background -->
+<SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF"/>           <!-- Card/surface background -->
+<SolidColorBrush x:Key="SurfaceVariantBrush" Color="#FAFAFA"/>   <!-- Alternate surface -->
+<SolidColorBrush x:Key="SurfaceAltBrush" Color="#F5F5F5"/>       <!-- Zebra striping -->
 ```
 
-**Usage:**
-```xml
-<!-- Good -->
-<Grid Margin="{StaticResource SpacingL}">
-<StackPanel Margin="0,0,0,24">  <!-- Exception: custom spacing between elements -->
-
-<!-- Bad -->
-<Grid Margin="15,20,15,20">  <!-- Never hardcode -->
+### Text Colors (WCAG AA Compliant)
+```xaml
+<SolidColorBrush x:Key="TextPrimaryBrush" Color="#1F1F1F"/>      <!-- Main text -->
+<SolidColorBrush x:Key="TextSecondaryBrush" Color="#5A5A5A"/>    <!-- Secondary text -->
+<SolidColorBrush x:Key="TextTertiaryBrush" Color="#757575"/>     <!-- Disabled/placeholder text -->
 ```
 
-### Typography Scale
-
-```xml
-<!-- Text Styles -->
-{StaticResource DisplayTextStyle}   <!-- 28px, SemiBold - Page titles -->
-{StaticResource TitleTextStyle}     <!-- 20px, SemiBold - Section headers -->
-{StaticResource BodyTextStyle}      <!-- 14px, Normal - Standard text -->
-{StaticResource CaptionTextStyle}   <!-- 12px, Normal - Metadata, labels -->
+### Semantic Colors
+```xaml
+<SolidColorBrush x:Key="SuccessBrush" Color="#107C10"/>    <!-- Success/positive actions -->
+<SolidColorBrush x:Key="WarningBrush" Color="#FFB900"/>    <!-- Warnings -->
+<SolidColorBrush x:Key="ErrorBrush" Color="#D13438"/>      <!-- Errors/danger -->
+<SolidColorBrush x:Key="InfoBrush" Color="#0078D4"/>       <!-- Informational -->
 ```
 
-**Usage:**
-```xml
-<TextBlock Text="Findings" 
-           Style="{StaticResource DisplayTextStyle}"
-           AutomationProperties.HeadingLevel="Level1"/>
-           
-<TextBlock Text="Recent Activity" 
-           Style="{StaticResource TitleTextStyle}"
-           AutomationProperties.HeadingLevel="Level2"/>
-           
-<TextBlock Text="{Binding Description}" 
-           Style="{StaticResource BodyTextStyle}"/>
-           
-<TextBlock Text="Last updated: 2 mins ago" 
-           Style="{StaticResource CaptionTextStyle}"
-           Foreground="{StaticResource TextSecondaryBrush}"/>
+### Usage
+
+Always use the static resource brushes instead of hard-coding colors:
+
+```xaml
+<!-- ✓ Correct -->
+<TextBlock Foreground="{StaticResource TextPrimaryBrush}" />
+
+<!-- ✗ Incorrect -->
+<TextBlock Foreground="#1F1F1F" />
 ```
+
+## Spacing System
+
+The spacing system is based on a **4px base unit** for consistent rhythm throughout the UI:
+
+```xaml
+<Thickness x:Key="SpacingXS">4</Thickness>      <!-- 4px -->
+<Thickness x:Key="SpacingS">8</Thickness>       <!-- 8px -->
+<Thickness x:Key="SpacingM">16</Thickness>      <!-- 16px -->
+<Thickness x:Key="SpacingL">24</Thickness>      <!-- 24px -->
+<Thickness x:Key="SpacingXL">32</Thickness>     <!-- 32px -->
+<Thickness x:Key="SpacingXXL">48</Thickness>    <!-- 48px -->
+```
+
+Double values are also available for numeric properties:
+```xaml
+<sys:Double x:Key="SpacingMValue">16</sys:Double>
+```
+
+### Usage Guidelines
+
+- **SpacingXS (4px)**: Tight spacing within components (e.g., badge padding)
+- **SpacingS (8px)**: Small gaps between related items
+- **SpacingM (16px)**: Standard spacing between sections, default padding
+- **SpacingL (24px)**: Large spacing between major sections, card padding
+- **SpacingXL (32px)**: Extra large spacing for major separations
+- **SpacingXXL (48px)**: Maximum spacing for dramatic separation
+
+### Example
+
+```xaml
+<StackPanel Margin="{StaticResource SpacingL}">
+    <TextBlock Text="Title" Margin="0,0,0,{StaticResource SpacingMValue}"/>
+    <TextBlock Text="Content" />
+</StackPanel>
+```
+
+## Icon System
+
+The application uses **Segoe MDL2 Assets**, a built-in Windows font containing icons. This eliminates the need for external icon libraries.
+
+### Icon Glyphs
+
+Icons are defined as Unicode string resources:
+
+```xaml
+<sys:String x:Key="Icon.Play">&#xE768;</sys:String>
+<sys:String x:Key="Icon.Stop">&#xE71A;</sys:String>
+<sys:String x:Key="Icon.Refresh">&#xE72C;</sys:String>
+<sys:String x:Key="Icon.Home">&#xE80F;</sys:String>
+<sys:String x:Key="Icon.Settings">&#xE713;</sys:String>
+<!-- ... and many more -->
+```
+
+### Icon Style
+
+The base icon style sets the Segoe MDL2 Assets font:
+
+```xaml
+<Style x:Key="Icon" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+    <Setter Property="FontSize" Value="16"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="HorizontalAlignment" Value="Center"/>
+</Style>
+```
+
+### Using Icons
+
+Icons are displayed using `TextBlock` with the Icon style:
+
+```xaml
+<!-- Basic icon -->
+<TextBlock Text="{StaticResource Icon.Play}" Style="{StaticResource Icon}"/>
+
+<!-- Icon with custom size and color -->
+<TextBlock Text="{StaticResource Icon.Refresh}"
+           Style="{StaticResource Icon}"
+           Width="24"
+           Height="24"
+           FontSize="24"
+           Foreground="{StaticResource PrimaryBrush}"/>
+
+<!-- Icon in a button -->
+<Button Style="{StaticResource PrimaryButton}">
+    <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{StaticResource Icon.Play}"
+                   Style="{StaticResource Icon}"
+                   Foreground="White"
+                   Margin="0,0,8,0"/>
+        <TextBlock Text="Start Crawl" Foreground="White"/>
+    </StackPanel>
+</Button>
+```
+
+### Available Icons
+
+| Icon Key | Glyph | Usage |
+|----------|-------|-------|
+| `Icon.Play` | &#xE768; | Start/play actions |
+| `Icon.Stop` | &#xE71A; | Stop actions |
+| `Icon.Pause` | &#xE769; | Pause actions |
+| `Icon.Refresh` | &#xE72C; | Refresh/reload |
+| `Icon.Home` | &#xE80F; | Home/main view |
+| `Icon.Settings` | &#xE713; | Settings/configuration |
+| `Icon.Search` | &#xE721; | Search functionality |
+| `Icon.Save` | &#xE74E; | Save operations |
+| `Icon.Delete` | &#xE74D; | Delete operations |
+| `Icon.Info` | &#xE946; | Information |
+| `Icon.Warning` | &#xE7BA; | Warnings |
+| `Icon.Error` | &#xE783; | Errors |
+| `Icon.CheckCircle` | &#xE73E; | Success/completed |
+| `Icon.Web` | &#xE774; | Web/browser |
+| `Icon.Folder` | &#xE8B7; | Folders |
+| `Icon.FileExcel` | &#xE9F9; | Excel files |
+| `Icon.Copy` | &#xE8C8; | Copy to clipboard |
+
+See `Styles.xaml` for the complete list of 40+ available icons.
+
+## Typography
+
+### Text Styles
+
+```xaml
+<!-- Display (28px) - Main headlines -->
+<TextBlock Text="Main Heading" Style="{StaticResource DisplayTextStyle}"/>
+
+<!-- Title (20px) - Section headers -->
+<TextBlock Text="Section Title" Style="{StaticResource TitleTextStyle}"/>
+
+<!-- Body (14px) - Standard text -->
+<TextBlock Text="Body content" Style="{StaticResource BodyTextStyle}"/>
+
+<!-- Caption (12px) - Metadata -->
+<TextBlock Text="Metadata" Style="{StaticResource CaptionTextStyle}"/>
+```
+
+### Default Text Style
+
+All `TextBlock` elements have a default 14px font size applied. You can override this with specific text styles.
+
+```xaml
+<!-- This will automatically be 14px -->
+<TextBlock Text="Default sized text"/>
+```
+
+## Buttons
 
 ### Button Styles
 
-```xml
-<!-- Primary Action (40px height, 24px horizontal padding) -->
-<Button Content="Start Crawl"
-        Command="{Binding StartCommand}"
-        Style="{StaticResource PrimaryButton}"/>
+#### Primary Button
+For main actions (e.g., "Save", "Start Crawl"):
 
-<!-- Secondary Action (40px height, 24px horizontal padding) -->
-<Button Content="Cancel"
-        Command="{Binding CancelCommand}"
-        Style="{StaticResource SecondaryButton}"/>
-
-<!-- Destructive Action (40px height, 24px horizontal padding) -->
-<Button Content="Delete Project"
-        Command="{Binding DeleteCommand}"
-        Style="{StaticResource DangerButton}"/>
-
-<!-- Prominent Action (48px height, 32px horizontal padding) -->
-<Button Content="Create Project"
-        Command="{Binding CreateCommand}"
-        Style="{StaticResource LargeButton}"/>
+```xaml
+<Button Content="Save" Style="{StaticResource PrimaryButton}"/>
 ```
 
-**Button Guidelines:**
-- Primary: Main action (1 per section max) - 40px height
-- Secondary: Alternative/cancel actions - 40px height
-- Danger: Destructive operations (delete, stop, clear) - 40px height
-- Large: Hero actions on landing screens - 48px height
-- All buttons use `Padding="24,12"` (or `32,12` for Large)
-- All buttons use `FocusVisualStyle="{x:Null}"` (Material Design handles focus)
+Features:
+- Blue background (`#0078D4`)
+- White foreground
+- Elevation shadow
+- Hover scale effect (1.02x)
+- Height: 40px, Padding: 24,8
 
-### Card Styles
+#### Secondary Button
+For secondary actions (e.g., "Cancel", "Refresh"):
 
-```xml
-<!-- Standard Card (default for content sections) -->
-<md:Card Style="{StaticResource StandardCard}">
-    <!-- Content -->
-</md:Card>
-
-<!-- Metric Card (dashboard stats) -->
-<md:Card Style="{StaticResource MetricCard}">
-    <!-- Stat content -->
-</md:Card>
-
-<!-- Info Card (notices, tips) -->
-<md:Card Style="{StaticResource InfoCard}">
-    <!-- Info message -->
-</md:Card>
-
-<!-- Message Cards -->
-<md:Card Style="{StaticResource ErrorMessageCard}"/>
-<md:Card Style="{StaticResource WarningMessageCard}"/>
-<md:Card Style="{StaticResource SuccessMessageCard}"/>
+```xaml
+<Button Content="Cancel" Style="{StaticResource SecondaryButton}"/>
 ```
 
-### Input Styles
+Features:
+- Transparent background with border
+- TextPrimary foreground
+- No elevation
+- Hover background change
+- Height: 40px, Padding: 24,8
 
-**CRITICAL: Always use vertical stacking for forms. NEVER use two-column layouts with labels on the left.**
+#### Danger Button
+For destructive actions (e.g., "Delete", "Stop"):
 
-```xml
-<!-- Text Input with Hint (simple field without helper text) -->
-<TextBox Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
-         md:HintAssist.Hint="Project Name"
-         Style="{StaticResource StandardTextBox}"
-         Margin="0,0,0,20"
-         AutomationProperties.Name="Project Name"
-         ToolTip="Enter a descriptive name for your project"/>
-
-<!-- Text Input with Hint and Helper Text (needs MORE spacing - 28px) -->
-<TextBox Text="{Binding MaxDepth, UpdateSourceTrigger=PropertyChanged}"
-         md:HintAssist.Hint="Max Crawl Depth"
-         md:HintAssist.HelperText="Maximum link depth from start URL (1-20)"
-         Style="{StaticResource StandardTextBox}"
-         Margin="0,0,0,28"
-         AutomationProperties.Name="Maximum Crawl Depth"
-         ToolTip="Maximum number of clicks from start URL"/>
-
-<!-- ComboBox -->
-<ComboBox SelectedValue="{Binding SelectedSeverity}"
-          Style="{StaticResource StandardComboBox}"
-          AutomationProperties.Name="Filter by Severity"/>
-
-<!-- CheckBox -->
-<CheckBox Content="Respect robots.txt"
-          IsChecked="{Binding RespectRobotsTxt}"
-          FontSize="14"
-          Margin="0,8,0,0"
-          AutomationProperties.Name="Respect Robots.txt"
-          ToolTip="Follow robots.txt exclusion rules"/>
+```xaml
+<Button Content="Delete" Style="{StaticResource DangerButton}"/>
 ```
 
-**TabControl:**
-```xml
-<!-- Tabbed dialog (e.g., Settings) -->
-<TabControl Style="{StaticResource StandardTabControl}">
-    <TabItem Header="General">
-        <ScrollViewer Padding="32,40,32,32">
-            <!-- Tab content -->
-        </ScrollViewer>
-    </TabItem>
-    <TabItem Header="Advanced">
-        <!-- Tab content -->
-    </TabItem>
-</TabControl>
+Features:
+- Red background (`#D13438`)
+- White foreground
+- Elevation shadow
+- Height: 40px, Padding: 24,8
+
+#### Large Button
+For prominent primary actions:
+
+```xaml
+<Button Content="Get Started" Style="{StaticResource LargeButton}"/>
 ```
 
-**TabControl Guidelines:**
-- Always use `StandardTabControl` style for proper text colors (white on selected blue tabs)
-- Selected tabs automatically get white text on blue background
-- Unselected tabs use standard text color
-- Don't add redundant headings inside tab content - the tab header is sufficient
+Features:
+- Same as Primary Button
+- Height: 48px, Padding: 32,12
+- Larger font size (15px)
 
-**Form Field Guidelines:**
+### Button with Icon
 
-1. **Always use `md:HintAssist.Hint`** - Put the field name in the hint (e.g., "Project Name", "Max Depth")
-2. **Use `md:HintAssist.HelperText`** for validation/guidance - Show constraints below the field
-3. **Never use labels beside textboxes** - The floating hint IS the label
-4. **Stack fields vertically** - Use StackPanel with MaxWidth (400-500px)
-5. **Consistent spacing** - **28px margin** between fields when using HelperText (`Margin="0,0,0,28"`)
-   - **20px margin** for simple fields without HelperText (`Margin="0,0,0,20"`)
-   - The floating label needs space to animate up without overlapping helper text below
-6. **Top padding** - Use **40px top padding** on ScrollViewer (`Padding="32,40,32,32"`) to prevent label cutoff
-7. **Always include tooltips** - Provides extra context on hover
-8. **UpdateSourceTrigger=PropertyChanged** - For real-time validation
-
-**Bad Pattern (DO NOT USE):**
-```xml
-<!-- BAD: Two-column layout with separate labels -->
-<Grid>
-    <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="Auto"/>
-        <ColumnDefinition Width="*"/>
-    </Grid.ColumnDefinitions>
-    <TextBlock Grid.Column="0" Text="Project Name"/>
-    <TextBox Grid.Column="1" Text="{Binding ProjectName}"/>
-</Grid>
-```
-
-**Good Pattern:**
-```xml
-<!-- GOOD: Vertical stacking with Material Design hints -->
-<ScrollViewer Padding="32,40,32,32">  <!-- Extra top padding prevents label cutoff -->
-    <StackPanel MaxWidth="500">
-        <TextBox Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
-                 md:HintAssist.Hint="Project Name"
-                 md:HintAssist.HelperText="Enter a descriptive name"
-                 Style="{StaticResource StandardTextBox}"
-                 Margin="0,0,0,28"/>  <!-- 28px when using HelperText -->
-        
-        <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}"
-                 md:HintAssist.Hint="Base URL"
-                 Style="{StaticResource StandardTextBox}"
-                 Margin="0,0,0,20"/>  <!-- 20px without HelperText -->
+```xaml
+<Button Style="{StaticResource PrimaryButton}">
+    <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{StaticResource Icon.Play}"
+                   Style="{StaticResource Icon}"
+                   Foreground="White"
+                   Margin="0,0,8,0"/>
+        <TextBlock Text="Start" Foreground="White"/>
     </StackPanel>
-</ScrollViewer>
+</Button>
 ```
 
-### DataGrid Style
+**Important**: When using icons inside Primary or Danger buttons, explicitly set `Foreground="White"` on both the icon and text, as button templates don't automatically inherit foreground color to nested TextBlocks.
 
-```xml
-<DataGrid ItemsSource="{Binding Items}"
+## Cards
+
+Cards are implemented using styled `Border` controls with drop shadows.
+
+### Standard Card
+
+```xaml
+<Border Style="{StaticResource Card}">
+    <StackPanel>
+        <TextBlock Text="Card Title" Style="{StaticResource TitleTextStyle}"/>
+        <TextBlock Text="Card content goes here"/>
+    </StackPanel>
+</Border>
+
+<!-- Alternative: StandardCard is an alias for Card -->
+<Border Style="{StaticResource StandardCard}">
+    <!-- Content -->
+</Border>
+```
+
+Features:
+- White background
+- 8px corner radius
+- 24px padding
+- Drop shadow (Dp2 equivalent)
+
+### Metric Card
+
+For dashboard metrics and statistics:
+
+```xaml
+<Border Style="{StaticResource MetricCard}"
+        BorderBrush="{StaticResource SuccessBrush}"
+        BorderThickness="4,0,0,0">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <TextBlock Grid.Row="0" 
+                   Text="URLs Crawled" 
+                   Style="{StaticResource BodyTextStyle}"/>
+        <TextBlock Grid.Row="1" 
+                   Text="1,234" 
+                   Style="{StaticResource DisplayTextStyle}"
+                   FontSize="32"/>
+    </Grid>
+</Border>
+```
+
+Features:
+- 16px padding (more compact than standard card)
+- Lighter drop shadow (Dp1 equivalent)
+- Often combined with colored left border for accent
+
+### Info Card
+
+For informational messages and hints:
+
+```xaml
+<Border Style="{StaticResource InfoCard}">
+    <TextBlock Text="Helpful information appears here"/>
+</Border>
+```
+
+Features:
+- Light blue background (`#E3F2FD`)
+- No shadow
+- 6px corner radius
+
+### Shadow Elevation
+
+Cards use `DropShadowEffect` to simulate Material Design elevation:
+
+| Elevation | Blur Radius | Shadow Depth | Opacity | Usage |
+|-----------|-------------|--------------|---------|-------|
+| Dp0 | - | - | - | No shadow (Info cards) |
+| Dp1 | 4 | 1 | 0.08 | Metric cards |
+| Dp2 | 8 | 2 | 0.10 | Standard cards |
+| Dp4 | 12 | 3 | 0.12 | Elevated cards |
+| Dp8 | 24 | 4 | 0.15 | Modal overlays |
+
+## Input Controls
+
+### TextBox
+
+Custom TextBox with placeholder support:
+
+```xaml
+<TextBox Text="{Binding ProjectName}"
+         Tag="Enter project name"
+         Style="{StaticResource StandardTextBox}"/>
+```
+
+Features:
+- Placeholder text shown when empty and unfocused (set via `Tag` property)
+- Border changes to primary color on hover/focus
+- Rounded corners (4px)
+- Padding: 12,10
+
+**Placeholder Pattern**: The `Tag` property is used to specify placeholder text. The custom template automatically shows/hides it based on focus and content.
+
+### CheckBox
+
+```xaml
+<CheckBox Content="Remember me" IsChecked="{Binding RememberMe}"/>
+```
+
+The default CheckBox style is automatically applied. For explicit styling:
+
+```xaml
+<CheckBox Content="Agree to terms" Style="{StaticResource StandardCheckBox}"/>
+```
+
+### ComboBox
+
+```xaml
+<ComboBox ItemsSource="{Binding Items}"
           SelectedItem="{Binding SelectedItem}"
+          Style="{StaticResource StandardComboBox}"/>
+```
+
+Features:
+- Consistent with TextBox styling
+- Primary color focus border
+- Padding: 12,8
+
+## DataGrid
+
+### Modern DataGrid Style
+
+```xaml
+<DataGrid ItemsSource="{Binding Items}"
           Style="{StaticResource ModernDataGrid}">
     <DataGrid.Columns>
-        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
-        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120"/>
+        <DataGridTextColumn Header="Name" Binding="{Binding Name}"/>
+        <DataGridTextColumn Header="Status" Binding="{Binding Status}"/>
     </DataGrid.Columns>
 </DataGrid>
 ```
 
 Features:
 - No grid lines
-- Alternating row backgrounds
-- Hover effects
+- Alternating row colors
+- Hover state with gray background
+- Selected state with light blue background (`#E3F2FD`)
+- Custom column header styling
 - Row height: 40px
-- Column headers: 44px height, semibold, subtle background
+- Header height: 44px
 
-### Progress Bar
+### Context Menus
 
-```xml
-<ProgressBar Value="{Binding ProgressPercentage}"
-             Maximum="100"
-             Style="{StaticResource ModernProgressBar}"
-             Height="12"/>
+DataGrids often have context menus with icons:
+
+```xaml
+<DataGrid.ContextMenu>
+    <ContextMenu>
+        <MenuItem Header="Copy">
+            <MenuItem.Icon>
+                <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
+            </MenuItem.Icon>
+        </MenuItem>
+    </ContextMenu>
+</DataGrid.ContextMenu>
 ```
+
+## TabControl
+
+### Standard TabControl
+
+```xaml
+<TabControl Style="{StaticResource StandardTabControl}">
+    <TabItem Header="General">
+        <!-- Content -->
+    </TabItem>
+    <TabItem Header="Advanced">
+        <!-- Content -->
+    </TabItem>
+</TabControl>
+```
+
+Features:
+- Custom tab header bar with light gray background
+- Blue underline on selected tab
+- Hover state
+- Padding in content area: 0,16,0,0
+
+### Tab Height
+
+To customize individual tab heights:
+
+```xaml
+<TabControl.ItemContainerStyle>
+    <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+        <Setter Property="Height" Value="48"/>
+    </Style>
+</TabControl.ItemContainerStyle>
+```
+
+**Important**: Use `BasedOn="{StaticResource {x:Type TabItem}}"` to inherit the custom TabItem style while overriding specific properties.
+
+## Progress Bars
+
+### Modern Progress Bar
+
+```xaml
+<ProgressBar Value="{Binding Progress}"
+             Maximum="100"
+             Style="{StaticResource ModernProgressBar}"/>
+```
+
+Features:
+- Rounded corners (6px)
+- Blue progress indicator with glow effect
+- Height: 12px
+- Light gray background
+
+## Badges
 
 ### Severity Badges
 
-```xml
-<!-- Use in DataGrid or custom layouts -->
+For findings and issue indicators:
+
+```xaml
+<!-- Error Badge -->
 <Border Style="{StaticResource ErrorSeverityBadge}">
     <TextBlock Text="Error"/>
 </Border>
 
+<!-- Warning Badge -->
 <Border Style="{StaticResource WarningSeverityBadge}">
     <TextBlock Text="Warning"/>
 </Border>
 
+<!-- Info Badge -->
 <Border Style="{StaticResource InfoSeverityBadge}">
     <TextBlock Text="Info"/>
 </Border>
@@ -385,1242 +562,266 @@ Features:
 
 ### Status Badges
 
-```xml
+For plugin and component status:
+
+```xaml
+<!-- Active/Success Status -->
 <Border Style="{StaticResource ActiveStatusBadge}">
     <TextBlock Text="Active"/>
 </Border>
 
+<!-- Loaded Status -->
 <Border Style="{StaticResource LoadedStatusBadge}">
     <TextBlock Text="Loaded"/>
 </Border>
 ```
 
-### Empty States
+Features:
+- Rounded corners (12px for status, 4px for severity)
+- Colored backgrounds with semantic meaning
+- Bold text
+- Font size: 12px
 
-```xml
+## Empty States
+
+### Empty State Pattern
+
+```xaml
 <StackPanel Style="{StaticResource EmptyStateContainer}">
-    <md:PackIcon Kind="FolderOutline" 
-                 Style="{StaticResource EmptyStateIcon}"/>
-    <TextBlock Text="No Recent Projects" 
+    <TextBlock Text="{StaticResource Icon.Folder}"
+               Style="{StaticResource EmptyStateIcon}"/>
+    <TextBlock Text="No Items Found"
                Style="{StaticResource EmptyStateTitle}"/>
-    <TextBlock Text="Create a new project to get started" 
+    <TextBlock Text="Start by adding your first item"
                Style="{StaticResource EmptyStateMessage}"/>
 </StackPanel>
 ```
 
-### Focus Visual Styles
+Features:
+- Large icon (64px)
+- Title and message with appropriate styling
+- Centered alignment
+- Gray color scheme
 
-```xml
-<!-- Standard focus (buttons, inputs) -->
-FocusVisualStyle="{StaticResource ModernFocusVisual}"
+## Animations
 
-<!-- Card focus (larger interactive areas) -->
-FocusVisualStyle="{StaticResource CardFocusVisual}"
+### Slide Up Animation
+
+```xaml
+<Border.Triggers>
+    <EventTrigger RoutedEvent="Loaded">
+        <BeginStoryboard>
+            <Storyboard>
+                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                 From="20" To="0" Duration="0:0:0.4"
+                                 DecelerationRatio="0.7"/>
+                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                 From="0" To="1" Duration="0:0:0.4"
+                                 DecelerationRatio="0.7"/>
+            </Storyboard>
+        </BeginStoryboard>
+    </EventTrigger>
+</Border.Triggers>
 ```
 
-------
-
-## 4) Accessibility Requirements
-
-**ALL UI elements MUST meet these requirements:**
-
-### Interactive Elements
-
-Every button, link, input, and interactive control MUST have:
-
-```xml
-<Button Content="Export"
-        Command="{Binding ExportCommand}"
-        AutomationProperties.Name="Export to CSV"
-        ToolTip="Export findings to CSV file"/>
-```
-
-- `AutomationProperties.Name` - Screen reader label (describe action)
-- `ToolTip` - Visual tooltip (provide context)
-
-### Headings
-
-All section titles MUST have heading levels:
-
-```xml
-<TextBlock Text="Project Settings"
-           Style="{StaticResource DisplayTextStyle}"
-           AutomationProperties.HeadingLevel="Level1"/>
-
-<TextBlock Text="Basic Information"
-           Style="{StaticResource TitleTextStyle}"
-           AutomationProperties.HeadingLevel="Level2"/>
-```
-
-**Heading hierarchy:**
-- Level1: Page title (one per view)
-- Level2: Major sections
-- Level3: Subsections (if needed)
-
-### Keyboard Navigation
-
-- All interactive elements MUST be keyboard accessible
-- Use `TabIndex` to control focus order when default is incorrect
-- Set `FocusVisualStyle` for custom focus indicators
-- Test with Tab, Shift+Tab, Enter, Space, Arrow keys
-
-### Keyboard Shortcuts
-
-Defined in `MainWindow.xaml`:
-```
-Ctrl+N      New Project
-Ctrl+O      Open Project
-Ctrl+W      Close Project
-Ctrl+1-4    Navigate to views
-F5          Refresh
-F6          Start Crawl
-F8          Stop Crawl
-```
-
-Always show shortcuts in menu items:
-```xml
-<MenuItem Header="_Start Crawl" 
-          Command="{Binding StartCrawlCommand}" 
-          InputGestureText="F6"/>
-```
-
-### Color Contrast
-
-All text must meet WCAG AA standards (4.5:1 for normal text, 3:1 for large text). The design system colors are pre-validated.
-
-### High Contrast Mode
-
-The app supports Windows High Contrast themes automatically. Test with:
-- Settings > Accessibility > Contrast themes
-
-------
-
-## 5) MVVM Architecture
-
-### ViewModel Structure
-
-```csharp
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.Logging;
-
-namespace ShoutingIguana.ViewModels;
-
-public partial class ExampleViewModel : ObservableObject, IDisposable
-{
-    private readonly ILogger<ExampleViewModel> _logger;
-    private readonly IExampleService _service;
-    private bool _disposed;
-
-    // Observable Properties (generates property + PropertyChanged)
-    [ObservableProperty]
-    private string _title = "Default Title";
-
-    [ObservableProperty]
-    private bool _isLoading;
-
-    [ObservableProperty]
-    private ObservableCollection<Item> _items = new();
-
-    // Constructor with DI
-    public ExampleViewModel(
-        ILogger<ExampleViewModel> logger,
-        IExampleService service)
-    {
-        _logger = logger;
-        _service = service;
-        
-        // Subscribe to events
-        _service.DataChanged += OnDataChanged;
-    }
-
-    // Relay Commands (generates command + CanExecute)
-    [RelayCommand]
-    private async Task LoadDataAsync()
-    {
-        IsLoading = true;
-        try
-        {
-            var data = await _service.GetDataAsync();
-            Items.Clear();
-            foreach (var item in data)
-            {
-                Items.Add(item);
-            }
-            _logger.LogInformation("Loaded {Count} items", Items.Count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to load data");
-            // Show error to user (via service, not MessageBox)
-        }
-        finally
-        {
-            IsLoading = false;
-        }
-    }
-
-    [RelayCommand(CanExecute = nameof(CanSave))]
-    private async Task SaveAsync()
-    {
-        // Save logic
-    }
-
-    private bool CanSave() => !string.IsNullOrWhiteSpace(Title);
-
-    // Event handlers
-    private void OnDataChanged(object? sender, EventArgs e)
-    {
-        // Update UI
-    }
-
-    // Disposal
-    public void Dispose()
-    {
-        if (_disposed) return;
-        
-        // Unsubscribe from events
-        _service.DataChanged -= OnDataChanged;
-        
-        _disposed = true;
-    }
-}
-```
-
-### ViewModel Rules
-
-1. **No UI Types**: Never reference `Window`, `MessageBox`, `Brush`, `Visibility`, etc.
-2. **Async Commands**: Use `Task` return type for async operations
-3. **Error Handling**: Log errors, don't swallow them
-4. **Disposal**: Implement `IDisposable` if subscribing to events
-5. **Property Names**: Use PascalCase for observable properties
-6. **UpdateSourceTrigger**: Use `PropertyChanged` for real-time validation
-
-### View Structure
-
-```xml
-<UserControl x:Class="ShoutingIguana.Views.ExampleView"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
-             Background="{StaticResource BackgroundBrush}">
-    
-    <Grid Margin="{StaticResource SpacingL}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <!-- Header -->
-        <Grid Grid.Row="0" Margin="{StaticResource SpacingL}">
-            <TextBlock Text="Page Title"
-                       Style="{StaticResource DisplayTextStyle}"
-                       AutomationProperties.HeadingLevel="Level1"/>
-            
-            <StackPanel Style="{StaticResource ToolbarPanel}">
-                <Button Content="Action"
-                        Command="{Binding ActionCommand}"
-                        Style="{StaticResource PrimaryButton}"/>
-            </StackPanel>
-        </Grid>
-
-        <!-- Content -->
-        <md:Card Grid.Row="1" Style="{StaticResource StandardCard}">
-            <!-- Your content here -->
-        </md:Card>
-    </Grid>
-</UserControl>
-```
-
-### View Code-Behind
-
-**Minimal code-behind only:**
-
-```csharp
-using System.Windows.Controls;
-
-namespace ShoutingIguana.Views;
-
-public partial class ExampleView : UserControl
-{
-    public ExampleView()
-    {
-        InitializeComponent();
-    }
-}
-```
-
-**Never put business logic in code-behind.** Only handle pure UI concerns that can't be done in XAML.
-
-------
-
-## 6) Navigation Pattern
-
-### INavigationService
-
-```csharp
-public interface INavigationService
-{
-    event EventHandler<UserControl>? NavigationRequested;
-    void NavigateTo<T>() where T : UserControl;
-    void NavigateTo(UserControl view);
-}
-```
-
-### Usage in ViewModels
-
-```csharp
-[RelayCommand]
-private void NavigateToSettings()
-{
-    _navigationService.NavigateTo<SettingsView>();
-}
-```
-
-### Navigation Lifecycle
-
-1. `NavigationService.NavigateTo<T>()` is called
-2. Service creates view instance via DI (ViewModel injected)
-3. Service disposes previous view's DataContext if `IDisposable`
-4. Service raises `NavigationRequested` event
-5. `MainViewModel` receives event and updates `CurrentView` property
-6. WPF ContentControl displays new view
-
-### ViewModel Disposal
-
-ViewModels are disposed automatically when navigating away:
-
-```csharp
-public partial class MyViewModel : ObservableObject, IDisposable
-{
-    private bool _disposed;
-
-    public MyViewModel(IMyService service)
-    {
-        _service = service;
-        _service.EventOccurred += OnEventOccurred;
-    }
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-        
-        // CRITICAL: Unsubscribe from all events
-        _service.EventOccurred -= OnEventOccurred;
-        
-        // Dispose owned resources
-        _someDisposable?.Dispose();
-        
-        _disposed = true;
-    }
-}
-```
-
-**Memory Leak Prevention:**
-- Always unsubscribe from events in `Dispose()`
-- Don't capture `this` in lambdas that outlive the ViewModel
-- Use weak event patterns for long-lived event sources
-
-------
-
-## 7) Dependency Injection
-
-### Registration in App.xaml.cs
-
-```csharp
-services.AddSingleton<INavigationService, NavigationService>();
-services.AddSingleton<IProjectContext, ProjectContext>();
-services.AddScoped<IUrlRepository, UrlRepository>();
-services.AddTransient<ProjectHomeViewModel>();
-```
-
-### Lifetimes
-
-- **Singleton**: Lives for app lifetime (services, caches)
-  - `INavigationService`, `IProjectContext`, `IPlaywrightService`
-  
-- **Scoped**: Lives for scope lifetime (database contexts)
-  - `IShoutingIguanaDbContext`, repositories
-  
-- **Transient**: New instance every time (ViewModels)
-  - All ViewModels (ensures clean state on navigation)
-
-### Service Patterns
-
-**Interface + Implementation:**
-```csharp
-// IMyService.cs
-public interface IMyService
-{
-    Task<Data> GetDataAsync();
-}
-
-// MyService.cs
-public class MyService : IMyService
-{
-    private readonly ILogger<MyService> _logger;
-
-    public MyService(ILogger<MyService> logger)
-    {
-        _logger = logger;
-    }
-
-    public async Task<Data> GetDataAsync()
-    {
-        _logger.LogInformation("Getting data...");
-        // Implementation
-    }
-}
-
-// Registration
-services.AddSingleton<IMyService, MyService>();
-```
-
-------
-
-## 8) Value Converters
-
-### Built-in Converters
-
-```xml
-<!-- In App.xaml -->
-<BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-<converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
-<converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
-<converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
-```
-
-### Usage Examples
-
-```xml
-<!-- Show/hide based on boolean -->
-<TextBlock Text="Loading..." 
-           Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-
-<!-- Invert boolean (for IsEnabled) -->
-<Button Content="Start"
-        IsEnabled="{Binding IsCrawling, Converter={StaticResource InverseBooleanConverter}}"/>
-
-<!-- Show when NOT loading -->
-<DataGrid Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"/>
-
-<!-- Show when object is not null -->
-<Button Visibility="{Binding CurrentProject, Converter={StaticResource NullToVisibilityConverter}}"/>
-```
-
-### Creating Custom Converters
-
-```csharp
-using System;
-using System.Globalization;
-using System.Windows.Data;
-
-namespace ShoutingIguana.Converters;
-
-public class StatusToColorConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        if (value is Status status)
-        {
-            return status switch
-            {
-                Status.Active => Application.Current.FindResource("SuccessBrush"),
-                Status.Error => Application.Current.FindResource("ErrorBrush"),
-                _ => Application.Current.FindResource("TextSecondaryBrush")
-            };
-        }
-        return Binding.DoNothing;
-    }
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        throw new NotImplementedException();
-    }
-}
-```
-
-Register in App.xaml:
-```xml
-<converters:StatusToColorConverter x:Key="StatusToColorConverter"/>
-```
-
-------
-
-## 9) Common UI Patterns
-
-### Page Header with Toolbar
-
-```xml
-<Grid Margin="{StaticResource SpacingL}">
-    <TextBlock Text="Findings"
-               Style="{StaticResource DisplayTextStyle}"
-               VerticalAlignment="Center"
-               AutomationProperties.HeadingLevel="Level1"/>
-    
-    <StackPanel Style="{StaticResource ToolbarPanel}">
-        <Button Command="{Binding RefreshCommand}"
-                Style="{StaticResource SecondaryButton}"
-                Margin="0,0,8,0">
-            <StackPanel Orientation="Horizontal">
-                <md:PackIcon Kind="Refresh" Width="16" Height="16" Margin="0,0,6,0"/>
-                <TextBlock Text="Refresh"/>
-            </StackPanel>
-        </Button>
-        <Button Command="{Binding ExportCommand}"
-                Style="{StaticResource PrimaryButton}">
-            <StackPanel Orientation="Horizontal">
-                <md:PackIcon Kind="Export" Width="16" Height="16" Margin="0,0,6,0"/>
-                <TextBlock Text="Export"/>
-            </StackPanel>
-        </Button>
-    </StackPanel>
-</Grid>
-```
-
-### Metric Card
-
-```xml
-<md:Card Style="{StaticResource MetricCard}"
-         BorderBrush="{StaticResource SuccessBrush}"
-         BorderThickness="4,0,0,0">
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-        
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-            <md:PackIcon Kind="CheckCircleOutline" 
-                         Width="20" Height="20"
-                         Foreground="{StaticResource SuccessBrush}"
-                         Margin="0,0,8,0"/>
-            <TextBlock Text="URLs Crawled"
-                       Style="{StaticResource BodyTextStyle}"
-                       Foreground="{StaticResource TextSecondaryBrush}"/>
-        </StackPanel>
-        
-        <TextBlock Grid.Row="1"
-                   Text="{Binding UrlsCrawled}"
-                   Style="{StaticResource DisplayTextStyle}"
-                   FontSize="32"
-                   Foreground="{StaticResource SuccessBrush}"/>
-    </Grid>
-</md:Card>
-```
-
-### Responsive Grid Layout
-
-```xml
-<Grid>
-    <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="16"/>  <!-- Gutter -->
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="16"/>
-        <ColumnDefinition Width="*"/>
-    </Grid.ColumnDefinitions>
-    
-    <md:Card Grid.Column="0" Style="{StaticResource MetricCard}"/>
-    <md:Card Grid.Column="2" Style="{StaticResource MetricCard}"/>
-    <md:Card Grid.Column="4" Style="{StaticResource MetricCard}"/>
-</Grid>
-```
-
-### Form Layout & Headings
-
-**Avoid excessive headings and spacing:**
-
-```xml
-<!-- BAD: Too many headings, excessive spacing -->
-<StackPanel>
-    <TextBlock Text="Project Settings"           <!-- 28px huge heading -->
-               Style="{StaticResource DisplayTextStyle}"
-               Margin="0,0,0,8"/>
-    <TextBlock Text="Configure your web crawl"   <!-- Redundant subtitle -->
-               Margin="{StaticResource SpacingXL}"/>
-    <TextBlock Text="Basic Information"          <!-- Redundant section heading -->
-               Style="{StaticResource TitleTextStyle}"/>
-    <Separator Margin="{StaticResource SpacingM}"/> <!-- Takes up space -->
-    <!-- Fields here -->
-</StackPanel>
-
-<!-- GOOD: Minimal headings, compact spacing -->
-<StackPanel>
-    <TextBlock Text="Project Settings"           <!-- Single title, smaller -->
-               Style="{StaticResource TitleTextStyle}"
-               Margin="0,0,0,24"/>
-    <!-- Fields start immediately -->
-    <TextBox md:HintAssist.Hint="Project Name" .../>
-    
-    <!-- Optional section divider for long forms -->
-    <TextBlock Text="Crawl Configuration"        <!-- Small section label -->
-               Style="{StaticResource BodyTextStyle}"
-               FontWeight="SemiBold"
-               Margin="0,24,0,16"/>
-</StackPanel>
-```
-
-**Form Layout Rules:**
-
-1. **One main heading per view** - Use `TitleTextStyle` (20px), not `DisplayTextStyle` (28px)
-2. **No redundant subtitles** - Get straight to the fields
-3. **Section labels** - If needed, use small `BodyTextStyle` with `FontWeight="SemiBold"`
-4. **No separators** - Visual clutter; use spacing instead
-5. **Field spacing** - **28px** between fields with HelperText, **20px** without HelperText
-6. **Section spacing** - 24px between sections
-7. **ScrollViewer padding** - Use `Padding="32,40,32,32"` (extra top padding prevents label cutoff)
-8. **MaxWidth on forms** - 400-500px prevents forms from stretching too wide
-
-**Vertical Stacking Example:**
-
-```xml
-<ScrollViewer Padding="32,40,32,32">  <!-- Extra top padding prevents label cutoff -->
-    <StackPanel MaxWidth="500">
-        <TextBox Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
-                 md:HintAssist.Hint="Project Name"
-                 md:HintAssist.HelperText="Enter a descriptive name"
-                 Style="{StaticResource StandardTextBox}"
-                 Margin="0,0,0,28"/>  <!-- 28px when using HelperText -->
-        
-        <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}"
-                 md:HintAssist.Hint="Base URL"
-                 Style="{StaticResource StandardTextBox}"
-                 Margin="0,0,0,20"/>  <!-- 20px without HelperText -->
-        
-        <!-- Section break -->
-        <TextBlock Text="Advanced Options"
-                   Style="{StaticResource BodyTextStyle}"
-                   FontWeight="SemiBold"
-                   Margin="0,24,0,16"/>
-        
-        <CheckBox Content="Enable feature"
-                  IsChecked="{Binding FeatureEnabled}"
-                  Margin="0,8,0,0"/>
-    </StackPanel>
-</ScrollViewer>
-```
-
-### Loading Overlay
-
-```xml
-<Grid>
-    <!-- Main content -->
-    <ContentControl Content="{Binding MainContent}"/>
-    
-    <!-- Loading overlay -->
-    <Grid Style="{StaticResource LoadingOverlay}"
-          Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-            <ProgressBar IsIndeterminate="True" Width="200" Height="4"/>
-            <TextBlock Text="Loading..." 
-                       Style="{StaticResource BodyTextStyle}"
-                       Margin="0,16,0,0"
-                       HorizontalAlignment="Center"/>
-        </StackPanel>
-    </Grid>
-</Grid>
-```
-
-### Context Menu on DataGrid
-
-```xml
-<DataGrid ItemsSource="{Binding Items}">
-    <DataGrid.ContextMenu>
-        <ContextMenu>
-            <MenuItem Header="Copy URL" 
-                      Command="{Binding CopyUrlCommand}"
-                      AutomationProperties.Name="Copy URL to Clipboard">
-                <MenuItem.Icon>
-                    <md:PackIcon Kind="ContentCopy" Width="16" Height="16"/>
-                </MenuItem.Icon>
-            </MenuItem>
-            <Separator/>
-            <MenuItem Header="Open in Browser" 
-                      Command="{Binding OpenInBrowserCommand}">
-                <MenuItem.Icon>
-                    <md:PackIcon Kind="OpenInNew" Width="16" Height="16"/>
-                </MenuItem.Icon>
-            </MenuItem>
-        </ContextMenu>
-    </DataGrid.ContextMenu>
-</DataGrid>
-```
-
-### Welcome Screen with Animation
-
-```xml
-<md:Card Padding="{StaticResource SpacingXXL}" 
-         md:ElevationAssist.Elevation="Dp4"
-         UniformCornerRadius="12"
-         MaxWidth="500">
-    <md:Card.RenderTransform>
-        <TranslateTransform/>
-    </md:Card.RenderTransform>
-    <md:Card.Triggers>
+### Rotating Icon (Loading Indicator)
+
+```xaml
+<TextBlock Text="{StaticResource Icon.Cog}"
+           Style="{StaticResource Icon}"
+           RenderTransformOrigin="0.5,0.5">
+    <TextBlock.RenderTransform>
+        <RotateTransform />
+    </TextBlock.RenderTransform>
+    <TextBlock.Triggers>
         <EventTrigger RoutedEvent="Loaded">
             <BeginStoryboard>
-                <Storyboard>
-                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                     From="20" To="0" Duration="0:0:0.4"
-                                     DecelerationRatio="0.7"/>
-                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                     From="0" To="1" Duration="0:0:0.4"
-                                     DecelerationRatio="0.7"/>
+                <Storyboard RepeatBehavior="Forever">
+                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                     From="0" To="360" Duration="0:0:2"
+                                     RepeatBehavior="Forever"/>
                 </Storyboard>
             </BeginStoryboard>
         </EventTrigger>
-    </md:Card.Triggers>
-    
-    <StackPanel>
-        <Image Source="/Assets/logo.png" Width="96" Height="96" Margin="0,0,0,24"/>
-        <TextBlock Text="Welcome" Style="{StaticResource DisplayTextStyle}"/>
-        <!-- Content -->
-    </StackPanel>
-</md:Card>
+    </TextBlock.Triggers>
+</TextBlock>
 ```
 
-------
+## Best Practices
 
-## 10) Data Binding Best Practices
+### 1. Always Use Static Resources
 
-### UpdateSourceTrigger
+```xaml
+<!-- ✓ Correct -->
+<TextBlock Foreground="{StaticResource TextPrimaryBrush}"/>
+<Button Style="{StaticResource PrimaryButton}"/>
 
-```xml
-<!-- Real-time validation/filtering -->
-<TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"/>
-
-<!-- Default (LostFocus) for forms -->
-<TextBox Text="{Binding ProjectName}"/>
+<!-- ✗ Incorrect -->
+<TextBlock Foreground="#1F1F1F"/>
+<Button Background="#0078D4" Foreground="White"/>
 ```
 
-### String Formatting
+### 2. Use Spacing Constants
 
-```xml
-<TextBlock Text="{Binding CreatedUtc, StringFormat='yyyy-MM-dd HH:mm:ss'}"/>
-<TextBlock Text="{Binding ProgressPercentage, StringFormat='{}{0:F1}%'}"/>
-<TextBlock Text="{Binding Count, StringFormat='Total: {0:N0}'}"/>
+```xaml
+<!-- ✓ Correct -->
+<StackPanel Margin="{StaticResource SpacingL}"/>
+
+<!-- ✗ Incorrect -->
+<StackPanel Margin="24"/>
 ```
 
-### Binding Modes
+### 3. Icons in Buttons Need Explicit Foreground
 
-```xml
-<!-- Default: TwoWay for input controls, OneWay for display -->
-<TextBox Text="{Binding Name}"/>  <!-- TwoWay by default -->
-<TextBlock Text="{Binding Name}"/>  <!-- OneWay by default -->
-
-<!-- Explicit modes -->
-<TextBlock Text="{Binding Status, Mode=OneWay}"/>
-<ComboBox SelectedItem="{Binding Selection, Mode=TwoWay}"/>
-<TextBox Text="{Binding ReadOnlyProp, Mode=OneTime}"/>  <!-- Set once, never updates -->
-```
-
-### Fallback and Target Null Values
-
-```xml
-<!-- Show placeholder when binding fails or is null -->
-<TextBlock Text="{Binding Description, FallbackValue='No description'}"/>
-<TextBlock Text="{Binding Count, TargetNullValue='N/A'}"/>
-```
-
-------
-
-## 11) Error Handling Patterns
-
-### ViewModel Error Handling
-
-```csharp
-[RelayCommand]
-private async Task LoadDataAsync()
-{
-    try
-    {
-        IsLoading = true;
-        ErrorMessage = null;  // Clear previous errors
-        
-        var data = await _service.GetDataAsync();
-        Items = new ObservableCollection<Item>(data);
-        
-        _logger.LogInformation("Loaded {Count} items", Items.Count);
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Failed to load data");
-        ErrorMessage = "Failed to load data. Please try again.";
-        
-        // For critical errors, show dialog via Dispatcher
-        await Application.Current.Dispatcher.InvokeAsync(() =>
-            MessageBox.Show(
-                $"Failed to load data: {ex.Message}",
-                "Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error));
-    }
-    finally
-    {
-        IsLoading = false;
-    }
-}
-```
-
-### Display Errors in UI
-
-```xml
-<!-- Error message card -->
-<md:Card Style="{StaticResource ErrorMessageCard}"
-         Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibilityConverter}}"
-         Margin="0,0,0,16">
+```xaml
+<!-- ✓ Correct -->
+<Button Style="{StaticResource PrimaryButton}">
     <StackPanel Orientation="Horizontal">
-        <md:PackIcon Kind="AlertCircle" 
-                     Width="20" Height="20"
-                     Foreground="{StaticResource ErrorBrush}"
-                     Margin="0,0,12,0"/>
-        <TextBlock Text="{Binding ErrorMessage}"
-                   Style="{StaticResource BodyTextStyle}"
-                   Foreground="{StaticResource ErrorBrush}"
-                   TextWrapping="Wrap"/>
+        <TextBlock Text="{StaticResource Icon.Play}"
+                   Style="{StaticResource Icon}"
+                   Foreground="White"/>
+        <TextBlock Text="Play" Foreground="White"/>
     </StackPanel>
-</md:Card>
-```
-
-------
-
-## 12) Testing Guidelines
-
-### Unit Testing ViewModels
-
-```csharp
-public class ProjectHomeViewModelTests
-{
-    private readonly Mock<ILogger<ProjectHomeViewModel>> _loggerMock;
-    private readonly Mock<IProjectService> _projectServiceMock;
-    private readonly ProjectHomeViewModel _viewModel;
-
-    public ProjectHomeViewModelTests()
-    {
-        _loggerMock = new Mock<ILogger<ProjectHomeViewModel>>();
-        _projectServiceMock = new Mock<IProjectService>();
-        _viewModel = new ProjectHomeViewModel(_loggerMock.Object, _projectServiceMock.Object);
-    }
-
-    [Fact]
-    public async Task LoadDataAsync_ShouldPopulateItems()
-    {
-        // Arrange
-        var expectedItems = new List<Item> { new Item { Name = "Test" } };
-        _projectServiceMock
-            .Setup(x => x.GetItemsAsync())
-            .ReturnsAsync(expectedItems);
-
-        // Act
-        await _viewModel.LoadDataCommand.ExecuteAsync(null);
-
-        // Assert
-        Assert.Single(_viewModel.Items);
-        Assert.Equal("Test", _viewModel.Items[0].Name);
-    }
-}
-```
-
-------
-
-## 13) Building & Packaging for Distribution
-
-### The 3-Part Build Process
-
-**1. PowerShell Build Script (`build-installer.ps1`)**
-
-Creates repeatable builds for multiple architectures:
-
-```powershell
-param(
-    [ValidateSet('x86', 'x64', 'Both')]
-    [string]$Platform = 'Both',
-    
-    [ValidateSet('Debug', 'Release')]
-    [string]$Configuration = 'Release'
-)
-
-# Example usage:
-# .\build-installer.ps1 -Platform Both -Configuration Release
-```
-
-**Key `dotnet publish` flags:**
-
-```powershell
-dotnet publish src\ShoutingIguana\ShoutingIguana.csproj `
-  -c Release `
-  -r win-x64 `                    # or win-x86
-  -o publish\x64 `
-  --self-contained true `          # Bundles .NET runtime
-  /p:PublishSingleFile=false       # Keep files separate for installer
-```
-
-**2. Inno Setup Script (`Installer.iss`)**
-
-Creates professional Windows installers from published files.
-
-**Key sections:**
-
-```inno
-[Setup]
-AppName=Shouting Iguana
-AppVersion=1.0.0
-PrivilegesRequired=admin              ; If you need registry access
-ArchitecturesInstallIn64BitMode=x64   ; For x64 builds
-
-[Files]
-Source: "..\publish\{#Platform}\*"; DestDir: "{app}"; Flags: recursesubdirs
-
-[Registry]
-; Example: Add context menu entries
-Root: HKCR; Subkey: "*\shell\ShoutingIguana\command"; ValueData: "{app}\ShoutingIguana.exe %*"
-
-[Code]
-; Check for .NET runtime and prompt download if missing
-```
-
-**3. Published Output Structure**
-
-```
-publish/
-├── x64/                    # 64-bit build
-│   └── ShoutingIguana.exe + dependencies
-├── x86/                    # 32-bit build  
-│   └── ShoutingIguana.exe + dependencies
-└── installer/
-    ├── ShoutingIguana-x64.exe     # Final installer for 64-bit
-    └── ShoutingIguana-x86.exe     # Final installer for 32-bit
-```
-
-### How to Build
-
-1. **Install Inno Setup 6** from https://jrsoftware.org/isdl.php
-
-2. **Run build script:**
-   ```powershell
-   .\build-installer.ps1 -Platform Both -Configuration Release
-   ```
-
-3. **Output:** Installers in `publish\installer\`
-
-### Key Advantages
-
-- Professional installers with uninstall support
-- Multi-architecture (x86/x64) with one command
-- Self-contained (users don't need .NET installed)
-- Repeatable builds for CI/CD
-- Registry integration for context menus, file associations
-
-------
-
-## 14) Performance Best Practices
-
-### UI Rendering
-
-```xml
-<!-- Improves text clarity -->
-<Window UseLayoutRounding="True"
-        TextOptions.TextFormattingMode="Display">
-```
-
-### DataGrid Virtualization
-
-```xml
-<!-- Enabled by default, but explicit for clarity -->
-<DataGrid VirtualizingPanel.IsVirtualizing="True"
-          VirtualizingPanel.VirtualizationMode="Recycling"
-          EnableRowVirtualization="True"
-          EnableColumnVirtualization="True"/>
-```
-
-### ObservableCollection Updates
-
-```csharp
-// Bad: Triggers UI update for each Add
-foreach (var item in newItems)
-{
-    Items.Add(item);
-}
-
-// Good: Replace entire collection
-Items = new ObservableCollection<Item>(newItems);
-```
-
-### Async/Await in Commands
-
-```csharp
-// Always use async Task for long-running operations
-[RelayCommand]
-private async Task LoadDataAsync()
-{
-    await Task.Run(() => _service.GetData());  // Don't block UI thread
-}
-```
-
-------
-
-## 15) Logging Best Practices
-
-### Log Levels
-
-```csharp
-_logger.LogTrace("Entering method with param: {Param}", param);        // Development only
-_logger.LogDebug("Cache hit for key: {Key}", key);                      // Development/staging
-_logger.LogInformation("User {UserId} logged in", userId);              // Production
-_logger.LogWarning("Retry attempt {Attempt} failed", attemptNum);       // Production
-_logger.LogError(ex, "Failed to save project {ProjectId}", projectId); // Production
-_logger.LogCritical(ex, "Database connection lost");                    // Production
-```
-
-### Structured Logging
-
-```csharp
-// Good: Structured with named parameters
-_logger.LogInformation("Crawled {UrlCount} URLs in {Duration}ms", count, duration);
-
-// Bad: String interpolation loses structure
-_logger.LogInformation($"Crawled {count} URLs in {duration}ms");
-```
-
-### Exception Logging
-
-```csharp
-// Always include exception as first parameter
-_logger.LogError(ex, "Failed to load project {ProjectId}", projectId);
-```
-
-------
-
-## 16) Code Quality Checklist
-
-Before committing code, verify:
-
-### XAML
-- [ ] All colors use StaticResource (no hardcoded hex values)
-- [ ] All spacing uses StaticResource or multiples of 4px
-- [ ] All text uses predefined styles
-- [ ] Interactive elements have `AutomationProperties.Name`
-- [ ] Interactive elements have `ToolTip`
-- [ ] Headings have `AutomationProperties.HeadingLevel`
-- [ ] Buttons use correct style (Primary/Secondary/Danger)
-- [ ] No business logic in code-behind
-
-### ViewModel
-- [ ] Uses `[ObservableProperty]` and `[RelayCommand]`
-- [ ] Implements `IDisposable` if subscribing to events
-- [ ] Unsubscribes from events in `Dispose()`
-- [ ] No UI types (Window, MessageBox, Brush, etc.)
-- [ ] Async commands use `Task` return type
-- [ ] Errors are logged with structured data
-- [ ] Constructor only assigns dependencies (no logic)
-
-### Services
-- [ ] Has interface definition
-- [ ] Registered in `App.xaml.cs` with correct lifetime
-- [ ] Async methods have `Async` suffix
-- [ ] Methods are testable (no static dependencies)
-- [ ] Errors are logged with context
-
-### General
-- [ ] No compiler warnings
-- [ ] No ReSharper/Rider warnings
-- [ ] XML docs on public APIs
-- [ ] Unit tests for business logic
-- [ ] Follows naming conventions (PascalCase for public, _camelCase for private fields)
-
-------
-
-## 17) Tabbed Dialogs & Settings
-
-### Tab Content Guidelines
-
-When using `TabControl`, **do not repeat the tab name as a heading inside the tab content**.
-
-```xml
-<!-- BAD: Redundant heading -->
-<TabItem Header="Browser">
-    <StackPanel>
-        <TextBlock Text="Browser Settings"     <!-- Tab already says "Browser" -->
-                   Style="{StaticResource TitleTextStyle}"/>
-        <TextBlock Text="Configure browser..."  <!-- Redundant description -->
-                   Style="{StaticResource BodyTextStyle}"/>
-        <!-- Fields -->
+</Button>
+
+<!-- ✗ Incorrect - Icons will be dark instead of white -->
+<Button Style="{StaticResource PrimaryButton}">
+    <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{StaticResource Icon.Play}" Style="{StaticResource Icon}"/>
+        <TextBlock Text="Play"/>
     </StackPanel>
-</TabItem>
-
-<!-- GOOD: Get straight to content -->
-<TabItem Header="Browser">
-    <ScrollViewer Padding="{StaticResource SpacingXL}">
-        <StackPanel MaxWidth="500">
-            <!-- Fields start immediately -->
-            <CheckBox Content="Run in headless mode".../>
-            <TextBox md:HintAssist.Hint="Viewport Width".../>
-        </StackPanel>
-    </ScrollViewer>
-</TabItem>
-```
-
-### Dialog Layout
-
-```xml
-<Window>
-    <Grid Margin="24,24,24,16">  <!-- Less bottom margin for buttons -->
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>          <!-- Content -->
-            <RowDefinition Height="Auto"/>       <!-- Buttons -->
-        </Grid.RowDefinitions>
-        
-        <!-- Don't add window title as TextBlock - title bar shows it -->
-        
-        <TabControl Grid.Row="0" 
-                    Style="{StaticResource StandardTabControl}">  <!-- Use StandardTabControl for proper text colors -->
-            <TabItem Header="General">
-                <ScrollViewer Padding="32,40,32,32">  <!-- Extra top padding prevents label cutoff -->
-                    <StackPanel MaxWidth="500">
-                        <TextBox md:HintAssist.Hint="Field Name"
-                                 md:HintAssist.HelperText="Helper text here"
-                                 Style="{StaticResource StandardTextBox}"
-                                 Margin="0,0,0,28"/>  <!-- 28px for fields with helper text -->
-                        <!-- More fields -->
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-        </TabControl>
-        
-        <!-- Action buttons at bottom -->
-        <StackPanel Grid.Row="1" 
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Margin="0,24,0,0">  <!-- Space above buttons -->
-            <Button Content="Cancel" 
-                    Style="{StaticResource SecondaryButton}"
-                    Margin="0,0,12,0"/>
-            <Button Content="Save" 
-                    Style="{StaticResource PrimaryButton}"/>
-        </StackPanel>
-    </Grid>
-</Window>
-```
-
-**Dialog Rules:**
-
-1. **No redundant title heading** - Window title bar already shows it
-2. **No section headings in tabs** - Tab name already identifies the section
-3. **Proper Grid rows** - Content in Row 0 (*), Buttons in Row 1 (Auto)
-4. **TabControl padding** - Add `Padding="0,16,0,0"` to create gap between tab strip and content
-5. **Tab content padding** - Use `Padding="32,40,32,32"` on ScrollViewer
-   - Extra top padding (40px) prevents floating label cutoff
-   - Standard side/bottom padding (32px) for consistent spacing
-6. **Field spacing** - Use `Margin="0,0,0,28"` between fields with HelperText (prevents overlap)
-7. **Button spacing** - Use `Margin="0,24,0,0"` on button panel to separate from content
-8. **Dialog margins** - Use `Margin="24,24,24,16"` on root Grid (less bottom margin for buttons)
-9. **Card padding** - Use `SpacingXS` (4px) minimum to prevent clipping
-
-## 18) Common Pitfalls & Solutions
-
-### Memory Leaks
-
-**Problem:** ViewModels not disposed, events not unsubscribed
-
-```csharp
-// Bad
-public class MyViewModel : ObservableObject
-{
-    public MyViewModel(IEventSource source)
-    {
-        source.EventOccurred += OnEvent;  // LEAK: Never unsubscribed
-    }
-}
-
-// Good
-public partial class MyViewModel : ObservableObject, IDisposable
-{
-    private readonly IEventSource _source;
-    
-    public MyViewModel(IEventSource source)
-    {
-        _source = source;
-        _source.EventOccurred += OnEvent;
-    }
-    
-    public void Dispose()
-    {
-        _source.EventOccurred -= OnEvent;  // Unsubscribe
-    }
-}
-```
-
-### UI Thread Blocking
-
-**Problem:** Long-running operations on UI thread
-
-```csharp
-// Bad: Blocks UI
-[RelayCommand]
-private void LoadData()
-{
-    var data = _service.GetData();  // Synchronous, blocks UI
-}
-
-// Good: Async, non-blocking
-[RelayCommand]
-private async Task LoadDataAsync()
-{
-    var data = await Task.Run(() => _service.GetData());
-}
-```
-
-### Hardcoded UI Values
-
-**Problem:** Colors and spacing hardcoded in XAML
-
-```xml
-<!-- Bad -->
-<TextBlock Foreground="#0078D4" FontSize="20" Margin="15,10,15,10"/>
-
-<!-- Good -->
-<TextBlock Foreground="{StaticResource PrimaryBrush}"
-           Style="{StaticResource TitleTextStyle}"
-           Margin="{StaticResource SpacingM}"/>
-```
-
-### Missing Accessibility
-
-**Problem:** No screen reader support
-
-```xml
-<!-- Bad -->
-<Button Content="⚙" Command="{Binding SettingsCommand}"/>
-
-<!-- Good -->
-<Button Command="{Binding SettingsCommand}"
-        AutomationProperties.Name="Open Settings"
-        ToolTip="Configure application settings">
-    <md:PackIcon Kind="Cog" Width="20" Height="20"/>
 </Button>
 ```
 
-------
+### 4. TextBox Placeholders Use Tag Property
 
-## 18) Resources & References
+```xaml
+<!-- ✓ Correct -->
+<TextBox Tag="Enter your name" Style="{StaticResource StandardTextBox}"/>
 
-### Official Documentation
-- [Material Design In XAML Toolkit](http://materialdesigninxaml.net/)
-- [CommunityToolkit.Mvvm](https://learn.microsoft.com/en-us/dotnet/communitytoolkit/mvvm/)
-- [Microsoft.Extensions.DependencyInjection](https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection)
-- [Serilog](https://serilog.net/)
+<!-- ✗ Incorrect - md:HintAssist no longer exists -->
+<TextBox md:HintAssist.Hint="Enter your name"/>
+```
 
-### WPF Best Practices
-- [WPF Performance](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/advanced/optimizing-performance-application-resources)
-- [WPF Accessibility](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/advanced/accessibility-best-practices)
-- [WCAG 2.1 Guidelines](https://www.w3.org/WAI/WCAG21/quickref/)
+### 5. Cards Use Border, Not Custom Controls
 
-### Internal Resources
-- Project logs: `%LocalAppData%\ShoutingIguana\logs\`
-- App settings: `%LocalAppData%\ShoutingIguana\appsettings.json`
-- Project files: `.siguana` SQLite databases
+```xaml
+<!-- ✓ Correct -->
+<Border Style="{StaticResource Card}">
+    <!-- Content -->
+</Border>
 
-------
+<!-- ✗ Incorrect - md:Card no longer exists -->
+<md:Card>
+    <!-- Content -->
+</md:Card>
+```
 
-**Remember:** Consistency is key. When in doubt, follow existing patterns in the codebase.
+### 6. Inherit TabItem Style When Customizing
+
+```xaml
+<!-- ✓ Correct -->
+<TabControl.ItemContainerStyle>
+    <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+        <Setter Property="Height" Value="48"/>
+    </Style>
+</TabControl.ItemContainerStyle>
+
+<!-- ✗ Incorrect - Will lose custom styling -->
+<TabControl.ItemContainerStyle>
+    <Style TargetType="TabItem">
+        <Setter Property="Height" Value="48"/>
+    </Style>
+</TabControl.ItemContainerStyle>
+```
+
+## Adding New Styles
+
+When adding new styles to the application:
+
+1. **Define in Styles.xaml**: All styles must be added to `src/ShoutingIguana/Styles/Styles.xaml`
+2. **Follow Naming Convention**: Use PascalCase with descriptive names (e.g., `PrimaryButton`, `MetricCard`)
+3. **Use Existing Resources**: Build on existing color and spacing resources
+4. **Add Documentation**: Add XML comments explaining the style's purpose and usage
+5. **Maintain Consistency**: Follow the established patterns for similar controls
+
+Example:
+
+```xaml
+<!-- ========================================
+     CUSTOM CONTROL STYLES
+     ======================================== -->
+
+<!-- Usage: <Border Style="{StaticResource CustomCard}"/> -->
+<Style x:Key="CustomCard" TargetType="Border" BasedOn="{StaticResource Card}">
+    <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+    <Setter Property="BorderThickness" Value="2"/>
+    <Setter Property="Padding" Value="16"/>
+</Style>
+```
+
+## Troubleshooting
+
+### Problem: Icons Not Showing
+
+**Solution**: Ensure you're using the correct icon key and the Icon style:
+```xaml
+<TextBlock Text="{StaticResource Icon.Play}" Style="{StaticResource Icon}"/>
+```
+
+### Problem: TabControl Looks Wrong
+
+**Solution**: Use the StandardTabControl style and inherit TabItem style when customizing:
+```xaml
+<TabControl Style="{StaticResource StandardTabControl}">
+    <TabControl.ItemContainerStyle>
+        <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+            <!-- Customizations -->
+        </Style>
+    </TabControl.ItemContainerStyle>
+</TabControl>
+```
+
+### Problem: TextBox Placeholder Not Showing
+
+**Solution**: Set the placeholder text using the `Tag` property:
+```xaml
+<TextBox Tag="Your placeholder text" Style="{StaticResource StandardTextBox}"/>
+```
+
+### Problem: Button Icons Are Dark Instead of White
+
+**Solution**: Explicitly set `Foreground="White"` on icons inside Primary/Danger buttons:
+```xaml
+<Button Style="{StaticResource PrimaryButton}">
+    <TextBlock Text="{StaticResource Icon.Play}"
+               Style="{StaticResource Icon}"
+               Foreground="White"/>
+</Button>
+```
+
+## Migration Notes
+
+### From Material Design
+
+If you're familiar with Material Design In XAML Toolkit, here are the key changes:
+
+| Material Design | Custom System |
+|-----------------|---------------|
+| `md:PackIcon` | `TextBlock` with Icon style |
+| `md:Card` | `Border` with Card style |
+| `md:ElevationAssist.Elevation` | `DropShadowEffect` in style |
+| `md:HintAssist.Hint` | `Tag` property on TextBox |
+| `MaterialDesignFilledTabControl` | `StandardTabControl` |
+| `MaterialDesignRaisedButton` | `PrimaryButton` |
+| `MaterialDesignOutlinedButton` | `SecondaryButton` |
+| `MaterialDesignOutlinedTextBox` | `StandardTextBox` |
+| `MaterialDesignOutlinedComboBox` | `StandardComboBox` |
+| `MaterialDesignDataGrid` | `ModernDataGrid` |
+
+## Conclusion
+
+The Shouting Iguana styling system provides a complete, self-contained solution for building modern Windows applications. By following the patterns and best practices outlined in this guide, you can maintain visual consistency and create a polished user experience without external dependencies.
+
+For questions or suggestions, refer to the `Styles.xaml` file which contains extensive inline documentation and examples.
+
