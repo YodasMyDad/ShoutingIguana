@@ -47,6 +47,9 @@ public partial class ProjectHomeViewModel : ObservableObject
     private bool _respectRobotsTxt = true;
 
     [ObservableProperty]
+    private bool _useSitemapXml = true;
+
+    [ObservableProperty]
     private UserAgentType _selectedUserAgentType = UserAgentType.Chrome;
 
     [ObservableProperty]
@@ -96,6 +99,7 @@ public partial class ProjectHomeViewModel : ObservableObject
                     MaxUrls = settings.MaxUrlsToCrawl;
                     CrawlDelay = settings.CrawlDelaySeconds;
                     RespectRobotsTxt = settings.RespectRobotsTxt;
+                    UseSitemapXml = settings.UseSitemapXml;
                     SelectedUserAgentType = settings.UserAgentType;
 
                     IsWelcomeScreen = false;
@@ -131,6 +135,7 @@ public partial class ProjectHomeViewModel : ObservableObject
         MaxUrls = 1000;
         CrawlDelay = 1.0;
         RespectRobotsTxt = true;
+        UseSitemapXml = true;
         SelectedUserAgentType = UserAgentType.Chrome;
     }
 
@@ -191,6 +196,7 @@ public partial class ProjectHomeViewModel : ObservableObject
                 MaxUrls = settings.MaxUrlsToCrawl;
                 CrawlDelay = settings.CrawlDelaySeconds;
                 RespectRobotsTxt = settings.RespectRobotsTxt;
+                UseSitemapXml = settings.UseSitemapXml;
                 SelectedUserAgentType = settings.UserAgentType;
 
                 // Update last opened time
@@ -242,6 +248,7 @@ public partial class ProjectHomeViewModel : ObservableObject
                 MaxUrlsToCrawl = MaxUrls,
                 CrawlDelaySeconds = CrawlDelay,
                 RespectRobotsTxt = RespectRobotsTxt,
+                UseSitemapXml = UseSitemapXml,
                 UserAgentType = SelectedUserAgentType
             };
 

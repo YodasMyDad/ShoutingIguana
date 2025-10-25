@@ -89,6 +89,7 @@ public partial class App : Application
                     // Core Services
                     services.AddSingleton<IAppSettingsService, AppSettingsService>();
                     services.AddSingleton<IRobotsService, RobotsService>();
+                    services.AddSingleton<ISitemapService, SitemapService>();
                     services.AddSingleton<ILinkExtractor, LinkExtractor>();
                     services.AddSingleton<IPlaywrightService, PlaywrightService>();
                     services.AddSingleton<IPluginRegistry, PluginRegistry>();

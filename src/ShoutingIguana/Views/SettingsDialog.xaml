@@ -81,6 +81,14 @@
                                       TabIndex="6"
                                       AutomationProperties.Name="Respect Robots.txt"
                                       ToolTip="Follow robots.txt exclusion rules"/>
+
+                            <CheckBox IsChecked="{Binding UseSitemapXml}"
+                                      Content="Discover URLs from sitemap.xml"
+                                      FontSize="14"
+                                      Margin="0,12,0,0"
+                                      TabIndex="7"
+                                      AutomationProperties.Name="Use Sitemap XML"
+                                      ToolTip="Check robots.txt and common locations for sitemap.xml and enqueue discovered URLs"/>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>

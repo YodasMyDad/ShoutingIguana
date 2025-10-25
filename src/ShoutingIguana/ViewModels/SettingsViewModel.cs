@@ -26,6 +26,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private int _maxCrawlDepth = 5;
     [ObservableProperty] private int _maxUrlsToCrawl = 10000;
     [ObservableProperty] private bool _respectRobotsTxt = true;
+    [ObservableProperty] private bool _useSitemapXml = true;
     [ObservableProperty] private double _crawlDelaySeconds = 1.0;
 
     // Browser settings
@@ -69,6 +70,7 @@ public partial class SettingsViewModel : ObservableObject
             MaxCrawlDepth = crawlSettings.MaxCrawlDepth;
             MaxUrlsToCrawl = crawlSettings.MaxUrlsToCrawl;
             RespectRobotsTxt = crawlSettings.RespectRobotsTxt;
+            UseSitemapXml = crawlSettings.UseSitemapXml;
             CrawlDelaySeconds = crawlSettings.CrawlDelaySeconds;
             MemoryLimitMb = crawlSettings.MemoryLimitMb;
         }
@@ -121,6 +123,7 @@ public partial class SettingsViewModel : ObservableObject
                 MaxCrawlDepth = MaxCrawlDepth,
                 MaxUrlsToCrawl = MaxUrlsToCrawl,
                 RespectRobotsTxt = RespectRobotsTxt,
+                UseSitemapXml = UseSitemapXml,
                 CrawlDelaySeconds = CrawlDelaySeconds,
                 MemoryLimitMb = MemoryLimitMb
             };
@@ -177,6 +180,7 @@ public partial class SettingsViewModel : ObservableObject
             MaxCrawlDepth = 5;
             MaxUrlsToCrawl = 10000;
             RespectRobotsTxt = true;
+            UseSitemapXml = true;
             CrawlDelaySeconds = 1.0;
 
             // Restore default browser settings

@@ -4,5 +4,6 @@ public interface IRobotsService
 {
     Task<bool> IsAllowedAsync(string url, string userAgent);
     Task<double?> GetCrawlDelayAsync(string host, string userAgent);
+    Task<List<string>> GetSitemapUrlsFromRobotsTxtAsync(string host);
 }
 

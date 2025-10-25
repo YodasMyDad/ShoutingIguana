@@ -35,6 +35,7 @@ public class ProjectSettings
     public int MaxCrawlDepth { get; set; } = 5;
     public int MaxUrlsToCrawl { get; set; } = 1000;
     public bool RespectRobotsTxt { get; set; } = true;
+    public bool UseSitemapXml { get; set; } = true;
     public UserAgentType UserAgentType { get; set; } = UserAgentType.Chrome;
     public double CrawlDelaySeconds { get; set; } = 1.0;
     public int ConcurrentRequests { get; set; } = 4;

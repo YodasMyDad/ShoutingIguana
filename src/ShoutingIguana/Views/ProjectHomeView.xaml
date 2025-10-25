@@ -233,6 +233,7 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <TextBox Grid.Row="0" Grid.Column="0"
@@ -289,6 +290,15 @@
                                   TabIndex="6"
                                   AutomationProperties.Name="Respect Robots.txt"
                                   ToolTip="Follow robots.txt exclusion rules"/>
+
+                        <CheckBox Grid.Row="3" Grid.Column="0"
+                                  Content="Discover URLs from sitemap.xml"
+                                  IsChecked="{Binding UseSitemapXml}"
+                                  Margin="0,8,0,0"
+                                  FontSize="14"
+                                  TabIndex="7"
+                                  AutomationProperties.Name="Use Sitemap XML"
+                                  ToolTip="Check robots.txt and common locations for sitemap.xml and enqueue discovered URLs"/>
                     </Grid>
 
                     <!-- Action Buttons -->

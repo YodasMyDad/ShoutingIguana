@@ -135,6 +135,32 @@ public class CrawlEngine(
             {
                 _logger.LogInformation("Seeding queue with base URL: {BaseUrl}", settings.BaseUrl);
                 await EnqueueUrlAsync(projectId, settings.BaseUrl, 0, 1000, settings.BaseUrl).ConfigureAwait(false);
+                
+                // Discover and enqueue URLs from sitemap.xml if enabled
+                if (settings.UseSitemapXml)
+                {
+                    _logger.LogInformation("Sitemap discovery enabled, searching for sitemaps...");
+                    var sitemapService = scope.ServiceProvider.GetRequiredService<ISitemapService>();
+                    var sitemapUrls = await sitemapService.DiscoverSitemapUrlsAsync(settings.BaseUrl).ConfigureAwait(false);
+                    
+                    if (sitemapUrls.Any())
+                    {
+                        _logger.LogInformation("Discovered {Count} URLs from sitemap(s), enqueueing...", sitemapUrls.Count);
+                        int enqueuedCount = 0;
+                        
+                        foreach (var url in sitemapUrls)
+                        {
+                            await EnqueueUrlAsync(projectId, url, 0, 900, settings.BaseUrl).ConfigureAwait(false);
+                            enqueuedCount++;
+                        }
+                        
+                        _logger.LogInformation("Enqueued {Count} URLs from sitemap discovery", enqueuedCount);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("No sitemap URLs discovered");
+                    }
+                }
             }
 
             // Initialize total discovered count from current queue size

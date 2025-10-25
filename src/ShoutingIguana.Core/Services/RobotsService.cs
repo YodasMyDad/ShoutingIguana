@@ -53,6 +53,20 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
         }
     }
 
+    public async Task<List<string>> GetSitemapUrlsFromRobotsTxtAsync(string host)
+    {
+        try
+        {
+            var robotsTxt = await GetRobotsTxtAsync(host).ConfigureAwait(false);
+            return robotsTxt?.GetSitemapUrls() ?? [];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error getting sitemap URLs from robots.txt for {Host}", host);
+            return [];
+        }
+    }
+
     private async Task<RobotsTxtFile?> GetRobotsTxtAsync(string host)
     {
         if (_cache.TryGetValue(host, out var cached))
@@ -114,6 +128,7 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
     {
         private readonly List<RobotRule> _rules = new();
         private readonly Dictionary<string, double> _crawlDelays = new();
+        private readonly List<string> _sitemapUrls = new();
 
         public RobotsTxtFile(string content)
         {
@@ -171,6 +186,12 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
                             _crawlDelays[currentUserAgent] = delay;
                         }
                         break;
+                    case "sitemap":
+                        if (!string.IsNullOrEmpty(value))
+                        {
+                            _sitemapUrls.Add(value);
+                        }
+                        break;
                 }
             }
         }
@@ -198,6 +219,12 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
                 return wildcardDelay;
 
             return null;
+        }
+
+        public List<string> GetSitemapUrls()
+        {
+            // Return a copy to prevent external modification
+            return new List<string>(_sitemapUrls);
         }
 
         private static bool MatchesUserAgent(string pattern, string userAgent)
