@@ -14,5 +14,12 @@ public class CrawlSettings
     public double CrawlDelaySeconds { get; set; } = 1.0;
     public int MemoryLimitMb { get; set; } = 1536; // 1.5 GB default
     public int RetryCount { get; set; } = 3;
+    public int ConnectionTimeoutSeconds { get; set; } = 30;
+    public int CheckpointInterval { get; set; } = 50; // Save checkpoint every N URLs
+    
+    /// <summary>
+    /// Global proxy settings for all projects (unless overridden per-project).
+    /// </summary>
+    public ProxySettings GlobalProxy { get; set; } = new();
 }
 

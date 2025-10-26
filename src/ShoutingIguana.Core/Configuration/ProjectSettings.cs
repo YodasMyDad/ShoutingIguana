@@ -40,6 +40,11 @@ public class ProjectSettings
     public double CrawlDelaySeconds { get; set; } = 1.0;
     public int ConcurrentRequests { get; set; } = 4;
     public int TimeoutSeconds { get; set; } = 10;
+    
+    /// <summary>
+    /// Project-specific proxy settings. If null, uses global proxy from app settings.
+    /// </summary>
+    public ProxySettings? ProxyOverride { get; set; }
 
     /// <summary>
     /// Gets the actual user agent string based on the selected type.

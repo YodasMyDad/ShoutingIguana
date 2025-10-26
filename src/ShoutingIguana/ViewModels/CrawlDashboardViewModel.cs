@@ -46,7 +46,19 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
     private bool _isCrawling;
 
     [ObservableProperty]
+    private bool _isPaused;
+
+    [ObservableProperty]
+    private bool _isLoading;
+
+    [ObservableProperty]
     private string _recentActivity = string.Empty;
+
+    [ObservableProperty]
+    private string _pauseResumeButtonText = "Pause Crawl";
+
+    [ObservableProperty]
+    private string _pauseResumeButtonIcon = "\uE769"; // Pause icon
 
     public bool ShowEmptyState => TotalDiscovered == 0 && !IsCrawling;
 
@@ -109,10 +121,56 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
             _logger.LogInformation("Stopping crawl");
             await _crawlEngine.StopCrawlAsync();
             IsCrawling = false;
+            IsPaused = false;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to stop crawl");
+        }
+    }
+
+    [RelayCommand]
+    private async Task PauseResumeAsync()
+    {
+        if (!IsCrawling)
+            return;
+
+        try
+        {
+            if (IsPaused)
+            {
+                _logger.LogInformation("Resuming crawl");
+                await _crawlEngine.ResumeCrawlAsync();
+                RecentActivity = "Crawl resumed";
+            }
+            else
+            {
+                _logger.LogInformation("Pausing crawl");
+                await _crawlEngine.PauseCrawlAsync();
+                RecentActivity = "Crawl paused";
+            }
+
+            UpdatePauseResumeState();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to pause/resume crawl");
+        }
+    }
+
+    private void UpdatePauseResumeState()
+    {
+        IsPaused = _crawlEngine.IsPaused;
+        
+        if (IsPaused)
+        {
+            PauseResumeButtonText = "Resume Crawl";
+            PauseResumeButtonIcon = "\uE768"; // Play icon
+        }
+        else
+        {
+            PauseResumeButtonText = "Pause Crawl";
+            PauseResumeButtonIcon = "\uE769"; // Pause icon
         }
     }
 
@@ -143,6 +201,7 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
             }
 
             IsCrawling = _crawlEngine.IsCrawling;
+            UpdatePauseResumeState();
             
             // If crawl just finished, check if it was successful
             if (wasCrawling && !IsCrawling)

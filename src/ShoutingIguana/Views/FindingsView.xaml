@@ -91,9 +91,7 @@
                         <TextBlock Text="{StaticResource Icon.Search}"
                                    Style="{StaticResource Icon}"
                                    FontSize="22"
-                                   Foreground="White"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
+                                   Foreground="White"/>
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="Findings"
@@ -116,6 +114,7 @@
                     <Button Command="{Binding RefreshCommand}"
                             Style="{StaticResource SecondaryButton}"
                             Margin="0,0,6,0"
+                            TabIndex="0"
                             AutomationProperties.Name="Refresh Findings"
                             ToolTip="Refresh findings from database (F5)">
                         <StackPanel Orientation="Horizontal">
@@ -123,7 +122,6 @@
                                        Style="{StaticResource Icon}"
                                        Width="16" 
                                        Height="16"
-                                       FontSize="16"
                                        Margin="0,0,6,0"/>
                             <TextBlock Text="Refresh" VerticalAlignment="Center"/>
                         </StackPanel>
@@ -131,6 +129,7 @@
                     <Button Command="{Binding ExportToCsvCommand}"
                             Style="{StaticResource SecondaryButton}"
                             Margin="0,0,6,0"
+                            TabIndex="1"
                             AutomationProperties.Name="Export to CSV"
                             ToolTip="Export findings to CSV file (Ctrl+Shift+E)">
                         <StackPanel Orientation="Horizontal">
@@ -138,13 +137,13 @@
                                        Style="{StaticResource Icon}"
                                        Width="16" 
                                        Height="16"
-                                       FontSize="16"
                                        Margin="0,0,6,0"/>
                             <TextBlock Text="CSV" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                     <Button Command="{Binding ExportToExcelCommand}"
                             Style="{StaticResource PrimaryButton}"
+                            TabIndex="2"
                             AutomationProperties.Name="Export to Excel"
                             ToolTip="Export findings to Excel workbook (Ctrl+E)">
                         <StackPanel Orientation="Horizontal">
@@ -152,7 +151,6 @@
                                        Style="{StaticResource Icon}"
                                        Width="16" 
                                        Height="16"
-                                       FontSize="16"
                                        Margin="0,0,6,0"/>
                             <TextBlock Text="Excel" 
                                        VerticalAlignment="Center"/>
@@ -165,8 +163,7 @@
         <!-- Tabbed Findings View -->
         <Border Grid.Row="1" 
                 Style="{StaticResource Card}"
-                Padding="{StaticResource SpacingXs}"
-                SnapsToDevicePixels="True">
+                Padding="{StaticResource SpacingXs}">
             <Grid>
                 <!-- Empty State (visible when no tabs) -->
                 <StackPanel Style="{StaticResource EmptyStateContainer}"
@@ -184,7 +181,6 @@
                 <TabControl ItemsSource="{Binding Tabs}" 
                             SelectedItem="{Binding SelectedTab}"
                             Style="{StaticResource StandardTabControl}"
-                            Background="{StaticResource SurfaceBrush}"
                             KeyboardNavigation.TabNavigation="Local"
                             Visibility="{Binding Tabs.Count, Converter={StaticResource Int32ToVisibilityConverter}}">
                 <TabControl.ItemContainerStyle>
@@ -245,7 +241,7 @@
                                                   SelectedValue="{Binding SelectedSeverity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                   SelectedValuePath="Tag"
                                                   Style="{StaticResource ModernComboBox}"
-                                                  TabIndex="0"
+                                                  TabIndex="3"
                                                   AutomationProperties.Name="Filter by Severity"
                                                   ToolTip="Filter findings by severity level">
                                             <ComboBoxItem Tag="{x:Null}" MaxWidth="180">
@@ -257,8 +253,7 @@
                                                                Style="{StaticResource Icon}"
                                                                FontSize="14"
                                                                Foreground="{StaticResource ErrorBrush}"
-                                                               Margin="0,0,8,0"
-                                                               VerticalAlignment="Center"/>
+                                                               Margin="0,0,8,0"/>
                                                     <TextBlock Text="Error" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                             </ComboBoxItem>
@@ -268,8 +263,7 @@
                                                                Style="{StaticResource Icon}"
                                                                FontSize="14"
                                                                Foreground="{StaticResource WarningBrush}"
-                                                               Margin="0,0,8,0"
-                                                               VerticalAlignment="Center"/>
+                                                               Margin="0,0,8,0"/>
                                                     <TextBlock Text="Warning" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                             </ComboBoxItem>
@@ -279,8 +273,7 @@
                                                                Style="{StaticResource Icon}"
                                                                FontSize="14"
                                                                Foreground="{StaticResource InfoBrush}"
-                                                               Margin="0,0,8,0"
-                                                               VerticalAlignment="Center"/>
+                                                               Margin="0,0,8,0"/>
                                                     <TextBlock Text="Info" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                             </ComboBoxItem>
@@ -295,7 +288,7 @@
                                                    AutomationProperties.AutomationId="SearchFilterLabel"/>
                                         <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                                                  Style="{StaticResource ModernTextBox}"
-                                                 TabIndex="1"
+                                                 TabIndex="4"
                                                  AutomationProperties.Name="Search Findings"
                                                  AutomationProperties.HelpText="Search findings by message, code, or URL"
                                                  ToolTip="Search findings by message, code, or URL">
@@ -470,7 +463,7 @@
                                           ItemsSource="{Binding FilteredFindings}"
                                           SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
                                           Style="{StaticResource ModernDataGrid}"
-                                          TabIndex="2"
+                                          TabIndex="5"
                                           AutomationProperties.Name="Findings List"
                                           AutomationProperties.HelpText="List of findings discovered during the crawl. Select a row to view details below."
                                           AutomationProperties.LiveSetting="Polite">
@@ -550,15 +543,15 @@
         <GridSplitter Grid.Row="2" 
                       Height="8" 
                       HorizontalAlignment="Stretch" 
-                      Background="Transparent"
+                      Style="{StaticResource ModernGridSplitter}"
                       Cursor="SizeNS"
-                      Margin="0,8"/>
+                      Margin="0,8"
+                      AutomationProperties.Name="Resize Findings and Details Panels"/>
 
         <!-- Details Panel -->
         <Border Grid.Row="3" 
                 Style="{StaticResource Card}"
-                Padding="0"
-                SnapsToDevicePixels="True">
+                Padding="0">
             <Grid KeyboardNavigation.TabNavigation="Local">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -579,10 +572,7 @@
                                     Margin="0,0,12,0">
                                 <TextBlock Text="{StaticResource Icon.CodeJson}"
                                            Style="{StaticResource Icon}"
-                                           FontSize="16"
-                                           Foreground="White"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
+                                           Foreground="White"/>
                             </Border>
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Text="Finding Details" 

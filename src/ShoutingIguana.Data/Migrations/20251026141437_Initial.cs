@@ -29,6 +29,33 @@ namespace ShoutingIguana.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "CrawlCheckpoints",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    ProjectId = table.Column<int>(type: "INTEGER", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    UrlsCrawled = table.Column<int>(type: "INTEGER", nullable: false),
+                    ErrorCount = table.Column<int>(type: "INTEGER", nullable: false),
+                    QueueSize = table.Column<int>(type: "INTEGER", nullable: false),
+                    LastCrawledUrl = table.Column<string>(type: "TEXT", maxLength: 2048, nullable: true),
+                    Status = table.Column<string>(type: "TEXT", maxLength: 50, nullable: false),
+                    ElapsedSeconds = table.Column<double>(type: "REAL", nullable: false),
+                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CrawlCheckpoints", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_CrawlCheckpoints_Projects_ProjectId",
+                        column: x => x.ProjectId,
+                        principalTable: "Projects",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "CrawlQueue",
                 columns: table => new
                 {
@@ -47,6 +74,31 @@ namespace ShoutingIguana.Data.Migrations
                     table.PrimaryKey("PK_CrawlQueue", x => x.Id);
                     table.ForeignKey(
                         name: "FK_CrawlQueue_Projects_ProjectId",
+                        column: x => x.ProjectId,
+                        principalTable: "Projects",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "CustomExtractionRules",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    ProjectId = table.Column<int>(type: "INTEGER", nullable: false),
+                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    FieldName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    SelectorType = table.Column<int>(type: "INTEGER", nullable: false),
+                    Selector = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: false),
+                    IsEnabled = table.Column<bool>(type: "INTEGER", nullable: false, defaultValue: true),
+                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CustomExtractionRules", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_CustomExtractionRules_Projects_ProjectId",
                         column: x => x.ProjectId,
                         principalTable: "Projects",
                         principalColumn: "Id",
@@ -106,7 +158,10 @@ namespace ShoutingIguana.Data.Migrations
                     Vary = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
                     ContentEncoding = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
                     LinkHeader = table.Column<string>(type: "TEXT", maxLength: 4000, nullable: true),
-                    HasHsts = table.Column<bool>(type: "INTEGER", nullable: false)
+                    HasHsts = table.Column<bool>(type: "INTEGER", nullable: false),
+                    ContentHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: true),
+                    SimHash = table.Column<long>(type: "INTEGER", nullable: true),
+                    IsIndexable = table.Column<bool>(type: "INTEGER", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -313,6 +368,11 @@ namespace ShoutingIguana.Data.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_CrawlCheckpoints_ProjectId_IsActive",
+                table: "CrawlCheckpoints",
+                columns: new[] { "ProjectId", "IsActive" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_CrawlQueue_HostKey",
                 table: "CrawlQueue",
                 column: "HostKey");
@@ -321,6 +381,11 @@ namespace ShoutingIguana.Data.Migrations
                 name: "IX_CrawlQueue_ProjectId_State_Priority",
                 table: "CrawlQueue",
                 columns: new[] { "ProjectId", "State", "Priority" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_CustomExtractionRules_ProjectId",
+                table: "CustomExtractionRules",
+                column: "ProjectId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Findings_ProjectId",
@@ -443,6 +508,11 @@ namespace ShoutingIguana.Data.Migrations
                 column: "Address");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Urls_ContentHash",
+                table: "Urls",
+                column: "ContentHash");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Urls_DiscoveredFromUrlId",
                 table: "Urls",
                 column: "DiscoveredFromUrlId");
@@ -463,6 +533,11 @@ namespace ShoutingIguana.Data.Migrations
                 column: "HtmlLang");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Urls_IsIndexable",
+                table: "Urls",
+                column: "IsIndexable");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Urls_NormalizedUrl",
                 table: "Urls",
                 column: "NormalizedUrl");
@@ -476,13 +551,24 @@ namespace ShoutingIguana.Data.Migrations
                 name: "IX_Urls_RobotsNoindex",
                 table: "Urls",
                 column: "RobotsNoindex");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Urls_SimHash",
+                table: "Urls",
+                column: "SimHash");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "CrawlCheckpoints");
+
+            migrationBuilder.DropTable(
                 name: "CrawlQueue");
+
+            migrationBuilder.DropTable(
+                name: "CustomExtractionRules");
 
             migrationBuilder.DropTable(
                 name: "Findings");

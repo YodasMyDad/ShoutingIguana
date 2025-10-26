@@ -9,6 +9,21 @@
         <SolidColorBrush x:Key="ErrorBackground" Color="#FFEBEE"/>
         <SolidColorBrush x:Key="InfoBackground" Color="#E3F2FD"/>
         <SolidColorBrush x:Key="WarningBackground" Color="#FFF8E1"/>
+        
+        <!-- Exit animation storyboard -->
+        <Storyboard x:Key="ExitStoryboard">
+            <DoubleAnimation Storyboard.TargetName="SlideTransform"
+                             Storyboard.TargetProperty="X"
+                             To="400" 
+                             Duration="0:0:0.25">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseIn"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                             To="0" 
+                             Duration="0:0:0.25"/>
+        </Storyboard>
     </UserControl.Resources>
     
     <UserControl.RenderTransform>

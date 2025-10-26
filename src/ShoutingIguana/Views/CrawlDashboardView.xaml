@@ -51,18 +51,29 @@
                         <TextBlock Text="{StaticResource Icon.CheckCircle}"
                                    Style="{StaticResource Icon}"
                                    FontSize="22"
-                                   Foreground="White"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
+                                   Foreground="White"/>
                     </Border>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Crawl Progress"
-                                   Style="{StaticResource DisplayTextStyle}"
-                                   FontSize="24"
-                                   Margin="0"
-                                   AutomationProperties.HeadingLevel="Level1"
-                                   AutomationProperties.LiveSetting="Polite"
-                                   AutomationProperties.AutomationId="CrawlProgressHeading"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Crawl Progress"
+                                       Style="{StaticResource DisplayTextStyle}"
+                                       FontSize="24"
+                                       Margin="0"
+                                       AutomationProperties.HeadingLevel="Level1"
+                                       AutomationProperties.LiveSetting="Polite"
+                                       AutomationProperties.AutomationId="CrawlProgressHeading"/>
+                            <Border Background="{StaticResource WarningBrush}"
+                                    CornerRadius="4"
+                                    Padding="8,4"
+                                    Margin="12,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding IsPaused, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock Text="PAUSED"
+                                           FontSize="12"
+                                           FontWeight="Bold"
+                                           Foreground="White"/>
+                            </Border>
+                        </StackPanel>
                         <TextBlock Text="Real-time crawling statistics and activity"
                                    Style="{StaticResource BodyTextStyle}"
                                    Foreground="{StaticResource TextSecondaryBrush}"
@@ -75,7 +86,6 @@
             <Border Grid.Row="1" 
                     Style="{StaticResource InfoCard}"
                     Margin="0,0,0,24"
-                    SnapsToDevicePixels="True"
                     Visibility="{Binding ShowEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}"
                     x:Name="EmptyStateCard">
                 <StackPanel>
@@ -100,17 +110,30 @@
 
             <!-- Progress Bar Card -->
             <Border Grid.Row="2" 
-                    Style="{StaticResource StandardCard}"
+                    Style="{StaticResource Card}"
                     Padding="32"
-                    Margin="0,0,0,24"
-                    SnapsToDevicePixels="True">
+                    Margin="0,0,0,24">
                 <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                    <!-- Skeleton Progress Card (shown while loading) -->
+                    <Grid Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel>
+                            <Rectangle Style="{StaticResource SkeletonCell}" Width="200" Height="24" Margin="0,0,0,20" HorizontalAlignment="Left"/>
+                            <Rectangle Style="{StaticResource SkeletonCell}" Margin="0,0,0,8"/>
+                            <Grid>
+                                <Rectangle Style="{StaticResource SkeletonCell}" Width="40" Height="12" HorizontalAlignment="Left"/>
+                                <Rectangle Style="{StaticResource SkeletonCell}" Width="40" Height="12" HorizontalAlignment="Right"/>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
                     
-                    <Grid Grid.Row="0" Margin="0,0,0,20">
+                    <!-- Actual Progress Card -->
+                    <Grid Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <Grid Grid.Row="0" Margin="0,0,0,20">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Border Background="{StaticResource PrimaryBrush}"
                                     Width="36" Height="36"
@@ -119,9 +142,7 @@
                                 <TextBlock Text="{StaticResource Icon.ChartBar}"
                                            Style="{StaticResource Icon}"
                                            FontSize="20"
-                                           Foreground="White"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
+                                           Foreground="White"/>
                             </Border>
                             <TextBlock Text="Overall Progress"
                                        Style="{StaticResource TitleTextStyle}"
@@ -139,21 +160,22 @@
                                    AutomationProperties.Name="Progress Percentage"/>
                     </Grid>
                     
-                    <StackPanel Grid.Row="1">
-                        <ProgressBar Value="{Binding ProgressPercentage}"
-                                     Maximum="100"
-                                     Height="16"
-                                     Style="{StaticResource ModernProgressBar}"
-                                     AutomationProperties.Name="Crawl Progress Bar"/>
-                        <Grid Margin="0,8,0,0">
-                            <TextBlock Text="0%"
-                                       Style="{StaticResource CaptionTextStyle}"
-                                       HorizontalAlignment="Left"/>
-                            <TextBlock Text="100%"
-                                       Style="{StaticResource CaptionTextStyle}"
-                                       HorizontalAlignment="Right"/>
-                        </Grid>
-                    </StackPanel>
+                        <StackPanel Grid.Row="1">
+                            <ProgressBar Value="{Binding ProgressPercentage}"
+                                         Maximum="100"
+                                         Height="16"
+                                         Style="{StaticResource ModernProgressBar}"
+                                         AutomationProperties.Name="Crawl Progress Bar"/>
+                            <Grid Margin="0,8,0,0">
+                                <TextBlock Text="0%"
+                                           Style="{StaticResource CaptionTextStyle}"
+                                           HorizontalAlignment="Left"/>
+                                <TextBlock Text="100%"
+                                           Style="{StaticResource CaptionTextStyle}"
+                                           HorizontalAlignment="Right"/>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
                 </Grid>
             </Border>
 
@@ -172,8 +194,124 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
+                <!-- Skeleton Metric Cards (shown while loading) -->
+                <Border Grid.Row="0" Grid.Column="0" 
+                        Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Rectangle Grid.Row="0" Style="{StaticResource SkeletonCell}" Width="140" Height="20" Margin="0,0,0,12"/>
+                        <Rectangle Grid.Row="1" Style="{StaticResource SkeletonCell}" Width="80" Height="36"/>
+                    </Grid>
+                </Border>
+                
+                <Border Grid.Row="0" Grid.Column="2" 
+                        Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Rectangle Grid.Row="0" Style="{StaticResource SkeletonCell}" Width="140" Height="20" Margin="0,0,0,12"/>
+                        <Rectangle Grid.Row="1" Style="{StaticResource SkeletonCell}" Width="80" Height="36"/>
+                    </Grid>
+                </Border>
+                
+                <Border Grid.Row="0" Grid.Column="4" 
+                        Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Rectangle Grid.Row="0" Style="{StaticResource SkeletonCell}" Width="140" Height="20" Margin="0,0,0,12"/>
+                        <Rectangle Grid.Row="1" Style="{StaticResource SkeletonCell}" Width="80" Height="36"/>
+                    </Grid>
+                </Border>
+                
+                <Border Grid.Row="2" Grid.Column="0" 
+                        Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Rectangle Grid.Row="0" Style="{StaticResource SkeletonCell}" Width="140" Height="20" Margin="0,0,0,12"/>
+                        <Rectangle Grid.Row="1" Style="{StaticResource SkeletonCell}" Width="80" Height="36"/>
+                    </Grid>
+                </Border>
+                
+                <Border Grid.Row="2" Grid.Column="2" 
+                        Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Rectangle Grid.Row="0" Style="{StaticResource SkeletonCell}" Width="140" Height="20" Margin="0,0,0,12"/>
+                        <Rectangle Grid.Row="1" Style="{StaticResource SkeletonCell}" Width="80" Height="36"/>
+                    </Grid>
+                </Border>
+                
+                <Border Grid.Row="2" Grid.Column="4" 
+                        Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        Background="{StaticResource SurfaceBrush}"
+                        CornerRadius="8"
+                        Padding="20"
+                        SnapsToDevicePixels="True">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Rectangle Grid.Row="0" Style="{StaticResource SkeletonCell}" Width="140" Height="20" Margin="0,0,0,12"/>
+                        <Rectangle Grid.Row="1" Style="{StaticResource SkeletonCell}" Width="80" Height="36"/>
+                    </Grid>
+                </Border>
+
                 <!-- URLs Crawled Card -->
                 <Border Grid.Row="0" Grid.Column="0" 
+                        Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                         Background="{StaticResource SurfaceBrush}"
                         CornerRadius="8"
                         Padding="20"
@@ -199,13 +337,11 @@
                                     Margin="0,0,10,0">
                                 <TextBlock Text="{StaticResource Icon.CheckCircle}"
                                            Style="{StaticResource Icon}"
-                                           FontSize="16"
                                            Foreground="White"/>
                             </Border>
                             <TextBlock Text="URLs Crawled"
                                        Style="{StaticResource BodyTextStyle}"
                                        FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
@@ -222,6 +358,7 @@
 
                 <!-- Total Discovered Card -->
                 <Border Grid.Row="0" Grid.Column="2" 
+                        Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                         Background="{StaticResource SurfaceBrush}"
                         CornerRadius="8"
                         Padding="20"
@@ -247,13 +384,11 @@
                                     Margin="0,0,10,0">
                                 <TextBlock Text="{StaticResource Icon.Link}"
                                            Style="{StaticResource Icon}"
-                                           FontSize="16"
                                            Foreground="White"/>
                             </Border>
                             <TextBlock Text="Total Discovered"
                                        Style="{StaticResource BodyTextStyle}"
                                        FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
@@ -268,6 +403,7 @@
 
                 <!-- Queue Size Card -->
                 <Border Grid.Row="0" Grid.Column="4" 
+                        Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                         Background="{StaticResource SurfaceBrush}"
                         CornerRadius="8"
                         Padding="20"
@@ -293,13 +429,11 @@
                                     Margin="0,0,10,0">
                                 <TextBlock Text="{StaticResource Icon.List}"
                                            Style="{StaticResource Icon}"
-                                           FontSize="16"
                                            Foreground="White"/>
                             </Border>
                             <TextBlock Text="Queue Size"
                                        Style="{StaticResource BodyTextStyle}"
                                        FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
@@ -314,6 +448,7 @@
 
                 <!-- Active Workers Card -->
                 <Border Grid.Row="2" Grid.Column="0" 
+                        Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                         Background="{StaticResource SurfaceBrush}"
                         CornerRadius="8"
                         Padding="20"
@@ -334,13 +469,11 @@
                                     Margin="0,0,10,0">
                                 <TextBlock Text="{StaticResource Icon.Cog}"
                                            Style="{StaticResource Icon}"
-                                           FontSize="16"
                                            Foreground="White"/>
                             </Border>
                             <TextBlock Text="Active Workers"
                                        Style="{StaticResource BodyTextStyle}"
                                        FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
@@ -354,6 +487,7 @@
 
                 <!-- Errors Card -->
                 <Border Grid.Row="2" Grid.Column="2" 
+                        Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                         Background="{StaticResource SurfaceBrush}"
                         CornerRadius="8"
                         Padding="20"
@@ -379,13 +513,11 @@
                                     Margin="0,0,10,0">
                                 <TextBlock Text="{StaticResource Icon.AlertCircle}"
                                            Style="{StaticResource Icon}"
-                                           FontSize="16"
                                            Foreground="White"/>
                             </Border>
                             <TextBlock Text="Errors"
                                        Style="{StaticResource BodyTextStyle}"
                                        FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
@@ -400,6 +532,7 @@
 
                 <!-- Elapsed Time Card -->
                 <Border Grid.Row="2" Grid.Column="4" 
+                        Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                         Background="{StaticResource SurfaceBrush}"
                         CornerRadius="8"
                         Padding="20"
@@ -420,13 +553,11 @@
                                     Margin="0,0,10,0">
                                 <TextBlock Text="{StaticResource Icon.Clock}"
                                            Style="{StaticResource Icon}"
-                                           FontSize="16"
                                            Foreground="White"/>
                             </Border>
                             <TextBlock Text="Elapsed Time"
                                        Style="{StaticResource BodyTextStyle}"
                                        FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                         
@@ -442,27 +573,33 @@
 
             <!-- Recent Activity Card -->
             <Border Grid.Row="4" 
-                    Style="{StaticResource StandardCard}"
+                    Style="{StaticResource Card}"
                     Padding="24"
-                    Margin="0,0,0,32"
-                    SnapsToDevicePixels="True">
+                    Margin="0,0,0,32">
                 <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                    <!-- Skeleton Activity Card (shown while loading) -->
+                    <Grid Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel>
+                            <Rectangle Style="{StaticResource SkeletonCell}" Width="160" Height="20" Margin="0,0,0,16" HorizontalAlignment="Left"/>
+                            <Rectangle Style="{StaticResource SkeletonCell}" Height="48"/>
+                        </StackPanel>
+                    </Grid>
                     
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+                    <!-- Actual Activity Card -->
+                    <Grid Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
                         <Border Background="{StaticResource InfoBrush}"
                                 Width="32" Height="32"
                                 CornerRadius="6"
                                 Margin="0,0,12,0">
                             <TextBlock Text="{StaticResource Icon.Web}"
                                        Style="{StaticResource Icon}"
-                                       FontSize="16"
-                                       Foreground="White"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                                       Foreground="White"/>
                         </Border>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="Recent Activity"
@@ -477,22 +614,22 @@
                         </StackPanel>
                     </StackPanel>
                     
-                    <Border Grid.Row="1"
-                            Background="{StaticResource SurfaceAltBrush}"
-                            BorderBrush="{StaticResource BorderLightBrush}"
-                            BorderThickness="1"
-                            CornerRadius="6"
-                            Padding="16"
-                            SnapsToDevicePixels="True">
-                        <TextBlock Text="{Binding RecentActivity}"
-                                   VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"
-                                   Style="{StaticResource BodyTextStyle}"
-                                   FontFamily="Consolas"
-                                   FontSize="13"
-                                   Foreground="{StaticResource TextPrimaryBrush}"
-                                   ToolTip="{Binding RecentActivity}"/>
-                    </Border>
+                        <Border Grid.Row="1"
+                                Background="{StaticResource SurfaceAltBrush}"
+                                BorderBrush="{StaticResource BorderLightBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="16"
+                                SnapsToDevicePixels="True">
+                            <TextBlock Text="{Binding RecentActivity}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       FontFamily="Consolas"
+                                       FontSize="13"
+                                       ToolTip="{Binding RecentActivity}"/>
+                        </Border>
+                    </Grid>
                 </Grid>
             </Border>
 
@@ -533,13 +670,38 @@
                         </StackPanel>
                     </Button>
                     
+                    <Button Command="{Binding PauseResumeCommand}"
+                            IsEnabled="{Binding IsCrawling}"
+                            Style="{StaticResource SecondaryButton}"
+                            Height="56"
+                            Padding="40,16"
+                            MinWidth="180"
+                            Margin="0,0,16,0"
+                            TabIndex="1"
+                            AutomationProperties.Name="{Binding PauseResumeButtonText}"
+                            AutomationProperties.HelpText="Pauses or resumes the active crawl"
+                            ToolTip="{Binding PauseResumeButtonText}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding PauseResumeButtonIcon}"
+                                       Style="{StaticResource Icon}"
+                                       Width="20" 
+                                       Height="20"
+                                       FontSize="20"
+                                       Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding PauseResumeButtonText}" 
+                                       VerticalAlignment="Center"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
+                    
                     <Button Command="{Binding StopCrawlCommand}"
                             IsEnabled="{Binding IsCrawling}"
                             Style="{StaticResource DangerButton}"
                             Height="56"
                             Padding="40,16"
                             MinWidth="180"
-                            TabIndex="1"
+                            TabIndex="2"
                             AutomationProperties.Name="Stop Crawl"
                             AutomationProperties.HelpText="Stops the current crawl operation immediately"
                             ToolTip="Stop the current crawl (F8)">

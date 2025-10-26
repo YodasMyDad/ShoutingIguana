@@ -24,6 +24,7 @@ public class CrawlEngine(
     private CancellationTokenSource? _cts;
     private Task? _crawlTask;
     private readonly ConcurrentDictionary<string, DateTime> _lastCrawlTime = new();
+    private readonly ManualResetEventSlim _pauseEvent = new(initialState: true); // Initially not paused
     
     // Performance counters
     private int _urlsCrawled;
@@ -32,10 +33,16 @@ public class CrawlEngine(
     private int _errorCount;
     private int _queueSize; // Cached queue size
     private Stopwatch? _stopwatch;
+    private TimeSpan _pausedTime = TimeSpan.Zero;
+    private DateTime? _pauseStartTime;
     private string? _lastCrawledUrl;
     private int _lastCrawledStatus;
+    private int _currentProjectId;
+    private int _isPaused; // Use int for thread-safe access (0 = false, 1 = true)
+    private int _isCrawling; // Use int for thread-safe access (0 = false, 1 = true)
 
-    public bool IsCrawling { get; private set; }
+    public bool IsCrawling => Interlocked.CompareExchange(ref _isCrawling, 0, 0) == 1;
+    public bool IsPaused => Interlocked.CompareExchange(ref _isPaused, 0, 0) == 1;
     public event EventHandler<CrawlProgressEventArgs>? ProgressUpdated;
 
     public Task StartCrawlAsync(int projectId, CancellationToken cancellationToken = default)
@@ -46,13 +53,18 @@ public class CrawlEngine(
             return Task.CompletedTask;
         }
 
-        IsCrawling = true;
+        Interlocked.Exchange(ref _isCrawling, 1);
+        Interlocked.Exchange(ref _isPaused, 0);
+        _currentProjectId = projectId;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _urlsCrawled = 0;
         _totalDiscovered = 0;
         _activeWorkers = 0;
         _errorCount = 0;
         _queueSize = 0;
+        _pausedTime = TimeSpan.Zero;
+        _pauseStartTime = null;
+        _pauseEvent.Set(); // Ensure not paused
         _stopwatch = Stopwatch.StartNew();
 
         _crawlTask = Task.Run(async () =>
@@ -71,8 +83,12 @@ public class CrawlEngine(
             }
             finally
             {
-                IsCrawling = false;
+                Interlocked.Exchange(ref _isCrawling, 0);
+                Interlocked.Exchange(ref _isPaused, 0);
                 _stopwatch?.Stop();
+                
+                // Deactivate checkpoints (crawl complete)
+                await DeactivateCheckpointsAsync(projectId).ConfigureAwait(false);
                 
                 // Send final progress update so UI knows crawl has finished
                 SendProgressUpdate(projectId);
@@ -88,6 +104,14 @@ public class CrawlEngine(
             return;
 
         _logger.LogInformation("Stopping crawl...");
+        
+        // Resume if paused so workers can exit
+        if (IsPaused)
+        {
+            _pauseEvent.Set();
+            Interlocked.Exchange(ref _isPaused, 0);
+        }
+        
         _cts.Cancel();
 
         if (_crawlTask != null)
@@ -109,10 +133,76 @@ public class CrawlEngine(
         }
     }
 
+    public Task PauseCrawlAsync()
+    {
+        if (!IsCrawling || IsPaused)
+        {
+            _logger.LogWarning("Cannot pause: crawl is not running or already paused");
+            return Task.CompletedTask;
+        }
+
+        _logger.LogInformation("Pausing crawl...");
+        Interlocked.Exchange(ref _isPaused, 1);
+        _pauseStartTime = DateTime.UtcNow;
+        _pauseEvent.Reset(); // Signal workers to pause
+        
+        // Pause stopwatch
+        _stopwatch?.Stop();
+        
+        SendProgressUpdate(_currentProjectId);
+        
+        return Task.CompletedTask;
+    }
+
+    public Task ResumeCrawlAsync()
+    {
+        if (!IsCrawling || !IsPaused)
+        {
+            _logger.LogWarning("Cannot resume: crawl is not paused");
+            return Task.CompletedTask;
+        }
+
+        _logger.LogInformation("Resuming crawl...");
+        
+        // Calculate paused time
+        if (_pauseStartTime.HasValue)
+        {
+            _pausedTime += DateTime.UtcNow - _pauseStartTime.Value;
+            _pauseStartTime = null;
+        }
+        
+        Interlocked.Exchange(ref _isPaused, 0);
+        _pauseEvent.Set(); // Signal workers to resume
+        
+        // Resume stopwatch
+        _stopwatch?.Start();
+        
+        SendProgressUpdate(_currentProjectId);
+        
+        return Task.CompletedTask;
+    }
+
+    public async Task<ShoutingIguana.Core.Models.CrawlCheckpoint?> GetActiveCheckpointAsync(int projectId)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var checkpointRepo = scope.ServiceProvider.GetRequiredService<ICrawlCheckpointRepository>();
+            return await checkpointRepo.GetActiveCheckpointAsync(projectId).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking for active checkpoint");
+            return null;
+        }
+    }
+
     private async Task RunCrawlAsync(int projectId, CancellationToken cancellationToken)
     {
         Project? project;
         ProjectSettings settings;
+        ProxySettings? globalProxySettings;
+        int checkpointInterval;
         int queueSize;
         
         using (var scope = _serviceProvider.CreateScope())
@@ -127,6 +217,11 @@ public class CrawlEngine(
 
             settings = System.Text.Json.JsonSerializer.Deserialize<ProjectSettings>(project.SettingsJson)
                 ?? new ProjectSettings();
+            
+            // Get app settings once (avoid repeated service lookups in worker loop)
+            var appSettings = scope.ServiceProvider.GetRequiredService<IAppSettingsService>();
+            globalProxySettings = appSettings.CrawlSettings.GlobalProxy;
+            checkpointInterval = appSettings.CrawlSettings.CheckpointInterval;
 
             // Seed the queue with base URL if empty
             var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
@@ -179,7 +274,7 @@ public class CrawlEngine(
         var workers = new List<Task>();
         for (int i = 0; i < settings.ConcurrentRequests; i++)
         {
-            workers.Add(WorkerAsync(projectId, settings, cancellationToken));
+            workers.Add(WorkerAsync(projectId, settings, globalProxySettings, checkpointInterval, cancellationToken));
         }
 
         // Progress reporting task (separate so we can control it)
@@ -206,12 +301,15 @@ public class CrawlEngine(
         }
     }
 
-    private async Task WorkerAsync(int projectId, ProjectSettings settings, CancellationToken cancellationToken)
+    private async Task WorkerAsync(int projectId, ProjectSettings settings, ProxySettings? globalProxySettings, int checkpointInterval, CancellationToken cancellationToken)
     {
         int emptyQueueCount = 0;
 
         while (!cancellationToken.IsCancellationRequested)
         {
+            // Wait if paused
+            _pauseEvent.Wait(cancellationToken);
+            
             CrawlQueueItem? queueItem;
             
             using (var scope = _serviceProvider.CreateScope())
@@ -274,6 +372,9 @@ public class CrawlEngine(
 
                 // Get user agent for this request
                 var userAgent = settings.GetUserAgentString();
+                
+                // Determine which proxy settings to use (project override or global)
+                var proxySettings = settings.ProxyOverride ?? globalProxySettings;
 
                 // Check robots.txt
                 bool? robotsAllowed = null;
@@ -295,7 +396,7 @@ public class CrawlEngine(
                 }
 
                 // Fetch URL with Playwright
-                var (urlData, page, renderedHtml, redirectChain) = await FetchUrlWithPlaywrightAsync(queueItem.Address, userAgent, cancellationToken).ConfigureAwait(false);
+                var (urlData, page, renderedHtml, redirectChain) = await FetchUrlWithPlaywrightAsync(queueItem.Address, userAgent, proxySettings, cancellationToken).ConfigureAwait(false);
 
                 try
                 {
@@ -340,6 +441,14 @@ public class CrawlEngine(
                     // Update last crawled URL for progress display
                     _lastCrawledUrl = queueItem.Address;
                     _lastCrawledStatus = urlData.StatusCode;
+                    
+                    // Save checkpoint at configured intervals
+                    // Note: Multiple workers may trigger checkpoint simultaneously at same interval.
+                    // This is acceptable - database handles concurrent inserts gracefully.
+                    if (checkpointInterval > 0 && _urlsCrawled % checkpointInterval == 0)
+                    {
+                        await SaveCheckpointAsync(projectId).ConfigureAwait(false);
+                    }
                 }
                 finally
                 {
@@ -385,7 +494,7 @@ public class CrawlEngine(
     /// OWNERSHIP: The caller is ALWAYS responsible for disposing the returned page via ClosePageAsync(),
     /// even if an error occurs. The page is returned in both success and error cases.
     /// </summary>
-    private async Task<(UrlFetchResult result, Microsoft.Playwright.IPage? page, string? html, List<RedirectHop> redirectChain)> FetchUrlWithPlaywrightAsync(string url, string userAgent, CancellationToken cancellationToken)
+    private async Task<(UrlFetchResult result, Microsoft.Playwright.IPage? page, string? html, List<RedirectHop> redirectChain)> FetchUrlWithPlaywrightAsync(string url, string userAgent, ProxySettings? proxySettings, CancellationToken cancellationToken)
     {
         Microsoft.Playwright.IPage? page = null;
         string? renderedHtml = null;
@@ -396,8 +505,8 @@ public class CrawlEngine(
             // Check cancellation before creating page
             cancellationToken.ThrowIfCancellationRequested();
             
-            // Create a new page with the specified user agent (caller becomes responsible for disposal from this point)
-            page = await _playwrightService.CreatePageAsync(userAgent).ConfigureAwait(false);
+            // Create a new page with the specified user agent and proxy (caller becomes responsible for disposal from this point)
+            page = await _playwrightService.CreatePageAsync(userAgent, proxySettings).ConfigureAwait(false);
             
             // Navigate to URL
             var response = await page.GotoAsync(url, new Microsoft.Playwright.PageGotoOptions
@@ -1354,6 +1463,59 @@ public class CrawlEngine(
         }
     }
 
+    /// <summary>
+    /// Saves a checkpoint for crash recovery.
+    /// </summary>
+    private async Task SaveCheckpointAsync(int projectId)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var checkpointRepo = scope.ServiceProvider.GetRequiredService<ICrawlCheckpointRepository>();
+            
+            var checkpoint = new ShoutingIguana.Core.Models.CrawlCheckpoint
+            {
+                ProjectId = projectId,
+                CreatedAt = DateTime.UtcNow,
+                UrlsCrawled = _urlsCrawled,
+                ErrorCount = _errorCount,
+                QueueSize = _queueSize,
+                LastCrawledUrl = _lastCrawledUrl,
+                Status = "InProgress",
+                ElapsedSeconds = (_stopwatch?.Elapsed ?? TimeSpan.Zero).TotalSeconds,
+                IsActive = true
+            };
+            
+            await checkpointRepo.CreateAsync(checkpoint).ConfigureAwait(false);
+            _logger.LogInformation("Checkpoint saved: {UrlsCrawled} URLs crawled", _urlsCrawled);
+            
+            // Cleanup old checkpoints to avoid bloat
+            await checkpointRepo.CleanupOldCheckpointsAsync(projectId).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving checkpoint");
+        }
+    }
+
+    /// <summary>
+    /// Deactivates all checkpoints for a project when crawl completes successfully.
+    /// </summary>
+    private async Task DeactivateCheckpointsAsync(int projectId)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var checkpointRepo = scope.ServiceProvider.GetRequiredService<ICrawlCheckpointRepository>();
+            await checkpointRepo.DeactivateCheckpointsAsync(projectId).ConfigureAwait(false);
+            _logger.LogInformation("Deactivated checkpoints for project {ProjectId}", projectId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deactivating checkpoints");
+        }
+    }
+
     private static string NormalizeUrl(string url)
     {
         try
@@ -1517,6 +1679,12 @@ public class CrawlEngine(
         public string RawData { get; set; } = string.Empty;
         public bool IsValid { get; set; }
         public string? ValidationErrors { get; set; }
+    }
+
+    public void Dispose()
+    {
+        _pauseEvent.Dispose();
+        _cts?.Dispose();
     }
 }
 

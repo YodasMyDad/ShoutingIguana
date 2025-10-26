@@ -16,12 +16,14 @@ public abstract class ShoutingIguanaDbContextBase : DbContext
     public DbSet<Url> Urls => Set<Url>();
     public DbSet<Link> Links => Set<Link>();
     public DbSet<CrawlQueueItem> CrawlQueue => Set<CrawlQueueItem>();
+    public DbSet<CrawlCheckpoint> CrawlCheckpoints => Set<CrawlCheckpoint>();
     public DbSet<Header> Headers => Set<Header>();
     public DbSet<Finding> Findings => Set<Finding>();
     public DbSet<Redirect> Redirects => Set<Redirect>();
     public DbSet<Image> Images => Set<Image>();
     public DbSet<Hreflang> Hreflangs => Set<Hreflang>();
     public DbSet<StructuredData> StructuredData => Set<StructuredData>();
+    public DbSet<CustomExtractionRule> CustomExtractionRules => Set<CustomExtractionRule>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

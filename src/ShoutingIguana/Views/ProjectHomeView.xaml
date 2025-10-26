@@ -2,7 +2,6 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:config="clr-namespace:ShoutingIguana.Core.Configuration;assembly=ShoutingIguana.Core"
-             xmlns:sys="clr-namespace:System;assembly=mscorlib"
              Background="{StaticResource BackgroundBrush}">
     
     <Grid KeyboardNavigation.TabNavigation="Local">
@@ -33,7 +32,6 @@
                                Height="48"
                                FontSize="48"
                                Foreground="{StaticResource PrimaryBrush}"
-                               HorizontalAlignment="Center"
                                Margin="0,0,0,24"
                                RenderTransformOrigin="0.5,0.5">
                         <TextBlock.RenderTransform>
@@ -224,9 +222,7 @@
                                 <TextBlock Text="{StaticResource Icon.Settings}"
                                            Style="{StaticResource Icon}"
                                            FontSize="22"
-                                           Foreground="White"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
+                                           Foreground="White"/>
                             </Border>
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Text="Project Settings"
@@ -460,7 +456,7 @@
                                     ToolTip="Save changes to project settings"/>
                             <Button Command="{Binding StartCrawlCommand}"
                                     Style="{StaticResource PrimaryButton}"
-                                    Height="48"
+                                    Height="56"
                                     Padding="32,12"
                                     TabIndex="9"
                                     IsDefault="True"
@@ -470,9 +466,9 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="{StaticResource Icon.Play}"
                                                Style="{StaticResource Icon}"
-                                               Width="18" 
-                                               Height="18"
-                                               FontSize="18"
+                                               Width="20" 
+                                               Height="20"
+                                               FontSize="20"
                                                Margin="0,0,8,0"/>
                                     <TextBlock Text="Start Crawl" 
                                                VerticalAlignment="Center"

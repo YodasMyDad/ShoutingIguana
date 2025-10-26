@@ -351,6 +351,225 @@
                 </ScrollViewer>
             </TabItem>
 
+            <!-- Network Tab -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{StaticResource Icon.Globe}"
+                                   Style="{StaticResource Icon}"
+                                   Width="16" 
+                                   Height="16"
+                                   FontSize="16"
+                                   Margin="0,0,8,0"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Network" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,24">
+                    <StackPanel MaxWidth="750">
+                        
+                        <!-- Proxy Settings Section -->
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,24">
+                            <StackPanel>
+                                <TextBlock Text="Proxy Settings" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
+
+                                <!-- Proxy Enable -->
+                                <Border Background="{StaticResource BackgroundBrush}"
+                                        BorderBrush="{StaticResource BorderLightBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="12"
+                                        Margin="0,0,0,16">
+                                    <StackPanel>
+                                        <CheckBox IsChecked="{Binding ProxyEnabled}"
+                                                  FontSize="14"
+                                                  Margin="0"
+                                                  TabIndex="0"
+                                                  AutomationProperties.Name="Enable Proxy">
+                                            <TextBlock Text="Use proxy server for all connections" TextWrapping="Wrap" FontWeight="SemiBold"/>
+                                        </CheckBox>
+                                        <TextBlock Text="Route all crawl traffic through a proxy server. Useful for corporate environments or privacy."
+                                                   Style="{StaticResource HelperText}"
+                                                   Margin="32,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Proxy Type -->
+                                <StackPanel Margin="0,0,0,16" IsEnabled="{Binding ProxyEnabled}">
+                                    <TextBlock Text="Proxy Type" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <ComboBox SelectedIndex="{Binding SelectedProxyType}"
+                                              Style="{StaticResource ModernComboBox}"
+                                              TabIndex="1"
+                                              AutomationProperties.Name="Proxy Type">
+                                        <ComboBoxItem Content="HTTP"/>
+                                        <ComboBoxItem Content="HTTPS"/>
+                                        <ComboBoxItem Content="SOCKS5"/>
+                                    </ComboBox>
+                                    <TextBlock Text="Select the protocol used by your proxy server."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+
+                                <!-- Server and Port -->
+                                <Grid Margin="0,0,0,16" IsEnabled="{Binding ProxyEnabled}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*"/>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Server" 
+                                                   Style="{StaticResource FormFieldLabel}"
+                                                   Margin="0,0,0,8"/>
+                                        <TextBox Text="{Binding ProxyServer, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource ModernTextBox}"
+                                                 TabIndex="2"
+                                                 AutomationProperties.Name="Proxy Server">
+                                            <TextBox.Tag>proxy.example.com</TextBox.Tag>
+                                        </TextBox>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Port" 
+                                                   Style="{StaticResource FormFieldLabel}"
+                                                   Margin="0,0,0,8"/>
+                                        <TextBox Text="{Binding ProxyPort, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource ModernTextBox}"
+                                                 TabIndex="3"
+                                                 AutomationProperties.Name="Proxy Port">
+                                            <TextBox.Tag>8080</TextBox.Tag>
+                                        </TextBox>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Authentication -->
+                                <Border Background="{StaticResource BackgroundBrush}"
+                                        BorderBrush="{StaticResource BorderLightBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="12"
+                                        Margin="0,0,0,16"
+                                        IsEnabled="{Binding ProxyEnabled}">
+                                    <StackPanel>
+                                        <CheckBox IsChecked="{Binding ProxyRequiresAuth}"
+                                                  FontSize="14"
+                                                  Margin="0"
+                                                  TabIndex="4"
+                                                  AutomationProperties.Name="Proxy Requires Authentication">
+                                            <TextBlock Text="Proxy requires authentication" TextWrapping="Wrap" FontWeight="SemiBold"/>
+                                        </CheckBox>
+                                    </StackPanel>
+                                </Border>
+
+                                <StackPanel Margin="0,0,0,16" IsEnabled="{Binding ProxyRequiresAuth}" Visibility="{Binding ProxyRequiresAuth, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <TextBlock Text="Username" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding ProxyUsername, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="5"
+                                             AutomationProperties.Name="Proxy Username"/>
+                                </StackPanel>
+
+                                <StackPanel Margin="0,0,0,16" IsEnabled="{Binding ProxyRequiresAuth}" Visibility="{Binding ProxyRequiresAuth, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <TextBlock Text="Password" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <PasswordBox x:Name="ProxyPasswordBox"
+                                                 TabIndex="6"
+                                                 Style="{StaticResource ModernPasswordBox}"
+                                                 AutomationProperties.Name="Proxy Password"
+                                                 PasswordChanged="ProxyPasswordBox_OnPasswordChanged"/>
+                                    <TextBlock Text="Password is encrypted using Windows DPAPI and stored securely."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+
+                                <!-- Bypass List -->
+                                <StackPanel Margin="0,0,0,16" IsEnabled="{Binding ProxyEnabled}">
+                                    <TextBlock Text="Bypass List (comma-separated patterns)" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding ProxyBypassList, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="7"
+                                             AutomationProperties.Name="Proxy Bypass List"
+                                             AcceptsReturn="True"
+                                             Height="60">
+                                        <TextBox.Tag>localhost, *.internal.com, 192.168.*</TextBox.Tag>
+                                    </TextBox>
+                                    <TextBlock Text="Hosts matching these patterns will bypass the proxy (e.g., localhost, *.internal.com)."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+
+                                <!-- Test Connection -->
+                                <StackPanel Margin="0,0,0,0">
+                                    <Button Command="{Binding TestProxyCommand}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            HorizontalAlignment="Left"
+                                            TabIndex="8"
+                                            IsEnabled="{Binding ProxyEnabled}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{StaticResource Icon.Globe}"
+                                                       Style="{StaticResource Icon}"
+                                                       Width="16"
+                                                       Height="16"
+                                                       Margin="0,0,8,0"/>
+                                            <TextBlock Text="Test Connection"/>
+                                        </StackPanel>
+                                    </Button>
+                                    
+                                    <TextBlock Text="{Binding ProxyTestResult}"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Margin="0,12,0,0"
+                                               TextWrapping="Wrap"
+                                               Visibility="{Binding ProxyTestResult, Converter={StaticResource NullToVisibilityConverter}}"/>
+                                    
+                                    <ProgressBar IsIndeterminate="True"
+                                                 Style="{StaticResource ModernProgressBar}"
+                                                 Margin="0,12,0,0"
+                                                 Height="4"
+                                                 Visibility="{Binding IsTestingProxy, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Connection Settings Section -->
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Connection Settings" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
+
+                                <StackPanel Margin="0,0,0,0">
+                                    <TextBlock Text="Connection Timeout" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding ConnectionTimeoutSeconds, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="9"
+                                             AutomationProperties.Name="Connection Timeout in Seconds"/>
+                                    <TextBlock Text="Maximum time in seconds to wait for establishing a connection (5-120 seconds)."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- Plugins Tab -->
             <TabItem>
                 <TabItem.Header>
@@ -402,7 +621,38 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Stage 2 Info Card -->
+                        <!-- Plugin Actions Section -->
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,24">
+                            <StackPanel>
+                                <TextBlock Text="Plugin Management" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
+
+                                <TextBlock Text="Reload plugins to discover newly installed plugins or reflect changes."
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource BodyTextStyle}"
+                                           Margin="0,0,0,16"/>
+
+                                <Button Command="{Binding ReloadPluginsCommand}"
+                                        Style="{StaticResource SecondaryButton}"
+                                        HorizontalAlignment="Left">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{StaticResource Icon.Refresh}"
+                                                   Style="{StaticResource Icon}"
+                                                   Width="16"
+                                                   Height="16"
+                                                   Margin="0,0,8,0"/>
+                                        <TextBlock Text="Reload Plugins"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Stage 3 Info Card -->
                         <Border Style="{StaticResource InfoCard}"
                                 Padding="16"
                                 Margin="0,0,0,0">
@@ -416,13 +666,233 @@
                                                Foreground="{StaticResource InfoBrush}"
                                                Margin="0,0,8,0"
                                                VerticalAlignment="Center"/>
-                                    <TextBlock Text="Stage 2 Limitation" 
+                                    <TextBlock Text="Hot-Loading Support" 
                                                FontWeight="SemiBold"
                                                FontSize="14"
                                                Foreground="{StaticResource InfoBrush}"
                                                VerticalAlignment="Center"/>
                                 </StackPanel>
-                                <TextBlock Text="In Stage 2, all plugins are always enabled. Plugin enable/disable and hot-loading will be available in Stage 3."
+                                <TextBlock Text="Plugins can be dynamically loaded and unloaded without restarting the application. Use the Extensions Manager (Ctrl+Shift+E) for full plugin management."
+                                           TextWrapping="Wrap"
+                                           FontSize="13"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           Margin="28,0,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Data Tab -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{StaticResource Icon.Folder}"
+                                   Style="{StaticResource Icon}"
+                                   Width="16" 
+                                   Height="16"
+                                   FontSize="16"
+                                   Margin="0,0,8,0"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Data" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,24">
+                    <StackPanel MaxWidth="750">
+                        
+                        <!-- Storage Section -->
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,24">
+                            <StackPanel>
+                                <TextBlock Text="Storage Settings" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
+
+                                <!-- Project Storage Location -->
+                                <StackPanel Margin="0,0,0,16">
+                                    <TextBlock Text="Project Storage Location" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0"
+                                                 Text="{Binding ProjectStoragePath, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource ModernTextBox}"
+                                                 IsReadOnly="True"
+                                                 Margin="0,0,8,0"/>
+                                        <Button Grid.Column="1"
+                                                Content="Browse..."
+                                                Style="{StaticResource SecondaryButton}"
+                                                Command="{Binding BrowseStoragePathCommand}"/>
+                                    </Grid>
+                                    <TextBlock Text="Location where project databases and files are stored"
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+
+                                <!-- Log Retention -->
+                                <StackPanel Margin="0,0,0,16">
+                                    <TextBlock Text="Log Retention (Days)" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding LogRetentionDays, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"/>
+                                    <TextBlock Text="Logs older than this will be automatically deleted (0 = keep forever)"
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+
+                                <!-- Auto-Checkpoint Interval -->
+                                <StackPanel Margin="0,0,0,0">
+                                    <TextBlock Text="Auto-Checkpoint Interval (URLs)" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding CheckpointInterval, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"/>
+                                    <TextBlock Text="Save crawl progress every N URLs for crash recovery"
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Database Maintenance Section -->
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Database Maintenance" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
+
+                                <TextBlock Text="Optimize database performance by rebuilding indices and reclaiming space."
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource BodyTextStyle}"
+                                           Margin="0,0,0,16"/>
+
+                                <Button Command="{Binding OptimizeDatabaseCommand}"
+                                        Style="{StaticResource SecondaryButton}"
+                                        HorizontalAlignment="Left">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{StaticResource Icon.Cog}"
+                                                   Style="{StaticResource Icon}"
+                                                   Width="16"
+                                                   Height="16"
+                                                   Margin="0,0,8,0"/>
+                                        <TextBlock Text="Optimize Database"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Feeds Tab -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{StaticResource Icon.Globe}"
+                                   Style="{StaticResource Icon}"
+                                   Width="16" 
+                                   Height="16"
+                                   FontSize="16"
+                                   Margin="0,0,8,0"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Feeds" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,24">
+                    <StackPanel MaxWidth="750">
+                        
+                        <!-- NuGet Feeds Section -->
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,24">
+                            <StackPanel>
+                                <TextBlock Text="NuGet Package Feeds" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
+
+                                <TextBlock Text="Configure NuGet feeds for plugin discovery and installation."
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource BodyTextStyle}"
+                                           Margin="0,0,0,16"/>
+
+                                <DataGrid ItemsSource="{Binding Feeds}"
+                                          Style="{StaticResource ModernDataGrid}"
+                                          MaxHeight="300"
+                                          Margin="0,0,0,16">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Name" 
+                                                            Binding="{Binding Name}" 
+                                                            Width="*"
+                                                            MinWidth="120"/>
+                                        <DataGridTextColumn Header="Feed URL" 
+                                                            Binding="{Binding Url}" 
+                                                            Width="2*"
+                                                            MinWidth="300"/>
+                                        <DataGridCheckBoxColumn Header="Enabled" 
+                                                                Binding="{Binding IsEnabled}" 
+                                                                Width="80"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Command="{Binding AddFeedCommand}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Margin="0,0,8,0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="+" 
+                                                       FontWeight="Bold"
+                                                       FontSize="16"
+                                                       Margin="0,0,6,0"/>
+                                            <TextBlock Text="Add Feed"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Command="{Binding RemoveFeedCommand}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Margin="0,0,8,0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{StaticResource Icon.Delete}"
+                                                       Style="{StaticResource Icon}"
+                                                       Width="16"
+                                                       Height="16"
+                                                       Margin="0,0,8,0"/>
+                                            <TextBlock Text="Remove"/>
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Info Card -->
+                        <Border Style="{StaticResource InfoCard}"
+                                Padding="16">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="{StaticResource Icon.Info}"
+                                               Style="{StaticResource Icon}"
+                                               Width="20"
+                                               Height="20"
+                                               FontSize="20"
+                                               Foreground="{StaticResource InfoBrush}"
+                                               Margin="0,0,8,0"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="Default Feed" 
+                                               FontWeight="SemiBold"
+                                               FontSize="14"
+                                               Foreground="{StaticResource InfoBrush}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Text="The default NuGet.org feed is always available and cannot be removed. Add custom feeds to access private or organization-specific plugins."
                                            TextWrapping="Wrap"
                                            FontSize="13"
                                            Foreground="{StaticResource TextPrimaryBrush}"
@@ -451,9 +921,8 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{StaticResource Icon.Refresh}"
                                    Style="{StaticResource Icon}"
-                                   Width="14"
-                                   Height="14"
-                                   FontSize="14"
+                                   Width="16"
+                                   Height="16"
                                    Margin="0,0,6,0"/>
                         <TextBlock Text="Restore Defaults" VerticalAlignment="Center"/>
                     </StackPanel>
@@ -483,7 +952,6 @@
                                        Style="{StaticResource Icon}"
                                        Width="16"
                                        Height="16"
-                                       FontSize="16"
                                        Margin="0,0,8,0"/>
                             <TextBlock Text="Save Settings" 
                                        VerticalAlignment="Center"

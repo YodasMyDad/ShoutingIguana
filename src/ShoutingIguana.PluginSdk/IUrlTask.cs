@@ -25,5 +25,15 @@ public interface IUrlTask
     /// Execute the task for the given URL context.
     /// </summary>
     Task ExecuteAsync(UrlContext ctx, CancellationToken ct);
+    
+    /// <summary>
+    /// Optional cleanup method called when a project is closed.
+    /// Use this to clear any per-project static data (e.g., dictionaries keyed by ProjectId).
+    /// Default implementation does nothing.
+    /// </summary>
+    void CleanupProject(int projectId)
+    {
+        // Default: no cleanup needed
+    }
 }
 

@@ -1,11 +1,19 @@
 namespace ShoutingIguana.Core.Services;
 
-public interface ICrawlEngine
+public interface ICrawlEngine : IDisposable
 {
     Task StartCrawlAsync(int projectId, CancellationToken cancellationToken = default);
     Task StopCrawlAsync();
+    Task PauseCrawlAsync();
+    Task ResumeCrawlAsync();
     bool IsCrawling { get; }
+    bool IsPaused { get; }
     event EventHandler<CrawlProgressEventArgs>? ProgressUpdated;
+    
+    /// <summary>
+    /// Checks if there is an active checkpoint for a project (for crash recovery).
+    /// </summary>
+    Task<ShoutingIguana.Core.Models.CrawlCheckpoint?> GetActiveCheckpointAsync(int projectId);
 }
 
 public class CrawlProgressEventArgs : EventArgs

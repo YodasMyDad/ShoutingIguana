@@ -17,6 +17,49 @@ namespace ShoutingIguana.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.10");
 
+            modelBuilder.Entity("ShoutingIguana.Core.Models.CrawlCheckpoint", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("ElapsedSeconds")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("ErrorCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastCrawledUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("QueueSize")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UrlsCrawled")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId", "IsActive");
+
+                    b.ToTable("CrawlCheckpoints", (string)null);
+                });
+
             modelBuilder.Entity("ShoutingIguana.Core.Models.CrawlQueueItem", b =>
                 {
                     b.Property<int>("Id")
@@ -55,6 +98,48 @@ namespace ShoutingIguana.Data.Migrations
                     b.HasIndex("ProjectId", "State", "Priority");
 
                     b.ToTable("CrawlQueue", (string)null);
+                });
+
+            modelBuilder.Entity("ShoutingIguana.Core.Models.CustomExtractionRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FieldName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Selector")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SelectorType")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("CustomExtractionRules", (string)null);
                 });
 
             modelBuilder.Entity("ShoutingIguana.Core.Models.Finding", b =>
@@ -404,6 +489,10 @@ namespace ShoutingIguana.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ContentHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ContentLanguageHeader")
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
@@ -452,6 +541,9 @@ namespace ShoutingIguana.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int?>("HttpStatus")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("IsIndexable")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsRedirectLoop")
@@ -530,6 +622,9 @@ namespace ShoutingIguana.Data.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("TEXT");
 
+                    b.Property<long?>("SimHash")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
@@ -548,6 +643,8 @@ namespace ShoutingIguana.Data.Migrations
 
                     b.HasIndex("Address");
 
+                    b.HasIndex("ContentHash");
+
                     b.HasIndex("DiscoveredFromUrlId");
 
                     b.HasIndex("HasMultipleCanonicals");
@@ -556,19 +653,45 @@ namespace ShoutingIguana.Data.Migrations
 
                     b.HasIndex("HtmlLang");
 
+                    b.HasIndex("IsIndexable");
+
                     b.HasIndex("NormalizedUrl");
 
                     b.HasIndex("RobotsNoindex");
+
+                    b.HasIndex("SimHash");
 
                     b.HasIndex("ProjectId", "Status");
 
                     b.ToTable("Urls", (string)null);
                 });
 
+            modelBuilder.Entity("ShoutingIguana.Core.Models.CrawlCheckpoint", b =>
+                {
+                    b.HasOne("ShoutingIguana.Core.Models.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("ShoutingIguana.Core.Models.CrawlQueueItem", b =>
                 {
                     b.HasOne("ShoutingIguana.Core.Models.Project", "Project")
                         .WithMany("CrawlQueue")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("ShoutingIguana.Core.Models.CustomExtractionRule", b =>
+                {
+                    b.HasOne("ShoutingIguana.Core.Models.Project", "Project")
+                        .WithMany()
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

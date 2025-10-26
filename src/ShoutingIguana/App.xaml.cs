@@ -16,6 +16,7 @@ using ShoutingIguana.Data;
 using ShoutingIguana.Data.Repositories;
 using ShoutingIguana.Services;
 using ShoutingIguana.ViewModels;
+using ShoutingIguana.Views;
 
 namespace ShoutingIguana;
 
@@ -26,6 +27,9 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Setup global exception handlers
+        SetupExceptionHandlers();
+
         // Setup Serilog first
         var logPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -81,12 +85,14 @@ public partial class App : Application
                     services.AddScoped<IProjectRepository, ProjectRepository>();
                     services.AddScoped<IUrlRepository, UrlRepository>();
                     services.AddScoped<ICrawlQueueRepository, CrawlQueueRepository>();
+                    services.AddScoped<ICrawlCheckpointRepository, CrawlCheckpointRepository>();
                     services.AddScoped<ILinkRepository, LinkRepository>();
                     services.AddScoped<IFindingRepository, FindingRepository>();
                     services.AddScoped<IRedirectRepository, RedirectRepository>();
                     services.AddScoped<IImageRepository, ImageRepository>();
                     services.AddScoped<IHreflangRepository, HreflangRepository>();
                     services.AddScoped<IStructuredDataRepository, StructuredDataRepository>();
+                    services.AddScoped<ICustomExtractionRuleRepository, CustomExtractionRuleRepository>();
 
                     // Core Services
                     services.AddSingleton<IAppSettingsService, AppSettingsService>();
@@ -97,6 +103,14 @@ public partial class App : Application
                     services.AddSingleton<IPluginRegistry, PluginRegistry>();
                     services.AddSingleton<ICrawlEngine, CrawlEngine>();
                     services.AddScoped<PluginExecutor>();
+                    services.AddSingleton<IProxyTestService, ProxyTestService>();
+                    services.AddSingleton<IListModeService, ListModeService>();
+                    services.AddSingleton<ICustomExtractionService, CustomExtractionService>();
+
+                    // NuGet Services
+                    services.AddSingleton<ShoutingIguana.Core.Services.NuGet.IFeedConfigurationService, ShoutingIguana.Core.Services.NuGet.FeedConfigurationService>();
+                    services.AddSingleton<ShoutingIguana.Core.Services.NuGet.INuGetService, ShoutingIguana.Core.Services.NuGet.NuGetService>();
+                    services.AddSingleton<ShoutingIguana.Core.Services.NuGet.IPackageManagerService, ShoutingIguana.Core.Services.NuGet.PackageManagerService>();
 
                     // Application Services
                     services.AddSingleton<IProjectContext, ProjectContext>();
@@ -111,6 +125,10 @@ public partial class App : Application
                     services.AddTransient<CrawlDashboardViewModel>();
                     services.AddTransient<FindingsViewModel>();
                     services.AddTransient<ExtensionsViewModel>();
+                    services.AddTransient<LinkGraphViewModel>();
+
+                    // Views
+                    services.AddTransient<LinkGraphView>();
 
                     // Main Window
                     services.AddTransient<MainWindow>();
@@ -265,6 +283,79 @@ public partial class App : Application
         
         Log.CloseAndFlush();
         base.OnExit(e);
+    }
+
+    private void SetupExceptionHandlers()
+    {
+        // Catch unhandled WPF UI thread exceptions
+        DispatcherUnhandledException += (sender, e) =>
+        {
+            LogAndShowError(e.Exception, "An unexpected error occurred in the application");
+            e.Handled = true; // Prevent app crash
+        };
+
+        // Catch unhandled exceptions from background threads
+        AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+        {
+            var exception = e.ExceptionObject as Exception;
+            LogAndShowError(exception, "A critical error occurred");
+            
+            // If this is terminating, flush logs immediately
+            if (e.IsTerminating)
+            {
+                Log.CloseAndFlush();
+            }
+        };
+
+        // Catch unhandled async exceptions (Task exceptions)
+        TaskScheduler.UnobservedTaskException += (sender, e) =>
+        {
+            LogAndShowError(e.Exception, "An error occurred in a background operation");
+            e.SetObserved(); // Prevent process termination
+        };
+    }
+
+    private void LogAndShowError(Exception? exception, string userMessage)
+    {
+        if (exception == null)
+        {
+            return;
+        }
+
+        // Log the full exception
+        Log.Fatal(exception, "Unhandled exception: {Message}", exception.Message);
+
+        // Show user-friendly error dialog on UI thread
+        Dispatcher.Invoke(() =>
+        {
+            try
+            {
+                var result = MessageBox.Show(
+                    $"{userMessage}\n\nError: {exception.Message}\n\nWould you like to view the error logs?",
+                    "Error - Shouting Iguana",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Error);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    // Open logs folder
+                    var logFolder = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "ShoutingIguana",
+                        "logs");
+
+                    if (Directory.Exists(logFolder))
+                    {
+                        System.Diagnostics.Process.Start("explorer.exe", logFolder);
+                    }
+                }
+            }
+            catch
+            {
+                // If showing the error dialog fails, just log it
+                Log.Fatal("Failed to show error dialog for exception: {Exception}", exception);
+            }
+        });
     }
 }
 

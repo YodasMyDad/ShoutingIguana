@@ -76,6 +76,12 @@ public class UrlConfiguration : IEntityTypeConfiguration<Url>
         builder.Property(e => e.LinkHeader)
             .HasMaxLength(4000);
         
+        // Stage 3: Duplicate Content Detection fields
+        builder.Property(e => e.ContentHash)
+            .HasMaxLength(64); // SHA-256 hex string
+        
+        // Stage 3: Indexability - no max length needed for bool
+        
         builder.HasIndex(e => e.Address);
         builder.HasIndex(e => e.NormalizedUrl);
         builder.HasIndex(e => e.Host);
@@ -83,6 +89,11 @@ public class UrlConfiguration : IEntityTypeConfiguration<Url>
         builder.HasIndex(e => e.RobotsNoindex);
         builder.HasIndex(e => e.HasMultipleCanonicals);
         builder.HasIndex(e => e.HtmlLang);
+        
+        // Stage 3: New indices for performance
+        builder.HasIndex(e => e.ContentHash); // For duplicate detection queries
+        builder.HasIndex(e => e.SimHash); // For near-duplicate detection
+        builder.HasIndex(e => e.IsIndexable); // For filtering indexable URLs
 
         builder.HasOne(e => e.Project)
             .WithMany(p => p.Urls)

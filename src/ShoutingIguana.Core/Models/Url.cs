@@ -68,6 +68,13 @@ public class Url
     public string? LinkHeader { get; set; }
     public bool HasHsts { get; set; }
     
+    // Stage 3: Duplicate Content Detection
+    public string? ContentHash { get; set; } // SHA-256 hash for exact duplicate detection
+    public long? SimHash { get; set; } // 64-bit SimHash for near-duplicate detection
+    
+    // Stage 3: Indexability Computation
+    public bool? IsIndexable { get; set; } // Computed: false if noindex or blocked or 4xx/5xx
+    
     // Navigation properties
     public Project Project { get; set; } = null!;
     public Url? DiscoveredFromUrl { get; set; }

@@ -14,6 +14,7 @@ using Ookii.Dialogs.Wpf;
 using ShoutingIguana.Core.Configuration;
 using ShoutingIguana.Core.Models;
 using ShoutingIguana.Core.Repositories;
+using ShoutingIguana.Core.Services;
 using ShoutingIguana.Services;
 
 namespace ShoutingIguana.ViewModels;
@@ -25,6 +26,7 @@ public partial class ProjectHomeViewModel : ObservableObject
     private readonly IProjectContext _projectContext;
     private readonly IServiceProvider _serviceProvider;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ICrawlEngine _crawlEngine;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCrawlCommand))]
@@ -66,13 +68,15 @@ public partial class ProjectHomeViewModel : ObservableObject
         INavigationService navigationService,
         IProjectContext projectContext,
         IServiceProvider serviceProvider,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        ICrawlEngine crawlEngine)
     {
         _logger = logger;
         _navigationService = navigationService;
         _projectContext = projectContext;
         _serviceProvider = serviceProvider;
         _httpClientFactory = httpClientFactory;
+        _crawlEngine = crawlEngine;
     }
 
     public async Task LoadAsync()
@@ -205,6 +209,9 @@ public partial class ProjectHomeViewModel : ObservableObject
 
                 IsWelcomeScreen = false;
                 _logger.LogInformation("Opened project: {ProjectName} from {FilePath}", project.Name, dialog.FileName);
+
+                // Check for crash recovery
+                await CheckForCrashRecoveryAsync(project.Id);
             }
             catch (Exception ex)
             {
@@ -401,6 +408,67 @@ public partial class ProjectHomeViewModel : ObservableObject
 
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    private async Task CheckForCrashRecoveryAsync(int projectId)
+    {
+        try
+        {
+            // Check if there's an active checkpoint (indicates incomplete crawl)
+            var checkpoint = await _crawlEngine.GetActiveCheckpointAsync(projectId);
+            
+            if (checkpoint != null)
+            {
+                _logger.LogWarning("Found active checkpoint from previous crawl - {UrlsCrawled} URLs crawled, {ErrorCount} errors, {QueueSize} in queue",
+                    checkpoint.UrlsCrawled, checkpoint.ErrorCount, checkpoint.QueueSize);
+
+                var elapsed = TimeSpan.FromSeconds(checkpoint.ElapsedSeconds);
+                var message = $"This project has an incomplete crawl from a previous session.{Environment.NewLine}{Environment.NewLine}" +
+                              $"Progress: {checkpoint.UrlsCrawled} URLs crawled{Environment.NewLine}" +
+                              $"Queue: {checkpoint.QueueSize} URLs remaining{Environment.NewLine}" +
+                              $"Errors: {checkpoint.ErrorCount}{Environment.NewLine}" +
+                              $"Time: {elapsed:hh\\:mm\\:ss}{Environment.NewLine}{Environment.NewLine}" +
+                              $"Would you like to resume the crawl?";
+
+                var result = await Application.Current.Dispatcher.InvokeAsync(() => 
+                    MessageBox.Show(
+                        message,
+                        "Resume Previous Crawl",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question));
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    _logger.LogInformation("User chose to resume previous crawl from checkpoint");
+                    
+                    // Reset any InProgress items back to Queued so they can be picked up
+                    using var scope = _serviceProvider.CreateScope();
+                    var queueRepo = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
+                    await queueRepo.ResetInProgressItemsAsync(projectId);
+                    
+                    // Navigate to crawl dashboard and start
+                    _navigationService.NavigateTo<Views.CrawlDashboardView>();
+                    await _crawlEngine.StartCrawlAsync(projectId);
+                }
+                else
+                {
+                    _logger.LogInformation("User chose not to resume, deactivating checkpoint");
+                    
+                    // Deactivate the checkpoint
+                    using var scope = _serviceProvider.CreateScope();
+                    var checkpointRepo = scope.ServiceProvider.GetRequiredService<ICrawlCheckpointRepository>();
+                    await checkpointRepo.DeactivateCheckpointsAsync(projectId);
+                    
+                    // Reset InProgress queue items to Queued state
+                    var queueRepo = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
+                    await queueRepo.ResetInProgressItemsAsync(projectId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking for crash recovery");
+        }
     }
 }
 

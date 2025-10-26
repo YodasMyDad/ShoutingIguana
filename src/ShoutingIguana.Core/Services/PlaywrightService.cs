@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
+using ShoutingIguana.Core.Configuration;
 
 namespace ShoutingIguana.Core.Services;
 
@@ -178,19 +179,44 @@ public class PlaywrightService(
         }
     }
 
-    public async Task<IPage> CreatePageAsync(string userAgent)
+    public async Task<IPage> CreatePageAsync(string userAgent, ProxySettings? proxySettings = null)
     {
         var browser = await GetBrowserAsync();
         
         // IMPORTANT: We create a new context for each page
         // The context must be disposed when the page is closed
         // This is handled by disposing the page's context in the page cleanup
-        var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        var contextOptions = new BrowserNewContextOptions
         {
             ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
             UserAgent = userAgent
-        });
+        };
 
+        // Configure proxy if provided and enabled
+        if (proxySettings is { Enabled: true } && !string.IsNullOrWhiteSpace(proxySettings.Server))
+        {
+            _logger.LogInformation("Creating page with proxy: {ProxyUrl}", proxySettings.GetProxyUrl());
+            
+            contextOptions.Proxy = new Proxy
+            {
+                Server = proxySettings.GetProxyUrl()
+            };
+
+            // Add authentication if required
+            if (proxySettings.RequiresAuthentication && !string.IsNullOrWhiteSpace(proxySettings.Username))
+            {
+                contextOptions.Proxy.Username = proxySettings.Username;
+                contextOptions.Proxy.Password = proxySettings.GetPassword();
+            }
+
+            // Add bypass list
+            if (proxySettings.BypassList.Count > 0)
+            {
+                contextOptions.Proxy.Bypass = string.Join(",", proxySettings.BypassList);
+            }
+        }
+
+        var context = await browser.NewContextAsync(contextOptions);
         var page = await context.NewPageAsync();
         
         // Set default timeout

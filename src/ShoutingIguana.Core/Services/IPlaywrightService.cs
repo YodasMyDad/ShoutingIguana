@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using ShoutingIguana.Core.Configuration;
 
 namespace ShoutingIguana.Core.Services;
 
@@ -42,7 +43,8 @@ public interface IPlaywrightService
     /// Create a new browser page with configured settings.
     /// </summary>
     /// <param name="userAgent">User agent string to use for this page</param>
-    Task<IPage> CreatePageAsync(string userAgent);
+    /// <param name="proxySettings">Optional proxy settings to use for this page</param>
+    Task<IPage> CreatePageAsync(string userAgent, ProxySettings? proxySettings = null);
     
     /// <summary>
     /// Properly close a page and dispose its context to prevent memory leaks.

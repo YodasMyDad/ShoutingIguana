@@ -27,7 +27,21 @@ public class CrawlQueueRepository(IShoutingIguanaDbContext context) : ICrawlQueu
             .ToListAsync().ConfigureAwait(false);
     }
 
+    public async Task<CrawlQueueItem?> GetByAddressAsync(int projectId, string address)
+    {
+        return await _context.CrawlQueue
+            .FirstOrDefaultAsync(q => q.ProjectId == projectId && q.Address == address)
+            .ConfigureAwait(false);
+    }
+
     public async Task<CrawlQueueItem> EnqueueAsync(CrawlQueueItem item)
+    {
+        _context.CrawlQueue.Add(item);
+        await _context.SaveChangesAsync().ConfigureAwait(false);
+        return item;
+    }
+
+    public async Task<CrawlQueueItem> CreateAsync(CrawlQueueItem item)
     {
         _context.CrawlQueue.Add(item);
         await _context.SaveChangesAsync().ConfigureAwait(false);
@@ -54,6 +68,26 @@ public class CrawlQueueRepository(IShoutingIguanaDbContext context) : ICrawlQueu
             .ToListAsync().ConfigureAwait(false);
         
         _context.CrawlQueue.RemoveRange(items);
+        await _context.SaveChangesAsync().ConfigureAwait(false);
+    }
+
+    public async Task<int> CountByStateAsync(int projectId, QueueState state)
+    {
+        return await _context.CrawlQueue
+            .CountAsync(q => q.ProjectId == projectId && q.State == state).ConfigureAwait(false);
+    }
+
+    public async Task ResetInProgressItemsAsync(int projectId)
+    {
+        var items = await _context.CrawlQueue
+            .Where(q => q.ProjectId == projectId && q.State == QueueState.InProgress)
+            .ToListAsync().ConfigureAwait(false);
+        
+        foreach (var item in items)
+        {
+            item.State = QueueState.Queued;
+        }
+        
         await _context.SaveChangesAsync().ConfigureAwait(false);
     }
 }

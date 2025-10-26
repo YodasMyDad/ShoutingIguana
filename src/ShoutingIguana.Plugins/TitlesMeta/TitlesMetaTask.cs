@@ -716,5 +716,15 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
 
         return (double)intersection / union;
     }
+    
+    /// <summary>
+    /// Cleanup per-project data when project is closed.
+    /// </summary>
+    public override void CleanupProject(int projectId)
+    {
+        _titlesByProject.TryRemove(projectId, out _);
+        _descriptionsByProject.TryRemove(projectId, out _);
+        _logger.LogDebug("Cleaned up titles/meta data for project {ProjectId}", projectId);
+    }
 }
 

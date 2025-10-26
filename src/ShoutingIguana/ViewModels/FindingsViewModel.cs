@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -10,7 +9,6 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ookii.Dialogs.Wpf;
-using ShoutingIguana.Core.Models;
 using ShoutingIguana.Core.Repositories;
 using ShoutingIguana.Services;
 
@@ -269,6 +267,40 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     private async Task RefreshAsync()
     {
         await LoadFindingsAsync();
+    }
+
+    [RelayCommand]
+    private void CopySelected()
+    {
+        try
+        {
+            if (SelectedTab?.SelectedFinding != null)
+            {
+                var finding = SelectedTab.SelectedFinding;
+                var textToCopy = $"{finding.Url}\t{finding.Message}\t{finding.Severity}";
+                Clipboard.SetText(textToCopy);
+                _logger.LogDebug("Copied finding to clipboard");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to copy to clipboard");
+        }
+    }
+
+    [RelayCommand]
+    private void SelectAll()
+    {
+        try
+        {
+            // In WPF DataGrid, SelectAll is typically handled by the view
+            // This is a placeholder that the view can override
+            _logger.LogDebug("Select all requested in findings view");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to select all");
+        }
     }
 
     public void Dispose()
