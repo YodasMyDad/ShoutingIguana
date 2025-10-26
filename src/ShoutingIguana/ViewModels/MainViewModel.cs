@@ -1,4 +1,5 @@
 using System;
+using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Core.Repositories;
 using ShoutingIguana.Core.Services;
+using ShoutingIguana.Data;
 using ShoutingIguana.Services;
 using ShoutingIguana.Views;
 
@@ -20,6 +22,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly IProjectContext _projectContext;
     private readonly IServiceProvider _serviceProvider;
     private readonly IPlaywrightService _playwrightService;
+    private readonly IToastService _toastService;
     private bool _disposed;
 
     [ObservableProperty]
@@ -40,18 +43,25 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _hasOpenProject;
 
+    /// <summary>
+    /// Gets the collection of active toast notifications.
+    /// </summary>
+    public ObservableCollection<ToastViewModel> Toasts => _toastService.Toasts;
+
     public MainViewModel(
         ILogger<MainViewModel> logger, 
         INavigationService navigationService,
         IProjectContext projectContext,
         IServiceProvider serviceProvider,
-        IPlaywrightService playwrightService)
+        IPlaywrightService playwrightService,
+        IToastService toastService)
     {
         _logger = logger;
         _navigationService = navigationService;
         _projectContext = projectContext;
         _serviceProvider = serviceProvider;
         _playwrightService = playwrightService;
+        _toastService = toastService;
         
         _navigationService.NavigationRequested += OnNavigationRequested;
         _projectContext.ProjectChanged += OnProjectChanged;
@@ -173,7 +183,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            var dbProvider = _serviceProvider.GetRequiredService<ShoutingIguana.Data.ProjectDbContextProvider>();
+            var dbProvider = _serviceProvider.GetRequiredService<ProjectDbContextProvider>();
             dbProvider.CloseProject();
             _projectContext.CloseProject();
             
@@ -230,7 +240,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 await findingsVm.RefreshCommand.ExecuteAsync(null);
             }
         }
-        else if (CurrentView is CrawlDashboardView dashboardView)
+        else if (CurrentView is CrawlDashboardView)
         {
             // Dashboard updates in real-time, no explicit refresh needed
             StatusMessage = "Crawl dashboard updates automatically";
@@ -416,7 +426,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             _logger.LogInformation("Opening settings dialog");
-            var settingsDialog = new Views.SettingsDialog(_serviceProvider)
+            var settingsDialog = new SettingsDialog(_serviceProvider)
             {
                 Owner = Application.Current.MainWindow
             };

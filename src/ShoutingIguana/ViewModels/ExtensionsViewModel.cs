@@ -22,6 +22,9 @@ public partial class ExtensionsViewModel : ObservableObject
     [ObservableProperty]
     private int _totalTasks;
 
+    [ObservableProperty]
+    private bool _isLoading;
+
     public ExtensionsViewModel(
         ILogger<ExtensionsViewModel> logger,
         IPluginRegistry pluginRegistry)
@@ -33,6 +36,7 @@ public partial class ExtensionsViewModel : ObservableObject
 
     private void LoadPlugins()
     {
+        IsLoading = true;
         var loadedPlugins = _pluginRegistry.LoadedPlugins;
         var registeredTasks = _pluginRegistry.RegisteredTasks;
 
@@ -49,6 +53,7 @@ public partial class ExtensionsViewModel : ObservableObject
         Plugins = new ObservableCollection<PluginInfo>(pluginInfos);
         TotalPlugins = Plugins.Count;
         TotalTasks = registeredTasks.Count;
+        IsLoading = false;
 
         _logger.LogInformation("Loaded {Count} plugins with {TaskCount} tasks", TotalPlugins, TotalTasks);
     }

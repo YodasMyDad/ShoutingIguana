@@ -3,6 +3,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="{StaticResource BackgroundBrush}">
     
+    <UserControl.InputBindings>
+        <KeyBinding Key="C" Modifiers="Control" Command="{Binding CopyPluginIdCommand}"/>
+    </UserControl.InputBindings>
     
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   KeyboardNavigation.TabNavigation="Local"
@@ -198,7 +201,107 @@
                     Padding="{StaticResource SpacingXs}"
                     SnapsToDevicePixels="True">
                 <Grid>
-                    <DataGrid ItemsSource="{Binding Plugins}"
+                    <!-- Skeleton Loader (shown while loading) -->
+                    <ItemsControl Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                  Margin="12">
+                        <ItemsControl.Items>
+                            <!-- 5 skeleton rows for plugins -->
+                            <Border Style="{StaticResource SkeletonRow}">
+                                <Grid Margin="12,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="280"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="180"/>
+                                    <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="70"/>
+                                    <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="300"/>
+                                    <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="90"/>
+                                    <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="30"/>
+                                    <Rectangle Grid.Column="5" Style="{StaticResource SkeletonCell}" Width="220"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource SkeletonRow}">
+                                <Grid Margin="12,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="280"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="160"/>
+                                    <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="70"/>
+                                    <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="280"/>
+                                    <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="90"/>
+                                    <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="30"/>
+                                    <Rectangle Grid.Column="5" Style="{StaticResource SkeletonCell}" Width="240"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource SkeletonRow}">
+                                <Grid Margin="12,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="280"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="170"/>
+                                    <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="70"/>
+                                    <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="310"/>
+                                    <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="90"/>
+                                    <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="30"/>
+                                    <Rectangle Grid.Column="5" Style="{StaticResource SkeletonCell}" Width="230"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource SkeletonRow}">
+                                <Grid Margin="12,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="280"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="190"/>
+                                    <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="70"/>
+                                    <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="290"/>
+                                    <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="90"/>
+                                    <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="30"/>
+                                    <Rectangle Grid.Column="5" Style="{StaticResource SkeletonCell}" Width="210"/>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource SkeletonRow}">
+                                <Grid Margin="12,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="280"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="175"/>
+                                    <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="70"/>
+                                    <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="305"/>
+                                    <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="90"/>
+                                    <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="30"/>
+                                    <Rectangle Grid.Column="5" Style="{StaticResource SkeletonCell}" Width="225"/>
+                                </Grid>
+                            </Border>
+                        </ItemsControl.Items>
+                    </ItemsControl>
+                    
+                    <!-- Actual DataGrid (hidden while loading) -->
+                    <DataGrid Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
+                              ItemsSource="{Binding Plugins}"
                               Style="{StaticResource ModernDataGrid}"
                               TabIndex="0"
                               AutomationProperties.Name="Plugins List"
@@ -211,7 +314,7 @@
                                           Command="{Binding CopyPluginIdCommand}"
                                           InputGestureText="Ctrl+C"
                                           AutomationProperties.Name="Copy Plugin ID to Clipboard"
-                                          AutomationProperties.HelpText="Copy the selected plugin's unique identifier to clipboard">
+                                          AutomationProperties.HelpText="Copy the selected plugin's unique identifier to clipboard (Ctrl+C)">
                                     <MenuItem.Icon>
                                         <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
                                     </MenuItem.Icon>

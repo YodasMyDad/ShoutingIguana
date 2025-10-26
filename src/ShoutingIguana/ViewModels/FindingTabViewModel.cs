@@ -49,13 +49,18 @@ public partial class FindingTabViewModel : ObservableObject
     [ObservableProperty]
     private int _infoCount;
 
+    [ObservableProperty]
+    private bool _isLoading;
+
     private List<Finding> _allFindings = [];
 
     public void LoadFindings(IEnumerable<Finding> findings)
     {
+        IsLoading = true;
         _allFindings = findings.ToList();
         UpdateCounts();
         ApplyFilters();
+        IsLoading = false;
     }
 
     partial void OnSelectedSeverityChanged(Severity? value)

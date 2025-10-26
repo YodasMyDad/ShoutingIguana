@@ -240,79 +240,113 @@
                         <TextBlock Text="Browser" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,32,32,16">
-                    <StackPanel MaxWidth="700">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,24">
+                    <StackPanel MaxWidth="750">
                         
                         <!-- Browser Mode Section -->
-                        <TextBlock Text="Browser Mode" 
-                                   Style="{StaticResource FormSectionHeader}"
-                                   Margin="0,0,0,16"
-                                   AutomationProperties.HeadingLevel="Level2"/>
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,24">
+                            <StackPanel>
+                                <TextBlock Text="Browser Mode" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
 
-                        <CheckBox IsChecked="{Binding Headless}"
-                                  FontSize="14"
-                                  Margin="0,0,0,8"
-                                  TabIndex="0"
-                                  AutomationProperties.Name="Headless Mode">
-                            <TextBlock Text="Run browser in headless mode" TextWrapping="Wrap" FontWeight="SemiBold"/>
-                        </CheckBox>
-                        <TextBlock Text="Recommended for better performance. Browser runs in background without GUI, using less memory and CPU."
-                                   Style="{StaticResource HelperText}"
-                                   Margin="32,0,0,20"/>
+                                <Border Background="{StaticResource BackgroundBrush}"
+                                        BorderBrush="{StaticResource BorderLightBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="12">
+                                    <StackPanel>
+                                        <CheckBox IsChecked="{Binding Headless}"
+                                                  FontSize="14"
+                                                  Margin="0"
+                                                  TabIndex="0"
+                                                  AutomationProperties.Name="Headless Mode">
+                                            <TextBlock Text="Run browser in headless mode" TextWrapping="Wrap" FontWeight="SemiBold"/>
+                                        </CheckBox>
+                                        <TextBlock Text="Recommended for better performance. Browser runs in background without GUI, using less memory and CPU."
+                                                   Style="{StaticResource HelperText}"
+                                                   Margin="32,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
 
                         <!-- Viewport Settings Section -->
-                        <TextBlock Text="Viewport Settings" 
-                                   Style="{StaticResource FormSectionHeader}"
-                                   AutomationProperties.HeadingLevel="Level2"/>
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,24">
+                            <StackPanel>
+                                <TextBlock Text="Viewport Settings" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
 
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="12"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
 
-                            <!-- Viewport Width -->
-                            <StackPanel Grid.Column="0" Style="{StaticResource InputContainer}">
-                                <TextBlock Text="Viewport Width" 
-                                           Style="{StaticResource FormFieldLabel}"/>
-                                <TextBox Text="{Binding ViewportWidth, UpdateSourceTrigger=PropertyChanged}"
-                                         Style="{StaticResource ModernTextBox}"
-                                         TabIndex="1"
-                                         AutomationProperties.Name="Viewport Width in Pixels"/>
-                                <TextBlock Text="Browser viewport width in pixels."
-                                           Style="{StaticResource HelperText}"/>
+                                    <!-- Viewport Width -->
+                                    <StackPanel Grid.Column="0" Margin="0,0,0,0">
+                                        <TextBlock Text="Viewport Width" 
+                                                   Style="{StaticResource FormFieldLabel}"
+                                                   Margin="0,0,0,8"/>
+                                        <TextBox Text="{Binding ViewportWidth, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource ModernTextBox}"
+                                                 TabIndex="1"
+                                                 AutomationProperties.Name="Viewport Width in Pixels"/>
+                                        <TextBlock Text="Browser viewport width in pixels."
+                                                   Style="{StaticResource HelperText}"/>
+                                    </StackPanel>
+
+                                    <!-- Viewport Height -->
+                                    <StackPanel Grid.Column="2" Margin="0,0,0,0">
+                                        <TextBlock Text="Viewport Height" 
+                                                   Style="{StaticResource FormFieldLabel}"
+                                                   Margin="0,0,0,8"/>
+                                        <TextBox Text="{Binding ViewportHeight, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource ModernTextBox}"
+                                                 TabIndex="2"
+                                                 AutomationProperties.Name="Viewport Height in Pixels"/>
+                                        <TextBlock Text="Browser viewport height in pixels."
+                                                   Style="{StaticResource HelperText}"/>
+                                    </StackPanel>
+                                </Grid>
                             </StackPanel>
-
-                            <!-- Viewport Height -->
-                            <StackPanel Grid.Column="2" Style="{StaticResource InputContainer}">
-                                <TextBlock Text="Viewport Height" 
-                                           Style="{StaticResource FormFieldLabel}"/>
-                                <TextBox Text="{Binding ViewportHeight, UpdateSourceTrigger=PropertyChanged}"
-                                         Style="{StaticResource ModernTextBox}"
-                                         TabIndex="2"
-                                         AutomationProperties.Name="Viewport Height in Pixels"/>
-                                <TextBlock Text="Browser viewport height in pixels."
-                                           Style="{StaticResource HelperText}"/>
-                            </StackPanel>
-                        </Grid>
+                        </Border>
 
                         <!-- Resource Management Section -->
-                        <TextBlock Text="Resource Management" 
-                                   Style="{StaticResource FormSectionHeader}"
-                                   AutomationProperties.HeadingLevel="Level2"/>
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Resource Management" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
 
-                        <!-- Memory Limit -->
-                        <StackPanel Style="{StaticResource InputContainer}">
-                            <TextBlock Text="Memory Limit" 
-                                       Style="{StaticResource FormFieldLabel}"/>
-                            <TextBox Text="{Binding MemoryLimitMb, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource ModernTextBox}"
-                                     TabIndex="3"
-                                     AutomationProperties.Name="Memory Limit in Megabytes"/>
-                            <TextBlock Text="Browser will automatically restart if memory usage exceeds this limit (in MB). Helps prevent crashes on long crawls."
-                                       Style="{StaticResource HelperText}"/>
-                        </StackPanel>
+                                <!-- Memory Limit -->
+                                <StackPanel Margin="0,0,0,0">
+                                    <TextBlock Text="Memory Limit" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBox Text="{Binding MemoryLimitMb, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="3"
+                                             AutomationProperties.Name="Memory Limit in Megabytes"/>
+                                    <TextBlock Text="Browser will automatically restart if memory usage exceeds this limit (in MB). Helps prevent crashes on long crawls."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -331,67 +365,72 @@
                         <TextBlock Text="Plugins" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
-                <Grid Margin="32,32,32,16">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,24">
+                    <StackPanel MaxWidth="750">
+                        
+                        <!-- Installed Plugins Section -->
+                        <Border Background="{StaticResource SurfaceBrush}"
+                                CornerRadius="8"
+                                Padding="24"
+                                Margin="0,0,0,24">
+                            <StackPanel>
+                                <TextBlock Text="Installed Plugins" 
+                                           Style="{StaticResource FormSectionHeader}"
+                                           Margin="0,0,0,16"
+                                           AutomationProperties.HeadingLevel="Level2"/>
 
-                    <TextBlock Grid.Row="0"
-                               Text="Installed Plugins" 
-                               Style="{StaticResource FormSectionHeader}"
-                               Margin="0,0,0,16"
-                               AutomationProperties.HeadingLevel="Level2"/>
-
-                    <DataGrid Grid.Row="1"
-                              ItemsSource="{Binding Plugins}"
-                              Style="{StaticResource ModernDataGrid}"
-                              MaxHeight="400"
-                              Margin="0,0,0,16">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" 
-                                                Binding="{Binding Name}" 
-                                                Width="*"
-                                                MinWidth="150"
-                                                FontWeight="SemiBold"/>
-                            <DataGridTextColumn Header="Version" 
-                                                Binding="{Binding Version}" 
-                                                Width="100"
-                                                FontFamily="Consolas"/>
-                            <DataGridCheckBoxColumn Header="Enabled" 
-                                                    Binding="{Binding IsEnabled}" 
-                                                    Width="80"
-                                                    IsReadOnly="True"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-
-                    <Border Grid.Row="2" 
-                            Style="{StaticResource InfoCard}"
-                            Padding="16">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                <TextBlock Text="{StaticResource Icon.Info}"
-                                           Style="{StaticResource Icon}"
-                                           Width="20"
-                                           Height="20"
-                                           FontSize="20"
-                                           Foreground="{StaticResource InfoBrush}"
-                                           Margin="0,0,0,8"/>
-                                <TextBlock Text="Stage 2 Limitation" 
-                                           FontWeight="SemiBold"
-                                           FontSize="14"
-                                           Foreground="{StaticResource InfoBrush}"
-                                           VerticalAlignment="Center"/>
+                                <DataGrid ItemsSource="{Binding Plugins}"
+                                          Style="{StaticResource ModernDataGrid}"
+                                          MaxHeight="400"
+                                          Margin="0,0,0,0">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Name" 
+                                                            Binding="{Binding Name}" 
+                                                            Width="*"
+                                                            MinWidth="150"
+                                                            FontWeight="SemiBold"/>
+                                        <DataGridTextColumn Header="Version" 
+                                                            Binding="{Binding Version}" 
+                                                            Width="100"
+                                                            FontFamily="Consolas"/>
+                                        <DataGridCheckBoxColumn Header="Enabled" 
+                                                                Binding="{Binding IsEnabled}" 
+                                                                Width="80"
+                                                                IsReadOnly="True"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
                             </StackPanel>
-                            <TextBlock Text="In Stage 2, all plugins are always enabled. Plugin enable/disable and hot-loading will be available in Stage 3."
-                                       TextWrapping="Wrap"
-                                       FontSize="13"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
-                                       Margin="28,0,0,0"/>
-                        </StackPanel>
-                    </Border>
-                </Grid>
+                        </Border>
+
+                        <!-- Stage 2 Info Card -->
+                        <Border Style="{StaticResource InfoCard}"
+                                Padding="16"
+                                Margin="0,0,0,0">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="{StaticResource Icon.Info}"
+                                               Style="{StaticResource Icon}"
+                                               Width="20"
+                                               Height="20"
+                                               FontSize="20"
+                                               Foreground="{StaticResource InfoBrush}"
+                                               Margin="0,0,8,0"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="Stage 2 Limitation" 
+                                               FontWeight="SemiBold"
+                                               FontSize="14"
+                                               Foreground="{StaticResource InfoBrush}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Text="In Stage 2, all plugins are always enabled. Plugin enable/disable and hot-loading will be available in Stage 3."
+                                           TextWrapping="Wrap"
+                                           FontSize="13"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           Margin="28,0,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
 

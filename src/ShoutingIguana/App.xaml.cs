@@ -101,6 +101,7 @@ public partial class App : Application
                     services.AddSingleton<INavigationService, NavigationService>();
                     services.AddSingleton<ICsvExportService, CsvExportService>();
                     services.AddSingleton<IExcelExportService, ExcelExportService>();
+                    services.AddSingleton<IToastService, ToastService>();
 
                     // ViewModels - Changed MainViewModel to Transient to ensure disposal
                     services.AddTransient<MainViewModel>();

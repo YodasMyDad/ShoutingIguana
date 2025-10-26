@@ -4,6 +4,12 @@
              xmlns:sdk="clr-namespace:ShoutingIguana.PluginSdk;assembly=ShoutingIguana.PluginSdk"
              Background="{StaticResource BackgroundBrush}">
     
+    <UserControl.InputBindings>
+        <KeyBinding Key="C" Modifiers="Control" Command="{Binding SelectedTab.CopyUrlCommand}"/>
+        <KeyBinding Key="C" Modifiers="Control+Shift" Command="{Binding SelectedTab.CopyMessageCommand}"/>
+        <KeyBinding Key="Enter" Modifiers="Control" Command="{Binding SelectedTab.OpenInBrowserCommand}"/>
+    </UserControl.InputBindings>
+    
     <UserControl.Resources>
         <!-- Severity Badge Selector -->
         <Style x:Key="SeverityBadgeStyle" TargetType="Border">
@@ -126,7 +132,7 @@
                             Style="{StaticResource SecondaryButton}"
                             Margin="0,0,6,0"
                             AutomationProperties.Name="Export to CSV"
-                            ToolTip="Export findings to CSV file">
+                            ToolTip="Export findings to CSV file (Ctrl+Shift+E)">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{StaticResource Icon.FileCsv}"
                                        Style="{StaticResource Icon}"
@@ -140,7 +146,7 @@
                     <Button Command="{Binding ExportToExcelCommand}"
                             Style="{StaticResource PrimaryButton}"
                             AutomationProperties.Name="Export to Excel"
-                            ToolTip="Export findings to Excel workbook">
+                            ToolTip="Export findings to Excel workbook (Ctrl+E)">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{StaticResource Icon.FileExcel}"
                                        Style="{StaticResource Icon}"
@@ -241,10 +247,42 @@
                                                   TabIndex="0"
                                                   AutomationProperties.Name="Filter by Severity"
                                                   ToolTip="Filter findings by severity level">
-                                            <ComboBoxItem Content="All Severities" Tag="{x:Null}"/>
-                                            <ComboBoxItem Content="⚠ Error" Tag="{x:Static sdk:Severity.Error}"/>
-                                            <ComboBoxItem Content="⚡ Warning" Tag="{x:Static sdk:Severity.Warning}"/>
-                                            <ComboBoxItem Content="ℹ Info" Tag="{x:Static sdk:Severity.Info}"/>
+                                            <ComboBoxItem Tag="{x:Null}">
+                                                <TextBlock Text="All Severities"/>
+                                            </ComboBoxItem>
+                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Error}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{StaticResource Icon.Error}" 
+                                                               Style="{StaticResource Icon}"
+                                                               FontSize="14"
+                                                               Foreground="{StaticResource ErrorBrush}"
+                                                               Margin="0,0,8,0"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="Error" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
+                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Warning}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{StaticResource Icon.Warning}" 
+                                                               Style="{StaticResource Icon}"
+                                                               FontSize="14"
+                                                               Foreground="{StaticResource WarningBrush}"
+                                                               Margin="0,0,8,0"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="Warning" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
+                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Info}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{StaticResource Icon.Info}" 
+                                                               Style="{StaticResource Icon}"
+                                                               FontSize="14"
+                                                               Foreground="{StaticResource InfoBrush}"
+                                                               Margin="0,0,8,0"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="Info" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
                                         </ComboBox>
                                     </StackPanel>
                                     
@@ -289,29 +327,168 @@
                             </Border>
 
                             <!-- Findings DataGrid -->
-                            <DataGrid Grid.Row="1"
-                                      ItemsSource="{Binding FilteredFindings}"
-                                      SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
-                                      Style="{StaticResource ModernDataGrid}"
-                                      TabIndex="2"
-                                      AutomationProperties.Name="Findings List"
-                                      AutomationProperties.HelpText="List of findings discovered during the crawl. Select a row to view details below."
-                                      AutomationProperties.LiveSetting="Polite">
+                            <Grid Grid.Row="1">
+                                <!-- Skeleton Loader (shown while loading) -->
+                                <ItemsControl Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                              Margin="12">
+                                    <ItemsControl.Items>
+                                        <!-- 8 skeleton rows -->
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="110"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="350"/>
+                                                    <ColumnDefinition Width="160"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="120"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="200"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="280"/>
+                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="110"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="350"/>
+                                                    <ColumnDefinition Width="160"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="100"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="250"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="300"/>
+                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="110"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="350"/>
+                                                    <ColumnDefinition Width="160"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="180"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="290"/>
+                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="110"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="350"/>
+                                                    <ColumnDefinition Width="160"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="110"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="220"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="310"/>
+                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="110"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="350"/>
+                                                    <ColumnDefinition Width="160"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="125"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="190"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="270"/>
+                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="110"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="350"/>
+                                                    <ColumnDefinition Width="160"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="115"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="240"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="295"/>
+                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="110"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="350"/>
+                                                    <ColumnDefinition Width="160"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="105"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="210"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="285"/>
+                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="110"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="350"/>
+                                                    <ColumnDefinition Width="160"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="135"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="230"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="275"/>
+                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                    </ItemsControl.Items>
+                                </ItemsControl>
+                                
+                                <!-- Actual DataGrid (hidden while loading) -->
+                                <DataGrid Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
+                                          ItemsSource="{Binding FilteredFindings}"
+                                          SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
+                                          Style="{StaticResource ModernDataGrid}"
+                                          TabIndex="2"
+                                          AutomationProperties.Name="Findings List"
+                                          AutomationProperties.HelpText="List of findings discovered during the crawl. Select a row to view details below."
+                                          AutomationProperties.LiveSetting="Polite">
                                 <DataGrid.ContextMenu>
                                     <ContextMenu AutomationProperties.Name="Findings Context Menu">
                                         <MenuItem Header="Copy URL" 
                                                   Command="{Binding CopyUrlCommand}"
                                                   InputGestureText="Ctrl+C"
                                                   AutomationProperties.Name="Copy URL to Clipboard"
-                                                  AutomationProperties.HelpText="Copy the selected finding's URL to clipboard">
+                                                  AutomationProperties.HelpText="Copy the selected finding's URL to clipboard (Ctrl+C)">
                                             <MenuItem.Icon>
                                                 <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                         <MenuItem Header="Copy Message" 
                                                   Command="{Binding CopyMessageCommand}"
+                                                  InputGestureText="Ctrl+Shift+C"
                                                   AutomationProperties.Name="Copy Message to Clipboard"
-                                                  AutomationProperties.HelpText="Copy the selected finding's message to clipboard">
+                                                  AutomationProperties.HelpText="Copy the selected finding's message to clipboard (Ctrl+Shift+C)">
                                             <MenuItem.Icon>
                                                 <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
                                             </MenuItem.Icon>
@@ -321,7 +498,7 @@
                                                   Command="{Binding OpenInBrowserCommand}"
                                                   InputGestureText="Ctrl+Enter"
                                                   AutomationProperties.Name="Open URL in Default Browser"
-                                                  AutomationProperties.HelpText="Opens the selected finding's URL in your default web browser">
+                                                  AutomationProperties.HelpText="Opens the selected finding's URL in your default web browser (Ctrl+Enter)">
                                             <MenuItem.Icon>
                                                 <TextBlock Text="{StaticResource Icon.OpenInNew}" Style="{StaticResource Icon}"/>
                                             </MenuItem.Icon>
@@ -358,8 +535,9 @@
                                                         Width="160"
                                                         FontFamily="Consolas"
                                                         FontSize="12"/>
-                                </DataGrid.Columns>
-                            </DataGrid>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
                         </Grid>
                     </DataTemplate>
                 </TabControl.ContentTemplate>

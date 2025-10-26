@@ -1,4 +1,5 @@
 ---
+description: This should be used for any database changes needed, new properties to existing ef core models etc...
 alwaysApply: false
 ---
 Perfect! Here's the markdown guide you can copy:
