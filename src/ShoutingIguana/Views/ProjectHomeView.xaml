@@ -203,7 +203,6 @@
             <Border Padding="48" 
                     Margin="{StaticResource SpacingM}"
                     MaxWidth="950"
-                    MinWidth="800"
                     HorizontalAlignment="Center"
                     Background="{StaticResource SurfaceBrush}"
                     CornerRadius="12"

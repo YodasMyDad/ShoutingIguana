@@ -26,6 +26,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly IToastService _toastService;
     private readonly ICrawlEngine _crawlEngine;
     private readonly IPluginRegistry _pluginRegistry;
+    private readonly IStatusService _statusService;
     private bool _disposed;
 
     [ObservableProperty]
@@ -68,7 +69,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IPlaywrightService playwrightService,
         IToastService toastService,
         ICrawlEngine crawlEngine,
-        IPluginRegistry pluginRegistry)
+        IPluginRegistry pluginRegistry,
+        IStatusService statusService)
     {
         _logger = logger;
         _navigationService = navigationService;
@@ -78,6 +80,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _toastService = toastService;
         _crawlEngine = crawlEngine;
         _pluginRegistry = pluginRegistry;
+        _statusService = statusService;
         
         _navigationService.NavigationRequested += OnNavigationRequested;
         _projectContext.ProjectChanged += OnProjectChanged;
@@ -85,6 +88,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _crawlEngine.ProgressUpdated += OnCrawlProgressUpdated;
         _pluginRegistry.PluginLoaded += OnPluginChanged;
         _pluginRegistry.PluginUnloaded += OnPluginChanged;
+        _statusService.StatusChanged += OnStatusChanged;
         
         // Set initial browser status
         UpdateBrowserStatus(_playwrightService.Status);
@@ -182,6 +186,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void UpdatePluginCount()
     {
         PluginCount = _pluginRegistry.LoadedPlugins.Count();
+    }
+
+    private void OnStatusChanged(object? sender, string message)
+    {
+        StatusMessage = message;
     }
 
     [RelayCommand]
@@ -1082,6 +1091,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _crawlEngine.ProgressUpdated -= OnCrawlProgressUpdated;
         _pluginRegistry.PluginLoaded -= OnPluginChanged;
         _pluginRegistry.PluginUnloaded -= OnPluginChanged;
+        _statusService.StatusChanged -= OnStatusChanged;
         _disposed = true;
     }
 }

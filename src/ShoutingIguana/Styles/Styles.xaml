@@ -55,6 +55,12 @@
     <SolidColorBrush x:Key="ErrorBrush" Color="#D13438"/>
     <SolidColorBrush x:Key="InfoBrush" Color="#0078D4"/>
     
+    <!-- Semantic Background Colors (for toasts, alerts) -->
+    <SolidColorBrush x:Key="SuccessBackgroundBrush" Color="#E8F5E9"/>
+    <SolidColorBrush x:Key="WarningBackgroundBrush" Color="#FFF8E1"/>
+    <SolidColorBrush x:Key="ErrorBackgroundBrush" Color="#FFEBEE"/>
+    <SolidColorBrush x:Key="InfoBackgroundBrush" Color="#E3F2FD"/>
+    
     <!-- Border Colors -->
     <SolidColorBrush x:Key="BorderBrush" Color="#E0E0E0"/>
     <SolidColorBrush x:Key="BorderLightBrush" Color="#EEEEEE"/>
@@ -479,7 +485,7 @@
     
     <!-- Info Card (for notices/hints) -->
     <Style x:Key="InfoCard" TargetType="Border" BasedOn="{StaticResource Card}">
-        <Setter Property="Background" Value="#E3F2FD"/>
+        <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
         <Setter Property="Effect" Value="{x:Null}"/>
     </Style>
     
@@ -598,7 +604,7 @@
                             <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background" Value="#E3F2FD"/>
+                            <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
                         </Trigger>
                     </Style.Triggers>
                 </Style>
@@ -762,7 +768,7 @@
     </Style>
     
     <Style x:Key="ErrorSeverityBadge" TargetType="Border" BasedOn="{StaticResource SeverityBadge}">
-        <Setter Property="Background" Value="#FFEBEE"/>
+        <Setter Property="Background" Value="{StaticResource ErrorBackgroundBrush}"/>
         <Style.Resources>
             <Style TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
@@ -773,7 +779,7 @@
     </Style>
     
     <Style x:Key="WarningSeverityBadge" TargetType="Border" BasedOn="{StaticResource SeverityBadge}">
-        <Setter Property="Background" Value="#FFF8E1"/>
+        <Setter Property="Background" Value="{StaticResource WarningBackgroundBrush}"/>
         <Style.Resources>
             <Style TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
@@ -784,7 +790,7 @@
     </Style>
     
     <Style x:Key="InfoSeverityBadge" TargetType="Border" BasedOn="{StaticResource SeverityBadge}">
-        <Setter Property="Background" Value="#E3F2FD"/>
+        <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
         <Style.Resources>
             <Style TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{StaticResource InfoBrush}"/>
@@ -805,7 +811,7 @@
     </Style>
     
     <Style x:Key="ActiveStatusBadge" TargetType="Border" BasedOn="{StaticResource StatusBadge}">
-        <Setter Property="Background" Value="#E8F5E9"/>
+        <Setter Property="Background" Value="{StaticResource SuccessBackgroundBrush}"/>
         <Style.Resources>
             <Style TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
@@ -816,7 +822,7 @@
     </Style>
     
     <Style x:Key="LoadedStatusBadge" TargetType="Border" BasedOn="{StaticResource StatusBadge}">
-        <Setter Property="Background" Value="#E3F2FD"/>
+        <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
         <Style.Resources>
             <Style TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{StaticResource InfoBrush}"/>
@@ -860,21 +866,21 @@
          ======================================== -->
     
     <Style x:Key="ErrorMessageCard" TargetType="Border" BasedOn="{StaticResource Card}">
-        <Setter Property="Background" Value="#FFEBEE"/>
+        <Setter Property="Background" Value="{StaticResource ErrorBackgroundBrush}"/>
         <Setter Property="Effect" Value="{x:Null}"/>
         <Setter Property="CornerRadius" Value="6"/>
         <Setter Property="Padding" Value="16"/>
     </Style>
     
     <Style x:Key="WarningMessageCard" TargetType="Border" BasedOn="{StaticResource Card}">
-        <Setter Property="Background" Value="#FFF8E1"/>
+        <Setter Property="Background" Value="{StaticResource WarningBackgroundBrush}"/>
         <Setter Property="Effect" Value="{x:Null}"/>
         <Setter Property="CornerRadius" Value="6"/>
         <Setter Property="Padding" Value="16"/>
     </Style>
     
     <Style x:Key="SuccessMessageCard" TargetType="Border" BasedOn="{StaticResource Card}">
-        <Setter Property="Background" Value="#E8F5E9"/>
+        <Setter Property="Background" Value="{StaticResource SuccessBackgroundBrush}"/>
         <Setter Property="Effect" Value="{x:Null}"/>
         <Setter Property="CornerRadius" Value="6"/>
         <Setter Property="Padding" Value="16"/>
@@ -888,12 +894,46 @@
         <Setter Property="HorizontalAlignment" Value="Center"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="Margin" Value="48"/>
+        <Setter Property="RenderTransform">
+            <Setter.Value>
+                <TranslateTransform Y="0"/>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <EventTrigger RoutedEvent="Loaded">
+                <BeginStoryboard>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                         From="12" To="0" Duration="0:0:0.5"
+                                         DecelerationRatio="0.8"/>
+                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                         From="0" To="1" Duration="0:0:0.5"
+                                         DecelerationRatio="0.8"/>
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+        </Style.Triggers>
     </Style>
     
     <Style x:Key="EmptyStateIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
         <Setter Property="FontSize" Value="64"/>
         <Setter Property="Foreground" Value="{StaticResource TextTertiaryBrush}"/>
         <Setter Property="Margin" Value="0,0,0,16"/>
+        <Style.Triggers>
+            <EventTrigger RoutedEvent="Loaded">
+                <BeginStoryboard>
+                    <Storyboard RepeatBehavior="Forever">
+                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                         From="0.5" To="1.0" Duration="0:0:2"
+                                         AutoReverse="True">
+                            <DoubleAnimation.EasingFunction>
+                                <CubicEase EasingMode="EaseInOut"/>
+                            </DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+        </Style.Triggers>
     </Style>
     
     <Style x:Key="EmptyStateTitle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextStyle}">
@@ -1090,7 +1130,7 @@
                             <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="#E3F2FD"/>
+                            <Setter TargetName="border" Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
                             <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
                             <Setter Property="FontWeight" Value="SemiBold"/>
                         </Trigger>

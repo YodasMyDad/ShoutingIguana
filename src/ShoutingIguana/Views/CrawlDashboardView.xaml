@@ -157,7 +157,8 @@
                                    VerticalAlignment="Center"
                                    Foreground="{StaticResource PrimaryBrush}"
                                    FontWeight="Bold"
-                                   AutomationProperties.Name="Progress Percentage"/>
+                                   AutomationProperties.Name="Progress Percentage"
+                                   AutomationProperties.LiveSetting="Polite"/>
                     </Grid>
                     
                         <StackPanel Grid.Row="1">
@@ -176,7 +177,6 @@
                             </Grid>
                             <TextBlock Text="{Binding StatusMessage}"
                                        Style="{StaticResource CaptionTextStyle}"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
                                        Margin="0,12,0,0"
                                        HorizontalAlignment="Center"
                                        Visibility="{Binding IsCrawling, Converter={StaticResource BooleanToVisibilityConverter}}"
@@ -359,7 +359,8 @@
                                    FontWeight="Bold"
                                    Foreground="{StaticResource SuccessBrush}"
                                    AutomationProperties.LiveSetting="Polite"
-                                   AutomationProperties.Name="URLs Crawled Count"/>
+                                   AutomationProperties.Name="URLs Crawled Count"
+                                   AutomationProperties.HelpText="Number of URLs that have been successfully crawled so far"/>
                     </Grid>
                 </Border>
 
@@ -404,7 +405,9 @@
                                    Style="{StaticResource DisplayTextStyle}"
                                    FontSize="36"
                                    FontWeight="Bold"
-                                   Foreground="{StaticResource InfoBrush}"/>
+                                   Foreground="{StaticResource InfoBrush}"
+                                   AutomationProperties.LiveSetting="Polite"
+                                   AutomationProperties.HelpText="Total number of unique URLs discovered during the crawl"/>
                     </Grid>
                 </Border>
 
@@ -449,7 +452,9 @@
                                    Style="{StaticResource DisplayTextStyle}"
                                    FontSize="36"
                                    FontWeight="Bold"
-                                   Foreground="{StaticResource PrimaryBrush}"/>
+                                   Foreground="{StaticResource PrimaryBrush}"
+                                   AutomationProperties.LiveSetting="Polite"
+                                   AutomationProperties.HelpText="Number of URLs waiting to be crawled in the queue"/>
                     </Grid>
                 </Border>
 
@@ -533,7 +538,9 @@
                                    Style="{StaticResource DisplayTextStyle}"
                                    FontSize="36"
                                    FontWeight="Bold"
-                                   Foreground="{StaticResource ErrorBrush}"/>
+                                   Foreground="{StaticResource ErrorBrush}"
+                                   AutomationProperties.LiveSetting="Assertive"
+                                   AutomationProperties.HelpText="Number of errors encountered during the crawl"/>
                     </Grid>
                 </Border>
 

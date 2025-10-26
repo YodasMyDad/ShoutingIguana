@@ -4,12 +4,6 @@
              xmlns:services="clr-namespace:ShoutingIguana.Services">
     
     <UserControl.Resources>
-        <!-- Toast background colors based on type -->
-        <SolidColorBrush x:Key="SuccessBackground" Color="#E8F5E9"/>
-        <SolidColorBrush x:Key="ErrorBackground" Color="#FFEBEE"/>
-        <SolidColorBrush x:Key="InfoBackground" Color="#E3F2FD"/>
-        <SolidColorBrush x:Key="WarningBackground" Color="#FFF8E1"/>
-        
         <!-- Exit animation storyboard -->
         <Storyboard x:Key="ExitStoryboard">
             <DoubleAnimation Storyboard.TargetName="SlideTransform"
@@ -60,19 +54,19 @@
             SnapsToDevicePixels="True">
         <Border.Style>
             <Style TargetType="Border">
-                <Setter Property="Background" Value="{StaticResource InfoBackground}"/>
+                <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
                 <Setter Property="BorderBrush" Value="{StaticResource InfoBrush}"/>
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding Type}" Value="{x:Static services:ToastType.Success}">
-                        <Setter Property="Background" Value="{StaticResource SuccessBackground}"/>
+                        <Setter Property="Background" Value="{StaticResource SuccessBackgroundBrush}"/>
                         <Setter Property="BorderBrush" Value="{StaticResource SuccessBrush}"/>
                     </DataTrigger>
                     <DataTrigger Binding="{Binding Type}" Value="{x:Static services:ToastType.Error}">
-                        <Setter Property="Background" Value="{StaticResource ErrorBackground}"/>
+                        <Setter Property="Background" Value="{StaticResource ErrorBackgroundBrush}"/>
                         <Setter Property="BorderBrush" Value="{StaticResource ErrorBrush}"/>
                     </DataTrigger>
                     <DataTrigger Binding="{Binding Type}" Value="{x:Static services:ToastType.Warning}">
-                        <Setter Property="Background" Value="{StaticResource WarningBackground}"/>
+                        <Setter Property="Background" Value="{StaticResource WarningBackgroundBrush}"/>
                         <Setter Property="BorderBrush" Value="{StaticResource WarningBrush}"/>
                     </DataTrigger>
                 </Style.Triggers>
@@ -117,9 +111,7 @@
                 <TextBlock Text="{Binding Icon}" 
                            Style="{StaticResource Icon}"
                            FontSize="16"
-                           Foreground="White"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                           Foreground="White"/>
             </Border>
             
             <!-- Message -->

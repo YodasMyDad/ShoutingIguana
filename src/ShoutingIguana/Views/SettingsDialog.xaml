@@ -34,9 +34,7 @@
                     <TextBlock Text="{StaticResource Icon.Settings}"
                                Style="{StaticResource Icon}"
                                FontSize="22"
-                               Foreground="White"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
+                               Foreground="White"/>
                 </Border>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Settings"
@@ -63,11 +61,8 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{StaticResource Icon.Web}"
                                    Style="{StaticResource Icon}"
-                                   Width="16" 
-                                   Height="16"
                                    FontSize="16"
-                                   Margin="0,0,8,0"
-                                   VerticalAlignment="Center"/>
+                                   Margin="0,0,8,0"/>
                         <TextBlock Text="Crawling" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
@@ -94,6 +89,7 @@
                                     <TextBox Text="{Binding ConcurrentRequests, UpdateSourceTrigger=PropertyChanged}"
                                              Style="{StaticResource ModernTextBox}"
                                              TabIndex="0"
+                                             FocusManager.IsFocusScope="False"
                                              AutomationProperties.Name="Concurrent Requests"
                                              ToolTip="Number of parallel requests (1-10)"/>
                                     <TextBlock Text="Number of parallel requests to make (1-10). Higher values speed up crawling but use more resources."
@@ -232,11 +228,8 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{StaticResource Icon.Globe}"
                                    Style="{StaticResource Icon}"
-                                   Width="16" 
-                                   Height="16"
                                    FontSize="16"
-                                   Margin="0,0,8,0"
-                                   VerticalAlignment="Center"/>
+                                   Margin="0,0,8,0"/>
                         <TextBlock Text="Browser" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
@@ -357,11 +350,8 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{StaticResource Icon.Globe}"
                                    Style="{StaticResource Icon}"
-                                   Width="16" 
-                                   Height="16"
                                    FontSize="16"
-                                   Margin="0,0,8,0"
-                                   VerticalAlignment="Center"/>
+                                   Margin="0,0,8,0"/>
                         <TextBlock Text="Network" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
@@ -576,11 +566,8 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{StaticResource Icon.Puzzle}"
                                    Style="{StaticResource Icon}"
-                                   Width="16" 
-                                   Height="16"
                                    FontSize="16"
-                                   Margin="0,0,8,0"
-                                   VerticalAlignment="Center"/>
+                                   Margin="0,0,8,0"/>
                         <TextBlock Text="Plugins" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
@@ -639,7 +626,10 @@
 
                                 <Button Command="{Binding ReloadPluginsCommand}"
                                         Style="{StaticResource SecondaryButton}"
-                                        HorizontalAlignment="Left">
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="Reload Plugins"
+                                        AutomationProperties.HelpText="Rescans the plugins directory and reloads all installed plugins"
+                                        ToolTip="Rescan and reload all installed plugins">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="{StaticResource Icon.Refresh}"
                                                    Style="{StaticResource Icon}"
@@ -689,11 +679,8 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{StaticResource Icon.Folder}"
                                    Style="{StaticResource Icon}"
-                                   Width="16" 
-                                   Height="16"
                                    FontSize="16"
-                                   Margin="0,0,8,0"
-                                   VerticalAlignment="Center"/>
+                                   Margin="0,0,8,0"/>
                         <TextBlock Text="Data" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
@@ -729,7 +716,10 @@
                                         <Button Grid.Column="1"
                                                 Content="Browse..."
                                                 Style="{StaticResource SecondaryButton}"
-                                                Command="{Binding BrowseStoragePathCommand}"/>
+                                                Command="{Binding BrowseStoragePathCommand}"
+                                                AutomationProperties.Name="Browse Storage Location"
+                                                AutomationProperties.HelpText="Opens a folder browser to select a new storage location for project files"
+                                                ToolTip="Select folder for project storage"/>
                                     </Grid>
                                     <TextBlock Text="Location where project databases and files are stored"
                                                Style="{StaticResource HelperText}"/>
@@ -777,7 +767,10 @@
 
                                 <Button Command="{Binding OptimizeDatabaseCommand}"
                                         Style="{StaticResource SecondaryButton}"
-                                        HorizontalAlignment="Left">
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="Optimize Database"
+                                        AutomationProperties.HelpText="Rebuilds database indices and reclaims unused space to improve performance"
+                                        ToolTip="Rebuild indices and reclaim space">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="{StaticResource Icon.Cog}"
                                                    Style="{StaticResource Icon}"
@@ -799,11 +792,8 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{StaticResource Icon.Globe}"
                                    Style="{StaticResource Icon}"
-                                   Width="16" 
-                                   Height="16"
                                    FontSize="16"
-                                   Margin="0,0,8,0"
-                                   VerticalAlignment="Center"/>
+                                   Margin="0,0,8,0"/>
                         <TextBlock Text="Feeds" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
@@ -848,7 +838,10 @@
                                 <StackPanel Orientation="Horizontal">
                                     <Button Command="{Binding AddFeedCommand}"
                                             Style="{StaticResource SecondaryButton}"
-                                            Margin="0,0,8,0">
+                                            Margin="0,0,8,0"
+                                            AutomationProperties.Name="Add NuGet Feed"
+                                            AutomationProperties.HelpText="Adds a new NuGet package feed for plugin discovery"
+                                            ToolTip="Add a custom NuGet feed">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="+" 
                                                        FontWeight="Bold"
@@ -859,7 +852,10 @@
                                     </Button>
                                     <Button Command="{Binding RemoveFeedCommand}"
                                             Style="{StaticResource SecondaryButton}"
-                                            Margin="0,0,8,0">
+                                            Margin="0,0,8,0"
+                                            AutomationProperties.Name="Remove Selected Feed"
+                                            AutomationProperties.HelpText="Removes the selected NuGet feed from the list"
+                                            ToolTip="Remove the selected feed">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{StaticResource Icon.Delete}"
                                                        Style="{StaticResource Icon}"

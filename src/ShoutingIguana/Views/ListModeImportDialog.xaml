@@ -33,9 +33,7 @@
                     <TextBlock Text="{StaticResource Icon.Import}"
                                Style="{StaticResource Icon}"
                                FontSize="22"
-                               Foreground="White"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
+                               Foreground="White"/>
                 </Border>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Import URL List"
@@ -187,7 +185,8 @@
                         IsDefault="True"
                         IsEnabled="{Binding CanImport}"
                         AutomationProperties.Name="Start Import"
-                        AutomationProperties.HelpText="Begins importing URLs from the selected CSV file"/>
+                        AutomationProperties.HelpText="Begins importing URLs from the selected CSV file"
+                        ToolTip="Import URLs from CSV and add to crawl queue (Enter)"/>
             </StackPanel>
         </Border>
     </Grid>

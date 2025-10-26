@@ -18,13 +18,13 @@
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding Severity}" Value="{x:Static sdk:Severity.Error}">
-                    <Setter Property="Background" Value="#FFEBEE"/>
+                    <Setter Property="Background" Value="{StaticResource ErrorBackgroundBrush}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Severity}" Value="{x:Static sdk:Severity.Warning}">
-                    <Setter Property="Background" Value="#FFF8E1"/>
+                    <Setter Property="Background" Value="{StaticResource WarningBackgroundBrush}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Severity}" Value="{x:Static sdk:Severity.Info}">
-                    <Setter Property="Background" Value="#E3F2FD"/>
+                    <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -246,6 +246,7 @@
                                                   Style="{StaticResource ModernComboBox}"
                                                   TabIndex="3"
                                                   AutomationProperties.Name="Filter by Severity"
+                                                  AutomationProperties.HelpText="Filters the findings list to show only items of the selected severity level"
                                                   ToolTip="Filter findings by severity level">
                                             <ComboBoxItem Tag="{x:Null}" MaxWidth="180">
                                                 <TextBlock Text="All Severities"/>
@@ -598,6 +599,8 @@
                                 Padding="16,6"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
+                                AutomationProperties.Name="Copy Details"
+                                AutomationProperties.HelpText="Copies the JSON representation of the selected finding to the clipboard"
                                 ToolTip="Copy JSON to clipboard">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{StaticResource Icon.Copy}"

@@ -32,9 +32,7 @@
                     <TextBlock Text="{StaticResource Icon.Code}"
                                Style="{StaticResource Icon}"
                                FontSize="22"
-                               Foreground="White"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
+                               Foreground="White"/>
                 </Border>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Custom Extraction Rules"
@@ -86,7 +84,8 @@
                               BorderThickness="0"
                               TabIndex="0"
                               AutomationProperties.Name="Custom Extraction Rules List"
-                              AutomationProperties.HelpText="List of custom extraction rules. Select a rule to edit it.">
+                              AutomationProperties.HelpText="List of custom extraction rules. Select a rule to edit it."
+                              AutomationProperties.LiveSetting="Polite">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Name" 
                                                 Binding="{Binding Name}" 
@@ -108,7 +107,8 @@
                                 Style="{StaticResource PrimaryButton}"
                                 TabIndex="1"
                                 AutomationProperties.Name="Add New Rule"
-                                AutomationProperties.HelpText="Creates a new custom extraction rule">
+                                AutomationProperties.HelpText="Creates a new custom extraction rule"
+                                ToolTip="Create a new extraction rule">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="+" 
                                            FontWeight="Bold" 
@@ -121,7 +121,8 @@
                                 Margin="8,0,0,0"
                                 TabIndex="2"
                                 AutomationProperties.Name="Edit Selected Rule"
-                                AutomationProperties.HelpText="Edits the currently selected extraction rule">
+                                AutomationProperties.HelpText="Edits the currently selected extraction rule"
+                                ToolTip="Edit the selected rule">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{StaticResource Icon.Edit}"
                                            Style="{StaticResource Icon}"
@@ -136,7 +137,8 @@
                                 Margin="8,0,0,0"
                                 TabIndex="3"
                                 AutomationProperties.Name="Delete Selected Rule"
-                                AutomationProperties.HelpText="Deletes the currently selected extraction rule permanently">
+                                AutomationProperties.HelpText="Deletes the currently selected extraction rule permanently"
+                                ToolTip="Delete the selected rule">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{StaticResource Icon.Delete}"
                                            Style="{StaticResource Icon}"
@@ -270,14 +272,18 @@
                                 Style="{StaticResource SecondaryButton}"
                                 Margin="0,0,8,0"
                                 TabIndex="9"
+                                IsCancel="True"
                                 AutomationProperties.Name="Cancel Edit"
-                                AutomationProperties.HelpText="Cancels editing and discards changes"/>
+                                AutomationProperties.HelpText="Cancels editing and discards changes"
+                                ToolTip="Cancel changes (Esc)"/>
                         <Button Content="Save"
                                 Command="{Binding SaveRuleCommand}"
                                 Style="{StaticResource PrimaryButton}"
                                 TabIndex="10"
+                                IsDefault="True"
                                 AutomationProperties.Name="Save Rule"
-                                AutomationProperties.HelpText="Saves the extraction rule"/>
+                                AutomationProperties.HelpText="Saves the extraction rule"
+                                ToolTip="Save extraction rule (Enter)"/>
                     </StackPanel>
                 </Grid>
             </Border>

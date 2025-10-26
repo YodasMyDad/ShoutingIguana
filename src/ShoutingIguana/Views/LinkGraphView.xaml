@@ -46,9 +46,7 @@
                         <TextBlock Text="{StaticResource Icon.Link}"
                                    Style="{StaticResource Icon}"
                                    FontSize="22"
-                                   Foreground="White"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
+                                   Foreground="White"/>
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="Link Graph"
@@ -78,12 +76,11 @@
                             Margin="0,0,6,0"
                             TabIndex="0"
                             AutomationProperties.Name="Refresh Link Graph"
+                            AutomationProperties.HelpText="Reloads the link graph data from the database to show latest results"
                             ToolTip="Refresh link graph (F5)">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{StaticResource Icon.Refresh}"
                                        Style="{StaticResource Icon}"
-                                       Width="16" 
-                                       Height="16"
                                        FontSize="16"
                                        Margin="0,0,6,0"/>
                             <TextBlock Text="Refresh" VerticalAlignment="Center"/>
@@ -93,12 +90,11 @@
                             Style="{StaticResource SecondaryButton}"
                             TabIndex="1"
                             AutomationProperties.Name="Export to CSV"
+                            AutomationProperties.HelpText="Exports the link graph data to a CSV file for further analysis"
                             ToolTip="Export link graph to CSV file">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{StaticResource Icon.Export}"
                                        Style="{StaticResource Icon}"
-                                       Width="16" 
-                                       Height="16"
                                        FontSize="16"
                                        Margin="0,0,6,0"/>
                             <TextBlock Text="Export CSV" VerticalAlignment="Center"/>
@@ -270,7 +266,6 @@
                           SelectedItem="{Binding SelectedLink}"
                           Style="{StaticResource ModernDataGrid}"
                           Visibility="{Binding TotalLinkCount, Converter={StaticResource Int32ToVisibilityConverter}}"
-                          AutoGenerateColumns="False"
                           TabIndex="3"
                           AutomationProperties.Name="Link Graph"
                           AutomationProperties.HelpText="List of links discovered during crawl. Select a row to view details."

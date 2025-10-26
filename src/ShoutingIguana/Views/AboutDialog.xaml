@@ -79,7 +79,6 @@
 
                         <TextBlock Text="Build Date"
                                    Style="{StaticResource CaptionTextStyle}"
-                                   Foreground="{StaticResource TextSecondaryBrush}"
                                    Margin="0,0,0,4"/>
                         <TextBlock Text="{Binding BuildDate}"
                                    Style="{StaticResource BodyTextStyle}"
@@ -87,7 +86,6 @@
 
                         <TextBlock Text="Runtime"
                                    Style="{StaticResource CaptionTextStyle}"
-                                   Foreground="{StaticResource TextSecondaryBrush}"
                                    Margin="0,0,0,4"/>
                         <TextBlock Text=".NET 9.0"
                                    Style="{StaticResource BodyTextStyle}"/>
@@ -104,8 +102,7 @@
                                    Style="{StaticResource SubtitleTextStyle}"
                                    Margin="0,0,0,12"/>
                         
-                        <TextBlock Style="{StaticResource CaptionTextStyle}"
-                                   Foreground="{StaticResource TextSecondaryBrush}">
+                        <TextBlock Style="{StaticResource CaptionTextStyle}">
                             <Run Text="• Microsoft Playwright"/>
                             <LineBreak/>
                             <Run Text="• Entity Framework Core"/>
@@ -142,7 +139,8 @@
                                 HorizontalContentAlignment="Left"
                                 TabIndex="0"
                                 AutomationProperties.Name="Open Documentation"
-                                AutomationProperties.HelpText="Opens the online documentation in your web browser">
+                                AutomationProperties.HelpText="Opens the online documentation in your web browser"
+                                ToolTip="Opens the Shouting Iguana documentation in your default web browser">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{StaticResource Icon.Document}"
                                            Style="{StaticResource Icon}"
@@ -160,7 +158,8 @@
                                 HorizontalContentAlignment="Left"
                                 TabIndex="1"
                                 AutomationProperties.Name="Open GitHub Repository"
-                                AutomationProperties.HelpText="Opens the project's GitHub repository in your web browser">
+                                AutomationProperties.HelpText="Opens the project's GitHub repository in your web browser"
+                                ToolTip="View source code and contribute on GitHub">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{StaticResource Icon.Code}"
                                            Style="{StaticResource Icon}"
@@ -177,7 +176,8 @@
                                 HorizontalContentAlignment="Left"
                                 TabIndex="2"
                                 AutomationProperties.Name="Check for Updates"
-                                AutomationProperties.HelpText="Checks if a newer version of Shouting Iguana is available">
+                                AutomationProperties.HelpText="Checks if a newer version of Shouting Iguana is available"
+                                ToolTip="Check if a new version of Shouting Iguana is available for download">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{StaticResource Icon.Refresh}"
                                            Style="{StaticResource Icon}"

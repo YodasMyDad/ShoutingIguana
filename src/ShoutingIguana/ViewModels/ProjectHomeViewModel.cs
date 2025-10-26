@@ -27,6 +27,7 @@ public partial class ProjectHomeViewModel : ObservableObject
     private readonly IServiceProvider _serviceProvider;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ICrawlEngine _crawlEngine;
+    private readonly IStatusService _statusService;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCrawlCommand))]
@@ -69,7 +70,8 @@ public partial class ProjectHomeViewModel : ObservableObject
         IProjectContext projectContext,
         IServiceProvider serviceProvider,
         IHttpClientFactory httpClientFactory,
-        ICrawlEngine crawlEngine)
+        ICrawlEngine crawlEngine,
+        IStatusService statusService)
     {
         _logger = logger;
         _navigationService = navigationService;
@@ -77,6 +79,7 @@ public partial class ProjectHomeViewModel : ObservableObject
         _serviceProvider = serviceProvider;
         _httpClientFactory = httpClientFactory;
         _crawlEngine = crawlEngine;
+        _statusService = statusService;
     }
 
     public async Task LoadAsync()
@@ -265,6 +268,7 @@ public partial class ProjectHomeViewModel : ObservableObject
                 if (CurrentProject == null)
                 {
                     // Create new project with its own database file
+                    _statusService.UpdateStatus("Creating project database...");
                     var projectsDir = GetProjectsDirectory();
                     var sanitizedName = string.Join("_", ProjectName.Split(Path.GetInvalidFileNameChars()));
                     var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
@@ -272,10 +276,12 @@ public partial class ProjectHomeViewModel : ObservableObject
                     var projectPath = Path.Combine(projectsDir, projectFileName);
 
                     // Switch to new database
+                    _statusService.UpdateStatus("Initializing database schema...");
                     var dbProvider = _serviceProvider.GetRequiredService<ShoutingIguana.Data.ProjectDbContextProvider>();
                     await dbProvider.SetProjectPathAsync(projectPath);
 
                     // Create project in new database
+                    _statusService.UpdateStatus("Saving project settings...");
                     using var scope = _serviceProvider.CreateScope();
                     var projectRepo = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
                     
@@ -294,6 +300,7 @@ public partial class ProjectHomeViewModel : ObservableObject
                     _projectContext.OpenProject(projectPath, CurrentProject.Id, CurrentProject.Name);
                     
                     _logger.LogInformation("Created new project: {ProjectName} at {ProjectPath}", ProjectName, projectPath);
+                    _statusService.UpdateStatus("Project created successfully");
                 }
                 else
                 {
@@ -352,13 +359,7 @@ public partial class ProjectHomeViewModel : ObservableObject
             try
             {
                 _logger.LogInformation("Testing connectivity to {BaseUrl}", BaseUrl);
-                
-                // Update UI on dispatcher
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    // Show validation status (could be bound to UI)
-                    _logger.LogDebug("Validating connection...");
-                });
+                _statusService.UpdateStatus($"Validating connection to {BaseUrl}...");
                 
                 var httpClient = _httpClientFactory.CreateClient();
                 httpClient.Timeout = TimeSpan.FromSeconds(5); // Quick test
@@ -367,6 +368,7 @@ public partial class ProjectHomeViewModel : ObservableObject
                 
                 await httpClient.GetAsync(BaseUrl);
                 _logger.LogInformation("Successfully connected to {BaseUrl}", BaseUrl);
+                _statusService.UpdateStatus("Connection validated");
                 validationSuccess = true;
             }
             catch (Exception ex)
@@ -388,6 +390,7 @@ public partial class ProjectHomeViewModel : ObservableObject
         }
 
         // Navigate to crawl dashboard with project context
+        _statusService.UpdateStatus("Starting crawl...");
         _navigationService.NavigateTo<ShoutingIguana.Views.CrawlDashboardView>();
         _logger.LogInformation("Navigating to crawl dashboard for project {ProjectId}", CurrentProject.Id);
     }

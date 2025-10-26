@@ -54,9 +54,7 @@
                         <TextBlock Text="{StaticResource Icon.Puzzle}"
                                    Style="{StaticResource Icon}"
                                    FontSize="22"
-                                   Foreground="White"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
+                                   Foreground="White"/>
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="Extensions Manager" 
@@ -82,7 +80,8 @@
                             ToolTip="Check for plugin updates"
                             Margin="0,0,8,0"
                             TabIndex="0"
-                            AutomationProperties.Name="Check for Plugin Updates">
+                            AutomationProperties.Name="Check for Plugin Updates"
+                            AutomationProperties.HelpText="Checks all installed plugins for available updates from the configured NuGet feeds">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{StaticResource Icon.Refresh}"
                                        Style="{StaticResource Icon}"
@@ -310,7 +309,7 @@
                                     <DataGridTemplateColumn Header="Status" Width="100">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate DataType="{x:Type vm:InstalledPluginViewModel}">
-                                                <Border Background="#E8F5E9"
+                                                <Border Background="{StaticResource SuccessBackgroundBrush}"
                                                         CornerRadius="12"
                                                         Padding="8,4"
                                                         HorizontalAlignment="Center">
@@ -370,7 +369,10 @@
                                     <TextBox Grid.Column="0"
                                              Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                                              Style="{StaticResource ModernTextBox}"
-                                             TabIndex="1">
+                                             TabIndex="1"
+                                             AutomationProperties.Name="Search Plugins"
+                                             AutomationProperties.HelpText="Search for available plugins in the NuGet feed by name or description"
+                                             ToolTip="Search for plugins by name or description">
                                         <TextBox.Tag>Search for plugins...</TextBox.Tag>
                                     </TextBox>
 
@@ -538,10 +540,10 @@
                                                         <Style TargetType="Border">
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsInstalled}" Value="True">
-                                                                    <Setter Property="Background" Value="#E8F5E9"/>
+                                                                    <Setter Property="Background" Value="{StaticResource SuccessBackgroundBrush}"/>
                                                                 </DataTrigger>
                                                                 <DataTrigger Binding="{Binding IsInstalled}" Value="False">
-                                                                    <Setter Property="Background" Value="#E3F2FD"/>
+                                                                    <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
@@ -701,13 +703,19 @@
                                         Style="{StaticResource PrimaryButton}"
                                         TabIndex="3"
                                         Margin="0,0,0,8"
-                                        Visibility="{Binding SelectedInstalledPlugin.HasUpdate, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                        Visibility="{Binding SelectedInstalledPlugin.HasUpdate, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                        AutomationProperties.Name="Update Plugin"
+                                        AutomationProperties.HelpText="Updates the selected plugin to the latest available version"
+                                        ToolTip="Update to the latest version"/>
                                 
                                 <Button Content="Uninstall"
                                         Command="{Binding UninstallPluginCommand}"
                                         Style="{StaticResource DangerButton}"
                                         TabIndex="4"
-                                        Visibility="{Binding SelectedInstalledPlugin.IsBuiltIn, Converter={StaticResource InverseBooleanToVisibilityConverter}}"/>
+                                        Visibility="{Binding SelectedInstalledPlugin.IsBuiltIn, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
+                                        AutomationProperties.Name="Uninstall Plugin"
+                                        AutomationProperties.HelpText="Permanently removes the selected plugin from the application"
+                                        ToolTip="Uninstall this plugin"/>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
@@ -807,7 +815,9 @@
                             <Button Content="Install Plugin"
                                     Command="{Binding InstallPluginCommand}"
                                     Style="{StaticResource PrimaryButton}"
-                                    TabIndex="5"/>
+                                    TabIndex="5"
+                                    AutomationProperties.Name="Install Plugin"
+                                    AutomationProperties.HelpText="Downloads and installs the selected plugin from the NuGet feed"/>
 
                             <!-- Install Progress -->
                             <Border Style="{StaticResource InfoCard}"
