@@ -16,6 +16,16 @@ public class BrokenLinksTask : UrlTaskBase
     private readonly bool _checkExternalLinks;
     private readonly bool _checkAnchorLinks;
 
+    // Helper class to track unique findings with occurrence counts
+    private class FindingTracker
+    {
+        public Severity Severity { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public object? Data { get; set; }
+        public int OccurrenceCount { get; set; } = 1;
+    }
+
     public BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, bool checkExternalLinks = false, bool checkAnchorLinks = true)
     {
         _logger = logger;
@@ -54,16 +64,22 @@ public class BrokenLinksTask : UrlTaskBase
             // Extract all links from HTML
             var links = await ExtractLinksFromHtmlAsync(doc, ctx);
 
+            // Track findings to deduplicate them
+            var findingsMap = new Dictionary<string, FindingTracker>();
+
             // If we have access to the browser page, also extract with diagnostics
             if (ctx.Page != null)
             {
-                await AnalyzeLinksWithDiagnosticsAsync(ctx, links, ct);
+                await AnalyzeLinksWithDiagnosticsAsync(ctx, links, findingsMap, ct);
             }
             else
             {
                 // Fallback to HTML-only analysis
-                await AnalyzeLinksFromHtmlAsync(ctx, links, ct);
+                await AnalyzeLinksFromHtmlAsync(ctx, links, findingsMap, ct);
             }
+
+            // Report all unique findings with occurrence counts
+            await ReportUniqueFindings(ctx, findingsMap);
         }
         catch (Exception ex)
         {
@@ -175,7 +191,7 @@ public class BrokenLinksTask : UrlTaskBase
         return Task.FromResult(links);
     }
 
-    private async Task AnalyzeLinksWithDiagnosticsAsync(UrlContext ctx, List<LinkInfo> links, CancellationToken ct)
+    private async Task AnalyzeLinksWithDiagnosticsAsync(UrlContext ctx, List<LinkInfo> links, Dictionary<string, FindingTracker> findingsMap, CancellationToken ct)
     {
         // Get all anchor elements from the page for diagnostic info
         var anchorElements = await ctx.Page!.QuerySelectorAllAsync("a[href]");
@@ -202,26 +218,26 @@ public class BrokenLinksTask : UrlTaskBase
         // Check each link
         foreach (var link in links)
         {
-            await CheckLinkAsync(ctx, link, anchorDiagnostics.GetValueOrDefault(link.Url), ct);
+            await CheckLinkAsync(ctx, link, anchorDiagnostics.GetValueOrDefault(link.Url), findingsMap, ct);
         }
     }
 
-    private async Task AnalyzeLinksFromHtmlAsync(UrlContext ctx, List<LinkInfo> links, CancellationToken ct)
+    private async Task AnalyzeLinksFromHtmlAsync(UrlContext ctx, List<LinkInfo> links, Dictionary<string, FindingTracker> findingsMap, CancellationToken ct)
     {
         foreach (var link in links)
         {
-            await CheckLinkAsync(ctx, link, null, ct);
+            await CheckLinkAsync(ctx, link, null, findingsMap, ct);
         }
     }
 
-    private async Task CheckLinkAsync(UrlContext ctx, LinkInfo link, ElementDiagnosticInfo? diagnosticInfo, CancellationToken ct)
+    private async Task CheckLinkAsync(UrlContext ctx, LinkInfo link, ElementDiagnosticInfo? diagnosticInfo, Dictionary<string, FindingTracker> findingsMap, CancellationToken ct)
     {
         bool isExternal = IsExternalLink(ctx.Project.BaseUrl, link.Url);
 
         // Check anchor links
         if (link.LinkType == "anchor" && !string.IsNullOrEmpty(link.AnchorId))
         {
-            await CheckAnchorLinkAsync(ctx, link, diagnosticInfo, ct);
+            await CheckAnchorLinkAsync(ctx, link, diagnosticInfo, findingsMap, ct);
             return;
         }
 
@@ -246,8 +262,9 @@ public class BrokenLinksTask : UrlTaskBase
             // Report slow external links
             if (result.IsSuccess && result.ResponseTime.TotalSeconds > 5)
             {
-                await ctx.Findings.ReportAsync(
-                    Key,
+                var key = $"{link.Url}|SLOW_EXTERNAL_LINK";
+                TrackFinding(findingsMap,
+                    key,
                     Severity.Info,
                     "SLOW_EXTERNAL_LINK",
                     $"External {link.LinkType} is slow to respond ({result.ResponseTime.TotalSeconds:F1}s): {link.Url}",
@@ -261,8 +278,10 @@ public class BrokenLinksTask : UrlTaskBase
             var severity = status.Value >= 500 || status.Value == 0 ? Severity.Error : Severity.Warning;
             var statusText = status.Value == 0 ? "Connection Failed" : status.Value.ToString();
             
-            await ctx.Findings.ReportAsync(
-                Key,
+            // Dedupe by link URL and status code
+            var key = $"{link.Url}|BROKEN_{link.LinkType.ToUpperInvariant()}|{status.Value}";
+            TrackFinding(findingsMap,
+                key,
                 severity,
                 $"BROKEN_{link.LinkType.ToUpperInvariant()}",
                 $"Broken {link.LinkType}: {link.Url} returns {statusText}",
@@ -271,8 +290,9 @@ public class BrokenLinksTask : UrlTaskBase
         // Report redirect chains for internal links
         else if (hasRedirect == true && !isExternal)
         {
-            await ctx.Findings.ReportAsync(
-                Key,
+            var key = $"{link.Url}|LINK_TO_REDIRECT";
+            TrackFinding(findingsMap,
+                key,
                 Severity.Info,
                 "LINK_TO_REDIRECT",
                 $"Link points to URL that redirects: {link.Url}",
@@ -281,8 +301,9 @@ public class BrokenLinksTask : UrlTaskBase
         // Report nofollow on internal links (SEO issue)
         else if (link.HasNofollow && !isExternal && link.LinkType == "hyperlink")
         {
-            await ctx.Findings.ReportAsync(
-                Key,
+            var key = $"{link.Url}|NOFOLLOW_INTERNAL_LINK";
+            TrackFinding(findingsMap,
+                key,
                 Severity.Warning,
                 "NOFOLLOW_INTERNAL_LINK",
                 $"Internal link has nofollow attribute (prevents link equity): {link.Url}",
@@ -290,7 +311,7 @@ public class BrokenLinksTask : UrlTaskBase
         }
     }
 
-    private async Task CheckAnchorLinkAsync(UrlContext ctx, LinkInfo link, ElementDiagnosticInfo? diagnosticInfo, CancellationToken ct)
+    private async Task CheckAnchorLinkAsync(UrlContext ctx, LinkInfo link, ElementDiagnosticInfo? diagnosticInfo, Dictionary<string, FindingTracker> findingsMap, CancellationToken ct)
     {
         if (ctx.Page == null || string.IsNullOrEmpty(link.AnchorId))
             return;
@@ -302,8 +323,10 @@ public class BrokenLinksTask : UrlTaskBase
             
             if (targetElement == null)
             {
-                await ctx.Findings.ReportAsync(
-                    Key,
+                // Dedupe by anchor ID only
+                var key = $"#{link.AnchorId}|BROKEN_ANCHOR_LINK";
+                TrackFinding(findingsMap,
+                    key,
                     Severity.Warning,
                     "BROKEN_ANCHOR_LINK",
                     $"Anchor link points to non-existent ID: #{link.AnchorId}",
@@ -371,6 +394,90 @@ public class BrokenLinksTask : UrlTaskBase
         }
 
         return data;
+    }
+
+    /// <summary>
+    /// Track a finding in the deduplication map. If the same finding already exists, increment its occurrence count.
+    /// </summary>
+    private void TrackFinding(Dictionary<string, FindingTracker> findingsMap, string key, Severity severity, string code, string message, object? data)
+    {
+        if (findingsMap.TryGetValue(key, out var existing))
+        {
+            // Increment occurrence count for duplicate findings
+            existing.OccurrenceCount++;
+        }
+        else
+        {
+            // Add new unique finding
+            findingsMap[key] = new FindingTracker
+            {
+                Severity = severity,
+                Code = code,
+                Message = message,
+                Data = data,
+                OccurrenceCount = 1
+            };
+        }
+    }
+
+    /// <summary>
+    /// Report all unique findings with occurrence counts to the findings sink.
+    /// </summary>
+    private async Task ReportUniqueFindings(UrlContext ctx, Dictionary<string, FindingTracker> findingsMap)
+    {
+        foreach (var kvp in findingsMap.Values)
+        {
+            var tracker = kvp;
+            
+            // Add occurrence count to the message if > 1
+            var message = tracker.Message;
+            if (tracker.OccurrenceCount > 1)
+            {
+                message += $" (occurs {tracker.OccurrenceCount} times on this page)";
+            }
+
+            // Add occurrence count to the data object if there are duplicates
+            object? dataWithCount = tracker.Data;
+            if (tracker.Data != null && tracker.OccurrenceCount > 1)
+            {
+                // Check if data is already a dictionary (from CreateFindingData)
+                if (tracker.Data is Dictionary<string, object?> existingDict)
+                {
+                    // Create a shallow copy to avoid mutation issues
+                    var dataDict = new Dictionary<string, object?>(existingDict)
+                    {
+                        ["occurrenceCount"] = tracker.OccurrenceCount
+                    };
+                    dataWithCount = dataDict;
+                }
+                else
+                {
+                    // Fall back to reflection for other types (anonymous types, etc.)
+                    var dataDict = new Dictionary<string, object?>();
+                    var dataType = tracker.Data.GetType();
+                    foreach (var prop in dataType.GetProperties())
+                    {
+                        try
+                        {
+                            dataDict[prop.Name] = prop.GetValue(tracker.Data);
+                        }
+                        catch
+                        {
+                            // Skip properties that can't be read
+                        }
+                    }
+                    dataDict["occurrenceCount"] = tracker.OccurrenceCount;
+                    dataWithCount = dataDict;
+                }
+            }
+
+            await ctx.Findings.ReportAsync(
+                Key,
+                tracker.Severity,
+                tracker.Code,
+                message,
+                dataWithCount);
+        }
     }
 
     private string ResolveUrl(Uri baseUri, string relativeUrl)
