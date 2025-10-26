@@ -47,27 +47,29 @@
         </Style>
     </UserControl.Resources>
     
-    <Grid Margin="{StaticResource SpacingL}" KeyboardNavigation.TabNavigation="Local">
-        <Grid.RenderTransform>
-            <TranslateTransform/>
-        </Grid.RenderTransform>
-        <Grid.Triggers>
-            <EventTrigger RoutedEvent="Loaded">
-                <BeginStoryboard>
-                    <Storyboard>
-                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                         From="20" To="0" Duration="0:0:0.4"
-                                         DecelerationRatio="0.7"/>
-                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                         From="0" To="1" Duration="0:0:0.4"
-                                         DecelerationRatio="0.7"/>
-                    </Storyboard>
-                </BeginStoryboard>
-            </EventTrigger>
-        </Grid.Triggers>
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="{StaticResource SpacingL}" KeyboardNavigation.TabNavigation="Local">
+            <Grid.RenderTransform>
+                <TranslateTransform/>
+            </Grid.RenderTransform>
+            <Grid.Triggers>
+                <EventTrigger RoutedEvent="Loaded">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                             From="20" To="0" Duration="0:0:0.4"
+                                             DecelerationRatio="0.7"/>
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                             From="0" To="1" Duration="0:0:0.4"
+                                             DecelerationRatio="0.7"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Grid.Triggers>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="2*" MinHeight="300"/>
+            <RowDefinition Height="2*" MinHeight="600"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="1*" MinHeight="220"/>
         </Grid.RowDefinitions>
@@ -181,6 +183,7 @@
                 <TabControl ItemsSource="{Binding Tabs}" 
                             SelectedItem="{Binding SelectedTab}"
                             Style="{StaticResource StandardTabControl}"
+                            MinHeight="500"
                             KeyboardNavigation.TabNavigation="Local"
                             Visibility="{Binding Tabs.Count, Converter={StaticResource Int32ToVisibilityConverter}}">
                 <TabControl.ItemContainerStyle>
@@ -210,10 +213,10 @@
                 </TabControl.ItemTemplate>
                 <TabControl.ContentTemplate>
                     <DataTemplate>
-                        <Grid Margin="16">
+                        <Grid Margin="16" MinHeight="400">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="*" MinHeight="300"/>
                             </Grid.RowDefinitions>
 
                             <!-- Filters -->
@@ -321,7 +324,7 @@
                             </Border>
 
                             <!-- Findings DataGrid -->
-                            <Grid Grid.Row="1">
+                            <Grid Grid.Row="1" MinHeight="300">
                                 <!-- Skeleton Loader (shown while loading) -->
                                 <ItemsControl Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
                                               Margin="12">
@@ -463,6 +466,7 @@
                                           ItemsSource="{Binding FilteredFindings}"
                                           SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
                                           Style="{StaticResource ModernDataGrid}"
+                                          MinHeight="250"
                                           TabIndex="5"
                                           AutomationProperties.Name="Findings List"
                                           AutomationProperties.HelpText="List of findings discovered during the crawl. Select a row to view details below."
@@ -634,4 +638,5 @@
             </Grid>
         </Border>
     </Grid>
+    </ScrollViewer>
 </UserControl>

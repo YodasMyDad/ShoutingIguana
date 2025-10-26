@@ -620,8 +620,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
             await NavigateToFindingsAsync();
         }
 
-        // TODO: Implement clear filters when FindingsViewModel supports it
-        _logger.LogInformation("Clear filters command - placeholder");
+        // Clear filters on the selected tab
+        if (CurrentView is FindingsView findingsView && findingsView.DataContext is FindingsViewModel findingsVm)
+        {
+            if (findingsVm.SelectedTab != null)
+            {
+                findingsVm.SelectedTab.SelectedSeverity = null;
+                findingsVm.SelectedTab.SearchText = string.Empty;
+                _logger.LogInformation("Cleared filters on tab: {TabName}", findingsVm.SelectedTab.DisplayName);
+            }
+            else
+            {
+                _logger.LogWarning("No tab selected to clear filters");
+            }
+        }
     }
 
     // ===== Navigation Commands =====
@@ -744,8 +756,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 await findingRepo.DeleteByProjectIdAsync(projectId);
                 await imageRepo.DeleteByProjectIdAsync(projectId);
                 await redirectRepo.DeleteByProjectIdAsync(projectId);
-
-                // TODO: Add DeleteByProjectIdAsync to other repositories (Url, Link, etc.) for complete reset
 
                 _logger.LogInformation("Reset project data for project {ProjectId}", projectId);
                 await Application.Current.Dispatcher.InvokeAsync(() =>

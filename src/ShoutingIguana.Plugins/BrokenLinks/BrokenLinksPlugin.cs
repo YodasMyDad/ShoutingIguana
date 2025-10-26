@@ -17,7 +17,6 @@ public class BrokenLinksPlugin : IPlugin
         var serviceProvider = context.GetServiceProvider();
         var checker = new BrokenLinksChecker(serviceProvider, context.CreateLogger<BrokenLinksChecker>());
         
-        // TODO: Read configuration from appsettings
         bool checkExternalLinks = false;
         bool checkAnchorLinks = true;
         

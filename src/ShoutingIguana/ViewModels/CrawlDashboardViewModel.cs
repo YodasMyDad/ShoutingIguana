@@ -60,6 +60,9 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _pauseResumeButtonIcon = "\uE769"; // Pause icon
 
+    [ObservableProperty]
+    private string _statusMessage = string.Empty;
+
     public bool ShowEmptyState => TotalDiscovered == 0 && !IsCrawling;
 
     public CrawlDashboardViewModel(
@@ -100,12 +103,14 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
         {
             var projectId = _projectContext.CurrentProjectId!.Value;
             _logger.LogInformation("Starting crawl for project {ProjectId}", projectId);
+            StatusMessage = "Starting crawl...";
             IsCrawling = true;
             await _crawlEngine.StartCrawlAsync(projectId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to start crawl");
+            StatusMessage = "Failed to start crawl";
             IsCrawling = false;
         }
     }
@@ -198,6 +203,31 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
             if (!string.IsNullOrEmpty(e.LastCrawledUrl))
             {
                 RecentActivity = $"Last crawled: {e.LastCrawledUrl}";
+            }
+            
+            // Update status message based on crawl state
+            if (_crawlEngine.IsCrawling)
+            {
+                if (ActiveWorkers > 0)
+                {
+                    StatusMessage = $"Crawling... {ActiveWorkers} worker{(ActiveWorkers == 1 ? "" : "s")} active";
+                }
+                else if (QueueSize > 0)
+                {
+                    StatusMessage = "Processing queue...";
+                }
+                else if (UrlsCrawled == 0)
+                {
+                    StatusMessage = "Discovering URLs...";
+                }
+                else
+                {
+                    StatusMessage = "Crawling...";
+                }
+            }
+            else
+            {
+                StatusMessage = string.Empty;
             }
 
             IsCrawling = _crawlEngine.IsCrawling;

@@ -56,6 +56,21 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
 
             // Check for broken canonical (would need to be crawled separately)
             await CheckCanonicalStatusAsync(ctx, canonical);
+            
+            // NEW: Check for canonical/robots conflicts (noindex + canonical)
+            await CheckCanonicalRobotsConflictAsync(ctx, canonical);
+            
+            // NEW: Check canonical pagination patterns
+            await CheckCanonicalPaginationAsync(ctx, canonical);
+            
+            // NEW: Check for canonical loops (A→B, B→A)
+            await CheckCanonicalLoopsAsync(ctx, canonical);
+            
+            // NEW: Validate HTTP header vs HTML consistency
+            await CheckCanonicalConsistencyAsync(ctx);
+            
+            // NEW: Check for canonicals on redirected URLs
+            await CheckCanonicalOnRedirectAsync(ctx, canonical);
         }
         catch (Exception ex)
         {
@@ -306,6 +321,219 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
         }
     }
     
+    /// <summary>
+    /// Check for canonical/robots conflicts (noindex + canonical is problematic)
+    /// </summary>
+    private async Task CheckCanonicalRobotsConflictAsync(UrlContext ctx, string? canonical)
+    {
+        if (string.IsNullOrEmpty(canonical))
+        {
+            return;
+        }
+
+        // Check if page has noindex directive
+        if (ctx.Metadata.RobotsNoindex == true)
+        {
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Error,
+                "CANONICAL_NOINDEX_CONFLICT",
+                "Page has both canonical tag AND noindex directive - conflicting signals",
+                new
+                {
+                    url = ctx.Url.ToString(),
+                    canonical,
+                    robotsNoindex = true,
+                    source = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) ? "X-Robots-Tag header" : "meta robots tag",
+                    issue = "Google may ignore the canonical when noindex is present",
+                    recommendation = "Remove either canonical or noindex - if you want to consolidate, use canonical only; if you want to de-index, use noindex only"
+                });
+        }
+    }
+
+    /// <summary>
+    /// Check canonical pagination patterns
+    /// </summary>
+    private async Task CheckCanonicalPaginationAsync(UrlContext ctx, string? canonical)
+    {
+        if (string.IsNullOrEmpty(canonical))
+        {
+            return;
+        }
+
+        var currentUrl = ctx.Url.ToString();
+        
+        // Detect if this is a paginated URL (page=2, page=3, /page/2/, etc.)
+        var isPaginated = System.Text.RegularExpressions.Regex.IsMatch(currentUrl, 
+            @"[?&]page=\d+|[?&]p=\d+|/page/\d+/|/p\d+/", 
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        if (isPaginated)
+        {
+            var normalizedCurrent = NormalizeUrl(currentUrl);
+            var normalizedCanonical = NormalizeUrl(canonical);
+            
+            // Check if paginated page canonicalizes to page 1 (often wrong)
+            var canonicalizesToPageOne = System.Text.RegularExpressions.Regex.IsMatch(canonical, 
+                @"[?&]page=1($|&)|[?&]p=1($|&)|/page/1/", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                
+            var removedPageParam = System.Text.RegularExpressions.Regex.Replace(canonical, 
+                @"[?&]page=\d+|[?&]p=\d+", 
+                "", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            
+            var canonicalizesToNonPaginated = !canonical.Contains("/page/") && 
+                                             !canonical.Contains("/p") &&
+                                             !canonical.Contains("?page=") &&
+                                             !canonical.Contains("&page=") &&
+                                             !canonical.Contains("?p=") &&
+                                             !canonical.Contains("&p=");
+
+            if (normalizedCurrent != normalizedCanonical && (canonicalizesToPageOne || canonicalizesToNonPaginated))
+            {
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Warning,
+                    "PAGINATION_CANONICAL_ISSUE",
+                    $"Paginated URL canonicalizes to page 1 or non-paginated version: {canonical}",
+                    new
+                    {
+                        url = currentUrl,
+                        canonical,
+                        issue = "Paginated pages should typically be self-referential or use rel=prev/next",
+                        recommendation = "For pagination: use self-referential canonicals + rel=prev/next, OR use view-all canonical if available"
+                    });
+            }
+        }
+    }
+
+    /// <summary>
+    /// Check for canonical loops (A→B, B→A)
+    /// </summary>
+    private async Task CheckCanonicalLoopsAsync(UrlContext ctx, string? canonical)
+    {
+        if (string.IsNullOrEmpty(canonical))
+        {
+            return;
+        }
+
+        var projectId = ctx.Project.ProjectId;
+        
+        if (!CanonicalsByProject.TryGetValue(projectId, out var projectCanonicals))
+        {
+            return;
+        }
+
+        // Build the canonical chain and detect loops
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var chain = new List<string>();
+        var current = ctx.Url.ToString();
+        
+        chain.Add(current);
+        visited.Add(NormalizeUrl(current));
+
+        // Follow the chain up to 5 hops
+        for (int i = 0; i < 5; i++)
+        {
+            if (!projectCanonicals.TryGetValue(current, out var nextCanonical))
+            {
+                break;
+            }
+
+            var normalizedNext = NormalizeUrl(nextCanonical);
+            
+            // Check if we've seen this URL before (loop detected)
+            if (visited.Contains(normalizedNext))
+            {
+                chain.Add(nextCanonical);
+                
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Error,
+                    "CANONICAL_LOOP",
+                    $"Canonical loop detected: {string.Join(" → ", chain)}",
+                    new
+                    {
+                        url = ctx.Url.ToString(),
+                        loop = chain.ToArray(),
+                        issue = "Circular canonical references confuse search engines",
+                        recommendation = "Fix canonical tags to point to a single final URL without loops"
+                    });
+                return;
+            }
+
+            chain.Add(nextCanonical);
+            visited.Add(normalizedNext);
+            current = nextCanonical;
+        }
+    }
+
+    /// <summary>
+    /// Validate canonical HTTP header vs HTML consistency
+    /// </summary>
+    private async Task CheckCanonicalConsistencyAsync(UrlContext ctx)
+    {
+        var canonicalHtml = ctx.Metadata.CanonicalHtml;
+        var canonicalHttp = ctx.Metadata.CanonicalHttp;
+
+        // If both are present, they should match
+        if (!string.IsNullOrEmpty(canonicalHtml) && !string.IsNullOrEmpty(canonicalHttp))
+        {
+            var normalizedHtml = NormalizeUrl(canonicalHtml);
+            var normalizedHttp = NormalizeUrl(canonicalHttp);
+
+            if (normalizedHtml != normalizedHttp)
+            {
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Warning,
+                    "CANONICAL_HEADER_HTML_MISMATCH",
+                    "Canonical tag in HTML differs from Link header",
+                    new
+                    {
+                        url = ctx.Url.ToString(),
+                        canonicalHtml,
+                        canonicalHttp,
+                        issue = "Conflicting canonical signals",
+                        note = "HTTP Link header typically takes precedence over HTML link tag",
+                        recommendation = "Ensure both canonicals point to the same URL, or remove one"
+                    });
+            }
+        }
+    }
+
+    /// <summary>
+    /// Check for canonicals on redirected URLs (pointless)
+    /// </summary>
+    private async Task CheckCanonicalOnRedirectAsync(UrlContext ctx, string? canonical)
+    {
+        if (string.IsNullOrEmpty(canonical))
+        {
+            return;
+        }
+
+        var statusCode = ctx.Metadata.StatusCode;
+        
+        // Check if this URL is a redirect
+        if (statusCode >= 300 && statusCode < 400)
+        {
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Warning,
+                "CANONICAL_ON_REDIRECT",
+                $"Page returns {statusCode} redirect but also has canonical tag",
+                new
+                {
+                    url = ctx.Url.ToString(),
+                    statusCode,
+                    canonical,
+                    issue = "Canonical tags on redirected URLs are ignored by search engines",
+                    recommendation = "Remove canonical tag from redirected URLs - the redirect itself is sufficient"
+                });
+        }
+    }
+
     /// <summary>
     /// Cleanup per-project data when project is closed.
     /// </summary>

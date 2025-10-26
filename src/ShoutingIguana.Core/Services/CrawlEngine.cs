@@ -232,29 +232,64 @@ public class CrawlEngine(
                 await EnqueueUrlAsync(projectId, settings.BaseUrl, 0, 1000, settings.BaseUrl).ConfigureAwait(false);
                 
                 // Discover and enqueue URLs from sitemap.xml if enabled
+                // Run this in parallel to avoid blocking the start of the crawl
                 if (settings.UseSitemapXml)
                 {
-                    _logger.LogInformation("Sitemap discovery enabled, searching for sitemaps...");
-                    var sitemapService = scope.ServiceProvider.GetRequiredService<ISitemapService>();
-                    var sitemapUrls = await sitemapService.DiscoverSitemapUrlsAsync(settings.BaseUrl).ConfigureAwait(false);
-                    
-                    if (sitemapUrls.Any())
+                    _ = Task.Run(async () =>
                     {
-                        _logger.LogInformation("Discovered {Count} URLs from sitemap(s), enqueueing...", sitemapUrls.Count);
-                        int enqueuedCount = 0;
-                        
-                        foreach (var url in sitemapUrls)
+                        try
                         {
-                            await EnqueueUrlAsync(projectId, url, 0, 900, settings.BaseUrl).ConfigureAwait(false);
-                            enqueuedCount++;
+                            _logger.LogInformation("Sitemap discovery enabled, searching for sitemaps...");
+                            
+                            // Create a new scope for this background task
+                            using var sitemapScope = _serviceProvider.CreateScope();
+                            var sitemapService = sitemapScope.ServiceProvider.GetRequiredService<ISitemapService>();
+                            var sitemapUrls = await sitemapService.DiscoverSitemapUrlsAsync(settings.BaseUrl).ConfigureAwait(false);
+                            
+                            // Check cancellation before processing results
+                            if (cancellationToken.IsCancellationRequested)
+                            {
+                                _logger.LogInformation("Sitemap discovery cancelled before enqueueing URLs");
+                                return;
+                            }
+                            
+                            if (sitemapUrls.Any())
+                            {
+                                _logger.LogInformation("Sitemap discovery completed. Found {Count} URLs from sitemap(s), enqueueing...", sitemapUrls.Count);
+                                int enqueuedCount = 0;
+                                
+                                foreach (var url in sitemapUrls)
+                                {
+                                    // Check cancellation periodically during enqueueing
+                                    if (cancellationToken.IsCancellationRequested)
+                                    {
+                                        _logger.LogInformation("Sitemap discovery cancelled after enqueueing {Count} of {Total} URLs", enqueuedCount, sitemapUrls.Count);
+                                        break;
+                                    }
+                                    
+                                    await EnqueueUrlAsync(projectId, url, 0, 900, settings.BaseUrl).ConfigureAwait(false);
+                                    enqueuedCount++;
+                                }
+                                
+                                if (!cancellationToken.IsCancellationRequested)
+                                {
+                                    _logger.LogInformation("Enqueued {Count} URLs from sitemap discovery", enqueuedCount);
+                                }
+                            }
+                            else
+                            {
+                                _logger.LogInformation("Sitemap discovery completed. No sitemap URLs discovered");
+                            }
                         }
-                        
-                        _logger.LogInformation("Enqueued {Count} URLs from sitemap discovery", enqueuedCount);
-                    }
-                    else
-                    {
-                        _logger.LogInformation("No sitemap URLs discovered");
-                    }
+                        catch (OperationCanceledException)
+                        {
+                            _logger.LogInformation("Sitemap discovery was cancelled");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Error during sitemap discovery");
+                        }
+                    }, cancellationToken);
                 }
             }
             else
@@ -508,12 +543,38 @@ public class CrawlEngine(
             // Create a new page with the specified user agent and proxy (caller becomes responsible for disposal from this point)
             page = await _playwrightService.CreatePageAsync(userAgent, proxySettings).ConfigureAwait(false);
             
-            // Navigate to URL
-            var response = await page.GotoAsync(url, new Microsoft.Playwright.PageGotoOptions
+            // Navigate to URL with fallback strategy
+            // Try NetworkIdle first (more reliable), fallback to DOMContentLoaded on timeout
+            Microsoft.Playwright.IResponse? response = null;
+            try
             {
-                WaitUntil = Microsoft.Playwright.WaitUntilState.NetworkIdle,
-                Timeout = 30000
-            }).ConfigureAwait(false);
+                response = await page.GotoAsync(url, new Microsoft.Playwright.PageGotoOptions
+                {
+                    WaitUntil = Microsoft.Playwright.WaitUntilState.NetworkIdle,
+                    Timeout = 30000
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning("NetworkIdle timeout for {Url}, retrying with DOMContentLoaded", url);
+                
+                // Retry with faster wait state
+                try
+                {
+                    response = await page.GotoAsync(url, new Microsoft.Playwright.PageGotoOptions
+                    {
+                        WaitUntil = Microsoft.Playwright.WaitUntilState.DOMContentLoaded,
+                        Timeout = 30000
+                    }).ConfigureAwait(false);
+                    
+                    _logger.LogInformation("Successfully loaded {Url} using DOMContentLoaded fallback", url);
+                }
+                catch (Exception fallbackEx)
+                {
+                    _logger.LogError(fallbackEx, "DOMContentLoaded fallback also failed for {Url}", url);
+                    throw; // Re-throw to be caught by outer exception handler
+                }
+            }
 
             if (response == null)
             {
@@ -1435,9 +1496,6 @@ public class CrawlEngine(
                 // 1. Reducing max URLs per crawl session
                 // 2. Crawling in batches
                 // 3. Restarting the application between large crawls
-                //
-                // TODO STAGE 3: Implement graceful browser restart with pause/resume coordination
-                // This requires the full pause/resume infrastructure from Stage 3
                 
                 _logger.LogWarning("Consider stopping the crawl and restarting the application if memory usage becomes problematic");
             }

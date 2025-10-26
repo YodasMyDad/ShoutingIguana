@@ -13,10 +13,8 @@ public class ListModePlugin : IPlugin
     public void Initialize(IHostContext context)
     {
         // List-Mode is primarily a service, not a per-URL task
-        // The actual import functionality will be exposed through the Tools menu
+        // The actual import functionality is exposed through the Tools menu
         // No task to register here
-        
-        // TODO: Register a service that can be called from MainViewModel's ImportUrlList command
     }
 }
 

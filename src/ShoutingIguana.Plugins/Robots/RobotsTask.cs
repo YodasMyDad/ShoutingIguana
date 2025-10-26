@@ -277,6 +277,109 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                     note = "Page will be removed from index after specified date"
                 });
         }
+        
+        // NEW: Check for indexifembedded (Google's new directive for iframes)
+        if (tag.Contains("indexifembedded"))
+        {
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Info,
+                "INDEXIFEMBEDDED_DETECTED",
+                "Page has 'indexifembedded' directive (allows indexing when embedded in iframes)",
+                new
+                {
+                    url = ctx.Url.ToString(),
+                    note = "This directive allows Google to index content even when embedded despite noindex",
+                    xRobotsTag = ctx.Metadata.XRobotsTag
+                });
+        }
+        
+        // NEW: Check for max-snippet directive
+        var maxSnippetMatch = System.Text.RegularExpressions.Regex.Match(tag, @"max-snippet:(\d+|-1)");
+        if (maxSnippetMatch.Success)
+        {
+            var maxSnippet = maxSnippetMatch.Groups[1].Value;
+            var snippetValue = maxSnippet == "-1" ? "unlimited" : $"{maxSnippet} characters";
+            
+            var severity = maxSnippet == "0" ? Severity.Warning : Severity.Info;
+            await ctx.Findings.ReportAsync(
+                Key,
+                severity,
+                "MAX_SNIPPET_DETECTED",
+                $"Page has 'max-snippet' directive: {snippetValue}",
+                new
+                {
+                    url = ctx.Url.ToString(),
+                    maxSnippet,
+                    note = maxSnippet == "0" ? 
+                        "max-snippet:0 prevents any text snippets - may reduce SERP visibility" :
+                        $"Limits text snippet length to {snippetValue}",
+                    recommendation = maxSnippet == "0" ? "Consider allowing snippets for better SERP appearance" : null
+                });
+        }
+        
+        // NEW: Check for max-image-preview directive
+        var maxImageMatch = System.Text.RegularExpressions.Regex.Match(tag, @"max-image-preview:(none|standard|large)");
+        if (maxImageMatch.Success)
+        {
+            var maxImage = maxImageMatch.Groups[1].Value;
+            var severity = maxImage == "none" ? Severity.Warning : Severity.Info;
+            
+            await ctx.Findings.ReportAsync(
+                Key,
+                severity,
+                "MAX_IMAGE_PREVIEW_DETECTED",
+                $"Page has 'max-image-preview' directive: {maxImage}",
+                new
+                {
+                    url = ctx.Url.ToString(),
+                    maxImagePreview = maxImage,
+                    note = maxImage == "none" ? 
+                        "Prevents image previews in search results - may reduce visibility" :
+                        $"Allows {maxImage} image previews in search results",
+                    recommendation = maxImage == "none" ? "Consider allowing image previews for better engagement" : null
+                });
+        }
+        
+        // NEW: Check for max-video-preview directive
+        var maxVideoMatch = System.Text.RegularExpressions.Regex.Match(tag, @"max-video-preview:(\d+|-1)");
+        if (maxVideoMatch.Success)
+        {
+            var maxVideo = maxVideoMatch.Groups[1].Value;
+            var videoValue = maxVideo == "-1" ? "unlimited" : $"{maxVideo} seconds";
+            
+            var severity = maxVideo == "0" ? Severity.Warning : Severity.Info;
+            await ctx.Findings.ReportAsync(
+                Key,
+                severity,
+                "MAX_VIDEO_PREVIEW_DETECTED",
+                $"Page has 'max-video-preview' directive: {videoValue}",
+                new
+                {
+                    url = ctx.Url.ToString(),
+                    maxVideoPreview = maxVideo,
+                    note = maxVideo == "0" ? 
+                        "Prevents video previews - may reduce click-through rates" :
+                        $"Limits video preview to {videoValue}",
+                    recommendation = maxVideo == "0" ? "Consider allowing video previews" : null
+                });
+        }
+        
+        // NEW: Check for googlebot-news specific directives
+        if (tag.Contains("googlebot-news"))
+        {
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Info,
+                "GOOGLEBOT_NEWS_DIRECTIVE",
+                "Page has googlebot-news specific directive",
+                new
+                {
+                    url = ctx.Url.ToString(),
+                    xRobotsTag = ctx.Metadata.XRobotsTag,
+                    note = "This directive specifically targets Google News crawler"
+                });
+        }
     }
 }
 
