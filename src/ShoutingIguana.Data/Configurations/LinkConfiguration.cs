@@ -13,10 +13,14 @@ public class LinkConfiguration : IEntityTypeConfiguration<Link>
         
         builder.Property(e => e.AnchorText)
             .HasMaxLength(500);
+        
+        builder.Property(e => e.RelAttribute)
+            .HasMaxLength(255);
 
         builder.HasIndex(e => e.FromUrlId);
         builder.HasIndex(e => e.ToUrlId);
         builder.HasIndex(e => new { e.ProjectId, e.LinkType });
+        builder.HasIndex(e => e.IsNofollow);
 
         builder.HasOne(e => e.Project)
             .WithMany(p => p.Links)

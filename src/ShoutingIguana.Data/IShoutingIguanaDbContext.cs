@@ -15,6 +15,8 @@ public interface IShoutingIguanaDbContext : IDisposable
     DbSet<Finding> Findings { get; }
     DbSet<Redirect> Redirects { get; }
     DbSet<Image> Images { get; }
+    DbSet<Hreflang> Hreflangs { get; }
+    DbSet<StructuredData> StructuredData { get; }
     
     int SaveChanges();
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

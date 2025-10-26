@@ -173,74 +173,51 @@ public class InventoryTask : UrlTaskBase
 
     private async Task AnalyzeIndexabilityAsync(UrlContext ctx)
     {
-        if (string.IsNullOrEmpty(ctx.RenderedHtml))
-            return;
-
-        var doc = new HtmlDocument();
-        doc.LoadHtml(ctx.RenderedHtml);
-
-        // Check for noindex meta tag
-        var robotsNode = doc.DocumentNode.SelectSingleNode("//meta[@name='robots']");
-        if (robotsNode != null)
+        // Use crawler-parsed robots data
+        if (ctx.Metadata.RobotsNoindex == true)
         {
-            var content = robotsNode.GetAttributeValue("content", "").ToLowerInvariant();
-            if (content.Contains("noindex"))
+            var source = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) ? 
+                "X-Robots-Tag header" : "meta robots tag";
+            
+            if (ctx.Metadata.HasRobotsConflict)
             {
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "NOINDEX_META",
-                    "Page has noindex directive (will not be indexed)",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        robotsContent = content
-                    });
+                source = "conflicting meta and X-Robots-Tag (most restrictive applied)";
             }
-        }
-
-        // Check for X-Robots-Tag header
-        if (ctx.Headers.TryGetValue("x-robots-tag", out var xRobotsTag))
-        {
-            if (xRobotsTag.Contains("noindex", StringComparison.OrdinalIgnoreCase))
-            {
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "NOINDEX_HEADER",
-                    "Page has noindex in X-Robots-Tag header",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        xRobotsTag
-                    });
-            }
-        }
-
-        // Check for canonical pointing elsewhere
-        var canonicalNode = doc.DocumentNode.SelectSingleNode("//link[@rel='canonical']");
-        if (canonicalNode != null)
-        {
-            var canonical = canonicalNode.GetAttributeValue("href", "").Trim();
-            if (!string.IsNullOrEmpty(canonical))
-            {
-                var normalizedCurrent = NormalizeUrl(ctx.Url.ToString());
-                var normalizedCanonical = NormalizeUrl(canonical);
-
-                if (normalizedCurrent != normalizedCanonical)
+            
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Warning,
+                "NOINDEX_DIRECTIVE",
+                $"Page has noindex directive (will not be indexed) - Source: {source}",
+                new
                 {
-                    await ctx.Findings.ReportAsync(
-                        Key,
-                        Severity.Info,
-                        "CANONICALIZED_PAGE",
-                        "Page canonical points elsewhere (will not be indexed)",
-                        new
-                        {
-                            url = ctx.Url.ToString(),
-                            canonical,
-                            note = "This page defers indexing to the canonical URL"
-                        });
-                }
+                    url = ctx.Url.ToString(),
+                    xRobotsTag = ctx.Metadata.XRobotsTag,
+                    hasConflict = ctx.Metadata.HasRobotsConflict
+                });
+        }
+
+        // Use crawler-parsed canonical data
+        var canonical = ctx.Metadata.CanonicalHtml ?? ctx.Metadata.CanonicalHttp;
+        if (!string.IsNullOrEmpty(canonical))
+        {
+            var normalizedCurrent = NormalizeUrl(ctx.Url.ToString());
+            var normalizedCanonical = NormalizeUrl(canonical);
+
+            if (normalizedCurrent != normalizedCanonical)
+            {
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Info,
+                    "CANONICALIZED_PAGE",
+                    "Page canonical points elsewhere (will not be indexed)",
+                    new
+                    {
+                        url = ctx.Url.ToString(),
+                        canonical,
+                        isCrossDomain = ctx.Metadata.HasCrossDomainCanonical,
+                        note = "This page defers indexing to the canonical URL"
+                    });
             }
         }
     }

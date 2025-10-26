@@ -23,6 +23,7 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
     private int _urlsCrawled;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowEmptyState))]
     private int _totalDiscovered;
 
     [ObservableProperty]
@@ -41,10 +42,13 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
     private double _progressPercentage;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowEmptyState))]
     private bool _isCrawling;
 
     [ObservableProperty]
     private string _recentActivity = string.Empty;
+
+    public bool ShowEmptyState => TotalDiscovered == 0 && !IsCrawling;
 
     public CrawlDashboardViewModel(
         ILogger<CrawlDashboardViewModel> logger, 
@@ -184,17 +188,17 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
                     var cts = _navigationCts; // Capture to avoid closure issues
                     
                     // Track the navigation task so we can properly await/cancel it
-                    _navigationTask = System.Threading.Tasks.Task.Run(async () =>
+                    _navigationTask = Task.Run(async () =>
                     {
                         try
                         {
-                            await System.Threading.Tasks.Task.Delay(2000, cts.Token); // Show completion message for 2 seconds
+                            await Task.Delay(2000, cts.Token); // Show completion message for 2 seconds
                             
                             await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                             {
                                 try
                                 {
-                                    _navigationService.NavigateTo<ShoutingIguana.Views.FindingsView>();
+                                    _navigationService.NavigateTo<Views.FindingsView>();
                                     _logger.LogInformation("Navigated to Findings view after crawl completion");
                                 }
                                 catch (Exception ex)

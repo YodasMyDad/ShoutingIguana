@@ -22,9 +22,51 @@ public class Url
     // Stage 2: Meta data fields
     public string? Title { get; set; }
     public string? MetaDescription { get; set; }
-    public string? CanonicalUrl { get; set; }
-    public string? MetaRobots { get; set; }
+    public string? CanonicalUrl { get; set; } // DEPRECATED - use CanonicalHtml/CanonicalHttp
+    public string? MetaRobots { get; set; } // DEPRECATED - use parsed RobotsNoindex/etc
     public string? RedirectTarget { get; set; } // Final URL after redirects
+    
+    // Enhanced Canonical fields
+    public string? CanonicalHtml { get; set; }
+    public string? CanonicalHttp { get; set; }
+    public bool HasMultipleCanonicals { get; set; }
+    public bool HasCrossDomainCanonical { get; set; }
+    public string? CanonicalIssues { get; set; } // JSON: validation errors
+    
+    // Parsed Robots directives
+    public bool? RobotsNoindex { get; set; }
+    public bool? RobotsNofollow { get; set; }
+    public bool? RobotsNoarchive { get; set; }
+    public bool? RobotsNosnippet { get; set; }
+    public bool? RobotsNoimageindex { get; set; }
+    public string? RobotsSource { get; set; } // "meta", "http", "both-conflict"
+    public string? XRobotsTag { get; set; }
+    public bool HasRobotsConflict { get; set; }
+    
+    // Language fields
+    public string? HtmlLang { get; set; }
+    public string? ContentLanguageHeader { get; set; }
+    
+    // Meta Refresh
+    public bool HasMetaRefresh { get; set; }
+    public int? MetaRefreshDelay { get; set; }
+    public string? MetaRefreshTarget { get; set; }
+    
+    // JavaScript detection
+    public bool HasJsChanges { get; set; }
+    public string? JsChangedElements { get; set; }
+    
+    // Redirect enhancements
+    public bool IsRedirectLoop { get; set; }
+    public int? RedirectChainLength { get; set; }
+    public bool IsSoft404 { get; set; }
+    
+    // Special HTTP headers
+    public string? CacheControl { get; set; }
+    public string? Vary { get; set; }
+    public string? ContentEncoding { get; set; }
+    public string? LinkHeader { get; set; }
+    public bool HasHsts { get; set; }
     
     // Navigation properties
     public Project Project { get; set; } = null!;
@@ -35,6 +77,8 @@ public class Url
     public ICollection<Finding> Findings { get; set; } = [];
     public ICollection<Redirect> Redirects { get; set; } = [];
     public ICollection<Image> Images { get; set; } = [];
+    public ICollection<Hreflang> Hreflangs { get; set; } = [];
+    public ICollection<StructuredData> StructuredData { get; set; } = [];
 }
 
 public enum UrlStatus

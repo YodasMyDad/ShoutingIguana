@@ -240,17 +240,18 @@
                                                    Style="{StaticResource FormFieldLabel}"
                                                    Margin="0,0,0,8"
                                                    AutomationProperties.AutomationId="SeverityFilterLabel"/>
-                                        <ComboBox MinWidth="150"
+                                        <ComboBox Width="200"
+                                                  MaxDropDownHeight="300"
                                                   SelectedValue="{Binding SelectedSeverity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                   SelectedValuePath="Tag"
                                                   Style="{StaticResource ModernComboBox}"
                                                   TabIndex="0"
                                                   AutomationProperties.Name="Filter by Severity"
                                                   ToolTip="Filter findings by severity level">
-                                            <ComboBoxItem Tag="{x:Null}">
+                                            <ComboBoxItem Tag="{x:Null}" MaxWidth="180">
                                                 <TextBlock Text="All Severities"/>
                                             </ComboBoxItem>
-                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Error}">
+                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Error}" MaxWidth="180">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="{StaticResource Icon.Error}" 
                                                                Style="{StaticResource Icon}"
@@ -261,7 +262,7 @@
                                                     <TextBlock Text="Error" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                             </ComboBoxItem>
-                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Warning}">
+                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Warning}" MaxWidth="180">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="{StaticResource Icon.Warning}" 
                                                                Style="{StaticResource Icon}"
@@ -272,7 +273,7 @@
                                                     <TextBlock Text="Warning" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                             </ComboBoxItem>
-                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Info}">
+                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Info}" MaxWidth="180">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="{StaticResource Icon.Info}" 
                                                                Style="{StaticResource Icon}"

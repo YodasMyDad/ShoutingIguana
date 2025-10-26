@@ -76,7 +76,7 @@
                     Style="{StaticResource InfoCard}"
                     Margin="0,0,0,24"
                     SnapsToDevicePixels="True"
-                    Visibility="{Binding TotalDiscovered, Converter={StaticResource InverseInt32ToVisibilityConverter}}"
+                    Visibility="{Binding ShowEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}"
                     x:Name="EmptyStateCard">
                 <StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">

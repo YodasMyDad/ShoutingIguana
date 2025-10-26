@@ -85,6 +85,8 @@ public partial class App : Application
                     services.AddScoped<IFindingRepository, FindingRepository>();
                     services.AddScoped<IRedirectRepository, RedirectRepository>();
                     services.AddScoped<IImageRepository, ImageRepository>();
+                    services.AddScoped<IHreflangRepository, HreflangRepository>();
+                    services.AddScoped<IStructuredDataRepository, StructuredDataRepository>();
 
                     // Core Services
                     services.AddSingleton<IAppSettingsService, AppSettingsService>();

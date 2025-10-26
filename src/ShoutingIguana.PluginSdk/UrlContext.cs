@@ -67,7 +67,21 @@ public sealed record UrlMetadata(
     string? ContentType,
     long? ContentLength,
     int Depth,
-    DateTime CrawledUtc);
+    DateTime CrawledUtc,
+    
+    // Enhanced SEO metadata (parsed by crawler)
+    string? CanonicalHtml = null,
+    string? CanonicalHttp = null,
+    bool HasMultipleCanonicals = false,
+    bool HasCrossDomainCanonical = false,
+    bool? RobotsNoindex = null,
+    bool? RobotsNofollow = null,
+    string? XRobotsTag = null,
+    bool HasRobotsConflict = false,
+    bool HasMetaRefresh = false,
+    int? MetaRefreshDelay = null,
+    string? MetaRefreshTarget = null,
+    string? HtmlLang = null);
 
 /// <summary>
 /// Project crawl settings.

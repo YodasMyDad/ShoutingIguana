@@ -22,5 +22,9 @@
     <ProjectReference Include="..\ShoutingIguana.Core\ShoutingIguana.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Migrations\" />
+  </ItemGroup>
+
 </Project>
 

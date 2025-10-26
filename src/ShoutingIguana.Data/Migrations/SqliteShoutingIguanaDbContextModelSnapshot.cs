@@ -15,7 +15,7 @@ namespace ShoutingIguana.Data.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
+            modelBuilder.HasAnnotation("ProductVersion", "9.0.10");
 
             modelBuilder.Entity("ShoutingIguana.Core.Models.CrawlQueueItem", b =>
                 {
@@ -131,6 +131,46 @@ namespace ShoutingIguana.Data.Migrations
                     b.ToTable("Headers", (string)null);
                 });
 
+            modelBuilder.Entity("ShoutingIguana.Core.Models.Hreflang", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsXDefault")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LanguageCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UrlId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsXDefault");
+
+                    b.HasIndex("LanguageCode");
+
+                    b.HasIndex("UrlId");
+
+                    b.HasIndex("UrlId", "LanguageCode");
+
+                    b.ToTable("Hreflangs", (string)null);
+                });
+
             modelBuilder.Entity("ShoutingIguana.Core.Models.Image", b =>
                 {
                     b.Property<int>("Id")
@@ -183,11 +223,24 @@ namespace ShoutingIguana.Data.Migrations
                     b.Property<int>("FromUrlId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsNofollow")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsSponsored")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsUgc")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("LinkType")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("ProjectId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("RelAttribute")
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("ToUrlId")
                         .HasColumnType("INTEGER");
@@ -195,6 +248,8 @@ namespace ShoutingIguana.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("FromUrlId");
+
+                    b.HasIndex("IsNofollow");
 
                     b.HasIndex("ToUrlId");
 
@@ -270,6 +325,51 @@ namespace ShoutingIguana.Data.Migrations
                     b.ToTable("Redirects", (string)null);
                 });
 
+            modelBuilder.Entity("ShoutingIguana.Core.Models.StructuredData", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsValid")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RawData")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SchemaType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UrlId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ValidationErrors")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsValid");
+
+                    b.HasIndex("SchemaType");
+
+                    b.HasIndex("Type");
+
+                    b.HasIndex("UrlId");
+
+                    b.HasIndex("UrlId", "Type");
+
+                    b.ToTable("StructuredData", (string)null);
+                });
+
             modelBuilder.Entity("ShoutingIguana.Core.Models.Url", b =>
                 {
                     b.Property<int>("Id")
@@ -281,7 +381,31 @@ namespace ShoutingIguana.Data.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CacheControl")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CanonicalHtml")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CanonicalHttp")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CanonicalIssues")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("CanonicalUrl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentEncoding")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentLanguageHeader")
+                        .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
                     b.Property<long?>("ContentLength")
@@ -300,18 +424,61 @@ namespace ShoutingIguana.Data.Migrations
                     b.Property<DateTime>("FirstSeenUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("HasCrossDomainCanonical")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("HasHsts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("HasJsChanges")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("HasMetaRefresh")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("HasMultipleCanonicals")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("HasRobotsConflict")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Host")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("HtmlLang")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("HttpStatus")
                         .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsRedirectLoop")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsSoft404")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("JsChangedElements")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastCrawledUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("LinkHeader")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("MetaDescription")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("MetaRefreshDelay")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("MetaRefreshTarget")
+                        .HasMaxLength(2048)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("MetaRobots")
@@ -330,11 +497,33 @@ namespace ShoutingIguana.Data.Migrations
                     b.Property<int>("ProjectId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("RedirectChainLength")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("RedirectTarget")
                         .HasColumnType("TEXT");
 
                     b.Property<bool?>("RobotsAllowed")
                         .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("RobotsNoarchive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("RobotsNofollow")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("RobotsNoimageindex")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("RobotsNoindex")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("RobotsNosnippet")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RobotsSource")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Scheme")
                         .IsRequired()
@@ -347,15 +536,29 @@ namespace ShoutingIguana.Data.Migrations
                     b.Property<string>("Title")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Vary")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("XRobotsTag")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Address");
 
                     b.HasIndex("DiscoveredFromUrlId");
 
+                    b.HasIndex("HasMultipleCanonicals");
+
                     b.HasIndex("Host");
 
+                    b.HasIndex("HtmlLang");
+
                     b.HasIndex("NormalizedUrl");
+
+                    b.HasIndex("RobotsNoindex");
 
                     b.HasIndex("ProjectId", "Status");
 
@@ -396,6 +599,17 @@ namespace ShoutingIguana.Data.Migrations
                 {
                     b.HasOne("ShoutingIguana.Core.Models.Url", "Url")
                         .WithMany("Headers")
+                        .HasForeignKey("UrlId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Url");
+                });
+
+            modelBuilder.Entity("ShoutingIguana.Core.Models.Hreflang", b =>
+                {
+                    b.HasOne("ShoutingIguana.Core.Models.Url", "Url")
+                        .WithMany("Hreflangs")
                         .HasForeignKey("UrlId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -452,6 +666,17 @@ namespace ShoutingIguana.Data.Migrations
                     b.Navigation("Url");
                 });
 
+            modelBuilder.Entity("ShoutingIguana.Core.Models.StructuredData", b =>
+                {
+                    b.HasOne("ShoutingIguana.Core.Models.Url", "Url")
+                        .WithMany("StructuredData")
+                        .HasForeignKey("UrlId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Url");
+                });
+
             modelBuilder.Entity("ShoutingIguana.Core.Models.Url", b =>
                 {
                     b.HasOne("ShoutingIguana.Core.Models.Url", "DiscoveredFromUrl")
@@ -485,6 +710,8 @@ namespace ShoutingIguana.Data.Migrations
 
                     b.Navigation("Headers");
 
+                    b.Navigation("Hreflangs");
+
                     b.Navigation("Images");
 
                     b.Navigation("LinksFrom");
@@ -492,6 +719,8 @@ namespace ShoutingIguana.Data.Migrations
                     b.Navigation("LinksTo");
 
                     b.Navigation("Redirects");
+
+                    b.Navigation("StructuredData");
                 });
 #pragma warning restore 612, 618
         }

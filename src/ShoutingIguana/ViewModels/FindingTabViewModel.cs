@@ -92,7 +92,7 @@ public partial class FindingTabViewModel : ObservableObject
                 (f.Url?.Address?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false));
         }
 
-        FilteredFindings = new ObservableCollection<Finding>(filtered.OrderByDescending(f => f.Severity).ThenByDescending(f => f.CreatedUtc));
+        FilteredFindings = new ObservableCollection<Finding>(filtered.OrderByDescending(f => f.Severity).ThenBy(f => f.Code).ThenByDescending(f => f.CreatedUtc));
         TotalCount = FilteredFindings.Count;
     }
 

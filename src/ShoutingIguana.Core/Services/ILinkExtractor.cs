@@ -12,5 +12,6 @@ public class ExtractedLink
     public string Url { get; set; } = string.Empty;
     public string? AnchorText { get; set; }
     public LinkType LinkType { get; set; }
+    public string? RelAttribute { get; set; }
 }
 

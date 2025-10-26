@@ -9,6 +9,12 @@ public class Link
     public string? AnchorText { get; set; }
     public LinkType LinkType { get; set; }
     
+    // SEO rel attributes
+    public string? RelAttribute { get; set; }
+    public bool IsNofollow { get; set; }
+    public bool IsUgc { get; set; }
+    public bool IsSponsored { get; set; }
+    
     // Navigation properties
     public Project Project { get; set; } = null!;
     public Url FromUrl { get; set; } = null!;

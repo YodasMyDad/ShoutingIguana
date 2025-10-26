@@ -118,7 +118,7 @@ public class CrawlEngine(
         using (var scope = _serviceProvider.CreateScope())
         {
             var projectRepository = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
-            project = await projectRepository.GetByIdAsync(projectId);
+            project = await projectRepository.GetByIdAsync(projectId).ConfigureAwait(false);
             if (project == null)
             {
                 _logger.LogError("Project {ProjectId} not found", projectId);
@@ -217,7 +217,7 @@ public class CrawlEngine(
             using (var scope = _serviceProvider.CreateScope())
             {
                 var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
-                queueItem = await queueRepository.GetNextItemAsync(projectId);
+                queueItem = await queueRepository.GetNextItemAsync(projectId).ConfigureAwait(false);
                 
                 // Update cached queue size
                 if (queueItem != null)
@@ -276,9 +276,11 @@ public class CrawlEngine(
                 var userAgent = settings.GetUserAgentString();
 
                 // Check robots.txt
+                bool? robotsAllowed = null;
                 if (settings.RespectRobotsTxt)
                 {
                     var allowed = await _robotsService.IsAllowedAsync(queueItem.Address, userAgent).ConfigureAwait(false);
+                    robotsAllowed = allowed;
                     if (!allowed)
                     {
                         _logger.LogInformation("URL blocked by robots.txt: {Url}", queueItem.Address);
@@ -298,7 +300,7 @@ public class CrawlEngine(
                 try
                 {
                     // Save URL to database
-                    var urlEntity = await SaveUrlAsync(projectId, queueItem, urlData, renderedHtml).ConfigureAwait(false);
+                    var urlEntity = await SaveUrlAsync(projectId, queueItem, urlData, renderedHtml, robotsAllowed).ConfigureAwait(false);
 
                     // Save redirect chain if present
                     if (redirectChain.Count > 0)
@@ -310,7 +312,7 @@ public class CrawlEngine(
                     using (var pluginScope = _serviceProvider.CreateScope())
                     {
                         var pluginExecutor = pluginScope.ServiceProvider.GetRequiredService<PluginExecutor>();
-                        var headers = urlData.Headers.GroupBy(h => h.Key).ToDictionary(g => g.Key, g => g.First().Value);
+                        var headers = urlData.Headers.GroupBy(h => h.Key.ToLowerInvariant()).ToDictionary(g => g.Key, g => g.First().Value);
                         await pluginExecutor.ExecuteTasksAsync(urlEntity, page, renderedHtml, headers, settings, userAgent, projectId, cancellationToken).ConfigureAwait(false);
                     }
 
@@ -395,14 +397,14 @@ public class CrawlEngine(
             cancellationToken.ThrowIfCancellationRequested();
             
             // Create a new page with the specified user agent (caller becomes responsible for disposal from this point)
-            page = await _playwrightService.CreatePageAsync(userAgent);
+            page = await _playwrightService.CreatePageAsync(userAgent).ConfigureAwait(false);
             
             // Navigate to URL
             var response = await page.GotoAsync(url, new Microsoft.Playwright.PageGotoOptions
             {
                 WaitUntil = Microsoft.Playwright.WaitUntilState.NetworkIdle,
                 Timeout = 30000
-            });
+            }).ConfigureAwait(false);
 
             if (response == null)
             {
@@ -418,10 +420,10 @@ public class CrawlEngine(
             redirectChain = ExtractRedirectChain(response);
 
             // Get rendered HTML
-            renderedHtml = await page.ContentAsync();
+            renderedHtml = await page.ContentAsync().ConfigureAwait(false);
 
             // Get headers
-            var headers = await response.AllHeadersAsync();
+            var headers = await response.AllHeadersAsync().ConfigureAwait(false);
             var headerList = headers.Select(h => new KeyValuePair<string, string>(h.Key, h.Value)).ToList();
 
             var result = new UrlFetchResult
@@ -554,15 +556,18 @@ public class CrawlEngine(
         }
     }
 
-    private async Task<Url> SaveUrlAsync(int projectId, CrawlQueueItem queueItem, UrlFetchResult fetchResult, string? renderedHtml)
+    private async Task<Url> SaveUrlAsync(int projectId, CrawlQueueItem queueItem, UrlFetchResult fetchResult, string? renderedHtml, bool? robotsAllowed)
     {
         using var scope = _serviceProvider.CreateScope();
         var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
+        var hreflangRepository = scope.ServiceProvider.GetRequiredService<IHreflangRepository>();
+        var structuredDataRepository = scope.ServiceProvider.GetRequiredService<IStructuredDataRepository>();
         
-        // Extract meta information from HTML
-        var (title, metaDescription, canonical, metaRobots) = ExtractMetaFromHtml(renderedHtml);
+        // Extract meta information from HTML with headers
+        var headers = fetchResult.Headers.GroupBy(h => h.Key.ToLowerInvariant()).ToDictionary(g => g.Key, g => g.First().Value);
+        var meta = ExtractMetaFromHtml(renderedHtml, headers, queueItem.Address);
         
-        var existing = await urlRepository.GetByAddressAsync(projectId, queueItem.Address);
+        var existing = await urlRepository.GetByAddressAsync(projectId, queueItem.Address).ConfigureAwait(false);
         if (existing != null)
         {
             existing.Status = fetchResult.IsSuccess ? UrlStatus.Completed : UrlStatus.Failed;
@@ -570,13 +575,58 @@ public class CrawlEngine(
             existing.ContentType = fetchResult.ContentType;
             existing.ContentLength = fetchResult.ContentLength;
             existing.LastCrawledUtc = DateTime.UtcNow;
-            existing.Title = title;
-            existing.MetaDescription = metaDescription;
-            existing.CanonicalUrl = canonical;
-            existing.MetaRobots = metaRobots;
+            existing.RobotsAllowed = robotsAllowed;
+            
+            // Basic meta
+            existing.Title = meta.Title;
+            existing.MetaDescription = meta.MetaDescription;
+            existing.CanonicalUrl = meta.CanonicalUrl;
+            existing.MetaRobots = meta.MetaRobots;
             existing.RedirectTarget = fetchResult.RedirectTarget;
             
-            return await urlRepository.UpdateAsync(existing);
+            // Enhanced canonical
+            existing.CanonicalHtml = meta.CanonicalHtml;
+            existing.CanonicalHttp = meta.CanonicalHttp;
+            existing.HasMultipleCanonicals = meta.HasMultipleCanonicals;
+            existing.HasCrossDomainCanonical = meta.HasCrossDomainCanonical;
+            existing.CanonicalIssues = meta.CanonicalIssues;
+            
+            // Parsed robots
+            existing.RobotsNoindex = meta.RobotsNoindex;
+            existing.RobotsNofollow = meta.RobotsNofollow;
+            existing.RobotsNoarchive = meta.RobotsNoarchive;
+            existing.RobotsNosnippet = meta.RobotsNosnippet;
+            existing.RobotsNoimageindex = meta.RobotsNoimageindex;
+            existing.RobotsSource = meta.RobotsSource;
+            existing.XRobotsTag = meta.XRobotsTag;
+            existing.HasRobotsConflict = meta.HasRobotsConflict;
+            
+            // Language
+            existing.HtmlLang = meta.HtmlLang;
+            existing.ContentLanguageHeader = meta.ContentLanguageHeader;
+            
+            // Meta refresh
+            existing.HasMetaRefresh = meta.HasMetaRefresh;
+            existing.MetaRefreshDelay = meta.MetaRefreshDelay;
+            existing.MetaRefreshTarget = meta.MetaRefreshTarget;
+            
+            // HTTP headers
+            existing.CacheControl = meta.CacheControl;
+            existing.Vary = meta.Vary;
+            existing.ContentEncoding = meta.ContentEncoding;
+            existing.LinkHeader = meta.LinkHeader;
+            existing.HasHsts = meta.HasHsts;
+            
+            var updated = await urlRepository.UpdateAsync(existing).ConfigureAwait(false);
+            
+            // Delete and recreate hreflangs and structured data
+            await hreflangRepository.DeleteByUrlIdAsync(updated.Id).ConfigureAwait(false);
+            await structuredDataRepository.DeleteByUrlIdAsync(updated.Id).ConfigureAwait(false);
+            
+            await SaveHreflangsAsync(updated.Id, meta.Hreflangs, hreflangRepository).ConfigureAwait(false);
+            await SaveStructuredDataAsync(updated.Id, meta.StructuredData, structuredDataRepository).ConfigureAwait(false);
+            
+            return updated;
         }
 
         var uri = new Uri(queueItem.Address);
@@ -595,11 +645,47 @@ public class CrawlEngine(
             HttpStatus = fetchResult.StatusCode,
             ContentType = fetchResult.ContentType,
             ContentLength = fetchResult.ContentLength,
-            Title = title,
-            MetaDescription = metaDescription,
-            CanonicalUrl = canonical,
-            MetaRobots = metaRobots,
-            RedirectTarget = fetchResult.RedirectTarget
+            RobotsAllowed = robotsAllowed,
+            
+            // Basic meta
+            Title = meta.Title,
+            MetaDescription = meta.MetaDescription,
+            CanonicalUrl = meta.CanonicalUrl,
+            MetaRobots = meta.MetaRobots,
+            RedirectTarget = fetchResult.RedirectTarget,
+            
+            // Enhanced canonical
+            CanonicalHtml = meta.CanonicalHtml,
+            CanonicalHttp = meta.CanonicalHttp,
+            HasMultipleCanonicals = meta.HasMultipleCanonicals,
+            HasCrossDomainCanonical = meta.HasCrossDomainCanonical,
+            CanonicalIssues = meta.CanonicalIssues,
+            
+            // Parsed robots
+            RobotsNoindex = meta.RobotsNoindex,
+            RobotsNofollow = meta.RobotsNofollow,
+            RobotsNoarchive = meta.RobotsNoarchive,
+            RobotsNosnippet = meta.RobotsNosnippet,
+            RobotsNoimageindex = meta.RobotsNoimageindex,
+            RobotsSource = meta.RobotsSource,
+            XRobotsTag = meta.XRobotsTag,
+            HasRobotsConflict = meta.HasRobotsConflict,
+            
+            // Language
+            HtmlLang = meta.HtmlLang,
+            ContentLanguageHeader = meta.ContentLanguageHeader,
+            
+            // Meta refresh
+            HasMetaRefresh = meta.HasMetaRefresh,
+            MetaRefreshDelay = meta.MetaRefreshDelay,
+            MetaRefreshTarget = meta.MetaRefreshTarget,
+            
+            // HTTP headers
+            CacheControl = meta.CacheControl,
+            Vary = meta.Vary,
+            ContentEncoding = meta.ContentEncoding,
+            LinkHeader = meta.LinkHeader,
+            HasHsts = meta.HasHsts
         };
 
         // Save headers
@@ -612,7 +698,46 @@ public class CrawlEngine(
             });
         }
 
-        return await urlRepository.CreateAsync(url);
+        var created = await urlRepository.CreateAsync(url).ConfigureAwait(false);
+        
+        // Save hreflangs and structured data
+        await SaveHreflangsAsync(created.Id, meta.Hreflangs, hreflangRepository).ConfigureAwait(false);
+        await SaveStructuredDataAsync(created.Id, meta.StructuredData, structuredDataRepository).ConfigureAwait(false);
+        
+        return created;
+    }
+    
+    private async Task SaveHreflangsAsync(int urlId, List<HreflangData> hreflangs, IHreflangRepository repository)
+    {
+        if (hreflangs.Count == 0) return;
+        
+        var entities = hreflangs.Select(h => new Hreflang
+        {
+            UrlId = urlId,
+            LanguageCode = h.LanguageCode,
+            TargetUrl = h.TargetUrl,
+            Source = h.Source,
+            IsXDefault = h.IsXDefault
+        }).ToList();
+        
+        await repository.CreateBatchAsync(entities).ConfigureAwait(false);
+    }
+    
+    private async Task SaveStructuredDataAsync(int urlId, List<StructuredDataInfo> structuredData, IStructuredDataRepository repository)
+    {
+        if (structuredData.Count == 0) return;
+        
+        var entities = structuredData.Select(sd => new StructuredData
+        {
+            UrlId = urlId,
+            Type = sd.Type,
+            SchemaType = sd.SchemaType,
+            RawData = sd.RawData,
+            IsValid = sd.IsValid,
+            ValidationErrors = sd.ValidationErrors
+        }).ToList();
+        
+        await repository.CreateBatchAsync(entities).ConfigureAwait(false);
     }
 
     private async Task SaveRedirectChainAsync(int urlId, List<RedirectHop> redirectChain)
@@ -644,11 +769,13 @@ public class CrawlEngine(
         }
     }
 
-    private (string? title, string? metaDescription, string? canonical, string? metaRobots) ExtractMetaFromHtml(string? html)
+    private EnhancedMetaData ExtractMetaFromHtml(string? html, Dictionary<string, string> headers, string currentUrl)
     {
+        var result = new EnhancedMetaData();
+        
         if (string.IsNullOrEmpty(html))
         {
-            return (null, null, null, null);
+            return result;
         }
 
         try
@@ -656,28 +783,329 @@ public class CrawlEngine(
             var doc = new HtmlAgilityPack.HtmlDocument();
             doc.LoadHtml(html);
 
-            var title = doc.DocumentNode.SelectSingleNode("//title")?.InnerText?.Trim();
-            var metaDescription = doc.DocumentNode.SelectSingleNode("//meta[@name='description']")?.GetAttributeValue("content", "")?.Trim();
-            var canonical = doc.DocumentNode.SelectSingleNode("//link[@rel='canonical']")?.GetAttributeValue("href", "")?.Trim();
-            var metaRobots = doc.DocumentNode.SelectSingleNode("//meta[@name='robots']")?.GetAttributeValue("content", "")?.Trim();
-
-            return (
-                string.IsNullOrEmpty(title) ? null : title,
-                string.IsNullOrEmpty(metaDescription) ? null : metaDescription,
-                string.IsNullOrEmpty(canonical) ? null : canonical,
-                string.IsNullOrEmpty(metaRobots) ? null : metaRobots
-            );
+            // Basic meta
+            result.Title = doc.DocumentNode.SelectSingleNode("//title")?.InnerText?.Trim();
+            result.MetaDescription = doc.DocumentNode.SelectSingleNode("//meta[@name='description']")?.GetAttributeValue("content", "")?.Trim();
+            
+            // Enhanced canonical detection
+            ExtractCanonicals(doc, headers, currentUrl, result);
+            
+            // Parse robots directives
+            ParseRobotsDirectives(doc, headers, result);
+            
+            // Language attributes
+            result.HtmlLang = doc.DocumentNode.SelectSingleNode("//html")?.GetAttributeValue("lang", "")?.Trim();
+            if (headers.TryGetValue("content-language", out var contentLang))
+            {
+                result.ContentLanguageHeader = contentLang;
+            }
+            
+            // Meta refresh
+            ParseMetaRefresh(doc, result);
+            
+            // Extract HTTP headers
+            ExtractSpecialHeaders(headers, result);
+            
+            // Extract hreflangs
+            result.Hreflangs = ExtractHreflangs(doc, headers, currentUrl);
+            
+            // Extract structured data
+            result.StructuredData = ExtractStructuredData(doc);
+            
+            return result;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error extracting meta information from HTML");
-            return (null, null, null, null);
+            return result;
+        }
+    }
+    
+    private void ExtractCanonicals(HtmlAgilityPack.HtmlDocument doc, Dictionary<string, string> headers, string currentUrl, EnhancedMetaData result)
+    {
+        // Extract all HTML canonicals
+        var canonicalNodes = doc.DocumentNode.SelectNodes("//link[@rel='canonical']");
+        if (canonicalNodes != null)
+        {
+            result.CanonicalHtml = canonicalNodes.First()?.GetAttributeValue("href", "")?.Trim();
+            result.HasMultipleCanonicals = canonicalNodes.Count > 1;
+            
+            if (!string.IsNullOrEmpty(result.CanonicalHtml))
+            {
+                result.CanonicalHtml = ResolveUrl(result.CanonicalHtml, currentUrl);
+                
+                // Check if cross-domain
+                try
+                {
+                    var currentUri = new Uri(currentUrl);
+                    var canonicalUri = new Uri(result.CanonicalHtml);
+                    result.HasCrossDomainCanonical = !string.Equals(currentUri.Host, canonicalUri.Host, StringComparison.OrdinalIgnoreCase);
+                }
+                catch (UriFormatException)
+                {
+                    // Invalid URI format, skip cross-domain check
+                }
+            }
+        }
+        
+        // Extract HTTP Link header canonical
+        if (headers.TryGetValue("link", out var linkHeader))
+        {
+            result.LinkHeader = linkHeader;
+            var canonicalMatch = System.Text.RegularExpressions.Regex.Match(linkHeader, @"<([^>]+)>;\s*rel=[""']?canonical[""']?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (canonicalMatch.Success)
+            {
+                result.CanonicalHttp = ResolveUrl(canonicalMatch.Groups[1].Value, currentUrl);
+            }
+        }
+        
+        // Validate issues
+        var issues = new List<string>();
+        if (result.HasMultipleCanonicals)
+        {
+            issues.Add("Multiple canonical tags in HTML");
+        }
+        if (!string.IsNullOrEmpty(result.CanonicalHtml) && !string.IsNullOrEmpty(result.CanonicalHttp) && 
+            !string.Equals(result.CanonicalHtml, result.CanonicalHttp, StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add("HTML and HTTP canonical differ");
+        }
+        
+        if (issues.Any())
+        {
+            result.CanonicalIssues = System.Text.Json.JsonSerializer.Serialize(issues);
+        }
+        
+        // Set deprecated field for backward compatibility
+        result.CanonicalUrl = result.CanonicalHtml ?? result.CanonicalHttp;
+    }
+    
+    private void ParseRobotsDirectives(HtmlAgilityPack.HtmlDocument doc, Dictionary<string, string> headers, EnhancedMetaData result)
+    {
+        var metaRobots = doc.DocumentNode.SelectSingleNode("//meta[@name='robots']")?.GetAttributeValue("content", "")?.Trim();
+        var xRobotsTag = headers.TryGetValue("x-robots-tag", out var xrt) ? xrt : null;
+        
+        result.MetaRobots = metaRobots; // Keep for backward compatibility
+        result.XRobotsTag = xRobotsTag;
+        
+        // Parse directives from both sources
+        var metaDirectives = ParseRobotsString(metaRobots);
+        var httpDirectives = ParseRobotsString(xRobotsTag);
+        
+        // Apply conflict resolution: most restrictive wins
+        result.RobotsNoindex = CombineRobotsFlags(metaDirectives.Noindex, httpDirectives.Noindex);
+        result.RobotsNofollow = CombineRobotsFlags(metaDirectives.Nofollow, httpDirectives.Nofollow);
+        result.RobotsNoarchive = CombineRobotsFlags(metaDirectives.Noarchive, httpDirectives.Noarchive);
+        result.RobotsNosnippet = CombineRobotsFlags(metaDirectives.Nosnippet, httpDirectives.Nosnippet);
+        result.RobotsNoimageindex = CombineRobotsFlags(metaDirectives.Noimageindex, httpDirectives.Noimageindex);
+        
+        // Determine source
+        if (!string.IsNullOrEmpty(metaRobots) && !string.IsNullOrEmpty(xRobotsTag))
+        {
+            result.RobotsSource = "both";
+            result.HasRobotsConflict = HasRobotsConflict(metaDirectives, httpDirectives);
+        }
+        else if (!string.IsNullOrEmpty(metaRobots))
+        {
+            result.RobotsSource = "meta";
+        }
+        else if (!string.IsNullOrEmpty(xRobotsTag))
+        {
+            result.RobotsSource = "http";
+        }
+    }
+    
+    private RobotsDirectives ParseRobotsString(string? robotsString)
+    {
+        var directives = new RobotsDirectives();
+        if (string.IsNullOrEmpty(robotsString)) return directives;
+        
+        var lower = robotsString.ToLowerInvariant();
+        
+        // Handle special "none" directive (equivalent to "noindex, nofollow")
+        // Use word boundary check to avoid false positives
+        if (System.Text.RegularExpressions.Regex.IsMatch(lower, @"\bnone\b"))
+        {
+            directives.Noindex = true;
+            directives.Nofollow = true;
+            return directives;
+        }
+        
+        // Handle individual directives (use word boundaries for precision)
+        directives.Noindex = System.Text.RegularExpressions.Regex.IsMatch(lower, @"\bnoindex\b");
+        directives.Nofollow = System.Text.RegularExpressions.Regex.IsMatch(lower, @"\bnofollow\b");
+        directives.Noarchive = System.Text.RegularExpressions.Regex.IsMatch(lower, @"\bnoarchive\b");
+        directives.Nosnippet = System.Text.RegularExpressions.Regex.IsMatch(lower, @"\bnosnippet\b");
+        directives.Noimageindex = System.Text.RegularExpressions.Regex.IsMatch(lower, @"\bnoimageindex\b");
+        
+        return directives;
+    }
+    
+    private bool? CombineRobotsFlags(bool metaValue, bool httpValue)
+    {
+        // Most restrictive wins: if either says no, it's no
+        if (metaValue || httpValue) return true;
+        if (!metaValue && !httpValue) return false;
+        return null;
+    }
+    
+    private bool HasRobotsConflict(RobotsDirectives meta, RobotsDirectives http)
+    {
+        return meta.Noindex != http.Noindex ||
+               meta.Nofollow != http.Nofollow ||
+               meta.Noarchive != http.Noarchive ||
+               meta.Nosnippet != http.Nosnippet ||
+               meta.Noimageindex != http.Noimageindex;
+    }
+    
+    private void ParseMetaRefresh(HtmlAgilityPack.HtmlDocument doc, EnhancedMetaData result)
+    {
+        var metaRefresh = doc.DocumentNode.SelectSingleNode("//meta[@http-equiv='refresh']");
+        if (metaRefresh != null)
+        {
+            var content = metaRefresh.GetAttributeValue("content", "");
+            var match = System.Text.RegularExpressions.Regex.Match(content, @"(\d+)\s*;\s*url=(.+?)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (match.Success && int.TryParse(match.Groups[1].Value, out var delay))
+            {
+                result.HasMetaRefresh = true;
+                result.MetaRefreshDelay = delay;
+                result.MetaRefreshTarget = match.Groups[2].Value.Trim();
+            }
+        }
+    }
+    
+    private void ExtractSpecialHeaders(Dictionary<string, string> headers, EnhancedMetaData result)
+    {
+        if (headers.TryGetValue("cache-control", out var cacheControl))
+            result.CacheControl = cacheControl;
+        
+        if (headers.TryGetValue("vary", out var vary))
+            result.Vary = vary;
+        
+        if (headers.TryGetValue("content-encoding", out var encoding))
+            result.ContentEncoding = encoding;
+        
+        if (headers.TryGetValue("strict-transport-security", out var hsts))
+            result.HasHsts = true;
+    }
+    
+    private List<HreflangData> ExtractHreflangs(HtmlAgilityPack.HtmlDocument doc, Dictionary<string, string> headers, string currentUrl)
+    {
+        var hreflangs = new List<HreflangData>();
+        
+        // Extract from HTML
+        var hreflangNodes = doc.DocumentNode.SelectNodes("//link[@rel='alternate'][@hreflang]");
+        if (hreflangNodes != null)
+        {
+            foreach (var node in hreflangNodes)
+            {
+                var lang = node.GetAttributeValue("hreflang", "");
+                var href = node.GetAttributeValue("href", "");
+                if (!string.IsNullOrEmpty(lang) && !string.IsNullOrEmpty(href))
+                {
+                    hreflangs.Add(new HreflangData
+                    {
+                        LanguageCode = lang,
+                        TargetUrl = ResolveUrl(href, currentUrl),
+                        Source = "html",
+                        IsXDefault = lang.Equals("x-default", StringComparison.OrdinalIgnoreCase)
+                    });
+                }
+            }
+        }
+        
+        // Extract from HTTP Link header
+        if (headers.TryGetValue("link", out var linkHeader))
+        {
+            var hreflangMatches = System.Text.RegularExpressions.Regex.Matches(linkHeader, 
+                @"<([^>]+)>;\s*rel=[""']?alternate[""']?;\s*hreflang=[""']?([^""';,\s]+)[""']?", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            
+            foreach (System.Text.RegularExpressions.Match match in hreflangMatches)
+            {
+                hreflangs.Add(new HreflangData
+                {
+                    LanguageCode = match.Groups[2].Value,
+                    TargetUrl = ResolveUrl(match.Groups[1].Value, currentUrl),
+                    Source = "http",
+                    IsXDefault = match.Groups[2].Value.Equals("x-default", StringComparison.OrdinalIgnoreCase)
+                });
+            }
+        }
+        
+        return hreflangs;
+    }
+    
+    private List<StructuredDataInfo> ExtractStructuredData(HtmlAgilityPack.HtmlDocument doc)
+    {
+        var result = new List<StructuredDataInfo>();
+        
+        // Extract JSON-LD
+        var jsonLdNodes = doc.DocumentNode.SelectNodes("//script[@type='application/ld+json']");
+        if (jsonLdNodes != null)
+        {
+            foreach (var node in jsonLdNodes)
+            {
+                var json = node.InnerText?.Trim();
+                if (!string.IsNullOrEmpty(json))
+                {
+                    try
+                    {
+                        using var jsonDoc = System.Text.Json.JsonDocument.Parse(json);
+                        var type = jsonDoc.RootElement.TryGetProperty("@type", out var typeEl) ? typeEl.GetString() : "Unknown";
+                        
+                        result.Add(new StructuredDataInfo
+                        {
+                            Type = "json-ld",
+                            SchemaType = type ?? "Unknown",
+                            RawData = json,
+                            IsValid = true
+                        });
+                    }
+                    catch (System.Text.Json.JsonException)
+                    {
+                        result.Add(new StructuredDataInfo
+                        {
+                            Type = "json-ld",
+                            SchemaType = "Unknown",
+                            RawData = json,
+                            IsValid = false,
+                            ValidationErrors = "Invalid JSON"
+                        });
+                    }
+                }
+            }
+        }
+        
+        return result;
+    }
+    
+    private string ResolveUrl(string url, string baseUrl)
+    {
+        try
+        {
+            if (Uri.TryCreate(url, UriKind.Absolute, out var absoluteUri))
+            {
+                return absoluteUri.ToString();
+            }
+            
+            if (Uri.TryCreate(new Uri(baseUrl), url, out var resolvedUri))
+            {
+                return resolvedUri.ToString();
+            }
+            
+            return url;
+        }
+        catch (UriFormatException)
+        {
+            // Invalid URI format, return as-is
+            return url;
         }
     }
 
     private async Task ProcessLinksAsync(int projectId, Url fromUrl, string htmlContent, string currentPageUrl, int currentDepth, string projectBaseUrl)
     {
-        var extractedLinks = await _linkExtractor.ExtractLinksAsync(htmlContent, currentPageUrl);
+        var extractedLinks = await _linkExtractor.ExtractLinksAsync(htmlContent, currentPageUrl).ConfigureAwait(false);
         var projectBaseUri = new Uri(projectBaseUrl);
 
         foreach (var link in extractedLinks)
@@ -707,7 +1135,7 @@ public class CrawlEngine(
                 var linkRepository = scope.ServiceProvider.GetRequiredService<ILinkRepository>();
                 
                 // Get or create the target URL
-                var toUrl = await urlRepository.GetByAddressAsync(projectId, link.Url);
+                var toUrl = await urlRepository.GetByAddressAsync(projectId, link.Url).ConfigureAwait(false);
                 if (toUrl == null)
                 {
                     // URL hasn't been crawled yet, create a pending entry
@@ -725,9 +1153,15 @@ public class CrawlEngine(
                         Status = UrlStatus.Pending,
                         DiscoveredFromUrlId = fromUrl.Id
                     };
-                    toUrl = await urlRepository.CreateAsync(toUrl);
+                    toUrl = await urlRepository.CreateAsync(toUrl).ConfigureAwait(false);
                 }
 
+                // Parse rel attribute
+                var rel = link.RelAttribute ?? string.Empty;
+                var isNofollow = rel.Contains("nofollow", StringComparison.OrdinalIgnoreCase);
+                var isUgc = rel.Contains("ugc", StringComparison.OrdinalIgnoreCase);
+                var isSponsored = rel.Contains("sponsored", StringComparison.OrdinalIgnoreCase);
+                
                 // Create link relationship
                 var linkEntity = new Link
                 {
@@ -735,7 +1169,11 @@ public class CrawlEngine(
                     FromUrlId = fromUrl.Id,
                     ToUrlId = toUrl.Id,
                     AnchorText = link.AnchorText,
-                    LinkType = link.LinkType
+                    LinkType = link.LinkType,
+                    RelAttribute = link.RelAttribute,
+                    IsNofollow = isNofollow,
+                    IsUgc = isUgc,
+                    IsSponsored = isSponsored
                 };
                 await linkRepository.CreateAsync(linkEntity).ConfigureAwait(false);
             }
@@ -776,7 +1214,7 @@ public class CrawlEngine(
             var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
             
             // Check if URL already exists
-            var existing = await urlRepository.GetByAddressAsync(projectId, url);
+            var existing = await urlRepository.GetByAddressAsync(projectId, url).ConfigureAwait(false);
             if (existing != null)
             {
                 _logger.LogDebug("URL already exists, skipping: {Url}", url);
@@ -1008,6 +1446,77 @@ public class CrawlEngine(
         public string ToUrl { get; set; } = string.Empty;
         public int StatusCode { get; set; }
         public int Position { get; set; }
+    }
+    
+    private class EnhancedMetaData
+    {
+        public string? Title { get; set; }
+        public string? MetaDescription { get; set; }
+        public string? CanonicalUrl { get; set; } // Deprecated
+        public string? MetaRobots { get; set; } // Deprecated
+        
+        // Enhanced canonical
+        public string? CanonicalHtml { get; set; }
+        public string? CanonicalHttp { get; set; }
+        public bool HasMultipleCanonicals { get; set; }
+        public bool HasCrossDomainCanonical { get; set; }
+        public string? CanonicalIssues { get; set; }
+        
+        // Parsed robots
+        public bool? RobotsNoindex { get; set; }
+        public bool? RobotsNofollow { get; set; }
+        public bool? RobotsNoarchive { get; set; }
+        public bool? RobotsNosnippet { get; set; }
+        public bool? RobotsNoimageindex { get; set; }
+        public string? RobotsSource { get; set; }
+        public string? XRobotsTag { get; set; }
+        public bool HasRobotsConflict { get; set; }
+        
+        // Language
+        public string? HtmlLang { get; set; }
+        public string? ContentLanguageHeader { get; set; }
+        
+        // Meta refresh
+        public bool HasMetaRefresh { get; set; }
+        public int? MetaRefreshDelay { get; set; }
+        public string? MetaRefreshTarget { get; set; }
+        
+        // HTTP headers
+        public string? CacheControl { get; set; }
+        public string? Vary { get; set; }
+        public string? ContentEncoding { get; set; }
+        public string? LinkHeader { get; set; }
+        public bool HasHsts { get; set; }
+        
+        // Collections
+        public List<HreflangData> Hreflangs { get; set; } = new();
+        public List<StructuredDataInfo> StructuredData { get; set; } = new();
+    }
+    
+    private class RobotsDirectives
+    {
+        public bool Noindex { get; set; }
+        public bool Nofollow { get; set; }
+        public bool Noarchive { get; set; }
+        public bool Nosnippet { get; set; }
+        public bool Noimageindex { get; set; }
+    }
+    
+    private class HreflangData
+    {
+        public string LanguageCode { get; set; } = string.Empty;
+        public string TargetUrl { get; set; } = string.Empty;
+        public string Source { get; set; } = string.Empty;
+        public bool IsXDefault { get; set; }
+    }
+    
+    private class StructuredDataInfo
+    {
+        public string Type { get; set; } = string.Empty;
+        public string SchemaType { get; set; } = string.Empty;
+        public string RawData { get; set; } = string.Empty;
+        public bool IsValid { get; set; }
+        public string? ValidationErrors { get; set; }
     }
 }
 

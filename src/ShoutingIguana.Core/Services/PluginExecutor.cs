@@ -51,7 +51,7 @@ public class PluginExecutor(
             HttpResponse: null, // We don't pass HttpResponse in Stage 2
             RenderedHtml: renderedHtml,
             Headers: headers,
-            Project: new PluginSdk.ProjectSettings(
+            Project: new ProjectSettings(
                 ProjectId: projectId,
                 BaseUrl: projectSettings.BaseUrl,
                 MaxDepth: projectSettings.MaxCrawlDepth,
@@ -63,7 +63,19 @@ public class PluginExecutor(
                 ContentType: urlEntity.ContentType,
                 ContentLength: urlEntity.ContentLength,
                 Depth: urlEntity.Depth,
-                CrawledUtc: urlEntity.LastCrawledUtc ?? DateTime.UtcNow),
+                CrawledUtc: urlEntity.LastCrawledUtc ?? DateTime.UtcNow,
+                CanonicalHtml: urlEntity.CanonicalHtml,
+                CanonicalHttp: urlEntity.CanonicalHttp,
+                HasMultipleCanonicals: urlEntity.HasMultipleCanonicals,
+                HasCrossDomainCanonical: urlEntity.HasCrossDomainCanonical,
+                RobotsNoindex: urlEntity.RobotsNoindex,
+                RobotsNofollow: urlEntity.RobotsNofollow,
+                XRobotsTag: urlEntity.XRobotsTag,
+                HasRobotsConflict: urlEntity.HasRobotsConflict,
+                HasMetaRefresh: urlEntity.HasMetaRefresh,
+                MetaRefreshDelay: urlEntity.MetaRefreshDelay,
+                MetaRefreshTarget: urlEntity.MetaRefreshTarget,
+                HtmlLang: urlEntity.HtmlLang),
             Findings: findingSink,
             Enqueue: new UrlEnqueueStub(), // Not implemented in Stage 2
             Logger: _logger);

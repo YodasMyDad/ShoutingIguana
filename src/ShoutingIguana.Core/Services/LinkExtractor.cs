@@ -29,11 +29,13 @@ public class LinkExtractor : ILinkExtractor
                     var resolvedUrl = ResolveUrl(href, baseUri);
                     if (resolvedUrl != null)
                     {
+                        var rel = node.GetAttributeValue("rel", string.Empty);
                         links.Add(new ExtractedLink
                         {
                             Url = resolvedUrl,
                             AnchorText = node.InnerText.Trim(),
-                            LinkType = LinkType.Hyperlink
+                            LinkType = LinkType.Hyperlink,
+                            RelAttribute = string.IsNullOrEmpty(rel) ? null : rel
                         });
                     }
                 }

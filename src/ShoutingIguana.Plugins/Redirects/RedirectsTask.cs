@@ -1,4 +1,3 @@
-using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using System.Text.RegularExpressions;
@@ -30,10 +29,10 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                 await AnalyzeHttpRedirectAsync(ctx);
             }
             
-            // Check for meta refresh redirects (even on 200 OK pages)
-            if (statusCode == 200 && !string.IsNullOrEmpty(ctx.RenderedHtml))
+            // Check for meta refresh redirects (even on 200 OK pages) - using crawler-parsed data
+            if (statusCode == 200 && ctx.Metadata.HasMetaRefresh)
             {
-                await CheckMetaRefreshAsync(ctx);
+                await ReportMetaRefreshAsync(ctx);
             }
             
             // Check for JavaScript redirects (on any successful page)
@@ -51,7 +50,7 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
     private async Task AnalyzeHttpRedirectAsync(UrlContext ctx)
     {
         var statusCode = ctx.Metadata.StatusCode;
-        var location = ctx.Headers.ContainsKey("Location") ? ctx.Headers["Location"] : null;
+        var location = ctx.Headers.TryGetValue("location", out var loc) ? loc : null;
         
         if (string.IsNullOrEmpty(location))
         {
@@ -186,39 +185,24 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
         }
     }
 
-    private async Task CheckMetaRefreshAsync(UrlContext ctx)
+    private async Task ReportMetaRefreshAsync(UrlContext ctx)
     {
-        var doc = new HtmlDocument();
-        doc.LoadHtml(ctx.RenderedHtml!);
+        // Use crawler-parsed meta refresh data
+        var delay = ctx.Metadata.MetaRefreshDelay ?? 0;
+        var targetUrl = ctx.Metadata.MetaRefreshTarget ?? "unknown";
 
-        var metaRefreshNode = doc.DocumentNode.SelectSingleNode("//meta[@http-equiv='refresh']");
-        if (metaRefreshNode != null)
-        {
-            var content = metaRefreshNode.GetAttributeValue("content", "");
-            if (!string.IsNullOrEmpty(content))
+        await ctx.Findings.ReportAsync(
+            Key,
+            Severity.Warning,
+            "META_REFRESH_REDIRECT",
+            $"Page uses meta refresh redirect (not SEO-friendly): {targetUrl}",
+            new
             {
-                // Parse meta refresh: "0;url=http://example.com"
-                var match = Regex.Match(content, @"(\d+)\s*;\s*url=(.+)", RegexOptions.IgnoreCase);
-                if (match.Success)
-                {
-                    var delay = int.Parse(match.Groups[1].Value);
-                    var targetUrl = match.Groups[2].Value.Trim();
-
-                    await ctx.Findings.ReportAsync(
-                        Key,
-                        Severity.Warning,
-                        "META_REFRESH_REDIRECT",
-                        $"Page uses meta refresh redirect (not SEO-friendly): {targetUrl}",
-                        new
-                        {
-                            url = ctx.Url.ToString(),
-                            targetUrl,
-                            delay,
-                            recommendation = "Use HTTP 301/302 redirects instead of meta refresh"
-                        });
-                }
-            }
-        }
+                url = ctx.Url.ToString(),
+                targetUrl,
+                delay,
+                recommendation = "Use HTTP 301/302 redirects instead of meta refresh"
+            });
     }
 
     private async Task CheckJavaScriptRedirectAsync(UrlContext ctx)

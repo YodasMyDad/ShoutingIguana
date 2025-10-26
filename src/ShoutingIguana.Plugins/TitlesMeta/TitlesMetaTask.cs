@@ -45,11 +45,9 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
             var doc = new HtmlDocument();
             doc.LoadHtml(ctx.RenderedHtml);
 
-            // Extract basic meta elements
+            // Extract basic meta elements (crawler already parsed canonical and robots)
             var title = ExtractTitle(doc);
             var description = ExtractMetaDescription(doc);
-            var canonical = ExtractCanonical(doc);
-            var robots = ExtractMetaRobots(doc);
             var viewport = ExtractViewport(doc);
             var charset = ExtractCharset(doc);
             var language = ExtractLanguage(doc);
@@ -63,11 +61,11 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
             // Analyze description
             await AnalyzeDescriptionAsync(ctx, description);
             
-            // Analyze canonical
-            await AnalyzeCanonicalAsync(ctx, canonical);
+            // Analyze canonical (using crawler-parsed data)
+            await AnalyzeCanonicalAsync(ctx);
             
-            // Analyze robots meta
-            await AnalyzeRobotsAsync(ctx, robots);
+            // Analyze robots meta (using crawler-parsed data)
+            await AnalyzeRobotsAsync(ctx);
             
             // Analyze viewport
             await AnalyzeViewportAsync(ctx, viewport);
@@ -108,17 +106,6 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
         return descNode?.GetAttributeValue("content", "")?.Trim() ?? "";
     }
 
-    private string ExtractCanonical(HtmlDocument doc)
-    {
-        var canonicalNode = doc.DocumentNode.SelectSingleNode("//link[@rel='canonical']");
-        return canonicalNode?.GetAttributeValue("href", "")?.Trim() ?? "";
-    }
-
-    private string ExtractMetaRobots(HtmlDocument doc)
-    {
-        var robotsNode = doc.DocumentNode.SelectSingleNode("//meta[@name='robots']");
-        return robotsNode?.GetAttributeValue("content", "")?.Trim() ?? "";
-    }
 
     private string ExtractViewport(HtmlDocument doc)
     {
@@ -323,15 +310,51 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
         }
     }
 
-    private async Task AnalyzeCanonicalAsync(UrlContext ctx, string canonical)
+    private async Task AnalyzeCanonicalAsync(UrlContext ctx)
     {
+        // Use crawler-parsed canonical data
+        var canonical = ctx.Metadata.CanonicalHtml ?? ctx.Metadata.CanonicalHttp;
+        
+        // Report multiple canonicals (crawler detected this)
+        if (ctx.Metadata.HasMultipleCanonicals)
+        {
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Error,
+                "MULTIPLE_CANONICALS",
+                "Page has multiple canonical tags",
+                new
+                {
+                    url = ctx.Url.ToString(),
+                    canonicalHtml = ctx.Metadata.CanonicalHtml,
+                    canonicalHttp = ctx.Metadata.CanonicalHttp,
+                    recommendation = "Remove duplicate canonical tags - only one should be present"
+                });
+        }
+        
+        // Report cross-domain canonical
+        if (ctx.Metadata.HasCrossDomainCanonical)
+        {
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Warning,
+                "CROSS_DOMAIN_CANONICAL",
+                $"Page canonical points to different domain: {canonical}",
+                new
+                {
+                    url = ctx.Url.ToString(),
+                    canonical,
+                    note = "Cross-domain canonicals are valid for syndicated content but should be used carefully"
+                });
+        }
+        
         if (!string.IsNullOrEmpty(canonical))
         {
-            // Check if canonical points to a different URL
+            // Check if canonical points to a different URL (same domain)
             var normalizedCurrent = NormalizeUrl(ctx.Url.ToString());
             var normalizedCanonical = NormalizeUrl(canonical);
 
-            if (normalizedCurrent != normalizedCanonical)
+            if (normalizedCurrent != normalizedCanonical && !ctx.Metadata.HasCrossDomainCanonical)
             {
                 await ctx.Findings.ReportAsync(
                     Key,
@@ -348,29 +371,56 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
         }
     }
 
-    private async Task AnalyzeRobotsAsync(UrlContext ctx, string robots)
+    private async Task AnalyzeRobotsAsync(UrlContext ctx)
     {
-        if (!string.IsNullOrEmpty(robots))
+        // Use crawler-parsed robots data
+        if (ctx.Metadata.RobotsNoindex == true)
         {
-            if (robots.Contains("noindex", StringComparison.OrdinalIgnoreCase))
-            {
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "NOINDEX_DETECTED",
-                    "Page has noindex directive (will not be indexed by search engines)",
-                    new { url = ctx.Url.ToString(), robots });
-            }
+            var source = ctx.Metadata.HasRobotsConflict ? "conflicting directives (most restrictive applied)" : 
+                         !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) ? "X-Robots-Tag header" : "meta robots tag";
+            
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Warning,
+                "NOINDEX_DETECTED",
+                $"Page has noindex directive (will not be indexed by search engines) - Source: {source}",
+                new 
+                { 
+                    url = ctx.Url.ToString(), 
+                    xRobotsTag = ctx.Metadata.XRobotsTag,
+                    hasConflict = ctx.Metadata.HasRobotsConflict
+                });
+        }
 
-            if (robots.Contains("nofollow", StringComparison.OrdinalIgnoreCase))
-            {
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "NOFOLLOW_DETECTED",
-                    "Page has nofollow directive (links will not pass equity)",
-                    new { url = ctx.Url.ToString(), robots });
-            }
+        if (ctx.Metadata.RobotsNofollow == true)
+        {
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Info,
+                "NOFOLLOW_DETECTED",
+                "Page has nofollow directive (links will not pass equity)",
+                new 
+                { 
+                    url = ctx.Url.ToString(),
+                    xRobotsTag = ctx.Metadata.XRobotsTag,
+                    hasConflict = ctx.Metadata.HasRobotsConflict
+                });
+        }
+        
+        // Report robots conflicts if detected
+        if (ctx.Metadata.HasRobotsConflict)
+        {
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Warning,
+                "ROBOTS_CONFLICT",
+                "Meta robots and X-Robots-Tag header have conflicting directives",
+                new 
+                { 
+                    url = ctx.Url.ToString(),
+                    xRobotsTag = ctx.Metadata.XRobotsTag,
+                    note = "Most restrictive directive takes precedence"
+                });
         }
     }
 
