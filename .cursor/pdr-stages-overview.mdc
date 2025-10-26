@@ -252,6 +252,7 @@ Attempting to build everything at once would be overwhelming and risky. Breaking
 
 ### Stage 3 Testing Checklist
 - [ ] Can install plugin from NuGet without restart
+- [ ] Plugin validation blocks non-plugin packages
 - [ ] Plugin loads and executes immediately
 - [ ] Can uninstall plugin, files deleted, ALC unloaded
 - [ ] All 13 plugins generate correct findings

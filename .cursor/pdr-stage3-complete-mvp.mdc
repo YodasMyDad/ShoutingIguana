@@ -101,17 +101,23 @@ This stage completes the MVP by adding:
   2. Show confirmation dialog with permissions/capabilities
   3. Download `.nupkg` file to temp
   4. Verify package integrity (hash check)
-  5. Extract to extensions folder
-  6. Load plugin via ALC (hot-load)
-  7. Show success notification
-  8. Plugin appears in Extensions Manager as "Enabled"
+  5. **Validate package contains plugin**
+     - Extract assemblies from `.nupkg`
+     - Use reflection to scan for types implementing `IPlugin`
+     - If no plugin found → show error "Package does not contain a valid Shouting Iguana plugin", block installation
+     - If plugin found → verify `[Plugin]` attribute and SDK compatibility
+  6. Extract to extensions folder (only if validation passed)
+  7. Load plugin via ALC (hot-load)
+  8. Show success notification
+  9. Plugin appears in Extensions Manager as "Enabled"
   
 - **Progress Reporting**
   - Download progress bar
-  - Status: Downloading, Extracting, Loading, Initializing
+  - Status: Downloading, Extracting, Validating, Loading, Initializing
   
 - **Error Handling**
   - Network errors → retry with exponential backoff
+  - No plugin found in package → show error, block install
   - Incompatible SDK → show error, block install
   - Load failures → show error dialog with logs, rollback
 
@@ -614,6 +620,7 @@ All plugins follow Stage 2 architecture (IPlugin, IUrlTask, IExportProvider).
 - View plugin details (README, version, author)
 - Install plugin from feed
 - Download progress shown
+- Plugin validation: attempt to install non-plugin package → error shown, install blocked
 - Plugin appears in Extensions Manager as installed
 - Check for updates → updates detected
 - Update plugin → old version unloaded, new loaded
