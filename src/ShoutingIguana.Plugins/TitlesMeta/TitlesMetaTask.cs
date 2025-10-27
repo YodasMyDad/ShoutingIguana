@@ -1,4 +1,5 @@
 using HtmlAgilityPack;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using System.Collections.Concurrent;
@@ -9,9 +10,10 @@ namespace ShoutingIguana.Plugins.TitlesMeta;
 /// <summary>
 /// Title, meta, Open Graph, Twitter Cards, and heading structure validation.
 /// </summary>
-public class TitlesMetaTask(ILogger logger) : UrlTaskBase
+public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : UrlTaskBase
 {
     private readonly ILogger _logger = logger;
+    private readonly IServiceProvider _serviceProvider = serviceProvider;
     private const int MIN_TITLE_LENGTH = 30;
     private const int MAX_TITLE_LENGTH = 60;
     private const int MAX_TITLE_WARNING_LENGTH = 70;
@@ -195,7 +197,7 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
         {
             await ctx.Findings.ReportAsync(
                 Key,
-                Severity.Error,
+                Severity.Warning,
                 "TITLE_TOO_LONG",
                 $"Title is too long ({title.Length} chars, will be truncated in search results)",
                 new { url = ctx.Url.ToString(), title, length = title.Length, recommendation = $"Keep titles under {MAX_TITLE_LENGTH} characters" });
@@ -216,28 +218,79 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
             if (projectTitles.TryGetValue(title, out var urls))
             {
                 int duplicateCount;
-                string[] otherUrls;
+                List<string> otherUrls;
                 
                 lock (urls)
                 {
                     duplicateCount = urls.Count;
-                    otherUrls = urls.Where(u => u != ctx.Url.ToString()).Take(5).ToArray();
+                    otherUrls = urls.Where(u => u != ctx.Url.ToString()).Take(5).ToList();
                 }
                 
                 if (duplicateCount > 1)
                 {
-                    await ctx.Findings.ReportAsync(
-                        Key,
-                        Severity.Error,
-                        "DUPLICATE_TITLE",
-                        $"Title \"{title}\" is used on multiple pages",
-                        new
+                    var currentUrl = ctx.Url.ToString();
+                    
+                    // Check if any of these duplicates are actually redirect relationships
+                    var redirectInfo = await CheckRedirectRelationshipsAsync(ctx.Project.ProjectId, currentUrl, otherUrls);
+                    
+                    if (redirectInfo.HasRedirects)
+                    {
+                        // Filter out URLs that have proper permanent redirects
+                        var nonRedirectDuplicates = otherUrls
+                            .Where(url => !redirectInfo.PermanentRedirects.Contains(url))
+                            .ToArray();
+                        
+                        // If we have temporary redirects, report them as warnings
+                        if (redirectInfo.TemporaryRedirects.Any())
                         {
-                            url = ctx.Url.ToString(),
-                            title,
-                            duplicateCount,
-                            otherUrls
-                        });
+                            await ctx.Findings.ReportAsync(
+                                Key,
+                                Severity.Warning,
+                                "DUPLICATE_TITLE_TEMPORARY_REDIRECT",
+                                $"Title \"{title}\" appears on pages with temporary redirect relationship",
+                                new
+                                {
+                                    url = currentUrl,
+                                    title,
+                                    temporaryRedirects = redirectInfo.TemporaryRedirects.ToArray(),
+                                    issue = "Temporary redirects (302/307) don't consolidate duplicate titles for search engines",
+                                    recommendation = "Change to 301 (Permanent) redirects to properly consolidate pages"
+                                });
+                        }
+                        
+                        // Only report true duplicates (no redirect relationship)
+                        if (nonRedirectDuplicates.Length > 0)
+                        {
+                            await ctx.Findings.ReportAsync(
+                                Key,
+                                Severity.Error,
+                                "DUPLICATE_TITLE",
+                                $"Title \"{title}\" is used on multiple pages",
+                                new
+                                {
+                                    url = currentUrl,
+                                    title,
+                                    duplicateCount = nonRedirectDuplicates.Length,
+                                    otherUrls = nonRedirectDuplicates
+                                });
+                        }
+                    }
+                    else
+                    {
+                        // No redirects found, report as regular duplicate
+                        await ctx.Findings.ReportAsync(
+                            Key,
+                            Severity.Error,
+                            "DUPLICATE_TITLE",
+                            $"Title \"{title}\" is used on multiple pages",
+                            new
+                            {
+                                url = currentUrl,
+                                title,
+                                duplicateCount,
+                                otherUrls = otherUrls.ToArray()
+                            });
+                    }
                 }
             }
         }
@@ -741,6 +794,198 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
         var union = words1.Union(words2).Count();
 
         return (double)intersection / union;
+    }
+    
+    /// <summary>
+    /// Check if URLs are in redirect relationships and categorize by redirect type.
+    /// </summary>
+    private async Task<RedirectRelationshipInfo> CheckRedirectRelationshipsAsync(int projectId, string currentUrl, List<string> otherUrls)
+    {
+        var info = new RedirectRelationshipInfo();
+        
+        try
+        {
+            // Get repository types through reflection to avoid direct Core dependency
+            var urlRepoType = Type.GetType("ShoutingIguana.Core.Repositories.IUrlRepository, ShoutingIguana.Core");
+            var redirectRepoType = Type.GetType("ShoutingIguana.Core.Repositories.IRedirectRepository, ShoutingIguana.Core");
+            var urlModelType = Type.GetType("ShoutingIguana.Core.Models.Url, ShoutingIguana.Core");
+            var redirectModelType = Type.GetType("ShoutingIguana.Core.Models.Redirect, ShoutingIguana.Core");
+            
+            if (urlRepoType == null || redirectRepoType == null || urlModelType == null || redirectModelType == null)
+            {
+                _logger.LogDebug("Unable to load repository types for redirect relationship checking");
+                return info;
+            }
+            
+            using var scope = _serviceProvider.CreateScope();
+            var urlRepo = scope.ServiceProvider.GetService(urlRepoType);
+            var redirectRepo = scope.ServiceProvider.GetService(redirectRepoType);
+            
+            if (urlRepo == null || redirectRepo == null)
+            {
+                _logger.LogDebug("Unable to resolve repositories from service provider");
+                return info;
+            }
+            
+            // Get all URLs via reflection
+            var getUrlsMethod = urlRepoType.GetMethod("GetByProjectIdAsync");
+            if (getUrlsMethod == null) return info;
+            
+            var urlsTask = getUrlsMethod.Invoke(urlRepo, new object[] { projectId }) as Task;
+            if (urlsTask == null) return info;
+            
+            await urlsTask.ConfigureAwait(false);
+            var urlsResult = urlsTask.GetType().GetProperty("Result")?.GetValue(urlsTask);
+            if (urlsResult == null) return info;
+            
+            // Build dictionary via reflection (Address property)
+            var urlDict = new Dictionary<string, dynamic>(StringComparer.OrdinalIgnoreCase);
+            var addressProp = urlModelType.GetProperty("Address");
+            
+            if (urlsResult is System.Collections.IEnumerable urlsEnumerable)
+            {
+                foreach (var url in urlsEnumerable)
+                {
+                    var address = addressProp?.GetValue(url) as string;
+                    if (address != null)
+                    {
+                        urlDict[address] = url;
+                    }
+                }
+            }
+            
+            // Get all redirects via reflection
+            var getRedirectsMethod = redirectRepoType.GetMethod("GetByProjectIdAsync");
+            if (getRedirectsMethod == null) return info;
+            
+            var redirectsTask = getRedirectsMethod.Invoke(redirectRepo, new object[] { projectId }) as Task;
+            if (redirectsTask == null) return info;
+            
+            await redirectsTask.ConfigureAwait(false);
+            var redirectsResult = redirectsTask.GetType().GetProperty("Result")?.GetValue(redirectsTask);
+            if (redirectsResult == null) return info;
+            
+            var allRedirects = new List<dynamic>();
+            if (redirectsResult is System.Collections.IEnumerable redirectsEnumerable)
+            {
+                foreach (var redirect in redirectsEnumerable)
+                {
+                    allRedirects.Add(redirect);
+                }
+            }
+            
+            // Get property accessors via reflection
+            var urlIdProp = urlModelType.GetProperty("Id");
+            var redirectUrlIdProp = redirectModelType.GetProperty("UrlId");
+            var redirectToUrlProp = redirectModelType.GetProperty("ToUrl");
+            var redirectStatusCodeProp = redirectModelType.GetProperty("StatusCode");
+            var redirectPositionProp = redirectModelType.GetProperty("Position");
+            
+            // For each other URL, check if there's a redirect relationship
+            foreach (var otherUrl in otherUrls)
+            {
+                // Check if currentUrl redirects to otherUrl
+                if (urlDict.TryGetValue(currentUrl, out var currentUrlEntity))
+                {
+                    var currentUrlId = (int?)urlIdProp?.GetValue(currentUrlEntity);
+                    if (currentUrlId.HasValue)
+                    {
+                        var redirectsFromCurrent = allRedirects
+                            .Where(r => {
+                                var rUrlId = (int?)redirectUrlIdProp?.GetValue(r);
+                                return rUrlId == currentUrlId.Value;
+                            })
+                            .OrderBy(r => (int?)redirectPositionProp?.GetValue(r) ?? 0)
+                            .ToList();
+                        
+                        if (redirectsFromCurrent.Any())
+                        {
+                            var finalRedirect = redirectsFromCurrent.Last();
+                            var toUrl = redirectToUrlProp?.GetValue(finalRedirect) as string;
+                            var statusCode = (int?)redirectStatusCodeProp?.GetValue(finalRedirect);
+                            
+                            if (toUrl != null && statusCode.HasValue)
+                            {
+                                var normalizedFinal = NormalizeUrl(toUrl);
+                                var normalizedOther = NormalizeUrl(otherUrl);
+                                
+                                if (normalizedFinal == normalizedOther)
+                                {
+                                    // currentUrl redirects to otherUrl
+                                    if (statusCode == 301 || statusCode == 308)
+                                    {
+                                        info.PermanentRedirects.Add(otherUrl);
+                                    }
+                                    else if (statusCode == 302 || statusCode == 307)
+                                    {
+                                        info.TemporaryRedirects.Add(otherUrl);
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Check if otherUrl redirects to currentUrl
+                if (urlDict.TryGetValue(otherUrl, out var otherUrlEntity))
+                {
+                    var otherUrlId = (int?)urlIdProp?.GetValue(otherUrlEntity);
+                    if (otherUrlId.HasValue)
+                    {
+                        var redirectsFromOther = allRedirects
+                            .Where(r => {
+                                var rUrlId = (int?)redirectUrlIdProp?.GetValue(r);
+                                return rUrlId == otherUrlId.Value;
+                            })
+                            .OrderBy(r => (int?)redirectPositionProp?.GetValue(r) ?? 0)
+                            .ToList();
+                        
+                        if (redirectsFromOther.Any())
+                        {
+                            var finalRedirect = redirectsFromOther.Last();
+                            var toUrl = redirectToUrlProp?.GetValue(finalRedirect) as string;
+                            var statusCode = (int?)redirectStatusCodeProp?.GetValue(finalRedirect);
+                            
+                            if (toUrl != null && statusCode.HasValue)
+                            {
+                                var normalizedFinal = NormalizeUrl(toUrl);
+                                var normalizedCurrent = NormalizeUrl(currentUrl);
+                                
+                                if (normalizedFinal == normalizedCurrent)
+                                {
+                                    // otherUrl redirects to currentUrl
+                                    if (statusCode == 301 || statusCode == 308)
+                                    {
+                                        info.PermanentRedirects.Add(otherUrl);
+                                    }
+                                    else if (statusCode == 302 || statusCode == 307)
+                                    {
+                                        info.TemporaryRedirects.Add(otherUrl);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error checking redirect relationships for duplicate title detection");
+        }
+        
+        return info;
+    }
+    
+    /// <summary>
+    /// Helper class to track redirect relationships.
+    /// </summary>
+    private class RedirectRelationshipInfo
+    {
+        public HashSet<string> PermanentRedirects { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> TemporaryRedirects { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public bool HasRedirects => PermanentRedirects.Any() || TemporaryRedirects.Any();
     }
     
     /// <summary>

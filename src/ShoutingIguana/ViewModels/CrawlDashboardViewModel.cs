@@ -127,6 +127,20 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
             await _crawlEngine.StopCrawlAsync();
             IsCrawling = false;
             IsPaused = false;
+
+            // Prompt user to view findings from partial results
+            var result = await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                System.Windows.MessageBox.Show(
+                    "The crawl has been stopped. Would you like to view the findings from the URLs that were crawled?",
+                    "View Findings",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Question));
+
+            if (result == System.Windows.MessageBoxResult.Yes)
+            {
+                _logger.LogInformation("Navigating to findings after stopping crawl");
+                _navigationService.NavigateTo<Views.FindingsView>();
+            }
         }
         catch (Exception ex)
         {

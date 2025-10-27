@@ -343,7 +343,7 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
         {
             await ctx.Findings.ReportAsync(
                 Key,
-                Severity.Error,
+                Severity.Warning,
                 "CANONICAL_NOINDEX_CONFLICT",
                 "Page has both canonical tag AND noindex directive - conflicting signals",
                 new
@@ -451,18 +451,19 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
             var normalizedNext = NormalizeUrl(nextCanonical);
             var normalizedCurrent = NormalizeUrl(current);
             
+            // Check if this is a self-referencing canonical (A → A)
+            // This is proper termination, not a loop
+            if (normalizedNext == normalizedCurrent)
+            {
+                _logger.LogDebug("Canonical chain for {Url} ends with self-referencing canonical at {Current} (proper termination)", 
+                    ctx.Url, current);
+                return; // Proper end of chain
+            }
+            
             // Check if we've seen this URL before (loop detected)
             if (visited.Contains(normalizedNext))
             {
-                // Don't report self-referencing canonicals as loops (they're best practice)
-                // Only report if the loop involves at least 2 different URLs
-                if (normalizedNext == normalizedCurrent && chain.Count == 1)
-                {
-                    // This is just a self-referencing canonical (A → A), which is fine
-                    _logger.LogDebug("URL {Url} has self-referencing canonical (best practice)", ctx.Url);
-                    return;
-                }
-                
+                // This is a real loop - we're cycling back to a DIFFERENT URL seen earlier
                 chain.Add(nextCanonical);
                 
                 await ctx.Findings.ReportAsync(

@@ -37,8 +37,8 @@ public class ProjectSettings
     public bool RespectRobotsTxt { get; set; } = true;
     public bool UseSitemapXml { get; set; } = true;
     public UserAgentType UserAgentType { get; set; } = UserAgentType.Chrome;
-    public double CrawlDelaySeconds { get; set; } = 1.0;
-    public int ConcurrentRequests { get; set; } = 4;
+    public double CrawlDelaySeconds { get; set; } = 1.5;
+    public int ConcurrentRequests { get; set; } = 3;
     public int TimeoutSeconds { get; set; } = 10;
     
     /// <summary>

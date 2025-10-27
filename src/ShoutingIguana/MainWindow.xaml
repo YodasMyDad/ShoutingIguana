@@ -72,11 +72,27 @@
                         <TextBlock Text="{StaticResource Icon.FolderOpen}" Style="{StaticResource Icon}"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="Recent Projects" x:Name="RecentProjectsMenu">
+                <MenuItem Header="Recent Projects" x:Name="RecentProjectsMenu" ItemsSource="{Binding RecentProjects}">
                     <MenuItem.Icon>
                         <TextBlock Text="{StaticResource Icon.History}" Style="{StaticResource Icon}"/>
                     </MenuItem.Icon>
-                    <MenuItem Header="(No recent projects)"/>
+                    <MenuItem.ItemContainerStyle>
+                        <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                            <Setter Property="Header" Value="{Binding Name}"/>
+                            <Setter Property="Command" Value="{Binding DataContext.OpenRecentProjectCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                            <Setter Property="CommandParameter" Value="{Binding}"/>
+                            <Setter Property="ToolTip" Value="{Binding FilePath}"/>
+                        </Style>
+                    </MenuItem.ItemContainerStyle>
+                    <MenuItem.Style>
+                        <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding RecentProjects.Count}" Value="0">
+                                    <Setter Property="IsEnabled" Value="False"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </MenuItem.Style>
                 </MenuItem>
                 <MenuItem Header="_Close Project" Command="{Binding CloseProjectCommand}" InputGestureText="Ctrl+W"
                           Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">

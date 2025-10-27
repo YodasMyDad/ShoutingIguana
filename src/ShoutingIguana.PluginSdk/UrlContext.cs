@@ -91,5 +91,6 @@ public sealed record ProjectSettings(
     string BaseUrl,
     int MaxDepth,
     string UserAgent,
-    bool RespectRobotsTxt);
+    bool RespectRobotsTxt,
+    bool UseSitemapXml);
 

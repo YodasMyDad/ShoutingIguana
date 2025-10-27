@@ -30,8 +30,8 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
     {
         try
         {
-            // Check if this is the base URL - try to discover sitemap
-            if (IsBaseUrl(ctx.Url.ToString(), ctx.Project.BaseUrl))
+            // Check if this is the base URL - try to discover sitemap (only if enabled)
+            if (IsBaseUrl(ctx.Url.ToString(), ctx.Project.BaseUrl) && ctx.Project.UseSitemapXml)
             {
                 await DiscoverSitemapAsync(ctx);
             }
@@ -59,17 +59,55 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
                 }
                 else if (httpStatus >= 400)
                 {
-                    // Other error
-                    await ctx.Findings.ReportAsync(
-                        Key,
-                        Severity.Error,
-                        "SITEMAP_ERROR",
-                        string.Format("Error accessing sitemap at {0} (HTTP {1})", ctx.Url, httpStatus),
-                        new
+                    // Check for restricted status codes
+                    var isRestricted = httpStatus == 401 || httpStatus == 403 || httpStatus == 451;
+                    
+                    if (isRestricted)
+                    {
+                        // Restricted sitemap - informational
+                        var restrictionType = httpStatus switch
                         {
-                            url = ctx.Url.ToString(),
-                            httpStatus
-                        });
+                            401 => "requires authentication",
+                            403 => "is forbidden/restricted",
+                            451 => "is unavailable for legal reasons",
+                            _ => "is restricted"
+                        };
+                        
+                        var note = httpStatus switch
+                        {
+                            401 => "This sitemap requires authentication/login to access",
+                            403 => "This sitemap is restricted and access is forbidden",
+                            451 => "This sitemap is unavailable for legal reasons",
+                            _ => "This sitemap has restricted access"
+                        };
+                        
+                        await ctx.Findings.ReportAsync(
+                            Key,
+                            Severity.Info,
+                            "SITEMAP_RESTRICTED",
+                            string.Format("Sitemap at {0} {1} (HTTP {2})", ctx.Url, restrictionType, httpStatus),
+                            new
+                            {
+                                url = ctx.Url.ToString(),
+                                httpStatus,
+                                note,
+                                recommendation = "If this is expected, ensure search engines can access the sitemap or provide an accessible alternative."
+                            });
+                    }
+                    else
+                    {
+                        // Other error
+                        await ctx.Findings.ReportAsync(
+                            Key,
+                            Severity.Error,
+                            "SITEMAP_ERROR",
+                            string.Format("Error accessing sitemap at {0} (HTTP {1})", ctx.Url, httpStatus),
+                            new
+                            {
+                                url = ctx.Url.ToString(),
+                                httpStatus
+                            });
+                    }
                 }
                 else if (httpStatus >= 200 && httpStatus < 300)
                 {

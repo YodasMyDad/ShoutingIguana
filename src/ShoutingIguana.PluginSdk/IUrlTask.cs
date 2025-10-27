@@ -33,12 +33,43 @@ public interface IUrlTask
     
     /// <summary>
     /// Optional cleanup method called when a project is closed.
-    /// Use this to clear any per-project static data (e.g., dictionaries keyed by ProjectId).
-    /// Default implementation does nothing.
+    /// 
+    /// MEMORY MANAGEMENT - CRITICAL FOR LONG-RUNNING APPLICATIONS:
+    /// If your plugin maintains static state (e.g., caches, dictionaries keyed by ProjectId),
+    /// you MUST implement this method to prevent memory leaks.
+    /// 
+    /// WHEN THIS IS CALLED:
+    /// - User closes a project via File > Close Project
+    /// - Application shuts down (before plugin unload)
+    /// - Project is switched (old project cleanup, new project load)
+    /// 
+    /// WHAT TO CLEAN UP:
+    /// - Static dictionaries keyed by ProjectId: _cache.Remove(projectId)
+    /// - Project-specific state held in static fields
+    /// - Event subscriptions tied to project lifecycle
+    /// - Large data structures that won't be reused
+    /// 
+    /// EXAMPLE - Plugin with Static Cache:
+    /// <code>
+    /// private static readonly ConcurrentDictionary&lt;int, HashSet&lt;string&gt;&gt; _processedUrls = new();
+    /// 
+    /// public void CleanupProject(int projectId)
+    /// {
+    ///     _processedUrls.TryRemove(projectId, out _);
+    ///     _logger.LogDebug("Cleaned up cached data for project {ProjectId}", projectId);
+    /// }
+    /// </code>
+    /// 
+    /// WARNING: Plugins that ignore this method will leak memory on each project open/close cycle.
+    /// In long-running sessions, this can accumulate to significant memory usage.
+    /// 
+    /// Default implementation does nothing - override if you use static state.
     /// </summary>
+    /// <param name="projectId">The ID of the project being closed</param>
     void CleanupProject(int projectId)
     {
         // Default: no cleanup needed
+        // Override this method if your plugin maintains static state
     }
 }
 

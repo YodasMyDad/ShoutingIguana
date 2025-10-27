@@ -162,12 +162,23 @@ public class PlaywrightService(
                 return _browser;
             }
 
-            // Launch new browser
+            // Launch new browser with comprehensive stealth arguments
             _logger.LogInformation("Launching Chromium browser...");
             _browser = await _playwright!.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
             {
                 Headless = true,
-                Args = ["--disable-blink-features=AutomationControlled"]
+                Args = [
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-dev-shm-usage",
+                    "--disable-web-security",
+                    "--disable-features=IsolateOrigins,site-per-process",
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-infobars",
+                    "--window-position=0,0",
+                    "--ignore-certificate-errors",
+                    "--ignore-certificate-errors-spki-list"
+                ]
             });
 
             _logger.LogInformation("Browser launched successfully");
@@ -189,7 +200,26 @@ public class PlaywrightService(
         var contextOptions = new BrowserNewContextOptions
         {
             ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
-            UserAgent = userAgent
+            UserAgent = userAgent,
+            Locale = "en-US",
+            TimezoneId = "America/New_York",
+            Permissions = new[] { "geolocation", "notifications" },
+            ColorScheme = ColorScheme.Light,
+            DeviceScaleFactor = 1,
+            HasTouch = false,
+            IsMobile = false,
+            JavaScriptEnabled = true,
+            ExtraHTTPHeaders = new Dictionary<string, string>
+            {
+                ["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                ["Accept-Language"] = "en-US,en;q=0.9",
+                ["Accept-Encoding"] = "gzip, deflate, br",
+                ["Sec-Fetch-Dest"] = "document",
+                ["Sec-Fetch-Mode"] = "navigate",
+                ["Sec-Fetch-Site"] = "none",
+                ["Sec-Fetch-User"] = "?1",
+                ["Upgrade-Insecure-Requests"] = "1"
+            }
         };
 
         // Configure proxy if provided and enabled
@@ -217,6 +247,28 @@ public class PlaywrightService(
         }
 
         var context = await browser.NewContextAsync(contextOptions);
+        
+        // Inject JavaScript to hide automation signals
+        await context.AddInitScriptAsync(@"
+            // Override navigator.webdriver
+            Object.defineProperty(navigator, 'webdriver', { get: () => false });
+            
+            // Override plugins and mimeTypes to appear more like a real browser
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+            Object.defineProperty(navigator, 'mimeTypes', { get: () => [1, 2, 3, 4] });
+            
+            // Override chrome property
+            window.chrome = { runtime: {} };
+            
+            // Override permissions query
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
+        ");
+        
         var page = await context.NewPageAsync();
         
         // Set default timeout

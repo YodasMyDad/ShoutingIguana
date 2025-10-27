@@ -29,13 +29,13 @@ public partial class SettingsViewModel : ObservableObject
     private readonly Window _dialog;
 
     // Crawling settings
-    [ObservableProperty] private int _concurrentRequests = 2;
+    [ObservableProperty] private int _concurrentRequests = 3;
     [ObservableProperty] private int _timeoutSeconds = 30;
     [ObservableProperty] private int _maxCrawlDepth = 5;
     [ObservableProperty] private int _maxUrlsToCrawl = 10000;
     [ObservableProperty] private bool _respectRobotsTxt = true;
     [ObservableProperty] private bool _useSitemapXml = true;
-    [ObservableProperty] private double _crawlDelaySeconds = 1.0;
+    [ObservableProperty] private double _crawlDelaySeconds = 1.5;
 
     // Browser settings
     [ObservableProperty] private bool _headless = true;
@@ -287,13 +287,13 @@ public partial class SettingsViewModel : ObservableObject
         if (result == MessageBoxResult.Yes)
         {
             // Restore default crawl settings
-            ConcurrentRequests = 2;
+            ConcurrentRequests = 3;
             TimeoutSeconds = 30;
             MaxCrawlDepth = 5;
             MaxUrlsToCrawl = 10000;
             RespectRobotsTxt = true;
             UseSitemapXml = true;
-            CrawlDelaySeconds = 1.0;
+            CrawlDelaySeconds = 1.5;
 
             // Restore default browser settings
             Headless = true;

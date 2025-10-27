@@ -12,7 +12,9 @@ public class DuplicateContentPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
-        context.RegisterTask(new DuplicateContentTask(context.CreateLogger(nameof(DuplicateContentTask))));
+        context.RegisterTask(new DuplicateContentTask(
+            context.CreateLogger(nameof(DuplicateContentTask)),
+            context.GetServiceProvider()));
     }
 }
 

@@ -274,34 +274,80 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
             }
         }
 
-        // Report broken links
+        // Report broken or restricted links
         if (status.HasValue && (status.Value >= 400 || status.Value == 0))
         {
-            // All broken links (4xx and 5xx) should be errors as they prevent users from accessing content
-            var severity = Severity.Error;
+            // Categorize status codes
+            var isRestricted = status.Value == 401 || status.Value == 403 || status.Value == 451;
+            var severity = isRestricted ? Severity.Info : Severity.Error;
             var statusText = status.Value == 0 ? "Connection Failed" : status.Value.ToString();
             
-            // Dedupe by link URL and status code
-            var key = $"{link.Url}|BROKEN_{link.LinkType.ToUpperInvariant()}|{status.Value}";
+            string code;
+            string message;
             
-            // Add depth information and specific recommendations for important pages
+            if (isRestricted)
+            {
+                // Restricted pages - informational only
+                code = status.Value switch
+                {
+                    401 => "AUTH_REQUIRED_LINK",
+                    403 => "FORBIDDEN_LINK",
+                    451 => "UNAVAILABLE_LEGAL",
+                    _ => "RESTRICTED_LINK"
+                };
+                
+                var restrictionType = status.Value switch
+                {
+                    401 => "requires authentication",
+                    403 => "is forbidden/restricted",
+                    451 => "is unavailable for legal reasons",
+                    _ => "is restricted"
+                };
+                
+                message = $"Link to restricted area: {link.Url} {restrictionType} (HTTP {status.Value})";
+            }
+            else
+            {
+                // Broken links - errors
+                code = $"BROKEN_{link.LinkType.ToUpperInvariant()}";
+                message = $"Broken {link.LinkType}: {link.Url} returns {statusText}";
+            }
+            
+            // Dedupe by link URL, code, and status code
+            var key = $"{link.Url}|{code}|{status.Value}";
+            
+            // Add depth information and specific recommendations
             var data = CreateFindingData(ctx, link, status.Value, isExternal, diagnosticInfo, hasRedirect: hasRedirect);
             var dataDict = data as Dictionary<string, object?>;
             
-            // Check if this is an important page (from source page perspective)
-            if (dataDict != null && ctx.Metadata.Depth <= 2 && !isExternal && link.LinkType == "hyperlink")
+            if (dataDict != null)
             {
-                dataDict["note"] = $"This broken link is found on an important page (depth {ctx.Metadata.Depth})";
-                dataDict["recommendation"] = status.Value == 404 
-                    ? "Fix the link URL or implement a 301 redirect to the correct page"
-                    : $"Investigate why this page returns {statusText} and fix the issue or update the link";
+                if (isRestricted)
+                {
+                    dataDict["note"] = status.Value switch
+                    {
+                        401 => "This page requires authentication/login to access",
+                        403 => "This page is restricted and access is forbidden",
+                        451 => "This page is unavailable for legal reasons",
+                        _ => "This page has restricted access"
+                    };
+                    dataDict["recommendation"] = "If this is expected (e.g., members-only area), this is not an error. Otherwise, check access permissions.";
+                }
+                else if (ctx.Metadata.Depth <= 2 && !isExternal && link.LinkType == "hyperlink")
+                {
+                    // Important page recommendations for actual broken links
+                    dataDict["note"] = $"This broken link is found on an important page (depth {ctx.Metadata.Depth})";
+                    dataDict["recommendation"] = status.Value == 404 
+                        ? "Fix the link URL or implement a 301 redirect to the correct page"
+                        : $"Investigate why this page returns {statusText} and fix the issue or update the link";
+                }
             }
             
             TrackFinding(findingsMap,
                 key,
                 severity,
-                $"BROKEN_{link.LinkType.ToUpperInvariant()}",
-                $"Broken {link.LinkType}: {link.Url} returns {statusText}",
+                code,
+                message,
                 data);
         }
         // Report redirect chains for internal links

@@ -14,5 +14,10 @@ public interface IAppSettingsService
     Task SaveAsync();
     
     void MarkBrowserInstalled();
+    
+    // Recent Projects
+    void AddRecentProject(string name, string filePath);
+    List<RecentProject> GetRecentProjects();
+    void RemoveRecentProject(string filePath);
 }
 

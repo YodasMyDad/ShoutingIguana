@@ -12,7 +12,9 @@ public class TitlesMetaPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
-        context.RegisterTask(new TitlesMetaTask(context.CreateLogger(nameof(TitlesMetaTask))));
+        context.RegisterTask(new TitlesMetaTask(
+            context.CreateLogger(nameof(TitlesMetaTask)),
+            context.GetServiceProvider()));
     }
 }
 

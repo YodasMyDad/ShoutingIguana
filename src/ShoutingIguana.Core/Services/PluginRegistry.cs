@@ -15,6 +15,7 @@ internal class PluginMetadata
     public required string SourcePath { get; init; }
     public List<IUrlTask> Tasks { get; init; } = [];
     public List<IExportProvider> Exporters { get; init; } = [];
+    public DateTime UnloadedAt { get; set; }
 }
 
 /// <summary>
@@ -138,6 +139,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
     {
         // ReSharper disable once RedundantDefaultMemberInitializer
         IPlugin? unloadedPlugin = null;
+        WeakReference? weakRef = null;
 
         await _lock.WaitAsync();
         try
@@ -152,6 +154,10 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
 
             // Capture plugin reference for event notification (used after lock release)
             unloadedPlugin = metadata.Plugin;
+            
+            // Capture weak reference for GC verification
+            weakRef = metadata.WeakRef;
+            metadata.UnloadedAt = DateTime.UtcNow;
 
             // Unregister all tasks and exporters from this plugin
             foreach (var task in metadata.Tasks)
@@ -207,6 +213,23 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                 GC.WaitForPendingFinalizers();
             }
         });
+        
+        // Verify that the AssemblyLoadContext was collected
+        // This helps detect memory leaks from plugin unloading
+        if (weakRef != null)
+        {
+            if (weakRef.IsAlive)
+            {
+                _logger.LogWarning(
+                    "Plugin AssemblyLoadContext for {PluginId} is still alive after GC. " +
+                    "This may indicate a memory leak. Check for plugin references being held.",
+                    pluginId);
+            }
+            else
+            {
+                _logger.LogDebug("✓ Plugin AssemblyLoadContext for {PluginId} was successfully garbage collected", pluginId);
+            }
+        }
     }
 
     public async Task ReloadPluginAsync(string pluginId)

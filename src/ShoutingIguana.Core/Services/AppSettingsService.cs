@@ -11,9 +11,11 @@ public class AppSettingsService(ILogger<AppSettingsService> logger) : IAppSettin
 {
     private readonly ILogger<AppSettingsService> _logger = logger;
     private readonly string _settingsPath = GetSettingsPath();
+    private readonly object _lock = new();
 
     public BrowserSettings BrowserSettings { get; private set; } = new();
     public CrawlSettings CrawlSettings { get; set; } = new();
+    private List<RecentProject> _recentProjects = new();
 
     public async Task LoadAsync()
     {
@@ -27,6 +29,10 @@ public class AppSettingsService(ILogger<AppSettingsService> logger) : IAppSettin
                 {
                     BrowserSettings = settings.Browser ?? new BrowserSettings();
                     CrawlSettings = settings.Crawl ?? new CrawlSettings();
+                    lock (_lock)
+                    {
+                        _recentProjects = settings.RecentProjects ?? new List<RecentProject>();
+                    }
                 }
                 _logger.LogInformation("Settings loaded from: {Path}", _settingsPath);
             }
@@ -45,10 +51,17 @@ public class AppSettingsService(ILogger<AppSettingsService> logger) : IAppSettin
     {
         try
         {
+            List<RecentProject> recentProjectsCopy;
+            lock (_lock)
+            {
+                recentProjectsCopy = new List<RecentProject>(_recentProjects);
+            }
+
             var settings = new AppSettings
             {
                 Browser = BrowserSettings,
-                Crawl = CrawlSettings
+                Crawl = CrawlSettings,
+                RecentProjects = recentProjectsCopy
             };
 
             var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions
@@ -77,6 +90,52 @@ public class AppSettingsService(ILogger<AppSettingsService> logger) : IAppSettin
         BrowserSettings.LastInstalledUtc = DateTime.UtcNow;
     }
 
+    public void AddRecentProject(string name, string filePath)
+    {
+        lock (_lock)
+        {
+            // Remove if already exists (to update timestamp and move to top)
+            _recentProjects.RemoveAll(p => string.Equals(p.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+
+            // Add to beginning of list
+            _recentProjects.Insert(0, new RecentProject
+            {
+                Name = name,
+                FilePath = filePath,
+                LastOpenedUtc = DateTime.UtcNow
+            });
+
+            // Keep only the 5 most recent
+            if (_recentProjects.Count > 5)
+            {
+                _recentProjects = _recentProjects.Take(5).ToList();
+            }
+
+            _logger.LogDebug("Added recent project: {Name} at {FilePath}", name, filePath);
+        }
+    }
+
+    public List<RecentProject> GetRecentProjects()
+    {
+        lock (_lock)
+        {
+            // Return a copy to prevent external modification
+            return new List<RecentProject>(_recentProjects);
+        }
+    }
+
+    public void RemoveRecentProject(string filePath)
+    {
+        lock (_lock)
+        {
+            var removed = _recentProjects.RemoveAll(p => string.Equals(p.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            if (removed > 0)
+            {
+                _logger.LogDebug("Removed recent project: {FilePath}", filePath);
+            }
+        }
+    }
+
     private static string GetSettingsPath()
     {
         var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -87,6 +146,7 @@ public class AppSettingsService(ILogger<AppSettingsService> logger) : IAppSettin
     {
         public BrowserSettings? Browser { get; set; }
         public CrawlSettings? Crawl { get; set; }
+        public List<RecentProject>? RecentProjects { get; set; }
     }
 }
 

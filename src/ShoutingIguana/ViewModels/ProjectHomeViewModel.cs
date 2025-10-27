@@ -28,6 +28,7 @@ public partial class ProjectHomeViewModel : ObservableObject
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ICrawlEngine _crawlEngine;
     private readonly IStatusService _statusService;
+    private readonly IAppSettingsService _appSettingsService;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCrawlCommand))]
@@ -44,7 +45,7 @@ public partial class ProjectHomeViewModel : ObservableObject
     private int _maxUrls = 1000;
 
     [ObservableProperty]
-    private double _crawlDelay = 1.0;
+    private double _crawlDelay = 1.5;
 
     [ObservableProperty]
     private bool _respectRobotsTxt = true;
@@ -71,7 +72,8 @@ public partial class ProjectHomeViewModel : ObservableObject
         IServiceProvider serviceProvider,
         IHttpClientFactory httpClientFactory,
         ICrawlEngine crawlEngine,
-        IStatusService statusService)
+        IStatusService statusService,
+        IAppSettingsService appSettingsService)
     {
         _logger = logger;
         _navigationService = navigationService;
@@ -80,6 +82,7 @@ public partial class ProjectHomeViewModel : ObservableObject
         _httpClientFactory = httpClientFactory;
         _crawlEngine = crawlEngine;
         _statusService = statusService;
+        _appSettingsService = appSettingsService;
     }
 
     public async Task LoadAsync()
@@ -140,7 +143,7 @@ public partial class ProjectHomeViewModel : ObservableObject
         BaseUrl = string.Empty;
         MaxDepth = 5;
         MaxUrls = 1000;
-        CrawlDelay = 1.0;
+        CrawlDelay = 1.5;
         RespectRobotsTxt = true;
         UseSitemapXml = true;
         SelectedUserAgentType = UserAgentType.Chrome;
@@ -212,6 +215,10 @@ public partial class ProjectHomeViewModel : ObservableObject
 
                 IsWelcomeScreen = false;
                 _logger.LogInformation("Opened project: {ProjectName} from {FilePath}", project.Name, dialog.FileName);
+
+                // Add to recent projects
+                _appSettingsService.AddRecentProject(project.Name, dialog.FileName);
+                await _appSettingsService.SaveAsync();
 
                 // Check for crash recovery
                 await CheckForCrashRecoveryAsync(project.Id);
@@ -298,6 +305,10 @@ public partial class ProjectHomeViewModel : ObservableObject
                     
                     // Update project context
                     _projectContext.OpenProject(projectPath, CurrentProject.Id, CurrentProject.Name);
+                    
+                    // Add to recent projects
+                    _appSettingsService.AddRecentProject(CurrentProject.Name, projectPath);
+                    await _appSettingsService.SaveAsync();
                     
                     _logger.LogInformation("Created new project: {ProjectName} at {ProjectPath}", ProjectName, projectPath);
                     _statusService.UpdateStatus("Project created successfully");

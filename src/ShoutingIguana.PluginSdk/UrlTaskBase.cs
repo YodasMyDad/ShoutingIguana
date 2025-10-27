@@ -14,11 +14,18 @@ public abstract class UrlTaskBase : IUrlTask
     
     /// <summary>
     /// Optional cleanup method called when a project is closed.
-    /// Override this to clear any per-project static data.
+    /// 
+    /// MEMORY MANAGEMENT - CRITICAL:
+    /// Override this method if your task maintains static state keyed by ProjectId.
+    /// Failure to clean up static state will cause memory leaks in long-running applications.
+    /// 
+    /// See <see cref="IUrlTask.CleanupProject"/> for detailed documentation and examples.
     /// </summary>
+    /// <param name="projectId">The ID of the project being closed</param>
     public virtual void CleanupProject(int projectId)
     {
         // Default: no cleanup needed
+        // Override if your task uses static fields/caches
     }
 }
 

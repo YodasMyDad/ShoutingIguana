@@ -40,6 +40,11 @@ public class CrawlEngine(
     private int _currentProjectId;
     private int _isPaused; // Use int for thread-safe access (0 = false, 1 = true)
     private int _isCrawling; // Use int for thread-safe access (0 = false, 1 = true)
+    
+    // Adaptive page loading strategy
+    private int _networkIdleSuccessCount;
+    private int _networkIdleFailureCount;
+    private int _useFastLoadingMode; // 0 = false, 1 = true (thread-safe)
 
     public bool IsCrawling => Interlocked.CompareExchange(ref _isCrawling, 0, 0) == 1;
     public bool IsPaused => Interlocked.CompareExchange(ref _isPaused, 0, 0) == 1;
@@ -63,6 +68,11 @@ public class CrawlEngine(
         _errorCount = 0;
         _queueSize = 0;
         _pausedTime = TimeSpan.Zero;
+        
+        // Reset adaptive loading strategy for new crawl
+        _networkIdleSuccessCount = 0;
+        _networkIdleFailureCount = 0;
+        Interlocked.Exchange(ref _useFastLoadingMode, 0);
         _pauseStartTime = null;
         _pauseEvent.Set(); // Ensure not paused
         _stopwatch = Stopwatch.StartNew();
@@ -402,11 +412,11 @@ public class CrawlEngine(
                     await queueRepository.UpdateAsync(queueItem).ConfigureAwait(false);
                 }
 
-                // Enforce politeness delay
-                await EnforcePolitenessDelayAsync(queueItem.HostKey, settings.CrawlDelaySeconds, cancellationToken).ConfigureAwait(false);
-
-                // Get user agent for this request
+                // Get user agent for this request (needed for robots.txt check)
                 var userAgent = settings.GetUserAgentString();
+
+                // Enforce politeness delay (checks robots.txt crawl-delay directive)
+                await EnforcePolitenessDelayAsync(queueItem.HostKey, queueItem.Address, settings.CrawlDelaySeconds, userAgent, cancellationToken).ConfigureAwait(false);
                 
                 // Determine which proxy settings to use (project override or global)
                 var proxySettings = settings.ProxyOverride ?? globalProxySettings;
@@ -502,6 +512,18 @@ public class CrawlEngine(
                     }
                 }
             }
+            catch (OperationCanceledException)
+            {
+                // Expected when crawl is stopped - don't log as error
+                _logger.LogDebug("Crawling {Url} was cancelled", queueItem.Address);
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
+                    queueItem.State = QueueState.Queued; // Reset to queued for potential resume
+                    await queueRepository.UpdateAsync(queueItem).ConfigureAwait(false);
+                }
+                throw; // Re-throw to stop worker
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error crawling {Url}", queueItem.Address);
@@ -543,37 +565,50 @@ public class CrawlEngine(
             // Create a new page with the specified user agent and proxy (caller becomes responsible for disposal from this point)
             page = await _playwrightService.CreatePageAsync(userAgent, proxySettings).ConfigureAwait(false);
             
-            // Navigate to URL with fallback strategy
-            // Try NetworkIdle first (more reliable), fallback to DOMContentLoaded on timeout
+            // Smart adaptive page loading
             Microsoft.Playwright.IResponse? response = null;
-            try
+            bool useFastMode = Interlocked.CompareExchange(ref _useFastLoadingMode, 0, 0) == 1;
+            
+            if (!useFastMode)
             {
-                response = await page.GotoAsync(url, new Microsoft.Playwright.PageGotoOptions
-                {
-                    WaitUntil = Microsoft.Playwright.WaitUntilState.NetworkIdle,
-                    Timeout = 30000
-                }).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogWarning("NetworkIdle timeout for {Url}, retrying with DOMContentLoaded", url);
-                
-                // Retry with faster wait state
+                // Try NetworkIdle with SHORT timeout (5s instead of 30s)
                 try
                 {
                     response = await page.GotoAsync(url, new Microsoft.Playwright.PageGotoOptions
                     {
-                        WaitUntil = Microsoft.Playwright.WaitUntilState.DOMContentLoaded,
-                        Timeout = 30000
+                        WaitUntil = Microsoft.Playwright.WaitUntilState.NetworkIdle,
+                        Timeout = 5000 // 5 seconds
                     }).ConfigureAwait(false);
                     
-                    _logger.LogInformation("Successfully loaded {Url} using DOMContentLoaded fallback", url);
+                    Interlocked.Increment(ref _networkIdleSuccessCount);
+                    _logger.LogDebug("Page loaded with NetworkIdle for {Url}", url);
                 }
-                catch (Exception fallbackEx)
+                catch (Exception ex) when (ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
                 {
-                    _logger.LogError(fallbackEx, "DOMContentLoaded fallback also failed for {Url}", url);
-                    throw; // Re-throw to be caught by outer exception handler
+                    Interlocked.Increment(ref _networkIdleFailureCount);
+                    
+                    // Check if we should switch to fast mode (3+ failures, no successes)
+                    // Use volatile reads for thread-safe access
+                    int failureCount = Interlocked.CompareExchange(ref _networkIdleFailureCount, 0, 0);
+                    int successCount = Interlocked.CompareExchange(ref _networkIdleSuccessCount, 0, 0);
+                    
+                    if (failureCount >= 3 && successCount == 0)
+                    {
+                        Interlocked.Exchange(ref _useFastLoadingMode, 1);
+                        _logger.LogInformation("Detected site with continuous background activity. Switching to fast loading mode for better performance.");
+                    }
+                    else
+                    {
+                        _logger.LogDebug("NetworkIdle timeout for {Url}, using DOMContentLoaded", url);
+                    }
+                    
+                    response = await LoadWithDOMContentLoadedAsync(page, url, cancellationToken).ConfigureAwait(false);
                 }
+            }
+            else
+            {
+                // Fast loading mode (DOMContentLoaded + grace period)
+                response = await LoadWithDOMContentLoadedAsync(page, url, cancellationToken).ConfigureAwait(false);
             }
 
             if (response == null)
@@ -713,9 +748,15 @@ public class CrawlEngine(
                 ErrorMessage = ex.Message
             };
         }
-        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (TaskCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Timeout
+            // User-initiated cancellation - don't log as error
+            _logger.LogDebug("Fetch cancelled for {Url}", url);
+            throw new OperationCanceledException("Fetch was cancelled", cancellationToken);
+        }
+        catch (TaskCanceledException)
+        {
+            // Timeout (not user-initiated)
             _logger.LogWarning("Timeout fetching {Url}", url);
             return new UrlFetchResult
             {
@@ -1415,15 +1456,82 @@ public class CrawlEngine(
         }
     }
 
-    private async Task EnforcePolitenessDelayAsync(string hostKey, double delaySeconds, CancellationToken cancellationToken)
+    private async Task<Microsoft.Playwright.IResponse?> LoadWithDOMContentLoadedAsync(Microsoft.Playwright.IPage page, string url, CancellationToken cancellationToken)
     {
+        var response = await page.GotoAsync(url, new Microsoft.Playwright.PageGotoOptions
+        {
+            WaitUntil = Microsoft.Playwright.WaitUntilState.DOMContentLoaded,
+            Timeout = 15000
+        }).ConfigureAwait(false);
+        
+        // Grace period for lazy-loaded content (JavaScript, images, etc.)
+        await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+        
+        // Wait for critical images to finish loading (max 2 seconds)
+        try
+        {
+            await page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.Load, new Microsoft.Playwright.PageWaitForLoadStateOptions
+            {
+                Timeout = 2000
+            }).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Non-critical, continue even if images haven't fully loaded
+        }
+        
+        return response;
+    }
+
+    private async Task EnforcePolitenessDelayAsync(string hostKey, string url, double configuredDelaySeconds, string userAgent, CancellationToken cancellationToken)
+    {
+        // Maximum allowed crawl-delay to prevent absurd values from robots.txt (e.g., hours/days)
+        const double MaxAllowedDelaySeconds = 10.0; // Cap at 10 seconds
+        
+        // Check robots.txt for crawl-delay directive
+        double effectiveDelay = configuredDelaySeconds;
+        try
+        {
+            var uri = new Uri(url);
+            var host = $"{uri.Scheme}://{uri.Host}";
+            var robotsCrawlDelay = await _robotsService.GetCrawlDelayAsync(host, userAgent).ConfigureAwait(false);
+            
+            if (robotsCrawlDelay.HasValue && robotsCrawlDelay.Value > effectiveDelay)
+            {
+                // Apply maximum cap to prevent absurd delays
+                if (robotsCrawlDelay.Value > MaxAllowedDelaySeconds)
+                {
+                    _logger.LogWarning("robots.txt crawl-delay of {Delay}s for {Host} exceeds maximum of {Max}s, capping delay. Site may not want to be crawled.", 
+                        robotsCrawlDelay.Value, host, MaxAllowedDelaySeconds);
+                    effectiveDelay = MaxAllowedDelaySeconds;
+                }
+                else
+                {
+                    _logger.LogDebug("Using robots.txt crawl-delay of {Delay}s for {Host} (configured: {ConfiguredDelay}s)", 
+                        robotsCrawlDelay.Value, host, configuredDelaySeconds);
+                    effectiveDelay = robotsCrawlDelay.Value;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error checking robots.txt crawl-delay, using configured delay");
+        }
+
+        // Add random jitter (±10% of delay) to appear more human-like
+        var jitterRange = effectiveDelay * 0.1;
+        var random = Random.Shared;
+        var jitter = (random.NextDouble() * jitterRange * 2) - jitterRange; // Range: -10% to +10%
+        var delayWithJitter = Math.Max(0.1, effectiveDelay + jitter); // Ensure minimum 100ms delay
+
         if (_lastCrawlTime.TryGetValue(hostKey, out var lastTime))
         {
             var elapsed = DateTime.UtcNow - lastTime;
-            var requiredDelay = TimeSpan.FromSeconds(delaySeconds);
+            var requiredDelay = TimeSpan.FromSeconds(delayWithJitter);
             if (elapsed < requiredDelay)
             {
                 var waitTime = requiredDelay - elapsed;
+                _logger.LogDebug("Waiting {WaitTime}ms before crawling next URL on {Host}", waitTime.TotalMilliseconds, hostKey);
                 await Task.Delay(waitTime, cancellationToken).ConfigureAwait(false);
             }
         }

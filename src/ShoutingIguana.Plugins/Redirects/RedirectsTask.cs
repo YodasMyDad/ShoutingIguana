@@ -243,51 +243,57 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
     {
         try
         {
-            // Check for common JavaScript redirect patterns
-            var hasWindowLocationRedirect = ctx.RenderedHtml!.Contains("window.location") &&
-                                           (ctx.RenderedHtml.Contains("window.location.href") ||
-                                            ctx.RenderedHtml.Contains("window.location.replace") ||
-                                            ctx.RenderedHtml.Contains("window.location.assign"));
-
-            var hasLocationRedirect = ctx.RenderedHtml.Contains("location.href") ||
-                                     ctx.RenderedHtml.Contains("location.replace") ||
-                                     ctx.RenderedHtml.Contains("location.assign");
-
-            if (hasWindowLocationRedirect || hasLocationRedirect)
+            // Extract only script tag content to avoid false positives from comments, strings, or other HTML
+            var scriptContentPattern = @"<script[^>]*>(.*?)</script>";
+            var scriptMatches = Regex.Matches(ctx.RenderedHtml!, scriptContentPattern, 
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            
+            if (scriptMatches.Count == 0)
             {
-                // Try to extract the target URL from JavaScript
-                var scriptMatches = Regex.Matches(ctx.RenderedHtml, 
-                    @"(?:window\.)?location\.(?:href|replace|assign)\s*=?\s*[""']([^""']+)[""']",
-                    RegexOptions.IgnoreCase);
-
-                if (scriptMatches.Count > 0)
+                return; // No script tags found
+            }
+            
+            foreach (Match scriptMatch in scriptMatches)
+            {
+                var scriptContent = scriptMatch.Groups[1].Value;
+                
+                // Remove single-line comments (//...)
+                scriptContent = Regex.Replace(scriptContent, @"//.*?$", "", RegexOptions.Multiline);
+                
+                // Remove multi-line comments (/* ... */)
+                scriptContent = Regex.Replace(scriptContent, @"/\*.*?\*/", "", RegexOptions.Singleline);
+                
+                // Look for actual redirect statements (not just mentions of location properties)
+                // Pattern explanation:
+                // - Looks for assignment or function call patterns
+                // - window.location.href = "url" or location.href = "url"
+                // - window.location.replace("url") or location.replace("url")
+                // - window.location.assign("url") or location.assign("url")
+                // - window.location = "url" (direct assignment)
+                var redirectPattern = @"(?:window\.)?location(?:\.(?:href|replace|assign))?\s*[=(]\s*[""'`]([^""'`\s]+)[""'`]";
+                var redirectMatches = Regex.Matches(scriptContent, redirectPattern, RegexOptions.IgnoreCase);
+                
+                if (redirectMatches.Count > 0)
                 {
-                    var targetUrl = scriptMatches[0].Groups[1].Value;
+                    // Found potential redirect - extract the URL
+                    var targetUrl = redirectMatches[0].Groups[1].Value;
                     
-                    await ctx.Findings.ReportAsync(
-                        Key,
-                        Severity.Warning,
-                        "JAVASCRIPT_REDIRECT",
-                        $"Page uses JavaScript redirect (not ideal for SEO): {targetUrl}",
-                        new
-                        {
-                            url = ctx.Url.ToString(),
-                            targetUrl,
-                            recommendation = "Use HTTP 301/302 redirects for better SEO"
-                        });
-                }
-                else
-                {
-                    await ctx.Findings.ReportAsync(
-                        Key,
-                        Severity.Info,
-                        "JAVASCRIPT_REDIRECT_DETECTED",
-                        "Page appears to use JavaScript redirect",
-                        new
-                        {
-                            url = ctx.Url.ToString(),
-                            note = "JavaScript redirects are not ideal for SEO"
-                        });
+                    // Filter out obvious false positives
+                    if (IsLikelyRedirectUrl(targetUrl))
+                    {
+                        await ctx.Findings.ReportAsync(
+                            Key,
+                            Severity.Warning,
+                            "JAVASCRIPT_REDIRECT",
+                            $"Page uses JavaScript redirect (not ideal for SEO): {targetUrl}",
+                            new
+                            {
+                                url = ctx.Url.ToString(),
+                                targetUrl,
+                                recommendation = "Use HTTP 301/302 redirects for better SEO"
+                            });
+                        return; // Report only once per page
+                    }
                 }
             }
         }
@@ -295,6 +301,38 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
         {
             _logger.LogDebug(ex, "Error checking for JavaScript redirects on {Url}", ctx.Url);
         }
+    }
+    
+    /// <summary>
+    /// Check if the extracted string looks like an actual redirect URL (not a placeholder or variable)
+    /// </summary>
+    private bool IsLikelyRedirectUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || url.Length < 3)
+            return false;
+            
+        // Filter out obvious placeholders and variable references
+        var lowerUrl = url.ToLowerInvariant();
+        
+        // Exclude JavaScript-like patterns
+        if (lowerUrl.Contains("{{") || lowerUrl.Contains("}}") || // Template placeholders
+            lowerUrl.Contains("${") || // Template literals
+            lowerUrl.StartsWith("javascript:") || // JavaScript protocol
+            lowerUrl == "about:blank" || // Blank page
+            lowerUrl.Contains("undefined") || // JavaScript undefined
+            lowerUrl.Contains("null") || // JavaScript null
+            lowerUrl == "#" || lowerUrl.StartsWith("#/")) // Hash-only or hash routes (SPAs)
+        {
+            return false;
+        }
+        
+        // Accept URLs that look real: absolute URLs or relative paths
+        return url.StartsWith("http://") || 
+               url.StartsWith("https://") || 
+               url.StartsWith("//") || // Protocol-relative
+               url.StartsWith("/") || // Absolute path
+               url.StartsWith("./") || // Relative path
+               url.Contains(".");  // Contains domain or file extension
     }
 
     private string GetRedirectType(int statusCode)

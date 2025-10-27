@@ -56,7 +56,8 @@ public class PluginExecutor(
                 BaseUrl: projectSettings.BaseUrl,
                 MaxDepth: projectSettings.MaxCrawlDepth,
                 UserAgent: userAgent,
-                RespectRobotsTxt: projectSettings.RespectRobotsTxt),
+                RespectRobotsTxt: projectSettings.RespectRobotsTxt,
+                UseSitemapXml: projectSettings.UseSitemapXml),
             Metadata: new UrlMetadata(
                 UrlId: urlEntity.Id,
                 StatusCode: urlEntity.HttpStatus ?? 0,

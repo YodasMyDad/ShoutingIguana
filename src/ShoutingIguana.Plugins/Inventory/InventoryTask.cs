@@ -21,20 +21,60 @@ public class InventoryTask : UrlTaskBase
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     {
-        // Report HTTP errors
+        // Report HTTP errors and restricted pages
         if (ctx.Metadata.StatusCode >= 400)
         {
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Error,
-                $"HTTP_{ctx.Metadata.StatusCode}",
-                $"HTTP error {ctx.Metadata.StatusCode}",
-                new
+            var statusCode = ctx.Metadata.StatusCode;
+            var isRestricted = statusCode == 401 || statusCode == 403 || statusCode == 451;
+            
+            if (isRestricted)
+            {
+                // Restricted pages - informational only
+                var restrictionType = statusCode switch
                 {
-                    url = ctx.Url.ToString(),
-                    status = ctx.Metadata.StatusCode,
-                    depth = ctx.Metadata.Depth
-                });
+                    401 => "Authentication Required",
+                    403 => "Forbidden/Restricted",
+                    451 => "Unavailable For Legal Reasons",
+                    _ => "Restricted"
+                };
+                
+                var note = statusCode switch
+                {
+                    401 => "This page requires authentication/login to access",
+                    403 => "This page is restricted and access is forbidden",
+                    451 => "This page is unavailable for legal reasons",
+                    _ => "This page has restricted access"
+                };
+                
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Info,
+                    $"HTTP_{statusCode}",
+                    $"HTTP {statusCode} - {restrictionType}",
+                    new
+                    {
+                        url = ctx.Url.ToString(),
+                        status = statusCode,
+                        depth = ctx.Metadata.Depth,
+                        note,
+                        recommendation = "If this is expected (e.g., members-only area), this is not an error. Otherwise, check access permissions."
+                    });
+            }
+            else
+            {
+                // Actual errors
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Error,
+                    $"HTTP_{statusCode}",
+                    $"HTTP error {statusCode}",
+                    new
+                    {
+                        url = ctx.Url.ToString(),
+                        status = statusCode,
+                        depth = ctx.Metadata.Depth
+                    });
+            }
         }
         
         // Analyze successful pages

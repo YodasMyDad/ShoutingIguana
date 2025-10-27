@@ -27,6 +27,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly ICrawlEngine _crawlEngine;
     private readonly IPluginRegistry _pluginRegistry;
     private readonly IStatusService _statusService;
+    private readonly IAppSettingsService _appSettingsService;
     private bool _disposed;
 
     [ObservableProperty]
@@ -56,6 +57,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private int _pluginCount;
 
+    [ObservableProperty]
+    private ObservableCollection<Core.Configuration.RecentProject> _recentProjects = new();
+
     /// <summary>
     /// Gets the collection of active toast notifications.
     /// </summary>
@@ -70,7 +74,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IToastService toastService,
         ICrawlEngine crawlEngine,
         IPluginRegistry pluginRegistry,
-        IStatusService statusService)
+        IStatusService statusService,
+        IAppSettingsService appSettingsService)
     {
         _logger = logger;
         _navigationService = navigationService;
@@ -81,6 +86,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _crawlEngine = crawlEngine;
         _pluginRegistry = pluginRegistry;
         _statusService = statusService;
+        _appSettingsService = appSettingsService;
         
         _navigationService.NavigationRequested += OnNavigationRequested;
         _projectContext.ProjectChanged += OnProjectChanged;
@@ -102,6 +108,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Update plugin count
         UpdatePluginCount();
         
+        // Load recent projects
+        LoadRecentProjects();
+        
         // Start with project home view
         _navigationService.NavigateTo<ProjectHomeView>();
         StatusMessage = "Ready";
@@ -113,6 +122,59 @@ public partial class MainViewModel : ObservableObject, IDisposable
         ProjectName = _projectContext.HasOpenProject 
             ? _projectContext.CurrentProjectName ?? "Unknown Project"
             : "No project loaded";
+        
+        // Refresh recent projects list when a project changes
+        LoadRecentProjects();
+    }
+
+    private void LoadRecentProjects()
+    {
+        // Load recent projects on a background thread to avoid blocking UI with File.Exists checks
+        Task.Run(async () =>
+        {
+            try
+            {
+                var recentProjects = _appSettingsService.GetRecentProjects();
+                
+                // Validate that files still exist and remove invalid ones
+                var validProjects = new System.Collections.Generic.List<Core.Configuration.RecentProject>();
+                bool removedAny = false;
+                
+                foreach (var project in recentProjects)
+                {
+                    if (System.IO.File.Exists(project.FilePath))
+                    {
+                        validProjects.Add(project);
+                    }
+                    else
+                    {
+                        _appSettingsService.RemoveRecentProject(project.FilePath);
+                        removedAny = true;
+                        _logger.LogDebug("Removed non-existent project from recent list: {FilePath}", project.FilePath);
+                    }
+                }
+
+                // Update UI collection on UI thread (ObservableCollection requires this)
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    RecentProjects.Clear();
+                    foreach (var project in validProjects)
+                    {
+                        RecentProjects.Add(project);
+                    }
+                });
+
+                // Save if we removed any invalid projects
+                if (removedAny)
+                {
+                    await _appSettingsService.SaveAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error loading recent projects");
+            }
+        });
     }
 
     private void OnNavigationRequested(object? sender, UserControl view)
@@ -196,6 +258,26 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task NewProjectAsync()
     {
+        // Check if a project is currently open
+        if (_projectContext.HasOpenProject)
+        {
+            var result = await Application.Current.Dispatcher.InvokeAsync(() =>
+                MessageBox.Show(
+                    "Starting a new project will close the current project.\n\nDo you want to continue?",
+                    "Close Current Project",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question));
+
+            if (result == MessageBoxResult.No)
+            {
+                return;
+            }
+
+            // Close the current project
+            await CloseProjectAsync();
+        }
+
+        // Navigate to project home
         await NavigateToProjectHomeAsync();
         
         // Trigger the new project action in ProjectHomeViewModel
@@ -218,6 +300,80 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (projectHomeView?.DataContext is ProjectHomeViewModel vm)
         {
             await vm.OpenProjectCommand.ExecuteAsync(null);
+        }
+    }
+
+    [RelayCommand]
+    private async Task OpenRecentProjectAsync(Core.Configuration.RecentProject recentProject)
+    {
+        if (recentProject == null)
+            return;
+
+        try
+        {
+            // Validate file exists
+            if (!System.IO.File.Exists(recentProject.FilePath))
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show(
+                        $"The project file could not be found:\n{recentProject.FilePath}\n\nIt may have been moved or deleted.",
+                        "Project Not Found",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning));
+
+                // Remove from recent list
+                _appSettingsService.RemoveRecentProject(recentProject.FilePath);
+                await _appSettingsService.SaveAsync();
+                LoadRecentProjects();
+                return;
+            }
+
+            // Check if a project is currently open and close it
+            if (_projectContext.HasOpenProject)
+            {
+                _logger.LogInformation("Closing current project to open recent project");
+                await CloseProjectAsync();
+            }
+
+            // Switch to the selected database
+            var dbProvider = _serviceProvider.GetRequiredService<ProjectDbContextProvider>();
+            await dbProvider.SetProjectPathAsync(recentProject.FilePath);
+
+            // Load project from database
+            using var scope = _serviceProvider.CreateScope();
+            var projectRepo = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
+            var projects = await projectRepo.GetRecentProjectsAsync(1);
+            var project = projects.FirstOrDefault();
+
+            if (project == null)
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show("No project found in the selected database.", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+                dbProvider.CloseProject();
+                return;
+            }
+
+            // Update project context
+            _projectContext.OpenProject(recentProject.FilePath, project.Id, project.Name);
+
+            // Update last opened time
+            project.LastOpenedUtc = DateTime.UtcNow;
+            await projectRepo.UpdateAsync(project);
+
+            // Update recent projects list (this will move it to the top)
+            _appSettingsService.AddRecentProject(project.Name, recentProject.FilePath);
+            await _appSettingsService.SaveAsync();
+
+            // Navigate to project home
+            await NavigateToProjectHomeAsync();
+
+            _logger.LogInformation("Opened recent project: {ProjectName} from {FilePath}", project.Name, recentProject.FilePath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open recent project from {FilePath}", recentProject.FilePath);
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+                MessageBox.Show($"Failed to open project: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
         }
     }
 
