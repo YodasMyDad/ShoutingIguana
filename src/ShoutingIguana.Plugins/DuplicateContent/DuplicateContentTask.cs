@@ -10,24 +10,50 @@ namespace ShoutingIguana.Plugins.DuplicateContent;
 
 /// <summary>
 /// Exact and near-duplicate content detection using SHA-256 and SimHash algorithms.
+/// Also checks domain/protocol variants to ensure proper 301 redirects are in place.
 /// </summary>
 public class DuplicateContentTask(ILogger logger) : UrlTaskBase
 {
     private readonly ILogger _logger = logger;
+    private static readonly HttpClient HttpClient = new(new HttpClientHandler 
+    { 
+        AllowAutoRedirect = false,
+        ServerCertificateCustomValidationCallback = (_, _, _, _) => true // Accept all SSL certificates for testing
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(10)
+    };
     
     // Track content hashes per project for duplicate detection
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, List<string>>> ContentHashesByProject = new();
     
     // Track SimHashes per project for near-duplicate detection
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<ulong, List<string>>> SimHashesByProject = new();
+    
+    // Track which projects have had their domain variants checked
+    private static readonly ConcurrentDictionary<int, bool> DomainVariantsCheckedByProject = new();
 
     public override string Key => "DuplicateContent";
     public override string DisplayName => "Duplicate Content";
-    public override string Description => "Identifies exact and near-duplicate content across your pages";
+    public override string Description => "Identifies exact and near-duplicate content across your pages, and validates domain/protocol variants redirect properly";
     public override int Priority => 50; // Run after basic analysis
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     {
+        try
+        {
+            // Check domain variants once per project (on first URL processed)
+            // TryAdd returns true only if the key was added (thread-safe)
+            if (DomainVariantsCheckedByProject.TryAdd(ctx.Project.ProjectId, true))
+            {
+                await CheckDomainVariantsAsync(ctx, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking domain variants for project {ProjectId}", ctx.Project.ProjectId);
+        }
+        
         // Only analyze HTML pages
         if (ctx.Metadata.ContentType?.Contains("text/html") != true)
         {
@@ -269,12 +295,297 @@ public class DuplicateContentTask(ILogger logger) : UrlTaskBase
     }
     
     /// <summary>
+    /// Check domain and protocol variants to ensure proper 301 redirects are in place.
+    /// This prevents duplicate content being served from multiple domain/protocol combinations.
+    /// </summary>
+    private async Task CheckDomainVariantsAsync(UrlContext ctx, CancellationToken ct)
+    {
+        try
+        {
+            // Get the canonical URL from the first URL being processed
+            var canonicalUrl = ctx.Url;
+            
+            _logger.LogInformation("Checking domain variants for canonical URL: {CanonicalUrl}", canonicalUrl);
+            
+            // Generate variants to test
+            var variants = GenerateDomainVariants(canonicalUrl);
+            
+            // Test each variant
+            foreach (var variant in variants)
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    break;
+                }
+                
+                await TestDomainVariantAsync(ctx, variant, canonicalUrl.ToString(), ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in CheckDomainVariantsAsync for {Url}", ctx.Url);
+        }
+    }
+    
+    /// <summary>
+    /// Generate domain/protocol variants to test.
+    /// For example, if canonical is https://lee.uk, generates:
+    /// - http://lee.uk
+    /// - https://www.lee.uk
+    /// - http://www.lee.uk
+    /// </summary>
+    private List<string> GenerateDomainVariants(Uri canonicalUrl)
+    {
+        var variants = new List<string>();
+        var scheme = canonicalUrl.Scheme;
+        var host = canonicalUrl.Host;
+        var isWww = host.StartsWith("www.", StringComparison.OrdinalIgnoreCase);
+        
+        // Determine the alternate protocol
+        var alternateScheme = scheme == "https" ? "http" : "https";
+        
+        // Determine the alternate host (www vs non-www)
+        string alternateHost;
+        if (isWww)
+        {
+            // Remove www.
+            alternateHost = host.Substring(4);
+        }
+        else
+        {
+            // Add www.
+            alternateHost = "www." + host;
+        }
+        
+        // Generate variants:
+        // 1. Alternate protocol with same host
+        variants.Add($"{alternateScheme}://{host}/");
+        
+        // 2. Same protocol with alternate host
+        variants.Add($"{scheme}://{alternateHost}/");
+        
+        // 3. Alternate protocol with alternate host
+        variants.Add($"{alternateScheme}://{alternateHost}/");
+        
+        return variants;
+    }
+    
+    /// <summary>
+    /// Test a domain variant and report findings.
+    /// </summary>
+    private async Task TestDomainVariantAsync(UrlContext ctx, string variantUrl, string canonicalUrl, CancellationToken ct)
+    {
+        try
+        {
+            _logger.LogDebug("Testing domain variant: {VariantUrl}", variantUrl);
+            
+            var request = new HttpRequestMessage(HttpMethod.Get, variantUrl);
+            request.Headers.Add("User-Agent", "ShoutingIguana/1.0 (SEO Crawler)");
+            
+            HttpResponseMessage response;
+            
+            try
+            {
+                response = await HttpClient.SendAsync(request, ct);
+            }
+            catch (HttpRequestException ex)
+            {
+                // Unable to connect or DNS error
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Warning,
+                    "DOMAIN_VARIANT_UNREACHABLE",
+                    $"Domain variant {variantUrl} is unreachable",
+                    new
+                    {
+                        variantUrl,
+                        canonicalUrl,
+                        error = ex.Message,
+                        note = "This variant doesn't resolve - this is fine if intentional"
+                    });
+                return;
+            }
+            catch (TaskCanceledException)
+            {
+                // Timeout
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Warning,
+                    "DOMAIN_VARIANT_TIMEOUT",
+                    $"Domain variant {variantUrl} timed out",
+                    new
+                    {
+                        variantUrl,
+                        canonicalUrl,
+                        note = "Variant did not respond within timeout period"
+                    });
+                return;
+            }
+            
+            // Use response and dispose it properly
+            using (response)
+            {
+                var statusCode = (int)response.StatusCode;
+            
+            // Check if it's a permanent redirect (301 or 308)
+            if (statusCode == 301 || statusCode == 308)
+            {
+                var locationHeader = response.Headers.Location?.ToString();
+                
+                // Normalize URLs for comparison
+                var normalizedLocation = NormalizeUrlForComparison(locationHeader);
+                var normalizedCanonical = NormalizeUrlForComparison(canonicalUrl);
+                
+                if (normalizedLocation == normalizedCanonical)
+                {
+                    // Correct! Permanent redirect to canonical URL
+                    await ctx.Findings.ReportAsync(
+                        Key,
+                        Severity.Info,
+                        "DOMAIN_VARIANT_CORRECT_REDIRECT",
+                        $"✓ Domain variant correctly redirects: {variantUrl} → {locationHeader} (HTTP {statusCode})",
+                        new
+                        {
+                            variantUrl,
+                            redirectsTo = locationHeader,
+                            statusCode,
+                            redirectType = statusCode == 301 ? "301 Permanent" : "308 Permanent Redirect",
+                            status = "Correct - prevents duplicate content"
+                        });
+                }
+                else
+                {
+                    // Redirects, but not to the canonical URL
+                    await ctx.Findings.ReportAsync(
+                        Key,
+                        Severity.Warning,
+                        "DOMAIN_VARIANT_WRONG_TARGET",
+                        $"Domain variant redirects to unexpected URL: {variantUrl} → {locationHeader}",
+                        new
+                        {
+                            variantUrl,
+                            redirectsTo = locationHeader,
+                            expectedTarget = canonicalUrl,
+                            statusCode,
+                            recommendation = "Ensure variant redirects to the canonical URL"
+                        });
+                }
+            }
+            // Check if it's a temporary redirect (should be permanent)
+            else if (statusCode >= 300 && statusCode < 400)
+            {
+                var locationHeader = response.Headers.Location?.ToString();
+                
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Error,
+                    "DOMAIN_VARIANT_WRONG_REDIRECT_TYPE",
+                    $"✗ Domain variant uses temporary redirect instead of 301: {variantUrl} → {locationHeader} (HTTP {statusCode})",
+                    new
+                    {
+                        variantUrl,
+                        redirectsTo = locationHeader,
+                        statusCode,
+                        redirectType = GetRedirectTypeName(statusCode),
+                        issue = "Temporary redirects (302/307) don't pass SEO value and may cause duplicate content issues",
+                        recommendation = "Change to 301 (Permanent) redirect to properly consolidate domain variants"
+                    });
+            }
+            // Check if it returns 200 OK (duplicate content!)
+            else if (statusCode == 200)
+            {
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Error,
+                    "DOMAIN_VARIANT_DUPLICATE_CONTENT",
+                    $"✗ DUPLICATE CONTENT: Domain variant serves content without redirecting: {variantUrl}",
+                    new
+                    {
+                        variantUrl,
+                        canonicalUrl,
+                        statusCode,
+                        issue = "Same content is accessible from multiple URLs, creating duplicate content",
+                        seoImpact = "Search engines may split ranking signals between variants, reducing overall rankings",
+                        recommendation = $"Add 301 redirect from {variantUrl} to {canonicalUrl}"
+                    });
+            }
+            else
+            {
+                // Other status codes (4xx, 5xx)
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Warning,
+                    "DOMAIN_VARIANT_ERROR",
+                    $"Domain variant returns error: {variantUrl} (HTTP {statusCode})",
+                    new
+                    {
+                        variantUrl,
+                        statusCode,
+                        note = "Variant returns an error - ensure this is intentional"
+                    });
+            }
+            } // End of using block for response
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error testing domain variant {VariantUrl}", variantUrl);
+        }
+    }
+    
+    /// <summary>
+    /// Normalize URL for comparison (remove trailing slashes, lowercase)
+    /// </summary>
+    private string NormalizeUrlForComparison(string? url)
+    {
+        if (string.IsNullOrEmpty(url))
+        {
+            return string.Empty;
+        }
+        
+        try
+        {
+            var uri = new Uri(url);
+            // Normalize: lowercase scheme and host, remove trailing slash from path
+            var normalized = $"{uri.Scheme.ToLowerInvariant()}://{uri.Host.ToLowerInvariant()}{uri.AbsolutePath.TrimEnd('/')}";
+            
+            // Include query string if present
+            if (!string.IsNullOrEmpty(uri.Query))
+            {
+                normalized += uri.Query;
+            }
+            
+            return normalized;
+        }
+        catch
+        {
+            return url.TrimEnd('/').ToLowerInvariant();
+        }
+    }
+    
+    /// <summary>
+    /// Get human-readable redirect type name
+    /// </summary>
+    private string GetRedirectTypeName(int statusCode)
+    {
+        return statusCode switch
+        {
+            301 => "301 Permanent",
+            302 => "302 Found (Temporary)",
+            303 => "303 See Other",
+            307 => "307 Temporary Redirect",
+            308 => "308 Permanent Redirect",
+            _ => $"{statusCode}"
+        };
+    }
+    
+    /// <summary>
     /// Cleanup per-project data when project is closed.
     /// </summary>
     public override void CleanupProject(int projectId)
     {
         ContentHashesByProject.TryRemove(projectId, out _);
         SimHashesByProject.TryRemove(projectId, out _);
+        DomainVariantsCheckedByProject.TryRemove(projectId, out _);
         _logger.LogDebug("Cleaned up duplicate content data for project {ProjectId}", projectId);
     }
 }

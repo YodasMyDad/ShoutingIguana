@@ -8,13 +8,14 @@ namespace ShoutingIguana.Plugins.BrokenLinks;
 /// <summary>
 /// Analyzes pages for broken links (404s, 500s, etc.) with comprehensive diagnostics.
 /// </summary>
-public class BrokenLinksTask : UrlTaskBase
+public class BrokenLinksTask : UrlTaskBase, IDisposable
 {
     private readonly ILogger _logger;
     private readonly IBrokenLinksChecker _checker;
     private readonly ExternalLinkChecker? _externalChecker;
     private readonly bool _checkExternalLinks;
     private readonly bool _checkAnchorLinks;
+    private bool _disposed;
 
     // Helper class to track unique findings with occurrence counts
     private class FindingTracker
@@ -327,7 +328,7 @@ public class BrokenLinksTask : UrlTaskBase
         }
     }
 
-    private async Task CheckAnchorLinkAsync(UrlContext ctx, LinkInfo link, ElementDiagnosticInfo? diagnosticInfo, Dictionary<string, FindingTracker> findingsMap, CancellationToken ct)
+    private async Task CheckAnchorLinkAsync(UrlContext ctx, LinkInfo link, ElementDiagnosticInfo? diagnosticInfo, Dictionary<string, FindingTracker> findingsMap, CancellationToken _)
     {
         if (ctx.Page == null || string.IsNullOrEmpty(link.AnchorId))
             return;
@@ -548,6 +549,18 @@ public class BrokenLinksTask : UrlTaskBase
         public string LinkType { get; set; } = string.Empty;
         public bool HasNofollow { get; set; }
         public string? AnchorId { get; set; }
+    }
+
+    /// <summary>
+    /// Dispose of resources, particularly the ExternalLinkChecker HttpClient.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _externalChecker?.Dispose();
+        _disposed = true;
     }
 }
 
