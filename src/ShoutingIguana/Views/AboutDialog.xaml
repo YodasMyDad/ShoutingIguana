@@ -8,9 +8,12 @@
         MinWidth="500"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource BackgroundBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}"
         ResizeMode="NoResize"
-        ShowInTaskbar="False">
-    
+        ShowInTaskbar="False"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+
     <Grid KeyboardNavigation.TabNavigation="Cycle">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -70,7 +73,7 @@
                         Padding="20"
                         Margin="0,0,0,16">
                     <StackPanel>
-                        <TextBlock Text="Copyright © 2025"
+                        <TextBlock Text="Copyright &#xA9; 2025"
                                    Style="{StaticResource BodyTextStyle}"
                                    Margin="0,0,0,8"/>
                         <TextBlock Text="Licensed under MIT License"
@@ -101,23 +104,23 @@
                         <TextBlock Text="Built With"
                                    Style="{StaticResource SubtitleTextStyle}"
                                    Margin="0,0,0,12"/>
-                        
+
                         <TextBlock Style="{StaticResource CaptionTextStyle}">
-                            <Run Text="• Microsoft Playwright"/>
+                            <Run Text="&#x2022; Microsoft Playwright"/>
                             <LineBreak/>
-                            <Run Text="• Entity Framework Core"/>
+                            <Run Text="&#x2022; Entity Framework Core"/>
                             <LineBreak/>
-                            <Run Text="• HtmlAgilityPack"/>
+                            <Run Text="&#x2022; HtmlAgilityPack"/>
                             <LineBreak/>
-                            <Run Text="• ClosedXML"/>
+                            <Run Text="&#x2022; ClosedXML"/>
                             <LineBreak/>
-                            <Run Text="• CsvHelper"/>
+                            <Run Text="&#x2022; CsvHelper"/>
                             <LineBreak/>
-                            <Run Text="• NuGet.Protocol"/>
+                            <Run Text="&#x2022; NuGet.Protocol"/>
                             <LineBreak/>
-                            <Run Text="• Serilog"/>
+                            <Run Text="&#x2022; Serilog"/>
                             <LineBreak/>
-                            <Run Text="• CommunityToolkit.Mvvm"/>
+                            <Run Text="&#x2022; CommunityToolkit.Mvvm"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>
@@ -211,4 +214,3 @@
         </Border>
     </Grid>
 </Window>
-

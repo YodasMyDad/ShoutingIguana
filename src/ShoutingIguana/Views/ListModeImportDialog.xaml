@@ -8,8 +8,11 @@
         MinWidth="650"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource BackgroundBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}"
         ResizeMode="NoResize"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
     
     <Grid Margin="0" KeyboardNavigation.TabNavigation="Cycle">
         <Grid.RowDefinitions>

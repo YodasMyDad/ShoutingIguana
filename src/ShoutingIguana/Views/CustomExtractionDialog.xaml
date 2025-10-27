@@ -8,8 +8,11 @@
         MinWidth="700"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource BackgroundBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}"
         ResizeMode="CanResize"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
     
     <Grid Margin="0" KeyboardNavigation.TabNavigation="Cycle">
         <Grid.RowDefinitions>
@@ -74,6 +77,7 @@
                     <DataGrid Grid.Row="1"
                               ItemsSource="{Binding Rules}"
                               SelectedItem="{Binding SelectedRule}"
+                              Style="{StaticResource ModernDataGrid}"
                               AutoGenerateColumns="False"
                               IsReadOnly="True"
                               SelectionMode="Single"
