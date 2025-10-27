@@ -17,6 +17,11 @@ public interface IUrlTask
     string DisplayName { get; }
     
     /// <summary>
+    /// Short description of what this task does.
+    /// </summary>
+    string Description { get; }
+    
+    /// <summary>
     /// Execution priority. Lower values execute first.
     /// </summary>
     int Priority { get; }

@@ -25,6 +25,7 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
 
     public override string Key => "TitlesMeta";
     public override string DisplayName => "Titles & Meta";
+    public override string Description => "Validates title tags, meta descriptions, Open Graph, and heading structure";
     public override int Priority => 30;
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
@@ -36,6 +37,12 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
 
         // Only analyze HTML pages
         if (ctx.Metadata.ContentType?.Contains("text/html") != true)
+        {
+            return;
+        }
+
+        // Only analyze successful pages (skip 4xx, 5xx errors)
+        if (ctx.Metadata.StatusCode < 200 || ctx.Metadata.StatusCode >= 300)
         {
             return;
         }
@@ -68,7 +75,7 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
             await AnalyzeRobotsAsync(ctx);
             
             // Analyze viewport
-            await AnalyzeViewportAsync(ctx, viewport);
+            await AnalyzeViewportAsync(ctx, viewport, doc);
             
             // Analyze charset
             await AnalyzeCharsetAsync(ctx, doc, charset);
@@ -424,8 +431,27 @@ public class TitlesMetaTask(ILogger logger) : UrlTaskBase
         }
     }
 
-    private async Task AnalyzeViewportAsync(UrlContext ctx, string viewport)
+    private async Task AnalyzeViewportAsync(UrlContext ctx, string viewport, HtmlDocument doc)
     {
+        // Check for multiple viewport declarations
+        var viewportNodes = doc.DocumentNode.SelectNodes("//meta[@name='viewport']");
+        var viewportCount = viewportNodes?.Count ?? 0;
+
+        if (viewportCount > 1)
+        {
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Warning,
+                "MULTIPLE_VIEWPORT_DECLARATIONS",
+                $"Multiple viewport declarations found ({viewportCount})",
+                new 
+                { 
+                    url = ctx.Url.ToString(), 
+                    count = viewportCount,
+                    recommendation = "Only one viewport meta tag should be present"
+                });
+        }
+        
         if (string.IsNullOrEmpty(viewport))
         {
             await ctx.Findings.ReportAsync(

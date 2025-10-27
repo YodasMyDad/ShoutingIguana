@@ -18,7 +18,8 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
     private const int MAX_DATA_URI_SIZE_KB = 10;
 
     public override string Key => "ImageAudit";
-    public override string DisplayName => "Image Audit";
+    public override string DisplayName => "Images";
+    public override string Description => "Checks image alt text, file sizes, formats, and optimization opportunities";
     public override int Priority => 60;
 
     // Helper class to track unique findings with occurrence counts
@@ -38,7 +39,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
             return;
         }
 
-        // Only analyze successful HTML pages
+        // Only analyze successful pages (skip 4xx, 5xx errors)
         if (ctx.Metadata.StatusCode < 200 || ctx.Metadata.StatusCode >= 300)
         {
             return;

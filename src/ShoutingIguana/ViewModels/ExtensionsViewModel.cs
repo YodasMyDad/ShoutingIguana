@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -69,6 +70,9 @@ public partial class ExtensionsViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private int _updatesAvailable;
 
+    [ObservableProperty]
+    private bool _includePrerelease;
+
     public ExtensionsViewModel(
         ILogger<ExtensionsViewModel> logger,
         IPluginRegistry pluginRegistry,
@@ -91,7 +95,19 @@ public partial class ExtensionsViewModel : ObservableObject, IDisposable
         _ = CheckForUpdatesAsync();
     }
 
-    partial void OnSearchQueryChanged(string value /* unused but required by partial method */)
+    partial void OnSearchQueryChanged(string value)
+    {
+        _ = value; // Suppress unused warning - required by partial method signature
+        TriggerDebouncedSearch();
+    }
+
+    partial void OnIncludePrereleaseChanged(bool value)
+    {
+        _ = value; // Suppress unused warning - required by partial method signature
+        TriggerDebouncedSearch();
+    }
+
+    private void TriggerDebouncedSearch()
     {
         // Debounced search - dispose old token before creating new one
         _searchCts?.Cancel();
@@ -166,16 +182,17 @@ public partial class ExtensionsViewModel : ObservableObject, IDisposable
     {
         if (string.IsNullOrWhiteSpace(SearchQuery))
         {
-            BrowseResults.Clear();
+            await Application.Current.Dispatcher.InvokeAsync(() => BrowseResults.Clear());
             return;
         }
 
-        IsSearching = true;
+        await Application.Current.Dispatcher.InvokeAsync(() => IsSearching = true);
         try
         {
             var results = await _nuGetService.SearchPackagesAsync(
                 SearchQuery,
-                tagFilter: "shoutingiguana-plugin",
+                tagFilter: null,
+                includePrerelease: IncludePrerelease,
                 skip: 0,
                 take: 50);
 
@@ -190,8 +207,12 @@ public partial class ExtensionsViewModel : ObservableObject, IDisposable
                 IsInstalled = InstalledPlugins.Any(p => p.PackageId.Equals(r.Id, StringComparison.OrdinalIgnoreCase))
             }).ToList();
 
-            BrowseResults = new ObservableCollection<BrowsePluginViewModel>(viewModels);
-            _logger.LogInformation("Found {Count} plugins matching '{Query}'", viewModels.Count, SearchQuery);
+            await Application.Current.Dispatcher.InvokeAsync(() => 
+            {
+                BrowseResults = new ObservableCollection<BrowsePluginViewModel>(viewModels);
+            });
+            
+            _logger.LogInformation("Found {Count} packages matching '{Query}'", viewModels.Count, SearchQuery);
         }
         catch (Exception ex)
         {
@@ -200,7 +221,7 @@ public partial class ExtensionsViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            IsSearching = false;
+            await Application.Current.Dispatcher.InvokeAsync(() => IsSearching = false);
         }
     }
 
@@ -210,25 +231,76 @@ public partial class ExtensionsViewModel : ObservableObject, IDisposable
         if (SelectedBrowsePlugin == null) return;
 
         IsInstalling = true;
-        InstallStatus = "Installing...";
+        InstallStatus = "Validating package...";
         InstallProgress = 0;
+
+        string? tempPackagePath = null;
 
         try
         {
-            var progress = new Progress<InstallProgress>(p =>
+            // Step 1: Download package to temp location for validation
+            // Use a unique directory per installation to avoid conflicts
+            var tempDir = Path.Combine(Path.GetTempPath(), "ShoutingIguana", "ValidatePackage", Guid.NewGuid().ToString());
+            Directory.CreateDirectory(tempDir);
+
+            var downloadProgress = new Progress<int>(p =>
+            {
+                InstallStatus = $"Downloading package... {p}%";
+                InstallProgress = p / 2; // First half of progress bar
+            });
+
+            tempPackagePath = await _nuGetService.DownloadPackageAsync(
+                SelectedBrowsePlugin.PackageId,
+                SelectedBrowsePlugin.Version,
+                tempDir,
+                downloadProgress);
+
+            // Step 2: Validate that package contains a valid plugin
+            InstallStatus = "Validating plugin...";
+            InstallProgress = 50;
+
+            var validation = await _nuGetService.ValidatePackageAsync(tempPackagePath);
+
+            if (validation.Result != PackageValidationResult.Valid)
+            {
+                var errorMessage = validation.Result switch
+                {
+                    PackageValidationResult.NoPlugin => 
+                        "This package does not contain a valid Shouting Iguana plugin. " +
+                        "Plugins must implement IPlugin interface and have the [Plugin] attribute.",
+                    PackageValidationResult.IncompatibleSdk => 
+                        $"This plugin requires SDK version {validation.MinSdkVersion} but the current version is incompatible. " +
+                        "Please update Shouting Iguana or contact the plugin developer.",
+                    PackageValidationResult.InvalidPackage => 
+                        $"Invalid or corrupted package: {validation.ErrorMessage}",
+                    _ => $"Package validation failed: {validation.ErrorMessage}"
+                };
+
+                _toastService.ShowError("Invalid Plugin Package", errorMessage);
+                _logger.LogWarning("Package validation failed for {PackageId}: {Result} - {Error}", 
+                    SelectedBrowsePlugin.PackageId, validation.Result, validation.ErrorMessage);
+                return;
+            }
+
+            // Step 3: Proceed with installation
+            InstallStatus = "Installing plugin...";
+            InstallProgress = 60;
+
+            var installProgress = new Progress<InstallProgress>(p =>
             {
                 InstallStatus = p.Status;
-                InstallProgress = p.PercentComplete;
+                InstallProgress = 60 + (p.PercentComplete * 40 / 100); // Last 40% of progress bar
             });
 
             var result = await _packageManager.InstallPluginAsync(
                 SelectedBrowsePlugin.PackageId,
                 SelectedBrowsePlugin.Version,
-                progress);
+                installProgress);
 
             if (result.Success)
             {
-                _toastService.ShowSuccess("Plugin Installed", $"{result.PluginName} has been installed successfully");
+                _toastService.ShowSuccess("Plugin Installed", 
+                    $"{validation.PluginName ?? result.PluginName} has been installed successfully");
                 SelectedBrowsePlugin.IsInstalled = true;
                 
                 // Refresh installed list
@@ -246,6 +318,23 @@ public partial class ExtensionsViewModel : ObservableObject, IDisposable
         }
         finally
         {
+            // Clean up temp package file
+            if (tempPackagePath != null)
+            {
+                try
+                {
+                    var tempDir = Path.GetDirectoryName(tempPackagePath);
+                    if (tempDir != null && Directory.Exists(tempDir))
+                    {
+                        Directory.Delete(tempDir, true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Failed to clean up temp package directory");
+                }
+            }
+
             IsInstalling = false;
             InstallStatus = string.Empty;
             InstallProgress = 0;

@@ -21,6 +21,7 @@ public class CustomExtractionTask(ILogger logger, IServiceProvider serviceProvid
 
     public override string Key => "CustomExtraction";
     public override string DisplayName => "Custom Extraction";
+    public override string Description => "Extracts custom data using CSS selectors, XPath, and regex patterns you define";
     public override int Priority => 70; // Run after most other analysis
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
@@ -32,6 +33,12 @@ public class CustomExtractionTask(ILogger logger, IServiceProvider serviceProvid
         }
 
         if (string.IsNullOrEmpty(ctx.RenderedHtml))
+        {
+            return;
+        }
+
+        // Only analyze successful pages (skip 4xx, 5xx errors)
+        if (ctx.Metadata.StatusCode < 200 || ctx.Metadata.StatusCode >= 300)
         {
             return;
         }

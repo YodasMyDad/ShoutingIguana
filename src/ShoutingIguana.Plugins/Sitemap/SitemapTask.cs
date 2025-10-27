@@ -22,7 +22,8 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
     private static readonly ConcurrentDictionary<int, bool> SitemapFoundByProject = new();
 
     public override string Key => "Sitemap";
-    public override string DisplayName => "XML Sitemap";
+    public override string DisplayName => "Sitemap";
+    public override string Description => "Validates XML sitemaps and compares them against crawled pages";
     public override int Priority => 45; // Run after basic analysis
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
@@ -39,7 +40,7 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
             if (IsSitemapUrl(ctx.Url.ToString()))
             {
                 // Check HTTP status first
-                var httpStatus = ctx.Metadata.HttpStatus ?? 0;
+                var httpStatus = ctx.Metadata.StatusCode;
                 
                 if (httpStatus == 404)
                 {
@@ -48,7 +49,7 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
                         Key,
                         Severity.Warning,
                         "SITEMAP_NOT_FOUND",
-                        $"Sitemap not found at {ctx.Url} (HTTP {httpStatus})",
+                        string.Format("Sitemap not found at {0} (HTTP {1})", ctx.Url, httpStatus),
                         new
                         {
                             url = ctx.Url.ToString(),
@@ -63,7 +64,7 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
                         Key,
                         Severity.Error,
                         "SITEMAP_ERROR",
-                        $"Error accessing sitemap at {ctx.Url} (HTTP {httpStatus})",
+                        string.Format("Error accessing sitemap at {0} (HTTP {1})", ctx.Url, httpStatus),
                         new
                         {
                             url = ctx.Url.ToString(),
@@ -109,18 +110,9 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
 
         // Queue sitemap URL for crawling with high priority
         await ctx.Enqueue.EnqueueAsync(sitemapUrl, depth: 1, priority: 10);
-
-        await ctx.Findings.ReportAsync(
-            Key,
-            Severity.Info,
-            "SITEMAP_DISCOVERY",
-            "Sitemap discovery initiated",
-            new
-            {
-                url = ctx.Url.ToString(),
-                sitemapUrl,
-                note = "Will attempt to fetch sitemap.xml from standard location"
-            });
+        
+        // Don't report a finding here - actual findings will be reported when sitemap is crawled
+        // (either SITEMAP_FOUND, SITEMAP_NOT_FOUND, or other validation issues)
     }
 
     private async Task AnalyzeSitemapFileAsync(UrlContext ctx)

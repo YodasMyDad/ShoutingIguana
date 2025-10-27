@@ -7,6 +7,7 @@ public abstract class UrlTaskBase : IUrlTask
 {
     public abstract string Key { get; }
     public abstract string DisplayName { get; }
+    public virtual string Description => string.Empty;
     public virtual int Priority => 100;
     
     public abstract Task ExecuteAsync(UrlContext ctx, CancellationToken ct);

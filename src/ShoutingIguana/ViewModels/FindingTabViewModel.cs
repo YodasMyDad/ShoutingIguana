@@ -23,6 +23,9 @@ public partial class FindingTabViewModel : ObservableObject
     private string _displayName = string.Empty;
 
     [ObservableProperty]
+    private string _description = string.Empty;
+
+    [ObservableProperty]
     private ObservableCollection<Finding> _findings = new();
 
     [ObservableProperty]

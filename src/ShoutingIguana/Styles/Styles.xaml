@@ -857,7 +857,7 @@
          ======================================== -->
     
     <Style x:Key="LoadingOverlay" TargetType="Grid">
-        <Setter Property="Background" Value="#80FFFFFF"/>
+        <Setter Property="Background" Value="#F0F3F3F3"/>
         <Setter Property="ZIndex" Value="999"/>
     </Style>
     
@@ -1037,6 +1037,36 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 
+                                <!-- ToggleButton spans entire ComboBox to make it fully clickable -->
+                                <ToggleButton x:Name="ToggleButton"
+                                            Grid.Column="0"
+                                            Grid.ColumnSpan="2"
+                                            Focusable="False"
+                                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                            ClickMode="Press"
+                                            Background="Transparent"
+                                            BorderThickness="0">
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Grid Background="Transparent">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="32"/>
+                                                </Grid.ColumnDefinitions>
+                                                <!-- Arrow icon on the right -->
+                                                <TextBlock Grid.Column="1"
+                                                         Text="&#xE70D;"
+                                                         FontFamily="Segoe MDL2 Assets"
+                                                         FontSize="12"
+                                                         Foreground="{StaticResource TextSecondaryBrush}"
+                                                         HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
+                                </ToggleButton>
+                                
+                                <!-- ContentPresenter on top for display, but not hit-testable -->
                                 <ContentPresenter x:Name="ContentSite"
                                                 Grid.Column="0"
                                                 IsHitTestVisible="False"
@@ -1046,22 +1076,6 @@
                                                 Margin="{TemplateBinding Padding}"
                                                 VerticalAlignment="Center"
                                                 HorizontalAlignment="Left"/>
-                                
-                                <ToggleButton x:Name="ToggleButton"
-                                            Grid.Column="1"
-                                            Focusable="False"
-                                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                            ClickMode="Press"
-                                            Width="32"
-                                            Background="Transparent"
-                                            BorderThickness="0">
-                                    <TextBlock Text="&#xE70D;"
-                                             FontFamily="Segoe MDL2 Assets"
-                                             FontSize="12"
-                                             Foreground="{StaticResource TextSecondaryBrush}"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center"/>
-                                </ToggleButton>
                             </Grid>
                         </Border>
                         

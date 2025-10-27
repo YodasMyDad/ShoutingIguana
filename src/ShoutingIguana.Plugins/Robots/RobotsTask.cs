@@ -11,13 +11,20 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
     private readonly ILogger _logger = logger;
 
     public override string Key => "Robots";
-    public override string DisplayName => "Robots & Indexability";
+    public override string DisplayName => "Indexability";
+    public override string Description => "Checks robots.txt, noindex tags, and other indexability directives";
     public override int Priority => 20; // Run early since other plugins may use IsIndexable
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     {
         try
         {
+            // Check for missing robots.txt on the homepage only (depth 0)
+            if (ctx.Metadata.Depth == 0)
+            {
+                await CheckForRobotsTxtAsync(ctx);
+            }
+            
             // Compute IsIndexable status
             bool isIndexable = ComputeIsIndexable(ctx);
             
@@ -51,13 +58,9 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         // 1. It has noindex in meta robots
         // 2. It has noindex in X-Robots-Tag header
         // 3. It's blocked by robots.txt (if crawler respects robots.txt)
-        // 4. It returns 4xx or 5xx status code
-
-        // Check status code
-        if (ctx.Metadata.StatusCode is >= 400)
-        {
-            return false;
-        }
+        //
+        // NOTE: We do NOT check HTTP status codes here - that's the Broken Links plugin's job.
+        // This plugin only cares about indexability DIRECTIVES (robots.txt, meta robots, etc.)
 
         // Check robots directives
         if (ctx.Metadata.RobotsNoindex == true)
@@ -74,6 +77,48 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         return true;
     }
 
+    private async Task CheckForRobotsTxtAsync(UrlContext ctx)
+    {
+        try
+        {
+            // Build robots.txt URL from the base URL
+            var baseUri = new Uri(ctx.Project.BaseUrl);
+            var robotsTxtUrl = $"{baseUri.Scheme}://{baseUri.Host}/robots.txt";
+            
+            // Note: HttpClient is created here for a one-time use (only at depth 0)
+            // This is acceptable since it's called once per crawl, not per URL
+            using var httpClient = new HttpClient();
+            httpClient.Timeout = TimeSpan.FromSeconds(10);
+            
+            var response = await httpClient.GetAsync(robotsTxtUrl);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                // No robots.txt found
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Info,
+                    "NO_ROBOTS_TXT",
+                    "No robots.txt file found (all pages allowed by default)",
+                    new
+                    {
+                        robotsTxtUrl,
+                        statusCode = (int)response.StatusCode,
+                        note = "A robots.txt file is not required, but it's recommended for SEO best practices. It can be used to control crawler access, specify crawl delays, and declare sitemap locations."
+                    });
+            }
+            else
+            {
+                // robots.txt exists - optionally could analyze its content here
+                _logger.LogDebug("robots.txt found at {Url}", robotsTxtUrl);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Error checking for robots.txt");
+        }
+    }
+    
     private Task AnalyzeRobotsTxtComplianceAsync(UrlContext ctx)
     {
         // Check if page is blocked by robots.txt but still internally linked
@@ -181,14 +226,27 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
 
     private async Task CheckImportantPageIndexabilityAsync(UrlContext ctx, bool isIndexable)
     {
-        // Check if an important page (low depth) is not indexable
+        // Check if an important page (low depth) is blocked by indexability directives
+        // NOTE: We only check robots directives here, not HTTP errors (that's Broken Links plugin's job)
         if (!isIndexable && ctx.Metadata.Depth <= 2)
         {
-            var reason = ctx.Metadata.RobotsNoindex == true
-                ? "noindex directive"
-                : ctx.Metadata.StatusCode >= 400
-                    ? $"HTTP {ctx.Metadata.StatusCode} status"
-                    : "unknown reason";
+            // Determine the reason (should only be robots-related at this point)
+            string reason;
+            string recommendation;
+            
+            if (ctx.Metadata.RobotsNoindex == true)
+            {
+                reason = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) 
+                    ? "noindex in X-Robots-Tag header" 
+                    : "noindex in meta robots tag";
+                recommendation = "Important pages should be indexable. Remove the noindex directive unless this is intentional (e.g., admin pages, thank-you pages).";
+            }
+            else
+            {
+                // This page is blocked by robots.txt or other directive
+                reason = "blocked by robots.txt or other directive";
+                recommendation = "Important pages should be accessible to search engines. Check your robots.txt file.";
+            }
 
             await ctx.Findings.ReportAsync(
                 Key,
@@ -200,9 +258,9 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                     url = ctx.Url.ToString(),
                     depth = ctx.Metadata.Depth,
                     reason,
-                    statusCode = ctx.Metadata.StatusCode,
                     hasNoindex = ctx.Metadata.RobotsNoindex,
-                    recommendation = "Important pages should be indexable unless intentionally blocked"
+                    xRobotsTag = ctx.Metadata.XRobotsTag,
+                    recommendation
                 });
         }
     }

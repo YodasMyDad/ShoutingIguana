@@ -17,13 +17,20 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, string>> CanonicalsByProject = new();
 
     public override string Key => "Canonical";
-    public override string DisplayName => "Canonical Validation";
+    public override string DisplayName => "Canonical";
+    public override string Description => "Validates canonical URLs and detects chains, conflicts, and cross-domain issues";
     public override int Priority => 25; // Run after basic analysis but before advanced
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     {
         // Only analyze HTML pages
         if (ctx.Metadata.ContentType?.Contains("text/html") != true)
+        {
+            return;
+        }
+
+        // Only analyze successful pages (skip 4xx, 5xx errors)
+        if (ctx.Metadata.StatusCode < 200 || ctx.Metadata.StatusCode >= 300)
         {
             return;
         }
@@ -442,10 +449,20 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
             }
 
             var normalizedNext = NormalizeUrl(nextCanonical);
+            var normalizedCurrent = NormalizeUrl(current);
             
             // Check if we've seen this URL before (loop detected)
             if (visited.Contains(normalizedNext))
             {
+                // Don't report self-referencing canonicals as loops (they're best practice)
+                // Only report if the loop involves at least 2 different URLs
+                if (normalizedNext == normalizedCurrent && chain.Count == 1)
+                {
+                    // This is just a self-referencing canonical (A → A), which is fine
+                    _logger.LogDebug("URL {Url} has self-referencing canonical (best practice)", ctx.Url);
+                    return;
+                }
+                
                 chain.Add(nextCanonical);
                 
                 await ctx.Findings.ReportAsync(

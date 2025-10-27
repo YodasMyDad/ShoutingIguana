@@ -20,6 +20,7 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
 
     public override string Key => "Redirects";
     public override string DisplayName => "Redirects";
+    public override string Description => "Detects redirect chains, loops, and canonicalization issues";
     public override int Priority => 20;
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
@@ -402,18 +403,18 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
     /// <summary>
     /// Validate redirect target status
     /// </summary>
-    private async Task ValidateRedirectTargetAsync(UrlContext ctx, string? targetUrl)
+    private Task ValidateRedirectTargetAsync(UrlContext ctx, string? targetUrl)
     {
         if (string.IsNullOrEmpty(targetUrl))
         {
-            return;
+            return Task.CompletedTask;
         }
         
         var projectId = ctx.Project.ProjectId;
         
         if (!RedirectsByProject.TryGetValue(projectId, out var projectRedirects))
         {
-            return;
+            return Task.CompletedTask;
         }
         
         // Check if target URL has been crawled and what its status is
@@ -421,12 +422,14 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
         if (projectRedirects.TryGetValue(targetUrl, out var targetRedirect))
         {
             // Target is also a redirect - will be caught by chain detection
-            return;
+            return Task.CompletedTask;
         }
         
         // Note: Full validation would require querying the URL repository
         // For now, we log that we should check this
         _logger.LogDebug("Redirect target {Target} should be validated for status", targetUrl);
+        
+        return Task.CompletedTask;
     }
     
     /// <summary>

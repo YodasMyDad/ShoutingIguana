@@ -41,6 +41,7 @@ public class BrokenLinksTask : UrlTaskBase
 
     public override string Key => "BrokenLinks";
     public override string DisplayName => "Broken Links";
+    public override string Description => "Detects broken links, 404 errors, and missing resources on your pages";
     public override int Priority => 50;
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
@@ -275,17 +276,32 @@ public class BrokenLinksTask : UrlTaskBase
         // Report broken links
         if (status.HasValue && (status.Value >= 400 || status.Value == 0))
         {
-            var severity = status.Value >= 500 || status.Value == 0 ? Severity.Error : Severity.Warning;
+            // All broken links (4xx and 5xx) should be errors as they prevent users from accessing content
+            var severity = Severity.Error;
             var statusText = status.Value == 0 ? "Connection Failed" : status.Value.ToString();
             
             // Dedupe by link URL and status code
             var key = $"{link.Url}|BROKEN_{link.LinkType.ToUpperInvariant()}|{status.Value}";
+            
+            // Add depth information and specific recommendations for important pages
+            var data = CreateFindingData(ctx, link, status.Value, isExternal, diagnosticInfo, hasRedirect: hasRedirect);
+            var dataDict = data as Dictionary<string, object?>;
+            
+            // Check if this is an important page (from source page perspective)
+            if (dataDict != null && ctx.Metadata.Depth <= 2 && !isExternal && link.LinkType == "hyperlink")
+            {
+                dataDict["note"] = $"This broken link is found on an important page (depth {ctx.Metadata.Depth})";
+                dataDict["recommendation"] = status.Value == 404 
+                    ? "Fix the link URL or implement a 301 redirect to the correct page"
+                    : $"Investigate why this page returns {statusText} and fix the issue or update the link";
+            }
+            
             TrackFinding(findingsMap,
                 key,
                 severity,
                 $"BROKEN_{link.LinkType.ToUpperInvariant()}",
                 $"Broken {link.LinkType}: {link.Url} returns {statusText}",
-                CreateFindingData(ctx, link, status.Value, isExternal, diagnosticInfo, hasRedirect: hasRedirect));
+                data);
         }
         // Report redirect chains for internal links
         else if (hasRedirect == true && !isExternal)

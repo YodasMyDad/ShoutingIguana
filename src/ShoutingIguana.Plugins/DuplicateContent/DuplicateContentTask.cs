@@ -23,6 +23,7 @@ public class DuplicateContentTask(ILogger logger) : UrlTaskBase
 
     public override string Key => "DuplicateContent";
     public override string DisplayName => "Duplicate Content";
+    public override string Description => "Identifies exact and near-duplicate content across your pages";
     public override int Priority => 50; // Run after basic analysis
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
@@ -34,6 +35,12 @@ public class DuplicateContentTask(ILogger logger) : UrlTaskBase
         }
 
         if (string.IsNullOrEmpty(ctx.RenderedHtml))
+        {
+            return;
+        }
+
+        // Only analyze successful pages (skip 4xx, 5xx errors)
+        if (ctx.Metadata.StatusCode < 200 || ctx.Metadata.StatusCode >= 300)
         {
             return;
         }
@@ -119,7 +126,18 @@ public class DuplicateContentTask(ILogger logger) : UrlTaskBase
         projectHashes.AddOrUpdate(
             hash,
             _ => new List<string> { url },
-            (_, list) => { lock (list) { list.Add(url); } return list; });
+            (_, list) =>
+            {
+                lock (list)
+                {
+                    // Only add if not already in the list (prevent duplicate entries for same URL)
+                    if (!list.Contains(url, StringComparer.OrdinalIgnoreCase))
+                    {
+                        list.Add(url);
+                    }
+                }
+                return list;
+            });
     }
 
     private void TrackSimHash(int projectId, ulong simHash, string url)
@@ -128,7 +146,18 @@ public class DuplicateContentTask(ILogger logger) : UrlTaskBase
         projectSimHashes.AddOrUpdate(
             simHash,
             _ => new List<string> { url },
-            (_, list) => { lock (list) { list.Add(url); } return list; });
+            (_, list) =>
+            {
+                lock (list)
+                {
+                    // Only add if not already in the list (prevent duplicate entries for same URL)
+                    if (!list.Contains(url, StringComparer.OrdinalIgnoreCase))
+                    {
+                        list.Add(url);
+                    }
+                }
+                return list;
+            });
     }
 
     private async Task CheckExactDuplicatesAsync(UrlContext ctx, string contentHash, string cleanedContent)

@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ookii.Dialogs.Wpf;
 using ShoutingIguana.Core.Repositories;
+using ShoutingIguana.Core.Services;
 using ShoutingIguana.Services;
 
 namespace ShoutingIguana.ViewModels;
@@ -117,9 +118,14 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         {
             using var scope = _serviceProvider.CreateScope();
             var findingRepository = scope.ServiceProvider.GetRequiredService<IFindingRepository>();
+            var pluginRegistry = scope.ServiceProvider.GetRequiredService<IPluginRegistry>();
             
             var projectId = _projectContext.CurrentProjectId!.Value;
             var allFindings = await findingRepository.GetByProjectIdAsync(projectId);
+            
+            // Get task metadata from plugin registry
+            var registeredTasks = pluginRegistry.RegisteredTasks;
+            var taskMetadata = registeredTasks.ToDictionary(t => t.Key, t => (t.DisplayName, t.Description));
             
             // Group findings by task key
             var grouped = allFindings.GroupBy(f => f.TaskKey);
@@ -128,10 +134,19 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             
             foreach (var group in grouped.OrderBy(g => g.Key))
             {
+                var taskKey = group.Key;
+                var displayName = taskMetadata.TryGetValue(taskKey, out var metadata) 
+                    ? metadata.DisplayName 
+                    : taskKey;
+                var description = taskMetadata.TryGetValue(taskKey, out var meta) 
+                    ? meta.Description 
+                    : string.Empty;
+                
                 var tab = new FindingTabViewModel
                 {
-                    TaskKey = group.Key,
-                    DisplayName = FormatTaskDisplayName(group.Key)
+                    TaskKey = taskKey,
+                    DisplayName = displayName,
+                    Description = description
                 };
                 tab.LoadFindings(group);
                 tabs.Add(tab);
@@ -164,19 +179,6 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show($"Failed to load findings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
         }
-    }
-
-    private string FormatTaskDisplayName(string taskKey)
-    {
-        // Convert "BrokenLinks" to "Broken Links", "TitlesMeta" to "Titles & Meta", etc.
-        return taskKey switch
-        {
-            "BrokenLinks" => "Broken Links",
-            "TitlesMeta" => "Titles & Meta",
-            "Inventory" => "Inventory",
-            "Redirects" => "Redirects",
-            _ => taskKey
-        };
     }
 
     [RelayCommand]
@@ -300,6 +302,23 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to select all");
+        }
+    }
+
+    [RelayCommand]
+    private void CopyDetails()
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(DetailsJson))
+            {
+                Clipboard.SetText(DetailsJson);
+                _logger.LogDebug("Copied finding details JSON to clipboard");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to copy details to clipboard");
         }
     }
 

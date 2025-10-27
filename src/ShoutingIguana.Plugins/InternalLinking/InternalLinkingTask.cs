@@ -23,6 +23,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
 
     public override string Key => "InternalLinking";
     public override string DisplayName => "Internal Linking";
+    public override string Description => "Analyzes internal links, anchor text, orphan pages, and link equity";
     public override int Priority => 40; // Run after basic analysis
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
@@ -34,6 +35,12 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         }
 
         if (string.IsNullOrEmpty(ctx.RenderedHtml))
+        {
+            return;
+        }
+
+        // Only analyze successful pages (skip 4xx, 5xx errors)
+        if (ctx.Metadata.StatusCode < 200 || ctx.Metadata.StatusCode >= 300)
         {
             return;
         }

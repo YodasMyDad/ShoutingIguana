@@ -15,6 +15,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
     public override string Key => "StructuredData";
     public override string DisplayName => "Structured Data";
+    public override string Description => "Extracts and validates JSON-LD, Microdata, and Schema.org markup";
     public override int Priority => 60; // Run after content analysis
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
@@ -26,6 +27,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         }
 
         if (string.IsNullOrEmpty(ctx.RenderedHtml))
+        {
+            return;
+        }
+
+        // Only analyze successful pages (skip 4xx, 5xx errors)
+        if (ctx.Metadata.StatusCode < 200 || ctx.Metadata.StatusCode >= 300)
         {
             return;
         }

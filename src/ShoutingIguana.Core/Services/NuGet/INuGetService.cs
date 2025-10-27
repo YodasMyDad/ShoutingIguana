@@ -11,6 +11,7 @@ public interface INuGetService
     Task<IReadOnlyList<PackageSearchResult>> SearchPackagesAsync(
         string searchTerm, 
         string? tagFilter = null, 
+        bool includePrerelease = false,
         int skip = 0, 
         int take = 20,
         CancellationToken cancellationToken = default);

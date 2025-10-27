@@ -361,27 +361,43 @@
                                     Padding="16"
                                     Margin="0,0,0,16">
                                 <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="12"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <TextBox Grid.Column="0"
+                                    <TextBox Grid.Row="0" Grid.Column="0"
                                              Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                                              Style="{StaticResource ModernTextBox}"
                                              TabIndex="1"
-                                             AutomationProperties.Name="Search Plugins"
-                                             AutomationProperties.HelpText="Search for available plugins in the NuGet feed by name or description"
-                                             ToolTip="Search for plugins by name or description">
-                                        <TextBox.Tag>Search for plugins...</TextBox.Tag>
+                                             AutomationProperties.Name="Search Packages"
+                                             AutomationProperties.HelpText="Search for available packages in the NuGet feed by name or description"
+                                             ToolTip="Search for packages by name or description">
+                                        <TextBox.Tag>Search for packages...</TextBox.Tag>
                                     </TextBox>
 
-                                    <ProgressBar Grid.Column="1"
+                                    <ProgressBar Grid.Row="0" Grid.Column="1"
                                                  IsIndeterminate="True"
                                                  Style="{StaticResource ModernProgressBar}"
                                                  Width="24" Height="24"
                                                  Margin="12,0,0,0"
                                                  Visibility="{Binding IsSearching, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                                    <CheckBox Grid.Row="2" Grid.Column="0"
+                                              IsChecked="{Binding IncludePrerelease}"
+                                              TabIndex="2"
+                                              AutomationProperties.Name="Include Pre-release Versions"
+                                              AutomationProperties.HelpText="When checked, search results will include pre-release package versions"
+                                              ToolTip="Include pre-release versions in search results">
+                                        <TextBlock Text="Include pre-release versions"
+                                                   Style="{StaticResource BodyTextStyle}"
+                                                   VerticalAlignment="Center"/>
+                                    </CheckBox>
                                 </Grid>
                             </Border>
 
@@ -512,7 +528,7 @@
                                       SelectedItem="{Binding SelectedBrowsePlugin}"
                                       Style="{StaticResource ModernDataGrid}"
                                       Visibility="{Binding IsSearching, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
-                                      TabIndex="2">
+                                      TabIndex="3">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Name" 
                                                         Binding="{Binding Name}" 
@@ -701,7 +717,7 @@
                                 <Button Content="Update Plugin"
                                         Command="{Binding UpdatePluginCommand}"
                                         Style="{StaticResource PrimaryButton}"
-                                        TabIndex="3"
+                                        TabIndex="4"
                                         Margin="0,0,0,8"
                                         Visibility="{Binding SelectedInstalledPlugin.HasUpdate, Converter={StaticResource BooleanToVisibilityConverter}}"
                                         AutomationProperties.Name="Update Plugin"
@@ -711,7 +727,7 @@
                                 <Button Content="Uninstall"
                                         Command="{Binding UninstallPluginCommand}"
                                         Style="{StaticResource DangerButton}"
-                                        TabIndex="4"
+                                        TabIndex="5"
                                         Visibility="{Binding SelectedInstalledPlugin.IsBuiltIn, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                                         AutomationProperties.Name="Uninstall Plugin"
                                         AutomationProperties.HelpText="Permanently removes the selected plugin from the application"
@@ -815,7 +831,7 @@
                             <Button Content="Install Plugin"
                                     Command="{Binding InstallPluginCommand}"
                                     Style="{StaticResource PrimaryButton}"
-                                    TabIndex="5"
+                                    TabIndex="6"
                                     AutomationProperties.Name="Install Plugin"
                                     AutomationProperties.HelpText="Downloads and installs the selected plugin from the NuGet feed"/>
 

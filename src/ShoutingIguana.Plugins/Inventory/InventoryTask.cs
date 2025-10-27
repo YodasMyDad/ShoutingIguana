@@ -15,7 +15,8 @@ public class InventoryTask : UrlTaskBase
     private const int MIN_CONTENT_LENGTH = 500;
 
     public override string Key => "Inventory";
-    public override string DisplayName => "URL Inventory";
+    public override string DisplayName => "Inventory";
+    public override string Description => "Tracks URL structure, page depth, and content quality across your site";
     public override int Priority => 10; // Run first
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)

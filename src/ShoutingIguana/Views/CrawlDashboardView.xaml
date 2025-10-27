@@ -175,12 +175,6 @@
                                            Style="{StaticResource CaptionTextStyle}"
                                            HorizontalAlignment="Right"/>
                             </Grid>
-                            <TextBlock Text="{Binding StatusMessage}"
-                                       Style="{StaticResource CaptionTextStyle}"
-                                       Margin="0,12,0,0"
-                                       HorizontalAlignment="Center"
-                                       Visibility="{Binding IsCrawling, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                       AutomationProperties.LiveSetting="Polite"/>
                         </StackPanel>
                     </Grid>
                 </Grid>

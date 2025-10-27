@@ -59,19 +59,11 @@
                                AutomationProperties.HeadingLevel="Level1"/>
                     
                     <!-- Subtitle -->
-                    <TextBlock Text="Setting up Playwright and plugins..." 
+                    <TextBlock Text="Setting up crawler and plugins..." 
                                Style="{StaticResource BodyTextStyle}"
                                Foreground="{StaticResource TextSecondaryBrush}"
                                HorizontalAlignment="Center"
                                Margin="{StaticResource SpacingL}"/>
-                    
-                    <!-- Progress Bar -->
-                    <ProgressBar IsIndeterminate="True" 
-                                 Height="4"
-                                 Style="{StaticResource ModernProgressBar}"
-                                 Margin="0"
-                                 AutomationProperties.Name="Initialization Progress"
-                                 AutomationProperties.LiveSetting="Polite"/>
                     
                     <!-- Status Text -->
                     <TextBlock Text="This may take a moment on first run" 

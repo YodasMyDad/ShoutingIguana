@@ -69,7 +69,7 @@
             </Grid.Triggers>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="2*" MinHeight="600"/>
+            <RowDefinition Height="2*" MinHeight="400" MaxHeight="800"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="1*" MinHeight="220"/>
         </Grid.RowDefinitions>
@@ -216,11 +216,22 @@
                         <Grid Margin="16" MinHeight="400">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*" MinHeight="300"/>
                             </Grid.RowDefinitions>
 
+                            <!-- Description -->
+                            <TextBlock Grid.Row="0"
+                                       Text="{Binding Description}"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,0,0,16"
+                                       Visibility="{Binding Description, Converter={StaticResource NullToVisibilityConverter}}"
+                                       TextWrapping="Wrap"/>
+
                             <!-- Filters -->
-                            <Border Background="{StaticResource SurfaceAltBrush}"
+                            <Border Grid.Row="1"
+                                    Background="{StaticResource SurfaceAltBrush}"
                                     CornerRadius="6"
                                     Padding="16"
                                     Margin="0,0,0,16">
@@ -325,7 +336,7 @@
                             </Border>
 
                             <!-- Findings DataGrid -->
-                            <Grid Grid.Row="1" MinHeight="300">
+                            <Grid Grid.Row="2" MinHeight="300">
                                 <!-- Skeleton Loader (shown while loading) -->
                                 <ItemsControl Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
                                               Margin="12">
@@ -467,7 +478,9 @@
                                           ItemsSource="{Binding FilteredFindings}"
                                           SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
                                           Style="{StaticResource ModernDataGrid}"
-                                          MinHeight="250"
+                                          Height="{Binding RelativeSource={RelativeSource AncestorType=Grid}, Path=ActualHeight}"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Auto"
                                           TabIndex="5"
                                           AutomationProperties.Name="Findings List"
                                           AutomationProperties.HelpText="List of findings discovered during the crawl. Select a row to view details below."

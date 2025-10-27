@@ -24,6 +24,7 @@ public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationServic
     public async Task<IReadOnlyList<PackageSearchResult>> SearchPackagesAsync(
         string searchTerm,
         string? tagFilter = null,
+        bool includePrerelease = false,
         int skip = 0,
         int take = 20,
         CancellationToken cancellationToken = default)
@@ -41,7 +42,7 @@ public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationServic
                     var repository = Repository.Factory.GetCoreV3(feed.Url);
                     var searchResource = await repository.GetResourceAsync<PackageSearchResource>(cancellationToken);
 
-                    var searchFilter = new SearchFilter(includePrerelease: false);
+                    var searchFilter = new SearchFilter(includePrerelease: includePrerelease);
                     var searchResults = await searchResource.SearchAsync(
                         searchTerm,
                         searchFilter,
