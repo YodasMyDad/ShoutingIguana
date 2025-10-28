@@ -184,8 +184,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             try
             {
+                var typeName = disposable.GetType().FullName;
                 disposable.Dispose();
-                _logger.LogDebug("Disposed previous view's DataContext: {Type}", disposable.GetType().Name);
+                _logger.LogDebug("Disposed previous view's DataContext of type {Type}", typeName);
             }
             catch (Exception ex)
             {

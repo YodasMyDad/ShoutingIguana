@@ -1,16 +1,17 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Core.Configuration;
 using ShoutingIguana.Core.Services;
 using ShoutingIguana.Core.Services.NuGet;
+using ShoutingIguana.Data;
 using ShoutingIguana.ViewModels.Models;
 
 namespace ShoutingIguana.ViewModels;
@@ -349,81 +350,22 @@ public partial class SettingsViewModel : ObservableObject
 
             _logger.LogInformation("Optimizing database...");
 
-            // Use reflection to execute VACUUM and ANALYZE on the database
+            // Get the DbContext through DI without reflection
             using var scope = _serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetService<IShoutingIguanaDbContext>();
             
-            // Get the DbContext through the IShoutingIguanaDbContext
-            var dbContextType = Type.GetType("ShoutingIguana.Data.IShoutingIguanaDbContext, ShoutingIguana.Data");
-            if (dbContextType == null)
-            {
-                MessageBox.Show("Unable to access database context.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
-
-            var dbContext = scope.ServiceProvider.GetService(dbContextType);
             if (dbContext == null)
             {
                 MessageBox.Show("Database context not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
-            // Get the Database property
-            var databaseProperty = dbContextType.GetProperty("Database");
-            if (databaseProperty == null)
-            {
-                MessageBox.Show("Unable to access database.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
-
-            var database = databaseProperty.GetValue(dbContext);
-            if (database == null)
-            {
-                MessageBox.Show("Database not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
-
-            // Execute VACUUM
-            var optimizationExecuted = false;
-            var execSqlMethod = database.GetType().GetMethod("ExecuteSqlRaw", new[] { typeof(string), typeof(object[]) });
+            // Execute VACUUM and ANALYZE using EF Core's DatabaseFacade directly
+            _logger.LogInformation("Executing VACUUM...");
+            await dbContext.Database.ExecuteSqlRawAsync("VACUUM;");
             
-            if (execSqlMethod != null)
-            {
-                _logger.LogInformation("Executing VACUUM...");
-                execSqlMethod.Invoke(database, new object[] { "VACUUM;", Array.Empty<object>() });
-                
-                _logger.LogInformation("Executing ANALYZE...");
-                execSqlMethod.Invoke(database, new object[] { "ANALYZE;", Array.Empty<object>() });
-                
-                optimizationExecuted = true;
-            }
-            else
-            {
-                // Try alternative method signature (async)
-                execSqlMethod = database.GetType().GetMethod("ExecuteSqlRawAsync", new[] { typeof(string), typeof(object[]), typeof(CancellationToken) });
-                if (execSqlMethod != null)
-                {
-                    _logger.LogInformation("Executing VACUUM...");
-                    var vacuumTask = (Task)execSqlMethod.Invoke(database, new object[] { "VACUUM;", Array.Empty<object>(), CancellationToken.None })!;
-                    await vacuumTask.ConfigureAwait(false);
-                    
-                    _logger.LogInformation("Executing ANALYZE...");
-                    var analyzeTask = (Task)execSqlMethod.Invoke(database, new object[] { "ANALYZE;", Array.Empty<object>(), CancellationToken.None })!;
-                    await analyzeTask.ConfigureAwait(false);
-                    
-                    optimizationExecuted = true;
-                }
-            }
-
-            if (!optimizationExecuted)
-            {
-                _logger.LogWarning("Database optimization could not be executed - ExecuteSqlRaw method not found");
-                MessageBox.Show(
-                    "Unable to execute database optimization. The database method is not available.",
-                    "Optimization Failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-                return;
-            }
+            _logger.LogInformation("Executing ANALYZE...");
+            await dbContext.Database.ExecuteSqlRawAsync("ANALYZE;");
 
             _logger.LogInformation("Database optimization completed successfully");
             MessageBox.Show(
