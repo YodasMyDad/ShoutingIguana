@@ -1,6 +1,6 @@
 # Shouting Iguana Plugin SDK
 
-Build powerful SEO analysis plugins for the Shouting Iguana crawler with minimal code.
+**Build powerful SEO analysis plugins with minimal code.** Write your logic, publish to NuGet, and instantly make it available to every Shouting Iguana user. No complex integrations, no steep learning curves—just clean, intuitive APIs that get out of your way.
 
 ## Quick Start
 
@@ -11,8 +11,6 @@ dotnet add package ShoutingIguana.PluginSdk
 ```
 
 ### Your First Plugin (5 minutes)
-
-Create a file `MyPlugin.cs`:
 
 ```csharp
 using ShoutingIguana.PluginSdk;
@@ -77,75 +75,49 @@ public class MyTask : UrlTaskBase
 }
 ```
 
-**That's it!** Your findings automatically appear in CSV/Excel/PDF exports.
+**That's it!** Package it, publish to NuGet, and your findings automatically appear in every user's exports.
 
-## Architecture Overview
+```bash
+dotnet pack -c Release
+dotnet nuget push bin/Release/YourPlugin.1.0.0.nupkg --api-key YOUR_KEY --source https://api.nuget.org/v3/index.json
+```
+
+## Built-in Plugins
+
+Shouting Iguana ships with professional-grade plugins:
+
+- **Broken Links** - Detects 404s and unreachable resources
+- **Canonical Tags** - Validates canonical URL implementation
+- **Custom Extraction** - Extract custom data using CSS selectors
+- **Duplicate Content** - Identifies pages with identical content
+- **Image Audit** - Analyzes image attributes, alt text, and size
+- **Internal Linking** - Maps internal link structure and anchor text
+- **Inventory** - Catalogs all discovered URLs and page types
+- **Link Graph** - Generates visual site architecture maps
+- **List Mode** - Import and analyze specific URL lists
+- **Redirects** - Traces redirect chains and identifies issues
+- **Robots.txt** - Validates robots.txt directives and blocked URLs
+- **Sitemap** - Analyzes XML sitemaps and validates entries
+- **Structured Data** - Validates JSON-LD and microdata markup
+- **Titles & Meta** - Audits title tags, meta descriptions, and length
+
+## Core Concepts
 
 ### Plugin Lifecycle
 
 ```
-Plugin Installation → Initialize() → Register Tasks → Crawl Starts → ExecuteAsync() per URL → Export
+Install from NuGet → Initialize() → Register Tasks → Crawl → ExecuteAsync() per URL → Export
 ```
 
-### Key Concepts
+### Key Interfaces
 
-- **IPlugin**: Entry point for your plugin
-- **IUrlTask**: Analysis logic that runs for each crawled URL
-- **FindingDetailsBuilder**: Create structured, user-friendly finding reports
-- **IRepositoryAccessor**: Query crawled data without reflection
-- **Automatic Exports**: All findings export to CSV/Excel/PDF automatically
-
-## Core Interfaces
-
-### IPlugin
-
-The plugin entry point. Implement this to register your analysis tasks.
-
-```csharp
-[Plugin(Id = "com.example.plugin", Name = "My Plugin")]
-public class MyPlugin : IPlugin
-{
-    public string Id => "com.example.plugin";
-    public string Name => "My Plugin";
-    public Version Version => new(1, 0, 0);
-    public string Description => "Plugin description";
-
-    public void Initialize(IHostContext context)
-    {
-        // Register tasks here
-        context.RegisterTask(new MyTask(context.CreateLogger<MyTask>()));
-    }
-}
-```
-
-### IUrlTask
-
-Analysis logic that runs for each URL. Extend `UrlTaskBase` for convenience.
-
-```csharp
-public class MyTask : UrlTaskBase
-{
-    public override string Key => "MyCheck";
-    public override string DisplayName => "My Check";
-    public override int Priority => 100; // Lower = runs earlier
-
-    public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
-    {
-        // ctx.Url - Current URL being analyzed
-        // ctx.RenderedHtml - HTML content
-        // ctx.Page - Browser page (if JavaScript rendering used)
-        // ctx.Metadata - Status code, content type, etc.
-        // ctx.Findings - Report issues
-        // ctx.Logger - Log messages
-        
-        // Your analysis logic here
-    }
-}
-```
+- **IPlugin** - Entry point for your plugin
+- **UrlTaskBase** - Analysis logic that runs for each crawled URL
+- **FindingDetailsBuilder** - Create structured, user-friendly reports
+- **IRepositoryAccessor** - Query crawled data efficiently
+- **IHostContext** - Access logging and task registration
 
 ## Building Findings
-
-Use `FindingDetailsBuilder` to create well-structured findings:
 
 ### Simple Finding
 
@@ -179,13 +151,12 @@ var details = FindingDetailsBuilder.Create()
         .AddItem("Implement 301 redirects where appropriate")
     .EndNested()
     .WithTechnicalMetadata("brokenLinkCount", count)
-    .WithTechnicalMetadata("pageDepth", ctx.Metadata.Depth)
     .Build();
 ```
 
 ## Accessing Crawled Data
 
-Use `IRepositoryAccessor` to query URLs and redirects without reflection:
+Query URLs and redirects without reflection:
 
 ```csharp
 public class CanonicalTask : UrlTaskBase
@@ -218,30 +189,19 @@ public class CanonicalTask : UrlTaskBase
                     $"Canonical points to uncrawled URL: {canonical}",
                     null);
             }
-            else if (targetUrl.Status >= 400)
-            {
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Error,
-                    "CANONICAL_TARGET_ERROR",
-                    $"Canonical points to error page ({targetUrl.Status})",
-                    null);
-            }
         }
     }
 }
 ```
 
-### Repository Accessor Methods
+### Repository Methods
 
 - `GetUrlByAddressAsync(projectId, address)` - Get single URL
-- `GetUrlsAsync(projectId)` - Stream all URLs (efficient for large datasets)
+- `GetUrlsAsync(projectId)` - Stream all URLs
 - `GetRedirectsAsync(projectId)` - Stream all redirects
 - `GetRedirectAsync(projectId, sourceUrl)` - Check if URL redirects
 
-## Helper Utilities
-
-### UrlHelper
+## URL Helper Utilities
 
 ```csharp
 using ShoutingIguana.PluginSdk.Helpers;
@@ -259,19 +219,39 @@ bool isExternal = UrlHelper.IsExternal(ctx.Project.BaseUrl, targetUrl);
 // Get domain
 var domain = UrlHelper.GetDomain("https://www.example.com/page");
 // Result: "example.com"
-
-// Check HTTPS
-bool secure = UrlHelper.IsHttps(url);
 ```
+
+## Best Practices
+
+### ✅ Do
+
+- Use `UrlTaskBase` instead of implementing `IUrlTask` directly
+- Return early for non-applicable URLs (check content type, status)
+- Use `FindingDetailsBuilder` for structured findings
+- Add technical metadata for debugging
+- Use emojis in section headers (📉, 💡, ⚠️, ✅)
+- Implement `CleanupProject()` if using static state
+
+### ❌ Don't
+
+- Don't block the thread (use async/await)
+- Don't create `IExportProvider` unless you need specialized formats
+- Don't store per-URL state in instance fields
+- Don't parse HTML twice (use `ctx.RenderedHtml`)
+
+## Severity Levels
+
+- **Error** - Critical issues (404s, broken links, missing required tags)
+- **Warning** - Issues to review (suboptimal titles, missing meta)
+- **Info** - Informational notices (redirects, statistics)
 
 ## Memory Management
 
-If your plugin uses static state (caches, dictionaries), implement cleanup:
+Clean up static state when projects close:
 
 ```csharp
 public class MyTask : UrlTaskBase
 {
-    // Static cache shared across all instances
     private static readonly ConcurrentDictionary<int, HashSet<string>> _cache = new();
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
@@ -280,7 +260,6 @@ public class MyTask : UrlTaskBase
         // Use cache...
     }
 
-    // IMPORTANT: Clean up when project closes
     public override void CleanupProject(int projectId)
     {
         _cache.TryRemove(projectId, out _);
@@ -288,74 +267,12 @@ public class MyTask : UrlTaskBase
 }
 ```
 
-## Export Providers (Advanced)
-
-**99% of plugins don't need this.** Findings automatically export to CSV/Excel/PDF.
-
-Only implement `IExportProvider` if you need specialized formats:
-
-```csharp
-public class JsonExporter : IExportProvider
-{
-    public string Key => "MyPluginJson";
-    public string DisplayName => "My Plugin (JSON)";
-    public string FileExtension => ".json";
-
-    public async Task<ExportResult> ExportAsync(ExportContext ctx, CancellationToken ct)
-    {
-        // Generate custom JSON export
-        // Access ctx.ProjectId, ctx.FilePath
-        // Query data, serialize to JSON
-        return new ExportResult(true);
-    }
-}
-
-// Register in Initialize()
-context.RegisterExport(new JsonExporter(logger, serviceProvider));
-```
-
-## Best Practices
-
-### ✅ Do
-
-- Use `UrlTaskBase` instead of `IUrlTask`
-- Return early for non-applicable URLs (check content type, status)
-- Use `FindingDetailsBuilder` for structured findings
-- Add technical metadata for debugging
-- Use emojis in section headers (📉, 💡, ⚠️, ✅)
-- Log important events with `ctx.Logger`
-- Implement `CleanupProject()` if using static state
-
-### ❌ Don't
-
-- Don't use reflection to access repositories (use `IRepositoryAccessor`)
-- Don't block the thread (use async/await)
-- Don't create `IExportProvider` unless you need specialized formats
-- Don't store per-URL state in instance fields (tasks can be reused)
-- Don't parse HTML twice (use `ctx.RenderedHtml`)
-
-## Severity Levels
-
-- **Error**: Critical issues that must be fixed (404s, broken links, missing required tags)
-- **Warning**: Issues that should be reviewed (suboptimal titles, missing meta)
-- **Info**: Informational notices (redirects, noindex pages, statistics)
-
-## Task Priority
-
-Lower priority numbers run first:
-
-- **10-30**: Early tasks (URL inventory, robots detection)
-- **50-70**: Content analysis (broken links, titles, meta tags)
-- **100**: Default priority
-- **150-200**: Tasks that depend on others (duplicate detection, summaries)
-
 ## Example: Duplicate Content Detector
 
 ```csharp
 public class DuplicateContentTask : UrlTaskBase
 {
     private static readonly ConcurrentDictionary<int, Dictionary<string, List<string>>> _contentHashes = new();
-    private readonly IRepositoryAccessor _accessor;
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     {
@@ -367,9 +284,8 @@ public class DuplicateContentTask : UrlTaskBase
         lock (hashes)
         {
             if (!hashes.ContainsKey(hash))
-            {
                 hashes[hash] = new List<string>();
-            }
+            
             hashes[hash].Add(ctx.Url.ToString());
             
             if (hashes[hash].Count > 1)
@@ -398,81 +314,30 @@ public class DuplicateContentTask : UrlTaskBase
 }
 ```
 
-## Testing Your Plugin
-
-1. Build your plugin project
-2. Package as NuGet: `dotnet pack -c Release`
-3. In Shouting Iguana: Extensions → Install from File
-4. Run a test crawl
-5. Check Findings tab for your issues
-6. Export to CSV/Excel to verify formatting
-
-## Publishing to NuGet
-
-```bash
-# Build and pack
-dotnet pack -c Release
-
-# Publish
-dotnet nuget push bin/Release/YourPlugin.1.0.0.nupkg --api-key YOUR_KEY --source https://api.nuget.org/v3/index.json
-```
-
-### Package Metadata
-
-```xml
-<PropertyGroup>
-  <PackageId>YourCompany.ShoutingIguana.YourPlugin</PackageId>
-  <Version>1.0.0</Version>
-  <Authors>Your Name</Authors>
-  <Description>Your plugin description</Description>
-  <PackageTags>shoutingiguana-plugin;seo;crawler</PackageTags>
-  <PackageLicenseExpression>MIT</PackageLicenseExpression>
-</PropertyGroup>
-```
-
 ## Troubleshooting
 
-### Plugin Not Loading
-
+**Plugin Not Loading**
 - Check `[Plugin]` attribute has correct Id and Name
 - Verify class implements `IPlugin`
 - Ensure package references `ShoutingIguana.PluginSdk`
 - Check logs in `%LocalAppData%/ShoutingIguana/logs/`
 
-### Findings Not Appearing
-
+**Findings Not Appearing**
 - Verify `ctx.Findings.ReportAsync()` is awaited
-- Check severity level (Error, Warning, Info all show)
-- Ensure task returns from `ExecuteAsync()` after reporting
 - Check task is registered in `Initialize()`
+- Ensure your condition logic isn't filtering out all pages
 
-### Memory Leaks
-
+**Memory Leaks**
 - Implement `CleanupProject()` if using static dictionaries
 - Don't store URL-specific data in instance fields
 - Use weak references for large caches
-- Profile with diagnostic tools
 
-## API Reference
+## Support
 
-See XML documentation in your IDE for detailed API docs on:
-
-- `IPlugin` - Plugin entry point
-- `IUrlTask` / `UrlTaskBase` - URL analysis
-- `FindingDetailsBuilder` - Build structured findings
-- `IRepositoryAccessor` - Query crawled data
-- `UrlHelper` - URL utilities
-- `IHostContext` - Plugin initialization context
-- `UrlContext` - URL analysis context
-- `FindingDetails` - Structured finding data
-
-## Support & Community
-
-- **Documentation**: [github.com/yourorg/ShoutingIguana/docs](https://github.com/yourorg/ShoutingIguana/docs)
-- **Issues**: [github.com/yourorg/ShoutingIguana/issues](https://github.com/yourorg/ShoutingIguana/issues)
-- **Examples**: See built-in plugins in the source repository
+- **Issues**: Report bugs and request features on GitHub
+- **Examples**: See built-in plugins in `ShoutingIguana.Plugins`
+- **API Docs**: XML documentation available in your IDE
 
 ## License
 
 MIT License - see LICENSE file for details
-

@@ -1,152 +1,48 @@
 # Shouting Iguana
 
-A professional web crawler and SEO analysis tool built with WPF and .NET 9.
+![Shouting Iguana](Assets/logo.png)
 
-## Stage 1: Core Foundation & Basic Crawling
+**Enterprise-grade web crawler and SEO analysis platform built on .NET 9**
 
-Currently implementing the foundational features including project management, basic HTTP crawling, SQLite database persistence, and CSV export.
+Shouting Iguana is a powerful desktop application for comprehensive website auditing and SEO analysis. Whether you're analyzing a small blog or crawling enterprise sites with millions of pages, Shouting Iguana delivers professional-grade insights through an intuitive interface.
 
-## Prerequisites
+## Why Shouting Iguana?
 
-- .NET 9.0 SDK
-- Visual Studio 2022 or JetBrains Rider
-- dotnet-ef tool (installed automatically by migration script)
+- **Enterprise-Scale Crawling** - Handle sites of any size with efficient SQLite-backed persistence and configurable crawl rules
+- **Extensible Plugin System** - Install SEO analysis plugins directly from NuGet or build your own with minimal code
+- **Comprehensive Analysis** - Detect broken links, duplicate content, missing meta tags, redirect chains, structured data issues, and more
+- **Professional Exports** - Export findings to CSV and Excel for client reports and team collaboration
+- **Modern Technology** - Built with .NET 9, WPF, Entity Framework Core, and Playwright for JavaScript rendering
 
 ## Getting Started
 
-1. Clone the repository
-2. Open `ShoutingIguana.sln` in your IDE
-3. Build the solution
-4. Run the WPF application
+### Prerequisites
 
-## Database Migrations
+- .NET 9.0 SDK
+- Visual Studio 2022 or JetBrains Rider
 
-### Creating a New Migration
+### Quick Start
 
-Run the migration script from the solution root:
+1. Build and run the solution
 
-```powershell
-.\migrations.ps1 -MigrationName "YourMigrationName"
-```
-
-Or let it prompt you:
-
-```powershell
-.\migrations.ps1
-```
-
-### Migration Details
-
-- **Database:** SQLite
-- **Context:** `SqliteShoutingIguanaDbContext`
-- **Location:** Database stored in `%APPDATA%/ShoutingIguana/projects/`
-- **Migrations:** Located in `src/ShoutingIguana.Data/Migrations/`
-
-### Manual Migration Commands
-
-If you prefer manual EF Core commands:
-
-```bash
-# Add a migration
-dotnet ef migrations add YourMigrationName --context SqliteShoutingIguanaDbContext --project src/ShoutingIguana.Data --startup-project src/ShoutingIguana
-
-# Remove last migration
-dotnet ef migrations remove --context SqliteShoutingIguanaDbContext --project src/ShoutingIguana.Data --startup-project src/ShoutingIguana
-
-# Update database
-dotnet ef database update --context SqliteShoutingIguanaDbContext --project src/ShoutingIguana.Data --startup-project src/ShoutingIguana
-```
-
-Note: Migrations are applied automatically when the application starts.
+2. Create a new project, configure your crawl settings, and start analyzing!
 
 ## Project Structure
 
-```
-ShoutingIguana/
-├── src/
-│   ├── ShoutingIguana.Core/          # Core models, interfaces, services
-│   │   ├── Models/                    # Domain entities
-│   │   ├── Configuration/             # Settings classes
-│   │   ├── Services/                  # Core business logic
-│   │   └── Repositories/              # Repository interfaces
-│   ├── ShoutingIguana.Data/          # EF Core, SQLite, repositories
-│   │   ├── Configurations/            # Entity type configurations
-│   │   ├── Migrations/                # EF Core migrations
-│   │   └── Repositories/              # Repository implementations
-│   └── ShoutingIguana/               # WPF application
-│       ├── ViewModels/                # MVVM view models
-│       ├── Views/                     # XAML views
-│       └── Services/                  # Application services
-├── Assets/                            # Application icons
-├── migrations.ps1                     # Migration helper script
-└── ShoutingIguana.sln                # Visual Studio solution
-```
+The solution is organized into focused projects:
 
-## Features (Stage 1)
+- **ShoutingIguana** - WPF desktop application with modern MaterialDesign UI
+- **ShoutingIguana.Core** - Domain models, business logic, and service interfaces
+- **ShoutingIguana.Data** - Entity Framework Core data access with SQLite
+- **ShoutingIguana.PluginSdk** - SDK for building custom analysis plugins
+- **ShoutingIguana.Plugins** - Built-in SEO analysis plugins
 
-### ✅ Implemented
-- Modern WPF UI with MaterialDesign theme
-- Dependency injection with Microsoft.Extensions.DependencyInjection
-- EF Core with SQLite database
-- Serilog file logging
-- Project management (create, open, save)
-- Basic crawl settings configuration
-- Navigation between views
-- Database migrations infrastructure
+## Building Plugins
 
-### 🚧 In Progress
-- HTTP crawl engine
-- Robots.txt parsing and respect
-- Link extraction with HtmlAgilityPack
-- URL inventory and queue management
-- Real-time crawl progress dashboard
-- CSV export functionality
+Shouting Iguana's plugin system lets you extend its capabilities with custom analysis logic. Plugins are distributed via NuGet, making them instantly accessible to all users.
 
-### 📋 Planned (Stage 2+)
-- Playwright integration for JavaScript rendering
-- Plugin system with SDK
-- Built-in analyzer plugins
-- Excel export
-- Advanced crawl features (pause/resume, proxy support)
-- Settings dialog
-
-## Technology Stack
-
-- **Framework:** .NET 9.0
-- **UI:** WPF with MaterialDesign
-- **MVVM:** CommunityToolkit.Mvvm
-- **Database:** SQLite with EF Core 9.0
-- **Logging:** Serilog
-- **HTTP:** HttpClient with Polly retry policies
-- **Parsing:** HtmlAgilityPack
-- **Export:** CsvHelper
-
-## Configuration
-
-Application settings are stored in `appsettings.json`:
-
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Data Source=shouting_iguana.db"
-  }
-}
-```
-
-The connection string is overridden at runtime to use the AppData folder.
+See the [Plugin SDK README](src/ShoutingIguana.PluginSdk/README.md) for a complete guide to building and publishing your own plugins.
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
-
-## Development Guidelines
-
-- Follow the coding standards in `.cursor/developer.mdc`
-- Use the EF Core patterns from `.cursor/efcore.mdc`
-- Follow WPF best practices from `.cursor/wpf.mdc`
-- Keep the PDR stages in mind when implementing features
-
-## Support
-
-For issues and feature requests, please use the GitHub issue tracker.
-
+This project is MIT [LICENSE](LICENSE) .
