@@ -48,6 +48,12 @@ public partial class ProjectHomeViewModel : ObservableObject
     private double _crawlDelay = 1.5;
 
     [ObservableProperty]
+    private int _concurrentRequests = 3;
+
+    [ObservableProperty]
+    private int _timeoutSeconds = 10;
+
+    [ObservableProperty]
     private bool _respectRobotsTxt = true;
 
     [ObservableProperty]
@@ -108,6 +114,8 @@ public partial class ProjectHomeViewModel : ObservableObject
                     MaxDepth = settings.MaxCrawlDepth;
                     MaxUrls = settings.MaxUrlsToCrawl;
                     CrawlDelay = settings.CrawlDelaySeconds;
+                    ConcurrentRequests = settings.ConcurrentRequests;
+                    TimeoutSeconds = settings.TimeoutSeconds;
                     RespectRobotsTxt = settings.RespectRobotsTxt;
                     UseSitemapXml = settings.UseSitemapXml;
                     SelectedUserAgentType = settings.UserAgentType;
@@ -144,6 +152,8 @@ public partial class ProjectHomeViewModel : ObservableObject
         MaxDepth = 5;
         MaxUrls = 1000;
         CrawlDelay = 1.5;
+        ConcurrentRequests = 3;
+        TimeoutSeconds = 10;
         RespectRobotsTxt = true;
         UseSitemapXml = true;
         SelectedUserAgentType = UserAgentType.Chrome;
@@ -205,6 +215,8 @@ public partial class ProjectHomeViewModel : ObservableObject
                 MaxDepth = settings.MaxCrawlDepth;
                 MaxUrls = settings.MaxUrlsToCrawl;
                 CrawlDelay = settings.CrawlDelaySeconds;
+                ConcurrentRequests = settings.ConcurrentRequests;
+                TimeoutSeconds = settings.TimeoutSeconds;
                 RespectRobotsTxt = settings.RespectRobotsTxt;
                 UseSitemapXml = settings.UseSitemapXml;
                 SelectedUserAgentType = settings.UserAgentType;
@@ -264,6 +276,8 @@ public partial class ProjectHomeViewModel : ObservableObject
                 MaxCrawlDepth = MaxDepth,
                 MaxUrlsToCrawl = MaxUrls,
                 CrawlDelaySeconds = CrawlDelay,
+                ConcurrentRequests = ConcurrentRequests,
+                TimeoutSeconds = TimeoutSeconds,
                 RespectRobotsTxt = RespectRobotsTxt,
                 UseSitemapXml = UseSitemapXml,
                 UserAgentType = SelectedUserAgentType
