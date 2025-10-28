@@ -123,31 +123,6 @@
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
-            <MenuItem Header="_Edit">
-                <MenuItem Header="_Copy" Command="{Binding CopyCommand}" InputGestureText="Ctrl+C">
-                    <MenuItem.Icon>
-                        <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="Select _All" Command="{Binding SelectAllCommand}" InputGestureText="Ctrl+A">
-                    <MenuItem.Icon>
-                        <TextBlock Text="{StaticResource Icon.CheckList}" Style="{StaticResource Icon}"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-                <Separator Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                <MenuItem Header="_Find in Findings..." Command="{Binding FindCommand}" InputGestureText="Ctrl+F"
-                          Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <MenuItem.Icon>
-                        <TextBlock Text="{StaticResource Icon.Search}" Style="{StaticResource Icon}"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="Clear _Filters" Command="{Binding ClearFiltersCommand}" InputGestureText="Ctrl+Shift+F"
-                          Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <MenuItem.Icon>
-                        <TextBlock Text="{StaticResource Icon.Remove}" Style="{StaticResource Icon}"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-            </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="Project _Home" Command="{Binding NavigateToProjectHomeCommand}" InputGestureText="Ctrl+1"
                           Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
