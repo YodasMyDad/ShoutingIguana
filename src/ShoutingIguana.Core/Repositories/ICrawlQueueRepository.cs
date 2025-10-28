@@ -14,5 +14,6 @@ public interface ICrawlQueueRepository
     Task ClearQueueAsync(int projectId);
     Task<int> CountByStateAsync(int projectId, QueueState state);
     Task ResetInProgressItemsAsync(int projectId);
+    Task DeleteAllByProjectIdAsync(int projectId);
 }
 

@@ -12,5 +12,6 @@ public interface IUrlRepository
     Task<Url> UpdateAsync(Url url);
     Task<int> CountByProjectIdAsync(int projectId);
     Task<int> CountByStatusAsync(int projectId, UrlStatus status);
+    Task DeleteByProjectIdAsync(int projectId);
 }
 

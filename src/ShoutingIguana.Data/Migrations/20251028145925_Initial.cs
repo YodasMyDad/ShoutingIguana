@@ -378,6 +378,12 @@ namespace ShoutingIguana.Data.Migrations
                 column: "HostKey");
 
             migrationBuilder.CreateIndex(
+                name: "IX_CrawlQueue_ProjectId_Address",
+                table: "CrawlQueue",
+                columns: new[] { "ProjectId", "Address" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_CrawlQueue_ProjectId_State_Priority",
                 table: "CrawlQueue",
                 columns: new[] { "ProjectId", "State", "Priority" });

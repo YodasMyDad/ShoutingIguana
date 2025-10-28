@@ -90,5 +90,15 @@ public class CrawlQueueRepository(IShoutingIguanaDbContext context) : ICrawlQueu
         
         await _context.SaveChangesAsync().ConfigureAwait(false);
     }
+
+    public async Task DeleteAllByProjectIdAsync(int projectId)
+    {
+        var items = await _context.CrawlQueue
+            .Where(q => q.ProjectId == projectId)
+            .ToListAsync().ConfigureAwait(false);
+        
+        _context.CrawlQueue.RemoveRange(items);
+        await _context.SaveChangesAsync().ConfigureAwait(false);
+    }
 }
 

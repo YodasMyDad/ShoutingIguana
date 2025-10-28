@@ -21,6 +21,10 @@ public class CrawlQueueItemConfiguration : IEntityTypeConfiguration<CrawlQueueIt
 
         builder.HasIndex(e => e.HostKey);
         builder.HasIndex(e => new { e.ProjectId, e.State, e.Priority });
+        
+        // Unique constraint to prevent duplicate URLs in queue (prevents race conditions)
+        builder.HasIndex(e => new { e.ProjectId, e.Address })
+            .IsUnique();
 
         builder.HasOne(e => e.Project)
             .WithMany(p => p.CrawlQueue)

@@ -38,5 +38,15 @@ public class LinkRepository(IShoutingIguanaDbContext context) : ILinkRepository
     {
         return await context.Links.CountAsync(l => l.ProjectId == projectId).ConfigureAwait(false);
     }
+
+    public async Task DeleteByProjectIdAsync(int projectId)
+    {
+        var links = await context.Links
+            .Where(l => l.ProjectId == projectId)
+            .ToListAsync().ConfigureAwait(false);
+        
+        context.Links.RemoveRange(links);
+        await context.SaveChangesAsync().ConfigureAwait(false);
+    }
 }
 

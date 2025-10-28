@@ -605,7 +605,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private async Task ExportToCsvAsync()
+    private async Task ExportAsync()
     {
         if (!_projectContext.HasOpenProject)
         {
@@ -623,30 +623,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var findingsView = CurrentView as FindingsView;
         if (findingsView?.DataContext is FindingsViewModel vm)
         {
-            await vm.ExportToCsvCommand.ExecuteAsync(null);
-        }
-    }
-
-    [RelayCommand]
-    private async Task ExportToExcelAsync()
-    {
-        if (!_projectContext.HasOpenProject)
-        {
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-                MessageBox.Show("No project is open", "No Project", MessageBoxButton.OK, MessageBoxImage.Information));
-            return;
-        }
-
-        // Navigate to findings view and trigger export
-        if (CurrentView is not FindingsView)
-        {
-            await NavigateToFindingsAsync();
-        }
-
-        var findingsView = CurrentView as FindingsView;
-        if (findingsView?.DataContext is FindingsViewModel vm)
-        {
-            await vm.ExportToExcelCommand.ExecuteAsync(null);
+            await vm.ExportCommand.ExecuteAsync(null);
         }
     }
 

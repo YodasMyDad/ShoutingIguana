@@ -245,8 +245,18 @@ public class CrawlEngine(
             queueSize = await queueRepository.CountQueuedAsync(projectId).ConfigureAwait(false);
             if (queueSize == 0)
             {
+                // Check if there are existing URLs from a previous crawl
+                var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
+                var existingUrlCount = await urlRepository.CountByProjectIdAsync(projectId).ConfigureAwait(false);
+                
+                if (existingUrlCount > 0)
+                {
+                    _logger.LogInformation("Detected existing crawl data ({UrlCount} URLs). Clearing all data for fresh crawl...", existingUrlCount);
+                    await ClearProjectCrawlDataAsync(projectId).ConfigureAwait(false);
+                }
+                
                 _logger.LogInformation("Seeding queue with base URL: {BaseUrl}", settings.BaseUrl);
-                await EnqueueUrlAsync(projectId, settings.BaseUrl, 0, 1000, settings.BaseUrl).ConfigureAwait(false);
+                await EnqueueUrlAsync(projectId, settings.BaseUrl, 0, 1000, settings.BaseUrl, allowRecrawl: true).ConfigureAwait(false);
                 
                 // Discover and enqueue URLs from sitemap.xml if enabled
                 // Run this in parallel to avoid blocking the start of the crawl
@@ -284,7 +294,7 @@ public class CrawlEngine(
                                         break;
                                     }
                                     
-                                    await EnqueueUrlAsync(projectId, url, 0, 900, settings.BaseUrl).ConfigureAwait(false);
+                                    await EnqueueUrlAsync(projectId, url, 0, 900, settings.BaseUrl, allowRecrawl: true).ConfigureAwait(false);
                                     enqueuedCount++;
                                 }
                                 
@@ -1403,7 +1413,7 @@ public class CrawlEngine(
         }
     }
 
-    private async Task EnqueueUrlAsync(int projectId, string url, int depth, int priority, string projectBaseUrl)
+    private async Task EnqueueUrlAsync(int projectId, string url, int depth, int priority, string projectBaseUrl, bool allowRecrawl = false)
     {
         try
         {
@@ -1432,12 +1442,50 @@ public class CrawlEngine(
             var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
             var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
             
-            // Check if URL already exists
-            var existing = await urlRepository.GetByAddressAsync(projectId, url).ConfigureAwait(false);
-            if (existing != null)
+            // Check if URL already exists in queue (prevents race conditions between workers)
+            var existingInQueue = await queueRepository.GetByAddressAsync(projectId, url).ConfigureAwait(false);
+            
+            if (allowRecrawl)
             {
-                _logger.LogDebug("URL already exists, skipping: {Url}", url);
-                return;
+                // For seed URLs when starting a fresh crawl, check if URL exists in queue and re-queue if completed/failed
+                if (existingInQueue != null)
+                {
+                    // If already queued or in progress, skip
+                    if (existingInQueue.State == QueueState.Queued || existingInQueue.State == QueueState.InProgress)
+                    {
+                        _logger.LogDebug("URL already in queue with active state, skipping: {Url}", url);
+                        return;
+                    }
+                    
+                    // If completed or failed, re-queue it by updating state
+                    existingInQueue.State = QueueState.Queued;
+                    existingInQueue.Priority = priority;
+                    existingInQueue.Depth = depth;
+                    existingInQueue.EnqueuedUtc = DateTime.UtcNow;
+                    await queueRepository.UpdateAsync(existingInQueue).ConfigureAwait(false);
+                    Interlocked.Increment(ref _totalDiscovered);
+                    Interlocked.Increment(ref _queueSize);
+                    _logger.LogInformation("✓ Re-queued: {Url} (Depth: {Depth})", url, depth);
+                    return;
+                }
+            }
+            else
+            {
+                // For normal crawling, check BOTH queue and crawled URLs to prevent duplicates
+                // Check queue first (faster, prevents race conditions)
+                if (existingInQueue != null)
+                {
+                    _logger.LogDebug("URL already in queue, skipping: {Url}", url);
+                    return;
+                }
+                
+                // Also check if already crawled
+                var existing = await urlRepository.GetByAddressAsync(projectId, url).ConfigureAwait(false);
+                if (existing != null)
+                {
+                    _logger.LogDebug("URL already crawled, skipping: {Url}", url);
+                    return;
+                }
             }
 
             var hostKey = urlUri.Host;
@@ -1460,7 +1508,18 @@ public class CrawlEngine(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to enqueue URL: {Url}", url);
+            // Check if this is a duplicate key exception from the database unique constraint
+            var exceptionMessage = ex.InnerException?.Message ?? ex.Message;
+            if (exceptionMessage.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase) || 
+                exceptionMessage.Contains("duplicate key", StringComparison.OrdinalIgnoreCase))
+            {
+                // Duplicate URL caught by database unique constraint (race condition between workers)
+                _logger.LogDebug("URL already in queue (caught by unique constraint), skipping: {Url}", url);
+            }
+            else
+            {
+                _logger.LogError(ex, "Failed to enqueue URL: {Url}", url);
+            }
         }
     }
 
@@ -1687,6 +1746,46 @@ public class CrawlEngine(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deactivating checkpoints");
+        }
+    }
+
+    /// <summary>
+    /// Clears all crawl data for a project to start a fresh crawl.
+    /// Deletes URLs, Links, Findings, Images, Redirects, Queue items, and Checkpoints.
+    /// </summary>
+    private async Task ClearProjectCrawlDataAsync(int projectId)
+    {
+        try
+        {
+            _logger.LogInformation("Clearing all crawl data for project {ProjectId} to start fresh crawl", projectId);
+            
+            using var scope = _serviceProvider.CreateScope();
+            
+            // Get all repositories
+            var urlRepo = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
+            var linkRepo = scope.ServiceProvider.GetRequiredService<ILinkRepository>();
+            var queueRepo = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
+            var checkpointRepo = scope.ServiceProvider.GetRequiredService<ICrawlCheckpointRepository>();
+            
+            // Clear all data (order matters for foreign keys)
+            // 1. Delete Links first (they have RESTRICT FK to URLs, must be removed before URLs)
+            await linkRepo.DeleteByProjectIdAsync(projectId).ConfigureAwait(false);
+            
+            // 2. Delete Queue (no FK dependencies)
+            await queueRepo.DeleteAllByProjectIdAsync(projectId).ConfigureAwait(false);
+            
+            // 3. Delete URLs (CASCADE will automatically delete Findings, Images, Redirects, Headers, etc.)
+            await urlRepo.DeleteByProjectIdAsync(projectId).ConfigureAwait(false);
+            
+            // 4. Deactivate checkpoints
+            await checkpointRepo.DeactivateCheckpointsAsync(projectId).ConfigureAwait(false);
+            
+            _logger.LogInformation("Successfully cleared all crawl data for project {ProjectId}", projectId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error clearing project crawl data");
+            throw; // Re-throw to prevent crawl from starting with partial clear
         }
     }
 

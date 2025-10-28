@@ -19,12 +19,12 @@ public class ExcelExportService(
     private readonly IServiceProvider _serviceProvider = serviceProvider;
     private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    public async Task<bool> ExportFindingsAsync(int projectId, string filePath, bool includeTechnicalMetadata = false)
+    public async Task<bool> ExportFindingsAsync(int projectId, string filePath, bool includeTechnicalMetadata = false, bool includeErrors = true, bool includeWarnings = true, bool includeInfo = true)
     {
         try
         {
-            _logger.LogInformation("Exporting findings to Excel: {FilePath} (Include Technical Metadata: {IncludeTechnical})", 
-                filePath, includeTechnicalMetadata);
+            _logger.LogInformation("Exporting findings to Excel: {FilePath} (Include Technical Metadata: {IncludeTechnical}, Errors: {Errors}, Warnings: {Warnings}, Info: {Info})", 
+                filePath, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
 
             // Create scope for repositories
             using var scope = _serviceProvider.CreateScope();
@@ -42,29 +42,40 @@ public class ExcelExportService(
             // Get all findings
             var allFindings = (await findingRepo.GetByProjectIdAsync(projectId)).ToList();
             
-            if (allFindings.Count == 0)
+            // Apply severity filtering
+            var filteredFindings = allFindings.Where(f => 
+                (includeErrors && f.Severity == Severity.Error) ||
+                (includeWarnings && f.Severity == Severity.Warning) ||
+                (includeInfo && f.Severity == Severity.Info)
+            ).ToList();
+            
+            if (filteredFindings.Count == 0)
             {
-                _logger.LogWarning("No findings to export for project {ProjectId}", projectId);
+                _logger.LogWarning("No findings to export for project {ProjectId} after applying severity filters", projectId);
                 return false;
             }
             
-            if (allFindings.Count > 50000)
+            if (filteredFindings.Count > 50000)
             {
-                _logger.LogWarning("Large export detected: {Count} findings. This may take some time.", allFindings.Count);
+                _logger.LogWarning("Large export detected: {Count} findings. This may take some time.", filteredFindings.Count);
             }
             
             using var workbook = new XLWorkbook();
 
             // Group findings by task key
-            var findingsByTask = allFindings.GroupBy(f => f.TaskKey).ToList();
+            var findingsByTask = filteredFindings.GroupBy(f => f.TaskKey).ToList();
 
             // Create summary sheet
-            CreateSummarySheet(workbook, project.Name, allFindings, findingsByTask);
+            CreateSummarySheet(workbook, project.Name, filteredFindings, findingsByTask);
 
-            // Create a sheet for each plugin's findings
+            // Create a sheet for each plugin's findings (skip empty groups)
             foreach (var taskGroup in findingsByTask.OrderBy(g => g.Key))
             {
-                CreateTaskSheet(workbook, taskGroup.Key, taskGroup.ToList(), includeTechnicalMetadata);
+                var taskFindings = taskGroup.ToList();
+                if (taskFindings.Count > 0)
+                {
+                    CreateTaskSheet(workbook, taskGroup.Key, taskFindings, includeTechnicalMetadata);
+                }
             }
 
             // Ensure directory exists
@@ -78,7 +89,7 @@ public class ExcelExportService(
             workbook.SaveAs(filePath);
 
             _logger.LogInformation("Excel export completed: {Count} findings exported to {FilePath}", 
-                allFindings.Count, filePath);
+                filteredFindings.Count, filePath);
             return true;
         }
         catch (Exception ex)

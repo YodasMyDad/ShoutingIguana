@@ -11,7 +11,7 @@ using ShoutingIguana.Data;
 namespace ShoutingIguana.Data.Migrations
 {
     [DbContext(typeof(SqliteShoutingIguanaDbContext))]
-    [Migration("20251027194459_Initial")]
+    [Migration("20251028145925_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -97,6 +97,9 @@ namespace ShoutingIguana.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("HostKey");
+
+                    b.HasIndex("ProjectId", "Address")
+                        .IsUnique();
 
                     b.HasIndex("ProjectId", "State", "Priority");
 

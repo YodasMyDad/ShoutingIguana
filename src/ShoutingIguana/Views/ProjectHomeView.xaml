@@ -209,7 +209,7 @@
                             Background="{StaticResource SurfaceBrush}"
                             BorderBrush="{StaticResource BorderLightBrush}"
                             BorderThickness="0,0,0,1"
-                            Padding="32,24"
+                            Padding="32"
                             CornerRadius="12,12,0,0">
                         <Grid>
                             <StackPanel Orientation="Horizontal">
@@ -245,15 +245,14 @@
                         <!-- Settings Tab -->
                         <TabItem>
                             <TabItem.Header>
-                                <StackPanel Orientation="Horizontal" Margin="12,0">
+                                <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="{StaticResource Icon.Settings}"
                                                Style="{StaticResource Icon}"
                                                FontSize="16"
                                                Margin="0,0,8,0"
                                                VerticalAlignment="Center"/>
                                     <TextBlock Text="Settings" 
-                                               VerticalAlignment="Center"
-                                               FontWeight="Medium"/>
+                                               VerticalAlignment="Center"/>
                                 </StackPanel>
                             </TabItem.Header>
                             
@@ -542,15 +541,14 @@
                         <!-- Custom Extraction Tab -->
                         <TabItem>
                             <TabItem.Header>
-                                <StackPanel Orientation="Horizontal" Margin="12,0">
+                                <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="{StaticResource Icon.Code}"
                                                Style="{StaticResource Icon}"
                                                FontSize="16"
                                                Margin="0,0,8,0"
                                                VerticalAlignment="Center"/>
                                     <TextBlock Text="Custom Extraction" 
-                                               VerticalAlignment="Center"
-                                               FontWeight="Medium"/>
+                                               VerticalAlignment="Center"/>
                                 </StackPanel>
                             </TabItem.Header>
                             
@@ -582,7 +580,7 @@
                                                   SelectedItem="{Binding SelectedExtractionRule}"
                                                   Style="{StaticResource ModernDataGrid}"
                                                   AutoGenerateColumns="False"
-                                                  IsReadOnly="True"
+                                                  IsReadOnly="False"
                                                   SelectionMode="Single"
                                                   HeadersVisibility="Column"
                                                   GridLinesVisibility="None"
@@ -593,17 +591,21 @@
                                                   TabIndex="20"
                                                   AutomationProperties.Name="Custom Extraction Rules List"
                                                   AutomationProperties.HelpText="List of custom extraction rules. Select a rule to edit it."
-                                                  AutomationProperties.LiveSetting="Polite">
+                                                  AutomationProperties.LiveSetting="Polite"
+                                                  CellEditEnding="DataGrid_CellEditEnding">
                                             <DataGrid.Columns>
                                                 <DataGridTextColumn Header="Name" 
                                                                     Binding="{Binding Name}" 
-                                                                    Width="*"/>
+                                                                    Width="*"
+                                                                    IsReadOnly="True"/>
                                                 <DataGridTextColumn Header="Type" 
                                                                     Binding="{Binding SelectorType, Converter={StaticResource SelectorTypeConverter}}" 
-                                                                    Width="Auto"/>
-                                                <DataGridCheckBoxColumn Header="Enabled" 
-                                                                        Binding="{Binding IsEnabled}" 
-                                                                        Width="Auto"/>
+                                                                    Width="Auto"
+                                                                    IsReadOnly="True"/>
+                                                <DataGridCheckBoxColumn Header="Enabled"
+                                                                        Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" 
+                                                                        Width="Auto"
+                                                                        IsReadOnly="False"/>
                                             </DataGrid.Columns>
                                         </DataGrid>
 
@@ -693,20 +695,6 @@
                                                              AutomationProperties.Name="Rule Name"
                                                              AutomationProperties.HelpText="Descriptive name for this extraction rule">
                                                         <TextBox.Tag>e.g., Product Title</TextBox.Tag>
-                                                    </TextBox>
-                                                </StackPanel>
-
-                                                <!-- Field Name -->
-                                                <StackPanel Margin="0,0,0,16">
-                                                    <TextBlock Text="Field Name (for export)" 
-                                                               Style="{StaticResource FormFieldLabel}"
-                                                               Margin="0,0,0,8"/>
-                                                    <TextBox Text="{Binding EditingExtractionFieldName, UpdateSourceTrigger=PropertyChanged}"
-                                                             Style="{StaticResource ModernTextBox}"
-                                                             TabIndex="25"
-                                                             AutomationProperties.Name="Field Name for Export"
-                                                             AutomationProperties.HelpText="Column name when exporting extracted data">
-                                                        <TextBox.Tag>e.g., product_title</TextBox.Tag>
                                                     </TextBox>
                                                 </StackPanel>
 

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -19,8 +20,9 @@ using ShoutingIguana.Services;
 
 namespace ShoutingIguana.ViewModels;
 
-public partial class ProjectHomeViewModel : ObservableObject
+public partial class ProjectHomeViewModel : ObservableObject, IDisposable
 {
+    private bool _disposed;
     private readonly ILogger<ProjectHomeViewModel> _logger;
     private readonly INavigationService _navigationService;
     private readonly IProjectContext _projectContext;
@@ -39,6 +41,9 @@ public partial class ProjectHomeViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCrawlCommand))]
     private string _baseUrl = string.Empty;
+    
+    private readonly SemaphoreSlim _autoCreateLock = new(1, 1);
+    private bool _isAutoCreatingProject = false;
 
     [ObservableProperty]
     private int _maxDepth = 5;
@@ -83,6 +88,8 @@ public partial class ProjectHomeViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEditExtractionRule))]
     [NotifyPropertyChangedFor(nameof(CanDeleteExtractionRule))]
+    [NotifyCanExecuteChangedFor(nameof(EditExtractionRuleCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DeleteExtractionRuleCommand))]
     private CustomExtractionRule? _selectedExtractionRule;
     
     [ObservableProperty]
@@ -92,11 +99,6 @@ public partial class ProjectHomeViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanSaveExtractionRule))]
     [NotifyCanExecuteChangedFor(nameof(SaveExtractionRuleCommand))]
     private string _editingExtractionName = string.Empty;
-    
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanSaveExtractionRule))]
-    [NotifyCanExecuteChangedFor(nameof(SaveExtractionRuleCommand))]
-    private string _editingExtractionFieldName = string.Empty;
     
     [ObservableProperty]
     private int _editingExtractionSelectorType;
@@ -115,7 +117,6 @@ public partial class ProjectHomeViewModel : ObservableObject
     public bool CanEditExtractionRule => SelectedExtractionRule != null;
     public bool CanDeleteExtractionRule => SelectedExtractionRule != null;
     public bool CanSaveExtractionRule => !string.IsNullOrWhiteSpace(EditingExtractionName) 
-                                          && !string.IsNullOrWhiteSpace(EditingExtractionFieldName) 
                                           && !string.IsNullOrWhiteSpace(EditingExtractionSelector);
 
     public ProjectHomeViewModel(
@@ -140,6 +141,135 @@ public partial class ProjectHomeViewModel : ObservableObject
         _appSettingsService = appSettingsService;
         _toastService = toastService;
         _customExtractionService = customExtractionService;
+    }
+    
+    // Property change handlers to auto-create project
+    partial void OnProjectNameChanged(string value)
+    {
+        _ = TryAutoCreateProjectAsync();
+    }
+    
+    partial void OnBaseUrlChanged(string value)
+    {
+        _ = TryAutoCreateProjectAsync();
+    }
+    
+    /// <summary>
+    /// Auto-creates the project database when both name and URL are valid and no project exists yet.
+    /// This allows users to add extraction rules before starting the first crawl.
+    /// </summary>
+    private async Task TryAutoCreateProjectAsync()
+    {
+        // Quick check without lock - avoid unnecessary lock contention
+        if (_isAutoCreatingProject || 
+            CurrentProject != null || 
+            string.IsNullOrWhiteSpace(ProjectName) || 
+            string.IsNullOrWhiteSpace(BaseUrl) ||
+            IsWelcomeScreen ||
+            !Uri.TryCreate(BaseUrl, UriKind.Absolute, out _))
+        {
+            return;
+        }
+        
+        // Try to acquire lock without blocking - if another call is already creating, skip
+        if (!await _autoCreateLock.WaitAsync(0))
+        {
+            return;
+        }
+        
+        try
+        {
+            // Double-check conditions after acquiring lock
+            if (_isAutoCreatingProject || 
+                CurrentProject != null || 
+                string.IsNullOrWhiteSpace(ProjectName) || 
+                string.IsNullOrWhiteSpace(BaseUrl) ||
+                IsWelcomeScreen ||
+                !Uri.TryCreate(BaseUrl, UriKind.Absolute, out _))
+            {
+                return;
+            }
+            
+            _isAutoCreatingProject = true;
+            
+            // Capture properties on UI thread before going to background
+            var projectName = ProjectName;
+            var baseUrl = BaseUrl;
+            
+            _logger.LogInformation("Auto-creating project database for: {ProjectName}", projectName);
+            
+            var settings = new ProjectSettings
+            {
+                BaseUrl = baseUrl,
+                MaxCrawlDepth = MaxDepth,
+                MaxUrlsToCrawl = MaxUrls,
+                CrawlDelaySeconds = CrawlDelay,
+                ConcurrentRequests = ConcurrentRequests,
+                TimeoutSeconds = TimeoutSeconds,
+                RespectRobotsTxt = RespectRobotsTxt,
+                UseSitemapXml = UseSitemapXml,
+                UserAgentType = SelectedUserAgentType
+            };
+            
+            Project? createdProject = null;
+            
+            await Task.Run(async () =>
+            {
+                var projectsDir = GetProjectsDirectory();
+                var sanitizedName = string.Join("_", projectName.Split(Path.GetInvalidFileNameChars()));
+                var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                var projectFileName = $"{sanitizedName}_{timestamp}.db";
+                var projectPath = Path.Combine(projectsDir, projectFileName);
+
+                // Switch to new database
+                var dbProvider = _serviceProvider.GetRequiredService<ShoutingIguana.Data.ProjectDbContextProvider>();
+                await dbProvider.SetProjectPathAsync(projectPath);
+
+                // Create project in new database
+                using var scope = _serviceProvider.CreateScope();
+                var projectRepo = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
+                
+                var project = new Project
+                {
+                    Name = projectName,
+                    BaseUrl = baseUrl,
+                    CreatedUtc = DateTime.UtcNow,
+                    LastOpenedUtc = DateTime.UtcNow,
+                    SettingsJson = JsonSerializer.Serialize(settings)
+                };
+
+                createdProject = await projectRepo.CreateAsync(project);
+                
+                // Update project context (safe to call from background thread)
+                _projectContext.OpenProject(projectPath, createdProject.Id, createdProject.Name);
+                
+                // Add to recent projects
+                _appSettingsService.AddRecentProject(createdProject.Name, projectPath);
+                await _appSettingsService.SaveAsync();
+                
+                _logger.LogInformation("Auto-created project: {ProjectName} at {ProjectPath}", projectName, projectPath);
+            });
+            
+            // Update CurrentProject on UI thread to ensure PropertyChanged fires on UI thread
+            if (createdProject != null)
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    CurrentProject = createdProject;
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to auto-create project database");
+            // Don't show error to user - this is a background operation
+            // They can still manually save via Start Crawl
+        }
+        finally
+        {
+            _isAutoCreatingProject = false;
+            _autoCreateLock.Release();
+        }
     }
 
     public async Task LoadAsync()
@@ -370,6 +500,7 @@ public partial class ProjectHomeViewModel : ObservableObject
                 if (CurrentProject == null)
                 {
                     // Create new project with its own database file
+                    // (This should rarely happen now due to auto-create, but keep as fallback)
                     _statusService.UpdateStatus("Creating project database...");
                     var projectsDir = GetProjectsDirectory();
                     var sanitizedName = string.Join("_", ProjectName.Split(Path.GetInvalidFileNameChars()));
@@ -410,7 +541,8 @@ public partial class ProjectHomeViewModel : ObservableObject
                 }
                 else
                 {
-                    // Update existing project
+                    // Update existing project (project was auto-created or already exists)
+                    _statusService.UpdateStatus("Updating project settings...");
                     using var scope = _serviceProvider.CreateScope();
                     var projectRepo = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
                     
@@ -427,6 +559,7 @@ public partial class ProjectHomeViewModel : ObservableObject
                     }
                     
                     _logger.LogInformation("Updated project: {ProjectName}", ProjectName);
+                    _statusService.UpdateStatus("Project updated successfully");
                 }
             });
 
@@ -588,7 +721,6 @@ public partial class ProjectHomeViewModel : ObservableObject
         IsEditingExtractionRule = true;
         EditingExtractionRuleId = 0;
         EditingExtractionName = string.Empty;
-        EditingExtractionFieldName = string.Empty;
         EditingExtractionSelectorType = 0; // CSS by default
         EditingExtractionSelector = string.Empty;
         EditingExtractionIsEnabled = true;
@@ -604,7 +736,6 @@ public partial class ProjectHomeViewModel : ObservableObject
         IsEditingExtractionRule = true;
         EditingExtractionRuleId = SelectedExtractionRule.Id;
         EditingExtractionName = SelectedExtractionRule.Name;
-        EditingExtractionFieldName = SelectedExtractionRule.FieldName;
         EditingExtractionSelectorType = SelectedExtractionRule.SelectorType;
         EditingExtractionSelector = SelectedExtractionRule.Selector;
         EditingExtractionIsEnabled = SelectedExtractionRule.IsEnabled;
@@ -659,7 +790,7 @@ public partial class ProjectHomeViewModel : ObservableObject
                 Id = EditingExtractionRuleId,
                 ProjectId = _projectContext.CurrentProjectId.Value,
                 Name = EditingExtractionName.Trim(),
-                FieldName = EditingExtractionFieldName.Trim(),
+                FieldName = GenerateFieldName(EditingExtractionName.Trim()),
                 SelectorType = EditingExtractionSelectorType,
                 Selector = EditingExtractionSelector.Trim(),
                 IsEnabled = EditingExtractionIsEnabled
@@ -701,6 +832,55 @@ public partial class ProjectHomeViewModel : ObservableObject
     {
         IsEditingExtractionRule = false;
         _logger.LogDebug("Cancelled extraction rule editing");
+    }
+    
+    /// <summary>
+    /// Saves the IsEnabled toggle change for an extraction rule.
+    /// Called when the user toggles the checkbox in the DataGrid.
+    /// </summary>
+    public async Task SaveExtractionRuleToggleAsync(CustomExtractionRule rule)
+    {
+        try
+        {
+            await _customExtractionService.SaveRuleAsync(rule);
+            _logger.LogDebug("Toggled extraction rule '{RuleName}' to {IsEnabled}", rule.Name, rule.IsEnabled);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error toggling extraction rule");
+            _toastService.ShowError("Error", "Failed to update rule");
+        }
+    }
+    
+    /// <summary>
+    /// Generates a valid field name from a rule name by converting to lowercase,
+    /// replacing spaces with underscores, and removing special characters.
+    /// </summary>
+    private static string GenerateFieldName(string ruleName)
+    {
+        if (string.IsNullOrWhiteSpace(ruleName))
+            return "unnamed_field";
+            
+        // Convert to lowercase and replace spaces with underscores
+        var fieldName = ruleName.ToLowerInvariant().Replace(' ', '_');
+        
+        // Remove all characters except alphanumeric and underscores
+        fieldName = System.Text.RegularExpressions.Regex.Replace(fieldName, @"[^a-z0-9_]", "");
+        
+        // Ensure it doesn't start with a number (add prefix if needed)
+        if (fieldName.Length > 0 && char.IsDigit(fieldName[0]))
+            fieldName = "field_" + fieldName;
+            
+        return string.IsNullOrWhiteSpace(fieldName) ? "unnamed_field" : fieldName;
+    }
+    
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+            
+        _autoCreateLock?.Dispose();
+        _disposed = true;
     }
 }
 

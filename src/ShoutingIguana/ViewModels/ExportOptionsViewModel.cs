@@ -17,6 +17,15 @@ public partial class ExportOptionsViewModel : ObservableObject
     [ObservableProperty]
     private string _exportFormat = "Excel";
     
+    [ObservableProperty]
+    private bool _includeErrors = true;
+    
+    [ObservableProperty]
+    private bool _includeWarnings = true;
+    
+    [ObservableProperty]
+    private bool _includeInfo = true;
+    
     public ExportOptionsViewModel(Window dialog)
     {
         _dialog = dialog;

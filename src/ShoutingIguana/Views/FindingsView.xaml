@@ -130,35 +130,19 @@
                             <TextBlock Text="Refresh" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                    <Button Command="{Binding ExportToCsvCommand}"
-                            Style="{StaticResource SecondaryButton}"
-                            Margin="0,0,6,0"
-                            TabIndex="1"
-                            AutomationProperties.Name="Export to CSV"
-                            AutomationProperties.HelpText="Export findings to CSV file with structured details and optional technical metadata"
-                            ToolTip="Export findings to CSV with structured details (Ctrl+Shift+E)">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{StaticResource Icon.FileCsv}"
-                                       Style="{StaticResource Icon}"
-                                       Width="16" 
-                                       Height="16"
-                                       Margin="0,0,6,0"/>
-                            <TextBlock Text="CSV" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Command="{Binding ExportToExcelCommand}"
+                    <Button Command="{Binding ExportCommand}"
                             Style="{StaticResource PrimaryButton}"
-                            TabIndex="2"
-                            AutomationProperties.Name="Export to Excel"
-                            AutomationProperties.HelpText="Export findings to Excel workbook with structured details and optional technical metadata"
-                            ToolTip="Export findings to Excel with structured details (Ctrl+E)">
+                            TabIndex="1"
+                            AutomationProperties.Name="Export Findings"
+                            AutomationProperties.HelpText="Export findings to Excel or CSV with customizable filters"
+                            ToolTip="Export findings with customizable format and filters (Ctrl+E)">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{StaticResource Icon.FileExcel}"
+                            <TextBlock Text="{StaticResource Icon.Save}"
                                        Style="{StaticResource Icon}"
                                        Width="16" 
                                        Height="16"
                                        Margin="0,0,6,0"/>
-                            <TextBlock Text="Excel" 
+                            <TextBlock Text="Export" 
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>

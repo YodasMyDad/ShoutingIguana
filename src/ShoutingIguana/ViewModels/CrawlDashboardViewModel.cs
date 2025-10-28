@@ -15,6 +15,7 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
     private readonly ICrawlEngine _crawlEngine;
     private readonly IProjectContext _projectContext;
     private readonly INavigationService _navigationService;
+    private readonly IPluginRegistry _pluginRegistry;
     private bool _disposed;
     private CancellationTokenSource? _navigationCts;
     private Task? _navigationTask;
@@ -69,12 +70,14 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
         ILogger<CrawlDashboardViewModel> logger, 
         ICrawlEngine crawlEngine,
         IProjectContext projectContext,
-        INavigationService navigationService)
+        INavigationService navigationService,
+        IPluginRegistry pluginRegistry)
     {
         _logger = logger;
         _crawlEngine = crawlEngine;
         _projectContext = projectContext;
         _navigationService = navigationService;
+        _pluginRegistry = pluginRegistry;
         
         _crawlEngine.ProgressUpdated += OnProgressUpdated;
     }
@@ -103,6 +106,24 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
         {
             var projectId = _projectContext.CurrentProjectId!.Value;
             _logger.LogInformation("Starting crawl for project {ProjectId}", projectId);
+            
+            // Clear plugin caches before starting crawl
+            // This ensures plugins (like CustomExtraction) reload their rules from the database
+            StatusMessage = "Preparing plugins...";
+            var tasks = _pluginRegistry.RegisteredTasks;
+            foreach (var task in tasks)
+            {
+                try
+                {
+                    task.CleanupProject(projectId);
+                    _logger.LogDebug("Cleared cache for plugin task: {TaskKey}", task.Key);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error clearing cache for plugin task {TaskKey}", task.Key);
+                }
+            }
+            
             StatusMessage = "Starting crawl...";
             IsCrawling = true;
             await _crawlEngine.StartCrawlAsync(projectId);

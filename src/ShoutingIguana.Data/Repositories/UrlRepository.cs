@@ -62,6 +62,16 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
         return await _context.Urls.CountAsync(u => u.ProjectId == projectId && u.Status == status).ConfigureAwait(false);
     }
 
+    public async Task DeleteByProjectIdAsync(int projectId)
+    {
+        var urls = await _context.Urls
+            .Where(u => u.ProjectId == projectId)
+            .ToListAsync().ConfigureAwait(false);
+        
+        _context.Urls.RemoveRange(urls);
+        await _context.SaveChangesAsync().ConfigureAwait(false);
+    }
+
     private static string NormalizeUrl(string url)
     {
         try

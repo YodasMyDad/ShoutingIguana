@@ -9,5 +9,6 @@ public interface ILinkRepository
     Task<IEnumerable<Link>> GetByFromUrlIdAsync(int fromUrlId);
     Task<IEnumerable<Link>> GetByToUrlIdAsync(int toUrlId);
     Task<int> CountByProjectIdAsync(int projectId);
+    Task DeleteByProjectIdAsync(int projectId);
 }
 

@@ -59,20 +59,27 @@ public class CsvExportService(ILogger<CsvExportService> logger, IServiceProvider
         }
     }
     
-    public async Task ExportFindingsAsync(int projectId, string filePath, bool includeTechnicalMetadata = false)
+    public async Task ExportFindingsAsync(int projectId, string filePath, bool includeTechnicalMetadata = false, bool includeErrors = true, bool includeWarnings = true, bool includeInfo = true)
     {
         try
         {
-            _logger.LogInformation("Exporting findings to CSV: {FilePath} (Include Technical Metadata: {IncludeTechnical})", 
-                filePath, includeTechnicalMetadata);
+            _logger.LogInformation("Exporting findings to CSV: {FilePath} (Include Technical Metadata: {IncludeTechnical}, Errors: {Errors}, Warnings: {Warnings}, Info: {Info})", 
+                filePath, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
             
             using var scope = _serviceProvider.CreateScope();
             var findingRepository = scope.ServiceProvider.GetRequiredService<IFindingRepository>();
-            var findings = (await findingRepository.GetByProjectIdAsync(projectId)).ToList();
+            var allFindings = (await findingRepository.GetByProjectIdAsync(projectId)).ToList();
+            
+            // Apply severity filtering
+            var findings = allFindings.Where(f => 
+                (includeErrors && f.Severity == Severity.Error) ||
+                (includeWarnings && f.Severity == Severity.Warning) ||
+                (includeInfo && f.Severity == Severity.Info)
+            ).ToList();
             
             if (findings.Count == 0)
             {
-                _logger.LogWarning("No findings to export for project {ProjectId}", projectId);
+                _logger.LogWarning("No findings to export for project {ProjectId} after applying severity filters", projectId);
                 // Still create an empty CSV file
             }
             

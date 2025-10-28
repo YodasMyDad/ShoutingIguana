@@ -81,30 +81,26 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
 
             if (extractedValues.Any())
             {
-                // Report extracted data as findings
-                var builder = FindingDetailsBuilder.Create()
-                    .AddItem($"Rule: {rule.Name}")
-                    .AddItem($"Field: {rule.FieldName}")
-                    .AddItem($"Selector type: {rule.SelectorType}")
-                    .AddItem($"Values found: {extractedValues.Count}");
+                // Report extracted data as findings - show only the values, metadata goes to technical section
+                var builder = FindingDetailsBuilder.Create();
                 
-                builder.BeginNested("📋 Extracted values");
-                foreach (var value in extractedValues.Take(10))
+                // Just show the extracted values - that's what users care about
+                foreach (var value in extractedValues.Take(100)) // Show up to 100 values
                 {
                     builder.AddItem(value);
                 }
-                if (extractedValues.Count > 10)
+                if (extractedValues.Count > 100)
                 {
-                    builder.AddItem($"... and {extractedValues.Count - 10} more");
+                    builder.AddItem($"... and {extractedValues.Count - 100} more (see technical metadata for full list)");
                 }
-                builder.EndNested();
                 
+                // All the rule metadata goes to technical metadata for power users
                 builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("ruleName", rule.Name)
                     .WithTechnicalMetadata("fieldName", rule.FieldName)
                     .WithTechnicalMetadata("selectorType", rule.SelectorType.ToString())
                     .WithTechnicalMetadata("selector", rule.Selector)
-                    .WithTechnicalMetadata("extractedValues", extractedValues.Take(10).ToArray())
+                    .WithTechnicalMetadata("extractedValues", extractedValues.ToArray())
                     .WithTechnicalMetadata("totalCount", extractedValues.Count);
                 
                 await ctx.Findings.ReportAsync(

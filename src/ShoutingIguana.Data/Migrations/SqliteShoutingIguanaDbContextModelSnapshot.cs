@@ -95,6 +95,9 @@ namespace ShoutingIguana.Data.Migrations
 
                     b.HasIndex("HostKey");
 
+                    b.HasIndex("ProjectId", "Address")
+                        .IsUnique();
+
                     b.HasIndex("ProjectId", "State", "Priority");
 
                     b.ToTable("CrawlQueue", (string)null);

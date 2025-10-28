@@ -236,7 +236,7 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private async Task ExportToCsvAsync()
+    private async Task ExportAsync()
     {
         if (!_projectContext.HasOpenProject)
         {
@@ -248,8 +248,13 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         try
         {
             // Show export options dialog
+            string exportFormat = "Excel";
             bool includeTechnicalMetadata = false;
+            bool includeErrors = true;
+            bool includeWarnings = true;
+            bool includeInfo = true;
             bool? optionsResult = null;
+            
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 var optionsDialog = new Views.ExportOptionsDialog
@@ -260,7 +265,11 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
                 optionsResult = optionsDialog.ShowDialog();
                 if (optionsResult == true)
                 {
+                    exportFormat = optionsDialog.ExportFormat;
                     includeTechnicalMetadata = optionsDialog.IncludeTechnicalMetadata;
+                    includeErrors = optionsDialog.IncludeErrors;
+                    includeWarnings = optionsDialog.IncludeWarnings;
+                    includeInfo = optionsDialog.IncludeInfo;
                 }
             });
             
@@ -270,98 +279,74 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
                 return;
             }
             
-            var dialog = new VistaSaveFileDialog
+            // Validate at least one severity is selected
+            if (!includeErrors && !includeWarnings && !includeInfo)
             {
-                Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
-                DefaultExt = "csv",
-                FileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.csv"
-            };
-
-            if (dialog.ShowDialog() == true)
-            {
-                var projectId = _projectContext.CurrentProjectId!.Value;
-                await _csvExportService.ExportFindingsAsync(projectId, dialog.FileName, includeTechnicalMetadata);
                 await Application.Current.Dispatcher.InvokeAsync(() =>
-                    MessageBox.Show($"Exported to {dialog.FileName}", "Export Successful", 
-                        MessageBoxButton.OK, MessageBoxImage.Information));
-                _logger.LogInformation("Exported findings to CSV: {FilePath} (Technical Metadata: {Include})", 
-                    dialog.FileName, includeTechnicalMetadata);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to export to CSV");
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-                MessageBox.Show($"Failed to export: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
-        }
-    }
-
-    [RelayCommand]
-    private async Task ExportToExcelAsync()
-    {
-        if (!_projectContext.HasOpenProject)
-        {
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-                MessageBox.Show("No project is open", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
-            return;
-        }
-
-        try
-        {
-            // Show export options dialog
-            bool includeTechnicalMetadata = false;
-            bool? optionsResult = null;
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                var optionsDialog = new Views.ExportOptionsDialog
-                {
-                    Owner = Application.Current.MainWindow
-                };
-                
-                optionsResult = optionsDialog.ShowDialog();
-                if (optionsResult == true)
-                {
-                    includeTechnicalMetadata = optionsDialog.IncludeTechnicalMetadata;
-                }
-            });
-            
-            // User cancelled export options
-            if (optionsResult != true)
-            {
+                    MessageBox.Show("Please select at least one severity level to export.", "No Severity Selected", 
+                        MessageBoxButton.OK, MessageBoxImage.Warning));
                 return;
+            }
+            
+            // Determine file filter and extension based on format
+            string filter, defaultExt, fileName;
+            if (exportFormat == "CSV")
+            {
+                filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*";
+                defaultExt = "csv";
+                fileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+            }
+            else
+            {
+                filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*";
+                defaultExt = "xlsx";
+                fileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx";
             }
             
             var dialog = new VistaSaveFileDialog
             {
-                Filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*",
-                DefaultExt = "xlsx",
-                FileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx"
+                Filter = filter,
+                DefaultExt = defaultExt,
+                FileName = fileName
             };
 
             if (dialog.ShowDialog() == true)
             {
                 var projectId = _projectContext.CurrentProjectId!.Value;
-                var success = await _excelExportService.ExportFindingsAsync(projectId, dialog.FileName, includeTechnicalMetadata);
                 
-                if (success)
+                if (exportFormat == "CSV")
                 {
+                    await _csvExportService.ExportFindingsAsync(projectId, dialog.FileName, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
                     await Application.Current.Dispatcher.InvokeAsync(() =>
                         MessageBox.Show($"Exported to {dialog.FileName}", "Export Successful", 
                             MessageBoxButton.OK, MessageBoxImage.Information));
-                    _logger.LogInformation("Exported findings to Excel: {FilePath} (Technical Metadata: {Include})", 
-                        dialog.FileName, includeTechnicalMetadata);
+                    _logger.LogInformation("Exported findings to CSV: {FilePath} (Technical: {Tech}, Errors: {Err}, Warnings: {Warn}, Info: {Info})", 
+                        dialog.FileName, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
                 }
                 else
                 {
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                        MessageBox.Show("Export failed. Check logs for details.", "Export Failed", 
-                            MessageBoxButton.OK, MessageBoxImage.Error));
+                    var success = await _excelExportService.ExportFindingsAsync(projectId, dialog.FileName, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
+                    
+                    if (success)
+                    {
+                        await Application.Current.Dispatcher.InvokeAsync(() =>
+                            MessageBox.Show($"Exported to {dialog.FileName}", "Export Successful", 
+                                MessageBoxButton.OK, MessageBoxImage.Information));
+                        _logger.LogInformation("Exported findings to Excel: {FilePath} (Technical: {Tech}, Errors: {Err}, Warnings: {Warn}, Info: {Info})", 
+                            dialog.FileName, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
+                    }
+                    else
+                    {
+                        await Application.Current.Dispatcher.InvokeAsync(() =>
+                            MessageBox.Show("Export failed. Check logs for details.", "Export Failed", 
+                                MessageBoxButton.OK, MessageBoxImage.Error));
+                    }
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to export to Excel");
+            _logger.LogError(ex, "Failed to export findings");
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show($"Failed to export: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
         }
