@@ -318,6 +318,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
             
             // Generate recommendations based on the issue
             string? recommendation = null;
+            string? impactNote = null;
             if (isRestricted)
             {
                 var note = status.Value switch
@@ -332,19 +333,20 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
             else if (ctx.Metadata.Depth <= 2 && !isExternal && link.LinkType == "hyperlink")
             {
                 // Important page recommendations for actual broken links
-                var note = $"This broken link is found on an important page (depth {ctx.Metadata.Depth}).";
+                impactNote = $"Broken links on important pages (depth {ctx.Metadata.Depth}) negatively impact site quality signals and user trust, which can reduce overall rankings.";
                 var action = status.Value == 404 
                     ? "Fix the link URL or implement a 301 redirect to the correct page."
                     : $"Investigate why this page returns {statusText} and fix the issue or update the link.";
-                recommendation = $"{note} {action}";
+                recommendation = $"{action} Broken links reduce 'site quality' signals that search engines use for ranking.";
             }
             else if (status.Value == 404)
             {
+                impactNote = "Broken links harm user experience and reduce site quality signals, which can negatively impact rankings.";
                 recommendation = "Fix the link URL or implement a 301 redirect to the correct page.";
             }
             
             // Add depth information and recommendations
-            var data = CreateFindingData(ctx, link, status.Value, isExternal, diagnosticInfo, hasRedirect: hasRedirect, recommendation: recommendation);
+            var data = CreateFindingData(ctx, link, status.Value, isExternal, diagnosticInfo, hasRedirect: hasRedirect, recommendation: recommendation, impactNote: impactNote);
             
             TrackFinding(findingsMap,
                 key,
@@ -426,7 +428,8 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         ElementDiagnosticInfo? diagnosticInfo,
         bool? hasRedirect = null,
         TimeSpan? responseTime = null,
-        string? recommendation = null)
+        string? recommendation = null,
+        string? impactNote = null)
     {
         var builder = FindingDetailsBuilder.Create()
             .AddItem($"Link destination: {link.Url}")
@@ -461,6 +464,14 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         if (isExternal)
         {
             builder.AddItem("🌐 External link");
+        }
+        
+        // Add impact note if provided
+        if (!string.IsNullOrEmpty(impactNote))
+        {
+            builder.BeginNested("📉 SEO Impact")
+                .AddItem(impactNote)
+                .EndNested();
         }
         
         // Add recommendation if provided
