@@ -52,88 +52,92 @@
         </Border>
 
         <!-- Settings -->
-        <Border Grid.Row="1" 
-                Style="{StaticResource Card}"
-                Margin="{StaticResource SpacingM}">
-            <StackPanel>
-                <!-- File Selection -->
-                <StackPanel Margin="0,0,0,24">
-                    <TextBlock Text="CSV File" 
-                               Style="{StaticResource FormFieldLabel}"
-                               Margin="0,0,0,8"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        
-                        <TextBox Grid.Column="0"
-                                 Text="{Binding CsvFilePath}"
-                                 Style="{StaticResource ModernTextBox}"
-                                 IsReadOnly="True"
-                                 TabIndex="0"
-                                 AutomationProperties.Name="CSV File Path"
-                                 AutomationProperties.HelpText="Path to the selected CSV file containing URLs">
-                            <TextBox.Tag>Select a CSV file...</TextBox.Tag>
-                        </TextBox>
-                        
-                        <Button Grid.Column="1"
-                                Command="{Binding BrowseFileCommand}"
-                                Style="{StaticResource SecondaryButton}"
-                                Margin="8,0,0,0"
-                                TabIndex="1"
-                                AutomationProperties.Name="Browse for CSV File"
-                                AutomationProperties.HelpText="Opens a file browser to select a CSV file">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.FolderOpen}"
-                                           Style="{StaticResource Icon}"
-                                           Width="16"
-                                           Height="16"
-                                           Margin="0,0,8,0"/>
-                                <TextBlock Text="Browse"/>
-                            </StackPanel>
-                        </Button>
-                    </Grid>
-                </StackPanel>
+        <ScrollViewer Grid.Row="1"
+                      Margin="{StaticResource SpacingM}"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      KeyboardNavigation.TabNavigation="Local">
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <!-- File Selection -->
+                    <StackPanel Margin="0,0,0,24">
+                        <TextBlock Text="CSV File"
+                                   Style="{StaticResource FormFieldLabel}"
+                                   Margin="0,0,0,8"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                <!-- Priority -->
-                <StackPanel Margin="0,0,0,24">
-                    <TextBlock Text="Priority" 
-                               Style="{StaticResource FormFieldLabel}"
-                               Margin="0,0,0,8"/>
-                    <TextBox Text="{Binding Priority, UpdateSourceTrigger=PropertyChanged}"
-                             Style="{StaticResource ModernTextBox}"
-                             TabIndex="2"
-                             AutomationProperties.Name="URL Priority"
-                             AutomationProperties.HelpText="Priority value for imported URLs. Higher values are crawled first. Default is 1000.">
-                        <TextBox.Tag>1000</TextBox.Tag>
-                    </TextBox>
-                    <TextBlock Text="Priority for imported URLs (higher values are crawled first). Default: 1000"
-                               Style="{StaticResource HelperText}"/>
-                </StackPanel>
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding CsvFilePath}"
+                                     Style="{StaticResource ModernTextBox}"
+                                     IsReadOnly="True"
+                                     TabIndex="0"
+                                     AutomationProperties.Name="CSV File Path"
+                                     AutomationProperties.HelpText="Path to the selected CSV file containing URLs">
+                                <TextBox.Tag>Select a CSV file...</TextBox.Tag>
+                            </TextBox>
 
-                <!-- Follow Links Option -->
-                <Border Background="{StaticResource BackgroundBrush}"
-                        BorderBrush="{StaticResource BorderLightBrush}"
-                        BorderThickness="1"
-                        CornerRadius="6"
-                        Padding="12">
-                    <StackPanel>
-                        <CheckBox IsChecked="{Binding FollowDiscoveredLinks}"
-                                  FontSize="14"
-                                  Margin="0"
-                                  TabIndex="3"
-                                  AutomationProperties.Name="Follow Discovered Links"
-                                  AutomationProperties.HelpText="Enable to also crawl links discovered on imported pages. Disable for list-mode only crawling.">
-                            <TextBlock Text="Follow discovered links" TextWrapping="Wrap" FontWeight="SemiBold"/>
-                        </CheckBox>
-                        <TextBlock Text="If unchecked, only URLs in the list will be crawled (list-mode only). If checked, links discovered on these pages will also be crawled."
-                                   Style="{StaticResource HelperText}"
-                                   Margin="32,6,0,0"/>
+                            <Button Grid.Column="1"
+                                    Command="{Binding BrowseFileCommand}"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Margin="8,0,0,0"
+                                    TabIndex="1"
+                                    AutomationProperties.Name="Browse for CSV File"
+                                    AutomationProperties.HelpText="Opens a file browser to select a CSV file">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.FolderOpen}"
+                                               Style="{StaticResource Icon}"
+                                               Width="16"
+                                               Height="16"
+                                               Margin="0,0,8,0"/>
+                                    <TextBlock Text="Browse"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
                     </StackPanel>
-                </Border>
-            </StackPanel>
-        </Border>
+
+                    <!-- Priority -->
+                    <StackPanel Margin="0,0,0,24">
+                        <TextBlock Text="Priority"
+                                   Style="{StaticResource FormFieldLabel}"
+                                   Margin="0,0,0,8"/>
+                        <TextBox Text="{Binding Priority, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource ModernTextBox}"
+                                 TabIndex="2"
+                                 AutomationProperties.Name="URL Priority"
+                                 AutomationProperties.HelpText="Priority value for imported URLs. Higher values are crawled first. Default is 1000.">
+                            <TextBox.Tag>1000</TextBox.Tag>
+                        </TextBox>
+                        <TextBlock Text="Priority for imported URLs (higher values are crawled first). Default: 1000"
+                                   Style="{StaticResource HelperText}"/>
+                    </StackPanel>
+
+                    <!-- Follow Links Option -->
+                    <Border Background="{StaticResource BackgroundBrush}"
+                            BorderBrush="{StaticResource BorderLightBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12">
+                        <StackPanel>
+                            <CheckBox IsChecked="{Binding FollowDiscoveredLinks}"
+                                      FontSize="14"
+                                      Margin="0"
+                                      TabIndex="3"
+                                      AutomationProperties.Name="Follow Discovered Links"
+                                      AutomationProperties.HelpText="Enable to also crawl links discovered on imported pages. Disable for list-mode only crawling.">
+                                <TextBlock Text="Follow discovered links" TextWrapping="Wrap" FontWeight="SemiBold"/>
+                            </CheckBox>
+                            <TextBlock Text="If unchecked, only URLs in the list will be crawled (list-mode only). If checked, links discovered on these pages will also be crawled."
+                                       Style="{StaticResource HelperText}"
+                                       Margin="32,6,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </ScrollViewer>
 
         <!-- Progress -->
         <Border Grid.Row="2"
