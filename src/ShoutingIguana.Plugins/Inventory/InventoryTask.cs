@@ -13,7 +13,8 @@ public class InventoryTask : UrlTaskBase
     private const int MAX_URL_LENGTH = 100;
     private const int WARNING_URL_LENGTH = 75;
     private const int MAX_QUERY_PARAMETERS = 3;
-    private const int MIN_CONTENT_LENGTH = 500;
+    private const int MIN_CONTENT_LENGTH = 1800; // ~300 words - modern SEO minimum for ranking
+    private const int WARNING_CONTENT_LENGTH = 900; // ~150 words - warning threshold
 
     public override string Key => "Inventory";
     public override string DisplayName => "Inventory";
@@ -344,25 +345,54 @@ public class InventoryTask : UrlTaskBase
         {
             var bodyText = bodyNode.InnerText ?? "";
             var contentLength = bodyText.Trim().Length;
+            var estimatedWords = contentLength / 6; // Rough estimate: 6 chars per word average
 
             if (contentLength < MIN_CONTENT_LENGTH)
             {
                 var details = FindingDetailsBuilder.Create()
-                    .AddItem($"Content length: {contentLength} characters")
-                    .AddItem($"Recommended: At least {MIN_CONTENT_LENGTH} characters")
+                    .AddItem($"Content length: {contentLength} characters (~{estimatedWords} words)")
+                    .AddItem($"Recommended: At least {MIN_CONTENT_LENGTH} characters (~300 words)")
+                    .BeginNested("⚠️ SEO Impact")
+                        .AddItem("Thin content rarely ranks in modern search engines")
+                        .AddItem("Google's 'Helpful Content Update' favors comprehensive content")
+                        .AddItem("Competitive keywords typically need 1,000-2,000+ words")
+                    .EndNested()
                     .BeginNested("💡 Recommendations")
-                        .AddItem("Add more substantive, unique content to this page")
-                        .AddItem("Thin content pages may not rank well in search results")
+                        .AddItem("Add substantive, unique content that thoroughly covers the topic")
+                        .AddItem("Include relevant details, examples, and explanations")
+                        .AddItem("Focus on user value and answering search intent completely")
                     .EndNested()
                     .WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("contentLength", contentLength)
+                    .WithTechnicalMetadata("estimatedWords", estimatedWords)
                     .Build();
                 
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Warning,
                     "THIN_CONTENT",
-                    $"Page has very little content ({contentLength} chars, recommend >{MIN_CONTENT_LENGTH})",
+                    $"Page has thin content ({estimatedWords} words, recommend 300+ for ranking)",
+                    details);
+            }
+            else if (contentLength < WARNING_CONTENT_LENGTH)
+            {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Content length: {contentLength} characters (~{estimatedWords} words)")
+                    .AddItem($"Minimum met but could be improved")
+                    .BeginNested("ℹ️ Note")
+                        .AddItem("While technically adequate, more content often ranks better")
+                        .AddItem("Consider expanding to 300-500+ words for competitive topics")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("contentLength", contentLength)
+                    .WithTechnicalMetadata("estimatedWords", estimatedWords)
+                    .Build();
+                
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Info,
+                    "LIMITED_CONTENT",
+                    $"Page has limited content ({estimatedWords} words, consider expanding for better rankings)",
                     details);
             }
         }
