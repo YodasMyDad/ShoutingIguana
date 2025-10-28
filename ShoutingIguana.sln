@@ -25,10 +25,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{0EF35D29-6
 		.cursor\developer.mdc = .cursor\developer.mdc
 		.cursor\efcore.mdc = .cursor\efcore.mdc
 		.cursor\wpf.mdc = .cursor\wpf.mdc
-		.cursor\pdr-stage1-foundation.mdc = .cursor\pdr-stage1-foundation.mdc
-		.cursor\pdr-stage2-plugins-and-playwright.mdc = .cursor\pdr-stage2-plugins-and-playwright.mdc
-		.cursor\pdr-stage3-complete-mvp.mdc = .cursor\pdr-stage3-complete-mvp.mdc
-		.cursor\pdr-stages-overview.mdc = .cursor\pdr-stages-overview.mdc
 	EndProjectSection
 EndProject
 Global

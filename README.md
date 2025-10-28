@@ -1,6 +1,6 @@
 # Shouting Iguana
 
-![Shouting Iguana](Assets/logo.png)
+<img src="Assets/logo.png" alt="Shouting Iguana" width="100">
 
 **Enterprise-grade web crawler and SEO analysis platform built on .NET 9**
 
