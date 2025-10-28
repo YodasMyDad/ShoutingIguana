@@ -351,128 +351,112 @@
                                             <Grid Margin="12,0">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="110"/>
-                                                    <ColumnDefinition Width="150"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="350"/>
                                                     <ColumnDefinition Width="160"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
-                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="120"/>
-                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="200"/>
-                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="280"/>
-                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="200"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="280"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
                                             </Grid>
                                         </Border>
                                         <Border Style="{StaticResource SkeletonRow}">
                                             <Grid Margin="12,0">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="110"/>
-                                                    <ColumnDefinition Width="150"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="350"/>
                                                     <ColumnDefinition Width="160"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
-                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="100"/>
-                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="250"/>
-                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="300"/>
-                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="250"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="300"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
                                             </Grid>
                                         </Border>
                                         <Border Style="{StaticResource SkeletonRow}">
                                             <Grid Margin="12,0">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="110"/>
-                                                    <ColumnDefinition Width="150"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="350"/>
                                                     <ColumnDefinition Width="160"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
-                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="130"/>
-                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="180"/>
-                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="290"/>
-                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="180"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="290"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
                                             </Grid>
                                         </Border>
                                         <Border Style="{StaticResource SkeletonRow}">
                                             <Grid Margin="12,0">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="110"/>
-                                                    <ColumnDefinition Width="150"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="350"/>
                                                     <ColumnDefinition Width="160"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
-                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="110"/>
-                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="220"/>
-                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="310"/>
-                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="220"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="310"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
                                             </Grid>
                                         </Border>
                                         <Border Style="{StaticResource SkeletonRow}">
                                             <Grid Margin="12,0">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="110"/>
-                                                    <ColumnDefinition Width="150"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="350"/>
                                                     <ColumnDefinition Width="160"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
-                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="125"/>
-                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="190"/>
-                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="270"/>
-                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="190"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="270"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
                                             </Grid>
                                         </Border>
                                         <Border Style="{StaticResource SkeletonRow}">
                                             <Grid Margin="12,0">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="110"/>
-                                                    <ColumnDefinition Width="150"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="350"/>
                                                     <ColumnDefinition Width="160"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
-                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="115"/>
-                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="240"/>
-                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="295"/>
-                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="240"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="295"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
                                             </Grid>
                                         </Border>
                                         <Border Style="{StaticResource SkeletonRow}">
                                             <Grid Margin="12,0">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="110"/>
-                                                    <ColumnDefinition Width="150"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="350"/>
                                                     <ColumnDefinition Width="160"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
-                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="105"/>
-                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="210"/>
-                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="285"/>
-                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="210"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="285"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
                                             </Grid>
                                         </Border>
                                         <Border Style="{StaticResource SkeletonRow}">
                                             <Grid Margin="12,0">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="110"/>
-                                                    <ColumnDefinition Width="150"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="350"/>
                                                     <ColumnDefinition Width="160"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
-                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="135"/>
-                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="230"/>
-                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="275"/>
-                                                <Rectangle Grid.Column="4" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="230"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="275"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
                                             </Grid>
                                         </Border>
                                     </ItemsControl.Items>
@@ -538,7 +522,8 @@
                                                         Width="150"
                                                         MinWidth="120"
                                                         FontFamily="Consolas"
-                                                        FontSize="13"/>
+                                                        FontSize="13"
+                                                        Visibility="Collapsed"/>
                                     <DataGridTextColumn Header="Message" 
                                                         Binding="{Binding Message}" 
                                                         Width="2*"
