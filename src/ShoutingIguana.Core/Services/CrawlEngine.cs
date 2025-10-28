@@ -228,6 +228,13 @@ public class CrawlEngine(
             settings = System.Text.Json.JsonSerializer.Deserialize<ProjectSettings>(project.SettingsJson)
                 ?? new ProjectSettings();
             
+            // Fallback: if BaseUrl is missing from settings JSON, use Project.BaseUrl
+            if (string.IsNullOrWhiteSpace(settings.BaseUrl) && !string.IsNullOrWhiteSpace(project.BaseUrl))
+            {
+                _logger.LogWarning("BaseUrl missing from ProjectSettings JSON, using Project.BaseUrl as fallback");
+                settings.BaseUrl = project.BaseUrl;
+            }
+            
             // Get app settings once (avoid repeated service lookups in worker loop)
             var appSettings = scope.ServiceProvider.GetRequiredService<IAppSettingsService>();
             globalProxySettings = appSettings.CrawlSettings.GlobalProxy;

@@ -54,7 +54,7 @@
         <Grid Grid.Row="1" Margin="{StaticResource SpacingL}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="{StaticResource SpacingXlValue}"/>
+                <ColumnDefinition Width="32"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
@@ -124,7 +124,7 @@
                         </Button>
                         <Button Command="{Binding EditRuleCommand}"
                                 Style="{StaticResource SecondaryButton}"
-                                Margin="{StaticResource SpacingS},0,0,0"
+                                Margin="8,0,0,0"
                                 TabIndex="2"
                                 AutomationProperties.Name="Edit Selected Rule"
                                 AutomationProperties.HelpText="Edits the currently selected extraction rule"
@@ -140,7 +140,7 @@
                         </Button>
                         <Button Command="{Binding DeleteRuleCommand}"
                                 Style="{StaticResource DangerButton}"
-                                Margin="{StaticResource SpacingS},0,0,0"
+                                Margin="8,0,0,0"
                                 TabIndex="3"
                                 AutomationProperties.Name="Delete Selected Rule"
                                 AutomationProperties.HelpText="Deletes the currently selected extraction rule permanently"
@@ -177,7 +177,7 @@
                                Margin="0,0,0,16"/>
 
                     <!-- Editor Form -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,24">
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,24" Padding="0,0,8,0">
                         <StackPanel>
                             <!-- Name -->
                             <StackPanel Margin="0,0,0,16">
@@ -277,7 +277,7 @@
                         <Button Content="Cancel"
                                 Command="{Binding CancelEditCommand}"
                                 Style="{StaticResource SecondaryButton}"
-                                Margin="0,0,{StaticResource SpacingS},0"
+                                Margin="0,0,8,0"
                                 TabIndex="9"
                                 IsCancel="True"
                                 AutomationProperties.Name="Cancel Edit"
