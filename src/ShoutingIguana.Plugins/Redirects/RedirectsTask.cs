@@ -94,7 +94,6 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                 .BeginNested("⚠️ Impact")
                     .AddItem("Browsers won't know where to redirect")
                     .AddItem("This is a server configuration error")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("statusCode", statusCode)
                 .Build();
@@ -136,7 +135,6 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                     .AddItem("Use 301 (permanent) redirects for permanent moves")
                     .AddItem("Permanent redirects pass more link equity")
                     .AddItem("Only use 302/307 for truly temporary redirects")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("toUrl", location)
                 .WithTechnicalMetadata("statusCode", statusCode)
@@ -160,11 +158,9 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                 .BeginNested("⚠️ Security Issue")
                     .AddItem("This breaks HTTPS and causes browser security warnings")
                     .AddItem("Users may see 'Not Secure' warnings")
-                .EndNested()
                 .BeginNested("💡 Recommendations")
                     .AddItem("Update redirect to point to HTTPS version")
                     .AddItem("Never downgrade from HTTPS to HTTP")
-                .EndNested()
                 .WithTechnicalMetadata("fromUrl", ctx.Url.ToString())
                 .WithTechnicalMetadata("toUrl", location)
                 .Build();
@@ -254,7 +250,6 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                     .BeginNested("💡 Recommendations")
                         .AddItem("Ensure consistent trailing slash usage across the site")
                         .AddItem("Decide on a standard (with or without slash) and apply everywhere")
-                    .EndNested()
                     .WithTechnicalMetadata("fromUrl", ctx.Url.ToString())
                     .WithTechnicalMetadata("toUrl", location)
                     .Build();
@@ -281,11 +276,9 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
             .BeginNested("⚠️ SEO Impact")
                 .AddItem("Meta refresh is not recommended for SEO")
                 .AddItem("Search engines may not follow these redirects")
-            .EndNested()
             .BeginNested("💡 Recommendations")
                 .AddItem("Use HTTP 301/302 redirects instead")
                 .AddItem("Server-side redirects are faster and more reliable")
-            .EndNested()
             .WithTechnicalMetadata("url", ctx.Url.ToString())
             .WithTechnicalMetadata("targetUrl", targetUrl)
             .WithTechnicalMetadata("delay", delay)
@@ -348,11 +341,9 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                                 .AddItem("JavaScript redirects are not ideal for SEO")
                                 .AddItem("Search engines may not follow them")
                                 .AddItem("Can impact page ranking and crawlability")
-                            .EndNested()
                             .BeginNested("💡 Recommendations")
                                 .AddItem("Use HTTP 301/302 redirects instead")
                                 .AddItem("Server-side redirects are instant and SEO-friendly")
-                            .EndNested()
                             .WithTechnicalMetadata("url", ctx.Url.ToString())
                             .WithTechnicalMetadata("targetUrl", targetUrl)
                             .Build();
@@ -469,17 +460,14 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                     {
                         builder.AddItem($"{hop.FromUrl} → {hop.ToUrl} ({hop.StatusCode})");
                     }
-                    builder.EndNested();
                     
                     builder.BeginNested("⚠️ Impact")
                         .AddItem("Page will never load - infinite loop")
-                        .AddItem("Browsers will show an error")
-                    .EndNested();
+                        .AddItem("Browsers will show an error");
                     
                     builder.BeginNested("💡 Recommendations")
                         .AddItem("Fix redirect configuration to eliminate the loop")
-                        .AddItem("Ensure final destination doesn't redirect back")
-                    .EndNested();
+                        .AddItem("Ensure final destination doesn't redirect back");
                     
                     builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                         .WithTechnicalMetadata("loop", chain.Select(r => new { from = r.FromUrl, to = r.ToUrl, status = r.StatusCode }).ToArray());
@@ -519,18 +507,15 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem($"{hop.FromUrl} → {hop.ToUrl} ({hop.StatusCode})");
             }
-            builder.EndNested();
             
             builder.BeginNested("⚠️ Impact")
                 .AddItem("Each redirect adds latency (slower page loads)")
                 .AddItem("Consumes crawl budget unnecessarily")
-                .AddItem("May dilute link equity")
-            .EndNested();
+                .AddItem("May dilute link equity");
             
             builder.BeginNested("💡 Recommendations")
                 .AddItem("Redirect directly to the final URL in a single hop")
-                .AddItem("Update all links to point to the final destination")
-            .EndNested();
+                .AddItem("Update all links to point to the final destination");
             
             builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("chainLength", chain.Count)
@@ -600,11 +585,9 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                         .BeginNested("⚠️ Issue")
                             .AddItem("Temporary redirects shouldn't be cached for long periods")
                             .AddItem("Clients will cache the redirect and may not see updates")
-                        .EndNested()
                         .BeginNested("💡 Recommendations")
                             .AddItem("Use 301/308 for permanent redirects")
                             .AddItem("Or reduce cache duration for truly temporary redirects")
-                        .EndNested()
                         .WithTechnicalMetadata("url", ctx.Url.ToString())
                         .WithTechnicalMetadata("statusCode", statusCode)
                         .WithTechnicalMetadata("maxAge", maxAge)

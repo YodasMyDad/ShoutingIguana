@@ -122,7 +122,6 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
                     .AddItem("Check your selector syntax")
                     .AddItem("Verify the pattern is valid")
                     .AddItem("Test selector on sample HTML")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("ruleName", rule.Name)
                 .WithTechnicalMetadata("error", ex.Message)

@@ -181,7 +181,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                     .AddItem("Every page must have a unique, descriptive title tag")
                     .AddItem("Add a <title> tag in the <head> section")
                     .AddItem("Title should describe the page content and include relevant keywords")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .Build();
             
@@ -203,7 +202,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem("Expand the title to be more descriptive")
                     .AddItem("Include relevant keywords that describe the page content")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("title", title)
                 .WithTechnicalMetadata("length", title.Length)
@@ -226,7 +224,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem($"Shorten the title to under {MAX_TITLE_LENGTH} characters")
                     .AddItem("Put the most important keywords at the beginning")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("title", title)
                 .WithTechnicalMetadata("length", title.Length)
@@ -299,17 +296,14 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                             {
                                 builder.AddItem(url);
                             }
-                            builder.EndNested();
                             
                             builder.BeginNested("⚠️ Issue")
                                 .AddItem("Temporary redirects (302/307) don't consolidate duplicate titles")
-                                .AddItem("Search engines may index both pages")
-                            .EndNested();
+                                .AddItem("Search engines may index both pages");
                             
                             builder.BeginNested("💡 Recommendations")
                                 .AddItem("Change to 301 (Permanent) redirects to properly consolidate pages")
-                                .AddItem("Or make titles unique if both pages should be indexed")
-                            .EndNested();
+                                .AddItem("Or make titles unique if both pages should be indexed");
                             
                             builder.WithTechnicalMetadata("url", currentUrl)
                                 .WithTechnicalMetadata("title", title)
@@ -339,12 +333,10 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                             {
                                 builder.AddItem($"... and {nonRedirectDuplicates.Length - 5} more");
                             }
-                            builder.EndNested();
                             
                             builder.BeginNested("💡 Recommendations")
                                 .AddItem("Make each title unique to help search engines and users distinguish pages")
-                                .AddItem("Include page-specific keywords in each title")
-                            .EndNested();
+                                .AddItem("Include page-specific keywords in each title");
                             
                             builder.WithTechnicalMetadata("url", currentUrl)
                                 .WithTechnicalMetadata("title", title)
@@ -375,12 +367,10 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                         {
                             builder.AddItem($"... and {otherUrls.Count - 5} more");
                         }
-                        builder.EndNested();
                         
                         builder.BeginNested("💡 Recommendations")
                             .AddItem("Make each title unique to help search engines and users distinguish pages")
-                            .AddItem("Include page-specific keywords in each title")
-                        .EndNested();
+                            .AddItem("Include page-specific keywords in each title");
                         
                         builder.WithTechnicalMetadata("url", currentUrl)
                             .WithTechnicalMetadata("title", title)
@@ -409,7 +399,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                     .AddItem("Meta descriptions improve click-through rates in search results")
                     .AddItem("Add a <meta name=\"description\" content=\"...\"> tag")
                     .AddItem("Write unique, compelling descriptions for each page")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .Build();
             
@@ -431,7 +420,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem("Expand the description to be more informative")
                     .AddItem("Include key benefits or features of the page")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("description", description)
                 .WithTechnicalMetadata("length", description.Length)
@@ -455,7 +443,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem($"Shorten to under {MAX_DESCRIPTION_LENGTH} characters")
                     .AddItem("Front-load the most important information")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("description", description)
                 .WithTechnicalMetadata("length", description.Length)
@@ -515,12 +502,10 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                     {
                         builder.AddItem(url);
                     }
-                    builder.EndNested();
                     
                     builder.BeginNested("💡 Recommendations")
                         .AddItem("Make each meta description unique")
-                        .AddItem("Tailor descriptions to each page's specific content")
-                    .EndNested();
+                        .AddItem("Tailor descriptions to each page's specific content");
                     
                     builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                         .WithTechnicalMetadata("description", description)
@@ -552,7 +537,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem("Remove duplicate canonical tags - only one should be present")
                     .AddItem("Multiple canonicals confuse search engines")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("canonicalHtml", ctx.Metadata.CanonicalHtml)
                 .WithTechnicalMetadata("canonicalHttp", ctx.Metadata.CanonicalHttp)
@@ -575,7 +559,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("ℹ️ Note")
                     .AddItem("Cross-domain canonicals are valid for syndicated content")
                     .AddItem("Use carefully - this gives ranking credit to another domain")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("canonical", canonical)
                 .Build();
@@ -602,7 +585,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                     .BeginNested("ℹ️ Impact")
                         .AddItem("This page will not be indexed by search engines")
                         .AddItem("The canonical URL will be indexed instead")
-                    .EndNested()
                     .WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("canonical", canonical)
                     .Build();
@@ -693,7 +675,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem("Only one viewport meta tag should be present")
                     .AddItem("Remove duplicate viewport tags")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("count", viewportCount)
                 .Build();
@@ -714,7 +695,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem("Add <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
                     .AddItem("Place it in the <head> section")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .Build();
             
@@ -736,7 +716,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem("Add <meta charset=\"utf-8\"> as first element in <head>")
                     .AddItem("This ensures proper character encoding")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .Build();
             
@@ -802,7 +781,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                     .AddItem("Add lang attribute for accessibility and SEO")
                     .AddItem("Example: <html lang=\"en\">")
                     .AddItem("Helps screen readers and search engines")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .Build();
             
@@ -833,7 +811,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem("Add og:title, og:description, og:image, og:url tags")
                     .AddItem("This controls how your page appears when shared on social media")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .Build();
             
@@ -860,7 +837,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             {
                 builder.AddItem(tag);
             }
-            builder.EndNested();
             
             builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("missing", missing.ToArray())
@@ -892,7 +868,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem("Add twitter:card, twitter:title, twitter:description tags")
                     .AddItem("Or rely on Open Graph tags (which Twitter also uses)")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .Build();
             
@@ -923,7 +898,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem("Every page should have exactly one H1 tag")
                     .AddItem("The H1 should describe the main topic of the page")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .Build();
             
@@ -950,7 +924,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             {
                 builder.AddItem($"... and {h1Count - 5} more");
             }
-            builder.EndNested();
             
             builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("h1Count", h1Count)
@@ -995,7 +968,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                         .BeginNested("ℹ️ Note")
                             .AddItem("H1 and title should be similar for better SEO")
                             .AddItem("They work together to signal page topic to search engines")
-                        .EndNested()
                         .WithTechnicalMetadata("url", ctx.Url.ToString())
                         .WithTechnicalMetadata("h1", h1Text)
                         .WithTechnicalMetadata("title", title)
@@ -1026,7 +998,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem("Use headings in order: H1 → H2 → H3, etc.")
                     .AddItem("Proper hierarchy helps accessibility and SEO")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .Build();
             
@@ -1045,7 +1016,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem("Use headings in order: H1 → H2 → H3, etc.")
                     .AddItem("Proper hierarchy helps accessibility and SEO")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .Build();
             
@@ -1069,7 +1039,6 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .BeginNested("💡 Recommendations")
                     .AddItem("Remove the meta keywords tag")
                     .AddItem("It wastes HTML bytes and provides no SEO value")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .Build();
             
@@ -1207,4 +1176,5 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         _logger.LogDebug("Cleaned up titles/meta data for project {ProjectId}", projectId);
     }
 }
+
 

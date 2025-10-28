@@ -46,28 +46,28 @@ public partial class ProjectHomeViewModel : ObservableObject, IDisposable
     private bool _isAutoCreatingProject = false;
 
     [ObservableProperty]
-    private int _maxDepth = 5;
+    private int _maxDepth;
 
     [ObservableProperty]
-    private int _maxUrls = 1000;
+    private int _maxUrls;
 
     [ObservableProperty]
-    private double _crawlDelay = 1.5;
+    private double _crawlDelay;
 
     [ObservableProperty]
-    private int _concurrentRequests = 3;
+    private int _concurrentRequests;
 
     [ObservableProperty]
-    private int _timeoutSeconds = 10;
+    private int _timeoutSeconds;
 
     [ObservableProperty]
-    private bool _respectRobotsTxt = true;
+    private bool _respectRobotsTxt;
 
     [ObservableProperty]
-    private bool _useSitemapXml = true;
+    private bool _useSitemapXml;
 
     [ObservableProperty]
-    private UserAgentType _selectedUserAgentType = UserAgentType.Chrome;
+    private UserAgentType _selectedUserAgentType;
 
     [ObservableProperty]
     private ObservableCollection<Project> _recentProjects = new();
@@ -141,6 +141,9 @@ public partial class ProjectHomeViewModel : ObservableObject, IDisposable
         _appSettingsService = appSettingsService;
         _toastService = toastService;
         _customExtractionService = customExtractionService;
+        
+        // Load default settings from app settings
+        LoadDefaultSettings();
     }
     
     // Property change handlers to auto-create project
@@ -349,6 +352,26 @@ public partial class ProjectHomeViewModel : ObservableObject, IDisposable
             _toastService.ShowError("Error", "Failed to load extraction rules");
         }
     }
+    
+    /// <summary>
+    /// Loads default settings from the application settings service.
+    /// This ensures consistency between project start settings and main settings.
+    /// </summary>
+    private void LoadDefaultSettings()
+    {
+        var crawlSettings = _appSettingsService.CrawlSettings;
+        
+        MaxDepth = crawlSettings.MaxCrawlDepth;
+        MaxUrls = crawlSettings.MaxUrlsToCrawl;
+        CrawlDelay = crawlSettings.CrawlDelaySeconds;
+        ConcurrentRequests = crawlSettings.ConcurrentRequests;
+        TimeoutSeconds = crawlSettings.TimeoutSeconds;
+        RespectRobotsTxt = crawlSettings.RespectRobotsTxt;
+        UseSitemapXml = crawlSettings.UseSitemapXml;
+        SelectedUserAgentType = UserAgentType.Chrome; // Default user agent type
+        
+        _logger.LogDebug("Loaded default settings from app settings");
+    }
 
     [RelayCommand]
     private void NewProject()
@@ -357,14 +380,7 @@ public partial class ProjectHomeViewModel : ObservableObject, IDisposable
         CurrentProject = null;
         ProjectName = string.Empty;
         BaseUrl = string.Empty;
-        MaxDepth = 5;
-        MaxUrls = 1000;
-        CrawlDelay = 1.5;
-        ConcurrentRequests = 3;
-        TimeoutSeconds = 10;
-        RespectRobotsTxt = true;
-        UseSitemapXml = true;
-        SelectedUserAgentType = UserAgentType.Chrome;
+        LoadDefaultSettings();
     }
 
     [RelayCommand]

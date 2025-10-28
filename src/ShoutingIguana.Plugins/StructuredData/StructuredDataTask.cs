@@ -119,7 +119,6 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                         .AddItem("Fix JSON syntax in ld+json script tag")
                         .AddItem("Use JSON validator to check structure")
                         .AddItem("Common issues: trailing commas, unescaped quotes")
-                    .EndNested()
                     .WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("error", ex.Message)
                     .Build();
@@ -144,7 +143,6 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem(schema);
             }
-            builder.EndNested();
             
             builder.AddItem("✅ Structured data helps search engines understand your content")
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
@@ -238,12 +236,10 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem(prop);
             }
-            builder.EndNested();
             
             builder.BeginNested("💡 Recommendations")
                 .AddItem("Add missing properties for complete Article markup")
-                .AddItem("Complete schemas qualify for rich results")
-            .EndNested();
+                .AddItem("Complete schemas qualify for rich results");
             
             builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("schemaType", schemaType)
@@ -328,12 +324,10 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem(prop);
             }
-            builder.EndNested();
             
             builder.BeginNested("💡 Recommendations")
                 .AddItem("Add missing properties per Google guidelines")
-                .AddItem("Complete Product schema qualifies for rich results")
-            .EndNested();
+                .AddItem("Complete Product schema qualifies for rich results");
             
             builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
@@ -356,7 +350,6 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem(warning);
             }
-            builder.EndNested();
             
             builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("warnings", warnings.ToArray());
@@ -556,12 +549,10 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem(prop);
             }
-            builder.EndNested();
             
             builder.BeginNested("💡 Recommendations")
                 .AddItem("Add missing properties for Video rich results")
-                .AddItem("Complete VideoObject appears in Google Video search")
-            .EndNested();
+                .AddItem("Complete VideoObject appears in Google Video search");
             
             builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
@@ -584,7 +575,6 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem(warning);
             }
-            builder.EndNested();
             
             builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("warnings", warnings.ToArray());
@@ -667,12 +657,10 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem(prop);
             }
-            builder.EndNested();
             
             builder.BeginNested("💡 Recommendations")
                 .AddItem("Add missing properties to qualify for rich results")
-                .AddItem("Complete Review schema shows star ratings in search")
-            .EndNested();
+                .AddItem("Complete Review schema shows star ratings in search");
             
             builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
@@ -695,7 +683,6 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem(warning);
             }
-            builder.EndNested();
             
             builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("warnings", warnings.ToArray());
@@ -733,7 +720,6 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem(prop);
             }
-            builder.EndNested();
             
             builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("schemaType", schemaType)
@@ -758,7 +744,6 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .BeginNested("💡 Recommendations")
                     .AddItem("Add itemListElement array with breadcrumb items")
                     .AddItem("Each item should have name and position")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .Build();
             
@@ -783,7 +768,6 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .BeginNested("💡 Recommendations")
                     .AddItem($"Add {requiredProp} array to the schema")
                     .AddItem("This property is required for rich results")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("schemaType", schemaType)
                 .WithTechnicalMetadata("missingProperty", requiredProp)
@@ -830,7 +814,6 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem(type);
             }
-            builder.EndNested();
             
             builder.AddItem("ℹ️ Consider using JSON-LD instead for easier maintenance")
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
@@ -884,7 +867,6 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                         .AddItem("Add JSON-LD structured data")
                         .AddItem("Structured data improves search appearance")
                         .AddItem("Can qualify for rich results and enhanced listings")
-                    .EndNested()
                     .WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("recommendedSchema", recommendedSchema)
                     .Build();
@@ -899,4 +881,5 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         }
     }
 }
+
 

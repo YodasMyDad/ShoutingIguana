@@ -102,7 +102,6 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .BeginNested("💡 Recommendations")
                     .AddItem("Add canonical tag to help search engines understand the preferred version")
                     .AddItem("Self-referencing canonicals are a best practice")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
                 .Build();
@@ -130,11 +129,9 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             .BeginNested("⚠️ Issue")
                 .AddItem("Multiple canonicals confuse search engines")
                 .AddItem("Search engines may ignore all canonicals")
-            .EndNested()
             .BeginNested("💡 Recommendations")
                 .AddItem("Remove duplicate canonical tags")
                 .AddItem("Keep only one canonical declaration")
-            .EndNested()
             .WithTechnicalMetadata("url", ctx.Url.ToString())
             .WithTechnicalMetadata("canonicalHtml", ctx.Metadata.CanonicalHtml)
             .WithTechnicalMetadata("canonicalHttp", ctx.Metadata.CanonicalHttp)
@@ -161,7 +158,6 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             .BeginNested("ℹ️ Note")
                 .AddItem("Cross-domain canonicals are valid for syndicated content")
                 .AddItem("Use carefully - this gives ranking credit to another domain")
-            .EndNested()
             .WithTechnicalMetadata("url", ctx.Url.ToString())
             .WithTechnicalMetadata("canonical", canonical)
             .Build();
@@ -199,7 +195,6 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .BeginNested("ℹ️ Impact")
                     .AddItem("This page will not be indexed")
                     .AddItem("Canonical page will be indexed instead")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("canonical", canonical)
                 .Build();
@@ -238,11 +233,9 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                         .BeginNested("⚠️ Issue")
                             .AddItem("Canonical chains are confusing for search engines")
                             .AddItem("May not be fully respected")
-                        .EndNested()
                         .BeginNested("💡 Recommendations")
                             .AddItem("Update canonical to point directly to the final URL")
                             .AddItem($"Change to: {canonicalOfCanonical}")
-                        .EndNested()
                         .WithTechnicalMetadata("url", ctx.Url.ToString())
                         .WithTechnicalMetadata("canonical", canonical)
                         .WithTechnicalMetadata("canonicalOfCanonical", canonicalOfCanonical)
@@ -292,11 +285,9 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                         .BeginNested("❌ Issue")
                             .AddItem("Canonical should point to a page that returns 200 OK")
                             .AddItem($"This canonical returns {canonicalUrlInfo.Status}")
-                        .EndNested()
                         .BeginNested("💡 Recommendations")
                             .AddItem("Update canonical to point to a working page")
                             .AddItem("Or fix the canonical target page")
-                        .EndNested()
                         .WithTechnicalMetadata("url", ctx.Url.ToString())
                         .WithTechnicalMetadata("canonicalUrl", canonicalUrl)
                         .WithTechnicalMetadata("canonicalHttpStatus", canonicalUrlInfo.Status)
@@ -371,11 +362,9 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                     .AddItem("Canonical says: consolidate to this URL")
                     .AddItem("Noindex says: don't index this page")
                     .AddItem("Google may ignore the canonical when noindex is present")
-                .EndNested()
                 .BeginNested("💡 Recommendations")
                     .AddItem("If you want to consolidate: Remove noindex, keep canonical")
                     .AddItem("If you want to de-index: Remove canonical, keep noindex")
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("canonical", canonical)
                 .WithTechnicalMetadata("robotsNoindex", true)
@@ -433,12 +422,10 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                     .BeginNested("⚠️ Pagination Issue")
                         .AddItem("Paginated pages canonicalize to page 1 or base URL")
                         .AddItem("This removes pagination from search results")
-                    .EndNested()
                     .BeginNested("💡 Recommendations")
                         .AddItem("Option 1: Self-referential canonical + rel=prev/next links")
                         .AddItem("Option 2: Canonical to view-all page (if available)")
                         .AddItem("Option 3: No canonical on pagination pages")
-                    .EndNested()
                     .WithTechnicalMetadata("url", currentUrl)
                     .WithTechnicalMetadata("canonical", canonical)
                     .Build();
@@ -512,17 +499,14 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 {
                     builder.AddItem(url);
                 }
-                builder.EndNested();
                 
                 builder.BeginNested("⚠️ Issue")
                     .AddItem("Circular canonical references confuse search engines")
-                    .AddItem("May prevent proper indexing of all pages in loop")
-                .EndNested();
+                    .AddItem("May prevent proper indexing of all pages in loop");
                 
                 builder.BeginNested("💡 Recommendations")
                     .AddItem("Fix canonical tags to point to a single final URL")
-                    .AddItem("Ensure no circular references")
-                .EndNested();
+                    .AddItem("Ensure no circular references");
                 
                 builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("loop", chain.ToArray());
@@ -564,13 +548,13 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                     .AddItem($"  • HTTP: {canonicalHttp}")
                     .BeginNested("⚠️ Issue")
                         .AddItem("Conflicting canonical signals")
-                        .AddItem("HTTP Link header typically takes precedence")
-                    .EndNested()
-                    .BeginNested("💡 Recommendations")
+                        .AddItem("HTTP Link header typically takes precedence");
+                    
+                details.BeginNested("💡 Recommendations")
                         .AddItem("Ensure both canonicals point to the same URL")
-                        .AddItem("Or remove one (prefer HTTP header for consistency)")
-                    .EndNested()
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                        .AddItem("Or remove one (prefer HTTP header for consistency)");
+                    
+                details.WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("canonicalHtml", canonicalHtml)
                     .WithTechnicalMetadata("canonicalHttp", canonicalHttp)
                     .Build();
@@ -605,13 +589,13 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .AddItem($"Canonical: {canonical}")
                 .BeginNested("⚠️ Issue")
                     .AddItem("Canonical tags on redirected URLs are ignored")
-                    .AddItem("Search engines follow the redirect, not the canonical")
-                .EndNested()
-                .BeginNested("💡 Recommendations")
+                    .AddItem("Search engines follow the redirect, not the canonical");
+            
+            details.BeginNested("💡 Recommendations")
                     .AddItem("Remove canonical tag from this redirect")
-                    .AddItem("The redirect itself is sufficient")
-                .EndNested()
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .AddItem("The redirect itself is sufficient");
+            
+            details.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("statusCode", statusCode)
                 .WithTechnicalMetadata("canonical", canonical)
                 .Build();
@@ -634,4 +618,5 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         _logger.LogDebug("Cleaned up canonical data for project {ProjectId}", projectId);
     }
 }
+
 

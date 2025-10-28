@@ -457,8 +457,24 @@ public class CrawlEngine(
                     }
                 }
 
-                // Fetch URL with Playwright
-                var (urlData, page, renderedHtml, redirectChain) = await FetchUrlWithPlaywrightAsync(queueItem.Address, userAgent, proxySettings, cancellationToken).ConfigureAwait(false);
+                // Determine fetch strategy: lightweight HTTP for static resources, Playwright for HTML pages
+                bool isStaticResource = IsStaticResource(queueItem.Address);
+                
+                UrlFetchResult urlData;
+                Microsoft.Playwright.IPage? page = null;
+                string? renderedHtml = null;
+                List<RedirectHop> redirectChain = [];
+
+                if (isStaticResource)
+                {
+                    // Lightweight fetch for CSS, JS, images (no browser needed)
+                    urlData = await FetchStaticResourceAsync(queueItem.Address, userAgent, proxySettings, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    // Full Playwright fetch for HTML pages
+                    (urlData, page, renderedHtml, redirectChain) = await FetchUrlWithPlaywrightAsync(queueItem.Address, userAgent, proxySettings, cancellationToken).ConfigureAwait(false);
+                }
 
                 try
                 {
@@ -674,6 +690,196 @@ public class CrawlEngine(
                 IsSuccess = false,
                 ErrorMessage = ex.Message
             }, page, null, redirectChain);
+        }
+    }
+
+    /// <summary>
+    /// Creates an HttpClient configured with proxy settings and browser-like headers.
+    /// </summary>
+    private HttpClient CreateHttpClient(string userAgent, ProxySettings? proxySettings)
+    {
+        HttpClientHandler handler = new()
+        {
+            AllowAutoRedirect = false, // We want to capture redirects
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+            UseCookies = false // Stateless crawling
+        };
+
+        // Configure proxy if provided
+        if (proxySettings?.Enabled == true && !string.IsNullOrWhiteSpace(proxySettings.Server))
+        {
+            // Note: SOCKS5 is not natively supported by HttpClient, only HTTP/HTTPS proxies
+            if (proxySettings.Type == ProxyType.Socks5)
+            {
+                _logger.LogWarning("SOCKS5 proxy requested but not supported by HttpClient. Static resources will use direct connection. Use Playwright for SOCKS5 support.");
+            }
+            else
+            {
+                var proxyUri = new Uri(proxySettings.GetProxyUrl());
+                handler.Proxy = new System.Net.WebProxy(proxyUri)
+                {
+                    BypassProxyOnLocal = true,
+                    BypassList = proxySettings.BypassList.ToArray()
+                };
+
+                // Add proxy authentication if required
+                if (proxySettings.RequiresAuthentication && !string.IsNullOrWhiteSpace(proxySettings.Username))
+                {
+                    var password = proxySettings.GetPassword();
+                    handler.Proxy.Credentials = new System.Net.NetworkCredential(
+                        proxySettings.Username,
+                        password
+                    );
+                }
+
+                handler.UseProxy = true;
+                _logger.LogDebug("Using proxy {ProxyUrl} for static resource requests", proxySettings.GetProxyUrl());
+            }
+        }
+
+        var client = new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+
+        // Add browser-like headers to avoid bot detection
+        client.DefaultRequestHeaders.Clear();
+        client.DefaultRequestHeaders.Add("User-Agent", userAgent);
+        client.DefaultRequestHeaders.Add("Accept", "*/*");
+        client.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.9");
+        client.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate, br");
+        client.DefaultRequestHeaders.Add("Cache-Control", "no-cache");
+        client.DefaultRequestHeaders.Add("Pragma", "no-cache");
+        // DNT (Do Not Track) - some crawlers include this
+        client.DefaultRequestHeaders.Add("DNT", "1");
+
+        return client;
+    }
+
+    /// <summary>
+    /// Fetches a static resource (CSS, JS, image) using lightweight HTTP HEAD/GET request.
+    /// Much faster than Playwright for static assets that don't need rendering.
+    /// </summary>
+    private async Task<UrlFetchResult> FetchStaticResourceAsync(string url, string userAgent, ProxySettings? proxySettings, CancellationToken cancellationToken)
+    {
+        // Create HttpClient with proxy and browser-like headers
+        using var httpClient = CreateHttpClient(userAgent, proxySettings);
+        
+        try
+        {
+            // Try HEAD request first (faster, only gets headers)
+            var request = new HttpRequestMessage(HttpMethod.Head, url);
+            HttpResponseMessage response;
+            
+            try
+            {
+                response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex) when (request.Method == HttpMethod.Head)
+            {
+                // Some servers don't support HEAD, fallback to GET
+                _logger.LogDebug("HEAD request failed for {Url} ({Error}), trying GET", url, ex.Message);
+                request = new HttpRequestMessage(HttpMethod.Get, url);
+                response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            }
+
+            using (response)
+            {
+                var headers = response.Headers
+                    .Concat(response.Content.Headers)
+                    .Select(h => new KeyValuePair<string, string>(h.Key, string.Join(", ", h.Value)))
+                    .ToList();
+
+                var contentType = response.Content.Headers.ContentType?.ToString();
+                var contentLength = response.Content.Headers.ContentLength;
+
+                return new UrlFetchResult
+                {
+                    StatusCode = (int)response.StatusCode,
+                    IsSuccess = response.IsSuccessStatusCode,
+                    ContentType = contentType,
+                    ContentLength = contentLength,
+                    Headers = headers,
+                    IsHtml = false, // Static resources are not HTML
+                    Content = null
+                };
+            }
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogWarning("Timeout fetching static resource: {Url}", url);
+            return new UrlFetchResult
+            {
+                StatusCode = 0,
+                IsSuccess = false,
+                ErrorMessage = "Request timeout",
+                IsHtml = false
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching static resource: {Url}", url);
+            return new UrlFetchResult
+            {
+                StatusCode = 0,
+                IsSuccess = false,
+                ErrorMessage = ex.Message,
+                IsHtml = false
+            };
+        }
+    }
+
+    /// <summary>
+    /// Determines if a URL is a non-HTML resource that should use lightweight HTTP checking.
+    /// This includes CSS, JS, images, videos, audio, documents, fonts, XML, etc.
+    /// Only HTML pages should use Playwright for full rendering.
+    /// </summary>
+    private static bool IsStaticResource(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            var path = uri.AbsolutePath.ToLowerInvariant();
+            
+            // Get the filename (last segment after /)
+            var lastSlash = path.LastIndexOf('/');
+            var filename = lastSlash >= 0 ? path.Substring(lastSlash + 1) : path;
+            
+            // If filename has no extension (no dot after last slash), it's likely an HTML page
+            if (!filename.Contains('.'))
+            {
+                return false; // Use Playwright for HTML pages like /page, /about
+            }
+            
+            // Check if it's an HTML-generating extension
+            if (path.EndsWith(".html") || 
+                path.EndsWith(".htm") ||
+                path.EndsWith(".php") ||
+                path.EndsWith(".asp") ||
+                path.EndsWith(".aspx") ||
+                path.EndsWith(".jsp") ||
+                path.EndsWith(".cfm"))
+            {
+                return false; // Use Playwright for HTML pages
+            }
+            
+            // Everything else is a static resource - use lightweight HTTP checking
+            // This includes:
+            // - Stylesheets: .css
+            // - Scripts: .js, .mjs
+            // - Images: .jpg, .jpeg, .png, .gif, .webp, .ico, .bmp, .svg
+            // - Videos: .mp4, .avi, .mov, .wmv, .flv, .mkv, .webm, .m4v, .mpg, .mpeg
+            // - Audio: .mp3, .wav, .ogg, .m4a, .aac, .flac, .wma
+            // - Documents: .pdf, .doc, .docx, .xls, .xlsx, .ppt, .pptx
+            // - Data: .xml, .json, .csv, .txt
+            // - Fonts: .ttf, .otf, .woff, .woff2, .eot
+            // - Archives: .zip, .rar, .7z, .tar, .gz
+            // And any other file type with an extension
+            return true;
+        }
+        catch
+        {
+            return false; // If we can't parse the URL, treat as HTML and use Playwright
         }
     }
 
@@ -1339,15 +1545,21 @@ public class CrawlEngine(
 
         foreach (var link in extractedLinks)
         {
-            // Only follow hyperlinks to other pages
-            if (link.LinkType == LinkType.Hyperlink)
+            // Enqueue hyperlinks, stylesheets, scripts, and images for crawling
+            // This matches Screaming Frog's behavior of crawling all resources
+            if (link.LinkType == LinkType.Hyperlink || 
+                link.LinkType == LinkType.Stylesheet || 
+                link.LinkType == LinkType.Script || 
+                link.LinkType == LinkType.Image)
             {
                 // Only enqueue links from the same domain as the project's base URL
                 if (Uri.TryCreate(link.Url, UriKind.Absolute, out var linkUri))
                 {
                     if (IsSameDomain(projectBaseUri, linkUri))
                     {
-                        await EnqueueUrlAsync(projectId, link.Url, currentDepth + 1, 100, projectBaseUrl).ConfigureAwait(false);
+                        // Use depth+1 only for hyperlinks; static resources stay at same depth to avoid hitting depth limit
+                        int resourceDepth = link.LinkType == LinkType.Hyperlink ? currentDepth + 1 : currentDepth;
+                        await EnqueueUrlAsync(projectId, link.Url, resourceDepth, 100, projectBaseUrl).ConfigureAwait(false);
                     }
                     else
                     {
@@ -1431,12 +1643,8 @@ public class CrawlEngine(
                 return;
             }
 
-            // Skip binary and media files that shouldn't be crawled with a browser
-            if (ShouldSkipBinaryFile(urlUri))
-            {
-                _logger.LogDebug("Skipping binary/media file: {Url}", url);
-                return;
-            }
+            // NOTE: We now crawl ALL resource types (PDFs, videos, fonts, etc.) using lightweight HTTP checking
+            // The binary file skip filter has been removed to match Screaming Frog's behavior
 
             using var scope = _serviceProvider.CreateScope();
             var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();

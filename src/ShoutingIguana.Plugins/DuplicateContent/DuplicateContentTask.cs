@@ -233,17 +233,14 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     {
                         builder.AddItem(url);
                     }
-                    builder.EndNested();
                     
                     builder.BeginNested("⚠️ Issue")
                         .AddItem("Temporary redirects (302/307) don't consolidate content")
-                        .AddItem("Search engines may index both versions")
-                    .EndNested();
+                        .AddItem("Search engines may index both versions");
                     
                     builder.BeginNested("💡 Recommendations")
                         .AddItem("Change to 301 (Permanent) redirects")
-                        .AddItem("Properly consolidates duplicate content for SEO")
-                    .EndNested();
+                        .AddItem("Properly consolidates duplicate content for SEO");
                     
                     builder.WithTechnicalMetadata("url", currentUrl)
                         .WithTechnicalMetadata("temporaryRedirects", redirectInfo.TemporaryRedirects.ToArray())
@@ -273,19 +270,16 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     {
                         builder.AddItem($"... and {nonRedirectDuplicates.Length - 5} more");
                     }
-                    builder.EndNested();
                     
                     builder.BeginNested("⚠️ Duplicate Content Issue")
                         .AddItem("Search engines may not know which version to rank")
                         .AddItem("May split ranking signals between pages")
-                        .AddItem("Can lead to lower rankings for all versions")
-                    .EndNested();
+                        .AddItem("Can lead to lower rankings for all versions");
                     
                     builder.BeginNested("💡 Recommendations")
                         .AddItem("Make each page's content unique")
                         .AddItem("Or consolidate pages with 301 redirects")
-                        .AddItem("Or use canonical tags to indicate preferred version")
-                    .EndNested();
+                        .AddItem("Or use canonical tags to indicate preferred version");
                     
                     builder.WithTechnicalMetadata("url", currentUrl)
                         .WithTechnicalMetadata("duplicateCount", nonRedirectDuplicates.Length)
@@ -317,19 +311,16 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 {
                     builder.AddItem($"... and {otherUrls.Count - 5} more");
                 }
-                builder.EndNested();
                 
                 builder.BeginNested("⚠️ Duplicate Content Issue")
                     .AddItem("Search engines may not know which version to rank")
                     .AddItem("May split ranking signals between pages")
-                    .AddItem("Can lead to lower rankings for all versions")
-                .EndNested();
+                    .AddItem("Can lead to lower rankings for all versions");
                 
                 builder.BeginNested("💡 Recommendations")
                     .AddItem("Make each page's content unique")
                     .AddItem("Or consolidate pages with 301 redirects")
-                    .AddItem("Or use canonical tags to indicate preferred version")
-                .EndNested();
+                    .AddItem("Or use canonical tags to indicate preferred version");
                 
                 builder.WithTechnicalMetadata("url", currentUrl)
                     .WithTechnicalMetadata("duplicateCount", urlsCopy.Count - 1)
@@ -403,18 +394,15 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             {
                 builder.AddItem($"{dup.Url} ({dup.Similarity:F1}% similar)");
             }
-            builder.EndNested();
             
             builder.BeginNested("⚠️ Near-Duplicate Impact")
                 .AddItem("Very similar content can confuse search engines")
-                .AddItem("May split ranking between similar pages")
-            .EndNested();
+                .AddItem("May split ranking between similar pages");
             
             builder.BeginNested("💡 Recommendations")
                 .AddItem("Consider consolidating similar pages")
                 .AddItem("Or differentiate content to make each page unique")
-                .AddItem("Add unique sections, examples, or perspectives")
-            .EndNested();
+                .AddItem("Add unique sections, examples, or perspectives");
             
             builder.WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("nearDuplicateCount", nearDuplicates.Count)
@@ -609,7 +597,6 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                         .BeginNested("💡 Recommendations")
                             .AddItem("Ensure variant redirects to the canonical URL")
                             .AddItem("Fix redirect target")
-                        .EndNested()
                         .WithTechnicalMetadata("variantUrl", variantUrl)
                         .WithTechnicalMetadata("redirectsTo", locationHeader)
                         .WithTechnicalMetadata("expectedTarget", canonicalUrl)
@@ -635,13 +622,13 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     .AddItem($"Type: {GetRedirectTypeName(statusCode)}")
                     .BeginNested("❌ Wrong Redirect Type")
                         .AddItem("Temporary redirects (302/307) don't pass SEO value")
-                        .AddItem("May cause duplicate content issues")
-                    .EndNested()
-                    .BeginNested("💡 Recommendations")
+                        .AddItem("May cause duplicate content issues");
+                
+                details.BeginNested("💡 Recommendations")
                         .AddItem("Change to 301 (Permanent) redirect")
-                        .AddItem("Consolidates domain variants properly")
-                    .EndNested()
-                    .WithTechnicalMetadata("variantUrl", variantUrl)
+                        .AddItem("Consolidates domain variants properly");
+                
+                details.WithTechnicalMetadata("variantUrl", variantUrl)
                     .WithTechnicalMetadata("redirectsTo", locationHeader)
                     .WithTechnicalMetadata("statusCode", statusCode)
                     .WithTechnicalMetadata("redirectType", GetRedirectTypeName(statusCode))
@@ -664,14 +651,14 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     .BeginNested("⚠️ Critical Issue")
                         .AddItem("Same content accessible from multiple URLs")
                         .AddItem("Search engines may split ranking signals")
-                        .AddItem("Reduces overall rankings for all variants")
-                    .EndNested()
-                    .BeginNested("💡 Recommendations")
+                        .AddItem("Reduces overall rankings for all variants");
+                
+                details.BeginNested("💡 Recommendations")
                         .AddItem($"Add 301 redirect from {variantUrl} to {canonicalUrl}")
                         .AddItem("Configure server to redirect all variants")
-                        .AddItem("Test all combinations (http/https, www/non-www)")
-                    .EndNested()
-                    .WithTechnicalMetadata("variantUrl", variantUrl)
+                        .AddItem("Test all combinations (http/https, www/non-www)");
+                
+                details.WithTechnicalMetadata("variantUrl", variantUrl)
                     .WithTechnicalMetadata("canonicalUrl", canonicalUrl)
                     .WithTechnicalMetadata("statusCode", statusCode)
                     .Build();
@@ -859,4 +846,5 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
         _logger.LogDebug("Cleaned up duplicate content data for project {ProjectId}", projectId);
     }
 }
+
 

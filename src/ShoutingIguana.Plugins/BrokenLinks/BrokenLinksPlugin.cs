@@ -16,7 +16,7 @@ public class BrokenLinksPlugin : IPlugin
         var accessor = context.GetRepositoryAccessor();
         var checker = new BrokenLinksChecker(accessor, context.CreateLogger<BrokenLinksChecker>());
         
-        bool checkExternalLinks = false;
+        bool checkExternalLinks = true; // Enable external link checking to match Screaming Frog behavior
         bool checkAnchorLinks = true;
         
         context.RegisterTask(new BrokenLinksTask(

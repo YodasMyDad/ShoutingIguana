@@ -61,7 +61,6 @@ public class MyTask : UrlTaskBase
                 .BeginNested("💡 Recommendation")
                     .AddItem("Titles should be at least 30 characters")
                     .AddItem("Include relevant keywords")
-                .EndNested()
                 .Build();
 
             await ctx.Findings.ReportAsync(
@@ -145,14 +144,14 @@ var details = FindingDetailsBuilder.Create()
     .BeginNested("📉 SEO Impact")
         .AddItem("Broken links harm user experience")
         .AddItem("May reduce page authority")
-    .EndNested()
     .BeginNested("💡 Recommendations")
         .AddItem("Fix or remove broken links")
         .AddItem("Implement 301 redirects where appropriate")
-    .EndNested()
     .WithTechnicalMetadata("brokenLinkCount", count)
     .Build();
 ```
+
+> **Note:** `EndNested()` is optional - `Build()` automatically closes any open nested sections. You can still use `EndNested()` for explicit control when working with complex multi-level nesting or when you need to add items at different nesting levels.
 
 ## Accessing Crawled Data
 
@@ -296,7 +295,6 @@ public class DuplicateContentTask : UrlTaskBase
                     .AddItem($"Duplicate content detected")
                     .BeginNested("📄 Other pages with same content")
                         .AddItems(others.ToArray())
-                    .EndNested()
                     .WithTechnicalMetadata("contentHash", hash)
                     .Build();
                 

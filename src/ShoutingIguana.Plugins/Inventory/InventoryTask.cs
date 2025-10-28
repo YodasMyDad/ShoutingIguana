@@ -55,7 +55,6 @@ public class InventoryTask : UrlTaskBase
                     .BeginNested("💡 Note")
                         .AddItem("If this is expected (e.g., members-only area), this is not an error")
                         .AddItem("Otherwise, check access permissions")
-                    .EndNested()
                     .WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("status", statusCode)
                     .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
@@ -78,7 +77,6 @@ public class InventoryTask : UrlTaskBase
                     .BeginNested("💡 Recommendations")
                         .AddItem("Investigate why this page returns an error")
                         .AddItem("Fix the page or implement a 301 redirect")
-                    .EndNested()
                     .WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("status", statusCode)
                     .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
@@ -116,7 +114,6 @@ public class InventoryTask : UrlTaskBase
                 .BeginNested("💡 Recommendations")
                     .AddItem("Shorter URLs are easier to share and remember")
                     .AddItem("They may also rank slightly better in search results")
-                .EndNested()
                 .WithTechnicalMetadata("url", url)
                 .WithTechnicalMetadata("length", urlLength)
                 .Build();
@@ -155,7 +152,6 @@ public class InventoryTask : UrlTaskBase
                 .BeginNested("💡 Recommendations")
                     .AddItem("Use lowercase URLs to avoid case-sensitivity issues")
                     .AddItem("Some servers treat /Page and /page as different resources")
-                .EndNested()
                 .WithTechnicalMetadata("url", url)
                 .WithTechnicalMetadata("uppercaseParts", uppercaseParts)
                 .Build();
@@ -187,7 +183,6 @@ public class InventoryTask : UrlTaskBase
                 {
                     builder.AddItem($"... and {queryParams.Length - 5} more");
                 }
-                builder.EndNested();
                 
                 builder.WithTechnicalMetadata("url", url)
                     .WithTechnicalMetadata("parameterCount", queryParams.Length)
@@ -210,7 +205,6 @@ public class InventoryTask : UrlTaskBase
                     .BeginNested("💡 Best Practices")
                         .AddItem("Consider using rel=prev/next link tags")
                         .AddItem("Use canonical tags to avoid duplicate content issues")
-                    .EndNested()
                     .WithTechnicalMetadata("url", url)
                     .Build();
                 
@@ -256,7 +250,6 @@ public class InventoryTask : UrlTaskBase
                 .BeginNested("💡 Recommendations")
                     .AddItem("Use hyphens (-) instead of underscores (_) for word separation")
                     .AddItem("Google treats hyphens as word separators but underscores as word connectors")
-                .EndNested()
                 .WithTechnicalMetadata("url", url)
                 .Build();
             
@@ -314,7 +307,6 @@ public class InventoryTask : UrlTaskBase
                     .BeginNested("ℹ️ Impact")
                         .AddItem("This page defers indexing to the canonical URL")
                         .AddItem("Search engines will index the canonical URL instead")
-                    .EndNested()
                     .WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("canonical", canonical)
                     .WithTechnicalMetadata("isCrossDomain", ctx.Metadata.HasCrossDomainCanonical)
@@ -355,12 +347,10 @@ public class InventoryTask : UrlTaskBase
                         .AddItem("Thin content rarely ranks in modern search engines")
                         .AddItem("Google's 'Helpful Content Update' favors comprehensive content")
                         .AddItem("Competitive keywords typically need 1,000-2,000+ words")
-                    .EndNested()
                     .BeginNested("💡 Recommendations")
                         .AddItem("Add substantive, unique content that thoroughly covers the topic")
                         .AddItem("Include relevant details, examples, and explanations")
                         .AddItem("Focus on user value and answering search intent completely")
-                    .EndNested()
                     .WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("contentLength", contentLength)
                     .WithTechnicalMetadata("estimatedWords", estimatedWords)
@@ -381,7 +371,6 @@ public class InventoryTask : UrlTaskBase
                     .BeginNested("ℹ️ Note")
                         .AddItem("While technically adequate, more content often ranks better")
                         .AddItem("Consider expanding to 300-500+ words for competitive topics")
-                    .EndNested()
                     .WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("contentLength", contentLength)
                     .WithTechnicalMetadata("estimatedWords", estimatedWords)

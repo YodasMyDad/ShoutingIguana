@@ -210,7 +210,9 @@ public class FindingDetailsBuilder
     /// </summary>
     /// <returns>The builder instance for method chaining.</returns>
     /// <remarks>
-    /// You must call <see cref="EndNested"/> for each <see cref="BeginNested(string)"/> before calling <see cref="Build"/>.
+    /// This method is optional - <see cref="Build"/> automatically closes any open nested sections.
+    /// Use <see cref="EndNested"/> when you want explicit control over nesting levels, especially
+    /// for multi-level nested structures or when adding items at different levels.
     /// </remarks>
     public FindingDetailsBuilder EndNested()
     {
@@ -289,9 +291,10 @@ public class FindingDetailsBuilder
     /// Call this after adding all items and sections.
     /// </summary>
     /// <returns>The constructed FindingDetails object ready to pass to <c>ctx.Findings.ReportAsync()</c>.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown if <see cref="EndNested"/> was not called to close all nested sections.
-    /// </exception>
+    /// <remarks>
+    /// Any open nested sections are automatically closed when <see cref="Build"/> is called,
+    /// so calling <see cref="EndNested"/> before <see cref="Build"/> is optional.
+    /// </remarks>
     /// <example>
     /// <code>
     /// var details = builder
@@ -308,10 +311,17 @@ public class FindingDetailsBuilder
     /// </example>
     public FindingDetails Build()
     {
-        // Ensure we're not still in a nested section
-        if (_currentParent != null || _nestedStack.Count > 0)
+        // Auto-close any open nested sections for convenience
+        while (_currentParent != null || _nestedStack.Count > 0)
         {
-            throw new InvalidOperationException("Cannot build FindingDetails while still in a nested section. Call EndNested() to close all nested sections.");
+            if (_nestedStack.Count > 0)
+            {
+                _currentParent = _nestedStack.Pop();
+            }
+            else
+            {
+                _currentParent = null;
+            }
         }
         
         return _details;

@@ -471,16 +471,14 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         if (!string.IsNullOrEmpty(impactNote))
         {
             builder.BeginNested("📉 SEO Impact")
-                .AddItem(impactNote)
-                .EndNested();
+                .AddItem(impactNote);
         }
         
         // Add recommendation if provided
         if (!string.IsNullOrEmpty(recommendation))
         {
             builder.BeginNested("💡 Recommendations")
-                .AddItem(recommendation)
-                .EndNested();
+                .AddItem(recommendation);
         }
         
         // Add all diagnostic/technical info to TechnicalMetadata

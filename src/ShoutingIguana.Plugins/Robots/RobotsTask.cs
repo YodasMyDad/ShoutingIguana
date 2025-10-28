@@ -104,7 +104,6 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                         .AddItem("Can be used to control crawler access")
                         .AddItem("Can specify crawl delays")
                         .AddItem("Can declare sitemap locations")
-                    .EndNested()
                     .WithTechnicalMetadata("robotsTxtUrl", robotsTxtUrl)
                     .WithTechnicalMetadata("statusCode", (int)response.StatusCode)
                     .Build();
@@ -280,7 +279,6 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 .AddItem($"Reason: {reason}")
                 .BeginNested("💡 Recommendations")
                     .AddItem(recommendation)
-                .EndNested()
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
                 .WithTechnicalMetadata("reason", reason)
@@ -408,8 +406,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem("⚠️ Prevents any text snippets - may reduce SERP visibility")
                     .BeginNested("💡 Recommendations")
-                        .AddItem("Consider allowing snippets for better SERP appearance")
-                    .EndNested();
+                        .AddItem("Consider allowing snippets for better SERP appearance");
             }
             else
             {
@@ -441,8 +438,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem("⚠️ Prevents image previews - may reduce visibility")
                     .BeginNested("💡 Recommendations")
-                        .AddItem("Consider allowing image previews for better engagement")
-                    .EndNested();
+                        .AddItem("Consider allowing image previews for better engagement");
             }
             else
             {
@@ -475,8 +471,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             {
                 builder.AddItem("⚠️ Prevents video previews - may reduce click-through")
                     .BeginNested("💡 Recommendations")
-                        .AddItem("Consider allowing video previews")
-                    .EndNested();
+                        .AddItem("Consider allowing video previews");
             }
             else
             {

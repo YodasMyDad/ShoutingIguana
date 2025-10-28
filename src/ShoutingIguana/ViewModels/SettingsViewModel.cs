@@ -252,20 +252,23 @@ public partial class SettingsViewModel : ObservableObject
 
         if (result == MessageBoxResult.Yes)
         {
-            // Restore default crawl settings
-            ConcurrentRequests = 3;
-            TimeoutSeconds = 30;
-            MaxCrawlDepth = 5;
-            MaxUrlsToCrawl = 10000;
-            RespectRobotsTxt = true;
-            UseSitemapXml = true;
-            CrawlDelaySeconds = 1.5;
+            // Restore default crawl settings from CrawlSettings defaults
+            var defaultCrawlSettings = new CrawlSettings();
+            ConcurrentRequests = defaultCrawlSettings.ConcurrentRequests;
+            TimeoutSeconds = defaultCrawlSettings.TimeoutSeconds;
+            MaxCrawlDepth = defaultCrawlSettings.MaxCrawlDepth;
+            MaxUrlsToCrawl = defaultCrawlSettings.MaxUrlsToCrawl;
+            RespectRobotsTxt = defaultCrawlSettings.RespectRobotsTxt;
+            UseSitemapXml = defaultCrawlSettings.UseSitemapXml;
+            CrawlDelaySeconds = defaultCrawlSettings.CrawlDelaySeconds;
+            MemoryLimitMb = defaultCrawlSettings.MemoryLimitMb;
+            ConnectionTimeoutSeconds = defaultCrawlSettings.ConnectionTimeoutSeconds;
 
-            // Restore default browser settings
-            Headless = true;
-            ViewportWidth = 1920;
-            ViewportHeight = 1080;
-            MemoryLimitMb = 1536;
+            // Restore default browser settings from BrowserSettings defaults
+            var defaultBrowserSettings = new BrowserSettings();
+            Headless = defaultBrowserSettings.Headless;
+            ViewportWidth = defaultBrowserSettings.ViewportWidth;
+            ViewportHeight = defaultBrowserSettings.ViewportHeight;
 
             // Restore default data settings
             LogRetentionDays = 30;
