@@ -1,6 +1,7 @@
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.Plugins.Shared;
 using System.Collections.Concurrent;
 
 namespace ShoutingIguana.Plugins.InternalLinking;
@@ -148,34 +149,50 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         // Check for pages with no outlinks (dead ends)
         if (outlinkCount == 0)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("Page has no internal links")
+                .AddItem($"Page depth: {ctx.Metadata.Depth}")
+                .AddItem("⚠️ Dead end - visitors have nowhere to go")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Add internal links to improve site navigation")
+                    .AddItem("Links help distribute link equity")
+                    .AddItem("Improve user experience with related content links")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "NO_OUTLINKS",
                 "Page has no internal links (dead end)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    depth = ctx.Metadata.Depth,
-                    recommendation = "Add internal links to improve site navigation and link equity flow"
-                });
+                details);
         }
 
         // Check for pages with very few outlinks (might be thin content or poor navigation)
         if (outlinkCount > 0 && outlinkCount < 3 && ctx.Metadata.Depth <= 2)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Internal links: {outlinkCount}")
+                .AddItem($"Page depth: {ctx.Metadata.Depth} (important page)")
+                .AddItem("ℹ️ Few outlinks may indicate poor navigation")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Add more contextual internal links")
+                    .AddItem("Link to related content")
+                    .AddItem("Aim for 3-5 contextual links per page")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("outlinkCount", outlinkCount)
+                .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "FEW_OUTLINKS",
                 $"Important page has few internal links ({outlinkCount})",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    outlinkCount,
-                    depth = ctx.Metadata.Depth,
-                    recommendation = "Consider adding more contextual internal links"
-                });
+                details);
         }
     }
 
@@ -200,18 +217,30 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
             
             if (!isHomepage)
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem("No internal links pointing to this page")
+                    .AddItem($"Page depth: {ctx.Metadata.Depth}")
+                    .AddItem("⚠️ Potential orphan page")
+                    .BeginNested("ℹ️ Impact")
+                        .AddItem("Orphan pages are harder for users to find")
+                        .AddItem("May not rank well without internal link equity")
+                        .AddItem("Search engines may not discover or prioritize them")
+                    .EndNested()
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Add links from navigation or relevant content")
+                        .AddItem("Ensure important pages are discoverable")
+                        .AddItem("Build internal linking structure")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Warning,
                     "POTENTIAL_ORPHAN",
                     "Page has no detected internal links pointing to it (potential orphan)",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        depth = ctx.Metadata.Depth,
-                        note = "This page was discovered but may not be linked from other pages",
-                        recommendation = "Ensure important pages are linked from navigation or content"
-                    });
+                    details);
             }
         }
     }
@@ -247,18 +276,29 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         // Check for over-optimization (same anchor text used for all links)
         if (uniqueCount == 1 && totalLinks >= 5)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"All {totalLinks} links use identical anchor text:")
+                .AddItem($"  \"{uniqueTexts[0]}\"")
+                .BeginNested("⚠️ Over-optimization Risk")
+                    .AddItem("Identical anchor text looks unnatural")
+                    .AddItem("May be seen as manipulative by search engines")
+                .EndNested()
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Vary anchor text naturally")
+                    .AddItem("Use different phrases that describe the page")
+                    .AddItem("Mix exact match, partial match, and branded anchors")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("anchorText", uniqueTexts[0])
+                .WithTechnicalMetadata("linkCount", totalLinks)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "ANCHOR_TEXT_OVER_OPTIMIZATION",
                 $"All links to this page use identical anchor text: \"{uniqueTexts[0]}\"",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    anchorText = uniqueTexts[0],
-                    linkCount = totalLinks,
-                    recommendation = "Vary anchor text for natural link profile"
-                });
+                details);
         }
 
         // Check for generic anchor text
@@ -267,18 +307,29 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
 
         if (genericCount > totalLinks * 0.5)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Generic anchor text: {genericCount} of {totalLinks} links")
+                .AddItem($"Percentage: {(genericCount * 100 / totalLinks)}%")
+                .BeginNested("⚠️ Impact")
+                    .AddItem("Generic anchors provide little SEO value")
+                    .AddItem("Miss opportunity to use relevant keywords")
+                .EndNested()
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Use descriptive anchor text that explains the destination")
+                    .AddItem("Instead of \"click here\", use \"view our pricing plans\"")
+                    .AddItem("Include relevant keywords naturally")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("genericCount", genericCount)
+                .WithTechnicalMetadata("totalLinks", totalLinks)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "GENERIC_ANCHOR_TEXT",
                 $"Many links use generic anchor text ({genericCount}/{totalLinks})",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    genericCount,
-                    totalLinks,
-                    recommendation = "Use descriptive anchor text that explains the destination page"
-                });
+                details);
         }
     }
     

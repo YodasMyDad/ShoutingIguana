@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.Plugins.Shared;
 
 namespace ShoutingIguana.Plugins.Robots;
 
@@ -95,17 +96,26 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             if (!response.IsSuccessStatusCode)
             {
                 // No robots.txt found
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Robots.txt URL: {robotsTxtUrl}")
+                    .AddItem($"HTTP Status: {(int)response.StatusCode}")
+                    .AddItem("✅ All pages allowed by default")
+                    .BeginNested("ℹ️ Note")
+                        .AddItem("A robots.txt file is not required")
+                        .AddItem("Can be used to control crawler access")
+                        .AddItem("Can specify crawl delays")
+                        .AddItem("Can declare sitemap locations")
+                    .EndNested()
+                    .WithTechnicalMetadata("robotsTxtUrl", robotsTxtUrl)
+                    .WithTechnicalMetadata("statusCode", (int)response.StatusCode)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Info,
                     "NO_ROBOTS_TXT",
                     "No robots.txt file found (all pages allowed by default)",
-                    new
-                    {
-                        robotsTxtUrl,
-                        statusCode = (int)response.StatusCode,
-                        note = "A robots.txt file is not required, but it's recommended for SEO best practices. It can be used to control crawler access, specify crawl delays, and declare sitemap locations."
-                    });
+                    details);
             }
             else
             {
@@ -146,34 +156,43 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         if (ctx.Metadata.RobotsNoindex == true)
         {
             var severity = ctx.Metadata.Depth <= 2 ? Severity.Warning : Severity.Info;
+            var source = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) ? "X-Robots-Tag header" : "meta robots tag";
+            
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Source: {source}")
+                .AddItem($"Page depth: {ctx.Metadata.Depth}")
+                .AddItem("⚠️ This page will not be indexed by search engines")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("source", source)
+                .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
+                .WithTechnicalMetadata("isIndexable", isIndexable)
+                .Build();
             
             await ctx.Findings.ReportAsync(
                 Key,
                 severity,
                 "NOINDEX_DETECTED",
                 "Page has noindex directive (will not be indexed by search engines)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    source = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) ? "X-Robots-Tag header" : "meta robots tag",
-                    depth = ctx.Metadata.Depth,
-                    isIndexable
-                });
+                details);
         }
 
         // Check for nofollow
         if (ctx.Metadata.RobotsNofollow == true)
         {
+            var source = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) ? "X-Robots-Tag header" : "meta robots tag";
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Source: {source}")
+                .AddItem("🔗 Links on this page will not pass link equity")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("source", source)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "NOFOLLOW_DETECTED",
                 "Page has nofollow directive (links will not pass equity)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    source = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) ? "X-Robots-Tag header" : "meta robots tag"
-                });
+                details);
         }
 
         // Check for other robots directives that might be present
@@ -188,18 +207,21 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         }
 
         // Report that X-Robots-Tag is being used
+        var details = FindingDetailsBuilder.Create()
+            .AddItem($"X-Robots-Tag: {ctx.Metadata.XRobotsTag}")
+            .AddItem($"Indexable: {(isIndexable ? "Yes" : "No")}")
+            .AddItem("ℹ️ HTTP headers override meta tags if both are present")
+            .WithTechnicalMetadata("url", ctx.Url.ToString())
+            .WithTechnicalMetadata("xRobotsTag", ctx.Metadata.XRobotsTag)
+            .WithTechnicalMetadata("isIndexable", isIndexable)
+            .Build();
+        
         await ctx.Findings.ReportAsync(
             Key,
             Severity.Info,
             "X_ROBOTS_TAG_PRESENT",
             $"X-Robots-Tag header present: {ctx.Metadata.XRobotsTag}",
-            new
-            {
-                url = ctx.Url.ToString(),
-                xRobotsTag = ctx.Metadata.XRobotsTag,
-                isIndexable,
-                note = "HTTP headers override meta tags if both are present"
-            });
+            details);
     }
 
     private async Task CheckRobotsConflictsAsync(UrlContext ctx)
@@ -209,19 +231,24 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             return;
         }
 
+        var details = FindingDetailsBuilder.Create()
+            .AddItem("Conflicting directives found:")
+            .AddItem($"  • X-Robots-Tag: {ctx.Metadata.XRobotsTag}")
+            .AddItem($"  • Meta robots noindex: {ctx.Metadata.RobotsNoindex}")
+            .AddItem($"  • Meta robots nofollow: {ctx.Metadata.RobotsNofollow}")
+            .AddItem("⚠️ Most restrictive directive takes precedence")
+            .WithTechnicalMetadata("url", ctx.Url.ToString())
+            .WithTechnicalMetadata("xRobotsTag", ctx.Metadata.XRobotsTag)
+            .WithTechnicalMetadata("metaRobotsNoindex", ctx.Metadata.RobotsNoindex)
+            .WithTechnicalMetadata("metaRobotsNofollow", ctx.Metadata.RobotsNofollow)
+            .Build();
+        
         await ctx.Findings.ReportAsync(
             Key,
             Severity.Warning,
             "ROBOTS_DIRECTIVE_CONFLICT",
             "Conflicting robots directives detected (meta tag vs X-Robots-Tag header)",
-            new
-            {
-                url = ctx.Url.ToString(),
-                xRobotsTag = ctx.Metadata.XRobotsTag,
-                metaRobotsNoindex = ctx.Metadata.RobotsNoindex,
-                metaRobotsNofollow = ctx.Metadata.RobotsNofollow,
-                resolution = "Most restrictive directive takes precedence"
-            });
+            details);
     }
 
     private async Task CheckImportantPageIndexabilityAsync(UrlContext ctx, bool isIndexable)
@@ -248,20 +275,26 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 recommendation = "Important pages should be accessible to search engines. Check your robots.txt file.";
             }
 
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Page depth: {ctx.Metadata.Depth} (important page)")
+                .AddItem($"Indexable: No")
+                .AddItem($"Reason: {reason}")
+                .BeginNested("💡 Recommendations")
+                    .AddItem(recommendation)
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
+                .WithTechnicalMetadata("reason", reason)
+                .WithTechnicalMetadata("hasNoindex", ctx.Metadata.RobotsNoindex)
+                .WithTechnicalMetadata("xRobotsTag", ctx.Metadata.XRobotsTag)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "IMPORTANT_PAGE_NOT_INDEXABLE",
                 $"Important page (depth {ctx.Metadata.Depth}) is not indexable: {reason}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    depth = ctx.Metadata.Depth,
-                    reason,
-                    hasNoindex = ctx.Metadata.RobotsNoindex,
-                    xRobotsTag = ctx.Metadata.XRobotsTag,
-                    recommendation
-                });
+                details);
         }
     }
 
@@ -278,165 +311,206 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         // Check for noarchive
         if (tag.Contains("noarchive"))
         {
+            var details = FindingDetailsBuilder.WithMetadata(
+                new Dictionary<string, object?> { ["url"] = ctx.Url.ToString() },
+                "noarchive directive detected",
+                "ℹ️ Search engines will not show cached versions of this page");
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "NOARCHIVE_DETECTED",
                 "Page has 'noarchive' directive (prevents cached copies)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    note = "Search engines will not show cached versions of this page"
-                });
+                details);
         }
 
         // Check for nosnippet
         if (tag.Contains("nosnippet"))
         {
+            var details = FindingDetailsBuilder.WithMetadata(
+                new Dictionary<string, object?> { ["url"] = ctx.Url.ToString() },
+                "nosnippet directive detected",
+                "ℹ️ Search engines will not show description snippets");
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "NOSNIPPET_DETECTED",
                 "Page has 'nosnippet' directive (prevents text snippets in search results)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    note = "Search engines will not show description snippets for this page"
-                });
+                details);
         }
 
         // Check for noimageindex
         if (tag.Contains("noimageindex"))
         {
+            var details = FindingDetailsBuilder.WithMetadata(
+                new Dictionary<string, object?> { ["url"] = ctx.Url.ToString() },
+                "noimageindex directive detected",
+                "ℹ️ Images on this page will not appear in image search");
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "NOIMAGEINDEX_DETECTED",
                 "Page has 'noimageindex' directive (images will not be indexed)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    note = "Images on this page will not appear in image search results"
-                });
+                details);
         }
 
         // Check for unavailable_after
         if (tag.Contains("unavailable_after"))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("unavailable_after directive detected")
+                .AddItem("⏰ Time-limited indexing")
+                .AddItem("ℹ️ Page will be removed from index after specified date")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("xRobotsTag", ctx.Metadata.XRobotsTag)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "UNAVAILABLE_AFTER_DETECTED",
                 "Page has 'unavailable_after' directive (time-limited indexing)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    xRobotsTag = ctx.Metadata.XRobotsTag,
-                    note = "Page will be removed from index after specified date"
-                });
+                details);
         }
         
-        // NEW: Check for indexifembedded (Google's new directive for iframes)
+        // Check for indexifembedded (Google's new directive for iframes)
         if (tag.Contains("indexifembedded"))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("indexifembedded directive detected")
+                .AddItem("ℹ️ Allows indexing when embedded in iframes")
+                .AddItem("Even if page has noindex, can be indexed when embedded")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("xRobotsTag", ctx.Metadata.XRobotsTag)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "INDEXIFEMBEDDED_DETECTED",
                 "Page has 'indexifembedded' directive (allows indexing when embedded in iframes)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    note = "This directive allows Google to index content even when embedded despite noindex",
-                    xRobotsTag = ctx.Metadata.XRobotsTag
-                });
+                details);
         }
         
-        // NEW: Check for max-snippet directive
+        // Check for max-snippet directive
         var maxSnippetMatch = System.Text.RegularExpressions.Regex.Match(tag, @"max-snippet:(\d+|-1)");
         if (maxSnippetMatch.Success)
         {
             var maxSnippet = maxSnippetMatch.Groups[1].Value;
             var snippetValue = maxSnippet == "-1" ? "unlimited" : $"{maxSnippet} characters";
-            
             var severity = maxSnippet == "0" ? Severity.Warning : Severity.Info;
+            
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"max-snippet: {snippetValue}");
+            
+            if (maxSnippet == "0")
+            {
+                builder.AddItem("⚠️ Prevents any text snippets - may reduce SERP visibility")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Consider allowing snippets for better SERP appearance")
+                    .EndNested();
+            }
+            else
+            {
+                builder.AddItem($"ℹ️ Limits text snippet length to {snippetValue}");
+            }
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("maxSnippet", maxSnippet);
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 severity,
                 "MAX_SNIPPET_DETECTED",
                 $"Page has 'max-snippet' directive: {snippetValue}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    maxSnippet,
-                    note = maxSnippet == "0" ? 
-                        "max-snippet:0 prevents any text snippets - may reduce SERP visibility" :
-                        $"Limits text snippet length to {snippetValue}",
-                    recommendation = maxSnippet == "0" ? "Consider allowing snippets for better SERP appearance" : null
-                });
+                builder.Build());
         }
         
-        // NEW: Check for max-image-preview directive
+        // Check for max-image-preview directive
         var maxImageMatch = System.Text.RegularExpressions.Regex.Match(tag, @"max-image-preview:(none|standard|large)");
         if (maxImageMatch.Success)
         {
             var maxImage = maxImageMatch.Groups[1].Value;
             var severity = maxImage == "none" ? Severity.Warning : Severity.Info;
             
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"max-image-preview: {maxImage}");
+            
+            if (maxImage == "none")
+            {
+                builder.AddItem("⚠️ Prevents image previews - may reduce visibility")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Consider allowing image previews for better engagement")
+                    .EndNested();
+            }
+            else
+            {
+                builder.AddItem($"✅ Allows {maxImage} image previews in search results");
+            }
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("maxImagePreview", maxImage);
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 severity,
                 "MAX_IMAGE_PREVIEW_DETECTED",
                 $"Page has 'max-image-preview' directive: {maxImage}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    maxImagePreview = maxImage,
-                    note = maxImage == "none" ? 
-                        "Prevents image previews in search results - may reduce visibility" :
-                        $"Allows {maxImage} image previews in search results",
-                    recommendation = maxImage == "none" ? "Consider allowing image previews for better engagement" : null
-                });
+                builder.Build());
         }
         
-        // NEW: Check for max-video-preview directive
+        // Check for max-video-preview directive
         var maxVideoMatch = System.Text.RegularExpressions.Regex.Match(tag, @"max-video-preview:(\d+|-1)");
         if (maxVideoMatch.Success)
         {
             var maxVideo = maxVideoMatch.Groups[1].Value;
             var videoValue = maxVideo == "-1" ? "unlimited" : $"{maxVideo} seconds";
-            
             var severity = maxVideo == "0" ? Severity.Warning : Severity.Info;
+            
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"max-video-preview: {videoValue}");
+            
+            if (maxVideo == "0")
+            {
+                builder.AddItem("⚠️ Prevents video previews - may reduce click-through")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Consider allowing video previews")
+                    .EndNested();
+            }
+            else
+            {
+                builder.AddItem($"ℹ️ Limits video preview to {videoValue}");
+            }
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("maxVideoPreview", maxVideo);
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 severity,
                 "MAX_VIDEO_PREVIEW_DETECTED",
                 $"Page has 'max-video-preview' directive: {videoValue}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    maxVideoPreview = maxVideo,
-                    note = maxVideo == "0" ? 
-                        "Prevents video previews - may reduce click-through rates" :
-                        $"Limits video preview to {videoValue}",
-                    recommendation = maxVideo == "0" ? "Consider allowing video previews" : null
-                });
+                builder.Build());
         }
         
-        // NEW: Check for googlebot-news specific directives
+        // Check for googlebot-news specific directives
         if (tag.Contains("googlebot-news"))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("googlebot-news directive detected")
+                .AddItem("ℹ️ This specifically targets Google News crawler")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("xRobotsTag", ctx.Metadata.XRobotsTag)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "GOOGLEBOT_NEWS_DIRECTIVE",
                 "Page has googlebot-news specific directive",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    xRobotsTag = ctx.Metadata.XRobotsTag,
-                    note = "This directive specifically targets Google News crawler"
-                });
+                details);
         }
     }
 }

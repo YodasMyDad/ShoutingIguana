@@ -4,6 +4,7 @@ using HtmlAgilityPack;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.Plugins.Shared;
 using ShoutingIguana.Plugins.CustomExtraction.Models;
 
 namespace ShoutingIguana.Plugins.CustomExtraction;
@@ -84,38 +85,62 @@ public class CustomExtractionTask(ILogger logger, IServiceProvider serviceProvid
             if (extractedValues.Any())
             {
                 // Report extracted data as findings
+                var builder = FindingDetailsBuilder.Create()
+                    .AddItem($"Rule: {rule.Name}")
+                    .AddItem($"Field: {rule.FieldName}")
+                    .AddItem($"Selector type: {rule.SelectorType}")
+                    .AddItem($"Values found: {extractedValues.Count}");
+                
+                builder.BeginNested("📋 Extracted values");
+                foreach (var value in extractedValues.Take(10))
+                {
+                    builder.AddItem(value);
+                }
+                if (extractedValues.Count > 10)
+                {
+                    builder.AddItem($"... and {extractedValues.Count - 10} more");
+                }
+                builder.EndNested();
+                
+                builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("ruleName", rule.Name)
+                    .WithTechnicalMetadata("fieldName", rule.FieldName)
+                    .WithTechnicalMetadata("selectorType", rule.SelectorType.ToString())
+                    .WithTechnicalMetadata("selector", rule.Selector)
+                    .WithTechnicalMetadata("extractedValues", extractedValues.Take(10).ToArray())
+                    .WithTechnicalMetadata("totalCount", extractedValues.Count);
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Info,
                     $"CUSTOM_DATA_EXTRACTED_{rule.Name.ToUpperInvariant()}",
                     $"Extracted {extractedValues.Count} value(s) for '{rule.Name}'",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        ruleName = rule.Name,
-                        fieldName = rule.FieldName,
-                        selectorType = rule.SelectorType.ToString(),
-                        selector = rule.Selector,
-                        extractedValues = extractedValues.Take(10).ToArray(), // Limit to first 10
-                        totalCount = extractedValues.Count
-                    });
+                    builder.Build());
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to apply extraction rule '{RuleName}' for {Url}", rule.Name, ctx.Url);
             
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Rule: {rule.Name}")
+                .AddItem($"Error: {ex.Message}")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Check your selector syntax")
+                    .AddItem("Verify the pattern is valid")
+                    .AddItem("Test selector on sample HTML")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("ruleName", rule.Name)
+                .WithTechnicalMetadata("error", ex.Message)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "EXTRACTION_RULE_ERROR",
                 $"Failed to apply extraction rule '{rule.Name}': {ex.Message}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    ruleName = rule.Name,
-                    error = ex.Message
-                });
+                details);
         }
     }
 

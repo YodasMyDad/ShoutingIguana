@@ -15,15 +15,17 @@ using ShoutingIguana.Services;
 
 namespace ShoutingIguana.ViewModels;
 
-public partial class ExtensionsViewModel : ObservableObject, IDisposable
+public partial class PluginManagementViewModel : ObservableObject, IDisposable
 {
-    private readonly ILogger<ExtensionsViewModel> _logger;
+    private readonly ILogger<PluginManagementViewModel> _logger;
     private readonly IPluginRegistry _pluginRegistry;
     private readonly INuGetService _nuGetService;
     private readonly IPackageManagerService _packageManager;
     private readonly IToastService _toastService;
+    private readonly IPluginConfigurationService _pluginConfig;
     private CancellationTokenSource? _searchCts;
     private bool _disposed;
+    private readonly HashSet<string> _updatingPluginIds = new(); // Track which plugins are currently being updated
 
     [ObservableProperty]
     private ObservableCollection<InstalledPluginViewModel> _installedPlugins = [];
@@ -73,18 +75,20 @@ public partial class ExtensionsViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _includePrerelease;
 
-    public ExtensionsViewModel(
-        ILogger<ExtensionsViewModel> logger,
+    public PluginManagementViewModel(
+        ILogger<PluginManagementViewModel> logger,
         IPluginRegistry pluginRegistry,
         INuGetService nuGetService,
         IPackageManagerService packageManager,
-        IToastService toastService)
+        IToastService toastService,
+        IPluginConfigurationService pluginConfig)
     {
         _logger = logger;
         _pluginRegistry = pluginRegistry;
         _nuGetService = nuGetService;
         _packageManager = packageManager;
         _toastService = toastService;
+        _pluginConfig = pluginConfig;
 
         // Subscribe to plugin events
         _pluginRegistry.PluginLoaded += OnPluginLoaded;
@@ -137,9 +141,21 @@ public partial class ExtensionsViewModel : ObservableObject, IDisposable
         IsLoading = true;
         try
         {
+            // Unsubscribe from old view models to prevent memory leak
+            if (InstalledPlugins.Count > 0)
+            {
+                foreach (var oldPlugin in InstalledPlugins)
+                {
+                    oldPlugin.PropertyChanged -= OnPluginViewModelPropertyChanged;
+                }
+            }
+            
             var loadedPlugins = _pluginRegistry.LoadedPlugins;
             var registeredTasks = _pluginRegistry.RegisteredTasks;
             var installedPackages = await _packageManager.GetInstalledPluginsAsync();
+            
+            // Batch fetch all plugin states for better performance
+            var pluginStates = await _pluginConfig.GetAllPluginStatesAsync();
 
             var viewModels = new List<InstalledPluginViewModel>();
 
@@ -147,18 +163,27 @@ public partial class ExtensionsViewModel : ObservableObject, IDisposable
             {
                 var packageInfo = installedPackages.FirstOrDefault(p =>
                     p.PluginId.Equals(plugin.Id, StringComparison.OrdinalIgnoreCase));
+                
+                // Check if plugin is enabled from batch result (default to enabled if not in config)
+                var isEnabled = !pluginStates.TryGetValue(plugin.Id, out var enabled) || enabled;
 
-                viewModels.Add(new InstalledPluginViewModel
+                var viewModel = new InstalledPluginViewModel
                 {
                     PluginId = plugin.Id,
                     Name = plugin.Name,
                     Version = plugin.Version.ToString(),
                     Description = plugin.Description,
-                    Status = "Loaded",
+                    Status = isEnabled ? "Loaded" : "Disabled",
                     TaskCount = registeredTasks.Count(t => GetPluginForTask(t) == plugin),
                     PackageId = packageInfo?.PackageId ?? "built-in",
-                    IsBuiltIn = packageInfo == null
-                });
+                    IsBuiltIn = packageInfo == null,
+                    IsEnabled = isEnabled
+                };
+                
+                // Subscribe to property changes for enable/disable toggle
+                viewModel.PropertyChanged += OnPluginViewModelPropertyChanged;
+                
+                viewModels.Add(viewModel);
             }
 
             InstalledPlugins = new ObservableCollection<InstalledPluginViewModel>(viewModels);
@@ -487,6 +512,65 @@ public partial class ExtensionsViewModel : ObservableObject, IDisposable
             await LoadInstalledPluginsAsync();
         });
     }
+    
+    private async void OnPluginViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(InstalledPluginViewModel.IsEnabled) && sender is InstalledPluginViewModel viewModel)
+        {
+            // Guard against re-entry for the same plugin (prevents infinite loop when reverting changes)
+            lock (_updatingPluginIds)
+            {
+                if (_updatingPluginIds.Contains(viewModel.PluginId))
+                {
+                    return;
+                }
+                _updatingPluginIds.Add(viewModel.PluginId);
+            }
+            
+            try
+            {
+                _logger.LogInformation("Plugin {PluginId} enabled state changed to {IsEnabled}", viewModel.PluginId, viewModel.IsEnabled);
+                
+                // Update the plugin configuration
+                await _pluginConfig.SetPluginEnabledAsync(viewModel.PluginId, viewModel.IsEnabled);
+                
+                // Update the status on UI thread
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    viewModel.Status = viewModel.IsEnabled ? "Loaded" : "Disabled";
+                });
+                
+                // Show toast notification
+                var message = viewModel.IsEnabled 
+                    ? $"{viewModel.Name} has been enabled" 
+                    : $"{viewModel.Name} has been disabled";
+                _toastService.ShowInfo("Plugin Settings Updated", message);
+                
+                _logger.LogInformation("Plugin {PluginId} successfully {State}", 
+                    viewModel.PluginId, 
+                    viewModel.IsEnabled ? "enabled" : "disabled");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update plugin enabled state for {PluginId}", viewModel.PluginId);
+                _toastService.ShowError("Error", $"Failed to update plugin state: {ex.Message}");
+                
+                // Revert the change on UI thread
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    viewModel.IsEnabled = !viewModel.IsEnabled;
+                });
+            }
+            finally
+            {
+                // Remove from tracking set
+                lock (_updatingPluginIds)
+                {
+                    _updatingPluginIds.Remove(viewModel.PluginId);
+                }
+            }
+        }
+    }
 
     public void Dispose()
     {
@@ -495,6 +579,12 @@ public partial class ExtensionsViewModel : ObservableObject, IDisposable
         // Unsubscribe from events to prevent memory leak
         _pluginRegistry.PluginLoaded -= OnPluginLoaded;
         _pluginRegistry.PluginUnloaded -= OnPluginUnloaded;
+        
+        // Unsubscribe from plugin view model property changes
+        foreach (var plugin in InstalledPlugins)
+        {
+            plugin.PropertyChanged -= OnPluginViewModelPropertyChanged;
+        }
 
         // Cancel and dispose search token
         _searchCts?.Cancel();
@@ -532,6 +622,9 @@ public partial class InstalledPluginViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _hasUpdate;
+    
+    [ObservableProperty]
+    private bool _isEnabled = true;
 }
 
 public partial class BrowsePluginViewModel : ObservableObject

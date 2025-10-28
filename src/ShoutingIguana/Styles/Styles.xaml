@@ -74,6 +74,7 @@
          SPACING SYSTEM (4px base unit)
          ======================================== -->
     
+    <Thickness x:Key="SpacingXxs">2</Thickness>
     <Thickness x:Key="SpacingXs">4</Thickness>
     <Thickness x:Key="SpacingS">8</Thickness>
     <Thickness x:Key="SpacingM">16</Thickness>
@@ -81,6 +82,7 @@
     <Thickness x:Key="SpacingXl">32</Thickness>
     <Thickness x:Key="SpacingXxl">48</Thickness>
     
+    <sys:Double x:Key="SpacingXxsValue">2</sys:Double>
     <sys:Double x:Key="SpacingXsValue">4</sys:Double>
     <sys:Double x:Key="SpacingSValue">8</sys:Double>
     <sys:Double x:Key="SpacingMValue">16</sys:Double>
@@ -1004,6 +1006,11 @@
         <Setter Property="Margin" Value="0,0,0,12"/>
     </Style>
     
+    <!-- Compact Form Field Label (for dialogs with limited height) -->
+    <Style x:Key="CompactFormFieldLabel" TargetType="TextBlock" BasedOn="{StaticResource FormFieldLabel}">
+        <Setter Property="Margin" Value="0,0,0,6"/>
+    </Style>
+    
     <!-- ========================================
          ENHANCED COMBOBOX STYLE
          ======================================== -->
@@ -1246,7 +1253,6 @@
         <Setter Property="HorizontalContentAlignment" Value="Left"/>
         <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
         <Setter Property="KeyboardNavigation.TabNavigation" Value="Local"/>
-        <Setter Property="PasswordChar" Value="●"/>
         <Setter Property="PasswordChar" Value="●"/>
         <Setter Property="Template">
             <Setter.Value>

@@ -8,19 +8,34 @@ namespace ShoutingIguana.Core.Services;
 public interface IPluginRegistry : IDisposable
 {
     /// <summary>
-    /// All loaded plugins.
+    /// All loaded plugins (includes both enabled and disabled plugins).
     /// </summary>
     IReadOnlyList<IPlugin> LoadedPlugins { get; }
     
     /// <summary>
-    /// All registered URL tasks from plugins.
+    /// Only enabled plugins (filtered by plugin configuration).
+    /// </summary>
+    IReadOnlyList<IPlugin> EnabledPlugins { get; }
+    
+    /// <summary>
+    /// All registered URL tasks from plugins (includes tasks from disabled plugins).
     /// </summary>
     IReadOnlyList<IUrlTask> RegisteredTasks { get; }
     
     /// <summary>
-    /// All registered export providers from plugins.
+    /// Only tasks from enabled plugins.
+    /// </summary>
+    IReadOnlyList<IUrlTask> EnabledTasks { get; }
+    
+    /// <summary>
+    /// All registered export providers from plugins (includes providers from disabled plugins).
     /// </summary>
     IReadOnlyList<IExportProvider> RegisteredExporters { get; }
+    
+    /// <summary>
+    /// Only export providers from enabled plugins.
+    /// </summary>
+    IReadOnlyList<IExportProvider> EnabledExporters { get; }
     
     /// <summary>
     /// Discover and load plugins from the plugins directory.

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Text.Json;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -33,6 +34,15 @@ public partial class FindingTabViewModel : ObservableObject
 
     [ObservableProperty]
     private Finding? _selectedFinding;
+    
+    [ObservableProperty]
+    private FindingDetails? _selectedFindingDetails;
+    
+    [ObservableProperty]
+    private bool _hasTechnicalMetadata;
+    
+    [ObservableProperty]
+    private string _technicalMetadataJson = string.Empty;
 
     [ObservableProperty]
     private Severity? _selectedSeverity;
@@ -68,12 +78,52 @@ public partial class FindingTabViewModel : ObservableObject
 
     partial void OnSelectedSeverityChanged(Severity? value)
     {
+        _ = value; // Suppress unused warning - required by partial method signature
         ApplyFilters();
     }
 
     partial void OnSearchTextChanged(string value)
     {
+        _ = value; // Suppress unused warning - required by partial method signature
         ApplyFilters();
+    }
+    
+    partial void OnSelectedFindingChanged(Finding? value)
+    {
+        if (value != null)
+        {
+            // Parse the FindingDetails from the JSON
+            SelectedFindingDetails = value.GetDetails();
+            
+            // Check if there's technical metadata
+            HasTechnicalMetadata = SelectedFindingDetails?.TechnicalMetadata != null && 
+                                   SelectedFindingDetails.TechnicalMetadata.Count > 0;
+            
+            // Format technical metadata JSON for display
+            if (HasTechnicalMetadata && SelectedFindingDetails?.TechnicalMetadata != null)
+            {
+                try
+                {
+                    TechnicalMetadataJson = JsonSerializer.Serialize(
+                        SelectedFindingDetails.TechnicalMetadata,
+                        new JsonSerializerOptions { WriteIndented = true });
+                }
+                catch
+                {
+                    TechnicalMetadataJson = "Error formatting technical metadata";
+                }
+            }
+            else
+            {
+                TechnicalMetadataJson = string.Empty;
+            }
+        }
+        else
+        {
+            SelectedFindingDetails = null;
+            HasTechnicalMetadata = false;
+            TechnicalMetadataJson = string.Empty;
+        }
     }
 
     private void ApplyFilters()
@@ -92,7 +142,7 @@ public partial class FindingTabViewModel : ObservableObject
             filtered = filtered.Where(f =>
                 f.Message.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
                 f.Code.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                (f.Url?.Address?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false));
+                f.Url.Address.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
         }
 
         FilteredFindings = new ObservableCollection<Finding>(filtered.OrderByDescending(f => f.Severity).ThenBy(f => f.Code).ThenByDescending(f => f.CreatedUtc));
@@ -112,7 +162,7 @@ public partial class FindingTabViewModel : ObservableObject
     [RelayCommand]
     private void CopyUrl()
     {
-        if (SelectedFinding?.Url?.Address != null)
+        if (SelectedFinding?.Url.Address != null)
         {
             Clipboard.SetText(SelectedFinding.Url.Address);
         }
@@ -130,7 +180,7 @@ public partial class FindingTabViewModel : ObservableObject
     [RelayCommand]
     private void OpenInBrowser()
     {
-        if (SelectedFinding?.Url?.Address != null)
+        if (SelectedFinding?.Url.Address != null)
         {
             try
             {

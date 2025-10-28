@@ -7,7 +7,7 @@ using ShoutingIguana.ViewModels;
 
 namespace ShoutingIguana.Views;
 
-public partial class SettingsDialog : Window
+public partial class SettingsDialog
 {
     public SettingsDialog(IServiceProvider serviceProvider)
     {
@@ -16,11 +16,10 @@ public partial class SettingsDialog : Window
         // Create ViewModel with this window instance
         var logger = serviceProvider.GetRequiredService<ILogger<SettingsViewModel>>();
         var appSettings = serviceProvider.GetRequiredService<IAppSettingsService>();
-        var pluginRegistry = serviceProvider.GetRequiredService<IPluginRegistry>();
         var proxyTestService = serviceProvider.GetRequiredService<IProxyTestService>();
         var feedConfigService = serviceProvider.GetRequiredService<ShoutingIguana.Core.Services.NuGet.IFeedConfigurationService>();
         
-        DataContext = new SettingsViewModel(logger, appSettings, pluginRegistry, proxyTestService, feedConfigService, serviceProvider, this);
+        DataContext = new SettingsViewModel(logger, appSettings, proxyTestService, feedConfigService, serviceProvider, this);
         
         // Load initial proxy password into PasswordBox
         if (DataContext is SettingsViewModel viewModel)

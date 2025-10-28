@@ -10,7 +10,7 @@
               Visibility="{Binding DataContext.IsInitializing, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}"
               KeyboardNavigation.TabNavigation="None"
               Focusable="False">
-            <Border Padding="{StaticResource SpacingXxl}" 
+            <Border Padding="{StaticResource SpacingXl}" 
                     MaxWidth="450"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
@@ -81,7 +81,7 @@
               VerticalAlignment="Center"
               KeyboardNavigation.TabNavigation="Local">
             
-            <Border Padding="{StaticResource SpacingXxl}" 
+            <Border Padding="{StaticResource SpacingXl}" 
                     Margin="{StaticResource SpacingM}" 
                     MaxWidth="500"
                     Background="{StaticResource SurfaceBrush}"
@@ -192,9 +192,9 @@
                       Padding="{StaticResource SpacingL}"
                       KeyboardNavigation.TabNavigation="Local"
                       Focusable="False">
-            <Border Padding="48" 
+            <Border Padding="32,40" 
                     Margin="{StaticResource SpacingM}"
-                    MaxWidth="950"
+                    MaxWidth="850"
                     HorizontalAlignment="Center"
                     Background="{StaticResource SurfaceBrush}"
                     CornerRadius="12"
@@ -231,7 +231,7 @@
                     <!-- Basic Information Section -->
                     <Border Background="{StaticResource SurfaceAltBrush}"
                             CornerRadius="8"
-                            Padding="24"
+                            Padding="20"
                             Margin="0,0,0,24">
                         <StackPanel>
                             <TextBlock Text="Basic Information" 
@@ -284,7 +284,7 @@
                     <!-- Crawl Configuration Section -->
                     <Border Background="{StaticResource SurfaceAltBrush}"
                             CornerRadius="8"
-                            Padding="24"
+                            Padding="20"
                             Margin="0,0,0,24">
                         <StackPanel>
                             <TextBlock Text="Crawl Configuration"
@@ -447,8 +447,8 @@
                                     ToolTip="Save changes to project settings"/>
                             <Button Command="{Binding StartCrawlCommand}"
                                     Style="{StaticResource PrimaryButton}"
-                                    Height="56"
-                                    Padding="32,12"
+                                    Height="52"
+                                    Padding="28,12"
                                     TabIndex="9"
                                     IsDefault="True"
                                     AutomationProperties.Name="Start Crawl"

@@ -2,9 +2,9 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Custom Extraction Rules"
-        Height="650"
+        Height="600"
         Width="850"
-        MinHeight="550"
+        MinHeight="500"
         MinWidth="700"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource BackgroundBrush}"
@@ -26,7 +26,7 @@
                 Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderLightBrush}"
                 BorderThickness="0,0,0,1"
-                Padding="32,24">
+                Padding="24,20">
             <StackPanel Orientation="Horizontal">
                 <Border Background="{StaticResource PrimaryBrush}"
                         Width="44" Height="44"
@@ -51,7 +51,7 @@
         </Border>
 
         <!-- Main Content -->
-        <Grid Grid.Row="1" Margin="{StaticResource SpacingL}">
+        <Grid Grid.Row="1" Margin="{StaticResource SpacingM}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="16"/>
@@ -311,7 +311,7 @@
                 Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderLightBrush}"
                 BorderThickness="0,1,0,0"
-                Padding="32,20">
+                Padding="24,16">
             <Button Content="Close"
                     Command="{Binding CloseCommand}"
                     Style="{StaticResource PrimaryButton}"

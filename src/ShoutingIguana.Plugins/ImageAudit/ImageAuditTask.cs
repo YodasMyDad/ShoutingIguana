@@ -1,6 +1,7 @@
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.Plugins.Shared;
 using System.Text.RegularExpressions;
 
 namespace ShoutingIguana.Plugins.ImageAudit;
@@ -28,7 +29,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         public Severity Severity { get; set; }
         public string Code { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
-        public object? Data { get; set; }
+        public FindingDetails? Data { get; set; }
         public int OccurrenceCount { get; set; } = 1;
     }
 
@@ -121,12 +122,23 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
 
         if (string.IsNullOrEmpty(src))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("Image element has no src attribute")
+                .AddItem("❌ Image will not display")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Add a valid src attribute to the img tag")
+                    .AddItem("Or remove the invalid img element")
+                .EndNested()
+                .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                .WithTechnicalMetadata("outerHtml", imgNode.OuterHtml.Length > 200 ? imgNode.OuterHtml.Substring(0, 200) : imgNode.OuterHtml)
+                .Build();
+            
             TrackFinding(findingsMap,
                 "missing_src",
                 Severity.Error,
                 "IMAGE_MISSING_SRC",
                 "Image element has no src attribute",
-                new { pageUrl = ctx.Url.ToString(), outerHtml = imgNode.OuterHtml.Length > 200 ? imgNode.OuterHtml.Substring(0, 200) : imgNode.OuterHtml });
+                details);
             return;
         }
 
@@ -158,46 +170,58 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
             if (height.GetValueOrDefault(0) == 0 || width.GetValueOrDefault(0) == 0 || 
                 (width.GetValueOrDefault(100) * height.GetValueOrDefault(100)) > 10000)
             {
-                // Instance-level: dedupe by imageUrl + hasWidth + hasHeight
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Image: {absoluteSrc}")
+                    .AddItem($"Width attribute: {(width.HasValue ? width.Value.ToString() : "missing")}")
+                    .AddItem($"Height attribute: {(height.HasValue ? height.Value.ToString() : "missing")}")
+                    .BeginNested("⚠️ Impact")
+                        .AddItem("Missing dimensions cause Cumulative Layout Shift (CLS)")
+                        .AddItem("Page content jumps when images load")
+                        .AddItem("Hurts Core Web Vitals score")
+                    .EndNested()
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Add width and height attributes to img tag")
+                        .AddItem("Set dimensions even if using CSS (helps browser reserve space)")
+                    .EndNested()
+                    .WithTechnicalMetadata("imageUrl", absoluteSrc)
+                    .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                    .WithTechnicalMetadata("hasWidth", width.HasValue)
+                    .WithTechnicalMetadata("hasHeight", height.HasValue)
+                    .WithTechnicalMetadata("altText", alt)
+                    .Build();
+                
                 var key = $"{absoluteSrc}|IMAGE_NO_DIMENSIONS|{width.HasValue}|{height.HasValue}";
-                TrackFinding(findingsMap,
-                    key,
-                    Severity.Warning,
-                    "IMAGE_NO_DIMENSIONS",
+                TrackFinding(findingsMap, key, Severity.Warning, "IMAGE_NO_DIMENSIONS",
                     $"Image missing width/height attributes (causes Cumulative Layout Shift): {absoluteSrc}",
-                    new
-                    {
-                        imageUrl = absoluteSrc,
-                        pageUrl = ctx.Url.ToString(),
-                        hasWidth = width.HasValue,
-                        hasHeight = height.HasValue,
-                        altText = alt
-                    });
+                    details);
             }
         }
 
         // Lazy loading check
         if (!loading.Equals("lazy", StringComparison.OrdinalIgnoreCase))
         {
-            // Only recommend lazy loading for images that are likely below the fold
-            // We'll assume images without dimensions or large images should be lazy-loaded
             if ((width.GetValueOrDefault(0) * height.GetValueOrDefault(0)) > 50000 || 
                 (!width.HasValue && !height.HasValue))
             {
-                // Instance-level: dedupe by imageUrl
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Image: {absoluteSrc}")
+                    .AddItem($"Dimensions: {width ?? 0} × {height ?? 0}")
+                    .AddItem("⚡ No lazy loading attribute")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Add loading=\"lazy\" attribute")
+                        .AddItem("Defers loading of below-fold images")
+                        .AddItem("Improves initial page load speed")
+                    .EndNested()
+                    .WithTechnicalMetadata("imageUrl", absoluteSrc)
+                    .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                    .WithTechnicalMetadata("width", width)
+                    .WithTechnicalMetadata("height", height)
+                    .Build();
+                
                 var key = $"{absoluteSrc}|IMAGE_NO_LAZY_LOADING";
-                TrackFinding(findingsMap,
-                    key,
-                    Severity.Info,
-                    "IMAGE_NO_LAZY_LOADING",
+                TrackFinding(findingsMap, key, Severity.Info, "IMAGE_NO_LAZY_LOADING",
                     $"Large image not lazy-loaded (causes slow page load): {absoluteSrc}",
-                    new
-                    {
-                        imageUrl = absoluteSrc,
-                        pageUrl = ctx.Url.ToString(),
-                        width,
-                        height
-                    });
+                    details);
             }
         }
 
@@ -206,59 +230,73 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         {
             if (width.HasValue && width.Value > 400)
             {
-                // Instance-level: dedupe by imageUrl
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Image: {absoluteSrc}")
+                    .AddItem($"Width: {width}px")
+                    .AddItem("📱 No srcset for responsive images")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Use srcset to serve different sizes for different devices")
+                        .AddItem("Saves bandwidth on mobile devices")
+                        .AddItem("Example: srcset=\"image-400w.jpg 400w, image-800w.jpg 800w\"")
+                    .EndNested()
+                    .WithTechnicalMetadata("imageUrl", absoluteSrc)
+                    .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                    .WithTechnicalMetadata("width", width)
+                    .WithTechnicalMetadata("height", height)
+                    .Build();
+                
                 var key = $"{absoluteSrc}|IMAGE_MISSING_SRCSET";
-                TrackFinding(findingsMap,
-                    key,
-                    Severity.Info,
-                    "IMAGE_MISSING_SRCSET",
+                TrackFinding(findingsMap, key, Severity.Info, "IMAGE_MISSING_SRCSET",
                     $"Image lacks srcset for responsive optimization: {absoluteSrc}",
-                    new
-                    {
-                        imageUrl = absoluteSrc,
-                        pageUrl = ctx.Url.ToString(),
-                        width,
-                        height,
-                        recommendation = "Use srcset to serve different sizes for different devices"
-                    });
+                    details);
             }
         }
 
         // Format optimization check
         if (isLegacyFormat && !isExternal)
         {
-            // Source-level: dedupe by imageUrl only
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Image: {absoluteSrc}")
+                .AddItem($"Format: {extension.ToUpperInvariant()}")
+                .BeginNested("💡 Optimization")
+                    .AddItem("Consider converting to WebP or AVIF format")
+                    .AddItem("WebP: 25-35% better compression than JPEG/PNG")
+                    .AddItem("AVIF: Even better compression (but check browser support)")
+                .EndNested()
+                .WithTechnicalMetadata("imageUrl", absoluteSrc)
+                .WithTechnicalMetadata("format", extension)
+                .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                .Build();
+            
             var key = $"{absoluteSrc}|IMAGE_LEGACY_FORMAT";
-            TrackFinding(findingsMap,
-                key,
-                Severity.Info,
-                "IMAGE_LEGACY_FORMAT",
+            TrackFinding(findingsMap, key, Severity.Info, "IMAGE_LEGACY_FORMAT",
                 $"Image uses legacy format (consider WebP/AVIF for better compression): {absoluteSrc}",
-                new
-                {
-                    imageUrl = absoluteSrc,
-                    format = extension,
-                    pageUrl = ctx.Url.ToString(),
-                    recommendation = "WebP offers 25-35% better compression than JPEG/PNG"
-                });
+                details);
         }
 
         // Hotlinking check
         if (isExternal)
         {
-            // Source-level: dedupe by imageUrl only
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Image: {absoluteSrc}")
+                .AddItem("🌐 External image (hotlinked)")
+                .BeginNested("⚠️ Risks")
+                    .AddItem("External images may break if source changes")
+                    .AddItem("No control over availability or performance")
+                    .AddItem("May violate licensing terms")
+                .EndNested()
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Host images on your own domain")
+                    .AddItem("Or use a CDN you control")
+                .EndNested()
+                .WithTechnicalMetadata("imageUrl", absoluteSrc)
+                .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                .Build();
+            
             var key = $"{absoluteSrc}|IMAGE_EXTERNAL_HOTLINK";
-            TrackFinding(findingsMap,
-                key,
-                Severity.Info,
-                "IMAGE_EXTERNAL_HOTLINK",
+            TrackFinding(findingsMap, key, Severity.Info, "IMAGE_EXTERNAL_HOTLINK",
                 $"Image hotlinked from external source: {absoluteSrc}",
-                new
-                {
-                    imageUrl = absoluteSrc,
-                    pageUrl = ctx.Url.ToString(),
-                    warning = "External images may break if source changes or removes them"
-                });
+                details);
         }
 
         // SVG with pixel dimensions
@@ -266,20 +304,24 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         {
             if (width.HasValue || height.HasValue)
             {
-                // Instance-level: dedupe by imageUrl + dimensions
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"SVG image: {absoluteSrc}")
+                    .AddItem($"Has pixel dimensions: {width} × {height}")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Remove pixel dimensions from SVG images")
+                        .AddItem("Use CSS for sizing instead")
+                        .AddItem("SVGs are vector graphics and scale infinitely")
+                    .EndNested()
+                    .WithTechnicalMetadata("imageUrl", absoluteSrc)
+                    .WithTechnicalMetadata("width", width)
+                    .WithTechnicalMetadata("height", height)
+                    .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                    .Build();
+                
                 var key = $"{absoluteSrc}|SVG_WITH_PIXEL_DIMENSIONS|{width}|{height}";
-                TrackFinding(findingsMap,
-                    key,
-                    Severity.Info,
-                    "SVG_WITH_PIXEL_DIMENSIONS",
+                TrackFinding(findingsMap, key, Severity.Info, "SVG_WITH_PIXEL_DIMENSIONS",
                     $"SVG image has pixel dimensions (should use CSS for scalability): {absoluteSrc}",
-                    new
-                    {
-                        imageUrl = absoluteSrc,
-                        width,
-                        height,
-                        pageUrl = ctx.Url.ToString()
-                    });
+                    details);
             }
         }
     }
@@ -289,119 +331,142 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         // Check for missing alt attribute
         if (string.IsNullOrWhiteSpace(alt))
         {
-            // Instance-level: dedupe by imageUrl only (all instances have same issue)
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Image: {imageUrl}")
+                .AddItem($"Dimensions: {width} × {height}")
+                .AddItem("❌ Missing alt text")
+                .BeginNested("♿ Accessibility Impact")
+                    .AddItem("Screen readers cannot describe this image")
+                    .AddItem("Required for WCAG compliance")
+                .EndNested()
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Add descriptive alt text for accessibility and SEO")
+                    .AddItem("Use alt=\"\" only for purely decorative images")
+                .EndNested()
+                .WithTechnicalMetadata("imageUrl", imageUrl)
+                .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                .WithTechnicalMetadata("width", width)
+                .WithTechnicalMetadata("height", height)
+                .Build();
+            
             var key = $"{imageUrl}|MISSING_ALT_TEXT";
-            TrackFinding(findingsMap,
-                key,
-                Severity.Warning,
-                "MISSING_ALT_TEXT",
+            TrackFinding(findingsMap, key, Severity.Warning, "MISSING_ALT_TEXT",
                 $"Image missing alt text: {imageUrl}",
-                new
-                {
-                    imageUrl,
-                    pageUrl = ctx.Url.ToString(),
-                    width,
-                    height,
-                    recommendation = "Add descriptive alt text for accessibility and SEO"
-                });
+                details);
             return;
         }
 
         // Check alt text quality
         if (alt.Length < MIN_ALT_TEXT_LENGTH && !IsLikelyDecorativeAlt(alt))
         {
-            // Instance-level: dedupe by imageUrl + actual alt text
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Image: {imageUrl}")
+                .AddItem($"Alt text: \"{alt}\" ({alt.Length} chars)")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Alt text should be descriptive (at least 5 characters)")
+                    .AddItem("Describe what the image shows or its purpose")
+                .EndNested()
+                .WithTechnicalMetadata("imageUrl", imageUrl)
+                .WithTechnicalMetadata("altText", alt)
+                .WithTechnicalMetadata("length", alt.Length)
+                .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                .Build();
+            
             var key = $"{imageUrl}|ALT_TEXT_TOO_SHORT|{alt}";
-            TrackFinding(findingsMap,
-                key,
-                Severity.Info,
-                "ALT_TEXT_TOO_SHORT",
+            TrackFinding(findingsMap, key, Severity.Info, "ALT_TEXT_TOO_SHORT",
                 $"Alt text is very short ({alt.Length} chars): \"{alt}\"",
-                new
-                {
-                    imageUrl,
-                    altText = alt,
-                    length = alt.Length,
-                    pageUrl = ctx.Url.ToString(),
-                    recommendation = "Alt text should be descriptive (at least 5 characters)"
-                });
+                details);
         }
         else if (alt.Length > MAX_ALT_TEXT_LENGTH)
         {
-            // Instance-level: dedupe by imageUrl + alt text (truncated for key)
+            var preview = alt.Length > 50 ? alt.Substring(0, 50) + "..." : alt;
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Image: {imageUrl}")
+                .AddItem($"Alt text: \"{preview}\" ({alt.Length} chars)")
+                .AddItem($"Recommended: Under {MAX_ALT_TEXT_LENGTH} characters")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Keep alt text concise and descriptive")
+                    .AddItem("Focus on the most important details")
+                .EndNested()
+                .WithTechnicalMetadata("imageUrl", imageUrl)
+                .WithTechnicalMetadata("altText", alt)
+                .WithTechnicalMetadata("length", alt.Length)
+                .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                .Build();
+            
             var altKey = alt.Length > 100 ? alt.Substring(0, 100) : alt;
             var key = $"{imageUrl}|ALT_TEXT_TOO_LONG|{altKey}";
-            TrackFinding(findingsMap,
-                key,
-                Severity.Warning,
-                "ALT_TEXT_TOO_LONG",
-                $"Alt text is too long ({alt.Length} chars, recommend <{MAX_ALT_TEXT_LENGTH}): \"{alt.Substring(0, Math.Min(alt.Length, 50))}...\"",
-                new
-                {
-                    imageUrl,
-                    altText = alt,
-                    length = alt.Length,
-                    pageUrl = ctx.Url.ToString(),
-                    recommendation = "Keep alt text concise and descriptive"
-                });
+            TrackFinding(findingsMap, key, Severity.Warning, "ALT_TEXT_TOO_LONG",
+                $"Alt text is too long ({alt.Length} chars, recommend <{MAX_ALT_TEXT_LENGTH}): \"{preview}\"",
+                details);
         }
 
         // Check for decorative images that should have empty alt
         if (IsLikelyDecorative(imageUrl, alt))
         {
-            // Instance-level: dedupe by imageUrl + alt text
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Image: {imageUrl}")
+                .AddItem($"Alt text: \"{alt}\"")
+                .AddItem("🎨 Appears to be decorative")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Use alt=\"\" for purely decorative images")
+                    .AddItem("This tells screen readers to skip the image")
+                .EndNested()
+                .WithTechnicalMetadata("imageUrl", imageUrl)
+                .WithTechnicalMetadata("altText", alt)
+                .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                .Build();
+            
             var key = $"{imageUrl}|POTENTIALLY_DECORATIVE|{alt}";
-            TrackFinding(findingsMap,
-                key,
-                Severity.Info,
-                "POTENTIALLY_DECORATIVE",
+            TrackFinding(findingsMap, key, Severity.Info, "POTENTIALLY_DECORATIVE",
                 $"Image appears decorative but has alt text (consider alt=\"\"): {imageUrl}",
-                new
-                {
-                    imageUrl,
-                    altText = alt,
-                    pageUrl = ctx.Url.ToString(),
-                    recommendation = "Use alt=\"\" for purely decorative images"
-                });
+                details);
         }
 
         // Check for redundant title attribute
         if (!string.IsNullOrWhiteSpace(title) && title.Equals(alt, StringComparison.OrdinalIgnoreCase))
         {
-            // Instance-level: dedupe by imageUrl + alt text
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Image: {imageUrl}")
+                .AddItem($"Alt = Title = \"{alt}\"")
+                .AddItem("ℹ️ Title duplicates alt text")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Remove redundant title attribute")
+                    .AddItem("Or make title provide additional context")
+                .EndNested()
+                .WithTechnicalMetadata("imageUrl", imageUrl)
+                .WithTechnicalMetadata("altText", alt)
+                .WithTechnicalMetadata("title", title)
+                .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                .Build();
+            
             var key = $"{imageUrl}|REDUNDANT_TITLE_ATTRIBUTE|{alt}";
-            TrackFinding(findingsMap,
-                key,
-                Severity.Info,
-                "REDUNDANT_TITLE_ATTRIBUTE",
+            TrackFinding(findingsMap, key, Severity.Info, "REDUNDANT_TITLE_ATTRIBUTE",
                 $"Image title attribute duplicates alt text: {imageUrl}",
-                new
-                {
-                    imageUrl,
-                    altText = alt,
-                    title,
-                    pageUrl = ctx.Url.ToString(),
-                    recommendation = "Remove redundant title attribute or make it different from alt"
-                });
+                details);
         }
 
         // Check for common bad patterns
         if (Regex.IsMatch(alt, @"^(image|picture|photo|img|graphic)(\s+of)?", RegexOptions.IgnoreCase))
         {
-            // Instance-level: dedupe by imageUrl + alt text
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Image: {imageUrl}")
+                .AddItem($"Alt text: \"{alt}\"")
+                .AddItem("⚠️ Starts with redundant word (image/picture/photo)")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Screen readers already announce it's an image")
+                    .AddItem("Start with the actual description")
+                    .AddItem($"Example: Instead of \"Image of sunset\", use \"Sunset over ocean\"")
+                .EndNested()
+                .WithTechnicalMetadata("imageUrl", imageUrl)
+                .WithTechnicalMetadata("altText", alt)
+                .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                .Build();
+            
             var key = $"{imageUrl}|ALT_TEXT_BAD_PATTERN|{alt}";
-            TrackFinding(findingsMap,
-                key,
-                Severity.Info,
-                "ALT_TEXT_BAD_PATTERN",
+            TrackFinding(findingsMap, key, Severity.Info, "ALT_TEXT_BAD_PATTERN",
                 $"Alt text starts with redundant word (image/picture/photo): \"{alt}\"",
-                new
-                {
-                    imageUrl,
-                    altText = alt,
-                    pageUrl = ctx.Url.ToString(),
-                    recommendation = "Screen readers already announce it's an image - start with the description"
-                });
+                details);
         }
     }
 
@@ -415,20 +480,28 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
 
             if (sizeKB > MAX_DATA_URI_SIZE_KB)
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Data URI size: {sizeKB}KB")
+                    .AddItem($"Recommended: Under {MAX_DATA_URI_SIZE_KB}KB")
+                    .BeginNested("⚠️ Impact")
+                        .AddItem("Large data URIs bloat HTML size")
+                        .AddItem("Cannot be cached separately")
+                        .AddItem("Increases page load time")
+                    .EndNested()
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Use external image files instead")
+                        .AddItem("Enable browser caching for better performance")
+                    .EndNested()
+                    .WithTechnicalMetadata("sizeKB", sizeKB)
+                    .WithTechnicalMetadata("pageUrl", ctx.Url.ToString())
+                    .Build();
+                
                 // Use hash of data URI for deduplication (data URI itself is too long for key)
                 var dataUriHash = dataUri.GetHashCode().ToString();
                 var key = $"datauri_{dataUriHash}|LARGE_DATA_URI";
-                TrackFinding(findingsMap,
-                    key,
-                    Severity.Warning,
-                    "LARGE_DATA_URI",
+                TrackFinding(findingsMap, key, Severity.Warning, "LARGE_DATA_URI",
                     $"Large data URI embedded in HTML ({sizeKB}KB, recommend <{MAX_DATA_URI_SIZE_KB}KB)",
-                    new
-                    {
-                        sizeKB,
-                        pageUrl = ctx.Url.ToString(),
-                        recommendation = "Large data URIs bloat HTML size and prevent caching - use external image files"
-                    });
+                    details);
             }
         }
         catch
@@ -442,7 +515,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
     /// <summary>
     /// Track a finding in the deduplication map. If the same finding already exists, increment its occurrence count.
     /// </summary>
-    private void TrackFinding(Dictionary<string, FindingTracker> findingsMap, string key, Severity severity, string code, string message, object? data)
+    private void TrackFinding(Dictionary<string, FindingTracker> findingsMap, string key, Severity severity, string code, string message, FindingDetails? data)
     {
         if (findingsMap.TryGetValue(key, out var existing))
         {
@@ -479,29 +552,13 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
                 message += $" (occurs {tracker.OccurrenceCount} times on this page)";
             }
 
-            // Add occurrence count to the data object if there are duplicates
-            object? dataWithCount = tracker.Data;
-            if (tracker.Data != null && tracker.OccurrenceCount > 1)
+            // Add occurrence count to finding details if there are duplicates
+            var details = tracker.Data;
+            if (details != null && tracker.OccurrenceCount > 1)
             {
-                // Convert data object to dictionary and add occurrenceCount
-                var dataDict = new Dictionary<string, object?>();
-                
-                // Use reflection to copy properties from the original data object (works for anonymous types)
-                var dataType = tracker.Data.GetType();
-                foreach (var prop in dataType.GetProperties())
-                {
-                    try
-                    {
-                        dataDict[prop.Name] = prop.GetValue(tracker.Data);
-                    }
-                    catch
-                    {
-                        // Skip properties that can't be read
-                    }
-                }
-                
-                dataDict["occurrenceCount"] = tracker.OccurrenceCount;
-                dataWithCount = dataDict;
+                // Add occurrence count to technical metadata
+                details.TechnicalMetadata ??= new Dictionary<string, object?>();
+                details.TechnicalMetadata["occurrenceCount"] = tracker.OccurrenceCount;
             }
 
             await ctx.Findings.ReportAsync(
@@ -509,7 +566,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
                 tracker.Severity,
                 tracker.Code,
                 message,
-                dataWithCount);
+                details);
         }
     }
 

@@ -2,6 +2,7 @@ using HtmlAgilityPack;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.Plugins.Shared;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
@@ -225,57 +226,124 @@ public class DuplicateContentTask(ILogger logger, IServiceProvider serviceProvid
                 // If we have temporary redirects, report them separately
                 if (redirectInfo.TemporaryRedirects.Any())
                 {
+                    var builder = FindingDetailsBuilder.Create()
+                        .AddItem("Duplicate content with temporary redirects");
+                    
+                    builder.BeginNested("📄 Temporary redirect URLs");
+                    foreach (var url in redirectInfo.TemporaryRedirects.Take(5))
+                    {
+                        builder.AddItem(url);
+                    }
+                    builder.EndNested();
+                    
+                    builder.BeginNested("⚠️ Issue")
+                        .AddItem("Temporary redirects (302/307) don't consolidate content")
+                        .AddItem("Search engines may index both versions")
+                    .EndNested();
+                    
+                    builder.BeginNested("💡 Recommendations")
+                        .AddItem("Change to 301 (Permanent) redirects")
+                        .AddItem("Properly consolidates duplicate content for SEO")
+                    .EndNested();
+                    
+                    builder.WithTechnicalMetadata("url", currentUrl)
+                        .WithTechnicalMetadata("temporaryRedirects", redirectInfo.TemporaryRedirects.ToArray())
+                        .WithTechnicalMetadata("contentHash", contentHash);
+                    
                     await ctx.Findings.ReportAsync(
                         Key,
                         Severity.Warning,
                         "DUPLICATE_CONTENT_TEMPORARY_REDIRECT",
                         $"Page has duplicate content served via temporary redirect(s) which can cause duplicate content issues",
-                        new
-                        {
-                            url = currentUrl,
-                            temporaryRedirects = redirectInfo.TemporaryRedirects.ToArray(),
-                            contentHash,
-                            issue = "Temporary redirects (302/307) don't consolidate duplicate content for search engines",
-                            recommendation = "Change to 301 (Permanent) redirects to properly consolidate duplicate content"
-                        });
+                        builder.Build());
                 }
                 
                 // Only report true duplicates (no redirect relationship)
                 if (nonRedirectDuplicates.Length > 0)
                 {
+                    var preview = cleanedContent.Length > 200 ? cleanedContent[..200] + "..." : cleanedContent;
+                    var builder = FindingDetailsBuilder.Create()
+                        .AddItem($"Found {nonRedirectDuplicates.Length} pages with exact duplicate content");
+                    
+                    builder.BeginNested("📄 Duplicate pages");
+                    foreach (var url in nonRedirectDuplicates.Take(5))
+                    {
+                        builder.AddItem(url);
+                    }
+                    if (nonRedirectDuplicates.Length > 5)
+                    {
+                        builder.AddItem($"... and {nonRedirectDuplicates.Length - 5} more");
+                    }
+                    builder.EndNested();
+                    
+                    builder.BeginNested("⚠️ Duplicate Content Issue")
+                        .AddItem("Search engines may not know which version to rank")
+                        .AddItem("May split ranking signals between pages")
+                        .AddItem("Can lead to lower rankings for all versions")
+                    .EndNested();
+                    
+                    builder.BeginNested("💡 Recommendations")
+                        .AddItem("Make each page's content unique")
+                        .AddItem("Or consolidate pages with 301 redirects")
+                        .AddItem("Or use canonical tags to indicate preferred version")
+                    .EndNested();
+                    
+                    builder.WithTechnicalMetadata("url", currentUrl)
+                        .WithTechnicalMetadata("duplicateCount", nonRedirectDuplicates.Length)
+                        .WithTechnicalMetadata("otherUrls", nonRedirectDuplicates)
+                        .WithTechnicalMetadata("contentHash", contentHash)
+                        .WithTechnicalMetadata("contentPreview", preview);
+                    
                     await ctx.Findings.ReportAsync(
                         Key,
                         Severity.Error,
                         "EXACT_DUPLICATE",
                         $"Page content is an exact duplicate of {nonRedirectDuplicates.Length} other page(s)",
-                        new
-                        {
-                            url = currentUrl,
-                            duplicateCount = nonRedirectDuplicates.Length,
-                            otherUrls = nonRedirectDuplicates,
-                            contentHash,
-                            contentPreview = cleanedContent.Length > 200 ? cleanedContent[..200] + "..." : cleanedContent,
-                            recommendation = "Each page should have unique content to avoid duplicate content issues"
-                        });
+                        builder.Build());
                 }
             }
             else
             {
                 // No redirects found, report as regular duplicate
+                var preview = cleanedContent.Length > 200 ? cleanedContent[..200] + "..." : cleanedContent;
+                var builder = FindingDetailsBuilder.Create()
+                    .AddItem($"Found {urlsCopy.Count - 1} pages with exact duplicate content");
+                
+                builder.BeginNested("📄 Duplicate pages");
+                foreach (var url in otherUrls.Take(5))
+                {
+                    builder.AddItem(url);
+                }
+                if (otherUrls.Count > 5)
+                {
+                    builder.AddItem($"... and {otherUrls.Count - 5} more");
+                }
+                builder.EndNested();
+                
+                builder.BeginNested("⚠️ Duplicate Content Issue")
+                    .AddItem("Search engines may not know which version to rank")
+                    .AddItem("May split ranking signals between pages")
+                    .AddItem("Can lead to lower rankings for all versions")
+                .EndNested();
+                
+                builder.BeginNested("💡 Recommendations")
+                    .AddItem("Make each page's content unique")
+                    .AddItem("Or consolidate pages with 301 redirects")
+                    .AddItem("Or use canonical tags to indicate preferred version")
+                .EndNested();
+                
+                builder.WithTechnicalMetadata("url", currentUrl)
+                    .WithTechnicalMetadata("duplicateCount", urlsCopy.Count - 1)
+                    .WithTechnicalMetadata("otherUrls", otherUrls.ToArray())
+                    .WithTechnicalMetadata("contentHash", contentHash)
+                    .WithTechnicalMetadata("contentPreview", preview);
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Error,
                     "EXACT_DUPLICATE",
                     $"Page content is an exact duplicate of {urlsCopy.Count - 1} other page(s)",
-                    new
-                    {
-                        url = currentUrl,
-                        duplicateCount = urlsCopy.Count - 1,
-                        otherUrls = otherUrls.ToArray(),
-                        contentHash,
-                        contentPreview = cleanedContent.Length > 200 ? cleanedContent[..200] + "..." : cleanedContent,
-                        recommendation = "Each page should have unique content to avoid duplicate content issues"
-                    });
+                    builder.Build());
             }
         }
     }
@@ -327,24 +395,39 @@ public class DuplicateContentTask(ILogger logger, IServiceProvider serviceProvid
                 .Take(5)
                 .ToArray();
 
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"Found {nearDuplicates.Count} pages with very similar content")
+                .AddItem("Threshold: >95% similar (Hamming distance < 3)");
+            
+            builder.BeginNested("📄 Similar pages");
+            foreach (var dup in topDuplicates)
+            {
+                builder.AddItem($"{dup.Url} ({dup.Similarity:F1}% similar)");
+            }
+            builder.EndNested();
+            
+            builder.BeginNested("⚠️ Near-Duplicate Impact")
+                .AddItem("Very similar content can confuse search engines")
+                .AddItem("May split ranking between similar pages")
+            .EndNested();
+            
+            builder.BeginNested("💡 Recommendations")
+                .AddItem("Consider consolidating similar pages")
+                .AddItem("Or differentiate content to make each page unique")
+                .AddItem("Add unique sections, examples, or perspectives")
+            .EndNested();
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("nearDuplicateCount", nearDuplicates.Count)
+                .WithTechnicalMetadata("topDuplicates", topDuplicates.Select(d => new { url = d.Url, similarity = d.Similarity }).ToArray())
+                .WithTechnicalMetadata("simHash", simHash.ToString("X16"));
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "NEAR_DUPLICATE",
                 $"Page content is very similar to {nearDuplicates.Count} other page(s)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    nearDuplicateCount = nearDuplicates.Count,
-                    topDuplicates = topDuplicates.Select(d => new
-                    {
-                        url = d.Url,
-                        similarity = $"{d.Similarity:F1}%"
-                    }).ToArray(),
-                    simHash = simHash.ToString("X16"),
-                    threshold = "Hamming distance < 3 (>95% similar)",
-                    recommendation = "Consider consolidating similar pages or making content more unique"
-                });
+                builder.Build());
         }
     }
     
@@ -445,34 +528,41 @@ public class DuplicateContentTask(ILogger logger, IServiceProvider serviceProvid
             catch (HttpRequestException ex)
             {
                 // Unable to connect or DNS error
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Variant: {variantUrl}")
+                    .AddItem($"Canonical: {canonicalUrl}")
+                    .AddItem($"Error: {ex.Message}")
+                    .AddItem("ℹ️ This variant doesn't resolve - fine if intentional")
+                    .WithTechnicalMetadata("variantUrl", variantUrl)
+                    .WithTechnicalMetadata("canonicalUrl", canonicalUrl)
+                    .WithTechnicalMetadata("error", ex.Message)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Warning,
                     "DOMAIN_VARIANT_UNREACHABLE",
                     $"Domain variant {variantUrl} is unreachable",
-                    new
-                    {
-                        variantUrl,
-                        canonicalUrl,
-                        error = ex.Message,
-                        note = "This variant doesn't resolve - this is fine if intentional"
-                    });
+                    details);
                 return;
             }
             catch (TaskCanceledException)
             {
                 // Timeout
+                var details = FindingDetailsBuilder.WithMetadata(
+                    new Dictionary<string, object?> {
+                        ["variantUrl"] = variantUrl,
+                        ["canonicalUrl"] = canonicalUrl
+                    },
+                    $"Variant: {variantUrl}",
+                    "⏱️ Timed out - did not respond");
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Warning,
                     "DOMAIN_VARIANT_TIMEOUT",
                     $"Domain variant {variantUrl} timed out",
-                    new
-                    {
-                        variantUrl,
-                        canonicalUrl,
-                        note = "Variant did not respond within timeout period"
-                    });
+                    details);
                 return;
             }
             
@@ -493,36 +583,46 @@ public class DuplicateContentTask(ILogger logger, IServiceProvider serviceProvid
                 if (normalizedLocation == normalizedCanonical)
                 {
                     // Correct! Permanent redirect to canonical URL
+                    var details = FindingDetailsBuilder.Create()
+                        .AddItem($"Variant: {variantUrl}")
+                        .AddItem($"Redirects to: {locationHeader}")
+                        .AddItem($"Type: {(statusCode == 301 ? "301 Permanent" : "308 Permanent")}")
+                        .AddItem("✅ Correct - prevents duplicate content")
+                        .WithTechnicalMetadata("variantUrl", variantUrl)
+                        .WithTechnicalMetadata("redirectsTo", locationHeader)
+                        .WithTechnicalMetadata("statusCode", statusCode)
+                        .Build();
+                    
                     await ctx.Findings.ReportAsync(
                         Key,
                         Severity.Info,
                         "DOMAIN_VARIANT_CORRECT_REDIRECT",
                         $"✓ Domain variant correctly redirects: {variantUrl} → {locationHeader} (HTTP {statusCode})",
-                        new
-                        {
-                            variantUrl,
-                            redirectsTo = locationHeader,
-                            statusCode,
-                            redirectType = statusCode == 301 ? "301 Permanent" : "308 Permanent Redirect",
-                            status = "Correct - prevents duplicate content"
-                        });
+                        details);
                 }
                 else
                 {
                     // Redirects, but not to the canonical URL
+                    var details = FindingDetailsBuilder.Create()
+                        .AddItem($"Variant: {variantUrl}")
+                        .AddItem($"Redirects to: {locationHeader}")
+                        .AddItem($"Expected: {canonicalUrl}")
+                        .BeginNested("💡 Recommendations")
+                            .AddItem("Ensure variant redirects to the canonical URL")
+                            .AddItem("Fix redirect target")
+                        .EndNested()
+                        .WithTechnicalMetadata("variantUrl", variantUrl)
+                        .WithTechnicalMetadata("redirectsTo", locationHeader)
+                        .WithTechnicalMetadata("expectedTarget", canonicalUrl)
+                        .WithTechnicalMetadata("statusCode", statusCode)
+                        .Build();
+                    
                     await ctx.Findings.ReportAsync(
                         Key,
                         Severity.Warning,
                         "DOMAIN_VARIANT_WRONG_TARGET",
                         $"Domain variant redirects to unexpected URL: {variantUrl} → {locationHeader}",
-                        new
-                        {
-                            variantUrl,
-                            redirectsTo = locationHeader,
-                            expectedTarget = canonicalUrl,
-                            statusCode,
-                            recommendation = "Ensure variant redirects to the canonical URL"
-                        });
+                        details);
                 }
             }
             // Check if it's a temporary redirect (should be permanent)
@@ -530,53 +630,78 @@ public class DuplicateContentTask(ILogger logger, IServiceProvider serviceProvid
             {
                 var locationHeader = response.Headers.Location?.ToString();
                 
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Variant: {variantUrl}")
+                    .AddItem($"Redirects to: {locationHeader}")
+                    .AddItem($"Type: {GetRedirectTypeName(statusCode)}")
+                    .BeginNested("❌ Wrong Redirect Type")
+                        .AddItem("Temporary redirects (302/307) don't pass SEO value")
+                        .AddItem("May cause duplicate content issues")
+                    .EndNested()
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Change to 301 (Permanent) redirect")
+                        .AddItem("Consolidates domain variants properly")
+                    .EndNested()
+                    .WithTechnicalMetadata("variantUrl", variantUrl)
+                    .WithTechnicalMetadata("redirectsTo", locationHeader)
+                    .WithTechnicalMetadata("statusCode", statusCode)
+                    .WithTechnicalMetadata("redirectType", GetRedirectTypeName(statusCode))
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Error,
                     "DOMAIN_VARIANT_WRONG_REDIRECT_TYPE",
                     $"✗ Domain variant uses temporary redirect instead of 301: {variantUrl} → {locationHeader} (HTTP {statusCode})",
-                    new
-                    {
-                        variantUrl,
-                        redirectsTo = locationHeader,
-                        statusCode,
-                        redirectType = GetRedirectTypeName(statusCode),
-                        issue = "Temporary redirects (302/307) don't pass SEO value and may cause duplicate content issues",
-                        recommendation = "Change to 301 (Permanent) redirect to properly consolidate domain variants"
-                    });
+                    details);
             }
             // Check if it returns 200 OK (duplicate content!)
             else if (statusCode == 200)
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Variant: {variantUrl}")
+                    .AddItem($"Canonical: {canonicalUrl}")
+                    .AddItem("❌ DUPLICATE CONTENT DETECTED")
+                    .BeginNested("⚠️ Critical Issue")
+                        .AddItem("Same content accessible from multiple URLs")
+                        .AddItem("Search engines may split ranking signals")
+                        .AddItem("Reduces overall rankings for all variants")
+                    .EndNested()
+                    .BeginNested("💡 Recommendations")
+                        .AddItem($"Add 301 redirect from {variantUrl} to {canonicalUrl}")
+                        .AddItem("Configure server to redirect all variants")
+                        .AddItem("Test all combinations (http/https, www/non-www)")
+                    .EndNested()
+                    .WithTechnicalMetadata("variantUrl", variantUrl)
+                    .WithTechnicalMetadata("canonicalUrl", canonicalUrl)
+                    .WithTechnicalMetadata("statusCode", statusCode)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Error,
                     "DOMAIN_VARIANT_DUPLICATE_CONTENT",
                     $"✗ DUPLICATE CONTENT: Domain variant serves content without redirecting: {variantUrl}",
-                    new
-                    {
-                        variantUrl,
-                        canonicalUrl,
-                        statusCode,
-                        issue = "Same content is accessible from multiple URLs, creating duplicate content",
-                        seoImpact = "Search engines may split ranking signals between variants, reducing overall rankings",
-                        recommendation = $"Add 301 redirect from {variantUrl} to {canonicalUrl}"
-                    });
+                    details);
             }
             else
             {
                 // Other status codes (4xx, 5xx)
+                var details = FindingDetailsBuilder.WithMetadata(
+                    new Dictionary<string, object?> {
+                        ["variantUrl"] = variantUrl,
+                        ["statusCode"] = statusCode
+                    },
+                    $"Variant: {variantUrl}",
+                    $"HTTP {statusCode}",
+                    "ℹ️ Variant returns an error - ensure this is intentional");
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Warning,
                     "DOMAIN_VARIANT_ERROR",
                     $"Domain variant returns error: {variantUrl} (HTTP {statusCode})",
-                    new
-                    {
-                        variantUrl,
-                        statusCode,
-                        note = "Variant returns an error - ensure this is intentional"
-                    });
+                    details);
             }
             } // End of using block for response
         }

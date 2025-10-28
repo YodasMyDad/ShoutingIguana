@@ -11,7 +11,7 @@ using ShoutingIguana.Data;
 namespace ShoutingIguana.Data.Migrations
 {
     [DbContext(typeof(SqliteShoutingIguanaDbContext))]
-    [Migration("20251026141437_Initial")]
+    [Migration("20251027194459_Initial")]
     partial class Initial
     {
         /// <inheritdoc />

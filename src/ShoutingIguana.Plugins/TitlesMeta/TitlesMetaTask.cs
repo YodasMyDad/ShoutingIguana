@@ -2,6 +2,7 @@ using HtmlAgilityPack;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.Plugins.Shared;
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
@@ -175,41 +176,88 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
     {
         if (string.IsNullOrEmpty(title))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("Page URL: " + ctx.Url)
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Every page must have a unique, descriptive title tag")
+                    .AddItem("Add a <title> tag in the <head> section")
+                    .AddItem("Title should describe the page content and include relevant keywords")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Error,
                 "MISSING_TITLE",
                 "Page is missing a title tag",
-                new { url = ctx.Url.ToString(), recommendation = "Every page must have a unique title tag" });
+                details);
             return;
         }
 
         if (title.Length < MIN_TITLE_LENGTH)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Title: \"{title}\"")
+                .AddItem($"Length: {title.Length} characters")
+                .AddItem($"Recommended: At least {MIN_TITLE_LENGTH} characters")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Expand the title to be more descriptive")
+                    .AddItem("Include relevant keywords that describe the page content")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("title", title)
+                .WithTechnicalMetadata("length", title.Length)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "TITLE_TOO_SHORT",
                 $"Title is too short ({title.Length} chars, recommended: {MIN_TITLE_LENGTH}+)",
-                new { url = ctx.Url.ToString(), title, length = title.Length });
+                details);
         }
         else if (title.Length > MAX_TITLE_WARNING_LENGTH)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Title: \"{title}\"")
+                .AddItem($"Length: {title.Length} characters")
+                .AddItem($"Maximum: {MAX_TITLE_LENGTH} characters (recommended)")
+                .AddItem($"⚠️ Will be truncated in search results after ~{MAX_TITLE_LENGTH} characters")
+                .BeginNested("💡 Recommendations")
+                    .AddItem($"Shorten the title to under {MAX_TITLE_LENGTH} characters")
+                    .AddItem("Put the most important keywords at the beginning")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("title", title)
+                .WithTechnicalMetadata("length", title.Length)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "TITLE_TOO_LONG",
                 $"Title is too long ({title.Length} chars, will be truncated in search results)",
-                new { url = ctx.Url.ToString(), title, length = title.Length, recommendation = $"Keep titles under {MAX_TITLE_LENGTH} characters" });
+                details);
         }
         else if (title.Length > MAX_TITLE_LENGTH)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Title: \"{title}\"")
+                .AddItem($"Length: {title.Length} characters")
+                .AddItem($"Recommended: Under {MAX_TITLE_LENGTH} characters")
+                .AddItem("ℹ️ May be truncated in some search results")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("title", title)
+                .WithTechnicalMetadata("length", title.Length)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "TITLE_LONG",
                 $"Title is long ({title.Length} chars, may be truncated: recommended: <{MAX_TITLE_LENGTH})",
-                new { url = ctx.Url.ToString(), title, length = title.Length });
+                details);
         }
 
         // Check for duplicate titles (will be reported later in batch)
@@ -243,53 +291,109 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
                         // If we have temporary redirects, report them as warnings
                         if (redirectInfo.TemporaryRedirects.Any())
                         {
+                            var builder = FindingDetailsBuilder.Create()
+                                .AddItem($"Title: \"{title}\"")
+                                .AddItem($"Found on pages with temporary redirect relationships");
+                            
+                            builder.BeginNested("📄 Pages with temporary redirects");
+                            foreach (var url in redirectInfo.TemporaryRedirects.Take(5))
+                            {
+                                builder.AddItem(url);
+                            }
+                            builder.EndNested();
+                            
+                            builder.BeginNested("⚠️ Issue")
+                                .AddItem("Temporary redirects (302/307) don't consolidate duplicate titles")
+                                .AddItem("Search engines may index both pages")
+                            .EndNested();
+                            
+                            builder.BeginNested("💡 Recommendations")
+                                .AddItem("Change to 301 (Permanent) redirects to properly consolidate pages")
+                                .AddItem("Or make titles unique if both pages should be indexed")
+                            .EndNested();
+                            
+                            builder.WithTechnicalMetadata("url", currentUrl)
+                                .WithTechnicalMetadata("title", title)
+                                .WithTechnicalMetadata("temporaryRedirects", redirectInfo.TemporaryRedirects.ToArray());
+                            
                             await ctx.Findings.ReportAsync(
                                 Key,
                                 Severity.Warning,
                                 "DUPLICATE_TITLE_TEMPORARY_REDIRECT",
                                 $"Title \"{title}\" appears on pages with temporary redirect relationship",
-                                new
-                                {
-                                    url = currentUrl,
-                                    title,
-                                    temporaryRedirects = redirectInfo.TemporaryRedirects.ToArray(),
-                                    issue = "Temporary redirects (302/307) don't consolidate duplicate titles for search engines",
-                                    recommendation = "Change to 301 (Permanent) redirects to properly consolidate pages"
-                                });
+                                builder.Build());
                         }
                         
                         // Only report true duplicates (no redirect relationship)
                         if (nonRedirectDuplicates.Length > 0)
                         {
+                            var builder = FindingDetailsBuilder.Create()
+                                .AddItem($"Title: \"{title}\"")
+                                .AddItem($"Found on {nonRedirectDuplicates.Length + 1} different pages");
+                            
+                            builder.BeginNested("📄 Other pages with same title");
+                            foreach (var url in nonRedirectDuplicates.Take(5))
+                            {
+                                builder.AddItem(url);
+                            }
+                            if (nonRedirectDuplicates.Length > 5)
+                            {
+                                builder.AddItem($"... and {nonRedirectDuplicates.Length - 5} more");
+                            }
+                            builder.EndNested();
+                            
+                            builder.BeginNested("💡 Recommendations")
+                                .AddItem("Make each title unique to help search engines and users distinguish pages")
+                                .AddItem("Include page-specific keywords in each title")
+                            .EndNested();
+                            
+                            builder.WithTechnicalMetadata("url", currentUrl)
+                                .WithTechnicalMetadata("title", title)
+                                .WithTechnicalMetadata("duplicateCount", nonRedirectDuplicates.Length)
+                                .WithTechnicalMetadata("otherUrls", nonRedirectDuplicates);
+                            
                             await ctx.Findings.ReportAsync(
                                 Key,
                                 Severity.Error,
                                 "DUPLICATE_TITLE",
                                 $"Title \"{title}\" is used on multiple pages",
-                                new
-                                {
-                                    url = currentUrl,
-                                    title,
-                                    duplicateCount = nonRedirectDuplicates.Length,
-                                    otherUrls = nonRedirectDuplicates
-                                });
+                                builder.Build());
                         }
                     }
                     else
                     {
                         // No redirects found, report as regular duplicate
+                        var builder = FindingDetailsBuilder.Create()
+                            .AddItem($"Title: \"{title}\"")
+                            .AddItem($"Found on {duplicateCount} different pages");
+                        
+                        builder.BeginNested("📄 Other pages with same title");
+                        foreach (var url in otherUrls.Take(5))
+                        {
+                            builder.AddItem(url);
+                        }
+                        if (otherUrls.Count > 5)
+                        {
+                            builder.AddItem($"... and {otherUrls.Count - 5} more");
+                        }
+                        builder.EndNested();
+                        
+                        builder.BeginNested("💡 Recommendations")
+                            .AddItem("Make each title unique to help search engines and users distinguish pages")
+                            .AddItem("Include page-specific keywords in each title")
+                        .EndNested();
+                        
+                        builder.WithTechnicalMetadata("url", currentUrl)
+                            .WithTechnicalMetadata("title", title)
+                            .WithTechnicalMetadata("duplicateCount", duplicateCount)
+                            .WithTechnicalMetadata("otherUrls", otherUrls.ToArray());
+                        
                         await ctx.Findings.ReportAsync(
                             Key,
                             Severity.Error,
                             "DUPLICATE_TITLE",
                             $"Title \"{title}\" is used on multiple pages",
-                            new
-                            {
-                                url = currentUrl,
-                                title,
-                                duplicateCount,
-                                otherUrls = otherUrls.ToArray()
-                            });
+                            builder.Build());
                     }
                 }
             }
@@ -300,41 +404,90 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
     {
         if (string.IsNullOrEmpty(description))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("Page URL: " + ctx.Url)
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Meta descriptions improve click-through rates in search results")
+                    .AddItem("Add a <meta name=\"description\" content=\"...\"> tag")
+                    .AddItem("Write unique, compelling descriptions for each page")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "MISSING_DESCRIPTION",
                 "Page is missing a meta description",
-                new { url = ctx.Url.ToString(), recommendation = "Meta descriptions improve click-through rates in search results" });
+                details);
             return;
         }
 
         if (description.Length < MIN_DESCRIPTION_LENGTH)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Description: \"{description}\"")
+                .AddItem($"Length: {description.Length} characters")
+                .AddItem($"Recommended: At least {MIN_DESCRIPTION_LENGTH} characters")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Expand the description to be more informative")
+                    .AddItem("Include key benefits or features of the page")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("description", description)
+                .WithTechnicalMetadata("length", description.Length)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "DESCRIPTION_TOO_SHORT",
                 $"Meta description is too short ({description.Length} chars, recommended: {MIN_DESCRIPTION_LENGTH}+)",
-                new { url = ctx.Url.ToString(), description, length = description.Length });
+                details);
         }
         else if (description.Length > MAX_DESCRIPTION_WARNING_LENGTH)
         {
+            var preview = description.Length > 100 ? description.Substring(0, 100) + "..." : description;
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Description: \"{preview}\"")
+                .AddItem($"Length: {description.Length} characters")
+                .AddItem($"Maximum: {MAX_DESCRIPTION_LENGTH} characters (recommended)")
+                .AddItem("⚠️ Will be truncated in search results")
+                .BeginNested("💡 Recommendations")
+                    .AddItem($"Shorten to under {MAX_DESCRIPTION_LENGTH} characters")
+                    .AddItem("Front-load the most important information")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("description", description)
+                .WithTechnicalMetadata("length", description.Length)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "DESCRIPTION_TOO_LONG",
                 $"Meta description is too long ({description.Length} chars, will be truncated)",
-                new { url = ctx.Url.ToString(), description = description.Substring(0, 100) + "...", length = description.Length, recommendation = $"Keep descriptions under {MAX_DESCRIPTION_LENGTH} characters" });
+                details);
         }
         else if (description.Length > MAX_DESCRIPTION_LENGTH)
         {
+            var preview = description.Length > 100 ? description.Substring(0, 100) + "..." : description;
+            var details = FindingDetailsBuilder.WithMetadata(
+                new Dictionary<string, object?> {
+                    ["url"] = ctx.Url.ToString(),
+                    ["description"] = description,
+                    ["length"] = description.Length
+                },
+                $"Description: \"{preview}\"",
+                $"Length: {description.Length} characters",
+                $"Recommended: Under {MAX_DESCRIPTION_LENGTH} characters");
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "DESCRIPTION_LONG",
                 $"Meta description is long ({description.Length} chars, may be truncated: recommended: <{MAX_DESCRIPTION_LENGTH})",
-                new { url = ctx.Url.ToString(), description = description.Substring(0, 100) + "...", length = description.Length });
+                details);
         }
 
         // Check for duplicate descriptions
@@ -353,18 +506,34 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
                 
                 if (duplicateCount > 1)
                 {
+                    var preview = description.Length > 80 ? description.Substring(0, 80) + "..." : description;
+                    var builder = FindingDetailsBuilder.Create()
+                        .AddItem($"Description: \"{preview}\"")
+                        .AddItem($"Found on {duplicateCount} pages");
+                    
+                    builder.BeginNested("📄 Other pages");
+                    foreach (var url in otherUrls)
+                    {
+                        builder.AddItem(url);
+                    }
+                    builder.EndNested();
+                    
+                    builder.BeginNested("💡 Recommendations")
+                        .AddItem("Make each meta description unique")
+                        .AddItem("Tailor descriptions to each page's specific content")
+                    .EndNested();
+                    
+                    builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                        .WithTechnicalMetadata("description", description)
+                        .WithTechnicalMetadata("duplicateCount", duplicateCount)
+                        .WithTechnicalMetadata("otherUrls", otherUrls);
+                    
                     await ctx.Findings.ReportAsync(
                         Key,
                         Severity.Warning,
                         "DUPLICATE_DESCRIPTION",
                         $"Meta description is used on multiple pages",
-                        new
-                        {
-                            url = ctx.Url.ToString(),
-                            description = description.Substring(0, Math.Min(description.Length, 100)) + "...",
-                            duplicateCount,
-                            otherUrls
-                        });
+                        builder.Build());
                 }
             }
         }
@@ -378,34 +547,46 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
         // Report multiple canonicals (crawler detected this)
         if (ctx.Metadata.HasMultipleCanonicals)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("HTML canonical: " + (ctx.Metadata.CanonicalHtml ?? "none"))
+                .AddItem("HTTP canonical: " + (ctx.Metadata.CanonicalHttp ?? "none"))
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Remove duplicate canonical tags - only one should be present")
+                    .AddItem("Multiple canonicals confuse search engines")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("canonicalHtml", ctx.Metadata.CanonicalHtml)
+                .WithTechnicalMetadata("canonicalHttp", ctx.Metadata.CanonicalHttp)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Error,
                 "MULTIPLE_CANONICALS",
                 "Page has multiple canonical tags",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    canonicalHtml = ctx.Metadata.CanonicalHtml,
-                    canonicalHttp = ctx.Metadata.CanonicalHttp,
-                    recommendation = "Remove duplicate canonical tags - only one should be present"
-                });
+                details);
         }
         
         // Report cross-domain canonical
         if (ctx.Metadata.HasCrossDomainCanonical)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Canonical URL: {canonical}")
+                .AddItem("🌐 Points to different domain")
+                .BeginNested("ℹ️ Note")
+                    .AddItem("Cross-domain canonicals are valid for syndicated content")
+                    .AddItem("Use carefully - this gives ranking credit to another domain")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("canonical", canonical)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "CROSS_DOMAIN_CANONICAL",
                 $"Page canonical points to different domain: {canonical}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    canonical,
-                    note = "Cross-domain canonicals are valid for syndicated content but should be used carefully"
-                });
+                details);
         }
         
         if (!string.IsNullOrEmpty(canonical))
@@ -416,17 +597,23 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
 
             if (normalizedCurrent != normalizedCanonical && !ctx.Metadata.HasCrossDomainCanonical)
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Current URL: {ctx.Url}")
+                    .AddItem($"Canonical URL: {canonical}")
+                    .BeginNested("ℹ️ Impact")
+                        .AddItem("This page will not be indexed by search engines")
+                        .AddItem("The canonical URL will be indexed instead")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("canonical", canonical)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Info,
                     "CANONICAL_TO_OTHER_PAGE",
                     $"Page canonical points to different URL: {canonical}",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        canonical,
-                        note = "This page will not be indexed; canonical page will be indexed instead"
-                    });
+                    details);
             }
         }
     }
@@ -439,48 +626,58 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
             var source = ctx.Metadata.HasRobotsConflict ? "conflicting directives (most restrictive applied)" : 
                          !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) ? "X-Robots-Tag header" : "meta robots tag";
             
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Source: {source}")
+                .AddItem("⚠️ This page will not appear in search results")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("xRobotsTag", ctx.Metadata.XRobotsTag)
+                .WithTechnicalMetadata("hasConflict", ctx.Metadata.HasRobotsConflict)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "NOINDEX_DETECTED",
                 $"Page has noindex directive (will not be indexed by search engines) - Source: {source}",
-                new 
-                { 
-                    url = ctx.Url.ToString(), 
-                    xRobotsTag = ctx.Metadata.XRobotsTag,
-                    hasConflict = ctx.Metadata.HasRobotsConflict
-                });
+                details);
         }
 
         if (ctx.Metadata.RobotsNofollow == true)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("Page has nofollow directive")
+                .AddItem("🔗 Links on this page will not pass link equity")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("xRobotsTag", ctx.Metadata.XRobotsTag)
+                .WithTechnicalMetadata("hasConflict", ctx.Metadata.HasRobotsConflict)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "NOFOLLOW_DETECTED",
                 "Page has nofollow directive (links will not pass equity)",
-                new 
-                { 
-                    url = ctx.Url.ToString(),
-                    xRobotsTag = ctx.Metadata.XRobotsTag,
-                    hasConflict = ctx.Metadata.HasRobotsConflict
-                });
+                details);
         }
         
         // Report robots conflicts if detected
         if (ctx.Metadata.HasRobotsConflict)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("Conflicting directives detected:")
+                .AddItem("  • Meta robots tag")
+                .AddItem("  • X-Robots-Tag HTTP header")
+                .AddItem("ℹ️ Most restrictive directive takes precedence")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("xRobotsTag", ctx.Metadata.XRobotsTag)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "ROBOTS_CONFLICT",
                 "Meta robots and X-Robots-Tag header have conflicting directives",
-                new 
-                { 
-                    url = ctx.Url.ToString(),
-                    xRobotsTag = ctx.Metadata.XRobotsTag,
-                    note = "Most restrictive directive takes precedence"
-                });
+                details);
         }
     }
 
@@ -492,31 +689,42 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
 
         if (viewportCount > 1)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Found {viewportCount} viewport declarations")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Only one viewport meta tag should be present")
+                    .AddItem("Remove duplicate viewport tags")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("count", viewportCount)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "MULTIPLE_VIEWPORT_DECLARATIONS",
                 $"Multiple viewport declarations found ({viewportCount})",
-                new 
-                { 
-                    url = ctx.Url.ToString(), 
-                    count = viewportCount,
-                    recommendation = "Only one viewport meta tag should be present"
-                });
+                details);
         }
         
         if (string.IsNullOrEmpty(viewport))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("📱 No viewport meta tag found")
+                .AddItem("This may cause mobile display issues")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Add <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
+                    .AddItem("Place it in the <head> section")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "MISSING_VIEWPORT",
                 "No viewport meta tag (mobile compatibility issue)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    recommendation = "Add <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-                });
+                details);
         }
     }
 
@@ -524,28 +732,41 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
     {
         if (string.IsNullOrEmpty(charset))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("No charset declaration found")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Add <meta charset=\"utf-8\"> as first element in <head>")
+                    .AddItem("This ensures proper character encoding")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "MISSING_CHARSET",
                 "No charset declaration found",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    recommendation = "Add <meta charset=\"utf-8\"> as first element in <head>"
-                });
+                details);
             return;
         }
 
         // Check if charset is UTF-8 (recommended)
         if (!charset.Equals("utf-8", StringComparison.OrdinalIgnoreCase))
         {
+            var details = FindingDetailsBuilder.WithMetadata(
+                new Dictionary<string, object?> {
+                    ["url"] = ctx.Url.ToString(),
+                    ["charset"] = charset
+                },
+                $"Charset: {charset}",
+                "ℹ️ UTF-8 is recommended for universal character support");
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "NON_UTF8_CHARSET",
                 $"Charset is '{charset}' (UTF-8 is recommended)",
-                new { url = ctx.Url.ToString(), charset });
+                details);
         }
 
         // Check for multiple charset declarations
@@ -555,12 +776,20 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
 
         if (totalCharsetDeclarations > 1)
         {
+            var details = FindingDetailsBuilder.WithMetadata(
+                new Dictionary<string, object?> {
+                    ["url"] = ctx.Url.ToString(),
+                    ["count"] = totalCharsetDeclarations
+                },
+                $"Found {totalCharsetDeclarations} charset declarations",
+                "⚠️ Only one charset declaration should be present");
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "MULTIPLE_CHARSET_DECLARATIONS",
                 $"Multiple charset declarations found ({totalCharsetDeclarations})",
-                new { url = ctx.Url.ToString(), count = totalCharsetDeclarations });
+                details);
         }
     }
 
@@ -568,16 +797,22 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
     {
         if (string.IsNullOrEmpty(language))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("No lang attribute on <html> element")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Add lang attribute for accessibility and SEO")
+                    .AddItem("Example: <html lang=\"en\">")
+                    .AddItem("Helps screen readers and search engines")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "MISSING_LANGUAGE",
                 "No lang attribute on <html> element",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    recommendation = "Add lang attribute for accessibility and SEO (e.g., <html lang=\"en\">)"
-                });
+                details);
         }
     }
 
@@ -593,16 +828,22 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
 
         if (ogTagCount == 0)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("No Open Graph tags found")
+                .AddItem("📱 Important for social media sharing")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Add og:title, og:description, og:image, og:url tags")
+                    .AddItem("This controls how your page appears when shared on social media")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "MISSING_OPEN_GRAPH",
                 "No Open Graph tags found (important for social sharing)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    recommendation = "Add og:title, og:description, og:image, og:url for better social media previews"
-                });
+                details);
         }
         else if (ogTagCount < 4)
         {
@@ -612,17 +853,26 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
             if (string.IsNullOrEmpty(ogImage)) missing.Add("og:image");
             if (string.IsNullOrEmpty(ogUrl)) missing.Add("og:url");
 
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"Present: {ogTagCount} of 4 recommended tags");
+            
+            builder.BeginNested("❌ Missing tags");
+            foreach (var tag in missing)
+            {
+                builder.AddItem(tag);
+            }
+            builder.EndNested();
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("missing", missing.ToArray())
+                .WithTechnicalMetadata("present", ogTagCount);
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "INCOMPLETE_OPEN_GRAPH",
                 $"Open Graph tags incomplete (missing: {string.Join(", ", missing)})",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    missing = missing.ToArray(),
-                    present = ogTagCount
-                });
+                builder.Build());
         }
     }
 
@@ -637,16 +887,22 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
 
         if (twitterTagCount == 0)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("No Twitter Card tags found")
+                .AddItem("ℹ️ Twitter will fall back to Open Graph tags")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Add twitter:card, twitter:title, twitter:description tags")
+                    .AddItem("Or rely on Open Graph tags (which Twitter also uses)")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "MISSING_TWITTER_CARDS",
                 "No Twitter Card tags found",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    recommendation = "Add Twitter Card tags for better Twitter sharing (or Twitter will fall back to Open Graph)"
-                });
+                details);
         }
     }
 
@@ -663,26 +919,50 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
 
         if (h1Count == 0)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("No H1 tag found")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Every page should have exactly one H1 tag")
+                    .AddItem("The H1 should describe the main topic of the page")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Error,
                 "MISSING_H1",
                 "Page has no H1 tag",
-                new { url = ctx.Url.ToString(), recommendation = "Every page should have exactly one H1 tag" });
+                details);
         }
         else if (h1Count > 1)
         {
+            var h1Texts = h1Nodes!.Take(5).Select(n => n.InnerText?.Trim()).ToArray();
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"Found {h1Count} H1 tags")
+                .AddItem("Recommended: Exactly 1 H1 per page");
+            
+            builder.BeginNested("📝 H1 texts found");
+            foreach (var text in h1Texts)
+            {
+                builder.AddItem($"\"{text}\"");
+            }
+            if (h1Count > 5)
+            {
+                builder.AddItem($"... and {h1Count - 5} more");
+            }
+            builder.EndNested();
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("h1Count", h1Count)
+                .WithTechnicalMetadata("h1Texts", h1Texts);
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "MULTIPLE_H1",
                 $"Page has {h1Count} H1 tags (should have exactly 1)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    h1Count,
-                    h1Texts = h1Nodes!.Take(5).Select(n => n.InnerText?.Trim()).ToArray()
-                });
+                builder.Build());
         }
         else
         {
@@ -691,12 +971,17 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
 
             if (string.IsNullOrEmpty(h1Text))
             {
+                var details = FindingDetailsBuilder.WithMetadata(
+                    new Dictionary<string, object?> { ["url"] = ctx.Url.ToString() },
+                    "H1 tag exists but is empty",
+                    "⚠️ H1 should contain descriptive text");
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Warning,
                     "EMPTY_H1",
                     "H1 tag is empty",
-                    new { url = ctx.Url.ToString() });
+                    details);
             }
             else if (!string.IsNullOrEmpty(title))
             {
@@ -704,18 +989,25 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
                 var similarity = CalculateSimilarity(h1Text, title);
                 if (similarity < 0.3) // Less than 30% similar
                 {
+                    var details = FindingDetailsBuilder.Create()
+                        .AddItem($"H1: \"{h1Text}\"")
+                        .AddItem($"Title: \"{title}\"")
+                        .AddItem($"Similarity: {similarity:P0}")
+                        .BeginNested("ℹ️ Note")
+                            .AddItem("H1 and title should be similar for better SEO")
+                            .AddItem("They work together to signal page topic to search engines")
+                        .EndNested()
+                        .WithTechnicalMetadata("url", ctx.Url.ToString())
+                        .WithTechnicalMetadata("h1", h1Text)
+                        .WithTechnicalMetadata("title", title)
+                        .Build();
+                    
                     await ctx.Findings.ReportAsync(
                         Key,
                         Severity.Info,
                         "H1_TITLE_MISMATCH",
                         "H1 and title are very different",
-                        new
-                        {
-                            url = ctx.Url.ToString(),
-                            h1 = h1Text,
-                            title,
-                            note = "H1 and title should be similar for better SEO"
-                        });
+                        details);
                 }
             }
         }
@@ -729,21 +1021,41 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
 
         if (!hasH2 && (hasH3 || hasH4 || hasH5 || hasH6))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("Heading hierarchy skips H2")
+                .AddItem("Found: H3+ headings without H2")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Use headings in order: H1 → H2 → H3, etc.")
+                    .AddItem("Proper hierarchy helps accessibility and SEO")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "SKIPPED_HEADING_LEVEL",
                 "Heading hierarchy skips H2 (has H3+ but no H2)",
-                new { url = ctx.Url.ToString(), recommendation = "Use headings in order: H1 -> H2 -> H3, etc." });
+                details);
         }
         else if (!hasH3 && (hasH4 || hasH5 || hasH6))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("Heading hierarchy skips H3")
+                .AddItem("Found: H4+ headings without H3")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Use headings in order: H1 → H2 → H3, etc.")
+                    .AddItem("Proper hierarchy helps accessibility and SEO")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "SKIPPED_HEADING_LEVEL",
                 "Heading hierarchy skips H3 (has H4+ but no H3)",
-                new { url = ctx.Url.ToString(), recommendation = "Use headings in order: H1 -> H2 -> H3, etc." });
+                details);
         }
     }
 
@@ -752,16 +1064,22 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
         var keywordsNode = doc.DocumentNode.SelectSingleNode("//meta[@name='keywords']");
         if (keywordsNode != null)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("Meta keywords tag detected")
+                .AddItem("⚠️ This tag is outdated and ignored by modern search engines")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Remove the meta keywords tag")
+                    .AddItem("It wastes HTML bytes and provides no SEO value")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "META_KEYWORDS_FOUND",
                 "Meta keywords tag found (outdated, not used by search engines)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    recommendation = "Remove meta keywords tag - it's not used by modern search engines and wastes HTML bytes"
-                });
+                details);
         }
     }
 

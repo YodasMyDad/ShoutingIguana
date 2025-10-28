@@ -650,10 +650,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private async Task NavigateToExtensionsAsync()
+    private async Task NavigateToPluginManagementAsync()
     {
-        _navigationService.NavigateTo<ExtensionsView>();
-        StatusMessage = "Extensions";
+        _navigationService.NavigateTo<PluginManagementView>();
+        StatusMessage = "Plugin Management";
         await Task.CompletedTask;
     }
 

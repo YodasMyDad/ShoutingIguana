@@ -22,7 +22,6 @@ public partial class SettingsViewModel : ObservableObject
 {
     private readonly ILogger<SettingsViewModel> _logger;
     private readonly IAppSettingsService _appSettings;
-    private readonly IPluginRegistry _pluginRegistry;
     private readonly IProxyTestService _proxyTestService;
     private readonly IFeedConfigurationService _feedConfigService;
     private readonly IServiceProvider _serviceProvider;
@@ -56,9 +55,6 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _proxyTestResult = string.Empty;
     [ObservableProperty] private bool _isTestingProxy;
 
-    // Plugin settings
-    [ObservableProperty] private ObservableCollection<PluginInfo> _plugins = [];
-    [ObservableProperty] private bool _pluginsChanged;
 
     // Data settings
     [ObservableProperty] private string _projectStoragePath = string.Empty;
@@ -71,7 +67,6 @@ public partial class SettingsViewModel : ObservableObject
     public SettingsViewModel(
         ILogger<SettingsViewModel> logger,
         IAppSettingsService appSettings,
-        IPluginRegistry pluginRegistry,
         IProxyTestService proxyTestService,
         IFeedConfigurationService feedConfigService,
         IServiceProvider serviceProvider,
@@ -79,14 +74,12 @@ public partial class SettingsViewModel : ObservableObject
     {
         _logger = logger;
         _appSettings = appSettings;
-        _pluginRegistry = pluginRegistry;
         _proxyTestService = proxyTestService;
         _feedConfigService = feedConfigService;
         _serviceProvider = serviceProvider;
         _dialog = dialog;
 
         LoadSettings();
-        LoadPlugins();
         LoadDataSettings();
         LoadFeeds();
     }
@@ -174,23 +167,6 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
-    private void LoadPlugins()
-    {
-        var loadedPlugins = _pluginRegistry.LoadedPlugins;
-        
-        foreach (var plugin in loadedPlugins)
-        {
-            Plugins.Add(new PluginInfo
-            {
-                Id = plugin.Id,
-                Name = plugin.Name,
-                Version = plugin.Version.ToString(),
-                IsEnabled = true // In Stage 2, all plugins are always enabled
-            });
-        }
-
-        _logger.LogDebug("Loaded {Count} plugins", Plugins.Count);
-    }
 
     [RelayCommand]
     private async Task SaveAsync()
@@ -243,19 +219,8 @@ public partial class SettingsViewModel : ObservableObject
             await _appSettings.SaveAsync();
 
             _logger.LogInformation("Settings saved successfully");
-
-            if (PluginsChanged)
-            {
-                MessageBox.Show(
-                    "Settings saved. Please restart the application for plugin changes to take effect.",
-                    "Restart Required",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-            else
-            {
-                MessageBox.Show("Settings saved successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
+            
+            MessageBox.Show("Settings saved successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
 
             _dialog.DialogResult = true;
             _dialog.Close();
@@ -309,29 +274,6 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private void ReloadPlugins()
-    {
-        try
-        {
-            _logger.LogInformation("Reloading plugins...");
-            
-            // Reload plugins from registry
-            Plugins.Clear();
-            LoadPlugins();
-            
-            MessageBox.Show(
-                $"Plugins reloaded successfully. Found {Plugins.Count} plugin(s).",
-                "Plugins Reloaded",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to reload plugins");
-            MessageBox.Show($"Failed to reload plugins: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
 
     [RelayCommand]
     private void BrowseStoragePath()

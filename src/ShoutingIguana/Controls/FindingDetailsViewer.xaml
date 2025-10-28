@@ -1,0 +1,36 @@
+<UserControl x:Class="ShoutingIguana.Controls.FindingDetailsViewer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sdk="clr-namespace:ShoutingIguana.PluginSdk;assembly=ShoutingIguana.PluginSdk"
+             Background="Transparent">
+    
+    <UserControl.Resources>
+        <!-- Template for displaying a single FindingDetail with its children -->
+        <HierarchicalDataTemplate x:Key="FindingDetailTemplate"
+                                  DataType="{x:Type sdk:FindingDetail}"
+                                  ItemsSource="{Binding Children}">
+            <TextBlock Text="{Binding Text}"
+                       TextWrapping="Wrap"
+                       Margin="0,2"
+                       FontSize="13"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+        </HierarchicalDataTemplate>
+    </UserControl.Resources>
+    
+    <!-- Bind the TreeView directly to Items and rely on the HierarchicalDataTemplate -->
+    <TreeView x:Name="DetailsTreeView"
+              BorderThickness="0"
+              Background="Transparent"
+              ItemsSource="{Binding Details.Items, RelativeSource={RelativeSource AncestorType=UserControl}}"
+              ItemTemplate="{StaticResource FindingDetailTemplate}"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch">
+        <TreeView.ItemContainerStyle>
+            <Style TargetType="TreeViewItem">
+                <Setter Property="IsExpanded" Value="True"/>
+                <Setter Property="Padding" Value="4,2"/>
+                <Setter Property="Margin" Value="0,1"/>
+            </Style>
+        </TreeView.ItemContainerStyle>
+    </TreeView>
+</UserControl>

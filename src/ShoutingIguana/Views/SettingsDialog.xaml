@@ -2,9 +2,9 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Settings"
-        Height="700"
+        Height="650"
         Width="900"
-        MinHeight="600"
+        MinHeight="550"
         MinWidth="800"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource BackgroundBrush}"
@@ -25,7 +25,7 @@
                 Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderLightBrush}"
                 BorderThickness="0,0,0,1"
-                Padding="32,24">
+                Padding="24,20">
             <StackPanel Orientation="Horizontal">
                 <Border Background="{StaticResource PrimaryBrush}"
                         Width="44" Height="44"
@@ -66,7 +66,7 @@
                         <TextBlock Text="Crawling" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,24">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20">
                     <StackPanel MaxWidth="750">
                         
                         <!-- Performance Section -->
@@ -233,7 +233,7 @@
                         <TextBlock Text="Browser" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,24">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20">
                     <StackPanel MaxWidth="750">
                         
                         <!-- Browser Mode Section -->
@@ -355,7 +355,7 @@
                         <TextBlock Text="Network" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,24">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20">
                     <StackPanel MaxWidth="750">
                         
                         <!-- Proxy Settings Section -->
@@ -560,119 +560,6 @@
                 </ScrollViewer>
             </TabItem>
 
-            <!-- Plugins Tab -->
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{StaticResource Icon.Puzzle}"
-                                   Style="{StaticResource Icon}"
-                                   FontSize="16"
-                                   Margin="0,0,8,0"/>
-                        <TextBlock Text="Plugins" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,24">
-                    <StackPanel MaxWidth="750">
-                        
-                        <!-- Installed Plugins Section -->
-                        <Border Background="{StaticResource SurfaceBrush}"
-                                CornerRadius="8"
-                                Padding="24"
-                                Margin="0,0,0,24">
-                            <StackPanel>
-                                <TextBlock Text="Installed Plugins" 
-                                           Style="{StaticResource FormSectionHeader}"
-                                           Margin="0,0,0,16"
-                                           AutomationProperties.HeadingLevel="Level2"/>
-
-                                <DataGrid ItemsSource="{Binding Plugins}"
-                                          Style="{StaticResource ModernDataGrid}"
-                                          MaxHeight="400"
-                                          Margin="0,0,0,0">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Name" 
-                                                            Binding="{Binding Name}" 
-                                                            Width="*"
-                                                            MinWidth="150"
-                                                            FontWeight="SemiBold"/>
-                                        <DataGridTextColumn Header="Version" 
-                                                            Binding="{Binding Version}" 
-                                                            Width="100"
-                                                            FontFamily="Consolas"/>
-                                        <DataGridCheckBoxColumn Header="Enabled" 
-                                                                Binding="{Binding IsEnabled}" 
-                                                                Width="80"
-                                                                IsReadOnly="True"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Plugin Actions Section -->
-                        <Border Background="{StaticResource SurfaceBrush}"
-                                CornerRadius="8"
-                                Padding="24"
-                                Margin="0,0,0,24">
-                            <StackPanel>
-                                <TextBlock Text="Plugin Management" 
-                                           Style="{StaticResource FormSectionHeader}"
-                                           Margin="0,0,0,16"
-                                           AutomationProperties.HeadingLevel="Level2"/>
-
-                                <TextBlock Text="Reload plugins to discover newly installed plugins or reflect changes."
-                                           TextWrapping="Wrap"
-                                           Style="{StaticResource BodyTextStyle}"
-                                           Margin="0,0,0,16"/>
-
-                                <Button Command="{Binding ReloadPluginsCommand}"
-                                        Style="{StaticResource SecondaryButton}"
-                                        HorizontalAlignment="Left"
-                                        AutomationProperties.Name="Reload Plugins"
-                                        AutomationProperties.HelpText="Rescans the plugins directory and reloads all installed plugins"
-                                        ToolTip="Rescan and reload all installed plugins">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{StaticResource Icon.Refresh}"
-                                                   Style="{StaticResource Icon}"
-                                                   Width="16"
-                                                   Height="16"
-                                                   Margin="0,0,8,0"/>
-                                        <TextBlock Text="Reload Plugins"/>
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Stage 3 Info Card -->
-                        <Border Style="{StaticResource InfoCard}"
-                                Padding="16"
-                                Margin="0,0,0,0">
-                            <StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <TextBlock Text="{StaticResource Icon.Info}"
-                                               Style="{StaticResource Icon}"
-                                               Width="20"
-                                               Height="20"
-                                               FontSize="20"
-                                               Foreground="{StaticResource InfoBrush}"
-                                               Margin="0,0,8,0"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text="Hot-Loading Support" 
-                                               FontWeight="SemiBold"
-                                               FontSize="14"
-                                               Foreground="{StaticResource InfoBrush}"
-                                               VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <TextBlock Text="Plugins can be dynamically loaded and unloaded without restarting the application. Use the Extensions Manager (Ctrl+Shift+E) for full plugin management."
-                                           TextWrapping="Wrap"
-                                           FontSize="13"
-                                           Foreground="{StaticResource TextPrimaryBrush}"
-                                           Margin="28,0,0,0"/>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
             <!-- Data Tab -->
             <TabItem>
                 <TabItem.Header>
@@ -684,7 +571,7 @@
                         <TextBlock Text="Data" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,24">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20">
                     <StackPanel MaxWidth="750">
                         
                         <!-- Storage Section -->
@@ -797,7 +684,7 @@
                         <TextBlock Text="Feeds" VerticalAlignment="Center"/>
                     </StackPanel>
                 </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,24">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20">
                     <StackPanel MaxWidth="750">
                         
                         <!-- NuGet Feeds Section -->
@@ -905,7 +792,7 @@
                 Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderLightBrush}"
                 BorderThickness="0,1,0,0"
-                Padding="32,20">
+                Padding="24,16">
             <Grid>
                 <Button Command="{Binding RestoreDefaultsCommand}"
                         Style="{StaticResource SecondaryButton}"

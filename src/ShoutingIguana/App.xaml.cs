@@ -100,6 +100,7 @@ public partial class App : Application
                     services.AddSingleton<ISitemapService, SitemapService>();
                     services.AddSingleton<ILinkExtractor, LinkExtractor>();
                     services.AddSingleton<IPlaywrightService, PlaywrightService>();
+                    services.AddSingleton<IPluginConfigurationService, PluginConfigurationService>();
                     services.AddSingleton<IPluginRegistry, PluginRegistry>();
                     services.AddSingleton<ICrawlEngine, CrawlEngine>();
                     services.AddScoped<PluginExecutor>();
@@ -125,10 +126,11 @@ public partial class App : Application
                     services.AddTransient<ProjectHomeViewModel>();
                     services.AddTransient<CrawlDashboardViewModel>();
                     services.AddTransient<FindingsViewModel>();
-                    services.AddTransient<ExtensionsViewModel>();
+                    services.AddTransient<PluginManagementViewModel>();
                     services.AddTransient<LinkGraphViewModel>();
 
                     // Views
+                    services.AddTransient<PluginManagementView>();
                     services.AddTransient<LinkGraphView>();
 
                     // Main Window

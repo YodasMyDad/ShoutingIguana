@@ -5,7 +5,6 @@ using ShoutingIguana.Core.Browser;
 using ShoutingIguana.Core.Models;
 using ShoutingIguana.Core.Repositories;
 using ShoutingIguana.PluginSdk;
-using System.Text.Json;
 
 namespace ShoutingIguana.Core.Services;
 
@@ -124,7 +123,7 @@ internal class FindingSink(int urlId, int projectId, IServiceProvider servicePro
     private readonly ILogger _logger = logger;
     private readonly List<Finding> _pendingFindings = [];
 
-    public async Task ReportAsync(string taskKey, Severity severity, string code, string message, object? data = null)
+    public async Task ReportAsync(string taskKey, Severity severity, string code, string message, FindingDetails? details = null)
     {
         try
         {
@@ -136,9 +135,11 @@ internal class FindingSink(int urlId, int projectId, IServiceProvider servicePro
                 Severity = severity,
                 Code = code,
                 Message = message,
-                DataJson = data != null ? JsonSerializer.Serialize(data) : null,
                 CreatedUtc = DateTime.UtcNow
             };
+            
+            // Set details using the helper method
+            finding.SetDetails(details);
 
             // Batch findings - don't save immediately
             _pendingFindings.Add(finding);
@@ -150,6 +151,25 @@ internal class FindingSink(int urlId, int projectId, IServiceProvider servicePro
         }
         
         await Task.CompletedTask;
+    }
+    
+    public async Task ReportAsync(string taskKey, Severity severity, string code, string message, object? data)
+    {
+        // Legacy overload - wrap data in TechnicalMetadata for backward compatibility
+        FindingDetails? details = null;
+        
+        if (data != null)
+        {
+            details = new FindingDetails
+            {
+                TechnicalMetadata = new Dictionary<string, object?>
+                {
+                    ["legacyData"] = data
+                }
+            };
+        }
+        
+        await ReportAsync(taskKey, severity, code, message, details);
     }
     
     /// <summary>

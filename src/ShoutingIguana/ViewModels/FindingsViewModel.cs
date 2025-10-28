@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using Ookii.Dialogs.Wpf;
 using ShoutingIguana.Core.Repositories;
 using ShoutingIguana.Core.Services;
+using ShoutingIguana.PluginSdk;
 using ShoutingIguana.Services;
 
 namespace ShoutingIguana.ViewModels;
@@ -22,6 +23,7 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     private readonly IExcelExportService _excelExportService;
     private readonly IProjectContext _projectContext;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IPluginConfigurationService _pluginConfig;
     private bool _disposed;
     private FindingTabViewModel? _previousTab;
 
@@ -32,20 +34,37 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     private FindingTabViewModel? _selectedTab;
 
     [ObservableProperty]
-    private string _detailsJson = string.Empty;
+    private FindingDetails? _selectedFindingDetails;
+    
+    [ObservableProperty]
+    private bool _hasTechnicalMetadata;
+    
+    [ObservableProperty]
+    private string _technicalMetadataJson = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasStructuredDetails;
+
+    [ObservableProperty]
+    private bool _isTechnicalModeEnabled;
 
     public FindingsViewModel(
         ILogger<FindingsViewModel> logger,
         ICsvExportService csvExportService,
         IExcelExportService excelExportService,
         IProjectContext projectContext,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IPluginConfigurationService pluginConfig)
     {
         _logger = logger;
         _csvExportService = csvExportService;
         _excelExportService = excelExportService;
         _projectContext = projectContext;
         _serviceProvider = serviceProvider;
+        _pluginConfig = pluginConfig;
+        
+        // Subscribe to plugin state changes to refresh tabs
+        _pluginConfig.PluginStateChanged += OnPluginStateChanged;
     }
 
     partial void OnSelectedTabChanged(FindingTabViewModel? value)
@@ -60,6 +79,13 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         if (value != null)
         {
             value.PropertyChanged += OnTabPropertyChanged;
+
+            // If no selection on the new tab, select the first item to show details
+            if (value.SelectedFinding == null && value.FilteredFindings.Count > 0)
+            {
+                value.SelectedFinding = value.FilteredFindings[0];
+            }
+
             UpdateDetailsPanel();
         }
 
@@ -68,9 +94,16 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
 
     private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(FindingTabViewModel.SelectedFinding))
+        // Update when the selected finding changes
+        // The FindingTabViewModel will have already updated its detail properties in its partial method
+        if (e.PropertyName == nameof(FindingTabViewModel.SelectedFinding)
+            || e.PropertyName == nameof(FindingTabViewModel.SelectedFindingDetails)
+            || e.PropertyName == nameof(FindingTabViewModel.HasTechnicalMetadata)
+            || e.PropertyName == nameof(FindingTabViewModel.TechnicalMetadataJson))
         {
-            UpdateDetailsPanel();
+            _logger.LogDebug("SelectedFinding changed, updating details panel");
+            // Use Dispatcher to ensure UI updates happen on the UI thread
+            Application.Current.Dispatcher.InvokeAsync(() => UpdateDetailsPanel());
         }
     }
 
@@ -78,32 +111,41 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     {
         if (SelectedTab?.SelectedFinding == null)
         {
-            DetailsJson = string.Empty;
+            _logger.LogDebug("No selected finding, clearing details");
+#pragma warning disable MVVMTK0034 // Direct field reference instead of property
+            _selectedFindingDetails = null;
+            _hasTechnicalMetadata = false;
+            _technicalMetadataJson = string.Empty;
+            _hasStructuredDetails = false;
+#pragma warning restore MVVMTK0034
+            OnPropertyChanged(nameof(SelectedFindingDetails));
+            OnPropertyChanged(nameof(HasTechnicalMetadata));
+            OnPropertyChanged(nameof(TechnicalMetadataJson));
+            OnPropertyChanged(nameof(HasStructuredDetails));
             return;
         }
 
         var finding = SelectedTab.SelectedFinding;
+        _logger.LogDebug("Updating details panel for finding: {FindingId}, URL: {Url}", 
+            finding.Id, finding.Url.Address);
         
-        if (string.IsNullOrEmpty(finding.DataJson))
-        {
-            DetailsJson = "No additional data";
-        }
-        else
-        {
-            try
-            {
-                // Pretty-print JSON
-                using var jsonDoc = System.Text.Json.JsonDocument.Parse(finding.DataJson);
-                DetailsJson = System.Text.Json.JsonSerializer.Serialize(jsonDoc, new System.Text.Json.JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
-            }
-            catch
-            {
-                DetailsJson = finding.DataJson;
-            }
-        }
+        // Directly update backing fields and manually raise PropertyChanged events
+        // This bypasses the equality check in the generated property setters to force UI updates
+#pragma warning disable MVVMTK0034 // Direct field reference instead of property
+        _selectedFindingDetails = SelectedTab.SelectedFindingDetails;
+        _hasTechnicalMetadata = SelectedTab.HasTechnicalMetadata;
+        _technicalMetadataJson = SelectedTab.TechnicalMetadataJson;
+        _hasStructuredDetails = _selectedFindingDetails?.Items.Count > 0;
+#pragma warning restore MVVMTK0034
+        
+        // Manually raise property changed events
+        OnPropertyChanged(nameof(SelectedFindingDetails));
+        OnPropertyChanged(nameof(HasTechnicalMetadata));
+        OnPropertyChanged(nameof(TechnicalMetadataJson));
+        OnPropertyChanged(nameof(HasStructuredDetails));
+        
+        _logger.LogDebug("Details updated - HasDetails: {HasDetails}, HasTechMetadata: {HasTechMetadata}", 
+            SelectedFindingDetails != null, HasTechnicalMetadata);
     }
 
     public async Task LoadFindingsAsync()
@@ -127,6 +169,10 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             var registeredTasks = pluginRegistry.RegisteredTasks;
             var taskMetadata = registeredTasks.ToDictionary(t => t.Key, t => (t.DisplayName, t.Description));
             
+            // Get enabled tasks to filter findings
+            var enabledTasks = pluginRegistry.EnabledTasks;
+            var enabledTaskKeys = new HashSet<string>(enabledTasks.Select(t => t.Key));
+            
             // Group findings by task key
             var grouped = allFindings.GroupBy(f => f.TaskKey);
 
@@ -135,6 +181,14 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             foreach (var group in grouped.OrderBy(g => g.Key))
             {
                 var taskKey = group.Key;
+                
+                // Only show tabs for enabled plugins
+                if (!enabledTaskKeys.Contains(taskKey))
+                {
+                    _logger.LogDebug("Skipping tab for disabled plugin task: {TaskKey}", taskKey);
+                    continue;
+                }
+                
                 var displayName = taskMetadata.TryGetValue(taskKey, out var metadata) 
                     ? metadata.DisplayName 
                     : taskKey;
@@ -193,6 +247,29 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
 
         try
         {
+            // Show export options dialog
+            bool includeTechnicalMetadata = false;
+            bool? optionsResult = null;
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                var optionsDialog = new Views.ExportOptionsDialog
+                {
+                    Owner = Application.Current.MainWindow
+                };
+                
+                optionsResult = optionsDialog.ShowDialog();
+                if (optionsResult == true)
+                {
+                    includeTechnicalMetadata = optionsDialog.IncludeTechnicalMetadata;
+                }
+            });
+            
+            // User cancelled export options
+            if (optionsResult != true)
+            {
+                return;
+            }
+            
             var dialog = new VistaSaveFileDialog
             {
                 Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
@@ -203,11 +280,12 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             if (dialog.ShowDialog() == true)
             {
                 var projectId = _projectContext.CurrentProjectId!.Value;
-                await _csvExportService.ExportUrlInventoryAsync(projectId, dialog.FileName);
+                await _csvExportService.ExportFindingsAsync(projectId, dialog.FileName, includeTechnicalMetadata);
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                     MessageBox.Show($"Exported to {dialog.FileName}", "Export Successful", 
                         MessageBoxButton.OK, MessageBoxImage.Information));
-                _logger.LogInformation("Exported findings to CSV: {FilePath}", dialog.FileName);
+                _logger.LogInformation("Exported findings to CSV: {FilePath} (Technical Metadata: {Include})", 
+                    dialog.FileName, includeTechnicalMetadata);
             }
         }
         catch (Exception ex)
@@ -230,6 +308,29 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
 
         try
         {
+            // Show export options dialog
+            bool includeTechnicalMetadata = false;
+            bool? optionsResult = null;
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                var optionsDialog = new Views.ExportOptionsDialog
+                {
+                    Owner = Application.Current.MainWindow
+                };
+                
+                optionsResult = optionsDialog.ShowDialog();
+                if (optionsResult == true)
+                {
+                    includeTechnicalMetadata = optionsDialog.IncludeTechnicalMetadata;
+                }
+            });
+            
+            // User cancelled export options
+            if (optionsResult != true)
+            {
+                return;
+            }
+            
             var dialog = new VistaSaveFileDialog
             {
                 Filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*",
@@ -240,14 +341,15 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             if (dialog.ShowDialog() == true)
             {
                 var projectId = _projectContext.CurrentProjectId!.Value;
-                var success = await _excelExportService.ExportFindingsAsync(projectId, dialog.FileName);
+                var success = await _excelExportService.ExportFindingsAsync(projectId, dialog.FileName, includeTechnicalMetadata);
                 
                 if (success)
                 {
                     await Application.Current.Dispatcher.InvokeAsync(() =>
                         MessageBox.Show($"Exported to {dialog.FileName}", "Export Successful", 
                             MessageBoxButton.OK, MessageBoxImage.Information));
-                    _logger.LogInformation("Exported findings to Excel: {FilePath}", dialog.FileName);
+                    _logger.LogInformation("Exported findings to Excel: {FilePath} (Technical Metadata: {Include})", 
+                        dialog.FileName, includeTechnicalMetadata);
                 }
                 else
                 {
@@ -310,10 +412,27 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     {
         try
         {
-            if (!string.IsNullOrEmpty(DetailsJson))
+            if (IsTechnicalModeEnabled)
             {
-                Clipboard.SetText(DetailsJson);
-                _logger.LogDebug("Copied finding details JSON to clipboard");
+                // Copy technical metadata JSON
+                if (!string.IsNullOrEmpty(TechnicalMetadataJson))
+                {
+                    Clipboard.SetText(TechnicalMetadataJson);
+                    _logger.LogDebug("Copied technical metadata JSON to clipboard");
+                }
+            }
+            else
+            {
+                // Copy formatted text from FindingDetails
+                if (SelectedFindingDetails != null)
+                {
+                    var text = ExtractTextFromFindingDetails(SelectedFindingDetails);
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        Clipboard.SetText(text);
+                        _logger.LogDebug("Copied finding details text to clipboard");
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -322,10 +441,60 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Extracts plain text from FindingDetails hierarchy for copying.
+    /// </summary>
+    private string ExtractTextFromFindingDetails(FindingDetails details)
+    {
+        if (details.Items.Count == 0)
+            return string.Empty;
+
+        var lines = new List<string>();
+        foreach (var item in details.Items)
+        {
+            ExtractTextFromDetail(item, lines, 0);
+        }
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>
+    /// Recursively extracts text from a FindingDetail and its children.
+    /// </summary>
+    private void ExtractTextFromDetail(FindingDetail detail, List<string> lines, int indentLevel)
+    {
+        var indent = new string(' ', indentLevel * 2);
+        lines.Add(indent + detail.Text);
+
+        if (detail.Children != null)
+        {
+            foreach (var child in detail.Children)
+            {
+                ExtractTextFromDetail(child, lines, indentLevel + 1);
+            }
+        }
+    }
+
+    private async void OnPluginStateChanged(object? sender, PluginStateChangedEventArgs e)
+    {
+        try
+        {
+            // Reload findings to show/hide tabs based on plugin enabled state
+            _logger.LogInformation("Plugin state changed for {PluginId}, reloading findings view", e.PluginId);
+            await LoadFindingsAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reloading findings after plugin state change");
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
             return;
+
+        // Unsubscribe from plugin state changes
+        _pluginConfig.PluginStateChanged -= OnPluginStateChanged;
 
         // Unsubscribe from current tab
         if (_previousTab != null)

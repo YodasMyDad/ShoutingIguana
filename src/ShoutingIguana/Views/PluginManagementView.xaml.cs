@@ -3,9 +3,9 @@ using ShoutingIguana.ViewModels;
 
 namespace ShoutingIguana.Views;
 
-public partial class ExtensionsView : UserControl
+public partial class PluginManagementView : UserControl
 {
-    public ExtensionsView(ExtensionsViewModel viewModel)
+    public PluginManagementView(PluginManagementViewModel viewModel)
     {
         InitializeComponent();
         DataContext = viewModel;

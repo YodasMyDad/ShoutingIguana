@@ -14,6 +14,7 @@
             <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
             <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
             <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+            <converters:InverseNullToVisibilityConverter x:Key="InverseNullToVisibilityConverter"/>
             <converters:Int32ToVisibilityConverter x:Key="Int32ToVisibilityConverter"/>
             <converters:InverseInt32ToVisibilityConverter x:Key="InverseInt32ToVisibilityConverter"/>
             <converters:SelectorTypeConverter x:Key="SelectorTypeConverter"/>

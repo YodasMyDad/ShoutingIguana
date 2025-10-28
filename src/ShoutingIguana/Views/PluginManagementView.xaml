@@ -1,4 +1,4 @@
-<UserControl x:Class="ShoutingIguana.Views.ExtensionsView"
+<UserControl x:Class="ShoutingIguana.Views.PluginManagementView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -57,13 +57,13 @@
                                    Foreground="White"/>
                     </Border>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Extensions Manager" 
+                        <TextBlock Text="Plugin Management" 
                                    Style="{StaticResource DisplayTextStyle}"
                                    FontSize="24"
                                    Margin="0"
                                    AutomationProperties.HeadingLevel="Level1"
                                    AutomationProperties.LiveSetting="Off"
-                                   AutomationProperties.AutomationId="ExtensionsPageHeading"/>
+                                   AutomationProperties.AutomationId="PluginManagementPageHeading"/>
                         <TextBlock Text="Install, update, and manage analysis plugins"
                                    Style="{StaticResource BodyTextStyle}"
                                    Foreground="{StaticResource TextSecondaryBrush}"
@@ -139,9 +139,9 @@
         <!-- Main Content: Two-Panel Layout -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" MinWidth="400"/>
+                <ColumnDefinition Width="2*" MinWidth="350"/>
                 <ColumnDefinition Width="16"/>
-                <ColumnDefinition Width="1*" MinWidth="300"/>
+                <ColumnDefinition Width="1*" MinWidth="280"/>
             </Grid.ColumnDefinitions>
 
             <!-- Left Panel: Tabs for Installed and Browse -->
@@ -279,7 +279,7 @@
                                       Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                                       TabIndex="0"
                                       AutomationProperties.Name="Installed Plugins"
-                                      AutomationProperties.HelpText="List of installed plugins. Select a plugin to view details and manage it.">
+                                      AutomationProperties.HelpText="List of installed plugins. Toggle the Enabled checkbox to enable or disable plugins without restart. Select a plugin to view details and manage it.">
                                 <DataGrid.ContextMenu>
                                     <ContextMenu AutomationProperties.Name="Plugin Context Menu">
                                         <MenuItem Header="Update Plugin" 
@@ -301,29 +301,46 @@
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Name" 
                                                         Binding="{Binding Name}" 
-                                                        Width="*"
+                                                        Width="2*"
+                                                        MinWidth="140"
                                                         FontWeight="SemiBold"/>
                                     <DataGridTextColumn Header="Version" 
                                                         Binding="{Binding Version}" 
-                                                        Width="80"/>
-                                    <DataGridTemplateColumn Header="Status" Width="100">
+                                                        Width="80"
+                                                        MinWidth="70"/>
+                                    <DataGridCheckBoxColumn Header="Enabled" 
+                                                            Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}" 
+                                                            Width="80"
+                                                            MinWidth="70"/>
+                                    <DataGridTemplateColumn Header="Status" Width="100" MinWidth="90">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate DataType="{x:Type vm:InstalledPluginViewModel}">
-                                                <Border Background="{StaticResource SuccessBackgroundBrush}"
+                                                <Border x:Name="StatusBorder"
+                                                        Background="{StaticResource SuccessBackgroundBrush}"
                                                         CornerRadius="12"
                                                         Padding="8,4"
-                                                        HorizontalAlignment="Center">
-                                                    <TextBlock Text="{Binding Status}"
+                                                        HorizontalAlignment="Center"
+                                                        ToolTip="{Binding Status}">
+                                                    <TextBlock x:Name="StatusText"
+                                                               Text="{Binding Status}"
                                                                Foreground="{StaticResource SuccessBrush}"
                                                                FontWeight="SemiBold"
                                                                FontSize="11"/>
                                                 </Border>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Disabled">
+                                                        <Setter TargetName="StatusBorder" Property="Background" Value="{StaticResource WarningBackgroundBrush}"/>
+                                                        <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                                                        <Setter TargetName="StatusBorder" Property="ToolTip" Value="Plugin is disabled - toggle Enabled checkbox to activate"/>
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="Tasks" 
                                                         Binding="{Binding TaskCount}" 
-                                                        Width="60">
+                                                        Width="60"
+                                                        MinWidth="55">
                                         <DataGridTextColumn.ElementStyle>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="HorizontalAlignment" Value="Center"/>
@@ -532,21 +549,24 @@
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Name" 
                                                         Binding="{Binding Name}" 
-                                                        Width="*"
+                                                        Width="2*"
+                                                        MinWidth="150"
                                                         FontWeight="SemiBold"/>
                                     <DataGridTextColumn Header="Version" 
                                                         Binding="{Binding Version}" 
-                                                        Width="80"/>
+                                                        Width="80"
+                                                        MinWidth="70"/>
                                     <DataGridTextColumn Header="Downloads" 
                                                         Binding="{Binding DownloadCount, StringFormat=N0}" 
-                                                        Width="100">
+                                                        Width="100"
+                                                        MinWidth="90">
                                         <DataGridTextColumn.ElementStyle>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="HorizontalAlignment" Value="Right"/>
                                             </Style>
                                         </DataGridTextColumn.ElementStyle>
                                     </DataGridTextColumn>
-                                    <DataGridTemplateColumn Header="Status" Width="90">
+                                    <DataGridTemplateColumn Header="Status" Width="90" MinWidth="80">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate DataType="{x:Type vm:BrowsePluginViewModel}">
                                                 <Border CornerRadius="12"

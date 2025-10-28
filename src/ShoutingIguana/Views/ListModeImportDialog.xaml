@@ -27,7 +27,7 @@
                 Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderLightBrush}"
                 BorderThickness="0,0,0,1"
-                Padding="32,24">
+                Padding="24,20">
             <StackPanel Orientation="Horizontal">
                 <Border Background="{StaticResource InfoBrush}"
                         Width="44" Height="44"
@@ -54,7 +54,7 @@
         <!-- Settings -->
         <Border Grid.Row="1" 
                 Style="{StaticResource Card}"
-                Margin="{StaticResource SpacingL}">
+                Margin="{StaticResource SpacingM}">
             <StackPanel>
                 <!-- File Selection -->
                 <StackPanel Margin="0,0,0,24">
@@ -138,7 +138,7 @@
         <!-- Progress -->
         <Border Grid.Row="2"
                 Style="{StaticResource InfoCard}"
-                Margin="24,16,24,0"
+                Margin="16,12,16,0"
                 Visibility="{Binding IsImporting, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StackPanel>
                 <TextBlock Text="{Binding ImportStatus}"
@@ -152,7 +152,7 @@
         <!-- Result Message -->
         <Border Grid.Row="2"
                 Style="{StaticResource SuccessMessageCard}"
-                Margin="24,16,24,0"
+                Margin="16,12,16,0"
                 Visibility="{Binding ImportComplete, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="{StaticResource Icon.Success}"
@@ -169,7 +169,7 @@
                 Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderLightBrush}"
                 BorderThickness="0,1,0,0"
-                Padding="32,20">
+                Padding="24,16">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Cancel"
                         Command="{Binding CancelCommand}"

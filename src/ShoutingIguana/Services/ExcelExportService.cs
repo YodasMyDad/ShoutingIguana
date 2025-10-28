@@ -17,12 +17,14 @@ public class ExcelExportService(
 {
     private readonly ILogger<ExcelExportService> _logger = logger;
     private readonly IServiceProvider _serviceProvider = serviceProvider;
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    public async Task<bool> ExportFindingsAsync(int projectId, string filePath)
+    public async Task<bool> ExportFindingsAsync(int projectId, string filePath, bool includeTechnicalMetadata = false)
     {
         try
         {
-            _logger.LogInformation("Exporting findings to Excel: {FilePath}", filePath);
+            _logger.LogInformation("Exporting findings to Excel: {FilePath} (Include Technical Metadata: {IncludeTechnical})", 
+                filePath, includeTechnicalMetadata);
 
             // Create scope for repositories
             using var scope = _serviceProvider.CreateScope();
@@ -38,12 +40,23 @@ public class ExcelExportService(
             }
 
             // Get all findings
-            var allFindings = await findingRepo.GetByProjectIdAsync(projectId);
+            var allFindings = (await findingRepo.GetByProjectIdAsync(projectId)).ToList();
+            
+            if (allFindings.Count == 0)
+            {
+                _logger.LogWarning("No findings to export for project {ProjectId}", projectId);
+                return false;
+            }
+            
+            if (allFindings.Count > 50000)
+            {
+                _logger.LogWarning("Large export detected: {Count} findings. This may take some time.", allFindings.Count);
+            }
             
             using var workbook = new XLWorkbook();
 
             // Group findings by task key
-            var findingsByTask = allFindings.GroupBy(f => f.TaskKey);
+            var findingsByTask = allFindings.GroupBy(f => f.TaskKey).ToList();
 
             // Create summary sheet
             CreateSummarySheet(workbook, project.Name, allFindings, findingsByTask);
@@ -51,7 +64,7 @@ public class ExcelExportService(
             // Create a sheet for each plugin's findings
             foreach (var taskGroup in findingsByTask.OrderBy(g => g.Key))
             {
-                CreateTaskSheet(workbook, taskGroup.Key, taskGroup.ToList());
+                CreateTaskSheet(workbook, taskGroup.Key, taskGroup.ToList(), includeTechnicalMetadata);
             }
 
             // Ensure directory exists
@@ -121,32 +134,81 @@ public class ExcelExportService(
         ws.Columns().AdjustToContents();
     }
 
-    private void CreateTaskSheet(XLWorkbook workbook, string taskKey, List<Core.Models.Finding> findings)
+    private void CreateTaskSheet(XLWorkbook workbook, string taskKey, List<Core.Models.Finding> findings, bool includeTechnicalMetadata)
     {
         // Sanitize sheet name (Excel has restrictions)
         var sheetName = SanitizeSheetName(taskKey);
         var ws = workbook.Worksheets.Add(sheetName);
 
-        // Headers
-        ws.Cell(1, 1).Value = "URL";
-        ws.Cell(1, 2).Value = "Severity";
-        ws.Cell(1, 3).Value = "Code";
-        ws.Cell(1, 4).Value = "Message";
-        ws.Cell(1, 5).Value = "Date";
+        // Headers - add Details column
+        var colIndex = 1;
+        ws.Cell(1, colIndex++).Value = "URL";
+        ws.Cell(1, colIndex++).Value = "Severity";
+        ws.Cell(1, colIndex++).Value = "Code";
+        ws.Cell(1, colIndex++).Value = "Message";
+        ws.Cell(1, colIndex++).Value = "Details";
         
-        ws.Range(1, 1, 1, 5).Style.Font.Bold = true;
-        ws.Range(1, 1, 1, 5).Style.Fill.BackgroundColor = XLColor.LightBlue;
+        var technicalColIndex = 0;
+        if (includeTechnicalMetadata)
+        {
+            technicalColIndex = colIndex;
+            ws.Cell(1, colIndex++).Value = "Technical Data";
+        }
+        
+        ws.Cell(1, colIndex++).Value = "Date";
+        
+        var headerEndCol = colIndex - 1;
+        ws.Range(1, 1, 1, headerEndCol).Style.Font.Bold = true;
+        ws.Range(1, 1, 1, headerEndCol).Style.Fill.BackgroundColor = XLColor.LightBlue;
         ws.Row(1).Height = 20;
 
         // Data
         var row = 2;
         foreach (var finding in findings.OrderByDescending(f => f.Severity).ThenByDescending(f => f.CreatedUtc))
         {
-            ws.Cell(row, 1).Value = finding.Url?.Address ?? "";
-            ws.Cell(row, 2).Value = finding.Severity.ToString();
-            ws.Cell(row, 3).Value = finding.Code;
-            ws.Cell(row, 4).Value = finding.Message;
-            ws.Cell(row, 5).Value = finding.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss");
+            colIndex = 1;
+            ws.Cell(row, colIndex++).Value = finding.Url?.Address ?? "";
+            ws.Cell(row, colIndex++).Value = finding.Severity.ToString();
+            ws.Cell(row, colIndex++).Value = finding.Code;
+            ws.Cell(row, colIndex++).Value = finding.Message;
+            
+            // Add formatted structured details
+            FindingDetails? details = null;
+            string detailsText = "";
+            try
+            {
+                details = finding.GetDetails();
+                detailsText = FormatFindingDetailsForExcel(details);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error parsing finding details for finding {FindingId}", finding.Id);
+                detailsText = "[Error parsing details]";
+            }
+            
+            var detailsCell = ws.Cell(row, colIndex++);
+            detailsCell.Value = detailsText;
+            detailsCell.Style.Alignment.WrapText = true;
+            detailsCell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
+            
+            // Set row height to auto for wrapped content
+            if (!string.IsNullOrEmpty(detailsText))
+            {
+                ws.Row(row).AdjustToContents();
+            }
+            
+            // Add technical metadata if requested
+            if (includeTechnicalMetadata && technicalColIndex > 0)
+            {
+                var technicalData = FormatTechnicalMetadataForExcel(details);
+                ws.Cell(row, technicalColIndex).Value = technicalData;
+                ws.Cell(row, technicalColIndex).Style.Alignment.WrapText = true;
+                ws.Cell(row, technicalColIndex).Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
+                ws.Cell(row, technicalColIndex).Style.Font.FontName = "Consolas";
+                ws.Cell(row, technicalColIndex).Style.Font.FontSize = 9;
+            }
+            
+            ws.Cell(row, colIndex++).Value = finding.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss");
 
             // Color code by severity
             var severityCell = ws.Cell(row, 2);
@@ -172,7 +234,7 @@ public class ExcelExportService(
         // Auto-filter
         if (row > 2)
         {
-            ws.Range(1, 1, row - 1, 5).SetAutoFilter();
+            ws.Range(1, 1, row - 1, headerEndCol).SetAutoFilter();
         }
 
         // Auto-fit columns
@@ -189,6 +251,69 @@ public class ExcelExportService(
 
         // Freeze header row
         ws.SheetView.FreezeRows(1);
+    }
+    
+    /// <summary>
+    /// Formats FindingDetails as readable text for Excel with indentation for nested items.
+    /// </summary>
+    private string FormatFindingDetailsForExcel(FindingDetails? details)
+    {
+        if (details == null || details.Items.Count == 0)
+        {
+            return "";
+        }
+        
+        var lines = new List<string>();
+        FormatDetailItems(details.Items, 0, lines);
+        return string.Join("\n", lines);
+    }
+    
+    /// <summary>
+    /// Recursively formats detail items with indentation.
+    /// </summary>
+    private void FormatDetailItems(List<FindingDetail> items, int indentLevel, List<string> lines)
+    {
+        // Guard against excessive nesting to prevent stack overflow
+        if (indentLevel > 10)
+        {
+            lines.Add($"{new string(' ', indentLevel * 2)}[Max nesting depth reached]");
+            return;
+        }
+        
+        foreach (var item in items)
+        {
+            var indent = new string(' ', indentLevel * 2);
+            var bullet = indentLevel > 0 ? "• " : "";
+            lines.Add($"{indent}{bullet}{item.Text}");
+            
+            if (item.Children != null && item.Children.Count > 0)
+            {
+                FormatDetailItems(item.Children, indentLevel + 1, lines);
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Formats technical metadata as JSON for Excel.
+    /// </summary>
+    private string FormatTechnicalMetadataForExcel(FindingDetails? details)
+    {
+        if (details?.TechnicalMetadata == null || details.TechnicalMetadata.Count == 0)
+        {
+            return "";
+        }
+        
+        try
+        {
+            return System.Text.Json.JsonSerializer.Serialize(
+                details.TechnicalMetadata,
+                JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error formatting technical metadata for export");
+            return "[Error formatting technical metadata]";
+        }
     }
 
     private string SanitizeSheetName(string name)

@@ -23,7 +23,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         public Severity Severity { get; set; }
         public string Code { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
-        public object? Data { get; set; }
+        public FindingDetails? Data { get; set; }
         public int OccurrenceCount { get; set; } = 1;
     }
 
@@ -316,32 +316,35 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
             // Dedupe by link URL, code, and status code
             var key = $"{link.Url}|{code}|{status.Value}";
             
-            // Add depth information and specific recommendations
-            var data = CreateFindingData(ctx, link, status.Value, isExternal, diagnosticInfo, hasRedirect: hasRedirect);
-            var dataDict = data as Dictionary<string, object?>;
-            
-            if (dataDict != null)
+            // Generate recommendations based on the issue
+            string? recommendation = null;
+            if (isRestricted)
             {
-                if (isRestricted)
+                var note = status.Value switch
                 {
-                    dataDict["note"] = status.Value switch
-                    {
-                        401 => "This page requires authentication/login to access",
-                        403 => "This page is restricted and access is forbidden",
-                        451 => "This page is unavailable for legal reasons",
-                        _ => "This page has restricted access"
-                    };
-                    dataDict["recommendation"] = "If this is expected (e.g., members-only area), this is not an error. Otherwise, check access permissions.";
-                }
-                else if (ctx.Metadata.Depth <= 2 && !isExternal && link.LinkType == "hyperlink")
-                {
-                    // Important page recommendations for actual broken links
-                    dataDict["note"] = $"This broken link is found on an important page (depth {ctx.Metadata.Depth})";
-                    dataDict["recommendation"] = status.Value == 404 
-                        ? "Fix the link URL or implement a 301 redirect to the correct page"
-                        : $"Investigate why this page returns {statusText} and fix the issue or update the link";
-                }
+                    401 => "This page requires authentication/login to access.",
+                    403 => "This page is restricted and access is forbidden.",
+                    451 => "This page is unavailable for legal reasons.",
+                    _ => "This page has restricted access."
+                };
+                recommendation = $"{note} If this is expected (e.g., members-only area), this is not an error. Otherwise, check access permissions.";
             }
+            else if (ctx.Metadata.Depth <= 2 && !isExternal && link.LinkType == "hyperlink")
+            {
+                // Important page recommendations for actual broken links
+                var note = $"This broken link is found on an important page (depth {ctx.Metadata.Depth}).";
+                var action = status.Value == 404 
+                    ? "Fix the link URL or implement a 301 redirect to the correct page."
+                    : $"Investigate why this page returns {statusText} and fix the issue or update the link.";
+                recommendation = $"{note} {action}";
+            }
+            else if (status.Value == 404)
+            {
+                recommendation = "Fix the link URL or implement a 301 redirect to the correct page.";
+            }
+            
+            // Add depth information and recommendations
+            var data = CreateFindingData(ctx, link, status.Value, isExternal, diagnosticInfo, hasRedirect: hasRedirect, recommendation: recommendation);
             
             TrackFinding(findingsMap,
                 key,
@@ -415,35 +418,77 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         }
     }
 
-    private object CreateFindingData(
+    private FindingDetails CreateFindingData(
         UrlContext ctx, 
         LinkInfo link, 
         int? httpStatus, 
         bool isExternal, 
         ElementDiagnosticInfo? diagnosticInfo,
         bool? hasRedirect = null,
-        TimeSpan? responseTime = null)
+        TimeSpan? responseTime = null,
+        string? recommendation = null)
     {
-        var data = new Dictionary<string, object?>
+        var builder = FindingDetailsBuilder.Create()
+            .AddItem($"Link destination: {link.Url}")
+            .AddItem($"Link type: {link.LinkType}")
+            .AddItem($"Source page: {ctx.Url}");
+        
+        if (!string.IsNullOrEmpty(link.AnchorText))
         {
-            ["sourceUrl"] = ctx.Url.ToString(),
-            ["targetUrl"] = link.Url,
-            ["anchorText"] = link.AnchorText,
-            ["linkType"] = link.LinkType,
-            ["httpStatus"] = httpStatus,
-            ["isExternal"] = isExternal,
-            ["hasNofollow"] = link.HasNofollow,
-            ["hasRedirect"] = hasRedirect
-        };
-
+            builder.AddItem($"Anchor text: \"{link.AnchorText}\"");
+        }
+        
+        if (httpStatus.HasValue)
+        {
+            builder.AddItem($"HTTP status: {httpStatus.Value}");
+        }
+        
+        if (hasRedirect == true)
+        {
+            builder.AddItem("⚠️ This URL has a redirect chain");
+        }
+        
+        if (link.HasNofollow)
+        {
+            builder.AddItem("🔗 Link has nofollow attribute");
+        }
+        
         if (responseTime.HasValue)
         {
-            data["responseTimeSeconds"] = responseTime.Value.TotalSeconds;
+            builder.AddItem($"Response time: {responseTime.Value.TotalSeconds:F2} seconds");
+        }
+        
+        if (isExternal)
+        {
+            builder.AddItem("🌐 External link");
+        }
+        
+        // Add recommendation if provided
+        if (!string.IsNullOrEmpty(recommendation))
+        {
+            builder.BeginNested("💡 Recommendations")
+                .AddItem(recommendation)
+                .EndNested();
+        }
+        
+        // Add all diagnostic/technical info to TechnicalMetadata
+        builder.WithTechnicalMetadata("sourceUrl", ctx.Url.ToString())
+            .WithTechnicalMetadata("targetUrl", link.Url)
+            .WithTechnicalMetadata("anchorText", link.AnchorText)
+            .WithTechnicalMetadata("linkType", link.LinkType)
+            .WithTechnicalMetadata("httpStatus", httpStatus)
+            .WithTechnicalMetadata("isExternal", isExternal)
+            .WithTechnicalMetadata("hasNofollow", link.HasNofollow)
+            .WithTechnicalMetadata("hasRedirect", hasRedirect);
+        
+        if (responseTime.HasValue)
+        {
+            builder.WithTechnicalMetadata("responseTimeSeconds", responseTime.Value.TotalSeconds);
         }
 
         if (diagnosticInfo != null)
         {
-            data["elementInfo"] = new
+            builder.WithTechnicalMetadata("elementInfo", new
             {
                 diagnosticInfo.TagName,
                 diagnosticInfo.DomPath,
@@ -453,16 +498,16 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 diagnosticInfo.IsVisible,
                 diagnosticInfo.HtmlContext,
                 diagnosticInfo.ComputedStyle
-            };
+            });
         }
 
-        return data;
+        return builder.Build();
     }
 
     /// <summary>
     /// Track a finding in the deduplication map. If the same finding already exists, increment its occurrence count.
     /// </summary>
-    private void TrackFinding(Dictionary<string, FindingTracker> findingsMap, string key, Severity severity, string code, string message, object? data)
+    private void TrackFinding(Dictionary<string, FindingTracker> findingsMap, string key, Severity severity, string code, string message, FindingDetails? data)
     {
         if (findingsMap.TryGetValue(key, out var existing))
         {
@@ -499,39 +544,13 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 message += $" (occurs {tracker.OccurrenceCount} times on this page)";
             }
 
-            // Add occurrence count to the data object if there are duplicates
-            object? dataWithCount = tracker.Data;
-            if (tracker.Data != null && tracker.OccurrenceCount > 1)
+            // Add occurrence count to finding details if there are duplicates
+            var details = tracker.Data;
+            if (details != null && tracker.OccurrenceCount > 1)
             {
-                // Check if data is already a dictionary (from CreateFindingData)
-                if (tracker.Data is Dictionary<string, object?> existingDict)
-                {
-                    // Create a shallow copy to avoid mutation issues
-                    var dataDict = new Dictionary<string, object?>(existingDict)
-                    {
-                        ["occurrenceCount"] = tracker.OccurrenceCount
-                    };
-                    dataWithCount = dataDict;
-                }
-                else
-                {
-                    // Fall back to reflection for other types (anonymous types, etc.)
-                    var dataDict = new Dictionary<string, object?>();
-                    var dataType = tracker.Data.GetType();
-                    foreach (var prop in dataType.GetProperties())
-                    {
-                        try
-                        {
-                            dataDict[prop.Name] = prop.GetValue(tracker.Data);
-                        }
-                        catch
-                        {
-                            // Skip properties that can't be read
-                        }
-                    }
-                    dataDict["occurrenceCount"] = tracker.OccurrenceCount;
-                    dataWithCount = dataDict;
-                }
+                // Add occurrence count to technical metadata
+                details.TechnicalMetadata ??= new Dictionary<string, object?>();
+                details.TechnicalMetadata["occurrenceCount"] = tracker.OccurrenceCount;
             }
 
             await ctx.Findings.ReportAsync(
@@ -539,7 +558,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 tracker.Severity,
                 tracker.Code,
                 message,
-                dataWithCount);
+                details);
         }
     }
 

@@ -1,5 +1,6 @@
 using HtmlAgilityPack;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.Plugins.Shared;
 using System.Text.RegularExpressions;
 
 namespace ShoutingIguana.Plugins.Inventory;
@@ -46,34 +47,49 @@ public class InventoryTask : UrlTaskBase
                     _ => "This page has restricted access"
                 };
                 
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"URL: {ctx.Url}")
+                    .AddItem($"HTTP Status: {statusCode}")
+                    .AddItem($"Page Depth: {ctx.Metadata.Depth}")
+                    .AddItem($"ℹ️ {note}")
+                    .BeginNested("💡 Note")
+                        .AddItem("If this is expected (e.g., members-only area), this is not an error")
+                        .AddItem("Otherwise, check access permissions")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("status", statusCode)
+                    .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Info,
                     $"HTTP_{statusCode}",
                     $"HTTP {statusCode} - {restrictionType}",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        status = statusCode,
-                        depth = ctx.Metadata.Depth,
-                        note,
-                        recommendation = "If this is expected (e.g., members-only area), this is not an error. Otherwise, check access permissions."
-                    });
+                    details);
             }
             else
             {
                 // Actual errors
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"URL: {ctx.Url}")
+                    .AddItem($"HTTP Status: {statusCode}")
+                    .AddItem($"Page Depth: {ctx.Metadata.Depth}")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Investigate why this page returns an error")
+                        .AddItem("Fix the page or implement a 301 redirect")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("status", statusCode)
+                    .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Error,
                     $"HTTP_{statusCode}",
                     $"HTTP error {statusCode}",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        status = statusCode,
-                        depth = ctx.Metadata.Depth
-                    });
+                    details);
             }
         }
         
@@ -94,47 +110,62 @@ public class InventoryTask : UrlTaskBase
         // Check URL length
         if (urlLength > MAX_URL_LENGTH)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"URL length: {urlLength} characters")
+                .AddItem($"Recommended: Under {MAX_URL_LENGTH} characters")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Shorter URLs are easier to share and remember")
+                    .AddItem("They may also rank slightly better in search results")
+                .EndNested()
+                .WithTechnicalMetadata("url", url)
+                .WithTechnicalMetadata("length", urlLength)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "URL_TOO_LONG",
                 $"URL is {urlLength} characters (recommend <{MAX_URL_LENGTH})",
-                new
-                {
-                    url,
-                    length = urlLength,
-                    recommendation = "Shorter URLs are easier to share and may rank better"
-                });
+                details);
         }
         else if (urlLength > WARNING_URL_LENGTH)
         {
+            var details = FindingDetailsBuilder.WithMetadata(
+                new Dictionary<string, object?> {
+                    ["url"] = url,
+                    ["length"] = urlLength
+                },
+                $"URL length: {urlLength} characters",
+                $"Recommended: Under {WARNING_URL_LENGTH} characters");
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "URL_LONG",
                 $"URL is {urlLength} characters (consider shortening)",
-                new
-                {
-                    url,
-                    length = urlLength
-                });
+                details);
         }
 
         // Check for uppercase in URL
         if (url != url.ToLowerInvariant())
         {
-            var uppercaseParts = Regex.Matches(url, "[A-Z]+").Cast<Match>().Select(m => m.Value).ToArray();
+            var uppercaseParts = Regex.Matches(url, "[A-Z]+").Select(m => m.Value).ToArray();
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Uppercase characters found: {string.Join(", ", uppercaseParts)}")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Use lowercase URLs to avoid case-sensitivity issues")
+                    .AddItem("Some servers treat /Page and /page as different resources")
+                .EndNested()
+                .WithTechnicalMetadata("url", url)
+                .WithTechnicalMetadata("uppercaseParts", uppercaseParts)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "UPPERCASE_IN_URL",
                 "URL contains uppercase characters (case-sensitivity risk)",
-                new
-                {
-                    url,
-                    uppercaseParts,
-                    recommendation = "Use lowercase URLs to avoid case-sensitivity issues"
-                });
+                details);
         }
 
         // Check query parameters
@@ -143,33 +174,52 @@ public class InventoryTask : UrlTaskBase
             var queryParams = ctx.Url.Query.TrimStart('?').Split('&');
             if (queryParams.Length > MAX_QUERY_PARAMETERS)
             {
+                var builder = FindingDetailsBuilder.Create()
+                    .AddItem($"Query parameters: {queryParams.Length}")
+                    .AddItem($"Recommended: {MAX_QUERY_PARAMETERS} or fewer");
+                
+                builder.BeginNested("📊 Parameters");
+                foreach (var param in queryParams.Take(5))
+                {
+                    builder.AddItem(param);
+                }
+                if (queryParams.Length > 5)
+                {
+                    builder.AddItem($"... and {queryParams.Length - 5} more");
+                }
+                builder.EndNested();
+                
+                builder.WithTechnicalMetadata("url", url)
+                    .WithTechnicalMetadata("parameterCount", queryParams.Length)
+                    .WithTechnicalMetadata("parameters", queryParams);
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Info,
                     "TOO_MANY_PARAMETERS",
                     $"URL has {queryParams.Length} query parameters (recommend <{MAX_QUERY_PARAMETERS})",
-                    new
-                    {
-                        url,
-                        parameterCount = queryParams.Length,
-                        parameters = queryParams.Take(5).ToArray()
-                    });
+                    builder.Build());
             }
 
             // Check for pagination parameters
             var paginationPattern = @"[?&](page|p|pg|offset|start)=";
             if (Regex.IsMatch(url, paginationPattern, RegexOptions.IgnoreCase))
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem("This appears to be a pagination page")
+                    .BeginNested("💡 Best Practices")
+                        .AddItem("Consider using rel=prev/next link tags")
+                        .AddItem("Use canonical tags to avoid duplicate content issues")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", url)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Info,
                     "PAGINATION_DETECTED",
                     "URL appears to be a pagination page",
-                    new
-                    {
-                        url,
-                        note = "Consider using rel=prev/next links and canonical tags"
-                    });
+                    details);
             }
         }
 
@@ -178,37 +228,44 @@ public class InventoryTask : UrlTaskBase
         if (Regex.IsMatch(url, specialCharsPattern))
         {
             var specialChars = Regex.Matches(url, specialCharsPattern)
-                .Cast<Match>()
                 .Select(m => m.Value)
                 .Distinct()
                 .ToArray();
+            
+            var details = FindingDetailsBuilder.WithMetadata(
+                new Dictionary<string, object?> {
+                    ["url"] = url,
+                    ["specialChars"] = specialChars
+                },
+                $"Non-standard characters: {string.Join(", ", specialChars)}",
+                "⚠️ May cause encoding issues in some contexts");
                 
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "SPECIAL_CHARS_IN_URL",
                 "URL contains non-standard characters",
-                new
-                {
-                    url,
-                    specialChars,
-                    note = "May cause encoding issues in some contexts"
-                });
+                details);
         }
 
         // Check for underscores (Google treats them differently than hyphens)
         if (ctx.Url.AbsolutePath.Contains('_'))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("URL contains underscores")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Use hyphens (-) instead of underscores (_) for word separation")
+                    .AddItem("Google treats hyphens as word separators but underscores as word connectors")
+                .EndNested()
+                .WithTechnicalMetadata("url", url)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "UNDERSCORES_IN_URL",
                 "URL contains underscores (hyphens are preferred for SEO)",
-                new
-                {
-                    url,
-                    recommendation = "Use hyphens (-) instead of underscores (_) for word separation"
-                });
+                details);
         }
     }
 
@@ -225,17 +282,20 @@ public class InventoryTask : UrlTaskBase
                 source = "conflicting meta and X-Robots-Tag (most restrictive applied)";
             }
             
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Source: {source}")
+                .AddItem("⚠️ This page will not appear in search engine results")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("xRobotsTag", ctx.Metadata.XRobotsTag)
+                .WithTechnicalMetadata("hasConflict", ctx.Metadata.HasRobotsConflict)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "NOINDEX_DIRECTIVE",
                 $"Page has noindex directive (will not be indexed) - Source: {source}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    xRobotsTag = ctx.Metadata.XRobotsTag,
-                    hasConflict = ctx.Metadata.HasRobotsConflict
-                });
+                details);
         }
 
         // Use crawler-parsed canonical data
@@ -247,18 +307,25 @@ public class InventoryTask : UrlTaskBase
 
             if (normalizedCurrent != normalizedCanonical)
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Current URL: {ctx.Url}")
+                    .AddItem($"Canonical URL: {canonical}")
+                    .AddItem($"Cross-domain: {(ctx.Metadata.HasCrossDomainCanonical ? "Yes" : "No")}")
+                    .BeginNested("ℹ️ Impact")
+                        .AddItem("This page defers indexing to the canonical URL")
+                        .AddItem("Search engines will index the canonical URL instead")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("canonical", canonical)
+                    .WithTechnicalMetadata("isCrossDomain", ctx.Metadata.HasCrossDomainCanonical)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Info,
                     "CANONICALIZED_PAGE",
                     "Page canonical points elsewhere (will not be indexed)",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        canonical,
-                        isCrossDomain = ctx.Metadata.HasCrossDomainCanonical,
-                        note = "This page defers indexing to the canonical URL"
-                    });
+                    details);
             }
         }
     }
@@ -280,17 +347,23 @@ public class InventoryTask : UrlTaskBase
 
             if (contentLength < MIN_CONTENT_LENGTH)
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Content length: {contentLength} characters")
+                    .AddItem($"Recommended: At least {MIN_CONTENT_LENGTH} characters")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Add more substantive, unique content to this page")
+                        .AddItem("Thin content pages may not rank well in search results")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("contentLength", contentLength)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Warning,
                     "THIN_CONTENT",
                     $"Page has very little content ({contentLength} chars, recommend >{MIN_CONTENT_LENGTH})",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        contentLength,
-                        recommendation = "Thin content pages may not rank well"
-                    });
+                    details);
             }
         }
     }

@@ -1,6 +1,7 @@
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.Plugins.Shared;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -112,33 +113,51 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             }
             catch (JsonException ex)
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem("JSON-LD syntax error")
+                    .AddItem($"Error: {ex.Message}")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Fix JSON syntax in ld+json script tag")
+                        .AddItem("Use JSON validator to check structure")
+                        .AddItem("Common issues: trailing commas, unescaped quotes")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("error", ex.Message)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Error,
                     "INVALID_JSON_LD",
                     $"JSON-LD syntax error: {ex.Message}",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        error = ex.Message,
-                        recommendation = "Fix JSON syntax in ld+json script tag"
-                    });
+                    details);
             }
         }
 
         if (validSchemas.Any())
         {
+            var distinctSchemas = validSchemas.Distinct().ToList();
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"Found {validSchemas.Count} JSON-LD schema(s)");
+            
+            builder.BeginNested("📋 Schema types");
+            foreach (var schema in distinctSchemas)
+            {
+                builder.AddItem(schema);
+            }
+            builder.EndNested();
+            
+            builder.AddItem("✅ Structured data helps search engines understand your content")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("schemas", validSchemas.ToArray())
+                .WithTechnicalMetadata("count", validSchemas.Count);
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "JSON_LD_FOUND",
-                $"Found {validSchemas.Count} JSON-LD schema(s): {string.Join(", ", validSchemas.Distinct())}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    schemas = validSchemas.ToArray(),
-                    count = validSchemas.Count
-                });
+                $"Found {validSchemas.Count} JSON-LD schema(s): {string.Join(", ", distinctSchemas)}",
+                builder.Build());
         }
     }
 
@@ -212,18 +231,31 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"Schema type: {schemaType}");
+            
+            builder.BeginNested("❌ Missing required properties");
+            foreach (var prop in missingProps)
+            {
+                builder.AddItem(prop);
+            }
+            builder.EndNested();
+            
+            builder.BeginNested("💡 Recommendations")
+                .AddItem("Add missing properties for complete Article markup")
+                .AddItem("Complete schemas qualify for rich results")
+            .EndNested();
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("schemaType", schemaType)
+                .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "INCOMPLETE_ARTICLE_SCHEMA",
                 $"{schemaType} schema missing required properties: {string.Join(", ", missingProps)}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    schemaType,
-                    missingProperties = missingProps.ToArray(),
-                    recommendation = "Add missing properties for complete Article markup"
-                });
+                builder.Build());
         }
     }
 
@@ -289,31 +321,53 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem("Product schema incomplete");
+            
+            builder.BeginNested("❌ Missing required properties");
+            foreach (var prop in missingProps)
+            {
+                builder.AddItem(prop);
+            }
+            builder.EndNested();
+            
+            builder.BeginNested("💡 Recommendations")
+                .AddItem("Add missing properties per Google guidelines")
+                .AddItem("Complete Product schema qualifies for rich results")
+            .EndNested();
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Error,
                 "INCOMPLETE_PRODUCT_SCHEMA",
                 $"Product schema missing required properties: {string.Join(", ", missingProps)}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    missingProperties = missingProps.ToArray(),
-                    recommendation = "Add missing properties for complete Product markup per Google guidelines"
-                });
+                builder.Build());
         }
 
         if (warnings.Any())
         {
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"Product schema has {warnings.Count} recommended improvements");
+            
+            builder.BeginNested("⚠️ Recommendations");
+            foreach (var warning in warnings)
+            {
+                builder.AddItem(warning);
+            }
+            builder.EndNested();
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("warnings", warnings.ToArray());
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "PRODUCT_SCHEMA_RECOMMENDATIONS",
                 $"Product schema has {warnings.Count} recommended improvements",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    warnings = warnings.ToArray()
-                });
+                builder.Build());
         }
     }
 
@@ -495,31 +549,53 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem("VideoObject schema incomplete");
+            
+            builder.BeginNested("❌ Missing required properties");
+            foreach (var prop in missingProps)
+            {
+                builder.AddItem(prop);
+            }
+            builder.EndNested();
+            
+            builder.BeginNested("💡 Recommendations")
+                .AddItem("Add missing properties for Video rich results")
+                .AddItem("Complete VideoObject appears in Google Video search")
+            .EndNested();
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Error,
                 "INCOMPLETE_VIDEO_SCHEMA",
                 $"VideoObject schema missing required properties: {string.Join(", ", missingProps)}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    missingProperties = missingProps.ToArray(),
-                    recommendation = "Add missing properties for VideoObject to appear in Google Video and YouTube search"
-                });
+                builder.Build());
         }
 
         if (warnings.Any())
         {
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"VideoObject schema: {warnings.Count} improvements");
+            
+            builder.BeginNested("⚠️ Recommendations");
+            foreach (var warning in warnings)
+            {
+                builder.AddItem(warning);
+            }
+            builder.EndNested();
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("warnings", warnings.ToArray());
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "VIDEO_SCHEMA_RECOMMENDATIONS",
                 $"VideoObject schema has {warnings.Count} recommended improvements",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    warnings = warnings.ToArray()
-                });
+                builder.Build());
         }
     }
 
@@ -584,31 +660,53 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem("Review schema incomplete");
+            
+            builder.BeginNested("❌ Missing required properties");
+            foreach (var prop in missingProps)
+            {
+                builder.AddItem(prop);
+            }
+            builder.EndNested();
+            
+            builder.BeginNested("💡 Recommendations")
+                .AddItem("Add missing properties to qualify for rich results")
+                .AddItem("Complete Review schema shows star ratings in search")
+            .EndNested();
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Error,
                 "INCOMPLETE_REVIEW_SCHEMA",
                 $"Review schema missing required properties: {string.Join(", ", missingProps)}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    missingProperties = missingProps.ToArray(),
-                    recommendation = "Add missing properties for Review schema to qualify for rich results"
-                });
+                builder.Build());
         }
 
         if (warnings.Any())
         {
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"Review schema: {warnings.Count} improvements");
+            
+            builder.BeginNested("⚠️ Recommendations");
+            foreach (var warning in warnings)
+            {
+                builder.AddItem(warning);
+            }
+            builder.EndNested();
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("warnings", warnings.ToArray());
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "REVIEW_SCHEMA_RECOMMENDATIONS",
                 $"Review schema has {warnings.Count} recommended improvements",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    warnings = warnings.ToArray()
-                });
+                builder.Build());
         }
     }
 
@@ -628,18 +726,26 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"{schemaType} schema incomplete");
+            
+            builder.BeginNested("❌ Missing required properties");
+            foreach (var prop in missingProps)
+            {
+                builder.AddItem(prop);
+            }
+            builder.EndNested();
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("schemaType", schemaType)
+                .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "INCOMPLETE_ORGANIZATION_SCHEMA",
                 $"{schemaType} schema missing required properties: {string.Join(", ", missingProps)}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    schemaType,
-                    missingProperties = missingProps.ToArray(),
-                    recommendation = "Add missing properties for complete Organization markup"
-                });
+                builder.Build());
         }
     }
 
@@ -647,16 +753,22 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
     {
         if (!root.TryGetProperty("itemListElement", out _))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("BreadcrumbList schema incomplete")
+                .AddItem("❌ Missing itemListElement property")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Add itemListElement array with breadcrumb items")
+                    .AddItem("Each item should have name and position")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "INVALID_BREADCRUMB_SCHEMA",
                 "BreadcrumbList missing itemListElement property",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    recommendation = "Add itemListElement array with breadcrumb items"
-                });
+                details);
         }
     }
 
@@ -666,17 +778,24 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (!root.TryGetProperty(requiredProp, out _))
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"{schemaType} schema incomplete")
+                .AddItem($"❌ Missing required '{requiredProp}' property")
+                .BeginNested("💡 Recommendations")
+                    .AddItem($"Add {requiredProp} array to the schema")
+                    .AddItem("This property is required for rich results")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("schemaType", schemaType)
+                .WithTechnicalMetadata("missingProperty", requiredProp)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 $"INCOMPLETE_{schemaType.ToUpperInvariant()}_SCHEMA",
                 $"{schemaType} schema missing required '{requiredProp}' property",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    schemaType,
-                    missingProperty = requiredProp
-                });
+                details);
         }
     }
 
@@ -703,18 +822,28 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (itemTypes.Any())
         {
+            var distinctTypes = itemTypes.Distinct().ToList();
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"Found {itemTypes.Count} Microdata item(s)");
+            
+            builder.BeginNested("📋 Item types");
+            foreach (var type in distinctTypes)
+            {
+                builder.AddItem(type);
+            }
+            builder.EndNested();
+            
+            builder.AddItem("ℹ️ Consider using JSON-LD instead for easier maintenance")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("itemTypes", distinctTypes.ToArray())
+                .WithTechnicalMetadata("count", itemTypes.Count);
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "MICRODATA_FOUND",
                 $"Found {itemTypes.Count} Microdata item(s)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    itemTypes = itemTypes.Distinct().ToArray(),
-                    count = itemTypes.Count,
-                    note = "Consider using JSON-LD instead of Microdata for easier maintenance"
-                });
+                builder.Build());
         }
     }
 
@@ -748,17 +877,25 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
             if (recommendedSchema != null)
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Page appears to be: {recommendedSchema}")
+                    .AddItem("❌ No structured data found")
+                    .AddItem($"Page depth: {ctx.Metadata.Depth} (important page)")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Add JSON-LD structured data")
+                        .AddItem("Structured data improves search appearance")
+                        .AddItem("Can qualify for rich results and enhanced listings")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("recommendedSchema", recommendedSchema)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Info,
                     "MISSING_STRUCTURED_DATA",
                     $"Page appears to be a {recommendedSchema} page but has no structured data",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        recommendedSchema,
-                        recommendation = "Add JSON-LD structured data to improve search appearance"
-                    });
+                    details);
             }
         }
     }

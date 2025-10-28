@@ -21,11 +21,12 @@ internal class PluginMetadata
 /// <summary>
 /// Implementation of IPluginRegistry for discovering and managing plugins with hot-loading support.
 /// </summary>
-public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory loggerFactory, IServiceProvider serviceProvider) : IPluginRegistry
+public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory loggerFactory, IServiceProvider serviceProvider, IPluginConfigurationService pluginConfig) : IPluginRegistry
 {
     private readonly ILogger<PluginRegistry> _logger = logger;
     private readonly ILoggerFactory _loggerFactory = loggerFactory;
     private readonly IServiceProvider _serviceProvider = serviceProvider;
+    private readonly IPluginConfigurationService _pluginConfig = pluginConfig;
     private readonly Dictionary<string, PluginMetadata> _pluginMetadata = [];
     private readonly List<IUrlTask> _registeredTasks = [];
     private readonly List<IExportProvider> _registeredExporters = [];
@@ -51,6 +52,35 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
         }
     }
 
+    public IReadOnlyList<IPlugin> EnabledPlugins
+    {
+        get
+        {
+            _lock.Wait();
+            try
+            {
+                // Batch fetch all plugin states to avoid multiple async calls
+                var allStates = _pluginConfig.GetAllPluginStatesAsync().GetAwaiter().GetResult();
+                
+                var enabledPlugins = new List<IPlugin>();
+                foreach (var metadata in _pluginMetadata.Values)
+                {
+                    // Check enabled state from batch result (default to enabled if not in config)
+                    var isEnabled = !allStates.TryGetValue(metadata.Plugin.Id, out var enabled) || enabled;
+                    if (isEnabled)
+                    {
+                        enabledPlugins.Add(metadata.Plugin);
+                    }
+                }
+                return enabledPlugins.AsReadOnly();
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+    }
+
     public IReadOnlyList<IUrlTask> RegisteredTasks
     {
         get
@@ -67,6 +97,35 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
         }
     }
 
+    public IReadOnlyList<IUrlTask> EnabledTasks
+    {
+        get
+        {
+            _lock.Wait();
+            try
+            {
+                // Batch fetch all plugin states to avoid multiple async calls
+                var allStates = _pluginConfig.GetAllPluginStatesAsync().GetAwaiter().GetResult();
+                
+                var enabledTasks = new List<IUrlTask>();
+                foreach (var metadata in _pluginMetadata.Values)
+                {
+                    // Check enabled state from batch result (default to enabled if not in config)
+                    var isEnabled = !allStates.TryGetValue(metadata.Plugin.Id, out var enabled) || enabled;
+                    if (isEnabled)
+                    {
+                        enabledTasks.AddRange(metadata.Tasks);
+                    }
+                }
+                return enabledTasks.AsReadOnly();
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+    }
+
     public IReadOnlyList<IExportProvider> RegisteredExporters
     {
         get
@@ -75,6 +134,35 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
             try
             {
                 return _registeredExporters.ToList().AsReadOnly();
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+    }
+
+    public IReadOnlyList<IExportProvider> EnabledExporters
+    {
+        get
+        {
+            _lock.Wait();
+            try
+            {
+                // Batch fetch all plugin states to avoid multiple async calls
+                var allStates = _pluginConfig.GetAllPluginStatesAsync().GetAwaiter().GetResult();
+                
+                var enabledExporters = new List<IExportProvider>();
+                foreach (var metadata in _pluginMetadata.Values)
+                {
+                    // Check enabled state from batch result (default to enabled if not in config)
+                    var isEnabled = !allStates.TryGetValue(metadata.Plugin.Id, out var enabled) || enabled;
+                    if (isEnabled)
+                    {
+                        enabledExporters.AddRange(metadata.Exporters);
+                    }
+                }
+                return enabledExporters.AsReadOnly();
             }
             finally
             {
@@ -283,7 +371,21 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
         _lock.Wait();
         try
         {
-            return _registeredTasks.OrderBy(t => t.Priority).ToList().AsReadOnly();
+            // Batch fetch all plugin states to avoid multiple async calls
+            var allStates = _pluginConfig.GetAllPluginStatesAsync().GetAwaiter().GetResult();
+            
+            // Only return tasks from enabled plugins
+            var enabledTasks = new List<IUrlTask>();
+            foreach (var metadata in _pluginMetadata.Values)
+            {
+                // Check enabled state from batch result (default to enabled if not in config)
+                var isEnabled = !allStates.TryGetValue(metadata.Plugin.Id, out var enabled) || enabled;
+                if (isEnabled)
+                {
+                    enabledTasks.AddRange(metadata.Tasks);
+                }
+            }
+            return enabledTasks.OrderBy(t => t.Priority).ToList().AsReadOnly();
         }
         finally
         {

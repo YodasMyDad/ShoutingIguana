@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.Plugins.Shared;
 using System.Collections.Concurrent;
 
 namespace ShoutingIguana.Plugins.Canonical;
@@ -96,17 +97,23 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
         // Only report missing canonical on important pages (depth <= 2)
         if (string.IsNullOrEmpty(canonical) && ctx.Metadata.Depth <= 2)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Page depth: {ctx.Metadata.Depth} (important page)")
+                .AddItem("No canonical tag found")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Add canonical tag to help search engines understand the preferred version")
+                    .AddItem("Self-referencing canonicals are a best practice")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "MISSING_CANONICAL",
                 "Important page is missing canonical tag",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    depth = ctx.Metadata.Depth,
-                    recommendation = "Add canonical tag to help search engines understand the preferred version"
-                });
+                details);
         }
     }
 
@@ -117,18 +124,29 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
             return;
         }
 
+        var details = FindingDetailsBuilder.Create()
+            .AddItem("Multiple canonical tags detected:")
+            .AddItem($"  • HTML: {ctx.Metadata.CanonicalHtml ?? "none"}")
+            .AddItem($"  • HTTP: {ctx.Metadata.CanonicalHttp ?? "none"}")
+            .BeginNested("⚠️ Issue")
+                .AddItem("Multiple canonicals confuse search engines")
+                .AddItem("Search engines may ignore all canonicals")
+            .EndNested()
+            .BeginNested("💡 Recommendations")
+                .AddItem("Remove duplicate canonical tags")
+                .AddItem("Keep only one canonical declaration")
+            .EndNested()
+            .WithTechnicalMetadata("url", ctx.Url.ToString())
+            .WithTechnicalMetadata("canonicalHtml", ctx.Metadata.CanonicalHtml)
+            .WithTechnicalMetadata("canonicalHttp", ctx.Metadata.CanonicalHttp)
+            .Build();
+        
         await ctx.Findings.ReportAsync(
             Key,
             Severity.Error,
             "MULTIPLE_CANONICALS",
             "Page has multiple canonical tags",
-            new
-            {
-                url = ctx.Url.ToString(),
-                canonicalHtml = ctx.Metadata.CanonicalHtml,
-                canonicalHttp = ctx.Metadata.CanonicalHttp,
-                recommendation = "Remove duplicate canonical tags - only one should be present"
-            });
+            details);
     }
 
     private async Task CheckCrossDomainCanonicalAsync(UrlContext ctx, string? canonical)
@@ -138,17 +156,23 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
             return;
         }
 
+        var details = FindingDetailsBuilder.Create()
+            .AddItem($"Canonical URL: {canonical}")
+            .AddItem("🌐 Points to different domain")
+            .BeginNested("ℹ️ Note")
+                .AddItem("Cross-domain canonicals are valid for syndicated content")
+                .AddItem("Use carefully - this gives ranking credit to another domain")
+            .EndNested()
+            .WithTechnicalMetadata("url", ctx.Url.ToString())
+            .WithTechnicalMetadata("canonical", canonical)
+            .Build();
+        
         await ctx.Findings.ReportAsync(
             Key,
             Severity.Warning,
             "CROSS_DOMAIN_CANONICAL",
             $"Canonical points to different domain: {canonical}",
-            new
-            {
-                url = ctx.Url.ToString(),
-                canonical,
-                note = "Cross-domain canonicals are valid for syndicated content but should be used carefully"
-            });
+            details);
     }
 
     private async Task CheckSelfReferencingCanonicalAsync(UrlContext ctx, string? canonical)
@@ -170,17 +194,23 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
         else if (!ctx.Metadata.HasCrossDomainCanonical)
         {
             // Canonical points to a different page on the same domain
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Current URL: {ctx.Url}")
+                .AddItem($"Canonical URL: {canonical}")
+                .BeginNested("ℹ️ Impact")
+                    .AddItem("This page will not be indexed")
+                    .AddItem("Canonical page will be indexed instead")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("canonical", canonical)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "CANONICAL_TO_OTHER_PAGE",
                 $"Canonical points to different URL: {canonical}",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    canonical,
-                    note = "This page will not be indexed; canonical page will be indexed instead"
-                });
+                details);
         }
     }
 
@@ -201,18 +231,30 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
 
                 if (normalizedCanonical != normalizedCanonicalOfCanonical)
                 {
+                    var details = FindingDetailsBuilder.Create()
+                        .AddItem("Canonical chain detected:")
+                        .AddItem($"  • This page: {ctx.Url}")
+                        .AddItem($"  • Points to: {canonical}")
+                        .AddItem($"  • Which points to: {canonicalOfCanonical}")
+                        .BeginNested("⚠️ Issue")
+                            .AddItem("Canonical chains are confusing for search engines")
+                            .AddItem("May not be fully respected")
+                        .EndNested()
+                        .BeginNested("💡 Recommendations")
+                            .AddItem("Update canonical to point directly to the final URL")
+                            .AddItem($"Change to: {canonicalOfCanonical}")
+                        .EndNested()
+                        .WithTechnicalMetadata("url", ctx.Url.ToString())
+                        .WithTechnicalMetadata("canonical", canonical)
+                        .WithTechnicalMetadata("canonicalOfCanonical", canonicalOfCanonical)
+                        .Build();
+                    
                     await ctx.Findings.ReportAsync(
                         Key,
                         Severity.Warning,
                         "CANONICAL_CHAIN",
                         $"Canonical chain detected: {ctx.Url} → {canonical} → {canonicalOfCanonical}",
-                        new
-                        {
-                            url = ctx.Url.ToString(),
-                            canonical,
-                            canonicalOfCanonical,
-                            recommendation = "Remove canonical chains - canonical should point directly to the final URL"
-                        });
+                        details);
                 }
             }
         }
@@ -272,17 +314,29 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
                     if (httpStatus.HasValue && httpStatus.Value != 200)
                     {
                         // Canonical target returns non-200 status - this is a problem
+                        var details = FindingDetailsBuilder.Create()
+                            .AddItem($"Current URL: {ctx.Url}")
+                            .AddItem($"Canonical URL: {canonicalUrl}")
+                            .AddItem($"Canonical HTTP status: {httpStatus.Value}")
+                            .BeginNested("❌ Issue")
+                                .AddItem("Canonical should point to a page that returns 200 OK")
+                                .AddItem($"This canonical returns {httpStatus.Value}")
+                            .EndNested()
+                            .BeginNested("💡 Recommendations")
+                                .AddItem("Update canonical to point to a working page")
+                                .AddItem("Or fix the canonical target page")
+                            .EndNested()
+                            .WithTechnicalMetadata("url", ctx.Url.ToString())
+                            .WithTechnicalMetadata("canonicalUrl", canonicalUrl)
+                            .WithTechnicalMetadata("canonicalHttpStatus", httpStatus.Value)
+                            .Build();
+                        
                         await ctx.Findings.ReportAsync(
                             Key,
                             Severity.Error,
                             "CANONICAL_TARGET_ERROR",
                             $"Canonical URL returns HTTP {httpStatus.Value}. The canonical target should return 200 OK.",
-                            new
-                            {
-                                CanonicalUrl = canonicalUrl,
-                                CanonicalHttpStatus = httpStatus.Value,
-                                Issue = "Canonical points to non-200 URL"
-                            });
+                            details);
                         
                         _logger.LogWarning("Canonical target error: {Url} → {Canonical} (HTTP {Status})",
                             ctx.Url, canonicalUrl, httpStatus.Value);
@@ -341,20 +395,31 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
         // Check if page has noindex directive
         if (ctx.Metadata.RobotsNoindex == true)
         {
+            var source = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) ? "X-Robots-Tag header" : "meta robots tag";
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Canonical: {canonical}")
+                .AddItem($"Noindex source: {source}")
+                .BeginNested("⚠️ Conflicting Signals")
+                    .AddItem("Canonical says: consolidate to this URL")
+                    .AddItem("Noindex says: don't index this page")
+                    .AddItem("Google may ignore the canonical when noindex is present")
+                .EndNested()
+                .BeginNested("💡 Recommendations")
+                    .AddItem("If you want to consolidate: Remove noindex, keep canonical")
+                    .AddItem("If you want to de-index: Remove canonical, keep noindex")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("canonical", canonical)
+                .WithTechnicalMetadata("robotsNoindex", true)
+                .WithTechnicalMetadata("source", source)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "CANONICAL_NOINDEX_CONFLICT",
                 "Page has both canonical tag AND noindex directive - conflicting signals",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    canonical,
-                    robotsNoindex = true,
-                    source = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) ? "X-Robots-Tag header" : "meta robots tag",
-                    issue = "Google may ignore the canonical when noindex is present",
-                    recommendation = "Remove either canonical or noindex - if you want to consolidate, use canonical only; if you want to de-index, use noindex only"
-                });
+                details);
         }
     }
 
@@ -384,11 +449,6 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
             var canonicalizesToPageOne = System.Text.RegularExpressions.Regex.IsMatch(canonical, 
                 @"[?&]page=1($|&)|[?&]p=1($|&)|/page/1/", 
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                
-            var removedPageParam = System.Text.RegularExpressions.Regex.Replace(canonical, 
-                @"[?&]page=\d+|[?&]p=\d+", 
-                "", 
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             
             var canonicalizesToNonPaginated = !canonical.Contains("/page/") && 
                                              !canonical.Contains("/p") &&
@@ -399,18 +459,28 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
 
             if (normalizedCurrent != normalizedCanonical && (canonicalizesToPageOne || canonicalizesToNonPaginated))
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Paginated URL: {currentUrl}")
+                    .AddItem($"Canonical: {canonical}")
+                    .BeginNested("⚠️ Pagination Issue")
+                        .AddItem("Paginated pages canonicalize to page 1 or base URL")
+                        .AddItem("This removes pagination from search results")
+                    .EndNested()
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Option 1: Self-referential canonical + rel=prev/next links")
+                        .AddItem("Option 2: Canonical to view-all page (if available)")
+                        .AddItem("Option 3: No canonical on pagination pages")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", currentUrl)
+                    .WithTechnicalMetadata("canonical", canonical)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Warning,
                     "PAGINATION_CANONICAL_ISSUE",
                     $"Paginated URL canonicalizes to page 1 or non-paginated version: {canonical}",
-                    new
-                    {
-                        url = currentUrl,
-                        canonical,
-                        issue = "Paginated pages should typically be self-referential or use rel=prev/next",
-                        recommendation = "For pagination: use self-referential canonicals + rel=prev/next, OR use view-all canonical if available"
-                    });
+                    details);
             }
         }
     }
@@ -466,18 +536,35 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
                 // This is a real loop - we're cycling back to a DIFFERENT URL seen earlier
                 chain.Add(nextCanonical);
                 
+                var builder = FindingDetailsBuilder.Create()
+                    .AddItem("❌ Canonical loop detected");
+                
+                builder.BeginNested("🔄 Loop Chain");
+                foreach (var url in chain)
+                {
+                    builder.AddItem(url);
+                }
+                builder.EndNested();
+                
+                builder.BeginNested("⚠️ Issue")
+                    .AddItem("Circular canonical references confuse search engines")
+                    .AddItem("May prevent proper indexing of all pages in loop")
+                .EndNested();
+                
+                builder.BeginNested("💡 Recommendations")
+                    .AddItem("Fix canonical tags to point to a single final URL")
+                    .AddItem("Ensure no circular references")
+                .EndNested();
+                
+                builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("loop", chain.ToArray());
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Error,
                     "CANONICAL_LOOP",
                     $"Canonical loop detected: {string.Join(" → ", chain)}",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        loop = chain.ToArray(),
-                        issue = "Circular canonical references confuse search engines",
-                        recommendation = "Fix canonical tags to point to a single final URL without loops"
-                    });
+                    builder.Build());
                 return;
             }
 
@@ -503,20 +590,29 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
 
             if (normalizedHtml != normalizedHttp)
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem("Canonical mismatch detected:")
+                    .AddItem($"  • HTML: {canonicalHtml}")
+                    .AddItem($"  • HTTP: {canonicalHttp}")
+                    .BeginNested("⚠️ Issue")
+                        .AddItem("Conflicting canonical signals")
+                        .AddItem("HTTP Link header typically takes precedence")
+                    .EndNested()
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Ensure both canonicals point to the same URL")
+                        .AddItem("Or remove one (prefer HTTP header for consistency)")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("canonicalHtml", canonicalHtml)
+                    .WithTechnicalMetadata("canonicalHttp", canonicalHttp)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Warning,
                     "CANONICAL_HEADER_HTML_MISMATCH",
                     "Canonical tag in HTML differs from Link header",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        canonicalHtml,
-                        canonicalHttp,
-                        issue = "Conflicting canonical signals",
-                        note = "HTTP Link header typically takes precedence over HTML link tag",
-                        recommendation = "Ensure both canonicals point to the same URL, or remove one"
-                    });
+                    details);
             }
         }
     }
@@ -536,19 +632,28 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
         // Check if this URL is a redirect
         if (statusCode >= 300 && statusCode < 400)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"HTTP Status: {statusCode} (redirect)")
+                .AddItem($"Canonical: {canonical}")
+                .BeginNested("⚠️ Issue")
+                    .AddItem("Canonical tags on redirected URLs are ignored")
+                    .AddItem("Search engines follow the redirect, not the canonical")
+                .EndNested()
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Remove canonical tag from this redirect")
+                    .AddItem("The redirect itself is sufficient")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("statusCode", statusCode)
+                .WithTechnicalMetadata("canonical", canonical)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "CANONICAL_ON_REDIRECT",
                 $"Page returns {statusCode} redirect but also has canonical tag",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    statusCode,
-                    canonical,
-                    issue = "Canonical tags on redirected URLs are ignored by search engines",
-                    recommendation = "Remove canonical tag from redirected URLs - the redirect itself is sufficient"
-                });
+                details);
         }
     }
 

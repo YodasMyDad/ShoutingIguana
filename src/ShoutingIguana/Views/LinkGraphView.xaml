@@ -313,16 +313,20 @@
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="From URL" 
                                             Binding="{Binding FromUrl}" 
-                                            Width="2*"/>
+                                            Width="2*"
+                                            MinWidth="200"/>
                         <DataGridTextColumn Header="To URL" 
                                             Binding="{Binding ToUrl}" 
-                                            Width="2*"/>
+                                            Width="2*"
+                                            MinWidth="200"/>
                         <DataGridTextColumn Header="Anchor Text" 
                                             Binding="{Binding AnchorText}" 
-                                            Width="*"/>
+                                            Width="*"
+                                            MinWidth="120"/>
                         <DataGridTextColumn Header="Type" 
                                             Binding="{Binding LinkType}" 
-                                            Width="100"/>
+                                            Width="100"
+                                            MinWidth="80"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>

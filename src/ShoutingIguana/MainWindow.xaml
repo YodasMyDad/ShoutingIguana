@@ -6,7 +6,7 @@
         Height="800"
         Width="1200"
         MinHeight="600"
-        MinWidth="900"
+        MinWidth="850"
         Icon="Assets/logo.png"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BackgroundBrush}"
@@ -32,7 +32,7 @@
         <KeyBinding Key="D2" Modifiers="Control" Command="{Binding NavigateToCrawlDashboardCommand}"/>
         <KeyBinding Key="D3" Modifiers="Control" Command="{Binding NavigateToFindingsCommand}"/>
         <KeyBinding Key="D4" Modifiers="Control" Command="{Binding NavigateToLinkGraphCommand}"/>
-        <KeyBinding Key="E" Modifiers="Control+Shift" Command="{Binding NavigateToExtensionsCommand}"/>
+        <KeyBinding Key="E" Modifiers="Control+Shift" Command="{Binding NavigateToPluginManagementCommand}"/>
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
         <KeyBinding Key="F11" Command="{Binding ToggleFullScreenCommand}"/>
         <!-- Crawl -->
@@ -175,7 +175,7 @@
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator/>
-                <MenuItem Header="_Extensions Manager" Command="{Binding NavigateToExtensionsCommand}" InputGestureText="Ctrl+Shift+E">
+                <MenuItem Header="_Plugin Management" Command="{Binding NavigateToPluginManagementCommand}" InputGestureText="Ctrl+Shift+E">
                     <MenuItem.Icon>
                         <TextBlock Text="{StaticResource Icon.Puzzle}" Style="{StaticResource Icon}"/>
                     </MenuItem.Icon>
@@ -247,7 +247,7 @@
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator/>
-                <MenuItem Header="_Options..." Command="{Binding OptionsCommand}" InputGestureText="Ctrl+,">
+                <MenuItem Header="_Settings..." Command="{Binding OptionsCommand}" InputGestureText="Ctrl+,">
                     <MenuItem.Icon>
                         <TextBlock Text="{StaticResource Icon.Settings}" Style="{StaticResource Icon}"/>
                     </MenuItem.Icon>

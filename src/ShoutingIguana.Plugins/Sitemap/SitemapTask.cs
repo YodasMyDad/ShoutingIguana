@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.Plugins.Shared;
 using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Xml.Linq;
@@ -45,17 +46,23 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
                 if (httpStatus == 404)
                 {
                     // Sitemap not found
+                    var details = FindingDetailsBuilder.Create()
+                        .AddItem($"Sitemap URL: {ctx.Url}")
+                        .AddItem($"HTTP Status: {httpStatus}")
+                        .BeginNested("💡 Recommendations")
+                            .AddItem("Consider creating an XML sitemap to help search engines discover your content")
+                            .AddItem("Sitemaps improve crawl efficiency and coverage")
+                        .EndNested()
+                        .WithTechnicalMetadata("url", ctx.Url.ToString())
+                        .WithTechnicalMetadata("httpStatus", httpStatus)
+                        .Build();
+                    
                     await ctx.Findings.ReportAsync(
                         Key,
                         Severity.Warning,
                         "SITEMAP_NOT_FOUND",
                         string.Format("Sitemap not found at {0} (HTTP {1})", ctx.Url, httpStatus),
-                        new
-                        {
-                            url = ctx.Url.ToString(),
-                            httpStatus,
-                            recommendation = "Consider creating an XML sitemap to help search engines discover your content"
-                        });
+                        details);
                 }
                 else if (httpStatus >= 400)
                 {
@@ -81,32 +88,41 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
                             _ => "This sitemap has restricted access"
                         };
                         
+                        var details = FindingDetailsBuilder.Create()
+                            .AddItem($"Sitemap URL: {ctx.Url}")
+                            .AddItem($"HTTP Status: {httpStatus}")
+                            .AddItem($"ℹ️ {note}")
+                            .BeginNested("💡 Note")
+                                .AddItem("If this is expected, ensure search engines can access the sitemap")
+                                .AddItem("Or provide an accessible alternative")
+                            .EndNested()
+                            .WithTechnicalMetadata("url", ctx.Url.ToString())
+                            .WithTechnicalMetadata("httpStatus", httpStatus)
+                            .Build();
+                        
                         await ctx.Findings.ReportAsync(
                             Key,
                             Severity.Info,
                             "SITEMAP_RESTRICTED",
                             string.Format("Sitemap at {0} {1} (HTTP {2})", ctx.Url, restrictionType, httpStatus),
-                            new
-                            {
-                                url = ctx.Url.ToString(),
-                                httpStatus,
-                                note,
-                                recommendation = "If this is expected, ensure search engines can access the sitemap or provide an accessible alternative."
-                            });
+                            details);
                     }
                     else
                     {
                         // Other error
+                        var details = FindingDetailsBuilder.WithMetadata(
+                            new Dictionary<string, object?> {
+                                ["url"] = ctx.Url.ToString(),
+                                ["httpStatus"] = httpStatus
+                            },
+                            $"Error accessing sitemap: HTTP {httpStatus}");
+                        
                         await ctx.Findings.ReportAsync(
                             Key,
                             Severity.Error,
                             "SITEMAP_ERROR",
                             string.Format("Error accessing sitemap at {0} (HTTP {1})", ctx.Url, httpStatus),
-                            new
-                            {
-                                url = ctx.Url.ToString(),
-                                httpStatus
-                            });
+                            details);
                     }
                 }
                 else if (httpStatus >= 200 && httpStatus < 300)
@@ -158,16 +174,22 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
         if (string.IsNullOrEmpty(ctx.RenderedHtml))
         {
             _logger.LogWarning("Sitemap URL {Url} returned no content", ctx.Url);
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Sitemap URL: {ctx.Url}")
+                .AddItem("❌ No content returned")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Ensure your sitemap.xml file contains valid XML content")
+                    .AddItem("Check server configuration")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "SITEMAP_EMPTY_CONTENT",
                 $"Sitemap at {ctx.Url} returned no content",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    recommendation = "Ensure your sitemap.xml file contains valid XML content"
-                });
+                details);
             return;
         }
 
@@ -205,12 +227,18 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
                         !xmlContent.TrimStart().StartsWith("<urlset", StringComparison.OrdinalIgnoreCase) &&
                         !xmlContent.TrimStart().StartsWith("<sitemapindex", StringComparison.OrdinalIgnoreCase))
                     {
+                        var details = FindingDetailsBuilder.WithMetadata(
+                            new Dictionary<string, object?> { ["url"] = ctx.Url.ToString() },
+                            "Gzipped sitemap could not be decompressed",
+                            "Content doesn't appear to be XML",
+                            "ℹ️ May already be decompressed by HTTP client");
+                        
                         await ctx.Findings.ReportAsync(
                             Key,
                             Severity.Error,
                             "SITEMAP_GZIP_ERROR",
                             $"Gzipped sitemap could not be decompressed and content doesn't appear to be XML",
-                            new { url = ctx.Url.ToString(), note = "Sitemap may already be decompressed by HTTP client" });
+                            details);
                         return;
                     }
                 }
@@ -222,34 +250,47 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
             
             if (sizeMB > 50)
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Sitemap size: {sizeMB:F2}MB")
+                    .AddItem($"Limit: 50MB")
+                    .AddItem("❌ Exceeds maximum allowed size")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Split into multiple sitemaps")
+                        .AddItem("Create a sitemap index file")
+                        .AddItem("Each sitemap should be under 50MB")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("sizeBytes", sizeBytes)
+                    .WithTechnicalMetadata("sizeMB", sizeMB)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Error,
                     "SITEMAP_SIZE_LIMIT_EXCEEDED",
                     $"Sitemap exceeds 50MB limit (current size: {sizeMB:F2}MB)",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        sizeBytes,
-                        sizeMB = $"{sizeMB:F2}MB",
-                        limit = "50MB",
-                        recommendation = "Split into multiple sitemaps using a sitemap index"
-                    });
+                    details);
             }
             else if (sizeMB > 40)
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Sitemap size: {sizeMB:F2}MB")
+                    .AddItem($"Limit: 50MB")
+                    .AddItem("⚠️ Approaching size limit")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Consider splitting before reaching the limit")
+                        .AddItem("Plan for sitemap index structure")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("sizeMB", sizeMB)
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Warning,
                     "SITEMAP_APPROACHING_SIZE_LIMIT",
                     $"Sitemap approaching 50MB limit (current size: {sizeMB:F2}MB)",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        sizeMB = $"{sizeMB:F2}MB",
-                        limit = "50MB",
-                        recommendation = "Consider splitting before reaching the limit"
-                    });
+                    details);
             }
 
             // Parse XML sitemap
@@ -258,12 +299,17 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
 
             if (ns == null)
             {
+                var details = FindingDetailsBuilder.WithMetadata(
+                    new Dictionary<string, object?> { ["url"] = ctx.Url.ToString() },
+                    "Sitemap XML is missing namespace",
+                    "⚠️ Should include xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"");
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Warning,
                     "INVALID_SITEMAP_XML",
                     "Sitemap XML is missing namespace",
-                    new { url = ctx.Url.ToString() });
+                    details);
                 return;
             }
 
@@ -284,12 +330,24 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error parsing sitemap XML for {Url}", ctx.Url);
+            var details = FindingDetailsBuilder.Create()
+                .AddItem("Failed to parse sitemap XML")
+                .AddItem($"Error: {ex.Message}")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Validate XML syntax")
+                    .AddItem("Ensure proper XML structure")
+                    .AddItem("Use sitemap validator tools")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("error", ex.Message)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Error,
                 "SITEMAP_PARSE_ERROR",
                 $"Failed to parse sitemap XML: {ex.Message}",
-                new { url = ctx.Url.ToString(), error = ex.Message });
+                details);
         }
     }
 
@@ -297,16 +355,20 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
     {
         var sitemapElements = doc.Descendants(ns + "sitemap").ToList();
 
+        var details = FindingDetailsBuilder.WithMetadata(
+            new Dictionary<string, object?> {
+                ["url"] = ctx.Url.ToString(),
+                ["sitemapCount"] = sitemapElements.Count
+            },
+            $"Sitemap index found with {sitemapElements.Count} sitemap(s)",
+            "✅ Good practice for large sites");
+        
         await ctx.Findings.ReportAsync(
             Key,
             Severity.Info,
             "SITEMAP_INDEX_FOUND",
             $"Sitemap index contains {sitemapElements.Count} sitemap(s)",
-            new
-            {
-                url = ctx.Url.ToString(),
-                sitemapCount = sitemapElements.Count
-            });
+            details);
 
         // Extract and queue child sitemaps
         foreach (var sitemapElement in sitemapElements)
@@ -329,57 +391,79 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
 
         if (urlElements.Count == 0)
         {
+            var details = FindingDetailsBuilder.WithMetadata(
+                new Dictionary<string, object?> { ["url"] = ctx.Url.ToString() },
+                "Sitemap contains no URLs",
+                "⚠️ Empty sitemap provides no value");
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "EMPTY_SITEMAP",
                 "Sitemap contains no URLs",
-                new { url = ctx.Url.ToString() });
+                details);
             return;
         }
 
         // Check 50,000 URL limit
         if (urlElements.Count > 50000)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"URL count: {urlElements.Count:N0}")
+                .AddItem($"Limit: 50,000 URLs")
+                .AddItem("❌ Exceeds maximum")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Split into multiple sitemaps")
+                    .AddItem("Create a sitemap index file")
+                    .AddItem("Each sitemap: max 50,000 URLs")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("urlCount", urlElements.Count)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Error,
                 "SITEMAP_URL_LIMIT_EXCEEDED",
                 $"Sitemap exceeds 50,000 URL limit (contains {urlElements.Count} URLs)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    urlCount = urlElements.Count,
-                    limit = 50000,
-                    recommendation = "Split into multiple sitemaps using a sitemap index"
-                });
+                details);
         }
         else if (urlElements.Count > 45000)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"URL count: {urlElements.Count:N0}")
+                .AddItem($"Limit: 50,000 URLs")
+                .AddItem("⚠️ Approaching limit")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Consider splitting before reaching the limit")
+                    .AddItem("Plan sitemap architecture now")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("urlCount", urlElements.Count)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "SITEMAP_APPROACHING_URL_LIMIT",
                 $"Sitemap approaching 50,000 URL limit (contains {urlElements.Count} URLs)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    urlCount = urlElements.Count,
-                    limit = 50000,
-                    recommendation = "Consider splitting before reaching the limit"
-                });
+                details);
         }
 
+        var sitemapDetails = FindingDetailsBuilder.WithMetadata(
+            new Dictionary<string, object?> {
+                ["url"] = ctx.Url.ToString(),
+                ["urlCount"] = urlElements.Count
+            },
+            $"Sitemap contains {urlElements.Count:N0} URLs",
+            "✅ Successfully parsed");
+        
         await ctx.Findings.ReportAsync(
             Key,
             Severity.Info,
             "SITEMAP_FOUND",
             $"Sitemap contains {urlElements.Count} URL(s)",
-            new
-            {
-                url = ctx.Url.ToString(),
-                urlCount = urlElements.Count
-            });
+            sitemapDetails);
 
         // Track sitemap URLs for later comparison
         HashSet<string> sitemapUrls = [];
@@ -484,77 +568,106 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
             allMaxPriority = priorities.Count(p => p >= 0.99);
             if (allMaxPriority == priorities.Count && priorities.Count >= 10)
             {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem("All URLs have priority 1.0")
+                    .AddItem("⚠️ This defeats the purpose of priority values")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Use priority to indicate relative importance (0.0 to 1.0)")
+                        .AddItem("Homepage: 1.0, important pages: 0.8, others: 0.5")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .Build();
+                
                 await ctx.Findings.ReportAsync(
                     Key,
                     Severity.Warning,
                     "ALL_PRIORITY_MAX",
                     "All URLs have priority 1.0 (defeats the purpose of priorities)",
-                    new
-                    {
-                        url = ctx.Url.ToString(),
-                        recommendation = "Use priority to indicate relative importance of URLs (0.0 to 1.0)"
-                    });
+                    details);
             }
         }
 
         if (invalidUrls > 0)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Invalid URLs found: {invalidUrls}")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Remove or fix invalid URLs in sitemap")
+                    .AddItem("All URLs must be absolute and valid")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("invalidCount", invalidUrls)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "INVALID_SITEMAP_URLS",
                 $"Sitemap contains {invalidUrls} invalid URL(s)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    invalidCount = invalidUrls,
-                    recommendation = "Remove or fix invalid URLs in sitemap"
-                });
+                details);
         }
         
         if (futureLastmod > 0)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"URLs with future lastmod dates: {futureLastmod}")
+                .AddItem("⚠️ lastmod dates should not be in the future")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Use current or past dates only")
+                    .AddItem("Check server clock if dates are consistently wrong")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("futureCount", futureLastmod)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Warning,
                 "FUTURE_LASTMOD_DATES",
                 $"Sitemap contains {futureLastmod} URL(s) with lastmod dates in the future",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    futureCount = futureLastmod,
-                    recommendation = "lastmod dates should not be in the future"
-                });
+                details);
         }
 
         if (tooOldUrls > 10)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"URLs with lastmod > 2 years old: {tooOldUrls}")
+                .AddItem("ℹ️ May indicate stale content")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Review these URLs for relevance")
+                    .AddItem("Update or remove outdated content")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("outdatedCount", tooOldUrls)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "OUTDATED_SITEMAP_URLS",
                 $"Sitemap contains {tooOldUrls} URL(s) with lastmod > 2 years old",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    outdatedCount = tooOldUrls,
-                    recommendation = "Consider removing or updating old URLs"
-                });
+                details);
         }
         
         if (invalidPriority > 0)
         {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"URLs with invalid priority: {invalidPriority}")
+                .AddItem("❌ Priority must be between 0.0 and 1.0")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Fix priority values to be in valid range")
+                    .AddItem("Use 1.0 for most important, 0.5 for medium, 0.1 for least")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("invalidCount", invalidPriority)
+                .Build();
+            
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Error,
                 "INVALID_PRIORITY_VALUES",
                 $"Sitemap contains {invalidPriority} URL(s) with invalid priority (must be 0.0-1.0)",
-                new
-                {
-                    url = ctx.Url.ToString(),
-                    invalidCount = invalidPriority,
-                    recommendation = "Priority must be between 0.0 and 1.0"
-                });
+                details);
         }
     }
 
@@ -647,19 +760,37 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
                     {
                         _logger.LogInformation("Found {Count} potential orphan URLs in sitemap", orphanUrls.Count);
 
-                        // Report summary finding
+                        var builder = FindingDetailsBuilder.Create()
+                            .AddItem($"Found {orphanUrls.Count} potential orphan URLs")
+                            .AddItem("ℹ️ URLs in sitemap but not discovered through crawling");
+                        
+                        builder.BeginNested("📄 Example orphan URLs");
+                        foreach (var url in orphanUrls.Take(5))
+                        {
+                            builder.AddItem(url);
+                        }
+                        if (orphanUrls.Count > 5)
+                        {
+                            builder.AddItem($"... and {orphanUrls.Count - 5} more");
+                        }
+                        builder.EndNested();
+                        
+                        builder.BeginNested("💡 Recommendations")
+                            .AddItem("Review these URLs for internal linking")
+                            .AddItem("Orphan URLs may not rank well without internal links")
+                            .AddItem("Consider adding links from relevant pages")
+                        .EndNested();
+                        
+                        builder.WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
+                            .WithTechnicalMetadata("orphanCount", orphanUrls.Count)
+                            .WithTechnicalMetadata("orphanUrls", orphanUrls.Take(10).ToList());
+                        
                         await ctx.Findings.ReportAsync(
                             Key,
                             Severity.Warning,
                             "ORPHAN_SITEMAP_URLS",
                             $"Found {orphanUrls.Count} URL(s) in sitemap that may not be linked internally",
-                            new
-                            {
-                                sitemapUrl = ctx.Url.ToString(),
-                                orphanCount = orphanUrls.Count,
-                                orphanUrls = orphanUrls.Take(10).ToList(), // Limit to first 10 in JSON
-                                recommendation = "Review these URLs to ensure they are properly linked in your site navigation"
-                            });
+                            builder.Build());
                     }
 
                     // Find missing URLs (crawled but not in sitemap)
@@ -671,17 +802,23 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
                     {
                         _logger.LogInformation("Found {Count} crawled URLs missing from sitemap", missingFromSitemap.Count);
 
+                        var details = FindingDetailsBuilder.Create()
+                            .AddItem($"Crawled URLs missing from sitemap: {missingFromSitemap.Count}")
+                            .AddItem("ℹ️ These URLs exist but aren't in your sitemap")
+                            .BeginNested("💡 Recommendations")
+                                .AddItem("Consider adding important URLs to your sitemap.xml")
+                                .AddItem("Sitemaps help search engines discover all content")
+                            .EndNested()
+                            .WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
+                            .WithTechnicalMetadata("missingCount", missingFromSitemap.Count)
+                            .Build();
+                        
                         await ctx.Findings.ReportAsync(
                             Key,
                             Severity.Info,
                             "URLS_MISSING_FROM_SITEMAP",
                             $"Found {missingFromSitemap.Count} crawled URL(s) not listed in sitemap",
-                            new
-                            {
-                                sitemapUrl = ctx.Url.ToString(),
-                                missingCount = missingFromSitemap.Count,
-                                recommendation = "Consider adding important URLs to your sitemap.xml"
-                            });
+                            details);
                     }
 
                     _logger.LogDebug("Sitemap comparison complete: {OrphanCount} orphans, {MissingCount} missing",
