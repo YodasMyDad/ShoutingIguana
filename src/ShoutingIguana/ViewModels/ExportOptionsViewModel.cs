@@ -17,8 +17,6 @@ public partial class ExportOptionsViewModel : ObservableObject
     [ObservableProperty]
     private string _exportFormat = "Excel";
     
-    public bool DialogResult { get; private set; }
-    
     public ExportOptionsViewModel(Window dialog)
     {
         _dialog = dialog;
@@ -27,15 +25,13 @@ public partial class ExportOptionsViewModel : ObservableObject
     [RelayCommand]
     private void Ok()
     {
-        DialogResult = true;
-        _dialog.Close();
+        _dialog.DialogResult = true;
     }
     
     [RelayCommand]
     private void Cancel()
     {
-        DialogResult = false;
-        _dialog.Close();
+        _dialog.DialogResult = false;
     }
 }
 

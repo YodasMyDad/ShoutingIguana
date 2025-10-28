@@ -1,6 +1,7 @@
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.PluginSdk.Helpers;
 using ShoutingIguana.Plugins.Shared;
 
 namespace ShoutingIguana.Plugins.BrokenLinks;
@@ -575,47 +576,12 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
 
     private string ResolveUrl(Uri baseUri, string relativeUrl)
     {
-        try
-        {
-            if (Uri.TryCreate(relativeUrl, UriKind.Absolute, out var absoluteUri))
-            {
-                return absoluteUri.ToString();
-            }
-            
-            if (Uri.TryCreate(baseUri, relativeUrl, out var resolvedUri))
-            {
-                return resolvedUri.ToString();
-            }
-            
-            return relativeUrl;
-        }
-        catch
-        {
-            return relativeUrl;
-        }
+        return UrlHelper.Resolve(baseUri, relativeUrl);
     }
 
     private bool IsExternalLink(string baseUrl, string targetUrl)
     {
-        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri))
-        {
-            return true;
-        }
-        
-        if (Uri.TryCreate(targetUrl, UriKind.Absolute, out var uri))
-        {
-            // Remove www. prefix for comparison
-            var baseHost = baseUri.Host.ToLowerInvariant();
-            var targetHost = uri.Host.ToLowerInvariant();
-            
-            if (baseHost.StartsWith("www."))
-                baseHost = baseHost.Substring(4);
-            if (targetHost.StartsWith("www."))
-                targetHost = targetHost.Substring(4);
-                
-            return baseHost != targetHost;
-        }
-        return false; // Relative URL is internal
+        return UrlHelper.IsExternal(baseUrl, targetUrl);
     }
 
     private class LinkInfo

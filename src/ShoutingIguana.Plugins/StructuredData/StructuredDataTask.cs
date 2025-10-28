@@ -1,7 +1,6 @@
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
-using ShoutingIguana.Plugins.Shared;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 

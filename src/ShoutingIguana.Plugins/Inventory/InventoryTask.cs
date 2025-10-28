@@ -1,6 +1,5 @@
 using HtmlAgilityPack;
 using ShoutingIguana.PluginSdk;
-using ShoutingIguana.Plugins.Shared;
 using System.Text.RegularExpressions;
 
 namespace ShoutingIguana.Plugins.Inventory;

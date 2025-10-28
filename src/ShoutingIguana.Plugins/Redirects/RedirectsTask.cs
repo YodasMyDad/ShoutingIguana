@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
-using ShoutingIguana.Plugins.Shared;
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 

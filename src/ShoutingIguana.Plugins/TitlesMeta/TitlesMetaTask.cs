@@ -1,8 +1,7 @@
 using HtmlAgilityPack;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
-using ShoutingIguana.Plugins.Shared;
+using ShoutingIguana.PluginSdk.Helpers;
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
@@ -11,10 +10,10 @@ namespace ShoutingIguana.Plugins.TitlesMeta;
 /// <summary>
 /// Title, meta, Open Graph, Twitter Cards, and heading structure validation.
 /// </summary>
-public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : UrlTaskBase
+public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
     private readonly ILogger _logger = logger;
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
+    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
     private const int MIN_TITLE_LENGTH = 30;
     private const int MAX_TITLE_LENGTH = 60;
     private const int MAX_TITLE_WARNING_LENGTH = 70;
@@ -1085,15 +1084,7 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
 
     private string NormalizeUrl(string url)
     {
-        try
-        {
-            var uri = new Uri(url);
-            return uri.GetLeftPart(UriPartial.Path).TrimEnd('/').ToLowerInvariant();
-        }
-        catch
-        {
-            return url.TrimEnd('/').ToLowerInvariant();
-        }
+        return UrlHelper.Normalize(url);
     }
 
     private double CalculateSimilarity(string text1, string text2)
@@ -1123,165 +1114,65 @@ public class TitlesMetaTask(ILogger logger, IServiceProvider serviceProvider) : 
         
         try
         {
-            // Get repository types through reflection to avoid direct Core dependency
-            var urlRepoType = Type.GetType("ShoutingIguana.Core.Repositories.IUrlRepository, ShoutingIguana.Core");
-            var redirectRepoType = Type.GetType("ShoutingIguana.Core.Repositories.IRedirectRepository, ShoutingIguana.Core");
-            var urlModelType = Type.GetType("ShoutingIguana.Core.Models.Url, ShoutingIguana.Core");
-            var redirectModelType = Type.GetType("ShoutingIguana.Core.Models.Redirect, ShoutingIguana.Core");
+            // Build lookup of all redirects for efficient checking
+            var redirectLookup = new Dictionary<string, List<RedirectInfo>>(StringComparer.OrdinalIgnoreCase);
             
-            if (urlRepoType == null || redirectRepoType == null || urlModelType == null || redirectModelType == null)
+            await foreach (var redirect in _repositoryAccessor.GetRedirectsAsync(projectId))
             {
-                _logger.LogDebug("Unable to load repository types for redirect relationship checking");
-                return info;
-            }
-            
-            using var scope = _serviceProvider.CreateScope();
-            var urlRepo = scope.ServiceProvider.GetService(urlRepoType);
-            var redirectRepo = scope.ServiceProvider.GetService(redirectRepoType);
-            
-            if (urlRepo == null || redirectRepo == null)
-            {
-                _logger.LogDebug("Unable to resolve repositories from service provider");
-                return info;
-            }
-            
-            // Get all URLs via reflection
-            var getUrlsMethod = urlRepoType.GetMethod("GetByProjectIdAsync");
-            if (getUrlsMethod == null) return info;
-            
-            var urlsTask = getUrlsMethod.Invoke(urlRepo, new object[] { projectId }) as Task;
-            if (urlsTask == null) return info;
-            
-            await urlsTask.ConfigureAwait(false);
-            var urlsResult = urlsTask.GetType().GetProperty("Result")?.GetValue(urlsTask);
-            if (urlsResult == null) return info;
-            
-            // Build dictionary via reflection (Address property)
-            var urlDict = new Dictionary<string, dynamic>(StringComparer.OrdinalIgnoreCase);
-            var addressProp = urlModelType.GetProperty("Address");
-            
-            if (urlsResult is System.Collections.IEnumerable urlsEnumerable)
-            {
-                foreach (var url in urlsEnumerable)
+                if (!redirectLookup.ContainsKey(redirect.SourceUrl))
                 {
-                    var address = addressProp?.GetValue(url) as string;
-                    if (address != null)
-                    {
-                        urlDict[address] = url;
-                    }
+                    redirectLookup[redirect.SourceUrl] = new List<RedirectInfo>();
                 }
+                redirectLookup[redirect.SourceUrl].Add(redirect);
             }
-            
-            // Get all redirects via reflection
-            var getRedirectsMethod = redirectRepoType.GetMethod("GetByProjectIdAsync");
-            if (getRedirectsMethod == null) return info;
-            
-            var redirectsTask = getRedirectsMethod.Invoke(redirectRepo, new object[] { projectId }) as Task;
-            if (redirectsTask == null) return info;
-            
-            await redirectsTask.ConfigureAwait(false);
-            var redirectsResult = redirectsTask.GetType().GetProperty("Result")?.GetValue(redirectsTask);
-            if (redirectsResult == null) return info;
-            
-            var allRedirects = new List<dynamic>();
-            if (redirectsResult is System.Collections.IEnumerable redirectsEnumerable)
-            {
-                foreach (var redirect in redirectsEnumerable)
-                {
-                    allRedirects.Add(redirect);
-                }
-            }
-            
-            // Get property accessors via reflection
-            var urlIdProp = urlModelType.GetProperty("Id");
-            var redirectUrlIdProp = redirectModelType.GetProperty("UrlId");
-            var redirectToUrlProp = redirectModelType.GetProperty("ToUrl");
-            var redirectStatusCodeProp = redirectModelType.GetProperty("StatusCode");
-            var redirectPositionProp = redirectModelType.GetProperty("Position");
             
             // For each other URL, check if there's a redirect relationship
             foreach (var otherUrl in otherUrls)
             {
                 // Check if currentUrl redirects to otherUrl
-                if (urlDict.TryGetValue(currentUrl, out var currentUrlEntity))
+                if (redirectLookup.TryGetValue(currentUrl, out var redirectsFromCurrent))
                 {
-                    var currentUrlId = (int?)urlIdProp?.GetValue(currentUrlEntity);
-                    if (currentUrlId.HasValue)
+                    var finalRedirect = redirectsFromCurrent.OrderBy(r => r.Position).LastOrDefault();
+                    if (finalRedirect != null)
                     {
-                        var redirectsFromCurrent = allRedirects
-                            .Where(r => {
-                                var rUrlId = (int?)redirectUrlIdProp?.GetValue(r);
-                                return rUrlId == currentUrlId.Value;
-                            })
-                            .OrderBy(r => (int?)redirectPositionProp?.GetValue(r) ?? 0)
-                            .ToList();
+                        var normalizedFinal = UrlHelper.Normalize(finalRedirect.ToUrl);
+                        var normalizedOther = UrlHelper.Normalize(otherUrl);
                         
-                        if (redirectsFromCurrent.Any())
+                        if (normalizedFinal == normalizedOther)
                         {
-                            var finalRedirect = redirectsFromCurrent.Last();
-                            var toUrl = redirectToUrlProp?.GetValue(finalRedirect) as string;
-                            var statusCode = (int?)redirectStatusCodeProp?.GetValue(finalRedirect);
-                            
-                            if (toUrl != null && statusCode.HasValue)
+                            // currentUrl redirects to otherUrl
+                            if (finalRedirect.IsPermanent)
                             {
-                                var normalizedFinal = NormalizeUrl(toUrl);
-                                var normalizedOther = NormalizeUrl(otherUrl);
-                                
-                                if (normalizedFinal == normalizedOther)
-                                {
-                                    // currentUrl redirects to otherUrl
-                                    if (statusCode == 301 || statusCode == 308)
-                                    {
-                                        info.PermanentRedirects.Add(otherUrl);
-                                    }
-                                    else if (statusCode == 302 || statusCode == 307)
-                                    {
-                                        info.TemporaryRedirects.Add(otherUrl);
-                                    }
-                                    continue;
-                                }
+                                info.PermanentRedirects.Add(otherUrl);
                             }
+                            else
+                            {
+                                info.TemporaryRedirects.Add(otherUrl);
+                            }
+                            continue;
                         }
                     }
                 }
                 
                 // Check if otherUrl redirects to currentUrl
-                if (urlDict.TryGetValue(otherUrl, out var otherUrlEntity))
+                if (redirectLookup.TryGetValue(otherUrl, out var redirectsFromOther))
                 {
-                    var otherUrlId = (int?)urlIdProp?.GetValue(otherUrlEntity);
-                    if (otherUrlId.HasValue)
+                    var finalRedirect = redirectsFromOther.OrderBy(r => r.Position).LastOrDefault();
+                    if (finalRedirect != null)
                     {
-                        var redirectsFromOther = allRedirects
-                            .Where(r => {
-                                var rUrlId = (int?)redirectUrlIdProp?.GetValue(r);
-                                return rUrlId == otherUrlId.Value;
-                            })
-                            .OrderBy(r => (int?)redirectPositionProp?.GetValue(r) ?? 0)
-                            .ToList();
+                        var normalizedFinal = UrlHelper.Normalize(finalRedirect.ToUrl);
+                        var normalizedCurrent = UrlHelper.Normalize(currentUrl);
                         
-                        if (redirectsFromOther.Any())
+                        if (normalizedFinal == normalizedCurrent)
                         {
-                            var finalRedirect = redirectsFromOther.Last();
-                            var toUrl = redirectToUrlProp?.GetValue(finalRedirect) as string;
-                            var statusCode = (int?)redirectStatusCodeProp?.GetValue(finalRedirect);
-                            
-                            if (toUrl != null && statusCode.HasValue)
+                            // otherUrl redirects to currentUrl
+                            if (finalRedirect.IsPermanent)
                             {
-                                var normalizedFinal = NormalizeUrl(toUrl);
-                                var normalizedCurrent = NormalizeUrl(currentUrl);
-                                
-                                if (normalizedFinal == normalizedCurrent)
-                                {
-                                    // otherUrl redirects to currentUrl
-                                    if (statusCode == 301 || statusCode == 308)
-                                    {
-                                        info.PermanentRedirects.Add(otherUrl);
-                                    }
-                                    else if (statusCode == 302 || statusCode == 307)
-                                    {
-                                        info.TemporaryRedirects.Add(otherUrl);
-                                    }
-                                }
+                                info.PermanentRedirects.Add(otherUrl);
+                            }
+                            else
+                            {
+                                info.TemporaryRedirects.Add(otherUrl);
                             }
                         }
                     }

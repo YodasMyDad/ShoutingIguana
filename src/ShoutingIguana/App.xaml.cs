@@ -101,6 +101,7 @@ public partial class App : Application
                     services.AddSingleton<ILinkExtractor, LinkExtractor>();
                     services.AddSingleton<IPlaywrightService, PlaywrightService>();
                     services.AddSingleton<IPluginConfigurationService, PluginConfigurationService>();
+                    services.AddSingleton<PluginSdk.IRepositoryAccessor, RepositoryAccessor>();
                     services.AddSingleton<IPluginRegistry, PluginRegistry>();
                     services.AddSingleton<ICrawlEngine, CrawlEngine>();
                     services.AddScoped<PluginExecutor>();

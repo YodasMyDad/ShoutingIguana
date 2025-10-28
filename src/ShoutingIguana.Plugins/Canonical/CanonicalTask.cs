@@ -1,7 +1,6 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
-using ShoutingIguana.Plugins.Shared;
+using ShoutingIguana.PluginSdk.Helpers;
 using System.Collections.Concurrent;
 
 namespace ShoutingIguana.Plugins.Canonical;
@@ -9,10 +8,10 @@ namespace ShoutingIguana.Plugins.Canonical;
 /// <summary>
 /// Canonical URL extraction, validation, chain detection, and cross-domain analysis.
 /// </summary>
-public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : UrlTaskBase
+public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
     private readonly ILogger _logger = logger;
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
+    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
     
     // Track canonical chains across URLs per project
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, string>> CanonicalsByProject = new();
@@ -275,82 +274,53 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
     {
         try
         {
-            // Get URL repository through reflection to check if canonical target was crawled
-            var urlRepoType = Type.GetType("ShoutingIguana.Core.Repositories.IUrlRepository, ShoutingIguana.Core");
-            if (urlRepoType == null)
-            {
-                _logger.LogDebug("Unable to load URL repository for canonical validation");
-                return;
-            }
+            // Check if canonical target was crawled using repository accessor
+            var canonicalUrlInfo = await _repositoryAccessor.GetUrlByAddressAsync(
+                ctx.Project.ProjectId,
+                canonicalUrl);
 
-            using var scope = _serviceProvider.CreateScope();
-            var urlRepo = scope.ServiceProvider.GetService(urlRepoType);
-            if (urlRepo == null)
+            if (canonicalUrlInfo != null)
             {
-                return;
-            }
-
-            // Get the canonical target URL from database
-            var getByAddressMethod = urlRepoType.GetMethod("GetByAddressAsync");
-            if (getByAddressMethod == null)
-            {
-                return;
-            }
-
-            var taskObj = getByAddressMethod.Invoke(urlRepo, new object[] { ctx.Project.ProjectId, canonicalUrl });
-            if (taskObj is Task task)
-            {
-                await task.ConfigureAwait(false);
-                
-                var resultProperty = task.GetType().GetProperty("Result");
-                var canonicalUrlEntity = resultProperty?.GetValue(task);
-
-                if (canonicalUrlEntity != null)
+                // Canonical URL was crawled - check its status
+                if (canonicalUrlInfo.Status != 200)
                 {
-                    // Canonical URL was crawled - check its status
-                    var urlType = canonicalUrlEntity.GetType();
-                    var httpStatus = urlType.GetProperty("HttpStatus")?.GetValue(canonicalUrlEntity) as int?;
+                    // Canonical target returns non-200 status - this is a problem
+                    var details = FindingDetailsBuilder.Create()
+                        .AddItem($"Current URL: {ctx.Url}")
+                        .AddItem($"Canonical URL: {canonicalUrl}")
+                        .AddItem($"Canonical HTTP status: {canonicalUrlInfo.Status}")
+                        .BeginNested("❌ Issue")
+                            .AddItem("Canonical should point to a page that returns 200 OK")
+                            .AddItem($"This canonical returns {canonicalUrlInfo.Status}")
+                        .EndNested()
+                        .BeginNested("💡 Recommendations")
+                            .AddItem("Update canonical to point to a working page")
+                            .AddItem("Or fix the canonical target page")
+                        .EndNested()
+                        .WithTechnicalMetadata("url", ctx.Url.ToString())
+                        .WithTechnicalMetadata("canonicalUrl", canonicalUrl)
+                        .WithTechnicalMetadata("canonicalHttpStatus", canonicalUrlInfo.Status)
+                        .Build();
                     
-                    if (httpStatus.HasValue && httpStatus.Value != 200)
-                    {
-                        // Canonical target returns non-200 status - this is a problem
-                        var details = FindingDetailsBuilder.Create()
-                            .AddItem($"Current URL: {ctx.Url}")
-                            .AddItem($"Canonical URL: {canonicalUrl}")
-                            .AddItem($"Canonical HTTP status: {httpStatus.Value}")
-                            .BeginNested("❌ Issue")
-                                .AddItem("Canonical should point to a page that returns 200 OK")
-                                .AddItem($"This canonical returns {httpStatus.Value}")
-                            .EndNested()
-                            .BeginNested("💡 Recommendations")
-                                .AddItem("Update canonical to point to a working page")
-                                .AddItem("Or fix the canonical target page")
-                            .EndNested()
-                            .WithTechnicalMetadata("url", ctx.Url.ToString())
-                            .WithTechnicalMetadata("canonicalUrl", canonicalUrl)
-                            .WithTechnicalMetadata("canonicalHttpStatus", httpStatus.Value)
-                            .Build();
-                        
-                        await ctx.Findings.ReportAsync(
-                            Key,
-                            Severity.Error,
-                            "CANONICAL_TARGET_ERROR",
-                            $"Canonical URL returns HTTP {httpStatus.Value}. The canonical target should return 200 OK.",
-                            details);
-                        
-                        _logger.LogWarning("Canonical target error: {Url} → {Canonical} (HTTP {Status})",
-                            ctx.Url, canonicalUrl, httpStatus.Value);
-                    }
-                    else if (httpStatus == 200)
-                    {
-                        _logger.LogDebug("Canonical target validated: {Canonical} returns 200 OK", canonicalUrl);
-                    }
+                    await ctx.Findings.ReportAsync(
+                        Key,
+                        Severity.Error,
+                        "CANONICAL_TARGET_ERROR",
+                        $"Canonical URL returns HTTP {canonicalUrlInfo.Status}. The canonical target should return 200 OK.",
+                        details);
+                    
+                    _logger.LogWarning("Canonical target error: {Url} → {Canonical} (HTTP {Status})",
+                        ctx.Url, canonicalUrl, canonicalUrlInfo.Status);
                 }
                 else
                 {
-                    // Canonical URL not yet crawled or external
-                    _logger.LogDebug("Canonical URL not found in crawled URLs: {Canonical} (may be external or not yet crawled)", canonicalUrl);
+                    _logger.LogDebug("Canonical target validated: {Canonical} returns 200 OK", canonicalUrl);
                 }
+            }
+            else
+            {
+                // Canonical URL not yet crawled or external
+                _logger.LogDebug("Canonical URL not found in crawled URLs: {Canonical} (may be external or not yet crawled)", canonicalUrl);
             }
         }
         catch (Exception ex)
@@ -364,12 +334,10 @@ public class CanonicalTask(ILogger logger, IServiceProvider serviceProvider) : U
     {
         try
         {
-            var uri = new Uri(url);
-            // Normalize: remove fragment, trailing slash, and convert to lowercase
-            var normalized = uri.GetLeftPart(UriPartial.Path).TrimEnd('/').ToLowerInvariant();
+            var normalized = UrlHelper.Normalize(url);
             
-            // Also normalize query string order if present
-            if (!string.IsNullOrEmpty(uri.Query))
+            // Also normalize query string if present
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.Query))
             {
                 normalized += uri.Query.ToLowerInvariant();
             }

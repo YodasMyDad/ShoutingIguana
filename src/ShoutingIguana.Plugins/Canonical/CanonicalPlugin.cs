@@ -14,7 +14,7 @@ public class CanonicalPlugin : IPlugin
     {
         context.RegisterTask(new CanonicalTask(
             context.CreateLogger(nameof(CanonicalTask)),
-            context.GetServiceProvider()));
+            context.GetRepositoryAccessor()));
     }
 }
 

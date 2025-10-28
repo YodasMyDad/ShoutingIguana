@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.BrokenLinks;
@@ -13,9 +12,9 @@ public class BrokenLinksPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
-        // Get service provider from context to create checker
-        var serviceProvider = context.GetServiceProvider();
-        var checker = new BrokenLinksChecker(serviceProvider, context.CreateLogger<BrokenLinksChecker>());
+        // Create checker with repository accessor
+        var accessor = context.GetRepositoryAccessor();
+        var checker = new BrokenLinksChecker(accessor, context.CreateLogger<BrokenLinksChecker>());
         
         bool checkExternalLinks = false;
         bool checkAnchorLinks = true;

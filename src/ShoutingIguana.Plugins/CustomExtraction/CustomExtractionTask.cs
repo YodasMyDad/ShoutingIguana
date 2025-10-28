@@ -1,24 +1,21 @@
 using System.Text.RegularExpressions;
 using Fizzler.Systems.HtmlAgilityPack;
 using HtmlAgilityPack;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
-using ShoutingIguana.Plugins.Shared;
-using ShoutingIguana.Plugins.CustomExtraction.Models;
 
 namespace ShoutingIguana.Plugins.CustomExtraction;
 
 /// <summary>
 /// User-defined data extraction using CSS selectors, XPath, and Regex patterns.
 /// </summary>
-public class CustomExtractionTask(ILogger logger, IServiceProvider serviceProvider) : UrlTaskBase
+public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
     private readonly ILogger _logger = logger;
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
+    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
     
     // Cache rules per project to avoid database query on every URL
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, List<ExtractionRule>> _rulesCache = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, List<CustomExtractionRuleInfo>> _rulesCache = new();
 
     public override string Key => "CustomExtraction";
     public override string DisplayName => "Custom Extraction";
@@ -70,7 +67,7 @@ public class CustomExtractionTask(ILogger logger, IServiceProvider serviceProvid
         }
     }
 
-    private async Task ApplyExtractionRuleAsync(UrlContext ctx, HtmlDocument doc, ExtractionRule rule)
+    private async Task ApplyExtractionRuleAsync(UrlContext ctx, HtmlDocument doc, CustomExtractionRuleInfo rule)
     {
         try
         {
@@ -230,7 +227,7 @@ public class CustomExtractionTask(ILogger logger, IServiceProvider serviceProvid
     /// <summary>
     /// Gets rules from cache or loads from database if not cached.
     /// </summary>
-    private async Task<List<ExtractionRule>> GetOrLoadRulesAsync(int projectId)
+    private async Task<List<CustomExtractionRuleInfo>> GetOrLoadRulesAsync(int projectId)
     {
         // Check cache first (avoid database query for every URL)
         if (_rulesCache.TryGetValue(projectId, out var cachedRules))
@@ -247,107 +244,29 @@ public class CustomExtractionTask(ILogger logger, IServiceProvider serviceProvid
     /// <summary>
     /// Loads extraction rules from the database for the specified project.
     /// </summary>
-    private async Task<List<ExtractionRule>> LoadRulesAsync(int projectId)
+    private async Task<List<CustomExtractionRuleInfo>> LoadRulesAsync(int projectId)
     {
         try
         {
-            // Use Microsoft.Extensions.DependencyInjection to resolve the service
-            using var scope = _serviceProvider.CreateScope();
-            var serviceType = Type.GetType("ShoutingIguana.Core.Services.ICustomExtractionService, ShoutingIguana.Core");
-            if (serviceType == null)
-            {
-                _logger.LogWarning("Could not load ICustomExtractionService type");
-                return new List<ExtractionRule>();
-            }
-            
-            var customExtractionService = scope.ServiceProvider.GetService(serviceType);
-            
-            if (customExtractionService == null)
-            {
-                _logger.LogWarning("ICustomExtractionService not available, skipping custom extraction");
-                return new List<ExtractionRule>();
-            }
-
-            // Use reflection to call GetRulesByProjectIdAsync
-            var method = customExtractionService.GetType().GetMethod("GetRulesByProjectIdAsync");
-            if (method == null)
-            {
-                _logger.LogWarning("GetRulesByProjectIdAsync method not found");
-                return new List<ExtractionRule>();
-            }
-
-            var taskResult = method.Invoke(customExtractionService, new object[] { projectId });
-            if (taskResult is not Task task)
-            {
-                _logger.LogWarning("GetRulesByProjectIdAsync did not return a Task");
-                return new List<ExtractionRule>();
-            }
-            
-            await task.ConfigureAwait(false);
-
-            // Get the result
-            var resultProperty = task.GetType().GetProperty("Result");
-            if (resultProperty == null)
-            {
-                _logger.LogWarning("Task.Result property not found");
-                return new List<ExtractionRule>();
-            }
-            
-            var resultValue = resultProperty.GetValue(task);
-            if (resultValue is not System.Collections.IEnumerable dbRules)
-            {
-                _logger.LogWarning("Result is not enumerable");
-                return new List<ExtractionRule>();
-            }
-
-            // Convert database models to plugin models
-            var rules = new List<ExtractionRule>();
-            foreach (var dbRule in dbRules)
-            {
-                try
-                {
-                    var ruleType = dbRule.GetType();
-                    var name = ruleType.GetProperty("Name")?.GetValue(dbRule) as string;
-                    var fieldName = ruleType.GetProperty("FieldName")?.GetValue(dbRule) as string;
-                    var selectorTypeObj = ruleType.GetProperty("SelectorType")?.GetValue(dbRule);
-                    var selector = ruleType.GetProperty("Selector")?.GetValue(dbRule) as string;
-                    var isEnabledObj = ruleType.GetProperty("IsEnabled")?.GetValue(dbRule);
-
-                    if (name == null || fieldName == null || selectorTypeObj == null || 
-                        selector == null || isEnabledObj == null)
-                    {
-                        _logger.LogWarning("Rule has null properties, skipping");
-                        continue;
-                    }
-
-                    var selectorType = (int)selectorTypeObj;
-                    var isEnabled = (bool)isEnabledObj;
-
-                    if (isEnabled)
-                    {
-                        rules.Add(new ExtractionRule
-                        {
-                            Name = name,
-                            FieldName = fieldName,
-                            SelectorType = (SelectorType)selectorType,
-                            Selector = selector
-                        });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Error converting rule, skipping");
-                }
-            }
-
-            _logger.LogDebug("Loaded {Count} extraction rules for project {ProjectId}", rules.Count, projectId);
-            return rules;
+            var rules = await _repositoryAccessor.GetCustomExtractionRulesAsync(projectId);
+            var enabledRules = rules.Where(r => r.IsEnabled).ToList();
+            _logger.LogDebug("Loaded {Count} enabled extraction rules for project {ProjectId}", enabledRules.Count, projectId);
+            return enabledRules;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error loading extraction rules for project {ProjectId}", projectId);
-            return new List<ExtractionRule>();
+            return new List<CustomExtractionRuleInfo>();
         }
+    }
+    
+    /// <summary>
+    /// Cleanup per-project cache when project is closed.
+    /// </summary>
+    public override void CleanupProject(int projectId)
+    {
+        _rulesCache.TryRemove(projectId, out _);
+        _logger.LogDebug("Cleaned up custom extraction rules cache for project {ProjectId}", projectId);
     }
 
 }

@@ -1,7 +1,5 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
-using ShoutingIguana.Plugins.Shared;
 using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Xml.Linq;
@@ -11,10 +9,10 @@ namespace ShoutingIguana.Plugins.Sitemap;
 /// <summary>
 /// XML sitemap discovery, parsing, validation, comparison, and generation.
 /// </summary>
-public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : UrlTaskBase
+public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
     private readonly ILogger _logger = logger;
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
+    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
     
     // Track discovered sitemap URLs per project
     private static readonly ConcurrentDictionary<int, HashSet<string>> SitemapUrlsByProject = new();
@@ -691,140 +689,102 @@ public class SitemapTask(ILogger logger, IServiceProvider serviceProvider) : Url
                 sitemapUrls = new HashSet<string>(urls, StringComparer.OrdinalIgnoreCase);
             }
 
-            // Get URL repository to check which sitemap URLs were actually crawled
-            var urlRepoType = Type.GetType("ShoutingIguana.Core.Repositories.IUrlRepository, ShoutingIguana.Core");
-            if (urlRepoType == null)
-            {
-                _logger.LogDebug("Unable to load URL repository for sitemap comparison");
-                return;
-            }
+            // Get all crawled URLs using repository accessor
+            var crawledAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var crawledUrlsWithNoInlinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            using var scope = _serviceProvider.CreateScope();
-            var urlRepo = scope.ServiceProvider.GetService(urlRepoType);
-            if (urlRepo == null)
+            await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId))
             {
-                return;
-            }
-
-            // Get all crawled URLs for the project
-            var getByProjectMethod = urlRepoType.GetMethod("GetByProjectIdAsync");
-            if (getByProjectMethod == null)
-            {
-                return;
-            }
-
-            var taskObj = getByProjectMethod.Invoke(urlRepo, new object[] { projectId });
-            if (taskObj is Task task)
-            {
-                await task.ConfigureAwait(false);
-                
-                var resultProperty = task.GetType().GetProperty("Result");
-                var allUrls = resultProperty?.GetValue(task) as System.Collections.IEnumerable;
-
-                if (allUrls != null)
+                if (!string.IsNullOrEmpty(url.Address))
                 {
-                    // Build set of crawled URL addresses
-                    var crawledAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    var crawledUrlsWithNoInlinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                    foreach (var url in allUrls)
+                    crawledAddresses.Add(url.Address);
+                    
+                    // URLs at depth > 0 with no inlinks might be orphans
+                    if (url.Depth > 0)
                     {
-                        var urlType = url.GetType();
-                        var address = urlType.GetProperty("Address")?.GetValue(url) as string;
-                        var depth = (int)(urlType.GetProperty("Depth")?.GetValue(url) ?? 0);
-
-                        if (!string.IsNullOrEmpty(address))
-                        {
-                            crawledAddresses.Add(address);
-                            
-                            // URLs at depth > 0 with no inlinks might be orphans
-                            if (depth > 0)
-                            {
-                                crawledUrlsWithNoInlinks.Add(address);
-                            }
-                        }
+                        crawledUrlsWithNoInlinks.Add(url.Address);
                     }
-
-                    // Find orphan URLs (in sitemap but not discovered through crawling)
-                    var orphanUrls = new List<string>();
-                    foreach (var sitemapUrl in sitemapUrls)
-                    {
-                        if (crawledUrlsWithNoInlinks.Contains(sitemapUrl))
-                        {
-                            orphanUrls.Add(sitemapUrl);
-                        }
-                    }
-
-                    // Report orphan URLs as findings
-                    if (orphanUrls.Count > 0)
-                    {
-                        _logger.LogInformation("Found {Count} potential orphan URLs in sitemap", orphanUrls.Count);
-
-                        var builder = FindingDetailsBuilder.Create()
-                            .AddItem($"Found {orphanUrls.Count} potential orphan URLs")
-                            .AddItem("ℹ️ URLs in sitemap but not discovered through crawling");
-                        
-                        builder.BeginNested("📄 Example orphan URLs");
-                        foreach (var url in orphanUrls.Take(5))
-                        {
-                            builder.AddItem(url);
-                        }
-                        if (orphanUrls.Count > 5)
-                        {
-                            builder.AddItem($"... and {orphanUrls.Count - 5} more");
-                        }
-                        builder.EndNested();
-                        
-                        builder.BeginNested("💡 Recommendations")
-                            .AddItem("Review these URLs for internal linking")
-                            .AddItem("Orphan URLs may not rank well without internal links")
-                            .AddItem("Consider adding links from relevant pages")
-                        .EndNested();
-                        
-                        builder.WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
-                            .WithTechnicalMetadata("orphanCount", orphanUrls.Count)
-                            .WithTechnicalMetadata("orphanUrls", orphanUrls.Take(10).ToList());
-                        
-                        await ctx.Findings.ReportAsync(
-                            Key,
-                            Severity.Warning,
-                            "ORPHAN_SITEMAP_URLS",
-                            $"Found {orphanUrls.Count} URL(s) in sitemap that may not be linked internally",
-                            builder.Build());
-                    }
-
-                    // Find missing URLs (crawled but not in sitemap)
-                    var missingFromSitemap = crawledAddresses
-                        .Where(crawledUrl => !sitemapUrls.Contains(crawledUrl))
-                        .ToList();
-
-                    if (missingFromSitemap.Count > 0)
-                    {
-                        _logger.LogInformation("Found {Count} crawled URLs missing from sitemap", missingFromSitemap.Count);
-
-                        var details = FindingDetailsBuilder.Create()
-                            .AddItem($"Crawled URLs missing from sitemap: {missingFromSitemap.Count}")
-                            .AddItem("ℹ️ These URLs exist but aren't in your sitemap")
-                            .BeginNested("💡 Recommendations")
-                                .AddItem("Consider adding important URLs to your sitemap.xml")
-                                .AddItem("Sitemaps help search engines discover all content")
-                            .EndNested()
-                            .WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
-                            .WithTechnicalMetadata("missingCount", missingFromSitemap.Count)
-                            .Build();
-                        
-                        await ctx.Findings.ReportAsync(
-                            Key,
-                            Severity.Info,
-                            "URLS_MISSING_FROM_SITEMAP",
-                            $"Found {missingFromSitemap.Count} crawled URL(s) not listed in sitemap",
-                            details);
-                    }
-
-                    _logger.LogDebug("Sitemap comparison complete: {OrphanCount} orphans, {MissingCount} missing",
-                        orphanUrls.Count, missingFromSitemap.Count);
                 }
             }
+
+            // Find orphan URLs (in sitemap but not discovered through crawling)
+            var orphanUrls = new List<string>();
+            foreach (var sitemapUrl in sitemapUrls)
+            {
+                if (crawledUrlsWithNoInlinks.Contains(sitemapUrl))
+                {
+                    orphanUrls.Add(sitemapUrl);
+                }
+            }
+
+            // Report orphan URLs as findings
+            if (orphanUrls.Count > 0)
+            {
+                _logger.LogInformation("Found {Count} potential orphan URLs in sitemap", orphanUrls.Count);
+
+                var builder = FindingDetailsBuilder.Create()
+                    .AddItem($"Found {orphanUrls.Count} potential orphan URLs")
+                    .AddItem("ℹ️ URLs in sitemap but not discovered through crawling");
+                
+                builder.BeginNested("📄 Example orphan URLs");
+                foreach (var url in orphanUrls.Take(5))
+                {
+                    builder.AddItem(url);
+                }
+                if (orphanUrls.Count > 5)
+                {
+                    builder.AddItem($"... and {orphanUrls.Count - 5} more");
+                }
+                builder.EndNested();
+                
+                builder.BeginNested("💡 Recommendations")
+                    .AddItem("Review these URLs for internal linking")
+                    .AddItem("Orphan URLs may not rank well without internal links")
+                    .AddItem("Consider adding links from relevant pages")
+                .EndNested();
+                
+                builder.WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
+                    .WithTechnicalMetadata("orphanCount", orphanUrls.Count)
+                    .WithTechnicalMetadata("orphanUrls", orphanUrls.Take(10).ToList());
+                
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Warning,
+                    "ORPHAN_SITEMAP_URLS",
+                    $"Found {orphanUrls.Count} URL(s) in sitemap that may not be linked internally",
+                    builder.Build());
+            }
+
+            // Find missing URLs (crawled but not in sitemap)
+            var missingFromSitemap = crawledAddresses
+                .Where(crawledUrl => !sitemapUrls.Contains(crawledUrl))
+                .ToList();
+
+            if (missingFromSitemap.Count > 0)
+            {
+                _logger.LogInformation("Found {Count} crawled URLs missing from sitemap", missingFromSitemap.Count);
+
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Crawled URLs missing from sitemap: {missingFromSitemap.Count}")
+                    .AddItem("ℹ️ These URLs exist but aren't in your sitemap")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Consider adding important URLs to your sitemap.xml")
+                        .AddItem("Sitemaps help search engines discover all content")
+                    .EndNested()
+                    .WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
+                    .WithTechnicalMetadata("missingCount", missingFromSitemap.Count)
+                    .Build();
+                
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Info,
+                    "URLS_MISSING_FROM_SITEMAP",
+                    $"Found {missingFromSitemap.Count} crawled URL(s) not listed in sitemap",
+                    details);
+            }
+
+            _logger.LogDebug("Sitemap comparison complete: {OrphanCount} orphans, {MissingCount} missing",
+                orphanUrls.Count, missingFromSitemap.Count);
         }
         catch (Exception ex)
         {

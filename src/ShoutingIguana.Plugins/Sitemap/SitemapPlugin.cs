@@ -12,12 +12,14 @@ public class SitemapPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        var accessor = context.GetRepositoryAccessor();
+        
         context.RegisterTask(new SitemapTask(
             context.CreateLogger(nameof(SitemapTask)),
-            context.GetServiceProvider()));
+            accessor));
         context.RegisterExport(new SitemapExporter(
             context.CreateLogger(nameof(SitemapExporter)), 
-            context.GetServiceProvider()));
+            accessor));
     }
 }
 

@@ -14,7 +14,7 @@ public class TitlesMetaPlugin : IPlugin
     {
         context.RegisterTask(new TitlesMetaTask(
             context.CreateLogger(nameof(TitlesMetaTask)),
-            context.GetServiceProvider()));
+            context.GetRepositoryAccessor()));
     }
 }
 

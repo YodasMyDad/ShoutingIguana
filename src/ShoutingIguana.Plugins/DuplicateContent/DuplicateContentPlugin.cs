@@ -14,7 +14,7 @@ public class DuplicateContentPlugin : IPlugin
     {
         context.RegisterTask(new DuplicateContentTask(
             context.CreateLogger(nameof(DuplicateContentTask)),
-            context.GetServiceProvider()));
+            context.GetRepositoryAccessor()));
     }
 }
 

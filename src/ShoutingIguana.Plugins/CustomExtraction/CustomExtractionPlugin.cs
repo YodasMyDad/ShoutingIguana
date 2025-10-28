@@ -14,7 +14,7 @@ public class CustomExtractionPlugin : IPlugin
     {
         context.RegisterTask(new CustomExtractionTask(
             context.CreateLogger(nameof(CustomExtractionTask)),
-            context.GetServiceProvider()));
+            context.GetRepositoryAccessor()));
     }
 }
 

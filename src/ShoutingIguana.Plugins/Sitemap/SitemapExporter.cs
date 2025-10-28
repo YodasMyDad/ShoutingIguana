@@ -1,5 +1,4 @@
 using System.Xml.Linq;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 
@@ -11,16 +10,16 @@ namespace ShoutingIguana.Plugins.Sitemap;
 public class SitemapExporter : IExportProvider
 {
     private readonly ILogger _logger;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IRepositoryAccessor _repositoryAccessor;
 
     public string Key => "SitemapXml";
     public string DisplayName => "Sitemap XML";
     public string FileExtension => ".xml";
 
-    public SitemapExporter(ILogger logger, IServiceProvider serviceProvider)
+    public SitemapExporter(ILogger logger, IRepositoryAccessor repositoryAccessor)
     {
         _logger = logger;
-        _serviceProvider = serviceProvider;
+        _repositoryAccessor = repositoryAccessor;
     }
 
     public async Task<ExportResult> ExportAsync(ExportContext ctx, CancellationToken ct)
@@ -29,69 +28,18 @@ public class SitemapExporter : IExportProvider
         {
             _logger.LogInformation("Generating sitemap XML for project {ProjectId}", ctx.ProjectId);
 
-            // Get URL repository through reflection to avoid direct Core dependency
-            using var scope = _serviceProvider.CreateScope();
-            var urlRepoType = Type.GetType("ShoutingIguana.Core.Repositories.IUrlRepository, ShoutingIguana.Core");
-            if (urlRepoType == null)
-            {
-                return new ExportResult(false, "Unable to load URL repository");
-            }
-
-            var urlRepo = scope.ServiceProvider.GetService(urlRepoType);
-            if (urlRepo == null)
-            {
-                return new ExportResult(false, "URL repository not available");
-            }
-
-            // Get URLs via reflection
-            var getByProjectMethod = urlRepoType.GetMethod("GetByProjectIdAsync");
-            if (getByProjectMethod == null)
-            {
-                return new ExportResult(false, "GetByProjectIdAsync method not found");
-            }
-
-            // Invoke the async method and get the Task
-            var urlsTaskObj = getByProjectMethod.Invoke(urlRepo, new object[] { ctx.ProjectId });
-            if (urlsTaskObj == null)
-            {
-                return new ExportResult(false, "Failed to invoke GetByProjectIdAsync");
-            }
-
-            // Cast to Task and await
-            var urlsTask = (Task)urlsTaskObj;
-            await urlsTask.ConfigureAwait(false);
-
-            // Get the Result property from the completed Task<IEnumerable<Url>>
-            var resultProperty = urlsTask.GetType().GetProperty("Result");
-            if (resultProperty == null)
-            {
-                return new ExportResult(false, "Unable to access task result");
-            }
-
-            var allUrls = resultProperty.GetValue(urlsTask) as System.Collections.IEnumerable;
-            if (allUrls == null)
-            {
-                return new ExportResult(false, "Failed to retrieve URLs");
-            }
-
-            // Filter for indexable URLs using reflection
+            // Filter for indexable URLs using repository accessor
             var indexableUrls = new List<SitemapUrl>();
-            foreach (var url in allUrls)
+            
+            await foreach (var url in _repositoryAccessor.GetUrlsAsync(ctx.ProjectId, ct))
             {
-                var urlType = url.GetType();
-                var isIndexable = urlType.GetProperty("IsIndexable")?.GetValue(url) as bool?;
-                var httpStatus = urlType.GetProperty("HttpStatus")?.GetValue(url) as int?;
-                var address = urlType.GetProperty("Address")?.GetValue(url) as string;
-                var lastCrawled = urlType.GetProperty("LastCrawledUtc")?.GetValue(url) as DateTime?;
-                var depth = (int)(urlType.GetProperty("Depth")?.GetValue(url) ?? 0);
-
-                if (isIndexable == true && httpStatus == 200 && !string.IsNullOrEmpty(address))
+                if (url.IsIndexable && url.Status == 200 && !string.IsNullOrEmpty(url.Address))
                 {
                     indexableUrls.Add(new SitemapUrl
                     {
-                        Address = address,
-                        LastCrawled = lastCrawled,
-                        Depth = depth
+                        Address = url.Address,
+                        LastCrawled = null, // Not available in UrlInfo - can be added if needed
+                        Depth = url.Depth
                     });
                 }
             }

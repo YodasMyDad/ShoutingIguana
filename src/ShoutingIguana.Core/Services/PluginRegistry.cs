@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 
@@ -623,5 +624,10 @@ internal class HostContext(
     public IServiceProvider GetServiceProvider()
     {
         return _serviceProvider;
+    }
+    
+    public IRepositoryAccessor GetRepositoryAccessor()
+    {
+        return _serviceProvider.GetRequiredService<IRepositoryAccessor>();
     }
 }

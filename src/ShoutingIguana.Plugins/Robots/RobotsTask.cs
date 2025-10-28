@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
-using ShoutingIguana.Plugins.Shared;
 
 namespace ShoutingIguana.Plugins.Robots;
 
