@@ -302,6 +302,7 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <!-- Max Depth -->
@@ -349,7 +350,7 @@
                                              TabIndex="4"
                                              AutomationProperties.Name="Crawl Delay in Seconds"
                                              ToolTip="Delay between requests in seconds">
-                                        <TextBox.Tag>e.g., 0.5</TextBox.Tag>
+                                        <TextBox.Tag>e.g., 1.5</TextBox.Tag>
                                     </TextBox>
                                     <TextBlock Text="Delay between requests in seconds."
                                                Style="{StaticResource HelperText}"/>
@@ -380,8 +381,42 @@
                                                Style="{StaticResource HelperText}"/>
                                 </StackPanel>
 
+                                <!-- Concurrent Requests -->
+                                <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,0,16">
+                                    <TextBlock Text="Concurrent Requests" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"
+                                               AutomationProperties.AutomationId="ConcurrentRequestsLabel"/>
+                                    <TextBox Text="{Binding ConcurrentRequests, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="6"
+                                             AutomationProperties.Name="Concurrent Requests"
+                                             ToolTip="Number of parallel requests (1-10)">
+                                        <TextBox.Tag>e.g., 3</TextBox.Tag>
+                                    </TextBox>
+                                    <TextBlock Text="Number of parallel requests to make (1-10). Higher values speed up crawling but use more resources."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+
+                                <!-- Request Timeout -->
+                                <StackPanel Grid.Row="2" Grid.Column="2" Margin="0,0,0,16">
+                                    <TextBlock Text="Request Timeout" 
+                                               Style="{StaticResource FormFieldLabel}"
+                                               Margin="0,0,0,8"
+                                               AutomationProperties.AutomationId="RequestTimeoutLabel"/>
+                                    <TextBox Text="{Binding TimeoutSeconds, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource ModernTextBox}"
+                                             TabIndex="7"
+                                             AutomationProperties.Name="Request Timeout in Seconds"
+                                             ToolTip="Maximum time in seconds to wait for a page response">
+                                        <TextBox.Tag>e.g., 30</TextBox.Tag>
+                                    </TextBox>
+                                    <TextBlock Text="Maximum time in seconds to wait for a page response (5-120 seconds recommended)."
+                                               Style="{StaticResource HelperText}"/>
+                                </StackPanel>
+
                                 <!-- Checkboxes -->
-                                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,4,0,0">
+                                <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,4,0,0">
                                     <Border Background="{StaticResource SurfaceBrush}"
                                             BorderBrush="{StaticResource BorderLightBrush}"
                                             BorderThickness="1"
@@ -393,7 +428,7 @@
                                                   IsChecked="{Binding RespectRobotsTxt}"
                                                   FontSize="14"
                                                   Margin="0"
-                                                  TabIndex="6"
+                                                  TabIndex="8"
                                                   AutomationProperties.Name="Respect Robots.txt"
                                                   AutomationProperties.HelpText="Recommended for ethical crawling. Respects website owner's crawling preferences."
                                                   ToolTip="Recommended for ethical crawling"/>
@@ -413,7 +448,7 @@
                                                   IsChecked="{Binding UseSitemapXml}"
                                                   FontSize="14"
                                                   Margin="0"
-                                                  TabIndex="7"
+                                                  TabIndex="9"
                                                   AutomationProperties.Name="Use Sitemap XML"
                                                   AutomationProperties.HelpText="Automatically checks robots.txt and common locations for sitemap.xml to discover URLs."
                                                   ToolTip="Automatically discover URLs from sitemap"/>
@@ -440,7 +475,7 @@
                                     Command="{Binding SaveSettingsCommand}"
                                     Style="{StaticResource SecondaryButton}"
                                     Margin="0,0,12,0"
-                                    TabIndex="8"
+                                    TabIndex="10"
                                     Visibility="{Binding CurrentProject, Converter={StaticResource NullToVisibilityConverter}}"
                                     AutomationProperties.Name="Save Project Settings"
                                     AutomationProperties.HelpText="Saves the current project settings to disk without starting crawl"
@@ -449,7 +484,7 @@
                                     Style="{StaticResource PrimaryButton}"
                                     Height="52"
                                     Padding="28,12"
-                                    TabIndex="9"
+                                    TabIndex="11"
                                     IsDefault="True"
                                     AutomationProperties.Name="Start Crawl"
                                     AutomationProperties.HelpText="Begins the web crawl with the configured settings"
