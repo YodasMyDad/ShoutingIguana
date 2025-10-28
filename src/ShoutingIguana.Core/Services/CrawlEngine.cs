@@ -461,18 +461,19 @@ public class CrawlEngine(
                         await SaveRedirectChainAsync(urlEntity.Id, redirectChain).ConfigureAwait(false);
                     }
 
-                    // Execute plugin tasks
+                    // Extract and save links BEFORE plugin execution
+                    // This allows plugins (like LinkGraph) to query link relationships
+                    if (urlData.IsSuccess && urlData.IsHtml && queueItem.Depth < settings.MaxCrawlDepth)
+                    {
+                        await ProcessLinksAsync(projectId, urlEntity, renderedHtml ?? "", queueItem.Address, queueItem.Depth, settings.BaseUrl).ConfigureAwait(false);
+                    }
+
+                    // Execute plugin tasks (now links are available in database)
                     using (var pluginScope = _serviceProvider.CreateScope())
                     {
                         var pluginExecutor = pluginScope.ServiceProvider.GetRequiredService<PluginExecutor>();
                         var headers = urlData.Headers.GroupBy(h => h.Key.ToLowerInvariant()).ToDictionary(g => g.Key, g => g.First().Value);
                         await pluginExecutor.ExecuteTasksAsync(urlEntity, page, renderedHtml, headers, settings, userAgent, projectId, cancellationToken).ConfigureAwait(false);
-                    }
-
-                    // Extract and enqueue links if successful and within depth
-                    if (urlData.IsSuccess && urlData.IsHtml && queueItem.Depth < settings.MaxCrawlDepth)
-                    {
-                        await ProcessLinksAsync(projectId, urlEntity, renderedHtml ?? "", queueItem.Address, queueItem.Depth, settings.BaseUrl).ConfigureAwait(false);
                     }
 
                     using (var scope = _serviceProvider.CreateScope())

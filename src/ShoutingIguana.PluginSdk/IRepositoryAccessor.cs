@@ -222,6 +222,51 @@ public interface IRepositoryAccessor
     Task<RedirectInfo?> GetRedirectAsync(int projectId, string sourceUrl);
     
     /// <summary>
+    /// Gets all outgoing links from a specific URL.
+    /// Useful for link analysis, link graph visualization, and internal linking plugins.
+    /// </summary>
+    /// <param name="projectId">The project ID to search within.</param>
+    /// <param name="fromUrlId">The ID of the source URL to get outgoing links from.</param>
+    /// <returns>
+    /// A list of links originating from the specified URL, including target URL address, anchor text, and link type.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This is optimized for per-URL analysis during crawling. Each link includes the target URL's address
+    /// so you don't need to make additional queries to resolve URL IDs.
+    /// </para>
+    /// <para>
+    /// Use this for:
+    /// - Analyzing outgoing links from a page
+    /// - Building link graphs
+    /// - Checking anchor text distribution
+    /// - Identifying orphaned pages
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var outgoingLinks = await accessor.GetLinksByFromUrlAsync(
+    ///     ctx.Project.ProjectId, 
+    ///     ctx.Metadata.UrlId);
+    /// 
+    /// foreach (var link in outgoingLinks)
+    /// {
+    ///     // Analyze each link
+    ///     await ctx.Findings.ReportAsync(
+    ///         Key,
+    ///         Severity.Info,
+    ///         "LINK_FOUND",
+    ///         $"Links to: {link.ToUrl}",
+    ///         FindingDetailsBuilder.Create()
+    ///             .AddItem($"Anchor text: {link.AnchorText}")
+    ///             .AddItem($"Link type: {link.LinkType}")
+    ///             .Build());
+    /// }
+    /// </code>
+    /// </example>
+    Task<List<LinkInfo>> GetLinksByFromUrlAsync(int projectId, int fromUrlId);
+    
+    /// <summary>
     /// Gets custom extraction rules defined for a project.
     /// Used by the Custom Extraction plugin to retrieve user-defined data extraction patterns.
     /// </summary>
@@ -343,6 +388,24 @@ public record RedirectInfo(
     /// </summary>
     public bool IsPermanent => StatusCode == 301 || StatusCode == 308;
 }
+
+/// <summary>
+/// Represents a link from one URL to another, including metadata like anchor text and link type.
+/// </summary>
+/// <param name="FromUrlId">The ID of the source URL (where the link originates).</param>
+/// <param name="ToUrlId">The ID of the target URL (where the link points to).</param>
+/// <param name="ToUrl">The address of the target URL for convenience.</param>
+/// <param name="AnchorText">The text of the link (for hyperlinks) or alt text (for images).</param>
+/// <param name="LinkType">The type of link (Internal, External, etc.).</param>
+/// <remarks>
+/// Use this to analyze linking patterns, build link graphs, or check anchor text optimization.
+/// </remarks>
+public record LinkInfo(
+    int FromUrlId,
+    int ToUrlId,
+    string ToUrl,
+    string? AnchorText,
+    string LinkType);
 
 /// <summary>
 /// Represents a custom data extraction rule.

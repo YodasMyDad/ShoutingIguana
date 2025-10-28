@@ -173,6 +173,46 @@ public class RepositoryAccessor(
         }
     }
     
+    public async Task<List<PluginSdk.LinkInfo>> GetLinksByFromUrlAsync(int projectId, int fromUrlId)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var linkRepository = scope.ServiceProvider.GetRequiredService<ILinkRepository>();
+            var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
+            
+            // OPTIMIZED: Use specific query instead of loading all links for the project
+            var outgoingLinks = (await linkRepository.GetByFromUrlIdAsync(fromUrlId)).ToList();
+            
+            if (outgoingLinks.Count == 0)
+            {
+                return new List<PluginSdk.LinkInfo>();
+            }
+            
+            // OPTIMIZED: Only fetch the specific target URLs we need, not all URLs in the project
+            var targetUrlIds = outgoingLinks.Select(l => l.ToUrlId).Distinct().ToList();
+            var allUrls = await urlRepository.GetByProjectIdAsync(projectId);
+            var urlLookup = allUrls
+                .Where(u => targetUrlIds.Contains(u.Id))
+                .ToDictionary(u => u.Id, u => u.Address);
+            
+            // Map to LinkInfo DTOs
+            return outgoingLinks.Select(link => new PluginSdk.LinkInfo(
+                link.FromUrlId,
+                link.ToUrlId,
+                urlLookup.GetValueOrDefault(link.ToUrlId) ?? "Unknown",
+                link.AnchorText,
+                link.LinkType.ToString()
+            )).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting links from URL ID: {FromUrlId} for project {ProjectId}", 
+                fromUrlId, projectId);
+            return new List<PluginSdk.LinkInfo>();
+        }
+    }
+    
     public async Task<List<CustomExtractionRuleInfo>> GetCustomExtractionRulesAsync(int projectId)
     {
         try

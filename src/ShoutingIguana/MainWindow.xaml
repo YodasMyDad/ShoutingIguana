@@ -31,7 +31,6 @@
         <KeyBinding Key="D1" Modifiers="Control" Command="{Binding NavigateToProjectHomeCommand}"/>
         <KeyBinding Key="D2" Modifiers="Control" Command="{Binding NavigateToCrawlDashboardCommand}"/>
         <KeyBinding Key="D3" Modifiers="Control" Command="{Binding NavigateToFindingsCommand}"/>
-        <KeyBinding Key="D4" Modifiers="Control" Command="{Binding NavigateToLinkGraphCommand}"/>
         <KeyBinding Key="E" Modifiers="Control+Shift" Command="{Binding NavigateToPluginManagementCommand}"/>
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
         <KeyBinding Key="F11" Command="{Binding ToggleFullScreenCommand}"/>
@@ -166,12 +165,6 @@
                           Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <MenuItem.Icon>
                         <TextBlock Text="{StaticResource Icon.Search}" Style="{StaticResource Icon}"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="Link _Graph" Command="{Binding NavigateToLinkGraphCommand}" InputGestureText="Ctrl+4"
-                          Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <MenuItem.Icon>
-                        <TextBlock Text="{StaticResource Icon.Link}" Style="{StaticResource Icon}"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator/>

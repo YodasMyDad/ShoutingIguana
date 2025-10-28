@@ -725,10 +725,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
             {
                 findingsVm.CopySelectedCommand.Execute(null);
             }
-            else if (CurrentView is LinkGraphView linkGraphView && linkGraphView.DataContext is LinkGraphViewModel linkGraphVm)
-            {
-                linkGraphVm.CopySelectedCommand.Execute(null);
-            }
             else
             {
                 _logger.LogDebug("Copy not supported in current view");
@@ -749,10 +745,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
             if (CurrentView is FindingsView findingsView && findingsView.DataContext is FindingsViewModel findingsVm)
             {
                 findingsVm.SelectAllCommand.Execute(null);
-            }
-            else if (CurrentView is LinkGraphView linkGraphView && linkGraphView.DataContext is LinkGraphViewModel linkGraphVm)
-            {
-                linkGraphVm.SelectAllCommand.Execute(null);
             }
             else
             {
@@ -840,14 +832,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show($"Failed to save project: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
         }
-    }
-
-    [RelayCommand]
-    private async Task NavigateToLinkGraphAsync()
-    {
-        _navigationService.NavigateTo<LinkGraphView>();
-        StatusMessage = "Link Graph";
-        await Task.CompletedTask;
     }
 
     // ===== Pause/Resume Command =====
@@ -969,7 +953,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void CustomExtraction()
+    private async Task CustomExtractionAsync()
     {
         if (!HasOpenProject || _projectContext.CurrentProjectId == null)
         {
@@ -979,16 +963,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            var dialog = new CustomExtractionDialog(_serviceProvider, _projectContext.CurrentProjectId.Value);
-            dialog.Owner = Application.Current.MainWindow;
-            dialog.ShowDialog();
+            // Navigate to Project Home
+            await NavigateToProjectHomeAsync();
             
-            _logger.LogInformation("Custom Extraction dialog closed");
+            // Switch to Custom Extraction tab (tab index 1)
+            if (CurrentView is ProjectHomeView projectHomeView && projectHomeView.DataContext is ProjectHomeViewModel vm)
+            {
+                vm.SelectedTabIndex = 1; // Custom Extraction tab
+                _logger.LogInformation("Navigated to Custom Extraction tab");
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error opening custom extraction dialog");
-            _toastService.ShowError("Error", "Failed to open custom extraction dialog");
+            _logger.LogError(ex, "Error navigating to custom extraction");
+            _toastService.ShowError("Error", "Failed to navigate to custom extraction");
         }
     }
 

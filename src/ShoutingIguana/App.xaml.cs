@@ -128,11 +128,9 @@ public partial class App : Application
                     services.AddTransient<CrawlDashboardViewModel>();
                     services.AddTransient<FindingsViewModel>();
                     services.AddTransient<PluginManagementViewModel>();
-                    services.AddTransient<LinkGraphViewModel>();
 
                     // Views
                     services.AddTransient<PluginManagementView>();
-                    services.AddTransient<LinkGraphView>();
 
                     // Main Window
                     services.AddTransient<MainWindow>();

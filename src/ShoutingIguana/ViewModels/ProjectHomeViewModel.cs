@@ -29,6 +29,8 @@ public partial class ProjectHomeViewModel : ObservableObject
     private readonly ICrawlEngine _crawlEngine;
     private readonly IStatusService _statusService;
     private readonly IAppSettingsService _appSettingsService;
+    private readonly IToastService _toastService;
+    private readonly ICustomExtractionService _customExtractionService;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCrawlCommand))]
@@ -70,6 +72,51 @@ public partial class ProjectHomeViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isWelcomeScreen = true;
+    
+    [ObservableProperty]
+    private int _selectedTabIndex;
+    
+    // Custom Extraction properties
+    [ObservableProperty]
+    private ObservableCollection<CustomExtractionRule> _extractionRules = new();
+    
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanEditExtractionRule))]
+    [NotifyPropertyChangedFor(nameof(CanDeleteExtractionRule))]
+    private CustomExtractionRule? _selectedExtractionRule;
+    
+    [ObservableProperty]
+    private bool _isEditingExtractionRule;
+    
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSaveExtractionRule))]
+    [NotifyCanExecuteChangedFor(nameof(SaveExtractionRuleCommand))]
+    private string _editingExtractionName = string.Empty;
+    
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSaveExtractionRule))]
+    [NotifyCanExecuteChangedFor(nameof(SaveExtractionRuleCommand))]
+    private string _editingExtractionFieldName = string.Empty;
+    
+    [ObservableProperty]
+    private int _editingExtractionSelectorType;
+    
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSaveExtractionRule))]
+    [NotifyCanExecuteChangedFor(nameof(SaveExtractionRuleCommand))]
+    private string _editingExtractionSelector = string.Empty;
+    
+    [ObservableProperty]
+    private bool _editingExtractionIsEnabled = true;
+    
+    [ObservableProperty]
+    private int _editingExtractionRuleId;
+    
+    public bool CanEditExtractionRule => SelectedExtractionRule != null;
+    public bool CanDeleteExtractionRule => SelectedExtractionRule != null;
+    public bool CanSaveExtractionRule => !string.IsNullOrWhiteSpace(EditingExtractionName) 
+                                          && !string.IsNullOrWhiteSpace(EditingExtractionFieldName) 
+                                          && !string.IsNullOrWhiteSpace(EditingExtractionSelector);
 
     public ProjectHomeViewModel(
         ILogger<ProjectHomeViewModel> logger,
@@ -79,7 +126,9 @@ public partial class ProjectHomeViewModel : ObservableObject
         IHttpClientFactory httpClientFactory,
         ICrawlEngine crawlEngine,
         IStatusService statusService,
-        IAppSettingsService appSettingsService)
+        IAppSettingsService appSettingsService,
+        IToastService toastService,
+        ICustomExtractionService customExtractionService)
     {
         _logger = logger;
         _navigationService = navigationService;
@@ -89,6 +138,8 @@ public partial class ProjectHomeViewModel : ObservableObject
         _crawlEngine = crawlEngine;
         _statusService = statusService;
         _appSettingsService = appSettingsService;
+        _toastService = toastService;
+        _customExtractionService = customExtractionService;
     }
 
     public async Task LoadAsync()
@@ -122,6 +173,9 @@ public partial class ProjectHomeViewModel : ObservableObject
 
                     IsWelcomeScreen = false;
                     _logger.LogInformation("Loaded project details for {ProjectName}", project.Name);
+                    
+                    // Load custom extraction rules
+                    await LoadExtractionRulesAsync();
                 }
                 else
                 {
@@ -139,6 +193,30 @@ public partial class ProjectHomeViewModel : ObservableObject
         {
             // No project open, show welcome screen
             IsWelcomeScreen = true;
+        }
+    }
+    
+    private async Task LoadExtractionRulesAsync()
+    {
+        if (!_projectContext.CurrentProjectId.HasValue)
+            return;
+        
+        try
+        {
+            var rules = await _customExtractionService.GetRulesByProjectIdAsync(_projectContext.CurrentProjectId.Value);
+            
+            // Ensure ObservableCollection update happens on UI thread
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                ExtractionRules = new ObservableCollection<CustomExtractionRule>(rules);
+            });
+            
+            _logger.LogInformation("Loaded {Count} extraction rules", rules.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading extraction rules");
+            _toastService.ShowError("Error", "Failed to load extraction rules");
         }
     }
 
@@ -231,6 +309,9 @@ public partial class ProjectHomeViewModel : ObservableObject
                 // Add to recent projects
                 _appSettingsService.AddRecentProject(project.Name, dialog.FileName);
                 await _appSettingsService.SaveAsync();
+                
+                // Load custom extraction rules
+                await LoadExtractionRulesAsync();
 
                 // Check for crash recovery
                 await CheckForCrashRecoveryAsync(project.Id);
@@ -497,6 +578,129 @@ public partial class ProjectHomeViewModel : ObservableObject
         {
             _logger.LogError(ex, "Error checking for crash recovery");
         }
+    }
+    
+    // ===== Custom Extraction Commands =====
+    
+    [RelayCommand]
+    private void AddExtractionRule()
+    {
+        IsEditingExtractionRule = true;
+        EditingExtractionRuleId = 0;
+        EditingExtractionName = string.Empty;
+        EditingExtractionFieldName = string.Empty;
+        EditingExtractionSelectorType = 0; // CSS by default
+        EditingExtractionSelector = string.Empty;
+        EditingExtractionIsEnabled = true;
+        
+        _logger.LogDebug("Starting new extraction rule creation");
+    }
+    
+    [RelayCommand(CanExecute = nameof(CanEditExtractionRule))]
+    private void EditExtractionRule()
+    {
+        if (SelectedExtractionRule == null) return;
+
+        IsEditingExtractionRule = true;
+        EditingExtractionRuleId = SelectedExtractionRule.Id;
+        EditingExtractionName = SelectedExtractionRule.Name;
+        EditingExtractionFieldName = SelectedExtractionRule.FieldName;
+        EditingExtractionSelectorType = SelectedExtractionRule.SelectorType;
+        EditingExtractionSelector = SelectedExtractionRule.Selector;
+        EditingExtractionIsEnabled = SelectedExtractionRule.IsEnabled;
+        
+        _logger.LogDebug("Editing extraction rule: {RuleName}", SelectedExtractionRule.Name);
+    }
+    
+    [RelayCommand(CanExecute = nameof(CanDeleteExtractionRule))]
+    private async Task DeleteExtractionRuleAsync()
+    {
+        if (SelectedExtractionRule == null) return;
+
+        var result = await Application.Current.Dispatcher.InvokeAsync(() =>
+            MessageBox.Show(
+                $"Are you sure you want to delete the rule '{SelectedExtractionRule.Name}'?",
+                "Confirm Delete",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question));
+
+        if (result == MessageBoxResult.Yes)
+        {
+            try
+            {
+                await _customExtractionService.DeleteRuleAsync(SelectedExtractionRule.Id);
+                ExtractionRules.Remove(SelectedExtractionRule);
+                SelectedExtractionRule = null;
+                
+                _toastService.ShowSuccess("Deleted", "Rule deleted successfully");
+                _logger.LogInformation("Deleted extraction rule");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting extraction rule");
+                _toastService.ShowError("Error", "Failed to delete rule");
+            }
+        }
+    }
+    
+    [RelayCommand(CanExecute = nameof(CanSaveExtractionRule))]
+    private async Task SaveExtractionRuleAsync()
+    {
+        if (!_projectContext.CurrentProjectId.HasValue)
+        {
+            _toastService.ShowWarning("No Project", "Please create or open a project first");
+            return;
+        }
+        
+        try
+        {
+            var rule = new CustomExtractionRule
+            {
+                Id = EditingExtractionRuleId,
+                ProjectId = _projectContext.CurrentProjectId.Value,
+                Name = EditingExtractionName.Trim(),
+                FieldName = EditingExtractionFieldName.Trim(),
+                SelectorType = EditingExtractionSelectorType,
+                Selector = EditingExtractionSelector.Trim(),
+                IsEnabled = EditingExtractionIsEnabled
+            };
+
+            var savedRule = await _customExtractionService.SaveRuleAsync(rule);
+
+            // Update UI
+            if (EditingExtractionRuleId == 0)
+            {
+                // New rule
+                ExtractionRules.Add(savedRule);
+                _toastService.ShowSuccess("Created", "Rule created successfully");
+            }
+            else
+            {
+                // Update existing
+                var existing = ExtractionRules.FirstOrDefault(r => r.Id == EditingExtractionRuleId);
+                if (existing != null)
+                {
+                    var index = ExtractionRules.IndexOf(existing);
+                    ExtractionRules[index] = savedRule;
+                }
+                _toastService.ShowSuccess("Updated", "Rule updated successfully");
+            }
+
+            IsEditingExtractionRule = false;
+            _logger.LogInformation("Saved extraction rule: {RuleName}", savedRule.Name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving extraction rule");
+            _toastService.ShowError("Error", "Failed to save rule");
+        }
+    }
+    
+    [RelayCommand]
+    private void CancelEditExtractionRule()
+    {
+        IsEditingExtractionRule = false;
+        _logger.LogDebug("Cancelled extraction rule editing");
     }
 }
 
