@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Custom Extraction Rules"
         Height="600"
-        Width="850"
+        Width="960"
         MinHeight="500"
-        MinWidth="700"
+        MinWidth="820"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource BackgroundBrush}"
         Foreground="{StaticResource TextPrimaryBrush}"
@@ -51,15 +51,15 @@
         </Border>
 
         <!-- Main Content -->
-        <Grid Grid.Row="1" Margin="{StaticResource SpacingM}">
+        <Grid Grid.Row="1" Margin="{StaticResource SpacingL}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="{StaticResource SpacingXlValue}"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <!-- Rules List -->
-            <Border Grid.Column="0" Style="{StaticResource Card}">
+            <Border Grid.Column="0" Style="{StaticResource Card}" VerticalAlignment="Stretch">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -86,6 +86,7 @@
                               CanUserResizeRows="False"
                               Background="Transparent"
                               BorderThickness="0"
+                              Margin="0,0,0,16"
                               TabIndex="0"
                               AutomationProperties.Name="Custom Extraction Rules List"
                               AutomationProperties.HelpText="List of custom extraction rules. Select a rule to edit it."
@@ -104,9 +105,10 @@
                     </DataGrid>
 
                     <!-- List Actions -->
-                    <StackPanel Grid.Row="2" 
-                                Orientation="Horizontal" 
-                                Margin="0,12,0,0">
+                    <StackPanel Grid.Row="2"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                Margin="0">
                         <Button Command="{Binding AddRuleCommand}"
                                 Style="{StaticResource PrimaryButton}"
                                 TabIndex="1"
@@ -122,7 +124,7 @@
                         </Button>
                         <Button Command="{Binding EditRuleCommand}"
                                 Style="{StaticResource SecondaryButton}"
-                                Margin="8,0,0,0"
+                                Margin="{StaticResource SpacingS},0,0,0"
                                 TabIndex="2"
                                 AutomationProperties.Name="Edit Selected Rule"
                                 AutomationProperties.HelpText="Edits the currently selected extraction rule"
@@ -138,7 +140,7 @@
                         </Button>
                         <Button Command="{Binding DeleteRuleCommand}"
                                 Style="{StaticResource DangerButton}"
-                                Margin="8,0,0,0"
+                                Margin="{StaticResource SpacingS},0,0,0"
                                 TabIndex="3"
                                 AutomationProperties.Name="Delete Selected Rule"
                                 AutomationProperties.HelpText="Deletes the currently selected extraction rule permanently"
@@ -157,8 +159,9 @@
             </Border>
 
             <!-- Rule Editor -->
-            <Border Grid.Column="2" 
+            <Border Grid.Column="2"
                     Style="{StaticResource Card}"
+                    VerticalAlignment="Stretch"
                     Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -174,7 +177,7 @@
                                Margin="0,0,0,16"/>
 
                     <!-- Editor Form -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,24">
                         <StackPanel>
                             <!-- Name -->
                             <StackPanel Margin="0,0,0,16">
@@ -259,7 +262,7 @@
                             <CheckBox IsChecked="{Binding EditingIsEnabled}"
                                       Content="Enabled"
                                       FontSize="14"
-                                      Margin="0,0,0,16"
+                                      Margin="0,0,0,8"
                                       TabIndex="8"
                                       AutomationProperties.Name="Rule Enabled"
                                       AutomationProperties.HelpText="Enable or disable this extraction rule"/>
@@ -267,14 +270,14 @@
                     </ScrollViewer>
 
                     <!-- Editor Actions -->
-                    <StackPanel Grid.Row="2" 
-                                Orientation="Horizontal" 
+                    <StackPanel Grid.Row="2"
+                                Orientation="Horizontal"
                                 HorizontalAlignment="Right"
-                                Margin="0,16,0,0">
+                                Margin="0">
                         <Button Content="Cancel"
                                 Command="{Binding CancelEditCommand}"
                                 Style="{StaticResource SecondaryButton}"
-                                Margin="0,0,8,0"
+                                Margin="0,0,{StaticResource SpacingS},0"
                                 TabIndex="9"
                                 IsCancel="True"
                                 AutomationProperties.Name="Cancel Edit"
@@ -293,8 +296,9 @@
             </Border>
 
             <!-- Placeholder when not editing -->
-            <Border Grid.Column="2" 
+            <Border Grid.Column="2"
                     Style="{StaticResource Card}"
+                    VerticalAlignment="Center"
                     Visibility="{Binding IsEditing, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <TextBlock Text="Select a rule to edit or click Add to create a new rule"
