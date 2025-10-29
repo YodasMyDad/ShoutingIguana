@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:sdk="clr-namespace:ShoutingIguana.PluginSdk;assembly=ShoutingIguana.PluginSdk"
              xmlns:controls="clr-namespace:ShoutingIguana.Controls"
+             xmlns:vm="clr-namespace:ShoutingIguana.ViewModels"
              x:Name="Root"
              Background="{StaticResource BackgroundBrush}">
     
@@ -175,32 +176,33 @@
                             KeyboardNavigation.TabNavigation="Local"
                             Visibility="{Binding Tabs.Count, Converter={StaticResource Int32ToVisibilityConverter}}">
                 <TabControl.ItemContainerStyle>
-                    <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
-                        <Setter Property="Height" Value="48"/>
+                    <Style TargetType="TabItem" BasedOn="{StaticResource CompactTabItem}">
+                        <Setter Property="MinHeight" Value="32"/>
                     </Style>
                 </TabControl.ItemContainerStyle>
                 <TabControl.ItemTemplate>
                     <DataTemplate>
-                        <StackPanel Orientation="Horizontal" Margin="12,0">
+                        <StackPanel Orientation="Horizontal" Margin="8,0">
                             <TextBlock Text="{Binding TabHeader}" 
                                        VerticalAlignment="Center"
-                                       Margin="0,0,8,0"
+                                       Margin="0,0,6,0"
                                        FontWeight="Medium"/>
                             <Border Background="{StaticResource ErrorBrush}" 
-                                    CornerRadius="10" 
-                                    Padding="6,2"
+                                    CornerRadius="8" 
+                                    Padding="5,1"
                                     VerticalAlignment="Center"
-                                    Visibility="{Binding ErrorCount, Converter={StaticResource Int32ToVisibilityConverter}}">
+                                    Visibility="{Binding ErrorCount, Converter={StaticResource Int32ToVisibilityConverter}, FallbackValue=Collapsed}">
                                 <TextBlock Text="{Binding ErrorCount}" 
                                            Foreground="White" 
-                                           FontSize="10"
+                                           FontSize="9"
                                            FontWeight="Bold"/>
                             </Border>
                         </StackPanel>
                     </DataTemplate>
                 </TabControl.ItemTemplate>
-                <TabControl.ContentTemplate>
-                    <DataTemplate>
+                <TabControl.Resources>
+                    <!-- DataTemplate for OverviewTabViewModel -->
+                    <DataTemplate DataType="{x:Type vm:OverviewTabViewModel}">
                         <Grid Margin="16" MinHeight="350">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -217,7 +219,7 @@
                                        Visibility="{Binding Description, Converter={StaticResource NullToVisibilityConverter}}"
                                        TextWrapping="Wrap"/>
 
-                            <!-- Filters -->
+                            <!-- Search Filter -->
                             <Border Grid.Row="1"
                                     Background="{StaticResource SurfaceAltBrush}"
                                     CornerRadius="6"
@@ -225,83 +227,25 @@
                                     Margin="0,0,0,16">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="16"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="16"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     
-                                    <!-- Severity Filter -->
-                                    <StackPanel Grid.Column="0" Margin="0">
-                                        <TextBlock Text="Severity" 
-                                                   Style="{StaticResource FormFieldLabel}"
-                                                   Margin="0,0,0,8"
-                                                   AutomationProperties.AutomationId="SeverityFilterLabel"/>
-                                        <ComboBox Width="180"
-                                                  MinWidth="160"
-                                                  MaxDropDownHeight="300"
-                                                  SelectedValue="{Binding SelectedSeverity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                  SelectedValuePath="Tag"
-                                                  Style="{StaticResource ModernComboBox}"
-                                                  TabIndex="3"
-                                                  AutomationProperties.Name="Filter by Severity"
-                                                  AutomationProperties.HelpText="Filters the findings list to show only items of the selected severity level"
-                                                  ToolTip="Filter findings by severity level">
-                                            <ComboBoxItem Tag="{x:Null}" MaxWidth="180">
-                                                <TextBlock Text="All Severities"/>
-                                            </ComboBoxItem>
-                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Error}" MaxWidth="180">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="{StaticResource Icon.Error}" 
-                                                               Style="{StaticResource Icon}"
-                                                               FontSize="14"
-                                                               Foreground="{StaticResource ErrorBrush}"
-                                                               Margin="0,0,8,0"/>
-                                                    <TextBlock Text="Error" VerticalAlignment="Center"/>
-                                                </StackPanel>
-                                            </ComboBoxItem>
-                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Warning}" MaxWidth="180">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="{StaticResource Icon.Warning}" 
-                                                               Style="{StaticResource Icon}"
-                                                               FontSize="14"
-                                                               Foreground="{StaticResource WarningBrush}"
-                                                               Margin="0,0,8,0"/>
-                                                    <TextBlock Text="Warning" VerticalAlignment="Center"/>
-                                                </StackPanel>
-                                            </ComboBoxItem>
-                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Info}" MaxWidth="180">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="{StaticResource Icon.Info}" 
-                                                               Style="{StaticResource Icon}"
-                                                               FontSize="14"
-                                                               Foreground="{StaticResource InfoBrush}"
-                                                               Margin="0,0,8,0"/>
-                                                    <TextBlock Text="Info" VerticalAlignment="Center"/>
-                                                </StackPanel>
-                                            </ComboBoxItem>
-                                        </ComboBox>
-                                    </StackPanel>
-                                    
                                     <!-- Search Box -->
-                                    <StackPanel Grid.Column="2">
-                                        <TextBlock Text="Search" 
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Search URLs" 
                                                    Style="{StaticResource FormFieldLabel}"
-                                                   Margin="0,0,0,8"
-                                                   AutomationProperties.AutomationId="SearchFilterLabel"/>
+                                                   Margin="0,0,0,8"/>
                                         <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                                                  Style="{StaticResource ModernTextBox}"
-                                                 TabIndex="4"
-                                                 AutomationProperties.Name="Search Findings"
-                                                 AutomationProperties.HelpText="Search findings by message, code, or URL"
-                                                 ToolTip="Search findings by message, code, or URL">
+                                                 ToolTip="Search URLs by address, title, or content type">
                                             <TextBox.Tag>Type to search...</TextBox.Tag>
                                         </TextBox>
                                     </StackPanel>
                                              
                                     <!-- Total Count Badge -->
-                                    <Border Grid.Column="4"
+                                    <Border Grid.Column="2"
                                             Background="{StaticResource PrimaryBrush}"
                                             CornerRadius="8"
                                             Padding="20,12"
@@ -324,7 +268,7 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Findings DataGrid -->
+                            <!-- URLs DataGrid -->
                             <Grid Grid.Row="2" MinHeight="250">
                                 <!-- Skeleton Loader (shown while loading) -->
                                 <ItemsControl Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
@@ -448,42 +392,25 @@
                                 
                                 <!-- Actual DataGrid (hidden while loading) -->
                                 <DataGrid Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
-                                          ItemsSource="{Binding FilteredFindings}"
-                                          SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
+                                          ItemsSource="{Binding FilteredUrls}"
+                                          SelectedItem="{Binding SelectedUrlModel, Mode=TwoWay}"
                                           Style="{StaticResource ModernDataGrid}"
                                           Height="400"
                                           VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Auto"
-                                          TabIndex="5"
-                                          AutomationProperties.Name="Findings List"
-                                          AutomationProperties.HelpText="List of findings discovered during the crawl. Select a row to view details below."
-                                          AutomationProperties.LiveSetting="Polite">
+                                          AutomationProperties.Name="URLs List"
+                                          AutomationProperties.HelpText="List of all URLs discovered during the crawl. Select a row to view details below.">
                                 <DataGrid.ContextMenu>
-                                    <ContextMenu AutomationProperties.Name="Findings Context Menu">
+                                    <ContextMenu>
                                         <MenuItem Header="Copy URL" 
-                                                  Command="{Binding CopyUrlCommand}"
-                                                  InputGestureText="Ctrl+C"
-                                                  AutomationProperties.Name="Copy URL to Clipboard"
-                                                  AutomationProperties.HelpText="Copy the selected finding's URL to clipboard (Ctrl+C)">
-                                            <MenuItem.Icon>
-                                                <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
-                                            </MenuItem.Icon>
-                                        </MenuItem>
-                                        <MenuItem Header="Copy Message" 
-                                                  Command="{Binding CopyMessageCommand}"
-                                                  InputGestureText="Ctrl+Shift+C"
-                                                  AutomationProperties.Name="Copy Message to Clipboard"
-                                                  AutomationProperties.HelpText="Copy the selected finding's message to clipboard (Ctrl+Shift+C)">
+                                                  Command="{Binding CopyUrlCommand}">
                                             <MenuItem.Icon>
                                                 <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                         <Separator/>
                                         <MenuItem Header="Open in Browser" 
-                                                  Command="{Binding OpenInBrowserCommand}"
-                                                  InputGestureText="Ctrl+Enter"
-                                                  AutomationProperties.Name="Open URL in Default Browser"
-                                                  AutomationProperties.HelpText="Opens the selected finding's URL in your default web browser (Ctrl+Enter)">
+                                                  Command="{Binding OpenInBrowserCommand}">
                                             <MenuItem.Icon>
                                                 <TextBlock Text="{StaticResource Icon.OpenInNew}" Style="{StaticResource Icon}"/>
                                             </MenuItem.Icon>
@@ -491,45 +418,258 @@
                                     </ContextMenu>
                                 </DataGrid.ContextMenu>
                                 <DataGrid.Columns>
-                                    <DataGridTemplateColumn Header="Severity" Width="Auto" MinWidth="100">
+                                    <DataGridTemplateColumn Header="Type" Width="100" MinWidth="90">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <Border Style="{StaticResource SeverityBadgeStyle}">
-                                                    <TextBlock Text="{Binding Severity}" 
-                                                               Style="{StaticResource SeverityTextStyle}"/>
+                                                <Border CornerRadius="4" 
+                                                        Padding="6,2" 
+                                                        HorizontalAlignment="Center">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsInternal}" Value="True">
+                                                                    <Setter Property="Background" Value="#E8F5E9"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsInternal}" Value="False">
+                                                                    <Setter Property="Background" Value="#F5F5F5"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <TextBlock Text="{Binding Type}" 
+                                                               FontWeight="Medium"
+                                                               FontSize="11">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsInternal}" Value="True">
+                                                                        <Setter Property="Foreground" Value="#2E7D32"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsInternal}" Value="False">
+                                                                        <Setter Property="Foreground" Value="#757575"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
                                                 </Border>
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
-                                    <DataGridTextColumn Header="Code" 
-                                                        Binding="{Binding Code}" 
-                                                        Width="150"
-                                                        MinWidth="120"
-                                                        FontFamily="Consolas"
-                                                        FontSize="13"
-                                                        Visibility="Collapsed"/>
-                                    <DataGridTextColumn Header="Message" 
-                                                        Binding="{Binding Message}" 
-                                                        Width="2*"
-                                                        MinWidth="200"/>
-                                    <DataGridTextColumn Header="URL" 
+                                    <DataGridTextColumn Header="Status" 
+                                                        Binding="{Binding Url.HttpStatus}" 
+                                                        Width="70"
+                                                        MinWidth="60"/>
+                                    <DataGridTextColumn Header="Address" 
                                                         Binding="{Binding Url.Address}" 
                                                         Width="3*"
-                                                        MinWidth="250"
+                                                        MinWidth="300"
                                                         FontFamily="Consolas"
                                                         FontSize="12"/>
-                                    <DataGridTextColumn Header="Date" 
-                                                        Binding="{Binding CreatedUtc, StringFormat='yyyy-MM-dd HH:mm:ss'}" 
+                                    <DataGridTextColumn Header="Title" 
+                                                        Binding="{Binding Url.Title}" 
+                                                        Width="2*"
+                                                        MinWidth="200"/>
+                                    <DataGridTextColumn Header="Content-Type" 
+                                                        Binding="{Binding Url.ContentType}" 
                                                         Width="150"
-                                                        MinWidth="140"
-                                                        FontFamily="Consolas"
-                                                        FontSize="12"/>
+                                                        MinWidth="120"/>
+                                    <DataGridTextColumn Header="Size" 
+                                                        Binding="{Binding Url.ContentLength, StringFormat='N0'}" 
+                                                        Width="100"
+                                                        MinWidth="80"/>
+                                    <DataGridTextColumn Header="Depth" 
+                                                        Binding="{Binding Url.Depth}" 
+                                                        Width="70"
+                                                        MinWidth="60"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </Grid>
                         </Grid>
                     </DataTemplate>
-                </TabControl.ContentTemplate>
+                    
+                    <!-- DataTemplate for FindingTabViewModel -->
+                    <DataTemplate DataType="{x:Type vm:FindingTabViewModel}">
+                        <Grid Margin="16" MinHeight="350">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*" MinHeight="250"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Description -->
+                            <TextBlock Grid.Row="0"
+                                       Text="{Binding Description}"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,0,0,16"
+                                       Visibility="{Binding Description, Converter={StaticResource NullToVisibilityConverter}}"
+                                       TextWrapping="Wrap"/>
+
+                            <!-- Filters -->
+                            <Border Grid.Row="1"
+                                    Background="{StaticResource SurfaceAltBrush}"
+                                    CornerRadius="6"
+                                    Padding="16"
+                                    Margin="0,0,0,16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="16"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- Severity Filter -->
+                                    <StackPanel Grid.Column="0" Margin="0">
+                                        <TextBlock Text="Severity" 
+                                                   Style="{StaticResource FormFieldLabel}"
+                                                   Margin="0,0,0,8"/>
+                                        <ComboBox Width="180"
+                                                  MinWidth="160"
+                                                  MaxDropDownHeight="300"
+                                                  SelectedValue="{Binding SelectedSeverity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  SelectedValuePath="Tag"
+                                                  Style="{StaticResource ModernComboBox}"
+                                                  ToolTip="Filter findings by severity level">
+                                            <ComboBoxItem Tag="{x:Null}" MaxWidth="180">
+                                                <TextBlock Text="All Severities"/>
+                                            </ComboBoxItem>
+                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Error}" MaxWidth="180">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{StaticResource Icon.Error}" 
+                                                               Style="{StaticResource Icon}"
+                                                               FontSize="14"
+                                                               Foreground="{StaticResource ErrorBrush}"
+                                                               Margin="0,0,8,0"/>
+                                                    <TextBlock Text="Error" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
+                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Warning}" MaxWidth="180">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{StaticResource Icon.Warning}" 
+                                                               Style="{StaticResource Icon}"
+                                                               FontSize="14"
+                                                               Foreground="{StaticResource WarningBrush}"
+                                                               Margin="0,0,8,0"/>
+                                                    <TextBlock Text="Warning" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
+                                            <ComboBoxItem Tag="{x:Static sdk:Severity.Info}" MaxWidth="180">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{StaticResource Icon.Info}" 
+                                                               Style="{StaticResource Icon}"
+                                                               FontSize="14"
+                                                               Foreground="{StaticResource InfoBrush}"
+                                                               Margin="0,0,8,0"/>
+                                                    <TextBlock Text="Info" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </ComboBoxItem>
+                                        </ComboBox>
+                                    </StackPanel>
+                                    
+                                    <!-- Search Box -->
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Search" 
+                                                   Style="{StaticResource FormFieldLabel}"
+                                                   Margin="0,0,0,8"/>
+                                        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource ModernTextBox}"
+                                                 ToolTip="Search findings by message, code, or URL">
+                                            <TextBox.Tag>Type to search...</TextBox.Tag>
+                                        </TextBox>
+                                    </StackPanel>
+                                             
+                                    <!-- Total Count Badge -->
+                                    <Border Grid.Column="4"
+                                            Background="{StaticResource PrimaryBrush}"
+                                            CornerRadius="8"
+                                            Padding="20,12"
+                                            VerticalAlignment="Bottom"
+                                            Height="40">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Total: "
+                                                       Foreground="White"
+                                                       FontWeight="Medium"
+                                                       FontSize="13"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding TotalCount, Mode=OneWay}" 
+                                                       Foreground="White"
+                                                       FontSize="18"
+                                                       FontWeight="Bold"
+                                                       VerticalAlignment="Center"
+                                                       Margin="4,0,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <!-- Findings DataGrid -->
+                            <DataGrid Grid.Row="2" 
+                                      Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
+                                      ItemsSource="{Binding FilteredFindings}"
+                                      SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
+                                      Style="{StaticResource ModernDataGrid}"
+                                      Height="400"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      AutomationProperties.Name="Findings List">
+                            <DataGrid.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Copy URL" 
+                                              Command="{Binding CopyUrlCommand}">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Copy Message" 
+                                              Command="{Binding CopyMessageCommand}">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="{StaticResource Icon.Copy}" Style="{StaticResource Icon}"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator/>
+                                    <MenuItem Header="Open in Browser" 
+                                              Command="{Binding OpenInBrowserCommand}">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="{StaticResource Icon.OpenInNew}" Style="{StaticResource Icon}"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Header="Severity" Width="120" MinWidth="100">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource SeverityBadgeStyle}">
+                                                <TextBlock Text="{Binding Severity}" 
+                                                           Style="{StaticResource SeverityTextStyle}"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="Message" 
+                                                    Binding="{Binding Message}" 
+                                                    Width="2*"
+                                                    MinWidth="200"/>
+                                <DataGridTextColumn Header="URL" 
+                                                    Binding="{Binding Url.Address}" 
+                                                    Width="3*"
+                                                    MinWidth="250"
+                                                    FontFamily="Consolas"
+                                                    FontSize="12"/>
+                                <DataGridTextColumn Header="Date" 
+                                                    Binding="{Binding CreatedUtc, StringFormat='yyyy-MM-dd HH:mm:ss'}" 
+                                                    Width="150"
+                                                    MinWidth="140"
+                                                    FontFamily="Consolas"
+                                                    FontSize="12"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </DataTemplate>
+                </TabControl.Resources>
                 </TabControl>
             </Grid>
         </Border>
@@ -569,14 +709,14 @@
                                            Style="{StaticResource Icon}"
                                            Foreground="White"/>
                             </Border>
-                            <TextBlock Text="Finding Details" 
+                            <TextBlock Text="{Binding DetailsHeaderText}" 
                                        Style="{StaticResource TitleTextStyle}"
                                        FontSize="16"
                                        Margin="0"
                                        VerticalAlignment="Center"
                                        AutomationProperties.HeadingLevel="Level2"
                                        AutomationProperties.LiveSetting="Polite"
-                                       AutomationProperties.AutomationId="FindingDetailsHeading"/>
+                                       AutomationProperties.AutomationId="DetailsHeading"/>
                         </StackPanel>
                         
                         <StackPanel Orientation="Horizontal" 
@@ -586,6 +726,7 @@
                                       Content="Technical"
                                       Margin="0,0,12,0"
                                       VerticalAlignment="Center"
+                                      Visibility="{Binding IsFindingTabSelected, Converter={StaticResource BooleanToVisibilityConverter}}"
                                       AutomationProperties.Name="Technical Mode"
                                       AutomationProperties.HelpText="Toggle to view technical metadata JSON"
                                       ToolTip="Show technical metadata JSON"/>
@@ -618,55 +759,225 @@
                             CornerRadius="6"
                             BorderThickness="1"
                             BorderBrush="{StaticResource BorderLightBrush}">
-                        <Grid>
-                            <!-- Normal View: Formatted Text from Plugin -->
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                          HorizontalScrollBarVisibility="Disabled"
-                                          Padding="16"
-                                          Visibility="{Binding IsTechnicalModeEnabled, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
-                                <StackPanel>
-                                    <!-- Show structured details if available -->
-                                    <controls:FindingDetailsViewer 
-                                        Details="{Binding SelectedFindingDetails}"
-                                        Visibility="{Binding HasStructuredDetails, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                    
-                                    <!-- Show message if no structured details -->
-                                    <TextBlock Text="No details available for this finding."
-                                               Style="{StaticResource BodyTextStyle}"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                               Visibility="{Binding HasStructuredDetails, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
-                                               Margin="0,8"/>
-                                </StackPanel>
-                            </ScrollViewer>
-                            
-                            <!-- Technical View: JSON Technical Metadata -->
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                          HorizontalScrollBarVisibility="Auto"
-                                          Padding="16"
-                                          Visibility="{Binding IsTechnicalModeEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <StackPanel>
-                                    <!-- Show technical metadata if available -->
-                                    <TextBox Text="{Binding TechnicalMetadataJson, Mode=OneWay}"
-                                             IsReadOnly="True"
-                                             TextWrapping="Wrap"
-                                             FontFamily="Consolas"
-                                             FontSize="12"
-                                             Background="Transparent"
-                                             BorderThickness="0"
-                                             Foreground="{StaticResource TextPrimaryBrush}"
-                                             Visibility="{Binding HasTechnicalMetadata, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                             AutomationProperties.Name="Technical Metadata JSON"
-                                             AutomationProperties.HelpText="JSON representation of technical metadata for advanced users. Read-only."/>
-                                    
-                                    <!-- Show message if no technical metadata -->
-                                    <TextBlock Text="No technical metadata available for this finding."
-                                               Style="{StaticResource BodyTextStyle}"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                               Visibility="{Binding HasTechnicalMetadata, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
-                                               Margin="0,8"/>
-                                </StackPanel>
-                            </ScrollViewer>
-                        </Grid>
+                        <ContentControl Content="{Binding SelectedTab}">
+                            <ContentControl.Resources>
+                                <!-- DataTemplate for OverviewTabViewModel - Show URL Properties -->
+                                <DataTemplate DataType="{x:Type vm:OverviewTabViewModel}">
+                                    <DataGrid ItemsSource="{Binding UrlProperties}"
+                                              AutoGenerateColumns="False"
+                                              IsReadOnly="True"
+                                              CanUserAddRows="False"
+                                              CanUserDeleteRows="False"
+                                              CanUserResizeRows="False"
+                                              CanUserSortColumns="False"
+                                              GridLinesVisibility="None"
+                                              HeadersVisibility="None"
+                                              Background="{StaticResource SurfaceBrush}"
+                                              BorderThickness="0"
+                                              FontSize="14"
+                                              ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                              Margin="{StaticResource SpacingM}"
+                                              Loaded="UrlPropertiesDataGrid_Loaded"
+                                              PreviewMouseWheel="DataGrid_PreviewMouseWheel"
+                                              IsHitTestVisible="True"
+                                              Focusable="False">
+                                        <DataGrid.Resources>
+                                            <!-- Override system selection colors to be transparent -->
+                                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="Transparent"/>
+                                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#1F1F1F"/>
+                                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="Transparent"/>
+                                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#1F1F1F"/>
+                                        </DataGrid.Resources>
+                                        <DataGrid.RowStyle>
+                                            <Style TargetType="DataGridRow">
+                                                <Setter Property="Background" Value="Transparent"/>
+                                                <Setter Property="Cursor" Value="Arrow"/>
+                                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                                <Setter Property="MinHeight" Value="36"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="DataGridRow">
+                                                            <Border Background="{TemplateBinding Background}"
+                                                                    BorderBrush="{StaticResource BorderLightBrush}"
+                                                                    BorderThickness="0,0,0,1"
+                                                                    SnapsToDevicePixels="True">
+                                                                <SelectiveScrollingGrid>
+                                                                    <SelectiveScrollingGrid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition/>
+                                                                    </SelectiveScrollingGrid.ColumnDefinitions>
+                                                                    <SelectiveScrollingGrid.RowDefinitions>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                    </SelectiveScrollingGrid.RowDefinitions>
+                                                                    <DataGridCellsPresenter Grid.Column="1"
+                                                                                            ItemsPanel="{TemplateBinding ItemsPanel}"
+                                                                                            SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                                                    <DataGridDetailsPresenter Grid.Column="1"
+                                                                                              Grid.Row="1"
+                                                                                              SelectiveScrollingGrid.SelectiveScrollingOrientation="{Binding AreRowDetailsFrozen, ConverterParameter={x:Static SelectiveScrollingOrientation.Vertical}, Converter={x:Static DataGrid.RowDetailsScrollingConverter}, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}"
+                                                                                              Visibility="{TemplateBinding DetailsVisibility}"/>
+                                                                    <DataGridRowHeader Grid.RowSpan="2"
+                                                                                       SelectiveScrollingGrid.SelectiveScrollingOrientation="Vertical"
+                                                                                       Visibility="{Binding HeadersVisibility, ConverterParameter={x:Static DataGridHeadersVisibility.Row}, Converter={x:Static DataGrid.HeadersVisibilityConverter}, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}"/>
+                                                                </SelectiveScrollingGrid>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </DataGrid.RowStyle>
+                                        <DataGrid.CellStyle>
+                                            <Style TargetType="DataGridCell">
+                                                <Setter Property="BorderThickness" Value="0"/>
+                                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                                <Setter Property="Padding" Value="16,8"/>
+                                                <Setter Property="VerticalContentAlignment" Value="Top"/>
+                                                <Setter Property="Background" Value="Transparent"/>
+                                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                                <Setter Property="Focusable" Value="False"/>
+                                                <Setter Property="IsTabStop" Value="False"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="DataGridCell">
+                                                            <Border Padding="{TemplateBinding Padding}"
+                                                                    Background="Transparent"
+                                                                    SnapsToDevicePixels="True">
+                                                                <ContentPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter Property="Background" Value="Transparent"/>
+                                                        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </DataGrid.CellStyle>
+                                        <DataGrid.Columns>
+                                            <DataGridTemplateColumn Header="Property" Width="250">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Key}" 
+                                                                   Style="{StaticResource BodyEmphasisTextStyle}"
+                                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                                   VerticalAlignment="Center"/>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTemplateColumn Header="Value" Width="*">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <TextBox Text="{Binding Value, Mode=OneWay}" 
+                                                                 IsReadOnly="True"
+                                                                 TextWrapping="Wrap"
+                                                                 AcceptsReturn="True"
+                                                                 BorderThickness="0"
+                                                                 Background="Transparent"
+                                                                 Foreground="{StaticResource TextPrimaryBrush}"
+                                                                 FontFamily="{StaticResource BodyFontFamily}"
+                                                                 FontSize="14"
+                                                                 Padding="0"
+                                                                 Margin="0"
+                                                                 IsTabStop="False"
+                                                                 Focusable="False"
+                                                                 IsReadOnlyCaretVisible="False"
+                                                                 Cursor="Arrow">
+                                                            <TextBox.Style>
+                                                                <Style TargetType="TextBox">
+                                                                    <Setter Property="Template">
+                                                                        <Setter.Value>
+                                                                            <ControlTemplate TargetType="TextBox">
+                                                                                <ScrollViewer x:Name="PART_ContentHost" 
+                                                                                              Focusable="False"
+                                                                                              HorizontalScrollBarVisibility="Disabled"
+                                                                                              VerticalScrollBarVisibility="Disabled"/>
+                                                                            </ControlTemplate>
+                                                                        </Setter.Value>
+                                                                    </Setter>
+                                                                </Style>
+                                                            </TextBox.Style>
+                                                        </TextBox>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                        </DataGrid.Columns>
+                                        <DataGrid.GroupStyle>
+                                            <GroupStyle>
+                                                <GroupStyle.HeaderTemplate>
+                                                    <DataTemplate>
+                                                        <Border Background="{StaticResource PrimaryBrush}" 
+                                                                Padding="{StaticResource SpacingS}"
+                                                                Margin="0,8,0,0"
+                                                                CornerRadius="4"
+                                                                SnapsToDevicePixels="True">
+                                                            <TextBlock Text="{Binding Name}" 
+                                                                       Style="{StaticResource BodyEmphasisTextStyle}"
+                                                                       Foreground="White"
+                                                                       FontSize="14"/>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </GroupStyle.HeaderTemplate>
+                                            </GroupStyle>
+                                        </DataGrid.GroupStyle>
+                                    </DataGrid>
+                                </DataTemplate>
+                                
+                                <!-- DataTemplate for FindingTabViewModel - Show Finding Details -->
+                                <DataTemplate DataType="{x:Type vm:FindingTabViewModel}">
+                                    <Grid>
+                                        <!-- Normal View: Formatted Text from Plugin -->
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled"
+                                                      Padding="16"
+                                                      Visibility="{Binding DataContext.IsTechnicalModeEnabled, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                                            <StackPanel>
+                                                <!-- Show structured details if available -->
+                                                <controls:FindingDetailsViewer 
+                                                    Details="{Binding SelectedFindingDetails}"
+                                                    Visibility="{Binding SelectedFindingDetails, Converter={StaticResource NullToVisibilityConverter}}"/>
+                                                
+                                                <!-- Show message if no structured details -->
+                                                <TextBlock Text="Select a finding to view details."
+                                                           Style="{StaticResource BodyTextStyle}"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Visibility="{Binding SelectedFindingDetails, Converter={StaticResource InverseNullToVisibilityConverter}}"
+                                                           Margin="0,8"/>
+                                            </StackPanel>
+                                        </ScrollViewer>
+                                        
+                                        <!-- Technical View: JSON Technical Metadata -->
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Auto"
+                                                      Padding="16"
+                                                      Visibility="{Binding DataContext.IsTechnicalModeEnabled, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <StackPanel>
+                                                <!-- Show technical metadata if available -->
+                                                <TextBox Text="{Binding TechnicalMetadataJson, Mode=OneWay}"
+                                                         IsReadOnly="True"
+                                                         TextWrapping="Wrap"
+                                                         FontFamily="Consolas"
+                                                         FontSize="12"
+                                                         Background="Transparent"
+                                                         BorderThickness="0"
+                                                         Foreground="{StaticResource TextPrimaryBrush}"
+                                                         Visibility="{Binding HasTechnicalMetadata, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                
+                                                <!-- Show message if no technical metadata -->
+                                                <TextBlock Text="No technical metadata available."
+                                                           Style="{StaticResource BodyTextStyle}"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Visibility="{Binding HasTechnicalMetadata, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
+                                                           Margin="0,8"/>
+                                            </StackPanel>
+                                        </ScrollViewer>
+                                    </Grid>
+                                </DataTemplate>
+                            </ContentControl.Resources>
+                        </ContentControl>
                     </Border>
                 </Border>
             </Grid>

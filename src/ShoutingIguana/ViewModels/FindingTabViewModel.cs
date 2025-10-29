@@ -67,6 +67,14 @@ public partial class FindingTabViewModel : ObservableObject
 
     private List<Finding> _allFindings = [];
 
+    public string TabHeader => $"{DisplayName} ({TotalCount})";
+
+    partial void OnTotalCountChanged(int value)
+    {
+        _ = value; // Suppress unused parameter warning
+        OnPropertyChanged(nameof(TabHeader));
+    }
+
     public void LoadFindings(IEnumerable<Finding> findings)
     {
         IsLoading = true;
@@ -156,8 +164,6 @@ public partial class FindingTabViewModel : ObservableObject
         InfoCount = _allFindings.Count(f => f.Severity == Severity.Info);
         TotalCount = _allFindings.Count;
     }
-
-    public string TabHeader => $"{DisplayName} ({TotalCount})";
 
     [RelayCommand]
     private void CopyUrl()

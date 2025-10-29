@@ -758,11 +758,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Clear filters on the selected tab
         if (CurrentView is FindingsView findingsView && findingsView.DataContext is FindingsViewModel findingsVm)
         {
-            if (findingsVm.SelectedTab != null)
+            if (findingsVm.SelectedTab is FindingTabViewModel findingTab)
             {
-                findingsVm.SelectedTab.SelectedSeverity = null;
-                findingsVm.SelectedTab.SearchText = string.Empty;
-                _logger.LogInformation("Cleared filters on tab: {TabName}", findingsVm.SelectedTab.DisplayName);
+                findingTab.SelectedSeverity = null;
+                findingTab.SearchText = string.Empty;
+                _logger.LogInformation("Cleared filters on tab: {TabName}", findingTab.DisplayName);
+            }
+            else if (findingsVm.SelectedTab is OverviewTabViewModel overviewTab)
+            {
+                overviewTab.SearchText = string.Empty;
+                _logger.LogInformation("Cleared filters on tab: {TabName}", overviewTab.DisplayName);
             }
             else
             {

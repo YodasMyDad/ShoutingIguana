@@ -28,10 +28,10 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     private FindingTabViewModel? _previousTab;
 
     [ObservableProperty]
-    private ObservableCollection<FindingTabViewModel> _tabs = new();
+    private ObservableCollection<object> _tabs = new();
 
     [ObservableProperty]
-    private FindingTabViewModel? _selectedTab;
+    private object? _selectedTab;
 
     [ObservableProperty]
     private FindingDetails? _selectedFindingDetails;
@@ -47,6 +47,10 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool _isTechnicalModeEnabled;
+
+    public bool IsFindingTabSelected => SelectedTab is FindingTabViewModel;
+    
+    public string DetailsHeaderText => SelectedTab is OverviewTabViewModel ? "URL Details" : "Finding Details";
 
     public FindingsViewModel(
         ILogger<FindingsViewModel> logger,
@@ -67,7 +71,7 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         _pluginConfig.PluginStateChanged += OnPluginStateChanged;
     }
 
-    partial void OnSelectedTabChanged(FindingTabViewModel? value)
+    partial void OnSelectedTabChanged(object? value)
     {
         // Unsubscribe from previous tab
         if (_previousTab != null)
@@ -75,21 +79,39 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             _previousTab.PropertyChanged -= OnTabPropertyChanged;
         }
 
-        // Subscribe to new tab
-        if (value != null)
+        // Subscribe to new tab if it's a FindingTabViewModel
+        if (value is FindingTabViewModel findingTab)
         {
-            value.PropertyChanged += OnTabPropertyChanged;
+            findingTab.PropertyChanged += OnTabPropertyChanged;
 
             // If no selection on the new tab, select the first item to show details
-            if (value.SelectedFinding == null && value.FilteredFindings.Count > 0)
+            if (findingTab.SelectedFinding == null && findingTab.FilteredFindings.Count > 0)
             {
-                value.SelectedFinding = value.FilteredFindings[0];
+                findingTab.SelectedFinding = findingTab.FilteredFindings[0];
             }
 
+            _previousTab = findingTab;
             UpdateDetailsPanel();
         }
-
-        _previousTab = value;
+        else if (value is OverviewTabViewModel overviewTab)
+        {
+            // For overview tab, select first URL if none selected
+            if (overviewTab.SelectedUrlModel == null && overviewTab.FilteredUrls.Count > 0)
+            {
+                overviewTab.SelectedUrlModel = overviewTab.FilteredUrls[0];
+            }
+            
+            _previousTab = null;
+            UpdateDetailsPanel();
+        }
+        else
+        {
+            _previousTab = null;
+        }
+        
+        // Notify that computed properties changed
+        OnPropertyChanged(nameof(IsFindingTabSelected));
+        OnPropertyChanged(nameof(DetailsHeaderText));
     }
 
     private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -109,9 +131,52 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
 
     private void UpdateDetailsPanel()
     {
-        if (SelectedTab?.SelectedFinding == null)
+        // Handle FindingTabViewModel
+        if (SelectedTab is FindingTabViewModel findingTab)
         {
-            _logger.LogDebug("No selected finding, clearing details");
+            if (findingTab.SelectedFinding == null)
+            {
+                _logger.LogDebug("No selected finding, clearing details");
+#pragma warning disable MVVMTK0034 // Direct field reference instead of property
+                _selectedFindingDetails = null;
+                _hasTechnicalMetadata = false;
+                _technicalMetadataJson = string.Empty;
+                _hasStructuredDetails = false;
+#pragma warning restore MVVMTK0034
+                OnPropertyChanged(nameof(SelectedFindingDetails));
+                OnPropertyChanged(nameof(HasTechnicalMetadata));
+                OnPropertyChanged(nameof(TechnicalMetadataJson));
+                OnPropertyChanged(nameof(HasStructuredDetails));
+                return;
+            }
+
+            var finding = findingTab.SelectedFinding;
+            _logger.LogDebug("Updating details panel for finding: {FindingId}, URL: {Url}", 
+                finding.Id, finding.Url.Address);
+            
+            // Directly update backing fields and manually raise PropertyChanged events
+            // This bypasses the equality check in the generated property setters to force UI updates
+#pragma warning disable MVVMTK0034 // Direct field reference instead of property
+            _selectedFindingDetails = findingTab.SelectedFindingDetails;
+            _hasTechnicalMetadata = findingTab.HasTechnicalMetadata;
+            _technicalMetadataJson = findingTab.TechnicalMetadataJson;
+            _hasStructuredDetails = _selectedFindingDetails?.Items.Count > 0;
+#pragma warning restore MVVMTK0034
+            
+            // Manually raise property changed events
+            OnPropertyChanged(nameof(SelectedFindingDetails));
+            OnPropertyChanged(nameof(HasTechnicalMetadata));
+            OnPropertyChanged(nameof(TechnicalMetadataJson));
+            OnPropertyChanged(nameof(HasStructuredDetails));
+            
+            _logger.LogDebug("Details updated - HasDetails: {HasDetails}, HasTechMetadata: {HasTechMetadata}", 
+                SelectedFindingDetails != null, HasTechnicalMetadata);
+        }
+        // Handle OverviewTabViewModel - no details panel update needed, it manages its own properties
+        else if (SelectedTab is OverviewTabViewModel)
+        {
+            // Overview tab manages its own UrlProperties, no need to update details panel here
+            _logger.LogDebug("Overview tab selected, details managed by OverviewTabViewModel");
 #pragma warning disable MVVMTK0034 // Direct field reference instead of property
             _selectedFindingDetails = null;
             _hasTechnicalMetadata = false;
@@ -122,30 +187,7 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(HasTechnicalMetadata));
             OnPropertyChanged(nameof(TechnicalMetadataJson));
             OnPropertyChanged(nameof(HasStructuredDetails));
-            return;
         }
-
-        var finding = SelectedTab.SelectedFinding;
-        _logger.LogDebug("Updating details panel for finding: {FindingId}, URL: {Url}", 
-            finding.Id, finding.Url.Address);
-        
-        // Directly update backing fields and manually raise PropertyChanged events
-        // This bypasses the equality check in the generated property setters to force UI updates
-#pragma warning disable MVVMTK0034 // Direct field reference instead of property
-        _selectedFindingDetails = SelectedTab.SelectedFindingDetails;
-        _hasTechnicalMetadata = SelectedTab.HasTechnicalMetadata;
-        _technicalMetadataJson = SelectedTab.TechnicalMetadataJson;
-        _hasStructuredDetails = _selectedFindingDetails?.Items.Count > 0;
-#pragma warning restore MVVMTK0034
-        
-        // Manually raise property changed events
-        OnPropertyChanged(nameof(SelectedFindingDetails));
-        OnPropertyChanged(nameof(HasTechnicalMetadata));
-        OnPropertyChanged(nameof(TechnicalMetadataJson));
-        OnPropertyChanged(nameof(HasStructuredDetails));
-        
-        _logger.LogDebug("Details updated - HasDetails: {HasDetails}, HasTechMetadata: {HasTechMetadata}", 
-            SelectedFindingDetails != null, HasTechnicalMetadata);
     }
 
     public async Task LoadFindingsAsync()
@@ -160,9 +202,20 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         {
             using var scope = _serviceProvider.CreateScope();
             var findingRepository = scope.ServiceProvider.GetRequiredService<IFindingRepository>();
+            var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
+            var projectRepository = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
             var pluginRegistry = scope.ServiceProvider.GetRequiredService<IPluginRegistry>();
             
             var projectId = _projectContext.CurrentProjectId!.Value;
+            
+            // Get project to access BaseUrl
+            var project = await projectRepository.GetByIdAsync(projectId);
+            var baseUrl = project?.BaseUrl;
+            
+            // Load all URLs for Overview tab
+            var allUrls = (await urlRepository.GetByProjectIdAsync(projectId)).ToList();
+            
+            // Load all findings for plugin tabs
             var allFindings = await findingRepository.GetByProjectIdAsync(projectId);
             
             // Get task metadata from plugin registry
@@ -176,8 +229,14 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             // Group findings by task key
             var grouped = allFindings.GroupBy(f => f.TaskKey);
 
-            var tabs = new List<FindingTabViewModel>();
+            var tabs = new List<object>();
             
+            // Create Overview tab first
+            var overviewTab = new OverviewTabViewModel();
+            overviewTab.LoadUrls(allUrls, baseUrl);
+            tabs.Add(overviewTab);
+            
+            // Create plugin tabs
             foreach (var group in grouped.OrderBy(g => g.Key))
             {
                 var taskKey = group.Key;
@@ -211,21 +270,30 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             {
                 foreach (var oldTab in Tabs)
                 {
-                    oldTab.Findings.Clear();
-                    oldTab.FilteredFindings.Clear();
+                    if (oldTab is FindingTabViewModel findingTab)
+                    {
+                        findingTab.Findings.Clear();
+                        findingTab.FilteredFindings.Clear();
+                    }
+                    else if (oldTab is OverviewTabViewModel oldOverviewTab)
+                    {
+                        oldOverviewTab.Urls.Clear();
+                        oldOverviewTab.FilteredUrls.Clear();
+                        oldOverviewTab.UrlProperties.Clear();
+                    }
                 }
             }
 
-            Tabs = new ObservableCollection<FindingTabViewModel>(tabs);
+            Tabs = new ObservableCollection<object>(tabs);
             
-            // Select first tab
+            // Select first tab (Overview)
             if (Tabs.Count > 0)
             {
                 SelectedTab = Tabs[0];
             }
             
-            _logger.LogInformation("Loaded findings: {TabCount} tabs, {FindingCount} total findings", 
-                Tabs.Count, allFindings.Count);
+            _logger.LogInformation("Loaded findings: {TabCount} tabs ({UrlCount} URLs, {FindingCount} findings)", 
+                Tabs.Count, allUrls.Count, allFindings.Count);
         }
         catch (Exception ex)
         {
@@ -363,12 +431,17 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     {
         try
         {
-            if (SelectedTab?.SelectedFinding != null)
+            if (SelectedTab is FindingTabViewModel findingTab && findingTab.SelectedFinding != null)
             {
-                var finding = SelectedTab.SelectedFinding;
-                var textToCopy = $"{finding.Url}\t{finding.Message}\t{finding.Severity}";
+                var finding = findingTab.SelectedFinding;
+                var textToCopy = $"{finding.Url.Address}\t{finding.Message}\t{finding.Severity}";
                 Clipboard.SetText(textToCopy);
                 _logger.LogDebug("Copied finding to clipboard");
+            }
+            else if (SelectedTab is OverviewTabViewModel overviewTab && overviewTab.SelectedUrlModel?.Url != null)
+            {
+                Clipboard.SetText(overviewTab.SelectedUrlModel.Url.Address);
+                _logger.LogDebug("Copied URL to clipboard");
             }
         }
         catch (Exception ex)
@@ -397,7 +470,36 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     {
         try
         {
-            if (IsTechnicalModeEnabled)
+            // Handle Overview tab - copy URL properties
+            if (SelectedTab is OverviewTabViewModel overviewTabCopy)
+            {
+                if (overviewTabCopy.UrlProperties.Count > 0)
+                {
+                    var lines = new List<string>();
+                    string? currentCategory = null;
+                    
+                    foreach (var prop in overviewTabCopy.UrlProperties)
+                    {
+                        if (prop.Category != currentCategory)
+                        {
+                            if (currentCategory != null)
+                                lines.Add(""); // Empty line between categories
+                            lines.Add($"=== {prop.Category} ===");
+                            currentCategory = prop.Category;
+                        }
+                        lines.Add($"{prop.Key}: {prop.Value}");
+                    }
+                    
+                    var text = string.Join(Environment.NewLine, lines);
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        Clipboard.SetText(text);
+                        _logger.LogDebug("Copied URL properties to clipboard");
+                    }
+                }
+            }
+            // Handle Finding tab
+            else if (IsTechnicalModeEnabled)
             {
                 // Copy technical metadata JSON
                 if (!string.IsNullOrEmpty(TechnicalMetadataJson))
@@ -465,7 +567,10 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         {
             // Reload findings to show/hide tabs based on plugin enabled state
             _logger.LogInformation("Plugin state changed for {PluginId}, reloading findings view", e.PluginId);
-            await LoadFindingsAsync();
+            await Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                await LoadFindingsAsync();
+            });
         }
         catch (Exception ex)
         {
@@ -492,8 +597,17 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         {
             foreach (var tab in Tabs)
             {
-                tab.Findings.Clear();
-                tab.FilteredFindings.Clear();
+                if (tab is FindingTabViewModel findingTab)
+                {
+                    findingTab.Findings.Clear();
+                    findingTab.FilteredFindings.Clear();
+                }
+                else if (tab is OverviewTabViewModel overviewTabDispose)
+                {
+                    overviewTabDispose.Urls.Clear();
+                    overviewTabDispose.FilteredUrls.Clear();
+                    overviewTabDispose.UrlProperties.Clear();
+                }
             }
             Tabs.Clear();
         }
