@@ -33,13 +33,13 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-            <!-- Header -->
-            <Border Grid.Row="0"
-                    Background="{StaticResource SurfaceBrush}"
-                    CornerRadius="8"
-                    Padding="24"
-                    Margin="0,0,0,24"
-                    SnapsToDevicePixels="True">
+        <!-- Header -->
+        <Border Grid.Row="0"
+                Background="{StaticResource SurfaceBrush}"
+                CornerRadius="8"
+                Padding="{StaticResource SpacingL}"
+                Margin="0,0,0,24"
+                SnapsToDevicePixels="True">
                 <Border.Effect>
                     <DropShadowEffect Color="#000000" BlurRadius="8" ShadowDepth="2" Opacity="0.06"/>
                 </Border.Effect>
@@ -111,7 +111,7 @@
             <!-- Progress Bar Card -->
             <Border Grid.Row="2" 
                     Style="{StaticResource Card}"
-                    Padding="32"
+                    Padding="{StaticResource SpacingXl}"
                     Margin="0,0,0,24">
                 <Grid>
                     <!-- Skeleton Progress Card (shown while loading) -->
@@ -582,7 +582,7 @@
             <!-- Recent Activity Card -->
             <Border Grid.Row="4" 
                     Style="{StaticResource Card}"
-                    Padding="24"
+                    Padding="{StaticResource SpacingL}"
                     Margin="0,0,0,32">
                 <Grid>
                     <!-- Skeleton Activity Card (shown while loading) -->
@@ -646,7 +646,7 @@
                     Background="{StaticResource SurfaceBrush}"
                     BorderBrush="{StaticResource BorderLightBrush}"
                     BorderThickness="0,1,0,0"
-                    Padding="24"
+                    Padding="{StaticResource SpacingL}"
                     CornerRadius="0,0,8,8"
                     SnapsToDevicePixels="True">
                 <StackPanel Orientation="Horizontal" 

@@ -111,6 +111,9 @@ public partial class App : Application
 
                     // NuGet Services
                     services.AddSingleton<ShoutingIguana.Core.Services.NuGet.IFeedConfigurationService, ShoutingIguana.Core.Services.NuGet.FeedConfigurationService>();
+                    services.AddSingleton<ShoutingIguana.Core.Services.NuGet.IDependencyCache, ShoutingIguana.Core.Services.NuGet.DependencyCache>();
+                    services.AddSingleton<ShoutingIguana.Core.Services.NuGet.IDependencyResolver, ShoutingIguana.Core.Services.NuGet.DependencyResolver>();
+                    services.AddSingleton<ShoutingIguana.Core.Services.NuGet.IPackageSecurityService, ShoutingIguana.Core.Services.NuGet.PackageSecurityService>();
                     services.AddSingleton<ShoutingIguana.Core.Services.NuGet.INuGetService, ShoutingIguana.Core.Services.NuGet.NuGetService>();
                     services.AddSingleton<ShoutingIguana.Core.Services.NuGet.IPackageManagerService, ShoutingIguana.Core.Services.NuGet.PackageManagerService>();
 

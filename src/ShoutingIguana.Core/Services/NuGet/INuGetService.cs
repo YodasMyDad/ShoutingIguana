@@ -40,5 +40,27 @@ public interface INuGetService
     Task<ValidationResult> ValidatePackageAsync(
         string packagePath,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Download a package and all its dependencies.
+    /// </summary>
+    Task<DownloadWithDependenciesResult> DownloadPackageWithDependenciesAsync(
+        string packageId,
+        string version,
+        string targetDirectory,
+        IProgress<InstallProgress>? progress = null,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Result of downloading a package with dependencies.
+/// </summary>
+public class DownloadWithDependenciesResult
+{
+    public required bool Success { get; init; }
+    public string? ErrorMessage { get; init; }
+    public string? MainPackagePath { get; init; }
+    public IReadOnlyList<string> DependencyPackagePaths { get; init; } = [];
+    public IReadOnlyList<DependencyInfo> ResolvedDependencies { get; init; } = [];
 }
 

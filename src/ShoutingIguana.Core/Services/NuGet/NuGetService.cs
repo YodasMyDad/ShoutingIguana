@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Reflection;
 using Microsoft.Extensions.Logging;
+using NuGet.Frameworks;
 using NuGet.Packaging;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
@@ -16,10 +17,24 @@ namespace ShoutingIguana.Core.Services.NuGet;
 /// <summary>
 /// Implementation of INuGetService using NuGet.Protocol.
 /// </summary>
-public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationService feedService) : INuGetService
+public class NuGetService : INuGetService
 {
-    private readonly ILogger<NuGetService> _logger = logger;
-    private readonly IFeedConfigurationService _feedService = feedService;
+    private readonly ILogger<NuGetService> _logger;
+    private readonly IFeedConfigurationService _feedService;
+    private readonly IDependencyResolver _dependencyResolver;
+    private readonly IPackageSecurityService _securityService;
+
+    public NuGetService(
+        ILogger<NuGetService> logger,
+        IFeedConfigurationService feedService,
+        IDependencyResolver dependencyResolver,
+        IPackageSecurityService securityService)
+    {
+        _logger = logger;
+        _feedService = feedService;
+        _dependencyResolver = dependencyResolver;
+        _securityService = securityService;
+    }
 
     public async Task<IReadOnlyList<PackageSearchResult>> SearchPackagesAsync(
         string searchTerm,
@@ -106,11 +121,12 @@ public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationServic
                     var repository = Repository.Factory.GetCoreV3(feed.Url);
                     var metadataResource = await repository.GetResourceAsync<PackageMetadataResource>(cancellationToken);
 
+                    using var sourceCacheContext = new SourceCacheContext();
                     var metadata = await metadataResource.GetMetadataAsync(
                         packageId,
                         includePrerelease: false,
                         includeUnlisted: false,
-                        new SourceCacheContext(),
+                        sourceCacheContext,
                         new NuGetLogger(_logger),
                         cancellationToken);
 
@@ -215,6 +231,19 @@ public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationServic
     {
         try
         {
+            _logger.LogInformation("Validating package: {PackagePath}", packagePath);
+
+            // Validate package size first
+            if (!await _securityService.ValidatePackageSizeAsync(packagePath, cancellationToken))
+            {
+                return new ValidationResult
+                {
+                    Result = PackageValidationResult.InvalidPackage,
+                    ErrorMessage = "Package size exceeds security limits",
+                    SecurityWarnings = ["Package file is too large"]
+                };
+            }
+
             // Extract package to temp directory
             var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
             Directory.CreateDirectory(tempDir);
@@ -223,6 +252,9 @@ public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationServic
             {
                 // Open the package
                 using var packageReader = new PackageArchiveReader(packagePath);
+                var packageIdentity = await packageReader.GetIdentityAsync(cancellationToken);
+                var packageId = packageIdentity.Id;
+                var packageVersion = packageIdentity.Version.ToString();
 
                 // Extract lib folder
                 var libItems = packageReader.GetLibItems().ToList();
@@ -234,6 +266,44 @@ public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationServic
                         ErrorMessage = "Package contains no library files"
                     };
                 }
+
+                // Resolve dependencies
+                _logger.LogDebug("Resolving dependencies for {PackageId} v{Version}", packageId, packageVersion);
+                var targetFramework = NuGetFramework.Parse("net9.0");
+                var dependencyResolution = await _dependencyResolver.ResolveDependenciesAsync(
+                    packageId,
+                    packageVersion,
+                    targetFramework,
+                    cancellationToken);
+
+                var dependencies = dependencyResolution.Dependencies.ToList();
+                var warnings = new List<string>(dependencyResolution.Warnings);
+
+                // Get feed URL from first feed (for security validation)
+                var feeds = await _feedService.GetFeedsAsync();
+                var feedUrl = feeds.FirstOrDefault(f => f.Enabled)?.Url ?? "https://api.nuget.org/v3/index.json";
+
+                // Perform security validation
+                var securityResult = await _securityService.ValidatePackageSecurityAsync(
+                    packageId,
+                    packageVersion,
+                    dependencies,
+                    feedUrl,
+                    cancellationToken);
+
+                if (!securityResult.IsValid)
+                {
+                    return new ValidationResult
+                    {
+                        Result = PackageValidationResult.InvalidPackage,
+                        ErrorMessage = securityResult.BlockReason ?? "Package failed security validation",
+                        SecurityWarnings = securityResult.Errors.Concat(securityResult.Warnings).ToList(),
+                        Dependencies = dependencies,
+                        TotalDownloadSize = CalculateTotalSize(packagePath, dependencies)
+                    };
+                }
+
+                warnings.AddRange(securityResult.Warnings);
 
                 // Extract files
                 var files = await packageReader.GetFilesAsync(cancellationToken);
@@ -281,7 +351,10 @@ public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationServic
                                 result = new ValidationResult
                                 {
                                     Result = PackageValidationResult.NoPlugin,
-                                    ErrorMessage = "Plugin class missing [Plugin] attribute"
+                                    ErrorMessage = "Plugin class missing [Plugin] attribute",
+                                    Dependencies = dependencies,
+                                    TotalDownloadSize = CalculateTotalSize(packagePath, dependencies),
+                                    SecurityWarnings = warnings
                                 };
                             }
                             else
@@ -293,7 +366,10 @@ public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationServic
                                     result = new ValidationResult
                                     {
                                         Result = PackageValidationResult.InvalidPackage,
-                                        ErrorMessage = "Failed to create plugin instance"
+                                        ErrorMessage = "Failed to create plugin instance",
+                                        Dependencies = dependencies,
+                                        TotalDownloadSize = CalculateTotalSize(packagePath, dependencies),
+                                        SecurityWarnings = warnings
                                     };
                                 }
                                 else
@@ -308,7 +384,10 @@ public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationServic
                                         {
                                             Result = PackageValidationResult.IncompatibleSdk,
                                             ErrorMessage = $"Plugin requires SDK version {pluginAttr.MinSdkVersion}, but current version is {currentVersion}",
-                                            MinSdkVersion = pluginAttr.MinSdkVersion
+                                            MinSdkVersion = pluginAttr.MinSdkVersion,
+                                            Dependencies = dependencies,
+                                            TotalDownloadSize = CalculateTotalSize(packagePath, dependencies),
+                                            SecurityWarnings = warnings
                                         };
                                     }
                                     else
@@ -319,7 +398,10 @@ public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationServic
                                             PluginId = plugin.Id,
                                             PluginName = plugin.Name,
                                             PluginVersion = plugin.Version.ToString(),
-                                            MinSdkVersion = pluginAttr.MinSdkVersion
+                                            MinSdkVersion = pluginAttr.MinSdkVersion,
+                                            Dependencies = dependencies,
+                                            TotalDownloadSize = CalculateTotalSize(packagePath, dependencies),
+                                            SecurityWarnings = warnings.Any() ? warnings : null
                                         };
                                     }
                                 }
@@ -352,7 +434,10 @@ public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationServic
                 return new ValidationResult
                 {
                     Result = PackageValidationResult.NoPlugin,
-                    ErrorMessage = "Package does not contain a valid Shouting Iguana plugin"
+                    ErrorMessage = "Package does not contain a valid Shouting Iguana plugin",
+                    Dependencies = dependencies,
+                    TotalDownloadSize = CalculateTotalSize(packagePath, dependencies),
+                    SecurityWarnings = warnings
                 };
             }
             finally
@@ -375,6 +460,148 @@ public class NuGetService(ILogger<NuGetService> logger, IFeedConfigurationServic
             {
                 Result = PackageValidationResult.InvalidPackage,
                 ErrorMessage = $"Validation error: {ex.Message}"
+            };
+        }
+    }
+
+    private long CalculateTotalSize(string mainPackagePath, IReadOnlyList<DependencyInfo> dependencies)
+    {
+        long totalSize = 0;
+        
+        try
+        {
+            var mainFileInfo = new FileInfo(mainPackagePath);
+            if (mainFileInfo.Exists)
+            {
+                totalSize += mainFileInfo.Length;
+            }
+        }
+        catch
+        {
+            // Ignore errors
+        }
+
+        totalSize += dependencies.Sum(d => d.PackageSize);
+        return totalSize;
+    }
+
+    public async Task<DownloadWithDependenciesResult> DownloadPackageWithDependenciesAsync(
+        string packageId,
+        string version,
+        string targetDirectory,
+        IProgress<InstallProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Downloading {PackageId} v{Version} with dependencies", packageId, version);
+            
+            progress?.Report(new InstallProgress { Status = "Resolving dependencies...", PercentComplete = 5 });
+
+            // Determine target framework - prefer net9.0, fall back to netstandard2.1
+            var targetFramework = NuGetFramework.Parse("net9.0");
+            
+            // Resolve all dependencies
+            var resolutionResult = await _dependencyResolver.ResolveDependenciesAsync(
+                packageId,
+                version,
+                targetFramework,
+                cancellationToken);
+
+            if (!resolutionResult.Success)
+            {
+                return new DownloadWithDependenciesResult
+                {
+                    Success = false,
+                    ErrorMessage = resolutionResult.ErrorMessage ?? "Failed to resolve dependencies"
+                };
+            }
+
+            var dependencies = resolutionResult.Dependencies.ToList();
+            _logger.LogInformation("Resolved {Count} dependencies for {PackageId}", dependencies.Count, packageId);
+
+            progress?.Report(new InstallProgress { Status = "Downloading packages...", PercentComplete = 20 });
+
+            // Download main package
+            var mainPackagePath = await DownloadPackageAsync(
+                packageId,
+                version,
+                targetDirectory,
+                null,
+                cancellationToken);
+
+            var dependencyPaths = new List<string> { mainPackagePath };
+            var totalPackages = dependencies.Count + 1;
+            var downloadedCount = 1;
+
+            // Download each dependency
+            foreach (var dep in dependencies)
+            {
+                try
+                {
+                    var percentComplete = 20 + (int)((downloadedCount / (double)totalPackages) * 70);
+                    progress?.Report(new InstallProgress
+                    {
+                        Status = $"Downloading {dep.PackageId} v{dep.Version}...",
+                        PercentComplete = percentComplete
+                    });
+
+                    var depPath = await DownloadPackageAsync(
+                        dep.PackageId,
+                        dep.Version,
+                        targetDirectory,
+                        null,
+                        cancellationToken);
+
+                    dependencyPaths.Add(depPath);
+                    downloadedCount++;
+
+                    // Update package size in dependency info
+                    var fileInfo = new FileInfo(depPath);
+                    if (fileInfo.Exists)
+                    {
+                        var depIndex = dependencies.FindIndex(d => 
+                            d.PackageId.Equals(dep.PackageId, StringComparison.OrdinalIgnoreCase));
+                        if (depIndex >= 0)
+                        {
+                            dependencies[depIndex] = new DependencyInfo
+                            {
+                                PackageId = dep.PackageId,
+                                Version = dep.Version,
+                                VersionRange = dep.VersionRange,
+                                TargetFramework = dep.TargetFramework,
+                                IsTransitive = dep.IsTransitive,
+                                Depth = dep.Depth,
+                                PackageSize = fileInfo.Length
+                            };
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to download dependency {PackageId} v{Version}", 
+                        dep.PackageId, dep.Version);
+                    // Continue with other dependencies rather than failing completely
+                }
+            }
+
+            progress?.Report(new InstallProgress { Status = "Download complete", PercentComplete = 100 });
+
+            return new DownloadWithDependenciesResult
+            {
+                Success = true,
+                MainPackagePath = mainPackagePath,
+                DependencyPackagePaths = dependencyPaths.Skip(1).ToList(),
+                ResolvedDependencies = dependencies
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error downloading package with dependencies: {PackageId}", packageId);
+            return new DownloadWithDependenciesResult
+            {
+                Success = false,
+                ErrorMessage = $"Download failed: {ex.Message}"
             };
         }
     }

@@ -6,7 +6,7 @@
         Height="800"
         Width="1200"
         MinHeight="600"
-        MinWidth="850"
+        MinWidth="800"
         Icon="Assets/logo.png"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BackgroundBrush}"

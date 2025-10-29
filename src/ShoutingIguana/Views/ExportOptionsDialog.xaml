@@ -4,16 +4,16 @@
         Title="Export Options"
         Height="550"
         Width="500"
-        MinHeight="550"
-        MinWidth="500"
+        MinHeight="450"
+        MinWidth="450"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource BackgroundBrush}"
         Foreground="{StaticResource TextPrimaryBrush}"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
-        ResizeMode="NoResize">
+        ResizeMode="CanResize">
     
-    <Grid Margin="24">
+    <Grid Margin="0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -21,22 +21,40 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,20">
-            <TextBlock Text="Export Options"
-                       Style="{StaticResource TitleTextStyle}"
-                       Margin="0,0,0,8"/>
-            <TextBlock Text="Configure how findings should be exported"
-                       Style="{StaticResource BodyTextStyle}"
-                       Foreground="{StaticResource TextSecondaryBrush}"/>
-        </StackPanel>
+        <Border Grid.Row="0"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderLightBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="{StaticResource SpacingL}">
+            <StackPanel Orientation="Horizontal">
+                <Border Background="{StaticResource SuccessBrush}"
+                        Width="44" Height="44"
+                        CornerRadius="8"
+                        Margin="0,0,16,0">
+                    <TextBlock Text="{StaticResource Icon.Export}"
+                               Style="{StaticResource Icon}"
+                               FontSize="22"
+                               Foreground="White"/>
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Export Options"
+                               Style="{StaticResource TitleTextStyle}"
+                               Margin="0"
+                               AutomationProperties.HeadingLevel="Level1"/>
+                    <TextBlock Text="Configure how findings should be exported"
+                               Style="{StaticResource BodyTextStyle}"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Margin="0,4,0,0"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
 
         <!-- Options -->
-        <Border Grid.Row="1"
-                Background="{StaticResource SurfaceBrush}"
-                CornerRadius="8"
-                Padding="24">
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Padding="{StaticResource SpacingL}">
+            <Border Style="{StaticResource Card}">
                 <StackPanel>
                     <!-- Format Selection -->
                     <StackPanel Margin="0,0,0,24">
@@ -91,27 +109,32 @@
                                   Margin="0,0,0,0"/>
                     </StackPanel>
                 </StackPanel>
-            </ScrollViewer>
-        </Border>
+            </Border>
+        </ScrollViewer>
 
         <!-- Action Buttons -->
         <Border Grid.Row="2"
                 Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderLightBrush}"
                 BorderThickness="0,1,0,0"
-                Padding="24,16"
-                Margin="0,24,0,0">
+                Padding="{StaticResource SpacingL}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Cancel"
                         Command="{Binding CancelCommand}"
                         Style="{StaticResource SecondaryButton}"
-                        Width="100"
+                        MinWidth="100"
+                        Height="48"
                         Margin="0,0,12,0"
-                        IsCancel="True"/>
+                        IsCancel="True"
+                        AutomationProperties.Name="Cancel Export"
+                        AutomationProperties.HelpText="Closes the export dialog without exporting"/>
                 <Button Command="{Binding OkCommand}"
                         Style="{StaticResource PrimaryButton}"
                         MinWidth="120"
-                        IsDefault="True">
+                        Height="48"
+                        IsDefault="True"
+                        AutomationProperties.Name="Export Findings"
+                        AutomationProperties.HelpText="Exports findings with the selected options">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{StaticResource Icon.Save}"
                                    Style="{StaticResource Icon}"

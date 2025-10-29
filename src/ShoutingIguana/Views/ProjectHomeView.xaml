@@ -209,7 +209,7 @@
                             Background="{StaticResource SurfaceBrush}"
                             BorderBrush="{StaticResource BorderLightBrush}"
                             BorderThickness="0,0,0,1"
-                            Padding="32"
+                            Padding="{StaticResource SpacingXl}"
                             CornerRadius="12,12,0,0">
                         <Grid>
                             <StackPanel Orientation="Horizontal">

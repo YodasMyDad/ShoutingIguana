@@ -13,6 +13,7 @@ public class PluginLoadContext : AssemblyLoadContext
     private readonly AssemblyDependencyResolver _resolver;
     private readonly ILogger? _logger;
     private readonly string _pluginPath;
+    private readonly Dictionary<string, Version> _loadedAssemblyVersions = new(StringComparer.OrdinalIgnoreCase);
 
     public PluginLoadContext(string pluginPath, ILogger? logger = null) 
         : base(isCollectible: true)
@@ -24,12 +25,27 @@ public class PluginLoadContext : AssemblyLoadContext
 
     protected override Assembly? Load(AssemblyName assemblyName)
     {
+        var name = assemblyName.Name ?? string.Empty;
+
         // Check if this is a shared assembly (SDK types, framework types)
         if (IsSharedAssembly(assemblyName))
         {
             // Load from default context (already loaded in host)
-            _logger?.LogDebug("Loading shared assembly from default context: {AssemblyName}", assemblyName.Name);
+            _logger?.LogDebug("Loading shared assembly from default context: {AssemblyName}", name);
             return null; // Return null to load from default context
+        }
+
+        // Check for version conflicts with previously loaded assemblies in this context
+        if (_loadedAssemblyVersions.TryGetValue(name, out var loadedVersion) && 
+            assemblyName.Version != null && 
+            loadedVersion != assemblyName.Version)
+        {
+            _logger?.LogWarning(
+                "Version conflict detected for {AssemblyName}: requested {RequestedVersion}, but {LoadedVersion} is already loaded. Using loaded version.",
+                name, assemblyName.Version, loadedVersion);
+            
+            // Return null to use already loaded version
+            return null;
         }
 
         // Try to resolve from plugin directory
@@ -37,11 +53,19 @@ public class PluginLoadContext : AssemblyLoadContext
         if (assemblyPath != null && File.Exists(assemblyPath))
         {
             _logger?.LogDebug("Loading plugin assembly from: {Path}", assemblyPath);
-            return LoadFromAssemblyPath(assemblyPath);
+            var assembly = LoadFromAssemblyPath(assemblyPath);
+            
+            // Track loaded version
+            if (assembly != null && assemblyName.Version != null)
+            {
+                _loadedAssemblyVersions[name] = assemblyName.Version;
+            }
+            
+            return assembly;
         }
 
         // Fall back to default resolution
-        _logger?.LogDebug("Falling back to default resolution for: {AssemblyName}", assemblyName.Name);
+        _logger?.LogDebug("Falling back to default resolution for: {AssemblyName}", name);
         return null;
     }
 
@@ -83,5 +107,13 @@ public class PluginLoadContext : AssemblyLoadContext
     }
 
     public string PluginPath => _pluginPath;
+
+    /// <summary>
+    /// Gets a dictionary of loaded assembly versions for diagnostics.
+    /// </summary>
+    public IReadOnlyDictionary<string, Version> GetLoadedAssemblyVersions()
+    {
+        return _loadedAssemblyVersions;
+    }
 }
 

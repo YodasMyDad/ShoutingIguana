@@ -68,6 +68,8 @@ public class InstalledPluginInfo
     public required string Version { get; init; }
     public required string PackageId { get; init; }
     public required string InstallPath { get; init; }
+    public IReadOnlyList<DependencyInfo>? Dependencies { get; init; }
+    public DateTime InstallDate { get; init; } = DateTime.UtcNow;
 }
 
 /// <summary>

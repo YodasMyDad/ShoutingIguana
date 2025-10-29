@@ -37,5 +37,22 @@ public class ValidationResult
     public string? PluginName { get; init; }
     public string? PluginVersion { get; init; }
     public string? MinSdkVersion { get; init; }
+    public IReadOnlyList<DependencyInfo>? Dependencies { get; init; }
+    public long TotalDownloadSize { get; init; }
+    public IReadOnlyList<string>? SecurityWarnings { get; init; }
+}
+
+/// <summary>
+/// Information about a package dependency.
+/// </summary>
+public class DependencyInfo
+{
+    public required string PackageId { get; init; }
+    public required string Version { get; init; }
+    public required string VersionRange { get; init; }
+    public required string TargetFramework { get; init; }
+    public bool IsTransitive { get; init; }
+    public int Depth { get; init; }
+    public long PackageSize { get; init; }
 }
 

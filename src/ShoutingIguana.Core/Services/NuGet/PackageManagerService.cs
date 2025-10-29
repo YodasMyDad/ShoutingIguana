@@ -10,11 +10,13 @@ namespace ShoutingIguana.Core.Services.NuGet;
 public class PackageManagerService(
     ILogger<PackageManagerService> logger,
     INuGetService nuGetService,
-    IPluginRegistry pluginRegistry) : IPackageManagerService
+    IPluginRegistry pluginRegistry,
+    IDependencyCache dependencyCache) : IPackageManagerService
 {
     private readonly ILogger<PackageManagerService> _logger = logger;
     private readonly INuGetService _nuGetService = nuGetService;
     private readonly IPluginRegistry _pluginRegistry = pluginRegistry;
+    private readonly IDependencyCache _dependencyCache = dependencyCache;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     private static string GetExtensionsPath()
@@ -23,6 +25,14 @@ public class PackageManagerService(
         var extensionsDir = Path.Combine(appData, "ShoutingIguana", "extensions");
         Directory.CreateDirectory(extensionsDir);
         return extensionsDir;
+    }
+
+    private static string GetDependencyCachePath()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var cacheDir = Path.Combine(appData, "ShoutingIguana", "dependency-cache");
+        Directory.CreateDirectory(cacheDir);
+        return cacheDir;
     }
 
     private static string GetMetadataPath()
@@ -50,22 +60,27 @@ public class PackageManagerService(
 
             try
             {
-                var downloadProgress = new Progress<int>(p =>
-                {
-                    progress?.Report(new InstallProgress { Status = "Downloading...", PercentComplete = p / 4 });
-                });
-
-                var packagePath = await _nuGetService.DownloadPackageAsync(
+                // Download package with all dependencies
+                var downloadResult = await _nuGetService.DownloadPackageWithDependenciesAsync(
                     packageId,
                     version,
                     tempDir,
-                    downloadProgress,
+                    progress,
                     cancellationToken);
+
+                if (!downloadResult.Success || downloadResult.MainPackagePath == null)
+                {
+                    return new InstallResult
+                    {
+                        Success = false,
+                        ErrorMessage = downloadResult.ErrorMessage ?? "Failed to download package"
+                    };
+                }
 
                 progress?.Report(new InstallProgress { Status = "Validating...", PercentComplete = 30 });
 
                 // Validate package
-                var validation = await _nuGetService.ValidatePackageAsync(packagePath, cancellationToken);
+                var validation = await _nuGetService.ValidatePackageAsync(downloadResult.MainPackagePath, cancellationToken);
 
                 if (validation.Result != PackageValidationResult.Valid)
                 {
@@ -89,7 +104,98 @@ public class PackageManagerService(
 
                 Directory.CreateDirectory(pluginDir);
 
-                ZipFile.ExtractToDirectory(packagePath, pluginDir);
+                // Extract main package
+                ZipFile.ExtractToDirectory(downloadResult.MainPackagePath, pluginDir);
+
+                // Extract all dependencies to the same lib directory
+                _logger.LogInformation("Extracting {Count} dependencies", downloadResult.DependencyPackagePaths.Count);
+                
+                var targetLibDir = Path.Combine(pluginDir, "lib");
+                
+                foreach (var i in Enumerable.Range(0, downloadResult.DependencyPackagePaths.Count))
+                {
+                    var depPackagePath = downloadResult.DependencyPackagePaths[i];
+                    var depInfo = downloadResult.ResolvedDependencies[i];
+                    
+                    try
+                    {
+                        // Check if we already have this dependency extracted somewhere
+                        var existingDepPath = _dependencyCache.GetExistingDependencyPath(depInfo.PackageId, depInfo.Version);
+                        
+                        if (existingDepPath != null)
+                        {
+                            _logger.LogInformation("Reusing existing dependency: {PackageId} v{Version} from {Path}", 
+                                depInfo.PackageId, depInfo.Version, existingDepPath);
+                            
+                            // Copy from existing location instead of extracting again
+                            foreach (var depFile in Directory.GetFiles(existingDepPath, "*.*", SearchOption.AllDirectories))
+                            {
+                                var relativePath = Path.GetRelativePath(existingDepPath, depFile);
+                                var targetPath = Path.Combine(targetLibDir, relativePath);
+                                
+                                Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+                                
+                                if (!File.Exists(targetPath))
+                                {
+                                    File.Copy(depFile, targetPath, false);
+                                }
+                            }
+                            continue;
+                        }
+                        
+                        // Extract dependency to shared cache location for reuse
+                        var cacheDir = GetDependencyCachePath();
+                        var depCacheDir = Path.Combine(cacheDir, depInfo.PackageId, depInfo.Version);
+                        
+                        // Extract to cache if not already there
+                        if (!Directory.Exists(depCacheDir))
+                        {
+                            Directory.CreateDirectory(depCacheDir);
+                            
+                            try
+                            {
+                                ZipFile.ExtractToDirectory(depPackagePath, depCacheDir);
+                                _logger.LogDebug("Extracted {PackageId} v{Version} to cache", depInfo.PackageId, depInfo.Version);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to extract {PackageId} to cache", depInfo.PackageId);
+                                // Clean up partial extraction
+                                try { Directory.Delete(depCacheDir, true); } catch { }
+                                throw;
+                            }
+                        }
+
+                        // Find lib folder in cached dependency
+                        var depLibDir = Directory.GetDirectories(depCacheDir, "lib", SearchOption.AllDirectories).FirstOrDefault();
+                        if (depLibDir != null)
+                        {
+                            // Copy from cache to plugin's lib folder
+                            foreach (var depFile in Directory.GetFiles(depLibDir, "*.*", SearchOption.AllDirectories))
+                            {
+                                var relativePath = Path.GetRelativePath(depLibDir, depFile);
+                                var targetPath = Path.Combine(targetLibDir, relativePath);
+                                
+                                Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+                                
+                                // Don't overwrite if file already exists (prefer main package files)
+                                if (!File.Exists(targetPath))
+                                {
+                                    File.Copy(depFile, targetPath, false);
+                                    _logger.LogDebug("Copied dependency file: {File}", relativePath);
+                                }
+                            }
+                            
+                            // Register this dependency location for future reuse
+                            _dependencyCache.RegisterDependency(depInfo.PackageId, depInfo.Version, depLibDir);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to extract dependency: {Path}", depPackagePath);
+                        // Continue with other dependencies
+                    }
+                }
 
                 progress?.Report(new InstallProgress { Status = "Loading plugin...", PercentComplete = 75 });
 
@@ -138,7 +244,9 @@ public class PackageManagerService(
                     PluginName = validation.PluginName!,
                     Version = version,
                     PackageId = packageId,
-                    InstallPath = pluginDir
+                    InstallPath = pluginDir,
+                    Dependencies = downloadResult.ResolvedDependencies,
+                    InstallDate = DateTime.UtcNow
                 });
 
                 progress?.Report(new InstallProgress { Status = "Complete", PercentComplete = 100 });

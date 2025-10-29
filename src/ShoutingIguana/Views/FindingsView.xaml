@@ -72,7 +72,7 @@
             </Grid.Triggers>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="2*" MinHeight="350" MaxHeight="800"/>
+            <RowDefinition Height="2*" MinHeight="300"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="1*" MinHeight="200"/>
         </Grid.RowDefinitions>
@@ -81,7 +81,7 @@
         <Border Grid.Row="0" 
                 Background="{StaticResource SurfaceBrush}"
                 CornerRadius="8"
-                Padding="24"
+                Padding="{StaticResource SpacingL}"
                 Margin="0,0,0,24"
                 SnapsToDevicePixels="True">
             <Border.Effect>
@@ -172,7 +172,6 @@
                 <TabControl ItemsSource="{Binding Tabs}" 
                             SelectedItem="{Binding SelectedTab}"
                             Style="{StaticResource StandardTabControl}"
-                            MinHeight="400"
                             KeyboardNavigation.TabNavigation="Local"
                             Visibility="{Binding Tabs.Count, Converter={StaticResource Int32ToVisibilityConverter}}">
                 <TabControl.ItemContainerStyle>
@@ -395,7 +394,6 @@
                                           ItemsSource="{Binding FilteredUrls}"
                                           SelectedItem="{Binding SelectedUrlModel, Mode=TwoWay}"
                                           Style="{StaticResource ModernDataGrid}"
-                                          Height="400"
                                           VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Auto"
                                           AutomationProperties.Name="URLs List"
@@ -611,7 +609,6 @@
                                       ItemsSource="{Binding FilteredFindings}"
                                       SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
                                       Style="{StaticResource ModernDataGrid}"
-                                      Height="400"
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Auto"
                                       AutomationProperties.Name="Findings List">
@@ -698,7 +695,7 @@
                         Background="{StaticResource SurfaceAltBrush}"
                         BorderBrush="{StaticResource BorderLightBrush}"
                         BorderThickness="0,0,0,1"
-                        Padding="24,16">
+                        Padding="{StaticResource SpacingM}">
                     <Grid>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Border Background="{StaticResource PrimaryBrush}"

@@ -4,12 +4,12 @@
         Title="Import URL List"
         Height="500"
         Width="650"
-        MinHeight="500"
-        MinWidth="650"
+        MinHeight="450"
+        MinWidth="550"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource BackgroundBrush}"
         Foreground="{StaticResource TextPrimaryBrush}"
-        ResizeMode="NoResize"
+        ResizeMode="CanResize"
         ShowInTaskbar="False"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display">
@@ -27,7 +27,7 @@
                 Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderLightBrush}"
                 BorderThickness="0,0,0,1"
-                Padding="24,20">
+                Padding="{StaticResource SpacingL}">
             <StackPanel Orientation="Horizontal">
                 <Border Background="{StaticResource InfoBrush}"
                         Width="44" Height="44"
@@ -173,7 +173,7 @@
                 Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderLightBrush}"
                 BorderThickness="0,1,0,0"
-                Padding="24,16">
+                Padding="{StaticResource SpacingM}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Cancel"
                         Command="{Binding CancelCommand}"
