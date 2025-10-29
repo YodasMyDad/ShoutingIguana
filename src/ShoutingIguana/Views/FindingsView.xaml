@@ -72,7 +72,7 @@
             </Grid.Triggers>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="2*" MinHeight="300"/>
+            <RowDefinition Height="2*" MinHeight="300" MaxHeight="600"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="1*" MinHeight="200"/>
         </Grid.RowDefinitions>
@@ -206,7 +206,7 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*" MinHeight="250"/>
+                                <RowDefinition Height="*" MinHeight="250" MaxHeight="450"/>
                             </Grid.RowDefinitions>
 
                             <!-- Description -->
@@ -394,6 +394,7 @@
                                           ItemsSource="{Binding FilteredUrls}"
                                           SelectedItem="{Binding SelectedUrlModel, Mode=TwoWay}"
                                           Style="{StaticResource ModernDataGrid}"
+                                          MaxHeight="450"
                                           VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Auto"
                                           AutomationProperties.Name="URLs List"
@@ -492,7 +493,7 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*" MinHeight="250"/>
+                                <RowDefinition Height="*" MinHeight="250" MaxHeight="450"/>
                             </Grid.RowDefinitions>
 
                             <!-- Description -->
@@ -609,6 +610,7 @@
                                       ItemsSource="{Binding FilteredFindings}"
                                       SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
                                       Style="{StaticResource ModernDataGrid}"
+                                      MaxHeight="450"
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Auto"
                                       AutomationProperties.Name="Findings List">

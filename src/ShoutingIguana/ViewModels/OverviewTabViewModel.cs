@@ -230,7 +230,8 @@ public partial class OverviewTabViewModel : ObservableObject
         properties.Add(new UrlPropertyViewModel { Category = "Technical", Key = "Address", Value = url.Address });
         properties.Add(new UrlPropertyViewModel { Category = "Technical", Key = "Content Type", Value = url.ContentType ?? "N/A" });
         properties.Add(new UrlPropertyViewModel { Category = "Technical", Key = "Content Length", Value = url.ContentLength?.ToString("N0") ?? "N/A" });
-        properties.Add(new UrlPropertyViewModel { Category = "Technical", Key = "Depth", Value = url.Depth.ToString() });
+        // Display "External" for external URLs (marked with depth=-1) instead of showing the implementation detail
+        properties.Add(new UrlPropertyViewModel { Category = "Technical", Key = "Depth", Value = url.Depth == -1 ? "External" : url.Depth.ToString() });
         properties.Add(new UrlPropertyViewModel { Category = "Technical", Key = "Status", Value = url.Status.ToString() });
         properties.Add(new UrlPropertyViewModel { Category = "Technical", Key = "Scheme", Value = url.Scheme });
         properties.Add(new UrlPropertyViewModel { Category = "Technical", Key = "Host", Value = url.Host });

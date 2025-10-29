@@ -444,52 +444,64 @@ public class CrawlEngine(
                     await queueRepository.UpdateAsync(queueItem).ConfigureAwait(false);
                 }
 
-                // Get user agent for this request (needed for robots.txt check)
-                var userAgent = settings.GetUserAgentString();
+            // Get user agent for this request (needed for robots.txt check)
+            var userAgent = settings.GetUserAgentString();
 
-                // Enforce politeness delay (checks robots.txt crawl-delay directive)
+            // Detect if this is an external URL (marked with depth=-1)
+            bool isExternalUrl = queueItem.Depth == -1;
+
+            // Enforce politeness delay (skip robots.txt crawl-delay check for external URLs)
+            if (!isExternalUrl)
+            {
                 await EnforcePolitenessDelayAsync(queueItem.HostKey, queueItem.Address, settings.CrawlDelaySeconds, userAgent, cancellationToken).ConfigureAwait(false);
-                
-                // Determine which proxy settings to use (project override or global)
-                var proxySettings = settings.ProxyOverride ?? globalProxySettings;
+            }
+            else
+            {
+                // For external URLs, use a simple fixed delay per host without checking robots.txt
+                await EnforceHostDelayAsync(queueItem.HostKey, 0.5).ConfigureAwait(false); // 500ms between external requests to same host
+            }
+            
+            // Determine which proxy settings to use (project override or global)
+            var proxySettings = settings.ProxyOverride ?? globalProxySettings;
 
-                // Check robots.txt
-                bool? robotsAllowed = null;
-                if (settings.RespectRobotsTxt)
+            // Check robots.txt (skip for external URLs - we're only checking status, not crawling)
+            bool? robotsAllowed = null;
+            if (settings.RespectRobotsTxt && !isExternalUrl)
+            {
+                var allowed = await _robotsService.IsAllowedAsync(queueItem.Address, userAgent).ConfigureAwait(false);
+                robotsAllowed = allowed;
+                if (!allowed)
                 {
-                    var allowed = await _robotsService.IsAllowedAsync(queueItem.Address, userAgent).ConfigureAwait(false);
-                    robotsAllowed = allowed;
-                    if (!allowed)
+                    _logger.LogInformation("URL blocked by robots.txt: {Url}", queueItem.Address);
+                    using (var scope = _serviceProvider.CreateScope())
                     {
-                        _logger.LogInformation("URL blocked by robots.txt: {Url}", queueItem.Address);
-                        using (var scope = _serviceProvider.CreateScope())
-                        {
-                            var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
-                            queueItem.State = QueueState.Completed;
-                            await queueRepository.UpdateAsync(queueItem).ConfigureAwait(false);
-                        }
-                        continue;
+                        var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
+                        queueItem.State = QueueState.Completed;
+                        await queueRepository.UpdateAsync(queueItem).ConfigureAwait(false);
                     }
+                    continue;
                 }
+            }
 
-                // Determine fetch strategy: lightweight HTTP for static resources, Playwright for HTML pages
-                bool isStaticResource = IsStaticResource(queueItem.Address);
-                
-                UrlFetchResult urlData;
-                Microsoft.Playwright.IPage? page = null;
-                string? renderedHtml = null;
-                List<RedirectHop> redirectChain = [];
+            // Determine fetch strategy: lightweight HTTP for static resources, Playwright for HTML pages
+            // External URLs always use lightweight HTTP
+            bool isStaticResource = IsStaticResource(queueItem.Address);
+            
+            UrlFetchResult urlData;
+            Microsoft.Playwright.IPage? page = null;
+            string? renderedHtml = null;
+            List<RedirectHop> redirectChain = [];
 
-                if (isStaticResource)
-                {
-                    // Lightweight fetch for CSS, JS, images (no browser needed)
-                    urlData = await FetchStaticResourceAsync(queueItem.Address, userAgent, proxySettings, cancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    // Full Playwright fetch for HTML pages
-                    (urlData, page, renderedHtml, redirectChain) = await FetchUrlWithPlaywrightAsync(queueItem.Address, userAgent, proxySettings, cancellationToken).ConfigureAwait(false);
-                }
+            if (isStaticResource || isExternalUrl)
+            {
+                // Lightweight fetch for CSS, JS, images, and external URLs (no browser needed)
+                urlData = await FetchStaticResourceAsync(queueItem.Address, userAgent, proxySettings, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                // Full Playwright fetch for HTML pages
+                (urlData, page, renderedHtml, redirectChain) = await FetchUrlWithPlaywrightAsync(queueItem.Address, userAgent, proxySettings, cancellationToken).ConfigureAwait(false);
+            }
 
                 try
                 {
@@ -502,12 +514,13 @@ public class CrawlEngine(
                         await SaveRedirectChainAsync(urlEntity.Id, redirectChain).ConfigureAwait(false);
                     }
 
-                    // Extract and save links (for link graph and discovery)
-                    // Pass the page so we can capture diagnostic metadata
-                    if (urlData.IsSuccess && urlData.IsHtml && queueItem.Depth < settings.MaxCrawlDepth)
-                    {
-                        await ProcessLinksAsync(projectId, urlEntity, renderedHtml ?? "", queueItem.Address, queueItem.Depth, settings.BaseUrl, page).ConfigureAwait(false);
-                    }
+                // Extract and save links (for link graph and discovery)
+                // Pass the page so we can capture diagnostic metadata
+                // Skip link extraction for external URLs (we don't want to crawl the entire internet)
+                if (urlData.IsSuccess && urlData.IsHtml && queueItem.Depth < settings.MaxCrawlDepth && !isExternalUrl)
+                {
+                    await ProcessLinksAsync(projectId, urlEntity, renderedHtml ?? "", queueItem.Address, queueItem.Depth, settings.BaseUrl, page).ConfigureAwait(false);
+                }
 
                     // PHASE 1: Plugin execution is deferred to Phase 2 (Analysis)
                     // This eliminates race conditions where plugins run before resources are crawled
@@ -1695,18 +1708,21 @@ public class CrawlEngine(
                 link.LinkType == LinkType.Script || 
                 link.LinkType == LinkType.Image)
             {
-                // Only enqueue links from the same domain as the project's base URL
+                // Enqueue links from both same and external domains
                 if (Uri.TryCreate(link.Url, UriKind.Absolute, out var linkUri))
                 {
                     if (IsSameDomain(projectBaseUri, linkUri))
                     {
-                        // Use depth+1 only for hyperlinks; static resources stay at same depth to avoid hitting depth limit
+                        // Internal link - use depth+1 for hyperlinks; static resources stay at same depth to avoid hitting depth limit
                         int resourceDepth = link.LinkType == LinkType.Hyperlink ? currentDepth + 1 : currentDepth;
                         await EnqueueUrlAsync(projectId, link.Url, resourceDepth, 100, projectBaseUrl).ConfigureAwait(false);
                     }
                     else
                     {
-                        _logger.LogDebug("Skipping external link: {Url} (external domain: {FromDomain})", link.Url, linkUri.Host);
+                        // External link - enqueue for status checking with a special depth marker (-1)
+                        // Negative depth clearly marks external URLs and can't conflict with any valid internal depth
+                        _logger.LogDebug("Enqueueing external link for status check: {Url} (external domain: {FromDomain})", link.Url, linkUri.Host);
+                        await EnqueueUrlAsync(projectId, link.Url, -1, 50, projectBaseUrl).ConfigureAwait(false);
                     }
                 }
             }
@@ -1956,19 +1972,23 @@ public class CrawlEngine(
     {
         try
         {
-            // Double-check domain filtering before enqueueing
-            if (!Uri.TryCreate(url, UriKind.Absolute, out var urlUri))
-            {
-                _logger.LogDebug("Invalid URL format, skipping: {Url}", url);
-                return;
-            }
+        // Double-check domain filtering before enqueueing
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var urlUri))
+        {
+            _logger.LogDebug("Invalid URL format, skipping: {Url}", url);
+            return;
+        }
 
-            var projectBaseUri = new Uri(projectBaseUrl);
-            if (!IsSameDomain(projectBaseUri, urlUri))
-            {
-                _logger.LogDebug("URL from different domain, skipping: {Url} (expected: {BaseDomain})", url, projectBaseUri.Host);
-                return;
-            }
+        var projectBaseUri = new Uri(projectBaseUrl);
+        bool isExternal = !IsSameDomain(projectBaseUri, urlUri);
+        
+        // Allow external URLs only when marked with depth=-1 (for status checking)
+        // Internal URLs are allowed at any valid depth (0 and positive)
+        if (isExternal && depth != -1)
+        {
+            _logger.LogDebug("URL from different domain, skipping: {Url} (expected: {BaseDomain})", url, projectBaseUri.Host);
+            return;
+        }
 
             // NOTE: We now crawl ALL resource types (PDFs, videos, fonts, etc.) using lightweight HTTP checking
             // The binary file skip filter has been removed to match Screaming Frog's behavior
@@ -2153,6 +2173,26 @@ public class CrawlEngine(
                 _lastCrawlTime.TryRemove(key, out _);
             }
         }
+    }
+
+    /// <summary>
+    /// Enforces a simple fixed delay per host without checking robots.txt.
+    /// Used for external URL status checking to avoid unnecessary robots.txt fetches.
+    /// </summary>
+    private async Task EnforceHostDelayAsync(string hostKey, double delaySeconds)
+    {
+        if (_lastCrawlTime.TryGetValue(hostKey, out var lastTime))
+        {
+            var elapsed = DateTime.UtcNow - lastTime;
+            var requiredDelay = TimeSpan.FromSeconds(delaySeconds);
+            if (elapsed < requiredDelay)
+            {
+                var waitTime = requiredDelay - elapsed;
+                await Task.Delay(waitTime).ConfigureAwait(false);
+            }
+        }
+
+        _lastCrawlTime[hostKey] = DateTime.UtcNow;
     }
 
     private async Task ReportProgressAsync(int projectId, CancellationToken cancellationToken)

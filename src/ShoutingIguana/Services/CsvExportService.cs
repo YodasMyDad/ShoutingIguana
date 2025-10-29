@@ -45,7 +45,8 @@ public class CsvExportService(ILogger<CsvExportService> logger, IServiceProvider
                 csv.WriteField(url.HttpStatus);
                 csv.WriteField(url.ContentType);
                 csv.WriteField(url.ContentLength);
-                csv.WriteField(url.Depth);
+                // Export "External" for external URLs (marked with depth=-1) instead of showing the implementation detail
+                csv.WriteField(url.Depth == -1 ? "External" : url.Depth.ToString());
                 csv.WriteField(url.LastCrawledUtc?.ToString("yyyy-MM-dd HH:mm:ss"));
                 csv.NextRecord();
             }
