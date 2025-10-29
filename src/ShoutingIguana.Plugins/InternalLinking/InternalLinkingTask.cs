@@ -1,6 +1,7 @@
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.PluginSdk.Helpers;
 using System.Collections.Concurrent;
 
 namespace ShoutingIguana.Plugins.InternalLinking;
@@ -49,9 +50,12 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         {
             var doc = new HtmlDocument();
             doc.LoadHtml(ctx.RenderedHtml);
+            
+            // Extract base tag if present (respects browser behavior for relative URLs)
+            Uri? baseTagUri = UrlHelper.ExtractBaseTag(ctx.RenderedHtml, ctx.Url);
 
             // Extract internal links
-            var internalLinks = ExtractInternalLinks(doc, ctx.Url, ctx.Project.BaseUrl);
+            var internalLinks = ExtractInternalLinks(doc, ctx.Url, ctx.Project.BaseUrl, baseTagUri);
 
             // Track outlinks
             TrackOutlinks(ctx.Project.ProjectId, ctx.Url.ToString(), internalLinks.Count);
@@ -74,7 +78,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         }
     }
 
-    private List<InternalLink> ExtractInternalLinks(HtmlDocument doc, Uri currentUrl, string baseUrl)
+    private List<InternalLink> ExtractInternalLinks(HtmlDocument doc, Uri currentUrl, string baseUrl, Uri? baseTagUri)
     {
         List<InternalLink> links = [];
         var linkNodes = doc.DocumentNode.SelectNodes("//a[@href]");
@@ -94,8 +98,9 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
                 continue;
             }
 
-            // Try to resolve relative URLs
-            if (!Uri.TryCreate(currentUrl, href, out var targetUri))
+            // Resolve URL using UrlHelper (respects base tag)
+            var resolvedUrl = UrlHelper.Resolve(currentUrl, href, baseTagUri);
+            if (!Uri.TryCreate(resolvedUrl, UriKind.Absolute, out var targetUri))
             {
                 continue;
             }

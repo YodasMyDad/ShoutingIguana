@@ -15,6 +15,27 @@ public class LinkExtractor : ILinkExtractor
             doc.LoadHtml(htmlContent);
 
             var baseUri = new Uri(baseUrl);
+            
+            // Extract base tag if present (respects browser behavior for relative URLs)
+            Uri? baseTagUri = null;
+            var baseNode = doc.DocumentNode.SelectSingleNode("//base[@href]");
+            if (baseNode != null)
+            {
+                var baseHref = baseNode.GetAttributeValue("href", string.Empty);
+                if (!string.IsNullOrWhiteSpace(baseHref))
+                {
+                    // Try to parse as absolute URI
+                    if (Uri.TryCreate(baseHref, UriKind.Absolute, out var absoluteBaseUri))
+                    {
+                        baseTagUri = absoluteBaseUri;
+                    }
+                    // Try to resolve as relative to current page
+                    else if (Uri.TryCreate(baseUri, baseHref, out var resolvedBaseUri))
+                    {
+                        baseTagUri = resolvedBaseUri;
+                    }
+                }
+            }
 
             // Extract hyperlinks
             var anchorNodes = doc.DocumentNode.SelectNodes("//a[@href]");
@@ -26,7 +47,7 @@ public class LinkExtractor : ILinkExtractor
                     if (string.IsNullOrWhiteSpace(href))
                         continue;
 
-                    var resolvedUrl = ResolveUrl(href, baseUri);
+                    var resolvedUrl = ResolveUrl(href, baseUri, baseTagUri);
                     if (resolvedUrl != null)
                     {
                         var rel = node.GetAttributeValue("rel", string.Empty);
@@ -51,7 +72,7 @@ public class LinkExtractor : ILinkExtractor
                     if (string.IsNullOrWhiteSpace(src))
                         continue;
 
-                    var resolvedUrl = ResolveUrl(src, baseUri);
+                    var resolvedUrl = ResolveUrl(src, baseUri, baseTagUri);
                     if (resolvedUrl != null)
                     {
                         links.Add(new ExtractedLink
@@ -74,7 +95,7 @@ public class LinkExtractor : ILinkExtractor
                     if (string.IsNullOrWhiteSpace(href))
                         continue;
 
-                    var resolvedUrl = ResolveUrl(href, baseUri);
+                    var resolvedUrl = ResolveUrl(href, baseUri, baseTagUri);
                     if (resolvedUrl != null)
                     {
                         links.Add(new ExtractedLink
@@ -96,7 +117,7 @@ public class LinkExtractor : ILinkExtractor
                     if (string.IsNullOrWhiteSpace(src))
                         continue;
 
-                    var resolvedUrl = ResolveUrl(src, baseUri);
+                    var resolvedUrl = ResolveUrl(src, baseUri, baseTagUri);
                     if (resolvedUrl != null)
                     {
                         links.Add(new ExtractedLink
@@ -116,7 +137,7 @@ public class LinkExtractor : ILinkExtractor
         return Task.FromResult<IEnumerable<ExtractedLink>>(links);
     }
 
-    private static string? ResolveUrl(string url, Uri baseUri)
+    private static string? ResolveUrl(string url, Uri baseUri, Uri? baseTagUri)
     {
         try
         {
@@ -134,13 +155,18 @@ public class LinkExtractor : ILinkExtractor
             {
                 absoluteUri = parsedUri;
             }
-            else if (Uri.TryCreate(baseUri, url, out parsedUri))
-            {
-                absoluteUri = parsedUri;
-            }
             else
             {
-                return null;
+                // Use base tag URI if present, otherwise use page URI
+                var resolveAgainst = baseTagUri ?? baseUri;
+                if (Uri.TryCreate(resolveAgainst, url, out parsedUri))
+                {
+                    absoluteUri = parsedUri;
+                }
+                else
+                {
+                    return null;
+                }
             }
 
             // Remove fragment

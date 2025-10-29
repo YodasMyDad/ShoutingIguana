@@ -1,6 +1,7 @@
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.PluginSdk.Helpers;
 using System.Text.RegularExpressions;
 
 namespace ShoutingIguana.Plugins.ImageAudit;
@@ -49,6 +50,9 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         {
             var doc = new HtmlDocument();
             doc.LoadHtml(ctx.RenderedHtml);
+            
+            // Extract base tag if present (respects browser behavior for relative URLs)
+            Uri? baseTagUri = UrlHelper.ExtractBaseTag(ctx.RenderedHtml, ctx.Url);
 
             // Extract all image tags
             var imgNodes = doc.DocumentNode.SelectNodes("//img");
@@ -65,7 +69,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
 
             foreach (var imgNode in imgNodes)
             {
-                await AnalyzeImageAsync(ctx, imgNode, findingsMap);
+                await AnalyzeImageAsync(ctx, imgNode, findingsMap, baseTagUri);
             }
 
             // Report all unique findings with occurrence counts
@@ -80,29 +84,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         }
     }
 
-    private string ResolveUrl(Uri baseUri, string relativeUrl)
-    {
-        try
-        {
-            if (Uri.TryCreate(relativeUrl, UriKind.Absolute, out var absoluteUri))
-            {
-                return absoluteUri.ToString();
-            }
-
-            if (Uri.TryCreate(baseUri, relativeUrl, out var resolvedUri))
-            {
-                return resolvedUri.ToString();
-            }
-
-            return relativeUrl;
-        }
-        catch
-        {
-            return relativeUrl;
-        }
-    }
-
-    private async Task AnalyzeImageAsync(UrlContext ctx, HtmlNode imgNode, Dictionary<string, FindingTracker> findingsMap)
+    private async Task AnalyzeImageAsync(UrlContext ctx, HtmlNode imgNode, Dictionary<string, FindingTracker> findingsMap, Uri? baseTagUri)
     {
         var src = imgNode.GetAttributeValue("src", "");
         var srcset = imgNode.GetAttributeValue("srcset", "");
@@ -144,8 +126,8 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         int? width = int.TryParse(widthStr, out var w) ? w : null;
         int? height = int.TryParse(heightStr, out var h) ? h : null;
 
-        // Resolve relative URLs
-        var absoluteSrc = ResolveUrl(ctx.Url, src);
+        // Resolve relative URLs using UrlHelper (respects base tag)
+        var absoluteSrc = UrlHelper.Resolve(ctx.Url, src, baseTagUri);
 
         // Determine if external image
         bool isExternal = IsExternalImage(ctx.Project.BaseUrl, absoluteSrc);

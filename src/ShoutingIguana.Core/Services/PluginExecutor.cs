@@ -153,25 +153,6 @@ internal class FindingSink(int urlId, int projectId, IServiceProvider servicePro
         await Task.CompletedTask;
     }
     
-    public async Task ReportAsync(string taskKey, Severity severity, string code, string message, object? data)
-    {
-        // Legacy overload - wrap data in TechnicalMetadata for backward compatibility
-        FindingDetails? details = null;
-        
-        if (data != null)
-        {
-            details = new FindingDetails
-            {
-                TechnicalMetadata = new Dictionary<string, object?>
-                {
-                    ["legacyData"] = data
-                }
-            };
-        }
-        
-        await ReportAsync(taskKey, severity, code, message, details);
-    }
-    
     /// <summary>
     /// Flush all pending findings to database in a single transaction.
     /// </summary>

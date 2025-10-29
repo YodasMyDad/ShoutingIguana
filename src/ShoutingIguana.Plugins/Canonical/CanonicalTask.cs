@@ -548,13 +548,13 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                     .AddItem($"  • HTTP: {canonicalHttp}")
                     .BeginNested("⚠️ Issue")
                         .AddItem("Conflicting canonical signals")
-                        .AddItem("HTTP Link header typically takes precedence");
-                    
-                details.BeginNested("💡 Recommendations")
+                        .AddItem("HTTP Link header typically takes precedence")
+                    .EndNested()
+                    .BeginNested("💡 Recommendations")
                         .AddItem("Ensure both canonicals point to the same URL")
-                        .AddItem("Or remove one (prefer HTTP header for consistency)");
-                    
-                details.WithTechnicalMetadata("url", ctx.Url.ToString())
+                        .AddItem("Or remove one (prefer HTTP header for consistency)")
+                    .EndNested()
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
                     .WithTechnicalMetadata("canonicalHtml", canonicalHtml)
                     .WithTechnicalMetadata("canonicalHttp", canonicalHttp)
                     .Build();
@@ -589,13 +589,13 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .AddItem($"Canonical: {canonical}")
                 .BeginNested("⚠️ Issue")
                     .AddItem("Canonical tags on redirected URLs are ignored")
-                    .AddItem("Search engines follow the redirect, not the canonical");
-            
-            details.BeginNested("💡 Recommendations")
+                    .AddItem("Search engines follow the redirect, not the canonical")
+                .EndNested()
+                .BeginNested("💡 Recommendations")
                     .AddItem("Remove canonical tag from this redirect")
-                    .AddItem("The redirect itself is sufficient");
-            
-            details.WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .AddItem("The redirect itself is sufficient")
+                .EndNested()
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("statusCode", statusCode)
                 .WithTechnicalMetadata("canonical", canonical)
                 .Build();

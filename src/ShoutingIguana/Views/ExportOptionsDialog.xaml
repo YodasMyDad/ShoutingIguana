@@ -24,7 +24,6 @@
         <StackPanel Grid.Row="0" Margin="0,0,0,20">
             <TextBlock Text="Export Options"
                        Style="{StaticResource TitleTextStyle}"
-                       FontSize="20"
                        Margin="0,0,0,8"/>
             <TextBlock Text="Configure how findings should be exported"
                        Style="{StaticResource BodyTextStyle}"
@@ -35,64 +34,62 @@
         <Border Grid.Row="1"
                 Background="{StaticResource SurfaceBrush}"
                 CornerRadius="8"
-                Padding="20">
+                Padding="24">
             <ScrollViewer VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
                 <StackPanel>
                     <!-- Format Selection -->
-                    <StackPanel Margin="0,0,0,20">
-                    <TextBlock Text="Export Format"
-                               FontWeight="SemiBold"
-                               FontSize="14"
-                               Margin="0,0,0,8"/>
-                    <ComboBox SelectedValue="{Binding ExportFormat}"
-                              SelectedValuePath="Content"
-                              Style="{StaticResource ModernComboBox}"
-                              FontSize="14">
-                        <ComboBoxItem Content="Excel" IsSelected="True"/>
-                        <ComboBoxItem Content="CSV"/>
-                    </ComboBox>
-                </StackPanel>
-                
-                <!-- Technical Metadata Option -->
-                <CheckBox IsChecked="{Binding IncludeTechnicalMetadata}"
-                          FontSize="14"
-                          Margin="0,0,0,20">
-                    <StackPanel>
-                        <TextBlock Text="Include Technical Metadata" 
+                    <StackPanel Margin="0,0,0,24">
+                        <TextBlock Text="Export Format"
                                    FontWeight="SemiBold"
-                                   TextWrapping="Wrap"/>
-                        <TextBlock Text="Adds an additional column with raw technical data (JSON format) for advanced analysis"
-                                   Style="{StaticResource HelperText}"
-                                   Margin="0,4,0,0"
-                                   TextWrapping="Wrap"/>
+                                   FontSize="14"
+                                   Margin="0,0,0,8"/>
+                        <ComboBox SelectedValue="{Binding ExportFormat}"
+                                  SelectedValuePath="Content"
+                                  Style="{StaticResource ModernComboBox}">
+                            <ComboBoxItem Content="Excel" IsSelected="True"/>
+                            <ComboBoxItem Content="CSV"/>
+                        </ComboBox>
                     </StackPanel>
-                </CheckBox>
-                
-                <!-- Severity Filter Section -->
-                <TextBlock Text="Include Severity Levels"
-                           FontWeight="SemiBold"
-                           FontSize="14"
-                           Margin="0,0,0,8"/>
-                <TextBlock Text="Select which severity levels to include in the export"
-                           Style="{StaticResource HelperText}"
-                           Margin="0,0,0,8"
-                           TextWrapping="Wrap"/>
-                
-                <CheckBox IsChecked="{Binding IncludeErrors}"
-                          Content="Errors"
-                          FontSize="14"
-                          Margin="0,0,0,8"/>
-                
-                <CheckBox IsChecked="{Binding IncludeWarnings}"
-                          Content="Warnings"
-                          FontSize="14"
-                          Margin="0,0,0,8"/>
-                
-                <CheckBox IsChecked="{Binding IncludeInfo}"
-                          Content="Info"
-                          FontSize="14"
-                          Margin="0"/>
+                    
+                    <!-- Technical Metadata Option -->
+                    <CheckBox IsChecked="{Binding IncludeTechnicalMetadata}"
+                              FontSize="14"
+                              Margin="0,0,0,24">
+                        <StackPanel>
+                            <TextBlock Text="Include Technical Metadata" 
+                                       FontWeight="SemiBold"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock Text="Adds an additional column with raw technical data (JSON format) for advanced analysis"
+                                       Style="{StaticResource HelperText}"/>
+                        </StackPanel>
+                    </CheckBox>
+                    
+                    <!-- Severity Filter Section -->
+                    <StackPanel Margin="0,0,0,0">
+                        <TextBlock Text="Include Severity Levels"
+                                   FontWeight="SemiBold"
+                                   FontSize="14"
+                                   Margin="0,0,0,8"/>
+                        <TextBlock Text="Select which severity levels to include in the export"
+                                   Style="{StaticResource HelperText}"
+                                   Margin="0,0,0,12"/>
+                        
+                        <CheckBox IsChecked="{Binding IncludeErrors}"
+                                  Content="Errors"
+                                  FontSize="14"
+                                  Margin="0,0,0,8"/>
+                        
+                        <CheckBox IsChecked="{Binding IncludeWarnings}"
+                                  Content="Warnings"
+                                  FontSize="14"
+                                  Margin="0,0,0,8"/>
+                        
+                        <CheckBox IsChecked="{Binding IncludeInfo}"
+                                  Content="Info"
+                                  FontSize="14"
+                                  Margin="0,0,0,0"/>
+                    </StackPanel>
                 </StackPanel>
             </ScrollViewer>
         </Border>

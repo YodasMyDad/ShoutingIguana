@@ -5,6 +5,7 @@ namespace ShoutingIguana.Plugins.Shared;
 
 /// <summary>
 /// Thread-safe service for checking external link status with caching.
+/// Cache is keyed by both URL and User-Agent to support multiple projects with different UA settings.
 /// </summary>
 public class ExternalLinkChecker : IDisposable
 {
@@ -26,10 +27,17 @@ public class ExternalLinkChecker : IDisposable
     /// <summary>
     /// Checks an external URL and returns cached result if available.
     /// </summary>
-    public async Task<ExternalLinkResult> CheckUrlAsync(string url, CancellationToken cancellationToken = default)
+    /// <param name="url">The URL to check</param>
+    /// <param name="userAgent">User-Agent string to use for the request (respects project settings)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    public async Task<ExternalLinkResult> CheckUrlAsync(string url, string userAgent, CancellationToken cancellationToken = default)
     {
+        // Create cache key combining URL and User-Agent
+        // This ensures different projects with different UA settings don't share cache
+        var cacheKey = $"{url}|{userAgent}";
+        
         // Check cache first
-        if (_cache.TryGetValue(url, out var cachedResult))
+        if (_cache.TryGetValue(cacheKey, out var cachedResult))
         {
             return cachedResult;
         }
@@ -40,15 +48,15 @@ public class ExternalLinkChecker : IDisposable
         try
         {
             // Double-check cache after acquiring semaphore
-            if (_cache.TryGetValue(url, out var cachedResult2))
+            if (_cache.TryGetValue(cacheKey, out var cachedResult2))
             {
                 return cachedResult2;
             }
 
-            var result = await CheckUrlInternalAsync(url, cancellationToken);
+            var result = await CheckUrlInternalAsync(url, userAgent, cancellationToken);
             
             // Cache the result
-            _cache.TryAdd(url, result);
+            _cache.TryAdd(cacheKey, result);
             
             return result;
         }
@@ -58,7 +66,7 @@ public class ExternalLinkChecker : IDisposable
         }
     }
 
-    private async Task<ExternalLinkResult> CheckUrlInternalAsync(string url, CancellationToken cancellationToken)
+    private async Task<ExternalLinkResult> CheckUrlInternalAsync(string url, string userAgent, CancellationToken cancellationToken)
     {
         var result = new ExternalLinkResult { Url = url };
         var startTime = DateTime.UtcNow;
@@ -69,10 +77,18 @@ public class ExternalLinkChecker : IDisposable
             cts.CancelAfter(_timeout);
 
             // Use HEAD request to avoid downloading content
-            var request = new HttpRequestMessage(HttpMethod.Head, url);
-            request.Headers.Add("User-Agent", "Mozilla/5.0 (compatible; ShoutingIguana/1.0; +https://github.com/yourrepo)");
+            using var request = new HttpRequestMessage(HttpMethod.Head, url);
+            
+            // Use the project's configured User-Agent (respects Chrome/Firefox/Edge/Safari/Random setting)
+            request.Headers.Add("User-Agent", userAgent);
+            request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+            request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
+            request.Headers.Add("Accept-Encoding", "gzip, deflate, br");
+            request.Headers.Add("DNT", "1");
+            request.Headers.Add("Connection", "keep-alive");
+            request.Headers.Add("Upgrade-Insecure-Requests", "1");
 
-            var response = await _httpClient.SendAsync(request, cts.Token);
+            using var response = await _httpClient.SendAsync(request, cts.Token);
             
             result.StatusCode = (int)response.StatusCode;
             result.IsSuccess = response.IsSuccessStatusCode;
@@ -118,8 +134,8 @@ public class ExternalLinkChecker : IDisposable
         if (_disposed)
             return;
 
-        _httpClient?.Dispose();
-        _rateLimiter?.Dispose();
+        _httpClient.Dispose();
+        _rateLimiter.Dispose();
         _disposed = true;
     }
 }

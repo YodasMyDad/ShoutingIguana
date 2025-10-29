@@ -93,6 +93,9 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
     private Task<List<LinkInfo>> ExtractLinksFromHtmlAsync(HtmlDocument doc, UrlContext ctx)
     {
         var links = new List<LinkInfo>();
+        
+        // Extract base tag if present (respects browser behavior for relative URLs)
+        Uri? baseTagUri = UrlHelper.ExtractBaseTag(ctx.RenderedHtml!, ctx.Url);
 
         // Hyperlinks (a tags)
         var aNodes = doc.DocumentNode.SelectNodes("//a[@href]");
@@ -125,7 +128,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                     
                     links.Add(new LinkInfo
                     {
-                        Url = ResolveUrl(ctx.Url, href),
+                        Url = ResolveUrl(ctx.Url, href, baseTagUri),
                         AnchorText = anchorText,
                         LinkType = "hyperlink",
                         HasNofollow = rel.Contains("nofollow", StringComparison.OrdinalIgnoreCase)
@@ -147,7 +150,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 {
                     links.Add(new LinkInfo
                     {
-                        Url = ResolveUrl(ctx.Url, src),
+                        Url = ResolveUrl(ctx.Url, src, baseTagUri),
                         AnchorText = alt,
                         LinkType = "image"
                     });
@@ -166,7 +169,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 {
                     links.Add(new LinkInfo
                     {
-                        Url = ResolveUrl(ctx.Url, href),
+                        Url = ResolveUrl(ctx.Url, href, baseTagUri),
                         LinkType = "stylesheet"
                     });
                 }
@@ -184,7 +187,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 {
                     links.Add(new LinkInfo
                     {
-                        Url = ResolveUrl(ctx.Url, src),
+                        Url = ResolveUrl(ctx.Url, src, baseTagUri),
                         LinkType = "script"
                     });
                 }
@@ -196,6 +199,13 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
 
     private async Task AnalyzeLinksWithDiagnosticsAsync(UrlContext ctx, List<LinkInfo> links, Dictionary<string, FindingTracker> findingsMap, CancellationToken ct)
     {
+        // Extract base tag for URL resolution
+        Uri? baseTagUri = null;
+        if (!string.IsNullOrEmpty(ctx.RenderedHtml))
+        {
+            baseTagUri = UrlHelper.ExtractBaseTag(ctx.RenderedHtml, ctx.Url);
+        }
+        
         // Get all anchor elements from the page for diagnostic info
         var anchorElements = await ctx.Page!.QuerySelectorAllAsync("a[href]");
         var anchorDiagnostics = new Dictionary<string, ElementDiagnosticInfo>();
@@ -207,7 +217,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 var href = await element.GetAttributeAsync("href");
                 if (!string.IsNullOrEmpty(href))
                 {
-                    var resolvedUrl = ResolveUrl(ctx.Url, href);
+                    var resolvedUrl = ResolveUrl(ctx.Url, href, baseTagUri);
                     var diagnosticInfo = await ElementDiagnostics.GetElementInfoAsync(ctx.Page, element);
                     anchorDiagnostics[resolvedUrl] = diagnosticInfo;
                 }
@@ -258,8 +268,8 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         }
         else if (_checkExternalLinks && _externalChecker != null)
         {
-            // External link - check via HTTP
-            var result = await _externalChecker.CheckUrlAsync(link.Url, ct);
+            // External link - check via HTTP using project's User-Agent setting
+            var result = await _externalChecker.CheckUrlAsync(link.Url, ctx.Project.UserAgent, ct);
             status = result.StatusCode;
             
             // Report slow external links
@@ -329,7 +339,16 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                     451 => "This page is unavailable for legal reasons.",
                     _ => "This page has restricted access."
                 };
-                recommendation = $"{note} If this is expected (e.g., members-only area), this is not an error. Otherwise, check access permissions.";
+                
+                // Add special note for external 403 errors (common with social media)
+                if (status.Value == 403 && isExternal)
+                {
+                    recommendation = $"{note} For external links (especially social media platforms like Twitter/X, LinkedIn, etc.), this often means the site blocks automated crawlers even though the page is publicly accessible in a browser. This is usually not an error - verify the link works in a browser. If it does, you can safely ignore this finding.";
+                }
+                else
+                {
+                    recommendation = $"{note} If this is expected (e.g., members-only area), this is not an error. Otherwise, check access permissions.";
+                }
             }
             else if (ctx.Metadata.Depth <= 2 && !isExternal && link.LinkType == "hyperlink")
             {
@@ -572,9 +591,9 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         }
     }
 
-    private string ResolveUrl(Uri baseUri, string relativeUrl)
+    private string ResolveUrl(Uri baseUri, string relativeUrl, Uri? baseTagUri = null)
     {
-        return UrlHelper.Resolve(baseUri, relativeUrl);
+        return UrlHelper.Resolve(baseUri, relativeUrl, baseTagUri);
     }
 
     private bool IsExternalLink(string baseUrl, string targetUrl)

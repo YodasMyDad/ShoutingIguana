@@ -503,8 +503,9 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
         {
             _logger.LogDebug("Testing domain variant: {VariantUrl}", variantUrl);
             
-            var request = new HttpRequestMessage(HttpMethod.Get, variantUrl);
-            request.Headers.Add("User-Agent", "ShoutingIguana/1.0 (SEO Crawler)");
+            using var request = new HttpRequestMessage(HttpMethod.Get, variantUrl);
+            // Use the project's configured User-Agent (respects Chrome/Firefox/Edge/Safari/Random setting)
+            request.Headers.Add("User-Agent", ctx.Project.UserAgent);
             
             HttpResponseMessage response;
             
@@ -622,13 +623,13 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     .AddItem($"Type: {GetRedirectTypeName(statusCode)}")
                     .BeginNested("❌ Wrong Redirect Type")
                         .AddItem("Temporary redirects (302/307) don't pass SEO value")
-                        .AddItem("May cause duplicate content issues");
-                
-                details.BeginNested("💡 Recommendations")
+                        .AddItem("May cause duplicate content issues")
+                    .EndNested()
+                    .BeginNested("💡 Recommendations")
                         .AddItem("Change to 301 (Permanent) redirect")
-                        .AddItem("Consolidates domain variants properly");
-                
-                details.WithTechnicalMetadata("variantUrl", variantUrl)
+                        .AddItem("Consolidates domain variants properly")
+                    .EndNested()
+                    .WithTechnicalMetadata("variantUrl", variantUrl)
                     .WithTechnicalMetadata("redirectsTo", locationHeader)
                     .WithTechnicalMetadata("statusCode", statusCode)
                     .WithTechnicalMetadata("redirectType", GetRedirectTypeName(statusCode))
@@ -651,14 +652,14 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     .BeginNested("⚠️ Critical Issue")
                         .AddItem("Same content accessible from multiple URLs")
                         .AddItem("Search engines may split ranking signals")
-                        .AddItem("Reduces overall rankings for all variants");
-                
-                details.BeginNested("💡 Recommendations")
+                        .AddItem("Reduces overall rankings for all variants")
+                    .EndNested()
+                    .BeginNested("💡 Recommendations")
                         .AddItem($"Add 301 redirect from {variantUrl} to {canonicalUrl}")
                         .AddItem("Configure server to redirect all variants")
-                        .AddItem("Test all combinations (http/https, www/non-www)");
-                
-                details.WithTechnicalMetadata("variantUrl", variantUrl)
+                        .AddItem("Test all combinations (http/https, www/non-www)")
+                    .EndNested()
+                    .WithTechnicalMetadata("variantUrl", variantUrl)
                     .WithTechnicalMetadata("canonicalUrl", canonicalUrl)
                     .WithTechnicalMetadata("statusCode", statusCode)
                     .Build();

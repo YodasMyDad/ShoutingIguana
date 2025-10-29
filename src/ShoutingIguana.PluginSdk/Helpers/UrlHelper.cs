@@ -135,6 +135,47 @@ public static class UrlHelper
     /// </example>
     public static string Resolve(Uri baseUri, string relativeUrl)
     {
+        return Resolve(baseUri, relativeUrl, null);
+    }
+
+    /// <summary>
+    /// Resolves a relative or absolute URL against a base URL, optionally respecting HTML base tag.
+    /// </summary>
+    /// <param name="baseUri">The current page URL to resolve against.</param>
+    /// <param name="relativeUrl">The relative or absolute URL to resolve.</param>
+    /// <param name="baseTagUri">Optional base tag URI from HTML &lt;base href&gt;. When provided, relative URLs resolve against this instead of baseUri.</param>
+    /// <returns>
+    /// The resolved absolute URL as a string.
+    /// If the relative URL is already absolute, it returns unchanged.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method respects HTML base tags, matching browser behavior.
+    /// If a base tag is present, relative URLs resolve against it instead of the page URL.
+    /// </para>
+    /// <para>
+    /// Resolution priority:
+    /// 1. If URL is absolute → return as-is
+    /// 2. If baseTagUri is provided → resolve relative to base tag
+    /// 3. Otherwise → resolve relative to current page URL (baseUri)
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var pageUri = new Uri("https://example.com/section/page.html");
+    /// var baseTagUri = new Uri("https://example.com/");
+    /// 
+    /// // Without base tag - relative to page directory
+    /// var url1 = UrlHelper.Resolve(pageUri, "other.html", null);
+    /// // Result: "https://example.com/section/other.html"
+    /// 
+    /// // With base tag - relative to base tag
+    /// var url2 = UrlHelper.Resolve(pageUri, "other.html", baseTagUri);
+    /// // Result: "https://example.com/other.html"
+    /// </code>
+    /// </example>
+    public static string Resolve(Uri baseUri, string relativeUrl, Uri? baseTagUri)
+    {
         if (string.IsNullOrWhiteSpace(relativeUrl))
         {
             return relativeUrl;
@@ -148,8 +189,11 @@ public static class UrlHelper
                 return absoluteUri.ToString();
             }
             
+            // Use base tag URI if provided, otherwise use page URI
+            var resolveAgainst = baseTagUri ?? baseUri;
+            
             // Resolve as relative URL
-            if (Uri.TryCreate(baseUri, relativeUrl, out var resolvedUri))
+            if (Uri.TryCreate(resolveAgainst, relativeUrl, out var resolvedUri))
             {
                 return resolvedUri.ToString();
             }
@@ -335,6 +379,81 @@ public static class UrlHelper
         path = path.TrimStart('/');
         
         return $"{baseUrl}/{path}";
+    }
+
+    /// <summary>
+    /// Extracts the base tag URI from HTML content if present.
+    /// </summary>
+    /// <param name="htmlContent">The HTML content to parse.</param>
+    /// <param name="currentPageUri">The current page URI used to resolve relative base hrefs.</param>
+    /// <returns>
+    /// The resolved base tag URI if found and valid; otherwise, null.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method parses HTML to find &lt;base href="..."&gt; tags, which browsers use
+    /// to resolve relative URLs. The base href can be:
+    /// - Absolute: &lt;base href="https://example.com/"&gt;
+    /// - Root-relative: &lt;base href="/"&gt;
+    /// - Path-relative: &lt;base href="/subfolder/"&gt;
+    /// </para>
+    /// <para>
+    /// If the base href is relative, it's resolved against the current page URL.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var html = "&lt;html&gt;&lt;head&gt;&lt;base href=\"/\"&gt;&lt;/head&gt;&lt;/html&gt;";
+    /// var pageUri = new Uri("https://example.com/section/page.html");
+    /// var baseUri = UrlHelper.ExtractBaseTag(html, pageUri);
+    /// // Result: new Uri("https://example.com/")
+    /// </code>
+    /// </example>
+    public static Uri? ExtractBaseTag(string htmlContent, Uri currentPageUri)
+    {
+        if (string.IsNullOrWhiteSpace(htmlContent))
+        {
+            return null;
+        }
+
+        try
+        {
+            // Simple regex-based extraction to avoid loading HtmlAgilityPack dependency in SDK
+            // Look for <base href="..."> tag (case-insensitive, with optional attributes)
+            var match = System.Text.RegularExpressions.Regex.Match(
+                htmlContent,
+                @"<base\s+[^>]*href\s*=\s*[""']([^""']+)[""']",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            if (!match.Success)
+            {
+                return null;
+            }
+
+            var baseHref = match.Groups[1].Value;
+            if (string.IsNullOrWhiteSpace(baseHref))
+            {
+                return null;
+            }
+
+            // Try to parse as absolute URI
+            if (Uri.TryCreate(baseHref, UriKind.Absolute, out var absoluteBaseUri))
+            {
+                return absoluteBaseUri;
+            }
+
+            // Try to resolve as relative to current page
+            if (Uri.TryCreate(currentPageUri, baseHref, out var resolvedBaseUri))
+            {
+                return resolvedBaseUri;
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
 
