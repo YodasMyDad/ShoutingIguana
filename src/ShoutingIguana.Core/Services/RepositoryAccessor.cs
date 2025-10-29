@@ -196,13 +196,22 @@ public class RepositoryAccessor(
                 .Where(u => targetUrlIds.Contains(u.Id))
                 .ToDictionary(u => u.Id, u => u.Address);
             
-            // Map to LinkInfo DTOs
+            // Map to LinkInfo DTOs with diagnostic metadata
             return outgoingLinks.Select(link => new PluginSdk.LinkInfo(
                 link.FromUrlId,
                 link.ToUrlId,
                 urlLookup.GetValueOrDefault(link.ToUrlId) ?? "Unknown",
                 link.AnchorText,
-                link.LinkType.ToString()
+                link.LinkType.ToString(),
+                link.DomPath,
+                link.ElementTag,
+                link.IsVisible,
+                link.PositionX,
+                link.PositionY,
+                link.ElementWidth,
+                link.ElementHeight,
+                link.HtmlSnippet,
+                link.ParentTag
             )).ToList();
         }
         catch (Exception ex)

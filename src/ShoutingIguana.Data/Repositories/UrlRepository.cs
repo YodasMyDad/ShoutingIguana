@@ -15,6 +15,13 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
             .FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false);
     }
 
+    public async Task<Url?> GetByIdWithHeadersAsync(int id)
+    {
+        return await _context.Urls
+            .Include(u => u.Headers)
+            .FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false);
+    }
+
     public async Task<Url?> GetByAddressAsync(int projectId, string address)
     {
         var normalized = NormalizeUrl(address);
@@ -35,6 +42,14 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
     {
         return await _context.Urls
             .Where(u => u.ProjectId == projectId && u.Status == status)
+            .ToListAsync().ConfigureAwait(false);
+    }
+
+    public async Task<List<Url>> GetCompletedUrlsAsync(int projectId)
+    {
+        return await _context.Urls
+            .Where(u => u.ProjectId == projectId && u.Status == UrlStatus.Completed)
+            .OrderBy(u => u.Id)
             .ToListAsync().ConfigureAwait(false);
     }
 

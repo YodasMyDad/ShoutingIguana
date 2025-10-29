@@ -397,6 +397,15 @@ public record RedirectInfo(
 /// <param name="ToUrl">The address of the target URL for convenience.</param>
 /// <param name="AnchorText">The text of the link (for hyperlinks) or alt text (for images).</param>
 /// <param name="LinkType">The type of link (Internal, External, etc.).</param>
+/// <param name="DomPath">The DOM path to the link element in the page.</param>
+/// <param name="ElementTag">The HTML tag name of the link element.</param>
+/// <param name="IsVisible">Whether the link is visible on the page.</param>
+/// <param name="PositionX">The X-coordinate position of the link element.</param>
+/// <param name="PositionY">The Y-coordinate position of the link element.</param>
+/// <param name="ElementWidth">The width of the link element in pixels.</param>
+/// <param name="ElementHeight">The height of the link element in pixels.</param>
+/// <param name="HtmlSnippet">A snippet of HTML surrounding the link element.</param>
+/// <param name="ParentTag">The HTML tag name of the parent element.</param>
 /// <remarks>
 /// Use this to analyze linking patterns, build link graphs, or check anchor text optimization.
 /// </remarks>
@@ -405,7 +414,16 @@ public record LinkInfo(
     int ToUrlId,
     string ToUrl,
     string? AnchorText,
-    string LinkType);
+    string LinkType,
+    string? DomPath = null,
+    string? ElementTag = null,
+    bool? IsVisible = null,
+    int? PositionX = null,
+    int? PositionY = null,
+    int? ElementWidth = null,
+    int? ElementHeight = null,
+    string? HtmlSnippet = null,
+    string? ParentTag = null);
 
 /// <summary>
 /// Represents a custom data extraction rule.

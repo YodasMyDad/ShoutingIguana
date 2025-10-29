@@ -75,6 +75,9 @@ public class Url
     // Stage 3: Indexability Computation
     public bool? IsIndexable { get; set; } // Computed: false if noindex or blocked or 4xx/5xx
     
+    // Two-Phase Crawl: Store rendered HTML for Phase 2 analysis
+    public string? RenderedHtml { get; set; } // Stored for Phase 2 plugin analysis
+    
     // Navigation properties
     public Project Project { get; set; } = null!;
     public Url? DiscoveredFromUrl { get; set; }

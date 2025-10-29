@@ -59,7 +59,7 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
             }
             
             // Check for JavaScript redirects (on any successful page)
-            if (statusCode == 200 && ctx.Page != null && !string.IsNullOrEmpty(ctx.RenderedHtml))
+            if (statusCode == 200 && !string.IsNullOrEmpty(ctx.RenderedHtml))
             {
                 await CheckJavaScriptRedirectAsync(ctx);
             }

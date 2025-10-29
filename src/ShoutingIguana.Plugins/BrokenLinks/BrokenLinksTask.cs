@@ -13,7 +13,8 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
 {
     private readonly ILogger _logger;
     private readonly IBrokenLinksChecker _checker;
-    private readonly ExternalLinkChecker? _externalChecker;
+    private readonly IRepositoryAccessor _repositoryAccessor;
+    private readonly ExternalLinkChecker _externalChecker;
     private readonly bool _checkExternalLinks;
     private readonly bool _checkAnchorLinks;
     private bool _disposed;
@@ -28,17 +29,16 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         public int OccurrenceCount { get; set; } = 1;
     }
 
-    public BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, bool checkExternalLinks = false, bool checkAnchorLinks = true)
+    public BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepositoryAccessor repositoryAccessor, bool checkExternalLinks = false, bool checkAnchorLinks = true)
     {
         _logger = logger;
         _checker = checker;
+        _repositoryAccessor = repositoryAccessor;
         _checkExternalLinks = checkExternalLinks;
         _checkAnchorLinks = checkAnchorLinks;
         
-        if (_checkExternalLinks)
-        {
-            _externalChecker = new ExternalLinkChecker(logger, TimeSpan.FromSeconds(5));
-        }
+        // Always create ExternalLinkChecker - needed for external link checking
+        _externalChecker = new ExternalLinkChecker(logger, TimeSpan.FromSeconds(5));
     }
 
     public override string Key => "BrokenLinks";
@@ -64,21 +64,50 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
             var doc = new HtmlDocument();
             doc.LoadHtml(ctx.RenderedHtml);
 
-            // Extract all links from HTML
-            var links = await ExtractLinksFromHtmlAsync(doc, ctx);
-
             // Track findings to deduplicate them
             var findingsMap = new Dictionary<string, FindingTracker>();
 
-            // If we have access to the browser page, also extract with diagnostics
-            if (ctx.Page != null)
+            // Load stored diagnostic metadata from Links table (captured in Phase 1)
+            // This includes ALL resources that were discovered during crawling, including
+            // stylesheets, scripts, images, etc. that may have returned 404
+            var linkDiagnostics = await LoadStoredLinkDiagnosticsAsync(ctx);
+            
+            // FIRST: Check all links from the Links table (Phase 1 captured data)
+            // This ensures we catch resources like stylesheets that may have been requested
+            // by the browser but failed to load (404) and may not be in final HTML
+            var storedLinks = await _repositoryAccessor.GetLinksByFromUrlAsync(ctx.Project.ProjectId, ctx.Metadata.UrlId);
+            var checkedUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            
+            foreach (var storedLink in storedLinks)
             {
-                await AnalyzeLinksWithDiagnosticsAsync(ctx, links, findingsMap, ct);
+                checkedUrls.Add(storedLink.ToUrl);
+                
+                var linkInfo = new LinkInfo
+                {
+                    Url = storedLink.ToUrl,
+                    AnchorText = storedLink.AnchorText ?? "",
+                    LinkType = storedLink.LinkType.ToLowerInvariant(),
+                    HasNofollow = false // Will be determined if needed
+                };
+                
+                var diagnosticInfo = linkDiagnostics.GetValueOrDefault(storedLink.ToUrl);
+                await CheckLinkAsync(ctx, linkInfo, diagnosticInfo, findingsMap, ct);
             }
-            else
+            
+            // SECOND: Extract links from HTML to catch any that might not be in Links table
+            // (edge cases, dynamically generated links, etc.)
+            var htmlLinks = await ExtractLinksFromHtmlAsync(doc, ctx);
+            
+            foreach (var link in htmlLinks)
             {
-                // Fallback to HTML-only analysis
-                await AnalyzeLinksFromHtmlAsync(ctx, links, findingsMap, ct);
+                // Skip if already checked from Links table
+                if (checkedUrls.Contains(link.Url))
+                {
+                    continue;
+                }
+                
+                var diagnosticInfo = linkDiagnostics.GetValueOrDefault(link.Url);
+                await CheckLinkAsync(ctx, link, diagnosticInfo, findingsMap, ct);
             }
 
             // Report all unique findings with occurrence counts
@@ -197,50 +226,56 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         return Task.FromResult(links);
     }
 
-    private async Task AnalyzeLinksWithDiagnosticsAsync(UrlContext ctx, List<LinkInfo> links, Dictionary<string, FindingTracker> findingsMap, CancellationToken ct)
+    /// <summary>
+    /// Loads stored diagnostic metadata from the Links table (captured in Phase 1).
+    /// Returns a dictionary mapping link URL to diagnostic info.
+    /// </summary>
+    private async Task<Dictionary<string, ElementDiagnosticInfo>> LoadStoredLinkDiagnosticsAsync(UrlContext ctx)
     {
-        // Extract base tag for URL resolution
-        Uri? baseTagUri = null;
-        if (!string.IsNullOrEmpty(ctx.RenderedHtml))
-        {
-            baseTagUri = UrlHelper.ExtractBaseTag(ctx.RenderedHtml, ctx.Url);
-        }
+        var diagnostics = new Dictionary<string, ElementDiagnosticInfo>(StringComparer.OrdinalIgnoreCase);
         
-        // Get all anchor elements from the page for diagnostic info
-        var anchorElements = await ctx.Page!.QuerySelectorAllAsync("a[href]");
-        var anchorDiagnostics = new Dictionary<string, ElementDiagnosticInfo>();
-
-        foreach (var element in anchorElements)
+        try
         {
-            try
+            // Get all outgoing links from this URL (includes diagnostic metadata)
+            var storedLinks = await _repositoryAccessor.GetLinksByFromUrlAsync(ctx.Project.ProjectId, ctx.Metadata.UrlId);
+            
+            foreach (var storedLink in storedLinks)
             {
-                var href = await element.GetAttributeAsync("href");
-                if (!string.IsNullOrEmpty(href))
+                // Only add if we have diagnostic data
+                if (!string.IsNullOrEmpty(storedLink.DomPath))
                 {
-                    var resolvedUrl = ResolveUrl(ctx.Url, href, baseTagUri);
-                    var diagnosticInfo = await ElementDiagnostics.GetElementInfoAsync(ctx.Page, element);
-                    anchorDiagnostics[resolvedUrl] = diagnosticInfo;
+                    var diagnosticInfo = new ElementDiagnosticInfo
+                    {
+                        TagName = storedLink.ElementTag ?? "unknown",
+                        DomPath = storedLink.DomPath,
+                        IsVisible = storedLink.IsVisible ?? true,
+                        BoundingBox = (storedLink.PositionX.HasValue && storedLink.PositionY.HasValue)
+                            ? new BoundingBoxInfo
+                            {
+                                X = storedLink.PositionX.Value,
+                                Y = storedLink.PositionY.Value,
+                                Width = storedLink.ElementWidth ?? 0,
+                                Height = storedLink.ElementHeight ?? 0
+                            }
+                            : null,
+                        HtmlContext = storedLink.HtmlSnippet ?? "",
+                        ParentElement = !string.IsNullOrEmpty(storedLink.ParentTag)
+                            ? new ParentElementInfo { TagName = storedLink.ParentTag }
+                            : null
+                    };
+                    
+                    diagnostics[storedLink.ToUrl] = diagnosticInfo;
                 }
             }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Error getting diagnostic info for anchor element");
-            }
+            
+            _logger.LogDebug("Loaded diagnostics for {Count} links from database for {Url}", diagnostics.Count, ctx.Url);
         }
-
-        // Check each link
-        foreach (var link in links)
+        catch (Exception ex)
         {
-            await CheckLinkAsync(ctx, link, anchorDiagnostics.GetValueOrDefault(link.Url), findingsMap, ct);
+            _logger.LogWarning(ex, "Error loading stored link diagnostics for {Url}", ctx.Url);
         }
-    }
-
-    private async Task AnalyzeLinksFromHtmlAsync(UrlContext ctx, List<LinkInfo> links, Dictionary<string, FindingTracker> findingsMap, CancellationToken ct)
-    {
-        foreach (var link in links)
-        {
-            await CheckLinkAsync(ctx, link, null, findingsMap, ct);
-        }
+        
+        return diagnostics;
     }
 
     private async Task CheckLinkAsync(UrlContext ctx, LinkInfo link, ElementDiagnosticInfo? diagnosticInfo, Dictionary<string, FindingTracker> findingsMap, CancellationToken ct)
@@ -260,13 +295,33 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         if (!isExternal)
         {
             // Internal link - check database
+            // Phase 2: All internal resources are guaranteed to be crawled and in database
             status = await _checker.CheckLinkStatusAsync(ctx.Project.ProjectId, link.Url, ct);
+            
+            // CRITICAL: If status is null, it means the URL is not in the database or hasn't been crawled
+            // This is unexpected in Phase 2 and should be reported as a broken link
+            if (!status.HasValue)
+            {
+                // Report as broken - URL should have been crawled but wasn't found
+                var key = $"{link.Url}|LINK_NOT_CRAWLED";
+                var impactNote = "This internal resource was discovered but not found in the crawl database. This typically indicates a broken link or a resource that failed to load.";
+                var recommendation = "Verify this URL is accessible and returns a valid response. Check for typos in the URL or missing files on the server.";
+                
+                TrackFinding(findingsMap,
+                    key,
+                    Severity.Error,
+                    $"BROKEN_{link.LinkType.ToUpperInvariant()}",
+                    $"Broken {link.LinkType}: {link.Url} (not found in crawl database)",
+                    CreateFindingData(ctx, link, null, false, diagnosticInfo, recommendation: recommendation, impactNote: impactNote));
+                
+                return; // Don't continue checking this link
+            }
             
             // Check if this URL has a redirect
             var urlWithAnchor = link.Url.Split('#')[0];
             hasRedirect = await CheckForRedirectAsync(ctx.Project.ProjectId, urlWithAnchor, ct);
         }
-        else if (_checkExternalLinks && _externalChecker != null)
+        else if (_checkExternalLinks)
         {
             // External link - check via HTTP using project's User-Agent setting
             var result = await _externalChecker.CheckUrlAsync(link.Url, ctx.Project.UserAgent, ct);
@@ -401,15 +456,32 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
 
     private async Task CheckAnchorLinkAsync(UrlContext ctx, LinkInfo link, ElementDiagnosticInfo? diagnosticInfo, Dictionary<string, FindingTracker> findingsMap, CancellationToken _)
     {
-        if (ctx.Page == null || string.IsNullOrEmpty(link.AnchorId))
+        if (string.IsNullOrEmpty(link.AnchorId))
             return;
 
         try
         {
-            // Check if the target anchor exists in the page
-            var targetElement = await ctx.Page.QuerySelectorAsync($"#{link.AnchorId}, [name='{link.AnchorId}']");
+            bool anchorExists = false;
             
-            if (targetElement == null)
+            // Check if the target anchor exists - works in both Phase 1 and Phase 2
+            if (ctx.Page != null)
+            {
+                // Phase 1: Use live browser page for accurate detection
+                var targetElement = await ctx.Page.QuerySelectorAsync($"#{link.AnchorId}, [name='{link.AnchorId}']");
+                anchorExists = targetElement != null;
+            }
+            else if (!string.IsNullOrEmpty(ctx.RenderedHtml))
+            {
+                // Phase 2: Check saved HTML using HtmlAgilityPack
+                var doc = new HtmlDocument();
+                doc.LoadHtml(ctx.RenderedHtml);
+                
+                // Check for id attribute or name attribute matching the anchor
+                var targetElement = doc.DocumentNode.SelectSingleNode($"//*[@id='{link.AnchorId}'] | //*[@name='{link.AnchorId}']");
+                anchorExists = targetElement != null;
+            }
+            
+            if (!anchorExists)
             {
                 // Dedupe by anchor ID only
                 var key = $"#{link.AnchorId}|BROKEN_ANCHOR_LINK";
@@ -618,7 +690,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         if (_disposed)
             return;
 
-        _externalChecker?.Dispose();
+        _externalChecker.Dispose();
         _disposed = true;
     }
 }

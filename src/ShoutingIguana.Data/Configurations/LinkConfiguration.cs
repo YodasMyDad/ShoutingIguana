@@ -16,6 +16,19 @@ public class LinkConfiguration : IEntityTypeConfiguration<Link>
         
         builder.Property(e => e.RelAttribute)
             .HasMaxLength(255);
+        
+        // Diagnostic fields
+        builder.Property(e => e.DomPath)
+            .HasMaxLength(1000);
+        
+        builder.Property(e => e.ElementTag)
+            .HasMaxLength(50);
+        
+        builder.Property(e => e.HtmlSnippet)
+            .HasMaxLength(1000);
+        
+        builder.Property(e => e.ParentTag)
+            .HasMaxLength(100);
 
         builder.HasIndex(e => e.FromUrlId);
         builder.HasIndex(e => e.ToUrlId);

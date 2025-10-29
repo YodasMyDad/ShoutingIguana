@@ -19,8 +19,9 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
     // Track inbound links (URL -> count)
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, int>> InlinkCountsByProject = new();
     
-    // Track anchor text per URL
-    private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, List<string>>> AnchorTextsByProject = new();
+    // Track anchor text per URL with source page information
+    // Key: ProjectId -> TargetUrl -> List<(SourceUrl, AnchorText)>
+    private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, List<(string SourceUrl, string AnchorText)>>> AnchorTextsByProject = new();
 
     public override string Key => "InternalLinking";
     public override string DisplayName => "Internal Linking";
@@ -64,7 +65,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
             foreach (var link in internalLinks)
             {
                 TrackInlink(ctx.Project.ProjectId, link.TargetUrl);
-                TrackAnchorText(ctx.Project.ProjectId, link.TargetUrl, link.AnchorText);
+                TrackAnchorText(ctx.Project.ProjectId, link.TargetUrl, ctx.Url.ToString(), link.AnchorText);
             }
 
             // Analyze this URL's linking
@@ -134,18 +135,18 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         projectInlinks.AddOrUpdate(targetUrl, 1, (_, count) => count + 1);
     }
 
-    private void TrackAnchorText(int projectId, string targetUrl, string anchorText)
+    private void TrackAnchorText(int projectId, string targetUrl, string sourceUrl, string anchorText)
     {
         if (string.IsNullOrWhiteSpace(anchorText))
         {
             return;
         }
 
-        var projectAnchors = AnchorTextsByProject.GetOrAdd(projectId, _ => new ConcurrentDictionary<string, List<string>>());
+        var projectAnchors = AnchorTextsByProject.GetOrAdd(projectId, _ => new ConcurrentDictionary<string, List<(string, string)>>());
         projectAnchors.AddOrUpdate(
             targetUrl,
-            _ => new List<string> { anchorText },
-            (_, list) => { lock (list) { list.Add(anchorText); } return list; });
+            _ => new List<(string, string)> { (sourceUrl, anchorText) },
+            (_, list) => { lock (list) { list.Add((sourceUrl, anchorText)); } return list; });
     }
 
     private async Task AnalyzeOutlinksAsync(UrlContext ctx, int outlinkCount)
@@ -260,7 +261,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
             return;
         }
 
-        List<string> textsCopy;
+        List<(string SourceUrl, string AnchorText)> textsCopy;
         lock (anchorTexts)
         {
             textsCopy = anchorTexts.ToList();
@@ -271,47 +272,38 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
             return;
         }
 
-        // Analyze anchor text diversity
-        var uniqueTexts = textsCopy.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var totalLinks = textsCopy.Count;
-        var uniqueCount = uniqueTexts.Count;
-
-        // Check for over-optimization (same anchor text used for all links)
-        if (uniqueCount == 1 && totalLinks >= 5)
-        {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"All {totalLinks} links use identical anchor text:")
-                .AddItem($"  \"{uniqueTexts[0]}\"")
-                .BeginNested("⚠️ Over-optimization Risk")
-                    .AddItem("Identical anchor text looks unnatural")
-                    .AddItem("May be seen as manipulative by search engines")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Vary anchor text naturally")
-                    .AddItem("Use different phrases that describe the page")
-                    .AddItem("Mix exact match, partial match, and branded anchors")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("anchorText", uniqueTexts[0])
-                .WithTechnicalMetadata("linkCount", totalLinks)
-                .Build();
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "ANCHOR_TEXT_OVER_OPTIMIZATION",
-                $"All links to this page use identical anchor text: \"{uniqueTexts[0]}\"",
-                details);
-        }
 
         // Check for generic anchor text
         var genericTerms = new[] { "click here", "read more", "learn more", "more", "here", "link" };
-        var genericCount = textsCopy.Count(t => genericTerms.Contains(t.ToLowerInvariant()));
+        var genericLinks = textsCopy.Where(t => genericTerms.Contains(t.AnchorText.ToLowerInvariant())).ToList();
+        var genericCount = genericLinks.Count;
 
         if (genericCount > totalLinks * 0.5)
         {
-            var details = FindingDetailsBuilder.Create()
+            // Get source pages with generic anchor text
+            var genericSourcePages = genericLinks
+                .Select(t => t.SourceUrl)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(10)
+                .ToList();
+            
+            var builder = FindingDetailsBuilder.Create()
                 .AddItem($"Generic anchor text: {genericCount} of {totalLinks} links")
-                .AddItem($"Percentage: {(genericCount * 100 / totalLinks)}%")
-                .BeginNested("⚠️ Impact")
+                .AddItem($"Percentage: {(genericCount * 100 / totalLinks)}%");
+            
+            builder.BeginNested("📄 Pages with generic anchor text");
+            foreach (var sourcePage in genericSourcePages.Take(5))
+            {
+                var genericAnchor = genericLinks.FirstOrDefault(l => l.SourceUrl.Equals(sourcePage, StringComparison.OrdinalIgnoreCase)).AnchorText;
+                builder.AddItem($"{sourcePage} (\"{genericAnchor}\")");
+            }
+            if (genericSourcePages.Count > 5)
+            {
+                builder.AddItem($"... and {genericSourcePages.Count - 5} more");
+            }
+            
+            builder.BeginNested("⚠️ Impact")
                     .AddItem("Generic anchors provide little SEO value")
                     .AddItem("Miss opportunity to use relevant keywords")
                 .BeginNested("💡 Recommendations")
@@ -321,14 +313,14 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
                 .WithTechnicalMetadata("url", ctx.Url.ToString())
                 .WithTechnicalMetadata("genericCount", genericCount)
                 .WithTechnicalMetadata("totalLinks", totalLinks)
-                .Build();
+                .WithTechnicalMetadata("sourcePages", genericSourcePages.ToArray());
             
             await ctx.Findings.ReportAsync(
                 Key,
                 Severity.Info,
                 "GENERIC_ANCHOR_TEXT",
                 $"Many links use generic anchor text ({genericCount}/{totalLinks})",
-                details);
+                builder.Build());
         }
     }
     

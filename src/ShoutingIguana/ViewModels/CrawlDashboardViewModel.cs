@@ -21,7 +21,13 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
     private Task? _navigationTask;
 
     [ObservableProperty]
+    private string _currentPhase = "Discovery";
+
+    [ObservableProperty]
     private int _urlsCrawled;
+
+    [ObservableProperty]
+    private int _urlsAnalyzed;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowEmptyState))]
@@ -221,31 +227,45 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
         {
             var wasCrawling = IsCrawling;
             
+            // Update phase
+            CurrentPhase = e.CurrentPhase == CrawlPhase.Discovery ? "Discovery" : "Analysis";
+            
             UrlsCrawled = e.UrlsCrawled;
+            UrlsAnalyzed = e.UrlsAnalyzed;
             TotalDiscovered = e.TotalDiscovered;
             QueueSize = Math.Max(0, e.QueueSize); // Ensure queue size is never negative
             ActiveWorkers = e.ActiveWorkers;
             ErrorCount = e.ErrorCount;
             ElapsedTime = e.Elapsed.ToString(@"hh\:mm\:ss");
 
-            if (TotalDiscovered > 0)
+            // Calculate progress based on current phase
+            if (e.CurrentPhase == CrawlPhase.Discovery && TotalDiscovered > 0)
             {
-                // Calculate progress and cap at 100% to prevent display issues
+                // Phase 1: Progress based on crawled vs discovered
                 var calculatedProgress = (double)UrlsCrawled / TotalDiscovered * 100;
+                ProgressPercentage = Math.Min(100.0, calculatedProgress);
+            }
+            else if (e.CurrentPhase == CrawlPhase.Analysis && UrlsCrawled > 0)
+            {
+                // Phase 2: Progress based on analyzed vs crawled
+                var calculatedProgress = (double)UrlsAnalyzed / UrlsCrawled * 100;
                 ProgressPercentage = Math.Min(100.0, calculatedProgress);
             }
 
             if (!string.IsNullOrEmpty(e.LastCrawledUrl))
             {
-                RecentActivity = $"Last crawled: {e.LastCrawledUrl}";
+                var phaseAction = e.CurrentPhase == CrawlPhase.Discovery ? "crawled" : "analyzed";
+                RecentActivity = $"Last {phaseAction}: {e.LastCrawledUrl}";
             }
             
-            // Update status message based on crawl state
+            // Update status message based on crawl state and phase
             if (_crawlEngine.IsCrawling)
             {
+                var phaseText = e.CurrentPhase == CrawlPhase.Discovery ? "Phase 1: Discovery" : "Phase 2: Analysis";
+                
                 if (ActiveWorkers > 0)
                 {
-                    StatusMessage = $"Crawling... {ActiveWorkers} worker{(ActiveWorkers == 1 ? "" : "s")} active";
+                    StatusMessage = $"{phaseText} - {ActiveWorkers} worker{(ActiveWorkers == 1 ? "" : "s")} active";
                 }
                 else if (QueueSize > 0)
                 {

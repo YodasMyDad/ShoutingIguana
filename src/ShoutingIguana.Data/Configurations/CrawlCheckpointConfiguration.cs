@@ -14,6 +14,7 @@ public class CrawlCheckpointConfiguration : IEntityTypeConfiguration<CrawlCheckp
         
         builder.Property(c => c.ProjectId).IsRequired();
         builder.Property(c => c.CreatedAt).IsRequired();
+        builder.Property(c => c.Phase).HasMaxLength(50).IsRequired();
         builder.Property(c => c.Status).HasMaxLength(50).IsRequired();
         builder.Property(c => c.LastCrawledUrl).HasMaxLength(2048);
         

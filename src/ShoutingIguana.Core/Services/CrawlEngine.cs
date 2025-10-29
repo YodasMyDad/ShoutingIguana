@@ -28,10 +28,12 @@ public class CrawlEngine(
     
     // Performance counters
     private int _urlsCrawled;
+    private int _urlsAnalyzed;
     private int _totalDiscovered;
     private int _activeWorkers;
     private int _errorCount;
     private int _queueSize; // Cached queue size
+    private CrawlPhase _currentPhase;
     private Stopwatch? _stopwatch;
     private TimeSpan _pausedTime = TimeSpan.Zero;
     private DateTime? _pauseStartTime;
@@ -63,10 +65,12 @@ public class CrawlEngine(
         _currentProjectId = projectId;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _urlsCrawled = 0;
+        _urlsAnalyzed = 0;
         _totalDiscovered = 0;
         _activeWorkers = 0;
         _errorCount = 0;
         _queueSize = 0;
+        _currentPhase = CrawlPhase.Discovery;
         _pausedTime = TimeSpan.Zero;
         
         // Reset adaptive loading strategy for new crawl
@@ -329,6 +333,7 @@ public class CrawlEngine(
             }
         }
 
+        _logger.LogInformation("=== PHASE 1: DISCOVERY ===");
         _logger.LogInformation("Starting {WorkerCount} workers for project {ProjectId}. Total discovered: {TotalDiscovered}", 
             settings.ConcurrentRequests, projectId, _totalDiscovered);
 
@@ -345,8 +350,18 @@ public class CrawlEngine(
         // Wait for all worker tasks to complete (not including progress reporter)
         await Task.WhenAll(workers).ConfigureAwait(false);
         
-        _logger.LogInformation("All workers completed. Crawled {UrlsCrawled} URLs, discovered {TotalDiscovered} total", 
+        _logger.LogInformation("Phase 1 complete. Crawled {UrlsCrawled} URLs, discovered {TotalDiscovered} total", 
             _urlsCrawled, _totalDiscovered);
+        
+        // PHASE 2: Analysis - Execute plugins on all crawled URLs
+        _logger.LogInformation("=== PHASE 2: ANALYSIS ===");
+        _currentPhase = CrawlPhase.Analysis;
+        _urlsAnalyzed = 0;
+        SendProgressUpdate(projectId);
+        
+        await RunAnalysisPhaseAsync(projectId, settings, cancellationToken).ConfigureAwait(false);
+        
+        _logger.LogInformation("Phase 2 complete. Analyzed {UrlsAnalyzed} URLs", _urlsAnalyzed);
 
         // Send final progress update before cancelling progress reporter
         SendProgressUpdate(projectId);
@@ -487,20 +502,15 @@ public class CrawlEngine(
                         await SaveRedirectChainAsync(urlEntity.Id, redirectChain).ConfigureAwait(false);
                     }
 
-                    // Extract and save links BEFORE plugin execution
-                    // This allows plugins (like LinkGraph) to query link relationships
+                    // Extract and save links (for link graph and discovery)
+                    // Pass the page so we can capture diagnostic metadata
                     if (urlData.IsSuccess && urlData.IsHtml && queueItem.Depth < settings.MaxCrawlDepth)
                     {
-                        await ProcessLinksAsync(projectId, urlEntity, renderedHtml ?? "", queueItem.Address, queueItem.Depth, settings.BaseUrl).ConfigureAwait(false);
+                        await ProcessLinksAsync(projectId, urlEntity, renderedHtml ?? "", queueItem.Address, queueItem.Depth, settings.BaseUrl, page).ConfigureAwait(false);
                     }
 
-                    // Execute plugin tasks (now links are available in database)
-                    using (var pluginScope = _serviceProvider.CreateScope())
-                    {
-                        var pluginExecutor = pluginScope.ServiceProvider.GetRequiredService<PluginExecutor>();
-                        var headers = urlData.Headers.GroupBy(h => h.Key.ToLowerInvariant()).ToDictionary(g => g.Key, g => g.First().Value);
-                        await pluginExecutor.ExecuteTasksAsync(urlEntity, page, renderedHtml, headers, settings, userAgent, projectId, cancellationToken).ConfigureAwait(false);
-                    }
+                    // PHASE 1: Plugin execution is deferred to Phase 2 (Analysis)
+                    // This eliminates race conditions where plugins run before resources are crawled
 
                     using (var scope = _serviceProvider.CreateScope())
                     {
@@ -572,6 +582,129 @@ public class CrawlEngine(
                 // Update last crawled URL for progress display
                 _lastCrawledUrl = queueItem.Address;
                 _lastCrawledStatus = 0; // Indicate failure
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _activeWorkers);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Phase 2: Analysis - Execute plugins on all crawled URLs.
+    /// </summary>
+    private async Task RunAnalysisPhaseAsync(int projectId, Configuration.ProjectSettings settings, CancellationToken cancellationToken)
+    {
+        // Query all successfully crawled URLs
+        List<Url> urlsToAnalyze;
+        using (var scope = _serviceProvider.CreateScope())
+        {
+            var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
+            urlsToAnalyze = await urlRepository.GetCompletedUrlsAsync(projectId).ConfigureAwait(false);
+        }
+        
+        _logger.LogInformation("Found {Count} URLs to analyze", urlsToAnalyze.Count);
+        
+        if (urlsToAnalyze.Count == 0)
+        {
+            _logger.LogWarning("No URLs to analyze in Phase 2");
+            return;
+        }
+        
+        // Create a queue of URL IDs to process
+        var analysisQueue = new System.Collections.Concurrent.ConcurrentQueue<int>(urlsToAnalyze.Select(u => u.Id));
+        
+        // Create analysis worker tasks
+        var workers = new List<Task>();
+        int workerCount = Math.Min(settings.ConcurrentRequests, 4); // Limit analysis workers (no network needed)
+        
+        for (int i = 0; i < workerCount; i++)
+        {
+            workers.Add(AnalysisWorkerAsync(projectId, settings, analysisQueue, cancellationToken));
+        }
+        
+        // Wait for all analysis workers to complete
+        await Task.WhenAll(workers).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Worker for Phase 2 analysis - processes URLs from the analysis queue.
+    /// </summary>
+    private async Task AnalysisWorkerAsync(
+        int projectId, 
+        Configuration.ProjectSettings settings, 
+        System.Collections.Concurrent.ConcurrentQueue<int> analysisQueue,
+        CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            // Wait if paused
+            _pauseEvent.Wait(cancellationToken);
+            
+            if (!analysisQueue.TryDequeue(out int urlId))
+            {
+                // No more URLs to analyze
+                break;
+            }
+            
+            try
+            {
+                Interlocked.Increment(ref _activeWorkers);
+                
+                // Load URL entity from database with headers
+                Url? urlEntity;
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
+                    urlEntity = await urlRepository.GetByIdAsync(urlId).ConfigureAwait(false);
+                }
+                
+                if (urlEntity == null)
+                {
+                    _logger.LogWarning("URL ID {UrlId} not found for analysis", urlId);
+                    continue;
+                }
+                
+                _logger.LogDebug("Analyzing URL: {Url}", urlEntity.Address);
+                
+                // Extract headers from loaded entity
+                var headers = urlEntity.Headers
+                    .GroupBy(h => h.Name.ToLowerInvariant())
+                    .ToDictionary(g => g.Key, g => g.First().Value);
+                
+                // Execute plugin tasks with saved HTML (no live browser page needed)
+                using (var pluginScope = _serviceProvider.CreateScope())
+                {
+                    var pluginExecutor = pluginScope.ServiceProvider.GetRequiredService<PluginExecutor>();
+                    var userAgent = settings.GetUserAgentString();
+                    
+                    // Pass NULL for page - plugins will work from saved HTML
+                    await pluginExecutor.ExecuteTasksAsync(
+                        urlEntity, 
+                        page: null,  // No live browser page in Phase 2
+                        urlEntity.RenderedHtml, 
+                        headers, 
+                        settings, 
+                        userAgent, 
+                        projectId, 
+                        cancellationToken).ConfigureAwait(false);
+                }
+                
+                Interlocked.Increment(ref _urlsAnalyzed);
+                
+                // Update last analyzed URL for progress display
+                _lastCrawledUrl = urlEntity.Address;
+                _lastCrawledStatus = urlEntity.HttpStatus ?? 0;
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Analysis cancelled");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error analyzing URL ID {UrlId}", urlId);
+                Interlocked.Increment(ref _errorCount);
             }
             finally
             {
@@ -767,21 +900,14 @@ public class CrawlEngine(
         
         try
         {
-            // Try HEAD request first (faster, only gets headers)
-            var request = new HttpRequestMessage(HttpMethod.Head, url);
+            // IMPORTANT: Use GET instead of HEAD for static resources
+            // Some servers (especially .NET/ASP.NET) return different status codes for HEAD vs GET
+            // HEAD might return 200 even when file doesn't exist, while GET returns 404
+            // This matches Screaming Frog behavior which uses GET for all resources
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
             HttpResponseMessage response;
             
-            try
-            {
-                response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            }
-            catch (HttpRequestException ex) when (request.Method == HttpMethod.Head)
-            {
-                // Some servers don't support HEAD, fallback to GET
-                _logger.LogDebug("HEAD request failed for {Url} ({Error}), trying GET", url, ex.Message);
-                request = new HttpRequestMessage(HttpMethod.Get, url);
-                response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            }
+            response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
 
             using (response)
             {
@@ -1012,6 +1138,12 @@ public class CrawlEngine(
             existing.LastCrawledUtc = DateTime.UtcNow;
             existing.RobotsAllowed = robotsAllowed;
             
+            // Store rendered HTML for Phase 2 analysis (only for successful HTML pages)
+            if (fetchResult.IsSuccess && fetchResult.IsHtml && !string.IsNullOrEmpty(renderedHtml))
+            {
+                existing.RenderedHtml = renderedHtml;
+            }
+            
             // Basic meta
             existing.Title = meta.Title;
             existing.MetaDescription = meta.MetaDescription;
@@ -1081,6 +1213,9 @@ public class CrawlEngine(
             ContentType = fetchResult.ContentType,
             ContentLength = fetchResult.ContentLength,
             RobotsAllowed = robotsAllowed,
+            
+            // Store rendered HTML for Phase 2 analysis (only for successful HTML pages)
+            RenderedHtml = (fetchResult.IsSuccess && fetchResult.IsHtml && !string.IsNullOrEmpty(renderedHtml)) ? renderedHtml : null,
             
             // Basic meta
             Title = meta.Title,
@@ -1538,10 +1673,18 @@ public class CrawlEngine(
         }
     }
 
-    private async Task ProcessLinksAsync(int projectId, Url fromUrl, string htmlContent, string currentPageUrl, int currentDepth, string projectBaseUrl)
+    private async Task ProcessLinksAsync(int projectId, Url fromUrl, string htmlContent, string currentPageUrl, int currentDepth, string projectBaseUrl, Microsoft.Playwright.IPage? page)
     {
-        var extractedLinks = await _linkExtractor.ExtractLinksAsync(htmlContent, currentPageUrl).ConfigureAwait(false);
+        var extractedLinksEnum = await _linkExtractor.ExtractLinksAsync(htmlContent, currentPageUrl).ConfigureAwait(false);
+        var extractedLinks = extractedLinksEnum.ToList(); // Materialize to avoid multiple enumeration
         var projectBaseUri = new Uri(projectBaseUrl);
+        
+        // Gather diagnostic metadata if we have a live browser page (Phase 1)
+        Dictionary<string, ElementDiagnosticInfo>? diagnosticsMap = null;
+        if (page != null)
+        {
+            diagnosticsMap = await GatherLinkDiagnosticsAsync(page, currentPageUrl, extractedLinks).ConfigureAwait(false);
+        }
 
         foreach (var link in extractedLinks)
         {
@@ -1616,6 +1759,29 @@ public class CrawlEngine(
                     IsUgc = isUgc,
                     IsSponsored = isSponsored
                 };
+                
+                // Add diagnostic metadata if captured (Phase 1 only)
+                if (diagnosticsMap != null && diagnosticsMap.TryGetValue(link.Url, out var diagnosticInfo))
+                {
+                    linkEntity.DomPath = diagnosticInfo.DomPath;
+                    linkEntity.ElementTag = diagnosticInfo.TagName;
+                    linkEntity.IsVisible = diagnosticInfo.IsVisible;
+                    linkEntity.PositionX = (int?)diagnosticInfo.BoundingBox?.X;
+                    linkEntity.PositionY = (int?)diagnosticInfo.BoundingBox?.Y;
+                    linkEntity.ElementWidth = (int?)diagnosticInfo.BoundingBox?.Width;
+                    linkEntity.ElementHeight = (int?)diagnosticInfo.BoundingBox?.Height;
+                    
+                    // Trim HTML snippet to max 1000 chars
+                    if (!string.IsNullOrEmpty(diagnosticInfo.HtmlContext))
+                    {
+                        linkEntity.HtmlSnippet = diagnosticInfo.HtmlContext.Length > 1000 
+                            ? diagnosticInfo.HtmlContext.Substring(0, 1000) 
+                            : diagnosticInfo.HtmlContext;
+                    }
+                    
+                    linkEntity.ParentTag = diagnosticInfo.ParentElement;
+                }
+                
                 await linkRepository.CreateAsync(linkEntity).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -1623,6 +1789,167 @@ public class CrawlEngine(
                 _logger.LogWarning(ex, "Failed to save link from {FromUrl} to {ToUrl}", fromUrl.Address, link.Url);
             }
         }
+    }
+    
+    /// <summary>
+    /// Gathers diagnostic metadata for all links on a page (Phase 1 only).
+    /// Returns a dictionary mapping resolved URL to diagnostic info.
+    /// </summary>
+    private async Task<Dictionary<string, ElementDiagnosticInfo>> GatherLinkDiagnosticsAsync(
+        Microsoft.Playwright.IPage page,
+        string currentPageUrl,
+        IEnumerable<ExtractedLink> extractedLinks)
+    {
+        var diagnostics = new Dictionary<string, ElementDiagnosticInfo>(StringComparer.OrdinalIgnoreCase);
+        
+        try
+        {
+            var currentUri = new Uri(currentPageUrl);
+            
+            // Build a set of URLs we care about for faster lookup
+            var targetUrls = new HashSet<string>(extractedLinks.Select(l => l.Url), StringComparer.OrdinalIgnoreCase);
+            
+            // Query all link-related elements: a, link, script, img
+            var elements = await page.QuerySelectorAllAsync("a[href], link[href], script[src], img[src]").ConfigureAwait(false);
+            
+            _logger.LogDebug("Gathering diagnostics for {Count} elements on {Url}", elements.Count, currentPageUrl);
+            
+            foreach (var element in elements)
+            {
+                try
+                {
+                    // Get the URL attribute (href or src)
+                    var href = await element.GetAttributeAsync("href").ConfigureAwait(false)
+                             ?? await element.GetAttributeAsync("src").ConfigureAwait(false);
+                    
+                    if (string.IsNullOrEmpty(href))
+                        continue;
+                    
+                    // Resolve to absolute URL to match extractedLinks
+                    string resolvedUrl;
+                    try
+                    {
+                        if (Uri.TryCreate(href, UriKind.Absolute, out var absoluteUri))
+                        {
+                            resolvedUrl = absoluteUri.ToString();
+                        }
+                        else if (Uri.TryCreate(currentUri, href, out var resolvedUri))
+                        {
+                            resolvedUrl = resolvedUri.ToString();
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                        
+                        // Remove fragment for matching
+                        var builder = new UriBuilder(resolvedUrl) { Fragment = string.Empty };
+                        resolvedUrl = builder.Uri.ToString();
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+                    
+                    // Only gather diagnostics for links we're actually tracking
+                    if (!targetUrls.Contains(resolvedUrl))
+                        continue;
+                    
+                    // Gather all diagnostic info in a SINGLE JavaScript evaluation (performance optimization)
+                    var diagnosticJson = await element.EvaluateAsync<string>(
+                        @"(el) => {
+                            // Get bounding box
+                            const rect = el.getBoundingClientRect();
+                            
+                            // Get visibility
+                            const style = window.getComputedStyle(el);
+                            const isVisible = style.display !== 'none' && 
+                                            style.visibility !== 'hidden' && 
+                                            style.opacity !== '0' &&
+                                            rect.width > 0 && 
+                                            rect.height > 0;
+                            
+                            // Get DOM path
+                            const path = [];
+                            let current = el;
+                            while (current && current.nodeType === Node.ELEMENT_NODE) {
+                                let selector = current.nodeName.toLowerCase();
+                                if (current.id) {
+                                    selector += '#' + current.id;
+                                    path.unshift(selector);
+                                    break;
+                                }
+                                if (current.className && typeof current.className === 'string') {
+                                    const classes = current.className.trim().split(/\s+/).join('.');
+                                    if (classes) selector += '.' + classes;
+                                }
+                                if (current.parentElement) {
+                                    const siblings = Array.from(current.parentElement.children);
+                                    const index = siblings.indexOf(current) + 1;
+                                    if (siblings.length > 1) {
+                                        selector += ':nth-child(' + index + ')';
+                                    }
+                                }
+                                path.unshift(selector);
+                                current = current.parentElement;
+                                if (path.length >= 10) break;
+                            }
+                            
+                            return JSON.stringify({
+                                tagName: el.tagName.toLowerCase(),
+                                domPath: path.join(' > '),
+                                isVisible: isVisible,
+                                boundingBox: {
+                                    x: rect.x,
+                                    y: rect.y,
+                                    width: rect.width,
+                                    height: rect.height
+                                },
+                                outerHtml: el.outerHTML,
+                                parentTag: el.parentElement?.tagName.toLowerCase() || null
+                            });
+                        }",
+                        element).ConfigureAwait(false);
+                    
+                    // Parse the JSON response (case-insensitive to handle camelCase from JS)
+                    var diagnostic = System.Text.Json.JsonSerializer.Deserialize<DiagnosticData>(diagnosticJson, 
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    
+                    if (diagnostic != null)
+                    {
+                        var diagnosticInfo = new ElementDiagnosticInfo
+                        {
+                            TagName = diagnostic.TagName ?? "unknown",
+                            DomPath = diagnostic.DomPath ?? "unknown",
+                            IsVisible = diagnostic.IsVisible,
+                            BoundingBox = new BoundingBoxInfo
+                            {
+                                X = diagnostic.BoundingBox?.X ?? 0,
+                                Y = diagnostic.BoundingBox?.Y ?? 0,
+                                Width = diagnostic.BoundingBox?.Width ?? 0,
+                                Height = diagnostic.BoundingBox?.Height ?? 0
+                            },
+                            HtmlContext = diagnostic.OuterHtml ?? "",
+                            ParentElement = diagnostic.ParentTag
+                        };
+                        
+                        diagnostics[resolvedUrl] = diagnosticInfo;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Error gathering diagnostic for element");
+                }
+            }
+            
+            _logger.LogDebug("Captured diagnostics for {Count} links on {Url}", diagnostics.Count, currentPageUrl);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error gathering link diagnostics for {Url}", currentPageUrl);
+        }
+        
+        return diagnostics;
     }
 
     private async Task EnqueueUrlAsync(int projectId, string url, int depth, int priority, string projectBaseUrl, bool allowRecrawl = false)
@@ -1885,7 +2212,9 @@ public class CrawlEngine(
 
             var args = new CrawlProgressEventArgs
             {
+                CurrentPhase = _currentPhase,
                 UrlsCrawled = _urlsCrawled,
+                UrlsAnalyzed = _urlsAnalyzed,
                 TotalDiscovered = _totalDiscovered,
                 QueueSize = _queueSize, // Use cached queue size instead of database query
                 ActiveWorkers = _activeWorkers,
@@ -1918,7 +2247,9 @@ public class CrawlEngine(
             {
                 ProjectId = projectId,
                 CreatedAt = DateTime.UtcNow,
+                Phase = _currentPhase == CrawlPhase.Discovery ? "Discovery" : "Analysis",
                 UrlsCrawled = _urlsCrawled,
+                UrlsAnalyzed = _urlsAnalyzed,
                 ErrorCount = _errorCount,
                 QueueSize = _queueSize,
                 LastCrawledUrl = _lastCrawledUrl,
@@ -2160,6 +2491,51 @@ public class CrawlEngine(
         public string RawData { get; set; } = string.Empty;
         public bool IsValid { get; set; }
         public string? ValidationErrors { get; set; }
+    }
+    
+    /// <summary>
+    /// Element diagnostic information captured during Phase 1.
+    /// </summary>
+    private class ElementDiagnosticInfo
+    {
+        public string TagName { get; set; } = string.Empty;
+        public string DomPath { get; set; } = string.Empty;
+        public bool IsVisible { get; set; }
+        public BoundingBoxInfo? BoundingBox { get; set; }
+        public string HtmlContext { get; set; } = string.Empty;
+        public string? ParentElement { get; set; }
+    }
+    
+    /// <summary>
+    /// Bounding box coordinates for an element.
+    /// </summary>
+    private class BoundingBoxInfo
+    {
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
+    }
+    
+    /// <summary>
+    /// Helper class for deserializing diagnostic data from JavaScript.
+    /// </summary>
+    private class DiagnosticData
+    {
+        public string? TagName { get; set; }
+        public string? DomPath { get; set; }
+        public bool IsVisible { get; set; }
+        public DiagnosticBoundingBox? BoundingBox { get; set; }
+        public string? OuterHtml { get; set; }
+        public string? ParentTag { get; set; }
+    }
+    
+    private class DiagnosticBoundingBox
+    {
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
     }
 
     public void Dispose()

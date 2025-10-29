@@ -21,7 +21,8 @@ public class BrokenLinksPlugin : IPlugin
         
         context.RegisterTask(new BrokenLinksTask(
             context.CreateLogger(nameof(BrokenLinksTask)), 
-            checker, 
+            checker,
+            accessor,  // Pass repository accessor for diagnostic metadata
             checkExternalLinks, 
             checkAnchorLinks));
     }

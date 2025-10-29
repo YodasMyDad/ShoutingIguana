@@ -36,7 +36,9 @@ namespace ShoutingIguana.Data.Migrations
                         .Annotation("Sqlite:Autoincrement", true),
                     ProjectId = table.Column<int>(type: "INTEGER", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    Phase = table.Column<string>(type: "TEXT", maxLength: 50, nullable: false),
                     UrlsCrawled = table.Column<int>(type: "INTEGER", nullable: false),
+                    UrlsAnalyzed = table.Column<int>(type: "INTEGER", nullable: false),
                     ErrorCount = table.Column<int>(type: "INTEGER", nullable: false),
                     QueueSize = table.Column<int>(type: "INTEGER", nullable: false),
                     LastCrawledUrl = table.Column<string>(type: "TEXT", maxLength: 2048, nullable: true),
@@ -161,7 +163,8 @@ namespace ShoutingIguana.Data.Migrations
                     HasHsts = table.Column<bool>(type: "INTEGER", nullable: false),
                     ContentHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: true),
                     SimHash = table.Column<long>(type: "INTEGER", nullable: true),
-                    IsIndexable = table.Column<bool>(type: "INTEGER", nullable: true)
+                    IsIndexable = table.Column<bool>(type: "INTEGER", nullable: true),
+                    RenderedHtml = table.Column<string>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -295,7 +298,16 @@ namespace ShoutingIguana.Data.Migrations
                     RelAttribute = table.Column<string>(type: "TEXT", maxLength: 255, nullable: true),
                     IsNofollow = table.Column<bool>(type: "INTEGER", nullable: false),
                     IsUgc = table.Column<bool>(type: "INTEGER", nullable: false),
-                    IsSponsored = table.Column<bool>(type: "INTEGER", nullable: false)
+                    IsSponsored = table.Column<bool>(type: "INTEGER", nullable: false),
+                    DomPath = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: true),
+                    ElementTag = table.Column<string>(type: "TEXT", maxLength: 50, nullable: true),
+                    IsVisible = table.Column<bool>(type: "INTEGER", nullable: true),
+                    PositionX = table.Column<int>(type: "INTEGER", nullable: true),
+                    PositionY = table.Column<int>(type: "INTEGER", nullable: true),
+                    ElementWidth = table.Column<int>(type: "INTEGER", nullable: true),
+                    ElementHeight = table.Column<int>(type: "INTEGER", nullable: true),
+                    HtmlSnippet = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: true),
+                    ParentTag = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true)
                 },
                 constraints: table =>
                 {

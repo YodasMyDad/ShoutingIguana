@@ -310,8 +310,8 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             }
             else
             {
-                // Canonical URL not yet crawled or external
-                _logger.LogDebug("Canonical URL not found in crawled URLs: {Canonical} (may be external or not yet crawled)", canonicalUrl);
+                // Canonical URL not found in database (external or out of scope)
+                _logger.LogDebug("Canonical URL not found in crawled URLs: {Canonical} (likely external or out of scope)", canonicalUrl);
             }
         }
         catch (Exception ex)

@@ -15,6 +15,17 @@ public class Link
     public bool IsUgc { get; set; }
     public bool IsSponsored { get; set; }
     
+    // Element diagnostics (captured in Phase 1 with live browser page)
+    public string? DomPath { get; set; }         // CSS selector path to element
+    public string? ElementTag { get; set; }      // HTML tag name (a, link, script, img)
+    public bool? IsVisible { get; set; }         // Element visibility on page
+    public int? PositionX { get; set; }          // Bounding box X coordinate
+    public int? PositionY { get; set; }          // Bounding box Y coordinate
+    public int? ElementWidth { get; set; }       // Bounding box width
+    public int? ElementHeight { get; set; }      // Bounding box height
+    public string? HtmlSnippet { get; set; }     // Surrounding HTML context (max 500 chars)
+    public string? ParentTag { get; set; }       // Parent element tag name
+    
     // Navigation properties
     public Project Project { get; set; } = null!;
     public Url FromUrl { get; set; } = null!;

@@ -426,8 +426,10 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
     {
         try
         {
-            // Get the canonical URL from the first URL being processed
-            var canonicalUrl = ctx.Url;
+            // Use the project's base URL (homepage) as the canonical URL for variant checking
+            // Domain variants should redirect to the homepage variant, not to whatever page
+            // happened to be processed first during the crawl
+            var canonicalUrl = new Uri(ctx.Project.BaseUrl);
             
             _logger.LogInformation("Checking domain variants for canonical URL: {CanonicalUrl}", canonicalUrl);
             

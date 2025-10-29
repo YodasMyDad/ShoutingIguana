@@ -18,9 +18,19 @@ public class CrawlCheckpoint
     public DateTime CreatedAt { get; set; }
     
     /// <summary>
-    /// Number of URLs crawled at checkpoint.
+    /// Current crawl phase (Discovery or Analysis).
+    /// </summary>
+    public string Phase { get; set; } = "Discovery";
+    
+    /// <summary>
+    /// Number of URLs crawled at checkpoint (Phase 1).
     /// </summary>
     public int UrlsCrawled { get; set; }
+    
+    /// <summary>
+    /// Number of URLs analyzed at checkpoint (Phase 2).
+    /// </summary>
+    public int UrlsAnalyzed { get; set; }
     
     /// <summary>
     /// Number of errors at checkpoint.

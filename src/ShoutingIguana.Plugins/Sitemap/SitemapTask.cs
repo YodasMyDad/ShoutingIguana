@@ -158,11 +158,13 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
 
         _logger.LogInformation("Attempting to discover sitemap at {SitemapUrl}", sitemapUrl);
 
-        // Queue sitemap URL for crawling with high priority
-        await ctx.Enqueue.EnqueueAsync(sitemapUrl, depth: 1, priority: 10);
+        // NOTE: In Phase 2 (Analysis), ctx.Enqueue is a stub - sitemaps are already discovered in Phase 1
+        // This is fine because sitemap discovery happens via CrawlEngine's sitemap service in Phase 1
+        // We only analyze sitemaps here, not discover them
         
         // Don't report a finding here - actual findings will be reported when sitemap is crawled
         // (either SITEMAP_FOUND, SITEMAP_NOT_FOUND, or other validation issues)
+        await Task.CompletedTask;
     }
 
     private async Task AnalyzeSitemapFileAsync(UrlContext ctx)
@@ -362,7 +364,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             $"Sitemap index contains {sitemapElements.Count} sitemap(s)",
             details);
 
-        // Extract and queue child sitemaps
+        // Extract child sitemaps
         foreach (var sitemapElement in sitemapElements)
         {
             var locElement = sitemapElement.Element(ns + "loc");
@@ -371,8 +373,9 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 var sitemapUrl = locElement.Value;
                 _logger.LogInformation("Found child sitemap: {SitemapUrl}", sitemapUrl);
                 
-                // Queue for crawling with high priority
-                await ctx.Enqueue.EnqueueAsync(sitemapUrl, depth: ctx.Metadata.Depth + 1, priority: 10);
+                // NOTE: In Phase 2, ctx.Enqueue is a stub (sitemaps already discovered in Phase 1)
+                // Child sitemaps are automatically discovered by CrawlEngine's sitemap service
+                // We only validate and analyze sitemaps here
             }
         }
     }

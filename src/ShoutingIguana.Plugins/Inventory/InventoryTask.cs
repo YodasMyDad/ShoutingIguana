@@ -103,7 +103,9 @@ public class InventoryTask : UrlTaskBase
     private async Task AnalyzeUrlStructureAsync(UrlContext ctx)
     {
         var url = ctx.Url.ToString();
-        var urlLength = url.Length;
+        // Calculate URL length WITHOUT query string (SEO best practice)
+        var urlWithoutQuery = ctx.Url.GetLeftPart(UriPartial.Path);
+        var urlLength = urlWithoutQuery.Length;
 
         // Check URL length
         if (urlLength > MAX_URL_LENGTH)
@@ -338,7 +340,8 @@ public class InventoryTask : UrlTaskBase
             var contentLength = bodyText.Trim().Length;
             var estimatedWords = contentLength / 6; // Rough estimate: 6 chars per word average
 
-            if (contentLength < MIN_CONTENT_LENGTH)
+            // Check content length thresholds in order: most severe first
+            if (contentLength < WARNING_CONTENT_LENGTH)
             {
                 var details = FindingDetailsBuilder.Create()
                     .AddItem($"Content length: {contentLength} characters (~{estimatedWords} words)")
@@ -363,7 +366,7 @@ public class InventoryTask : UrlTaskBase
                     $"Page has thin content ({estimatedWords} words, recommend 300+ for ranking)",
                     details);
             }
-            else if (contentLength < WARNING_CONTENT_LENGTH)
+            else if (contentLength < MIN_CONTENT_LENGTH)
             {
                 var details = FindingDetailsBuilder.Create()
                     .AddItem($"Content length: {contentLength} characters (~{estimatedWords} words)")

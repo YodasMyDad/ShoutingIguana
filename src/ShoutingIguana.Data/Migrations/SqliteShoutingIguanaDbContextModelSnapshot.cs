@@ -39,6 +39,11 @@ namespace ShoutingIguana.Data.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("ProjectId")
                         .HasColumnType("INTEGER");
 
@@ -49,6 +54,9 @@ namespace ShoutingIguana.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("UrlsAnalyzed")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("UrlsCrawled")
                         .HasColumnType("INTEGER");
@@ -308,8 +316,26 @@ namespace ShoutingIguana.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("DomPath")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ElementHeight")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ElementTag")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ElementWidth")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("FromUrlId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("HtmlSnippet")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("IsNofollow")
                         .HasColumnType("INTEGER");
@@ -320,7 +346,20 @@ namespace ShoutingIguana.Data.Migrations
                     b.Property<bool>("IsUgc")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool?>("IsVisible")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("LinkType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ParentTag")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("PositionX")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("PositionY")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("ProjectId")
@@ -596,6 +635,9 @@ namespace ShoutingIguana.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("RedirectTarget")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RenderedHtml")
                         .HasColumnType("TEXT");
 
                     b.Property<bool?>("RobotsAllowed")

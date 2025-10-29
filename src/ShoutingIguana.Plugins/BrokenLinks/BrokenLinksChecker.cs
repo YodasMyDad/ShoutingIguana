@@ -29,7 +29,7 @@ public class BrokenLinksChecker : IBrokenLinksChecker
                 return null; // URL not crawled yet
             }
             
-            _logger.LogDebug("Found URL {Url} with status {Status}", url, urlInfo.Status);
+            _logger.LogDebug("Found URL {Url} with HTTP status {Status}", url, urlInfo.Status);
             return urlInfo.Status;
         }
         catch (Exception ex)
