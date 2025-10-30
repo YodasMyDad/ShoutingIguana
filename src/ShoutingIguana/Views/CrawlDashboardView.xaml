@@ -144,11 +144,18 @@
                                            FontSize="20"
                                            Foreground="White"/>
                             </Border>
-                            <TextBlock Text="Overall Progress"
-                                       Style="{StaticResource TitleTextStyle}"
-                                       FontSize="18"
-                                       VerticalAlignment="Center"
-                                       AutomationProperties.HeadingLevel="Level2"/>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Overall Progress"
+                                           Style="{StaticResource TitleTextStyle}"
+                                           FontSize="18"
+                                           AutomationProperties.HeadingLevel="Level2"/>
+                                <TextBlock Text="{Binding CurrentPhase}"
+                                           Style="{StaticResource CaptionTextStyle}"
+                                           Foreground="{StaticResource PrimaryBrush}"
+                                           FontWeight="Medium"
+                                           Margin="0,4,0,0"
+                                           Visibility="{Binding IsCrawling, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            </StackPanel>
                         </StackPanel>
                         <TextBlock Text="{Binding ProgressPercentage, StringFormat={}{0:F1}%}"
                                    Style="{StaticResource DisplayTextStyle}"

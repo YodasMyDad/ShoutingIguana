@@ -20,6 +20,15 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
     
     // Track if sitemap was found for project
     private static readonly ConcurrentDictionary<int, bool> SitemapFoundByProject = new();
+    
+    // Track if sitemap comparison has been done for project (critical for performance - only run once)
+    private static readonly ConcurrentDictionary<int, bool> SitemapComparisonDoneByProject = new();
+    
+    // Cache URL statuses per project to avoid database queries for every sitemap URL (critical for performance)
+    private static readonly ConcurrentDictionary<int, Dictionary<string, int>> UrlStatusCacheByProject = new();
+    
+    // Semaphore to ensure only one thread loads URL statuses per project
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> UrlStatusLoadingSemaphores = new();
 
     public override string Key => "Sitemap";
     public override string DisplayName => "Sitemap";
@@ -134,7 +143,12 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     await AnalyzeSitemapFileAsync(ctx);
                     
                     // After parsing sitemap, compare with crawled URLs to find orphans
-                    await CompareSitemapWithCrawledUrlsAsync(ctx);
+                    // IMPORTANT: Only run once per project (TryAdd returns true only if key was added - thread-safe)
+                    // This prevents loading ALL URLs multiple times for projects with multiple sitemap files
+                    if (SitemapComparisonDoneByProject.TryAdd(ctx.Project.ProjectId, true))
+                    {
+                        await CompareSitemapWithCrawledUrlsAsync(ctx);
+                    }
                 }
             }
         }
@@ -496,6 +510,9 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             }
         }
 
+        // Validate sitemap URLs against crawl status
+        await ValidateSitemapUrlStatusAsync(ctx, sitemapUrls.ToList());
+
         // Check for common sitemap issues
         await ValidateSitemapUrlsAsync(ctx, urlElements, ns);
     }
@@ -666,6 +683,228 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
         }
     }
 
+    /// <summary>
+    /// Ensures URL status cache is loaded for the project (loads once, thread-safe).
+    /// CRITICAL for performance: prevents database query for every sitemap URL checked.
+    /// </summary>
+    private async Task EnsureUrlStatusCacheLoadedAsync(int projectId, CancellationToken ct)
+    {
+        // Fast path: check if already cached
+        if (UrlStatusCacheByProject.ContainsKey(projectId))
+        {
+            return;
+        }
+        
+        // Get or create semaphore for this project
+        var semaphore = UrlStatusLoadingSemaphores.GetOrAdd(projectId, _ => new SemaphoreSlim(1, 1));
+        
+        // Wait for exclusive access to load URL statuses
+        await semaphore.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            // Double-check: another thread might have loaded while we waited
+            if (UrlStatusCacheByProject.ContainsKey(projectId))
+            {
+                return;
+            }
+            
+            // Load all URLs and build status cache
+            _logger.LogInformation("Loading URL status cache for project {ProjectId} (SitemapTask)", projectId);
+            var statusCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            
+            await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId, ct))
+            {
+                if (!string.IsNullOrEmpty(url.Address))
+                {
+                    statusCache[url.Address] = url.Status;
+                }
+            }
+            
+            // Cache for future use
+            UrlStatusCacheByProject[projectId] = statusCache;
+            _logger.LogInformation("Cached {Count} URL statuses for project {ProjectId} (SitemapTask)", statusCache.Count, projectId);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+    
+    /// <summary>
+    /// Validate sitemap URLs against their actual crawl status.
+    /// Reports ERROR for 404s/5xx, WARNING for 301s/noindex pages.
+    /// </summary>
+    private async Task ValidateSitemapUrlStatusAsync(UrlContext ctx, List<string> sitemapUrls)
+    {
+        try
+        {
+            var projectId = ctx.Project.ProjectId;
+            var errors404 = new List<string>();
+            var errors5xx = new List<string>();
+            var redirects = new List<string>();
+            var notCrawled = new List<string>();
+            
+            // CRITICAL PERFORMANCE FIX: Pre-load URL status cache
+            // This prevents 1000 database queries (one per sitemap URL)
+            await EnsureUrlStatusCacheLoadedAsync(projectId, CancellationToken.None);
+            
+            // Get the cache
+            var statusCache = UrlStatusCacheByProject.GetValueOrDefault(projectId);
+
+            // Check each sitemap URL's status from cache (FAST!)
+            foreach (var sitemapUrl in sitemapUrls.Take(1000)) // Limit to 1000 URLs to avoid performance issues
+            {
+                try
+                {
+                    // Look up status from cache instead of database query
+                    if (statusCache == null || !statusCache.TryGetValue(sitemapUrl, out var status))
+                    {
+                        // URL not found in crawl database - might be out of scope or not yet crawled
+                        notCrawled.Add(sitemapUrl);
+                        continue;
+                    }
+
+                    // Check HTTP status
+                    if (status == 404)
+                    {
+                        errors404.Add(sitemapUrl);
+                    }
+                    else if (status >= 500 && status < 600)
+                    {
+                        errors5xx.Add(sitemapUrl);
+                    }
+                    else if (status >= 300 && status < 400)
+                    {
+                        redirects.Add(sitemapUrl);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Error checking status for sitemap URL {Url}", sitemapUrl);
+                }
+            }
+
+            // Report 404 errors (ERROR severity)
+            if (errors404.Count > 0)
+            {
+                var builder = FindingDetailsBuilder.Create()
+                    .AddItem($"Found {errors404.Count} URLs returning 404 Not Found")
+                    .AddItem("❌ 404 pages waste crawl budget and confuse indexation");
+
+                builder.BeginNested("📄 Example 404 URLs in sitemap");
+                foreach (var url in errors404.Take(10))
+                {
+                    builder.AddItem(url);
+                }
+                if (errors404.Count > 10)
+                {
+                    builder.AddItem($"... and {errors404.Count - 10} more");
+                }
+
+                builder.BeginNested("⚠️ Impact")
+                    .AddItem("Wastes Googlebot crawl budget")
+                    .AddItem("These pages cannot be indexed")
+                    .AddItem("May indicate broken internal links");
+
+                builder.BeginNested("💡 Recommendations")
+                    .AddItem("Remove 404 URLs from sitemap")
+                    .AddItem("Fix the pages or redirect them with 301s")
+                    .AddItem("Update sitemap generation logic");
+
+                builder.WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
+                    .WithTechnicalMetadata("error404Count", errors404.Count)
+                    .WithTechnicalMetadata("urls", errors404.Take(20).ToArray());
+
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Error,
+                    "SITEMAP_CONTAINS_404S",
+                    $"Sitemap contains {errors404.Count} URL(s) returning 404 errors",
+                    builder.Build());
+            }
+
+            // Report 5xx server errors (ERROR severity)
+            if (errors5xx.Count > 0)
+            {
+                var builder = FindingDetailsBuilder.Create()
+                    .AddItem($"Found {errors5xx.Count} URLs returning server errors (5xx)")
+                    .AddItem("❌ Server errors indicate serious problems");
+
+                builder.BeginNested("📄 URLs with server errors");
+                foreach (var url in errors5xx.Take(10))
+                {
+                    builder.AddItem(url);
+                }
+                if (errors5xx.Count > 10)
+                {
+                    builder.AddItem($"... and {errors5xx.Count - 10} more");
+                }
+
+                builder.BeginNested("⚠️ Impact")
+                    .AddItem("Search engines cannot index error pages")
+                    .AddItem("May trigger site-wide quality signals")
+                    .AddItem("Wastes crawl budget");
+
+                builder.BeginNested("💡 Recommendations")
+                    .AddItem("Fix server errors immediately")
+                    .AddItem("Remove broken URLs from sitemap")
+                    .AddItem("Investigate server/application issues");
+
+                builder.WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
+                    .WithTechnicalMetadata("error5xxCount", errors5xx.Count)
+                    .WithTechnicalMetadata("urls", errors5xx.Take(20).ToArray());
+
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Error,
+                    "SITEMAP_CONTAINS_5XX_ERRORS",
+                    $"Sitemap contains {errors5xx.Count} URL(s) returning server errors",
+                    builder.Build());
+            }
+
+            // Report redirects (WARNING severity)
+            if (redirects.Count > 0)
+            {
+                var builder = FindingDetailsBuilder.Create()
+                    .AddItem($"Found {redirects.Count} URLs that redirect (3xx)")
+                    .AddItem("⚠️ Sitemap should contain final destination URLs");
+
+                builder.BeginNested("📄 Redirecting URLs");
+                foreach (var url in redirects.Take(10))
+                {
+                    builder.AddItem(url);
+                }
+                if (redirects.Count > 10)
+                {
+                    builder.AddItem($"... and {redirects.Count - 10} more");
+                }
+
+                builder.BeginNested("💡 Recommendations")
+                    .AddItem("Update sitemap to point to final destination URLs")
+                    .AddItem("Remove redirect URLs and add their targets instead")
+                    .AddItem("Saves search engines an extra hop");
+
+                builder.WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
+                    .WithTechnicalMetadata("redirectCount", redirects.Count)
+                    .WithTechnicalMetadata("urls", redirects.Take(20).ToArray());
+
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Warning,
+                    "SITEMAP_CONTAINS_REDIRECTS",
+                    $"Sitemap contains {redirects.Count} URL(s) that redirect",
+                    builder.Build());
+            }
+
+            _logger.LogDebug("Validated {Total} sitemap URLs: {Errors404} 404s, {Errors5xx} 5xxs, {Redirects} redirects, {NotCrawled} not crawled",
+                sitemapUrls.Count, errors404.Count, errors5xx.Count, redirects.Count, notCrawled.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error validating sitemap URL status");
+        }
+    }
+
     private async Task CompareSitemapWithCrawledUrlsAsync(UrlContext ctx)
     {
         try
@@ -794,6 +1033,15 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
     {
         SitemapUrlsByProject.TryRemove(projectId, out _);
         SitemapFoundByProject.TryRemove(projectId, out _);
+        SitemapComparisonDoneByProject.TryRemove(projectId, out _);
+        UrlStatusCacheByProject.TryRemove(projectId, out _);
+        
+        // Cleanup and dispose semaphore
+        if (UrlStatusLoadingSemaphores.TryRemove(projectId, out var semaphore))
+        {
+            semaphore.Dispose();
+        }
+        
         _logger.LogDebug("Cleaned up sitemap data for project {ProjectId}", projectId);
     }
 }

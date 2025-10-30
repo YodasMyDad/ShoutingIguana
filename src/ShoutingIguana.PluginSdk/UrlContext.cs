@@ -84,6 +84,7 @@ public sealed record UrlContext(
 /// <param name="MetaRefreshDelay">Delay in seconds for meta refresh, if present.</param>
 /// <param name="MetaRefreshTarget">Target URL for meta refresh, if present.</param>
 /// <param name="HtmlLang">Language code from &lt;html lang="..."&gt; attribute, if present.</param>
+/// <param name="IsRedirectLoop">True if URL encountered an infinite redirect loop (ERR_TOO_MANY_REDIRECTS).</param>
 /// <remarks>
 /// <para>
 /// This metadata is pre-parsed by the crawler to avoid plugins re-parsing the same data.
@@ -115,7 +116,8 @@ public sealed record UrlMetadata(
     bool HasMetaRefresh = false,
     int? MetaRefreshDelay = null,
     string? MetaRefreshTarget = null,
-    string? HtmlLang = null);
+    string? HtmlLang = null,
+    bool IsRedirectLoop = false);
 
 /// <summary>
 /// Project crawl settings passed to plugins.

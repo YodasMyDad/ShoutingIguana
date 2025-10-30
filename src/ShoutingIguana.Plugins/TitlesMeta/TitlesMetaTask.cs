@@ -24,6 +24,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
     // For duplicate detection across pages
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, List<string>>> _titlesByProject = new();
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, List<string>>> _descriptionsByProject = new();
+    
+    // Cache redirects per project to avoid loading them repeatedly (critical for performance)
+    private static readonly ConcurrentDictionary<int, Dictionary<string, List<RedirectInfo>>> RedirectCacheByProject = new();
+    
+    // Semaphore to ensure only one thread loads redirects per project (prevents race condition)
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> RedirectLoadingSemaphores = new();
 
     public override string Key => "TitlesMeta";
     public override string DisplayName => "Titles & Meta";
@@ -75,6 +81,10 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             
             // Analyze description
             await AnalyzeDescriptionAsync(ctx, description);
+            
+            // CTR optimization checks
+            await CheckDescriptionCTRAsync(ctx, description);
+            await CheckTitleCTRAsync(ctx, title);
             
             // Analyze canonical (using crawler-parsed data)
             await AnalyzeCanonicalAsync(ctx);
@@ -261,6 +271,9 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 $"Title is long ({title.Length} chars, may be truncated: recommended: <{MAX_TITLE_LENGTH})",
                 details);
         }
+        
+        // Check pixel width (more accurate than character count for SERP appearance)
+        await CheckTitlePixelWidthAsync(ctx, title);
 
         // Check for duplicate titles (will be reported later in batch)
         if (_titlesByProject.TryGetValue(ctx.Project.ProjectId, out var projectTitles))
@@ -392,6 +405,97 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                     }
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Check title pixel width for more accurate SERP appearance prediction.
+    /// Google displays ~600px of title, not a fixed character count.
+    /// </summary>
+    private async Task CheckTitlePixelWidthAsync(UrlContext ctx, string title)
+    {
+        // Calculate approximate pixel width
+        // Different characters have different widths in Google's SERP display
+        // Approximate widths: uppercase/wide chars ~12px, lowercase ~8px, narrow chars like 'i' ~4px
+        double pixelWidth = 0;
+        
+        foreach (char c in title)
+        {
+            if (char.IsUpper(c) || c == 'W' || c == 'M')
+            {
+                pixelWidth += 12; // Wide characters
+            }
+            else if (c == 'i' || c == 'l' || c == 'I' || c == '!' || c == '|' || c == '.' || c == ',')
+            {
+                pixelWidth += 4; // Narrow characters
+            }
+            else if (char.IsWhiteSpace(c))
+            {
+                pixelWidth += 4; // Spaces
+            }
+            else
+            {
+                pixelWidth += 8; // Average characters
+            }
+        }
+        
+        // Google displays approximately 600px on desktop, 580px on mobile
+        // Use 580px as the safe threshold
+        const int SAFE_PIXEL_WIDTH = 580;
+        const int MAX_PIXEL_WIDTH = 600;
+        
+        if (pixelWidth > MAX_PIXEL_WIDTH)
+        {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Title: \"{title}\"")
+                .AddItem($"Pixel width: ~{(int)pixelWidth}px (estimated)")
+                .AddItem($"Recommended: Under {SAFE_PIXEL_WIDTH}px for mobile")
+                .AddItem($"Character count: {title.Length} chars")
+                .AddItem("⚠️ Title will likely be truncated in search results")
+                .BeginNested("ℹ️ Why Pixel Width Matters")
+                    .AddItem("Google displays titles by pixel width, not character count")
+                    .AddItem("Wide characters (W, M) take more space than narrow ones (i, l)")
+                    .AddItem("Truncated titles = lower CTR = ranking impact")
+                .BeginNested("💡 Recommendations")
+                    .AddItem("Shorten title or use narrower characters")
+                    .AddItem("Put most important keywords at the beginning")
+                    .AddItem("Front-load key information that should always show")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("title", title)
+                .WithTechnicalMetadata("pixelWidth", (int)pixelWidth)
+                .WithTechnicalMetadata("characterCount", title.Length)
+                .Build();
+            
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Info,
+                "TITLE_PIXEL_WIDTH_EXCEEDED",
+                $"Title likely truncated in SERPs (~{(int)pixelWidth}px estimated, recommend <{SAFE_PIXEL_WIDTH}px)",
+                details);
+        }
+        else if (pixelWidth > SAFE_PIXEL_WIDTH)
+        {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Title: \"{title}\"")
+                .AddItem($"Pixel width: ~{(int)pixelWidth}px (estimated)")
+                .AddItem($"Recommended: Under {SAFE_PIXEL_WIDTH}px for mobile")
+                .AddItem($"Character count: {title.Length} chars")
+                .AddItem("ℹ️ May be truncated on mobile search results")
+                .BeginNested("💡 Recommendation")
+                    .AddItem("Consider shortening slightly for mobile users")
+                    .AddItem("Most important keywords should appear first")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("title", title)
+                .WithTechnicalMetadata("pixelWidth", (int)pixelWidth)
+                .WithTechnicalMetadata("characterCount", title.Length)
+                .Build();
+            
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Info,
+                "TITLE_PIXEL_WIDTH_WARNING",
+                $"Title may be truncated on mobile (~{(int)pixelWidth}px, recommend <{SAFE_PIXEL_WIDTH}px)",
+                details);
         }
     }
 
@@ -963,17 +1067,21 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             }
             else if (!string.IsNullOrEmpty(title))
             {
-                // Check H1/Title alignment (should be similar for SEO)
-                var similarity = CalculateSimilarity(h1Text, title);
-                if (similarity < 0.3) // Less than 30% similar
+                // Check for exact H1/Title duplication (keyword variation opportunity)
+                var normalizedH1 = h1Text.Trim().ToLowerInvariant();
+                var normalizedTitle = title.Trim().ToLowerInvariant();
+                
+                if (normalizedH1 == normalizedTitle)
                 {
                     var details = FindingDetailsBuilder.Create()
                         .AddItem($"H1: \"{h1Text}\"")
                         .AddItem($"Title: \"{title}\"")
-                        .AddItem($"Similarity: {similarity:P0}")
-                        .BeginNested("ℹ️ Note")
-                            .AddItem("H1 and title should be similar for better SEO")
-                            .AddItem("They work together to signal page topic to search engines")
+                        .AddItem("ℹ️ Identical H1 and title")
+                        .BeginNested("💡 Optimization Opportunity")
+                            .AddItem("Using identical text wastes keyword variation opportunity")
+                            .AddItem("Not an error - many sites do this - but suboptimal")
+                            .AddItem("Consider varying wording to target related keywords")
+                            .AddItem("Example: Title 'Best Running Shoes 2024', H1 'Top Athletic Footwear Guide'")
                         .WithTechnicalMetadata("url", ctx.Url.ToString())
                         .WithTechnicalMetadata("h1", h1Text)
                         .WithTechnicalMetadata("title", title)
@@ -982,8 +1090,46 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                     await ctx.Findings.ReportAsync(
                         Key,
                         Severity.Info,
-                        "H1_TITLE_MISMATCH",
-                        "H1 and title are very different",
+                        "EXACT_H1_TITLE_DUPLICATION",
+                        "H1 and title are identical - missed keyword variation opportunity",
+                        details);
+                }
+                
+                // Check H1/Title alignment (should be complementary, not unrelated)
+                var similarity = CalculateSimilarity(h1Text, title);
+                if (similarity < 0.3) // Less than 30% similar
+                {
+                    var details = FindingDetailsBuilder.Create()
+                        .AddItem($"H1: \"{h1Text}\"")
+                        .AddItem($"Title: \"{title}\"")
+                        .AddItem($"Similarity: {similarity:P0}")
+                        .BeginNested("ℹ️ Why This Matters")
+                            .AddItem("H1 and title should be COMPLEMENTARY, not identical or unrelated")
+                            .AddItem("H1 = on-page structure for users")
+                            .AddItem("Title = SERP appearance for click-through rate")
+                        .BeginNested("✅ Good Example")
+                            .AddItem("H1: 'Leather Dog Collars'")
+                            .AddItem("Title: 'Leather Dog Collars in Many Styles | DOGSHOP'")
+                            .AddItem("(Different wording, same topic, includes brand)")
+                        .BeginNested("❌ Bad Example")
+                            .AddItem("H1: 'Welcome to Our Store'")
+                            .AddItem("Title: 'Leather Dog Collars - DOGSHOP'")
+                            .AddItem("(Completely different topics - confusing signals)")
+                        .BeginNested("💡 Recommendations")
+                            .AddItem("Ensure H1 and title reinforce the same topic")
+                            .AddItem("H1 can be keyword-focused, title can add modifiers/brand")
+                            .AddItem("Both should clearly indicate what the page is about")
+                        .WithTechnicalMetadata("url", ctx.Url.ToString())
+                        .WithTechnicalMetadata("h1", h1Text)
+                        .WithTechnicalMetadata("title", title)
+                        .WithTechnicalMetadata("similarity", similarity)
+                        .Build();
+                    
+                    await ctx.Findings.ReportAsync(
+                        Key,
+                        Severity.Info,
+                        "H1_TITLE_UNRELATED",
+                        "H1 and title appear unrelated - should be complementary for same topic",
                         details);
                 }
             }
@@ -1081,15 +1227,33 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
     }
     
     /// <summary>
-    /// Check if URLs are in redirect relationships and categorize by redirect type.
+    /// Gets cached redirects for a project, loading them once if not cached.
+    /// This prevents loading all redirects repeatedly for every URL (critical for performance).
+    /// Thread-safe: uses semaphore to ensure only one thread loads data per project.
     /// </summary>
-    private async Task<RedirectRelationshipInfo> CheckRedirectRelationshipsAsync(int projectId, string currentUrl, List<string> otherUrls)
+    private async Task<Dictionary<string, List<RedirectInfo>>> GetOrLoadRedirectCacheAsync(int projectId)
     {
-        var info = new RedirectRelationshipInfo();
+        // Fast path: check if already cached
+        if (RedirectCacheByProject.TryGetValue(projectId, out var cachedRedirects))
+        {
+            return cachedRedirects;
+        }
         
+        // Get or create semaphore for this project
+        var semaphore = RedirectLoadingSemaphores.GetOrAdd(projectId, _ => new SemaphoreSlim(1, 1));
+        
+        // Wait for exclusive access to load redirects
+        await semaphore.WaitAsync().ConfigureAwait(false);
         try
         {
-            // Build lookup of all redirects for efficient checking
+            // Double-check: another thread might have loaded while we waited
+            if (RedirectCacheByProject.TryGetValue(projectId, out cachedRedirects))
+            {
+                return cachedRedirects;
+            }
+            
+            // Load and cache redirects (only one thread gets here)
+            _logger.LogDebug("Loading redirects for project {ProjectId} (first time)", projectId);
             var redirectLookup = new Dictionary<string, List<RedirectInfo>>(StringComparer.OrdinalIgnoreCase);
             
             await foreach (var redirect in _repositoryAccessor.GetRedirectsAsync(projectId))
@@ -1100,6 +1264,30 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 }
                 redirectLookup[redirect.SourceUrl].Add(redirect);
             }
+            
+            // Cache for future use
+            RedirectCacheByProject[projectId] = redirectLookup;
+            _logger.LogInformation("Cached {Count} redirect entries for project {ProjectId}", redirectLookup.Count, projectId);
+            
+            return redirectLookup;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+    
+    /// <summary>
+    /// Check if URLs are in redirect relationships and categorize by redirect type.
+    /// </summary>
+    private async Task<RedirectRelationshipInfo> CheckRedirectRelationshipsAsync(int projectId, string currentUrl, List<string> otherUrls)
+    {
+        var info = new RedirectRelationshipInfo();
+        
+        try
+        {
+            // Use cached redirects - load once per project instead of per URL (massive performance improvement)
+            var redirectLookup = await GetOrLoadRedirectCacheAsync(projectId);
             
             // For each other URL, check if there's a redirect relationship
             foreach (var otherUrl in otherUrls)
@@ -1163,6 +1351,103 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
     }
     
     /// <summary>
+    /// Check meta description for CTR-driving action words
+    /// </summary>
+    private async Task CheckDescriptionCTRAsync(UrlContext ctx, string description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            return; // Already reported as missing
+        }
+        
+        // Action words that drive clicks
+        var actionWords = new[]
+        {
+            "learn", "discover", "get", "find", "buy", "download", "try", "save", 
+            "see", "compare", "check", "explore", "browse", "shop", "read", 
+            "watch", "start", "join", "access", "unlock", "grab", "claim"
+        };
+        
+        var descriptionLower = description.ToLowerInvariant();
+        var hasActionWord = actionWords.Any(word => 
+            Regex.IsMatch(descriptionLower, $@"\b{word}\b"));
+        
+        if (!hasActionWord)
+        {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Description: \"{description}\"")
+                .AddItem("ℹ️ No action-driving words detected")
+                .BeginNested("🎯 CTR Impact")
+                    .AddItem("Action words encourage users to click from search results")
+                    .AddItem("Higher CTR = positive ranking signal")
+                    .AddItem("Compelling descriptions stand out in competitive SERPs")
+                .BeginNested("💡 CTR Optimization")
+                    .AddItem("Add action words: 'Learn', 'Discover', 'Get', 'Find', 'Try', 'Save'")
+                    .AddItem("Example: 'Learn how to optimize your site' vs 'Site optimization information'")
+                    .AddItem("Make users want to click - be specific and compelling")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("description", description)
+                .Build();
+            
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Info,
+                "DESCRIPTION_NO_ACTION_WORDS",
+                "Meta description lacks action-driving words - CTR optimization opportunity",
+                details);
+        }
+    }
+    
+    /// <summary>
+    /// Check title for special characters that improve SERP visibility
+    /// </summary>
+    private async Task CheckTitleCTRAsync(UrlContext ctx, string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return; // Already reported as missing
+        }
+        
+        // Special characters that help titles stand out in SERPs
+        var specialChars = new[] { "|", "•", "→", "–", "—", "[", "]", "(", ")" };
+        var hasSpecialChar = specialChars.Any(ch => title.Contains(ch));
+        
+        // Check for purely alphanumeric titles (no separators at all)
+        var hasSeparators = title.Contains("|") || title.Contains("-") || 
+                           title.Contains("•") || title.Contains("→") ||
+                           title.Contains("–") || title.Contains("—") ||
+                           title.Contains("[") || title.Contains("]") ||
+                           title.Contains("(") || title.Contains(")") ||
+                           title.Contains(":") || title.Contains("–");
+        
+        if (!hasSeparators)
+        {
+            var details = FindingDetailsBuilder.Create()
+                .AddItem($"Title: \"{title}\"")
+                .AddItem("ℹ️ No visual separators detected")
+                .BeginNested("🎯 CTR Impact")
+                    .AddItem("Special characters help titles stand out in search results")
+                    .AddItem("Visual separation improves readability in SERPs")
+                    .AddItem("Better visibility = higher click-through rates")
+                .BeginNested("💡 CTR Optimization")
+                    .AddItem("Add separators: | • → – — [ ] ( )")
+                    .AddItem("Example: 'SEO Guide | Complete Tutorial 2024' vs 'SEO Guide Complete Tutorial 2024'")
+                    .AddItem("Example: 'Running Shoes → Top 10 Picks' vs 'Running Shoes Top 10 Picks'")
+                    .AddItem("Use brand separator: 'Page Title | Brand Name'")
+                .WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("title", title)
+                .Build();
+            
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Info,
+                "TITLE_NO_SPECIAL_CHARS",
+                "Title lacks visual separators - CTR optimization opportunity",
+                details);
+        }
+    }
+    
+    /// <summary>
     /// Helper class to track redirect relationships.
     /// </summary>
     private class RedirectRelationshipInfo
@@ -1179,6 +1464,14 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
     {
         _titlesByProject.TryRemove(projectId, out _);
         _descriptionsByProject.TryRemove(projectId, out _);
+        RedirectCacheByProject.TryRemove(projectId, out _);
+        
+        // Cleanup and dispose semaphore
+        if (RedirectLoadingSemaphores.TryRemove(projectId, out var semaphore))
+        {
+            semaphore.Dispose();
+        }
+        
         _logger.LogDebug("Cleaned up titles/meta data for project {ProjectId}", projectId);
     }
 }

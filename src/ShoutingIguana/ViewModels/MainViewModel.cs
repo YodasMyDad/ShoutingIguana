@@ -58,6 +58,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private int _pluginCount;
 
     [ObservableProperty]
+    private bool _isCrawling;
+
+    [ObservableProperty]
     private ObservableCollection<Core.Configuration.RecentProject> _recentProjects = new();
 
     /// <summary>
@@ -104,6 +107,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         
         // Update pause/resume state
         UpdatePauseResumeState();
+        
+        // Update crawl state
+        UpdateCrawlState();
         
         // Update plugin count
         UpdatePluginCount();
@@ -221,6 +227,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
             UpdatePauseResumeState();
+            UpdateCrawlState();
         });
     }
 
@@ -236,6 +243,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
             PauseResumeMenuText = "Pause Crawl";
             PauseResumeIcon = "\uE769"; // Pause icon
         }
+    }
+
+    private void UpdateCrawlState()
+    {
+        IsCrawling = _crawlEngine.IsCrawling;
     }
 
     private void OnPluginChanged(object? sender, EventArgs e)
@@ -499,34 +511,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private async Task RefreshAsync()
-    {
-        // Refresh current view
-        if (CurrentView is FindingsView findingsView)
-        {
-            if (findingsView.DataContext is FindingsViewModel findingsVm)
-            {
-                await findingsVm.RefreshCommand.ExecuteAsync(null);
-            }
-        }
-        else if (CurrentView is CrawlDashboardView)
-        {
-            // Dashboard updates in real-time, no explicit refresh needed
-            StatusMessage = "Crawl dashboard updates automatically";
-        }
-        else if (CurrentView is ProjectHomeView projectHomeView)
-        {
-            if (projectHomeView.DataContext is ProjectHomeViewModel projectVm)
-            {
-                await projectVm.LoadAsync();
-            }
-        }
-        
-        StatusMessage = "Refreshed";
-        _logger.LogInformation("View refreshed");
-    }
-
-    [RelayCommand]
     private async Task StartCrawlAsync()
     {
         if (!_projectContext.HasOpenProject)
@@ -601,29 +585,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                     MessageBox.Show($"Failed to clear queue: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
             }
-        }
-    }
-
-    [RelayCommand]
-    private async Task ExportAsync()
-    {
-        if (!_projectContext.HasOpenProject)
-        {
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-                MessageBox.Show("No project is open", "No Project", MessageBoxButton.OK, MessageBoxImage.Information));
-            return;
-        }
-
-        // Navigate to findings view and trigger export
-        if (CurrentView is not FindingsView)
-        {
-            await NavigateToFindingsAsync();
-        }
-
-        var findingsView = CurrentView as FindingsView;
-        if (findingsView?.DataContext is FindingsViewModel vm)
-        {
-            await vm.ExportCommand.ExecuteAsync(null);
         }
     }
 
@@ -980,213 +941,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     // ===== Help Menu Commands =====
-
-    [RelayCommand]
-    private void Documentation()
-    {
-        try
-        {
-            var docsUrl = "https://github.com/yourusername/ShoutingIguana/wiki";
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = docsUrl,
-                UseShellExecute = true
-            });
-            _logger.LogInformation("Opened documentation in browser");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to open documentation");
-            MessageBox.Show(
-                "Documentation is available at: https://github.com/yourusername/ShoutingIguana/wiki",
-                "Documentation",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-        }
-    }
-
-    [RelayCommand]
-    private void PluginDevGuide()
-    {
-        try
-        {
-            var guideUrl = "https://github.com/yourusername/ShoutingIguana/wiki/Plugin-Development";
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = guideUrl,
-                UseShellExecute = true
-            });
-            _logger.LogInformation("Opened plugin dev guide in browser");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to open plugin dev guide");
-            MessageBox.Show(
-                "Plugin Development Guide is available at: https://github.com/yourusername/ShoutingIguana/wiki/Plugin-Development",
-                "Plugin Development Guide",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-        }
-    }
-
-    [RelayCommand]
-    private async Task CheckAppUpdatesAsync()
-    {
-        try
-        {
-            _logger.LogInformation("Checking for updates...");
-            StatusMessage = "Checking for updates...";
-
-            // Check GitHub API for latest release
-            const string currentVersion = "1.0.0";
-            const string githubApiUrl = "https://api.github.com/repos/yourusername/ShoutingIguana/releases/latest";
-            
-            using var httpClient = new System.Net.Http.HttpClient();
-            httpClient.DefaultRequestHeaders.Add("User-Agent", "ShoutingIguana");
-            httpClient.Timeout = TimeSpan.FromSeconds(10);
-
-            var response = await httpClient.GetAsync(githubApiUrl);
-            
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("GitHub API returned {StatusCode}", response.StatusCode);
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                    MessageBox.Show(
-                        "Unable to check for updates. Please visit the GitHub releases page manually.",
-                        "Update Check",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information));
-                StatusMessage = "Update check unavailable";
-                return;
-            }
-
-            var json = await response.Content.ReadAsStringAsync();
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            // Safely extract properties with fallbacks
-            var latestVersionTag = currentVersion;
-            var releaseName = "Latest Release";
-            var releaseUrl = string.Empty;
-            
-            if (root.TryGetProperty("tag_name", out var tagElement))
-            {
-                latestVersionTag = tagElement.GetString()?.TrimStart('v') ?? currentVersion;
-            }
-            
-            if (root.TryGetProperty("name", out var nameElement))
-            {
-                releaseName = nameElement.GetString() ?? "Latest Release";
-            }
-            
-            if (root.TryGetProperty("html_url", out var urlElement))
-            {
-                releaseUrl = urlElement.GetString() ?? string.Empty;
-            }
-            
-            _logger.LogInformation("Latest version: {LatestVersion}, Current: {CurrentVersion}", latestVersionTag, currentVersion);
-
-            // Simple version comparison (assumes semantic versioning)
-            if (IsNewerVersion(currentVersion, latestVersionTag))
-            {
-                var result = await Application.Current.Dispatcher.InvokeAsync(() =>
-                    MessageBox.Show(
-                        $"A new version is available!\n\n" +
-                        $"Current version: {currentVersion}\n" +
-                        $"Latest version: {latestVersionTag}\n" +
-                        $"Release: {releaseName}\n\n" +
-                        $"Would you like to download the update?",
-                        "Update Available",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Information));
-
-                if (result == MessageBoxResult.Yes && !string.IsNullOrEmpty(releaseUrl))
-                {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = releaseUrl,
-                        UseShellExecute = true
-                    });
-                }
-
-                StatusMessage = "Update available";
-            }
-            else
-            {
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                    MessageBox.Show(
-                        $"You are running the latest version of Shouting Iguana (v{currentVersion}).",
-                        "No Updates Available",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information));
-
-                StatusMessage = "Up to date";
-            }
-
-            _logger.LogInformation("Update check complete");
-        }
-        catch (System.Net.Http.HttpRequestException ex)
-        {
-            _logger.LogWarning(ex, "Network error checking for updates");
-            StatusMessage = "Update check failed";
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-                MessageBox.Show(
-                    "Unable to check for updates. Please check your internet connection.",
-                    "Network Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to check for updates");
-            StatusMessage = "Update check failed";
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-                MessageBox.Show($"Failed to check for updates: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
-        }
-    }
-
-    /// <summary>
-    /// Compares two semantic version strings.
-    /// </summary>
-    /// <returns>True if newVersion is newer than currentVersion.</returns>
-    private static bool IsNewerVersion(string currentVersion, string newVersion)
-    {
-        try
-        {
-            var current = Version.Parse(currentVersion);
-            var latest = Version.Parse(newVersion);
-            return latest > current;
-        }
-        catch
-        {
-            // If parsing fails, assume no update
-            return false;
-        }
-    }
-
-    [RelayCommand]
-    private void ReportIssue()
-    {
-        try
-        {
-            var issuesUrl = "https://github.com/yourusername/ShoutingIguana/issues/new";
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = issuesUrl,
-                UseShellExecute = true
-            });
-            _logger.LogInformation("Opened GitHub issues in browser");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to open GitHub issues");
-            MessageBox.Show(
-                "Report issues at: https://github.com/yourusername/ShoutingIguana/issues",
-                "Report Issue",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-        }
-    }
 
     [RelayCommand]
     private void ToggleFullScreen()

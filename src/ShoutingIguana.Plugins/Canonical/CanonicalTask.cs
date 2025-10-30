@@ -15,6 +15,12 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
     
     // Track canonical chains across URLs per project
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, string>> CanonicalsByProject = new();
+    
+    // Cache URL statuses per project to avoid database queries (critical for performance)
+    private static readonly ConcurrentDictionary<int, Dictionary<string, int>> UrlStatusCacheByProject = new();
+    
+    // Semaphore to ensure only one thread loads URL statuses per project
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> UrlStatusLoadingSemaphores = new();
 
     public override string Key => "Canonical";
     public override string DisplayName => "Canonical";
@@ -269,45 +275,94 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         await ValidateCanonicalTargetAsync(ctx, canonical);
     }
 
+    /// <summary>
+    /// Ensures URL status cache is loaded for the project (loads once, thread-safe).
+    /// CRITICAL for performance: prevents database query for every canonical checked.
+    /// </summary>
+    private async Task EnsureUrlStatusCacheLoadedAsync(int projectId, CancellationToken ct)
+    {
+        // Fast path: check if already cached
+        if (UrlStatusCacheByProject.ContainsKey(projectId))
+        {
+            return;
+        }
+        
+        // Get or create semaphore for this project
+        var semaphore = UrlStatusLoadingSemaphores.GetOrAdd(projectId, _ => new SemaphoreSlim(1, 1));
+        
+        // Wait for exclusive access to load URL statuses
+        await semaphore.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            // Double-check: another thread might have loaded while we waited
+            if (UrlStatusCacheByProject.ContainsKey(projectId))
+            {
+                return;
+            }
+            
+            // Load all URLs and build status cache
+            _logger.LogInformation("Loading URL status cache for project {ProjectId} (CanonicalTask)", projectId);
+            var statusCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            
+            await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId, ct))
+            {
+                if (!string.IsNullOrEmpty(url.Address))
+                {
+                    statusCache[url.Address] = url.Status;
+                }
+            }
+            
+            // Cache for future use
+            UrlStatusCacheByProject[projectId] = statusCache;
+            _logger.LogInformation("Cached {Count} URL statuses for project {ProjectId} (CanonicalTask)", statusCache.Count, projectId);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+    
     private async Task ValidateCanonicalTargetAsync(UrlContext ctx, string canonicalUrl)
     {
         try
         {
-            // Check if canonical target was crawled using repository accessor
-            var canonicalUrlInfo = await _repositoryAccessor.GetUrlByAddressAsync(
-                ctx.Project.ProjectId,
-                canonicalUrl);
+            // CRITICAL PERFORMANCE FIX: Pre-load URL status cache
+            await EnsureUrlStatusCacheLoadedAsync(ctx.Project.ProjectId, CancellationToken.None);
+            
+            // Check if canonical target was crawled using cache (FAST!)
+            var statusCache = UrlStatusCacheByProject.GetValueOrDefault(ctx.Project.ProjectId);
+            var status = statusCache?.GetValueOrDefault(canonicalUrl);
 
-            if (canonicalUrlInfo != null)
+            if (status.HasValue)
             {
                 // Canonical URL was crawled - check its status
-                if (canonicalUrlInfo.Status != 200)
+                if (status.Value != 200)
                 {
                     // Canonical target returns non-200 status - this is a problem
                     var details = FindingDetailsBuilder.Create()
                         .AddItem($"Current URL: {ctx.Url}")
                         .AddItem($"Canonical URL: {canonicalUrl}")
-                        .AddItem($"Canonical HTTP status: {canonicalUrlInfo.Status}")
+                        .AddItem($"Canonical HTTP status: {status.Value}")
                         .BeginNested("❌ Issue")
                             .AddItem("Canonical should point to a page that returns 200 OK")
-                            .AddItem($"This canonical returns {canonicalUrlInfo.Status}")
+                            .AddItem($"This canonical returns {status.Value}")
                         .BeginNested("💡 Recommendations")
                             .AddItem("Update canonical to point to a working page")
                             .AddItem("Or fix the canonical target page")
                         .WithTechnicalMetadata("url", ctx.Url.ToString())
                         .WithTechnicalMetadata("canonicalUrl", canonicalUrl)
-                        .WithTechnicalMetadata("canonicalHttpStatus", canonicalUrlInfo.Status)
+                        .WithTechnicalMetadata("canonicalHttpStatus", status.Value)
                         .Build();
                     
                     await ctx.Findings.ReportAsync(
                         Key,
                         Severity.Error,
                         "CANONICAL_TARGET_ERROR",
-                        $"Canonical URL returns HTTP {canonicalUrlInfo.Status}. The canonical target should return 200 OK.",
+                        $"Canonical URL returns HTTP {status.Value}. The canonical target should return 200 OK.",
                         details);
                     
                     _logger.LogWarning("Canonical target error: {Url} → {Canonical} (HTTP {Status})",
-                        ctx.Url, canonicalUrl, canonicalUrlInfo.Status);
+                        ctx.Url, canonicalUrl, status.Value);
                 }
                 else
                 {
@@ -621,6 +676,14 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
     public override void CleanupProject(int projectId)
     {
         CanonicalsByProject.TryRemove(projectId, out _);
+        UrlStatusCacheByProject.TryRemove(projectId, out _);
+        
+        // Cleanup and dispose semaphore
+        if (UrlStatusLoadingSemaphores.TryRemove(projectId, out var semaphore))
+        {
+            semaphore.Dispose();
+        }
+        
         _logger.LogDebug("Cleaned up canonical data for project {ProjectId}", projectId);
     }
 }

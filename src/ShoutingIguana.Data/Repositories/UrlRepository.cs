@@ -11,6 +11,7 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
     public async Task<Url?> GetByIdAsync(int id)
     {
         return await _context.Urls
+            .AsNoTracking()
             .Include(u => u.Headers)
             .FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false);
     }
@@ -51,6 +52,89 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
             .Where(u => u.ProjectId == projectId && u.Status == UrlStatus.Completed)
             .OrderBy(u => u.Id)
             .ToListAsync().ConfigureAwait(false);
+    }
+
+    public async Task<List<int>> GetCompletedUrlIdsAsync(int projectId)
+    {
+        return await _context.Urls
+            .AsNoTracking()
+            .Where(u => u.ProjectId == projectId && u.Status == UrlStatus.Completed)
+            .Select(u => u.Id)
+            .ToListAsync().ConfigureAwait(false);
+    }
+
+    public async Task<UrlAnalysisDto?> GetForAnalysisAsync(int id)
+    {
+        return await _context.Urls
+            .AsNoTracking()
+            .Where(u => u.Id == id)
+            .Select(u => new UrlAnalysisDto
+            {
+                Id = u.Id,
+                ProjectId = u.ProjectId,
+                Address = u.Address,
+                NormalizedUrl = u.NormalizedUrl,
+                Scheme = u.Scheme,
+                Host = u.Host,
+                Path = u.Path,
+                Depth = u.Depth,
+                DiscoveredFromUrlId = u.DiscoveredFromUrlId,
+                FirstSeenUtc = u.FirstSeenUtc,
+                LastCrawledUtc = u.LastCrawledUtc,
+                Status = u.Status,
+                HttpStatus = u.HttpStatus,
+                ContentType = u.ContentType,
+                ContentLength = u.ContentLength,
+                RobotsAllowed = u.RobotsAllowed,
+                Title = u.Title,
+                MetaDescription = u.MetaDescription,
+                CanonicalUrl = u.CanonicalUrl,
+                MetaRobots = u.MetaRobots,
+                RedirectTarget = u.RedirectTarget,
+                CanonicalHtml = u.CanonicalHtml,
+                CanonicalHttp = u.CanonicalHttp,
+                HasMultipleCanonicals = u.HasMultipleCanonicals,
+                HasCrossDomainCanonical = u.HasCrossDomainCanonical,
+                CanonicalIssues = u.CanonicalIssues,
+                RobotsNoindex = u.RobotsNoindex,
+                RobotsNofollow = u.RobotsNofollow,
+                RobotsNoarchive = u.RobotsNoarchive,
+                RobotsNosnippet = u.RobotsNosnippet,
+                RobotsNoimageindex = u.RobotsNoimageindex,
+                RobotsSource = u.RobotsSource,
+                XRobotsTag = u.XRobotsTag,
+                HasRobotsConflict = u.HasRobotsConflict,
+                HtmlLang = u.HtmlLang,
+                ContentLanguageHeader = u.ContentLanguageHeader,
+                HasMetaRefresh = u.HasMetaRefresh,
+                MetaRefreshDelay = u.MetaRefreshDelay,
+                MetaRefreshTarget = u.MetaRefreshTarget,
+                HasJsChanges = u.HasJsChanges,
+                JsChangedElements = u.JsChangedElements,
+                IsRedirectLoop = u.IsRedirectLoop,
+                RedirectChainLength = u.RedirectChainLength,
+                IsSoft404 = u.IsSoft404,
+                CacheControl = u.CacheControl,
+                Vary = u.Vary,
+                ContentEncoding = u.ContentEncoding,
+                LinkHeader = u.LinkHeader,
+                HasHsts = u.HasHsts,
+                ContentHash = u.ContentHash,
+                SimHash = u.SimHash,
+                IsIndexable = u.IsIndexable,
+                // Note: RenderedHtml is intentionally excluded
+                Headers = u.Headers.ToList()
+            })
+            .FirstOrDefaultAsync().ConfigureAwait(false);
+    }
+
+    public async Task<string?> GetRenderedHtmlAsync(int id)
+    {
+        return await _context.Urls
+            .AsNoTracking()
+            .Where(u => u.Id == id)
+            .Select(u => u.RenderedHtml)
+            .FirstOrDefaultAsync().ConfigureAwait(false);
     }
 
     public async Task<Url> CreateAsync(Url url)

@@ -704,22 +704,30 @@ public partial class ProjectHomeViewModel : ObservableObject, IDisposable
                     var queueRepo = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
                     await queueRepo.ResetInProgressItemsAsync(projectId);
                     
-                    // Navigate to crawl dashboard and start
+                    // Navigate to crawl dashboard and start with resume flag
                     _navigationService.NavigateTo<Views.CrawlDashboardView>();
-                    await _crawlEngine.StartCrawlAsync(projectId);
+                    await _crawlEngine.StartCrawlAsync(projectId, resumeFromCheckpoint: true);
                 }
                 else
                 {
-                    _logger.LogInformation("User chose not to resume, deactivating checkpoint");
+                    _logger.LogInformation("User chose not to resume, clearing all crawl data");
                     
-                    // Deactivate the checkpoint
+                    // User declined to resume - clear all old crawl data for fresh start
                     using var scope = _serviceProvider.CreateScope();
+                    
+                    // Get all repositories
+                    var urlRepo = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
+                    var linkRepo = scope.ServiceProvider.GetRequiredService<ILinkRepository>();
+                    var queueRepo = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
                     var checkpointRepo = scope.ServiceProvider.GetRequiredService<ICrawlCheckpointRepository>();
+                    
+                    // Clear all data (order matters for foreign keys)
+                    await linkRepo.DeleteByProjectIdAsync(projectId);
+                    await queueRepo.DeleteAllByProjectIdAsync(projectId);
+                    await urlRepo.DeleteByProjectIdAsync(projectId);
                     await checkpointRepo.DeactivateCheckpointsAsync(projectId);
                     
-                    // Reset InProgress queue items to Queued state
-                    var queueRepo = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
-                    await queueRepo.ResetInProgressItemsAsync(projectId);
+                    _logger.LogInformation("Successfully cleared all crawl data for project {ProjectId}", projectId);
                 }
             }
         }

@@ -34,6 +34,13 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
 
         try
         {
+            // Check for redirect loop errors that were caught during crawl
+            if (ctx.Metadata.IsRedirectLoop)
+            {
+                await ReportRedirectLoopErrorAsync(ctx);
+                return; // No further analysis needed for redirect loops
+            }
+            
             var statusCode = ctx.Metadata.StatusCode;
             
             // Check if this URL is a redirect
@@ -86,6 +93,32 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
             ToUrl = toUrl,
             StatusCode = statusCode
         };
+    }
+    
+    private async Task ReportRedirectLoopErrorAsync(UrlContext ctx)
+    {
+        var details = FindingDetailsBuilder.Create()
+            .AddItem("❌ Infinite redirect loop detected (ERR_TOO_MANY_REDIRECTS)")
+            .AddItem($"URL: {ctx.Url}")
+            .BeginNested("⚠️ Impact")
+                .AddItem("Page cannot be loaded - browser stops after too many redirects")
+                .AddItem("This URL is completely inaccessible to users and search engines")
+                .AddItem("Critical issue that prevents crawling and indexing")
+            .BeginNested("💡 Recommendations")
+                .AddItem("Check your server redirect configuration")
+                .AddItem("Ensure the redirect chain doesn't loop back to itself")
+                .AddItem("Test the URL in a browser to see the redirect chain")
+                .AddItem("Common causes: conflicting .htaccess rules, CMS misconfiguration, CDN settings")
+            .WithTechnicalMetadata("url", ctx.Url.ToString())
+            .WithTechnicalMetadata("errorType", "ERR_TOO_MANY_REDIRECTS")
+            .Build();
+        
+        await ctx.Findings.ReportAsync(
+            Key,
+            Severity.Error,
+            "REDIRECT_LOOP_ERROR",
+            "Infinite redirect loop - page cannot be loaded (ERR_TOO_MANY_REDIRECTS)",
+            details);
     }
 
     private async Task AnalyzeHttpRedirectAsync(UrlContext ctx)

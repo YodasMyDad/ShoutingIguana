@@ -34,6 +34,12 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
     
     // Track which projects have had their domain variants checked
     private static readonly ConcurrentDictionary<int, bool> DomainVariantsCheckedByProject = new();
+    
+    // Cache redirects per project to avoid loading them repeatedly (critical for performance)
+    private static readonly ConcurrentDictionary<int, Dictionary<string, List<RedirectInfo>>> RedirectCacheByProject = new();
+    
+    // Semaphore to ensure only one thread loads redirects per project (prevents race condition)
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> RedirectLoadingSemaphores = new();
 
     public override string Key => "DuplicateContent";
     public override string DisplayName => "Duplicate Content";
@@ -106,6 +112,9 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
 
             // Check for near-duplicates
             await CheckNearDuplicatesAsync(ctx, simHash);
+            
+            // Check boilerplate ratio (important pages only)
+            await CheckBoilerplateRatioAsync(ctx);
         }
         catch (Exception ex)
         {
@@ -421,6 +430,109 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 "NEAR_DUPLICATE",
                 $"Page content is very similar to {nearDuplicates.Count} other page(s)",
                 builder.Build());
+        }
+    }
+    
+    /// <summary>
+    /// Check content-to-boilerplate ratio on important pages.
+    /// Pages with mostly navigation/footer/boilerplate are thin content signals.
+    /// </summary>
+    private async Task CheckBoilerplateRatioAsync(UrlContext ctx)
+    {
+        // Only check important pages (depth <= 2)
+        if (ctx.Metadata.Depth > 2)
+        {
+            return;
+        }
+
+        try
+        {
+            var doc = new HtmlDocument();
+            doc.LoadHtml(ctx.RenderedHtml);
+
+            // Get total body content
+            var bodyNode = doc.DocumentNode.SelectSingleNode("//body");
+            if (bodyNode == null)
+            {
+                return;
+            }
+
+            var totalBodyText = bodyNode.InnerText ?? "";
+            var totalBodyLength = Regex.Replace(totalBodyText, @"\s+", " ").Trim().Length;
+
+            if (totalBodyLength < 100) // Skip very small pages
+            {
+                return;
+            }
+
+            // Try to identify main content area by removing common boilerplate elements
+            // Remove header, footer, nav, sidebar, aside
+            var boilerplateSelectors = new[] { "//header", "//footer", "//nav", "//aside", "//sidebar", "//*[@role='navigation']", "//*[@role='banner']", "//*[@role='contentinfo']" };
+            
+            var docCopy = new HtmlDocument();
+            docCopy.LoadHtml(ctx.RenderedHtml);
+            
+            foreach (var selector in boilerplateSelectors)
+            {
+                var nodesToRemove = docCopy.DocumentNode.SelectNodes(selector);
+                if (nodesToRemove != null)
+                {
+                    foreach (var node in nodesToRemove)
+                    {
+                        node.Remove();
+                    }
+                }
+            }
+
+            // Get main content after removing boilerplate
+            var bodyAfterRemoval = docCopy.DocumentNode.SelectSingleNode("//body");
+            var mainContentText = bodyAfterRemoval?.InnerText ?? "";
+            var mainContentLength = Regex.Replace(mainContentText, @"\s+", " ").Trim().Length;
+
+            // Calculate ratio: main_content / total_body
+            double contentRatio = totalBodyLength > 0 ? (double)mainContentLength / totalBodyLength : 0;
+
+            // Report if ratio is poor (less than 40% main content)
+            if (contentRatio < 0.4)
+            {
+                var boilerplatePercentage = (int)((1 - contentRatio) * 100);
+                var estimatedMainWords = mainContentLength / 6; // Rough word estimate
+                
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Boilerplate content: ~{boilerplatePercentage}% of page")
+                    .AddItem($"Main content: ~{(int)(contentRatio * 100)}% of page (~{estimatedMainWords} words)")
+                    .AddItem($"Page depth: {ctx.Metadata.Depth} (important page)")
+                    .BeginNested("⚠️ Quality Signal Impact")
+                        .AddItem("Google's Quality Rater Guidelines focus on 'Main Content' amount")
+                        .AddItem("Pages with mostly navigation/boilerplate = thin content signal")
+                        .AddItem("High boilerplate ratio dilutes content quality signals")
+                        .AddItem("May trigger Panda/Helpful Content quality filters")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Add more substantive main content to the page")
+                        .AddItem("Aim for at least 40-50% main content ratio")
+                        .AddItem("Focus on unique, valuable content above the fold")
+                        .AddItem("Reduce repetitive navigation elements if possible")
+                    .WithTechnicalMetadata("url", ctx.Url.ToString())
+                    .WithTechnicalMetadata("contentRatio", contentRatio)
+                    .WithTechnicalMetadata("boilerplatePercentage", boilerplatePercentage)
+                    .WithTechnicalMetadata("totalBodyLength", totalBodyLength)
+                    .WithTechnicalMetadata("mainContentLength", mainContentLength)
+                    .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
+                    .Build();
+
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Warning,
+                    "HIGH_BOILERPLATE_RATIO",
+                    $"Page has high boilerplate ratio (~{boilerplatePercentage}% boilerplate, only ~{estimatedMainWords} words main content)",
+                    details);
+                    
+                _logger.LogDebug("High boilerplate ratio on {Url}: {Ratio:P0} main content", ctx.Url, contentRatio);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Error checking boilerplate ratio for {Url}", ctx.Url);
         }
     }
     
@@ -753,15 +865,33 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
     }
     
     /// <summary>
-    /// Check if URLs are in redirect relationships and categorize by redirect type.
+    /// Gets cached redirects for a project, loading them once if not cached.
+    /// This prevents loading all redirects repeatedly for every URL (critical for performance).
+    /// Thread-safe: uses semaphore to ensure only one thread loads data per project.
     /// </summary>
-    private async Task<RedirectRelationshipInfo> CheckRedirectRelationshipsAsync(int projectId, string currentUrl, List<string> otherUrls)
+    private async Task<Dictionary<string, List<RedirectInfo>>> GetOrLoadRedirectCacheAsync(int projectId)
     {
-        var info = new RedirectRelationshipInfo();
+        // Fast path: check if already cached
+        if (RedirectCacheByProject.TryGetValue(projectId, out var cachedRedirects))
+        {
+            return cachedRedirects;
+        }
         
+        // Get or create semaphore for this project
+        var semaphore = RedirectLoadingSemaphores.GetOrAdd(projectId, _ => new SemaphoreSlim(1, 1));
+        
+        // Wait for exclusive access to load redirects
+        await semaphore.WaitAsync().ConfigureAwait(false);
         try
         {
-            // Build lookup of all redirects for efficient checking
+            // Double-check: another thread might have loaded while we waited
+            if (RedirectCacheByProject.TryGetValue(projectId, out cachedRedirects))
+            {
+                return cachedRedirects;
+            }
+            
+            // Load and cache redirects (only one thread gets here)
+            _logger.LogDebug("Loading redirects for project {ProjectId} (first time)", projectId);
             var redirectLookup = new Dictionary<string, List<RedirectInfo>>(StringComparer.OrdinalIgnoreCase);
             
             await foreach (var redirect in _repositoryAccessor.GetRedirectsAsync(projectId))
@@ -772,6 +902,30 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 }
                 redirectLookup[redirect.SourceUrl].Add(redirect);
             }
+            
+            // Cache for future use
+            RedirectCacheByProject[projectId] = redirectLookup;
+            _logger.LogInformation("Cached {Count} redirect entries for project {ProjectId}", redirectLookup.Count, projectId);
+            
+            return redirectLookup;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+    
+    /// <summary>
+    /// Check if URLs are in redirect relationships and categorize by redirect type.
+    /// </summary>
+    private async Task<RedirectRelationshipInfo> CheckRedirectRelationshipsAsync(int projectId, string currentUrl, List<string> otherUrls)
+    {
+        var info = new RedirectRelationshipInfo();
+        
+        try
+        {
+            // Use cached redirects - load once per project instead of per URL (massive performance improvement)
+            var redirectLookup = await GetOrLoadRedirectCacheAsync(projectId);
             
             // For each other URL, check if there's a redirect relationship
             foreach (var otherUrl in otherUrls)
@@ -852,6 +1006,14 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
         ContentHashesByProject.TryRemove(projectId, out _);
         SimHashesByProject.TryRemove(projectId, out _);
         DomainVariantsCheckedByProject.TryRemove(projectId, out _);
+        RedirectCacheByProject.TryRemove(projectId, out _);
+        
+        // Cleanup and dispose semaphore
+        if (RedirectLoadingSemaphores.TryRemove(projectId, out var semaphore))
+        {
+            semaphore.Dispose();
+        }
+        
         _logger.LogDebug("Cleaned up duplicate content data for project {ProjectId}", projectId);
     }
 }

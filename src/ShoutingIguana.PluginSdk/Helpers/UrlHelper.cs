@@ -184,6 +184,13 @@ public static class UrlHelper
 
         try
         {
+            // Handle protocol-relative URLs (//example.com/path)
+            // These should be treated as https:// URLs
+            if (relativeUrl.StartsWith("//"))
+            {
+                relativeUrl = "https:" + relativeUrl;
+            }
+            
             // Check if it's already an absolute URL
             if (Uri.TryCreate(relativeUrl, UriKind.Absolute, out var absoluteUri))
             {

@@ -10,6 +10,9 @@ public interface IUrlRepository
     Task<IEnumerable<Url>> GetByProjectIdAsync(int projectId);
     Task<IEnumerable<Url>> GetByStatusAsync(int projectId, UrlStatus status);
     Task<List<Url>> GetCompletedUrlsAsync(int projectId);
+    Task<List<int>> GetCompletedUrlIdsAsync(int projectId);
+    Task<UrlAnalysisDto?> GetForAnalysisAsync(int id);
+    Task<string?> GetRenderedHtmlAsync(int id);
     Task<Url> CreateAsync(Url url);
     Task<Url> UpdateAsync(Url url);
     Task<int> CountByProjectIdAsync(int projectId);

@@ -98,6 +98,7 @@ public class InventoryTask : UrlTaskBase
             await AnalyzeUrlStructureAsync(ctx);
             await AnalyzeIndexabilityAsync(ctx);
             await AnalyzeContentQualityAsync(ctx);
+            await CheckThirdPartyResourcesAsync(ctx);
         }
     }
 
@@ -231,6 +232,9 @@ public class InventoryTask : UrlTaskBase
                     "URL appears to be a pagination page",
                     details);
             }
+            
+            // Check for session IDs in URL (CRITICAL SEO ISSUE)
+            await CheckSessionIdsAsync(ctx, url);
         }
 
         // Check for special characters
@@ -275,6 +279,69 @@ public class InventoryTask : UrlTaskBase
                 "UNDERSCORES_IN_URL",
                 "URL contains underscores (hyphens are preferred for SEO)",
                 details);
+        }
+    }
+
+    /// <summary>
+    /// Check for session IDs in URLs - a critical SEO issue causing infinite duplicate content.
+    /// </summary>
+    private async Task CheckSessionIdsAsync(UrlContext ctx, string url)
+    {
+        // Common session ID patterns across different platforms
+        var sessionIdPatterns = new[]
+        {
+            // Java
+            (Pattern: @"[?&;]jsessionid=", Name: "JSESSIONID (Java)", Example: "jsessionid=ABC123"),
+            // PHP
+            (Pattern: @"[?&]PHPSESSID=", Name: "PHPSESSID (PHP)", Example: "PHPSESSID=ABC123"),
+            (Pattern: @"[?&]sid=", Name: "SID (PHP)", Example: "sid=ABC123"),
+            // ASP.NET
+            (Pattern: @"[?&;\(]ASPSESSIONID[A-Z]{8}=", Name: "ASPSESSIONID (ASP.NET)", Example: "ASPSESSIONID=ABC123"),
+            (Pattern: @"\(S\([a-z0-9]{24}\)\)", Name: "ASP.NET Cookieless Session", Example: "(S(abc123xyz))"),
+            // ColdFusion
+            (Pattern: @"[?&]CFID=", Name: "CFID (ColdFusion)", Example: "CFID=123456"),
+            (Pattern: @"[?&]CFTOKEN=", Name: "CFTOKEN (ColdFusion)", Example: "CFTOKEN=ABC123"),
+            // Generic
+            (Pattern: @"[?&]sessionid=", Name: "SESSIONID (Generic)", Example: "sessionid=ABC123"),
+            (Pattern: @"[?&]session_id=", Name: "SESSION_ID (Generic)", Example: "session_id=ABC123"),
+            (Pattern: @"[?&]sess=", Name: "SESS (Generic)", Example: "sess=ABC123"),
+        };
+
+        foreach (var (Pattern, Name, Example) in sessionIdPatterns)
+        {
+            if (Regex.IsMatch(url, Pattern, RegexOptions.IgnoreCase))
+            {
+                var details = FindingDetailsBuilder.Create()
+                    .AddItem($"Session ID detected: {Name}")
+                    .AddItem($"URL: {url}")
+                    .AddItem("❌ CRITICAL DUPLICATE CONTENT ISSUE")
+                    .BeginNested("⚠️ Impact")
+                        .AddItem("Creates infinite duplicate content variations")
+                        .AddItem("Each user session = new URL for same content")
+                        .AddItem("Completely ruins site indexation")
+                        .AddItem("Wastes massive crawl budget")
+                        .AddItem("Can cause site-wide deindexation in severe cases")
+                    .BeginNested("💡 Recommendations")
+                        .AddItem("Use cookies for session tracking instead of URLs")
+                        .AddItem("Configure your application server to use cookie-based sessions")
+                        .AddItem("Add robots.txt rules to block session ID parameters if immediate fix impossible")
+                        .AddItem($"Example robots.txt: Disallow: /*?{Example}*")
+                        .AddItem("This is a CRITICAL issue - fix immediately")
+                    .WithTechnicalMetadata("url", url)
+                    .WithTechnicalMetadata("sessionIdType", Name)
+                    .WithTechnicalMetadata("pattern", Pattern)
+                    .Build();
+
+                await ctx.Findings.ReportAsync(
+                    Key,
+                    Severity.Error,
+                    "SESSION_ID_IN_URL",
+                    $"CRITICAL: Session ID in URL causes infinite duplicate content: {Name}",
+                    details);
+                
+                // Only report once per URL (first match found)
+                return;
+            }
         }
     }
 
@@ -429,6 +496,172 @@ public class InventoryTask : UrlTaskBase
         }
     }
 
+    /// <summary>
+    /// Check for excessive third-party resources that impact performance
+    /// </summary>
+    private async Task CheckThirdPartyResourcesAsync(UrlContext ctx)
+    {
+        if (string.IsNullOrEmpty(ctx.RenderedHtml))
+        {
+            return;
+        }
+        
+        // Only analyze HTML pages
+        if (ctx.Metadata.ContentType?.Contains("text/html") != true)
+        {
+            return;
+        }
+        
+        // Only analyze internal URLs
+        if (UrlHelper.IsExternal(ctx.Project.BaseUrl, ctx.Url.ToString()))
+        {
+            return;
+        }
+        
+        var doc = new HtmlDocument();
+        doc.LoadHtml(ctx.RenderedHtml);
+        
+        var thirdPartyDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var heavyThirdPartyScripts = new List<string>();
+        var currentDomain = new Uri(ctx.Project.BaseUrl).Host;
+        
+        // Known heavy third-party services
+        var knownHeavyServices = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "google-analytics.com", "Google Analytics" },
+            { "googletagmanager.com", "Google Tag Manager" },
+            { "facebook.net", "Facebook Pixel" },
+            { "facebook.com", "Facebook SDK" },
+            { "doubleclick.net", "Google Ads" },
+            { "googlesyndication.com", "Google AdSense" },
+            { "adservice.google.com", "Google Ads" },
+            { "analytics.tiktok.com", "TikTok Pixel" },
+            { "connect.facebook.net", "Facebook Connect" },
+            { "bat.bing.com", "Bing Ads" },
+            { "hotjar.com", "Hotjar Analytics" },
+            { "mouseflow.com", "Mouseflow Analytics" },
+            { "clarity.ms", "Microsoft Clarity" },
+            { "fullstory.com", "FullStory Analytics" }
+        };
+        
+        // Check scripts
+        var scriptNodes = doc.DocumentNode.SelectNodes("//script[@src]");
+        if (scriptNodes != null)
+        {
+            foreach (var script in scriptNodes)
+            {
+                var src = script.GetAttributeValue("src", "");
+                if (string.IsNullOrEmpty(src))
+                    continue;
+                
+                if (Uri.TryCreate(src, UriKind.Absolute, out var uri))
+                {
+                    var domain = uri.Host.ToLowerInvariant();
+                    
+                    // Skip same-domain resources
+                    if (domain.Equals(currentDomain, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    
+                    // Skip CDN domains that are just hosting your resources
+                    if (domain.Contains(currentDomain.Replace("www.", "")))
+                        continue;
+                    
+                    thirdPartyDomains.Add(domain);
+                    
+                    // Check if it's a known heavy service
+                    foreach (var kvp in knownHeavyServices)
+                    {
+                        if (domain.Contains(kvp.Key))
+                        {
+                            if (!heavyThirdPartyScripts.Contains(kvp.Value))
+                            {
+                                heavyThirdPartyScripts.Add(kvp.Value);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check stylesheets (less impactful but still third-party)
+        var linkNodes = doc.DocumentNode.SelectNodes("//link[@rel='stylesheet'][@href]");
+        if (linkNodes != null)
+        {
+            foreach (var link in linkNodes)
+            {
+                var href = link.GetAttributeValue("href", "");
+                if (string.IsNullOrEmpty(href))
+                    continue;
+                
+                if (Uri.TryCreate(href, UriKind.Absolute, out var uri))
+                {
+                    var domain = uri.Host.ToLowerInvariant();
+                    
+                    if (domain.Equals(currentDomain, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    
+                    if (domain.Contains(currentDomain.Replace("www.", "")))
+                        continue;
+                    
+                    thirdPartyDomains.Add(domain);
+                }
+            }
+        }
+        
+        // Report if excessive third-party domains (> 10)
+        if (thirdPartyDomains.Count > 10)
+        {
+            var builder = FindingDetailsBuilder.Create()
+                .AddItem($"Third-party domains: {thirdPartyDomains.Count}")
+                .AddItem("⚠️ Excessive external resource loading");
+            
+            builder.BeginNested("🌐 Third-party domains");
+            foreach (var domain in thirdPartyDomains.Take(15))
+            {
+                builder.AddItem(domain);
+            }
+            if (thirdPartyDomains.Count > 15)
+            {
+                builder.AddItem($"... and {thirdPartyDomains.Count - 15} more");
+            }
+            
+            if (heavyThirdPartyScripts.Any())
+            {
+                builder.BeginNested("📊 Known analytics/tracking services");
+                foreach (var service in heavyThirdPartyScripts)
+                {
+                    builder.AddItem(service);
+                }
+            }
+            
+            builder.BeginNested("⚠️ Performance Impact")
+                .AddItem("Each third-party domain requires DNS lookup + connection")
+                .AddItem("Analytics and ad scripts slow page load significantly")
+                .AddItem("Impacts Core Web Vitals (LCP, FID/INP)")
+                .AddItem("Slower pages = lower rankings");
+            
+            builder.BeginNested("💡 Recommendations")
+                .AddItem("Audit third-party scripts - remove unnecessary ones")
+                .AddItem("Consolidate analytics (e.g., use only GTM instead of multiple)")
+                .AddItem("Defer non-critical scripts with async or defer attributes")
+                .AddItem("Consider self-hosting critical third-party resources")
+                .AddItem("Limit to essential tracking and functionality only");
+            
+            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
+                .WithTechnicalMetadata("thirdPartyCount", thirdPartyDomains.Count)
+                .WithTechnicalMetadata("domains", thirdPartyDomains.ToArray())
+                .WithTechnicalMetadata("heavyServices", heavyThirdPartyScripts.ToArray());
+            
+            await ctx.Findings.ReportAsync(
+                Key,
+                Severity.Warning,
+                "EXCESSIVE_THIRD_PARTY_RESOURCES",
+                $"Excessive third-party resources: {thirdPartyDomains.Count} external domains (impacts performance)",
+                builder.Build());
+        }
+    }
+    
     private string NormalizeUrl(string url)
     {
         try

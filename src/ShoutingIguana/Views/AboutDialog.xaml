@@ -46,7 +46,7 @@
                                    Style="{StaticResource TitleTextStyle}"
                                    Margin="0"
                                    AutomationProperties.HeadingLevel="Level1"/>
-                        <TextBlock Text="Version 1.0.0 (Stage 3 MVP)"
+                        <TextBlock Text="Version 1.0.0"
                                    Style="{StaticResource BodyTextStyle}"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    Margin="0,4,0,0"/>
@@ -122,74 +122,11 @@
                             <LineBreak/>
                             <Run Text="&#x2022; CommunityToolkit.Mvvm"/>
                         </TextBlock>
-                    </StackPanel>
-                </Border>
 
-                <!-- Links Section -->
-                <Border Background="{StaticResource SurfaceBrush}"
-                        CornerRadius="8"
-                        Padding="20"
-                        Margin="0,0,0,0">
-                    <StackPanel>
-                        <TextBlock Text="Links"
-                                   Style="{StaticResource SubtitleTextStyle}"
-                                   Margin="0,0,0,12"/>
-
-                        <Button Command="{Binding OpenDocumentationCommand}"
-                                Style="{StaticResource SecondaryButton}"
-                                HorizontalAlignment="Stretch"
-                                Margin="0,0,0,8"
-                                HorizontalContentAlignment="Left"
-                                TabIndex="0"
-                                AutomationProperties.Name="Open Documentation"
-                                AutomationProperties.HelpText="Opens the online documentation in your web browser"
-                                ToolTip="Opens the Shouting Iguana documentation in your default web browser">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Document}"
-                                           Style="{StaticResource Icon}"
-                                           Width="16"
-                                           Height="16"
-                                           Margin="0,0,8,0"/>
-                                <TextBlock Text="Documentation"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button Command="{Binding OpenGitHubCommand}"
-                                Style="{StaticResource SecondaryButton}"
-                                HorizontalAlignment="Stretch"
-                                Margin="0,0,0,8"
-                                HorizontalContentAlignment="Left"
-                                TabIndex="1"
-                                AutomationProperties.Name="Open GitHub Repository"
-                                AutomationProperties.HelpText="Opens the project's GitHub repository in your web browser"
-                                ToolTip="View source code and contribute on GitHub">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Code}"
-                                           Style="{StaticResource Icon}"
-                                           Width="16"
-                                           Height="16"
-                                           Margin="0,0,8,0"/>
-                                <TextBlock Text="GitHub Repository"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button Command="{Binding CheckForUpdatesCommand}"
-                                Style="{StaticResource SecondaryButton}"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                TabIndex="2"
-                                AutomationProperties.Name="Check for Updates"
-                                AutomationProperties.HelpText="Checks if a newer version of Shouting Iguana is available"
-                                ToolTip="Check if a new version of Shouting Iguana is available for download">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Refresh}"
-                                           Style="{StaticResource Icon}"
-                                           Width="16"
-                                           Height="16"
-                                           Margin="0,0,8,0"/>
-                                <TextBlock Text="Check for Updates"/>
-                            </StackPanel>
-                        </Button>
+                        <TextBlock Text="Developed by Lee Messenger"
+                                   Style="{StaticResource BodyTextStyle}"
+                                   Margin="0,16,0,0"
+                                   FontWeight="Medium"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -207,7 +144,7 @@
                     Height="48"
                     HorizontalAlignment="Center"
                     MinWidth="120"
-                    TabIndex="3"
+                    TabIndex="0"
                     IsDefault="True"
                     AutomationProperties.Name="Close About Dialog"
                     AutomationProperties.HelpText="Closes the About dialog and returns to the application"/>

@@ -18,6 +18,12 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
     private readonly bool _checkExternalLinks;
     private readonly bool _checkAnchorLinks;
     private bool _disposed;
+    
+    // Cache URL statuses per project to avoid database queries for every link (critical for performance)
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, Dictionary<string, int>> UrlStatusCacheByProject = new();
+    
+    // Semaphore to ensure only one thread loads URL statuses per project
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, SemaphoreSlim> UrlStatusLoadingSemaphores = new();
 
     // Helper class to track unique findings with occurrence counts
     private class FindingTracker
@@ -66,16 +72,22 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
 
             // Track findings to deduplicate them
             var findingsMap = new Dictionary<string, FindingTracker>();
+            
+            // CRITICAL PERFORMANCE FIX: Pre-load URL status cache for this project
+            // This prevents database query for every link (50+ queries per page = massive bottleneck!)
+            await EnsureUrlStatusCacheLoadedAsync(ctx.Project.ProjectId, ct);
 
-            // Load stored diagnostic metadata from Links table (captured in Phase 1)
+            // FIRST: Load all links from the Links table (Phase 1 captured data) - ONCE
             // This includes ALL resources that were discovered during crawling, including
             // stylesheets, scripts, images, etc. that may have returned 404
-            var linkDiagnostics = await LoadStoredLinkDiagnosticsAsync(ctx);
+            var storedLinks = await _repositoryAccessor.GetLinksByFromUrlAsync(ctx.Project.ProjectId, ctx.Metadata.UrlId);
             
-            // FIRST: Check all links from the Links table (Phase 1 captured data)
+            // Extract diagnostic metadata from stored links
+            var linkDiagnostics = ExtractLinkDiagnostics(storedLinks);
+            
+            // Check all links from the Links table
             // This ensures we catch resources like stylesheets that may have been requested
             // by the browser but failed to load (404) and may not be in final HTML
-            var storedLinks = await _repositoryAccessor.GetLinksByFromUrlAsync(ctx.Project.ProjectId, ctx.Metadata.UrlId);
             var checkedUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             
             foreach (var storedLink in storedLinks)
@@ -227,53 +239,106 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
     }
 
     /// <summary>
-    /// Loads stored diagnostic metadata from the Links table (captured in Phase 1).
-    /// Returns a dictionary mapping link URL to diagnostic info.
+    /// Ensures URL status cache is loaded for the project (loads once, thread-safe).
+    /// CRITICAL for performance: prevents database query for every link checked.
     /// </summary>
-    private async Task<Dictionary<string, ElementDiagnosticInfo>> LoadStoredLinkDiagnosticsAsync(UrlContext ctx)
+    private async Task EnsureUrlStatusCacheLoadedAsync(int projectId, CancellationToken ct)
     {
-        var diagnostics = new Dictionary<string, ElementDiagnosticInfo>(StringComparer.OrdinalIgnoreCase);
+        // Fast path: check if already cached
+        if (UrlStatusCacheByProject.ContainsKey(projectId))
+        {
+            return;
+        }
         
+        // Get or create semaphore for this project
+        var semaphore = UrlStatusLoadingSemaphores.GetOrAdd(projectId, _ => new SemaphoreSlim(1, 1));
+        
+        // Wait for exclusive access to load URL statuses
+        await semaphore.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            // Get all outgoing links from this URL (includes diagnostic metadata)
-            var storedLinks = await _repositoryAccessor.GetLinksByFromUrlAsync(ctx.Project.ProjectId, ctx.Metadata.UrlId);
-            
-            foreach (var storedLink in storedLinks)
+            // Double-check: another thread might have loaded while we waited
+            if (UrlStatusCacheByProject.ContainsKey(projectId))
             {
-                // Only add if we have diagnostic data
-                if (!string.IsNullOrEmpty(storedLink.DomPath))
+                return;
+            }
+            
+            // Load all URLs and build status cache
+            _logger.LogInformation("Loading URL status cache for project {ProjectId} (first time)", projectId);
+            var statusCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            
+            await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId, ct))
+            {
+                if (!string.IsNullOrEmpty(url.Address))
                 {
-                    var diagnosticInfo = new ElementDiagnosticInfo
-                    {
-                        TagName = storedLink.ElementTag ?? "unknown",
-                        DomPath = storedLink.DomPath,
-                        IsVisible = storedLink.IsVisible ?? true,
-                        BoundingBox = (storedLink.PositionX.HasValue && storedLink.PositionY.HasValue)
-                            ? new BoundingBoxInfo
-                            {
-                                X = storedLink.PositionX.Value,
-                                Y = storedLink.PositionY.Value,
-                                Width = storedLink.ElementWidth ?? 0,
-                                Height = storedLink.ElementHeight ?? 0
-                            }
-                            : null,
-                        HtmlContext = storedLink.HtmlSnippet ?? "",
-                        ParentElement = !string.IsNullOrEmpty(storedLink.ParentTag)
-                            ? new ParentElementInfo { TagName = storedLink.ParentTag }
-                            : null
-                    };
-                    
-                    diagnostics[storedLink.ToUrl] = diagnosticInfo;
+                    statusCache[url.Address] = url.Status;
                 }
             }
             
-            _logger.LogDebug("Loaded diagnostics for {Count} links from database for {Url}", diagnostics.Count, ctx.Url);
+            // Cache for future use
+            UrlStatusCacheByProject[projectId] = statusCache;
+            _logger.LogInformation("Cached {Count} URL statuses for project {ProjectId}", statusCache.Count, projectId);
         }
-        catch (Exception ex)
+        finally
         {
-            _logger.LogWarning(ex, "Error loading stored link diagnostics for {Url}", ctx.Url);
+            semaphore.Release();
         }
+    }
+    
+    /// <summary>
+    /// Gets URL status from cache (fast lookup, no database query).
+    /// Returns null if URL not found in cache.
+    /// </summary>
+    private int? GetUrlStatusFromCache(int projectId, string url)
+    {
+        if (UrlStatusCacheByProject.TryGetValue(projectId, out var cache))
+        {
+            if (cache.TryGetValue(url, out var status))
+            {
+                return status;
+            }
+        }
+        return null;
+    }
+    
+    /// <summary>
+    /// Extracts diagnostic metadata from stored links (already loaded from database).
+    /// Returns a dictionary mapping link URL to diagnostic info.
+    /// </summary>
+    private Dictionary<string, ElementDiagnosticInfo> ExtractLinkDiagnostics(List<PluginSdk.LinkInfo> storedLinks)
+    {
+        var diagnostics = new Dictionary<string, ElementDiagnosticInfo>(StringComparer.OrdinalIgnoreCase);
+        
+        foreach (var storedLink in storedLinks)
+        {
+            // Only add if we have diagnostic data
+            if (!string.IsNullOrEmpty(storedLink.DomPath))
+            {
+                var diagnosticInfo = new ElementDiagnosticInfo
+                {
+                    TagName = storedLink.ElementTag ?? "unknown",
+                    DomPath = storedLink.DomPath,
+                    IsVisible = storedLink.IsVisible ?? true,
+                    BoundingBox = (storedLink.PositionX.HasValue && storedLink.PositionY.HasValue)
+                        ? new BoundingBoxInfo
+                        {
+                            X = storedLink.PositionX.Value,
+                            Y = storedLink.PositionY.Value,
+                            Width = storedLink.ElementWidth ?? 0,
+                            Height = storedLink.ElementHeight ?? 0
+                        }
+                        : null,
+                    HtmlContext = storedLink.HtmlSnippet ?? "",
+                    ParentElement = !string.IsNullOrEmpty(storedLink.ParentTag)
+                        ? new ParentElementInfo { TagName = storedLink.ParentTag }
+                        : null
+                };
+                
+                diagnostics[storedLink.ToUrl] = diagnosticInfo;
+            }
+        }
+        
+        _logger.LogDebug("Extracted diagnostics for {Count} links", diagnostics.Count);
         
         return diagnostics;
     }
@@ -294,32 +359,33 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
 
         if (!isExternal)
         {
-            // Internal link - check database
+            // Internal link - check from cache (FAST - no database query!)
             // Phase 2: All internal resources are guaranteed to be crawled and in database
-            status = await _checker.CheckLinkStatusAsync(ctx.Project.ProjectId, link.Url, ct);
+            status = GetUrlStatusFromCache(ctx.Project.ProjectId, link.Url);
             
             // CRITICAL: If status is null, it means the URL is not in the database or hasn't been crawled
-            // This is unexpected in Phase 2 and should be reported as a broken link
+            // This could be because MaxUrlsToCrawl was reached before this URL was crawled
             if (!status.HasValue)
             {
-                // Report as broken - URL should have been crawled but wasn't found
+                // Report as warning - URL wasn't crawled, not necessarily broken
                 var key = $"{link.Url}|LINK_NOT_CRAWLED";
-                var impactNote = "This internal resource was discovered but not found in the crawl database. This typically indicates a broken link or a resource that failed to load.";
-                var recommendation = "Verify this URL is accessible and returns a valid response. Check for typos in the URL or missing files on the server.";
+                var impactNote = "This internal link was discovered during the crawl but was not checked because the MaxUrlsToCrawl limit was reached.";
+                var recommendation = "To check this URL, increase the 'Maximum URLs to Crawl' setting in your project settings and run the crawl again. Alternatively, this could indicate a broken link if the URL is invalid.";
                 
                 TrackFinding(findingsMap,
                     key,
-                    Severity.Error,
-                    $"BROKEN_{link.LinkType.ToUpperInvariant()}",
-                    $"Broken {link.LinkType}: {link.Url} (not found in crawl database)",
+                    Severity.Warning,
+                    "LINK_NOT_CRAWLED",
+                    $"Uncrawled {link.LinkType}: {link.Url} (not found in crawl database)",
                     CreateFindingData(ctx, link, null, false, diagnosticInfo, recommendation: recommendation, impactNote: impactNote));
                 
                 return; // Don't continue checking this link
             }
             
-            // Check if this URL has a redirect
+            // Check if this URL has a redirect (use cache instead of database query)
             var urlWithAnchor = link.Url.Split('#')[0];
-            hasRedirect = await CheckForRedirectAsync(ctx.Project.ProjectId, urlWithAnchor, ct);
+            var redirectStatus = GetUrlStatusFromCache(ctx.Project.ProjectId, urlWithAnchor);
+            hasRedirect = redirectStatus.HasValue && redirectStatus.Value >= 300 && redirectStatus.Value < 400;
         }
         else if (_checkExternalLinks)
         {
@@ -344,20 +410,30 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         if (status.HasValue && (status.Value >= 400 || status.Value == 0))
         {
             // Categorize status codes
-            var isRestricted = status.Value == 401 || status.Value == 403 || status.Value == 451;
-            var severity = isRestricted ? Severity.Info : Severity.Error;
+            var isRestricted = status.Value == 401 || status.Value == 403 || status.Value == 405 || status.Value == 451;
+            var isConnectionFailed = status.Value == 0;
+            
+            // Connection failures are warnings (could be transient), restricted access is info, true errors are errors
+            var severity = isConnectionFailed ? Severity.Warning : (isRestricted ? Severity.Info : Severity.Error);
             var statusText = status.Value == 0 ? "Connection Failed" : status.Value.ToString();
             
             string code;
             string message;
             
-            if (isRestricted)
+            if (isConnectionFailed)
+            {
+                // Connection failures - warnings (transient issues)
+                code = $"CONNECTION_FAILED_{link.LinkType.ToUpperInvariant()}";
+                message = $"{link.LinkType} connection failed: {link.Url} (could be temporary)";
+            }
+            else if (isRestricted)
             {
                 // Restricted pages - informational only
                 code = status.Value switch
                 {
                     401 => "AUTH_REQUIRED_LINK",
                     403 => "FORBIDDEN_LINK",
+                    405 => "METHOD_NOT_ALLOWED_LINK",
                     451 => "UNAVAILABLE_LEGAL",
                     _ => "RESTRICTED_LINK"
                 };
@@ -366,6 +442,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 {
                     401 => "requires authentication",
                     403 => "is forbidden/restricted",
+                    405 => "does not allow HEAD requests",
                     451 => "is unavailable for legal reasons",
                     _ => "is restricted"
                 };
@@ -385,12 +462,19 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
             // Generate recommendations based on the issue
             string? recommendation = null;
             string? impactNote = null;
-            if (isRestricted)
+            if (isConnectionFailed)
+            {
+                // Connection failure recommendations
+                recommendation = "Connection failures can be temporary network issues, DNS problems, or server unavailability. Try checking the link again later. If this persists, the resource may be permanently unavailable.";
+                impactNote = "Temporary connection failures don't necessarily indicate a broken link, but persistent failures harm user experience.";
+            }
+            else if (isRestricted)
             {
                 var note = status.Value switch
                 {
                     401 => "This page requires authentication/login to access.",
                     403 => "This page is restricted and access is forbidden.",
+                    405 => "This resource does not allow HEAD requests (common for external scripts and APIs).",
                     451 => "This page is unavailable for legal reasons.",
                     _ => "This page has restricted access."
                 };
@@ -399,6 +483,11 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 if (status.Value == 403 && isExternal)
                 {
                     recommendation = $"{note} For external links (especially social media platforms like Twitter/X, LinkedIn, etc.), this often means the site blocks automated crawlers even though the page is publicly accessible in a browser. This is usually not an error - verify the link works in a browser. If it does, you can safely ignore this finding.";
+                }
+                // Add special note for 405 errors (common for external resources)
+                else if (status.Value == 405 && isExternal)
+                {
+                    recommendation = $"{note} External scripts, APIs, and resources often return 405 for automated checks using HEAD requests. This is normal behavior and doesn't indicate a broken link. The resource is likely accessible in a browser. You can safely ignore this finding.";
                 }
                 else
                 {
@@ -499,18 +588,6 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         }
     }
 
-    private async Task<bool> CheckForRedirectAsync(int projectId, string url, CancellationToken ct)
-    {
-        try
-        {
-            var status = await _checker.CheckLinkStatusAsync(projectId, url, ct);
-            return status.HasValue && status.Value >= 300 && status.Value < 400;
-        }
-        catch
-        {
-            return false;
-        }
-    }
 
     private FindingDetails CreateFindingData(
         UrlContext ctx, 
@@ -682,6 +759,22 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         public string? AnchorId { get; set; }
     }
 
+    /// <summary>
+    /// Cleanup per-project data when project is closed.
+    /// </summary>
+    public override void CleanupProject(int projectId)
+    {
+        UrlStatusCacheByProject.TryRemove(projectId, out _);
+        
+        // Cleanup and dispose semaphore
+        if (UrlStatusLoadingSemaphores.TryRemove(projectId, out var semaphore))
+        {
+            semaphore.Dispose();
+        }
+        
+        _logger.LogDebug("Cleaned up broken links cache for project {ProjectId}", projectId);
+    }
+    
     /// <summary>
     /// Dispose of resources, particularly the ExternalLinkChecker HttpClient.
     /// </summary>

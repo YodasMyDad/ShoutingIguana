@@ -21,7 +21,7 @@ public class PluginExecutor(
     private readonly IServiceProvider _serviceProvider = serviceProvider;
 
     public async Task ExecuteTasksAsync(
-        Url urlEntity,
+        UrlAnalysisDto urlData,
         IPage? page,
         string? renderedHtml,
         Dictionary<string, string> headers,
@@ -37,15 +37,15 @@ public class PluginExecutor(
             return;
         }
 
-        _logger.LogDebug("Executing {Count} plugin tasks for {Url}", tasks.Count, urlEntity.Address);
+        _logger.LogDebug("Executing {Count} plugin tasks for {Url}", tasks.Count, urlData.Address);
 
         // Create context
         IBrowserPage? browserPage = page != null ? new BrowserPage(page) : null;
         
-        var findingSink = new FindingSink(urlEntity.Id, projectId, _serviceProvider, _logger);
+        var findingSink = new FindingSink(urlData.Id, projectId, _serviceProvider, _logger);
         
         var urlContext = new UrlContext(
-            Url: new Uri(urlEntity.Address),
+            Url: new Uri(urlData.Address),
             Page: browserPage,
             HttpResponse: null, // We don't pass HttpResponse in Stage 2
             RenderedHtml: renderedHtml,
@@ -58,24 +58,25 @@ public class PluginExecutor(
                 RespectRobotsTxt: projectSettings.RespectRobotsTxt,
                 UseSitemapXml: projectSettings.UseSitemapXml),
             Metadata: new UrlMetadata(
-                UrlId: urlEntity.Id,
-                StatusCode: urlEntity.HttpStatus ?? 0,
-                ContentType: urlEntity.ContentType,
-                ContentLength: urlEntity.ContentLength,
-                Depth: urlEntity.Depth,
-                CrawledUtc: urlEntity.LastCrawledUtc ?? DateTime.UtcNow,
-                CanonicalHtml: urlEntity.CanonicalHtml,
-                CanonicalHttp: urlEntity.CanonicalHttp,
-                HasMultipleCanonicals: urlEntity.HasMultipleCanonicals,
-                HasCrossDomainCanonical: urlEntity.HasCrossDomainCanonical,
-                RobotsNoindex: urlEntity.RobotsNoindex,
-                RobotsNofollow: urlEntity.RobotsNofollow,
-                XRobotsTag: urlEntity.XRobotsTag,
-                HasRobotsConflict: urlEntity.HasRobotsConflict,
-                HasMetaRefresh: urlEntity.HasMetaRefresh,
-                MetaRefreshDelay: urlEntity.MetaRefreshDelay,
-                MetaRefreshTarget: urlEntity.MetaRefreshTarget,
-                HtmlLang: urlEntity.HtmlLang),
+                UrlId: urlData.Id,
+                StatusCode: urlData.HttpStatus ?? 0,
+                ContentType: urlData.ContentType,
+                ContentLength: urlData.ContentLength,
+                Depth: urlData.Depth,
+                CrawledUtc: urlData.LastCrawledUtc ?? DateTime.UtcNow,
+                CanonicalHtml: urlData.CanonicalHtml,
+                CanonicalHttp: urlData.CanonicalHttp,
+                HasMultipleCanonicals: urlData.HasMultipleCanonicals,
+                HasCrossDomainCanonical: urlData.HasCrossDomainCanonical,
+                RobotsNoindex: urlData.RobotsNoindex,
+                RobotsNofollow: urlData.RobotsNofollow,
+                XRobotsTag: urlData.XRobotsTag,
+                HasRobotsConflict: urlData.HasRobotsConflict,
+                HasMetaRefresh: urlData.HasMetaRefresh,
+                MetaRefreshDelay: urlData.MetaRefreshDelay,
+                MetaRefreshTarget: urlData.MetaRefreshTarget,
+                HtmlLang: urlData.HtmlLang,
+                IsRedirectLoop: urlData.IsRedirectLoop),
             Findings: findingSink,
             Enqueue: new UrlEnqueueStub(), // Not implemented in Stage 2
             Logger: _logger);
@@ -95,12 +96,12 @@ public class PluginExecutor(
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.LogInformation("Task execution cancelled for {Url}", urlEntity.Address);
+                    _logger.LogInformation("Task execution cancelled for {Url}", urlData.Address);
                     throw;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error executing task {TaskName} for {Url}", task.DisplayName, urlEntity.Address);
+                    _logger.LogError(ex, "Error executing task {TaskName} for {Url}", task.DisplayName, urlData.Address);
                 }
             }
         }

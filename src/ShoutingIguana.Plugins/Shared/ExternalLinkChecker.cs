@@ -73,6 +73,33 @@ public class ExternalLinkChecker : IDisposable
 
         try
         {
+            // Handle protocol-relative URLs (//example.com/path)
+            // These should be treated as https:// URLs
+            if (url.StartsWith("//"))
+            {
+                url = "https:" + url;
+            }
+            
+            // Validate URL scheme - only support http and https
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                result.StatusCode = 0;
+                result.IsSuccess = false;
+                result.ErrorMessage = "Invalid URL format";
+                result.ResponseTime = DateTime.UtcNow - startTime;
+                return result;
+            }
+
+            if (uri.Scheme != "http" && uri.Scheme != "https")
+            {
+                result.StatusCode = 0;
+                result.IsSuccess = false;
+                result.ErrorMessage = $"Unsupported URL scheme: {uri.Scheme}";
+                result.ResponseTime = DateTime.UtcNow - startTime;
+                _logger.LogDebug("Skipping external link check for unsupported scheme: {Url}", url);
+                return result;
+            }
+
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(_timeout);
 

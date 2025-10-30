@@ -52,7 +52,7 @@ public class CrawlEngine(
     public bool IsPaused => Interlocked.CompareExchange(ref _isPaused, 0, 0) == 1;
     public event EventHandler<CrawlProgressEventArgs>? ProgressUpdated;
 
-    public Task StartCrawlAsync(int projectId, CancellationToken cancellationToken = default)
+    public Task StartCrawlAsync(int projectId, bool resumeFromCheckpoint = false, CancellationToken cancellationToken = default)
     {
         if (IsCrawling)
         {
@@ -85,7 +85,7 @@ public class CrawlEngine(
         {
             try
             {
-                await RunCrawlAsync(projectId, _cts.Token).ConfigureAwait(false);
+                await RunCrawlAsync(projectId, resumeFromCheckpoint, _cts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -211,13 +211,12 @@ public class CrawlEngine(
         }
     }
 
-    private async Task RunCrawlAsync(int projectId, CancellationToken cancellationToken)
+    private async Task RunCrawlAsync(int projectId, bool resumeFromCheckpoint, CancellationToken cancellationToken)
     {
         Project? project;
         ProjectSettings settings;
         ProxySettings? globalProxySettings;
         int checkpointInterval;
-        int queueSize;
         
         using (var scope = _serviceProvider.CreateScope())
         {
@@ -244,92 +243,93 @@ public class CrawlEngine(
             globalProxySettings = appSettings.CrawlSettings.GlobalProxy;
             checkpointInterval = appSettings.CrawlSettings.CheckpointInterval;
 
-            // Seed the queue with base URL if empty
+            var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
             var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
-            queueSize = await queueRepository.CountQueuedAsync(projectId).ConfigureAwait(false);
-            if (queueSize == 0)
+            
+            if (resumeFromCheckpoint)
             {
-                // Check if there are existing URLs from a previous crawl
-                var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
+                // Resuming from checkpoint - preserve existing data
+                var existingQueueCount = await queueRepository.CountQueuedAsync(projectId).ConfigureAwait(false);
+                _logger.LogInformation("Resuming crawl from checkpoint with {QueueCount} URLs in queue", existingQueueCount);
+                _totalDiscovered = existingQueueCount;
+                _queueSize = existingQueueCount;
+            }
+            else
+            {
+                // Starting fresh: check for existing data and clear it
                 var existingUrlCount = await urlRepository.CountByProjectIdAsync(projectId).ConfigureAwait(false);
+                var existingQueueCount = await queueRepository.CountQueuedAsync(projectId).ConfigureAwait(false);
                 
-                if (existingUrlCount > 0)
+                if (existingUrlCount > 0 || existingQueueCount > 0)
                 {
-                    _logger.LogInformation("Detected existing crawl data ({UrlCount} URLs). Clearing all data for fresh crawl...", existingUrlCount);
+                    _logger.LogInformation("Detected existing crawl data ({UrlCount} URLs, {QueueCount} queued). Clearing all data for fresh crawl...", 
+                        existingUrlCount, existingQueueCount);
                     await ClearProjectCrawlDataAsync(projectId).ConfigureAwait(false);
                 }
                 
                 _logger.LogInformation("Seeding queue with base URL: {BaseUrl}", settings.BaseUrl);
-                await EnqueueUrlAsync(projectId, settings.BaseUrl, 0, 1000, settings.BaseUrl, allowRecrawl: true).ConfigureAwait(false);
-                
-                // Discover and enqueue URLs from sitemap.xml if enabled
-                // Run this in parallel to avoid blocking the start of the crawl
-                if (settings.UseSitemapXml)
-                {
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            _logger.LogInformation("Sitemap discovery enabled, searching for sitemaps...");
-                            
-                            // Create a new scope for this background task
-                            using var sitemapScope = _serviceProvider.CreateScope();
-                            var sitemapService = sitemapScope.ServiceProvider.GetRequiredService<ISitemapService>();
-                            var sitemapUrls = await sitemapService.DiscoverSitemapUrlsAsync(settings.BaseUrl).ConfigureAwait(false);
-                            
-                            // Check cancellation before processing results
-                            if (cancellationToken.IsCancellationRequested)
-                            {
-                                _logger.LogInformation("Sitemap discovery cancelled before enqueueing URLs");
-                                return;
-                            }
-                            
-                            if (sitemapUrls.Any())
-                            {
-                                _logger.LogInformation("Sitemap discovery completed. Found {Count} URLs from sitemap(s), enqueueing...", sitemapUrls.Count);
-                                int enqueuedCount = 0;
-                                
-                                foreach (var url in sitemapUrls)
-                                {
-                                    // Check cancellation periodically during enqueueing
-                                    if (cancellationToken.IsCancellationRequested)
-                                    {
-                                        _logger.LogInformation("Sitemap discovery cancelled after enqueueing {Count} of {Total} URLs", enqueuedCount, sitemapUrls.Count);
-                                        break;
-                                    }
-                                    
-                                    await EnqueueUrlAsync(projectId, url, 0, 900, settings.BaseUrl, allowRecrawl: true).ConfigureAwait(false);
-                                    enqueuedCount++;
-                                }
-                                
-                                if (!cancellationToken.IsCancellationRequested)
-                                {
-                                    _logger.LogInformation("Enqueued {Count} URLs from sitemap discovery", enqueuedCount);
-                                }
-                            }
-                            else
-                            {
-                                _logger.LogInformation("Sitemap discovery completed. No sitemap URLs discovered");
-                            }
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            _logger.LogInformation("Sitemap discovery was cancelled");
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error during sitemap discovery");
-                        }
-                    }, cancellationToken);
-                }
+                await EnqueueUrlAsync(projectId, settings.BaseUrl, 0, 1000, settings.BaseUrl, settings.MaxUrlsToCrawl, allowRecrawl: true).ConfigureAwait(false);
             }
-            else
+            
+            // Discover and enqueue URLs from sitemap.xml if enabled (only when starting fresh, not when resuming)
+            // Run this in parallel to avoid blocking the start of the crawl
+            if (!resumeFromCheckpoint && settings.UseSitemapXml)
             {
-                // Queue is not empty - this is a resume from a previous crawl
-                // Initialize counters from database to reflect existing state
-                _totalDiscovered = await queueRepository.CountQueuedAsync(projectId).ConfigureAwait(false);
-                _queueSize = _totalDiscovered;
-                _logger.LogInformation("Resuming crawl with {QueueSize} URLs already in queue", _queueSize);
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        _logger.LogInformation("Sitemap discovery enabled, searching for sitemaps...");
+                        
+                        // Create a new scope for this background task
+                        using var sitemapScope = _serviceProvider.CreateScope();
+                        var sitemapService = sitemapScope.ServiceProvider.GetRequiredService<ISitemapService>();
+                        var sitemapUrls = await sitemapService.DiscoverSitemapUrlsAsync(settings.BaseUrl).ConfigureAwait(false);
+                        
+                        // Check cancellation before processing results
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            _logger.LogInformation("Sitemap discovery cancelled before enqueueing URLs");
+                            return;
+                        }
+                        
+                        if (sitemapUrls.Any())
+                        {
+                            _logger.LogInformation("Sitemap discovery completed. Found {Count} URLs from sitemap(s), enqueueing...", sitemapUrls.Count);
+                            int enqueuedCount = 0;
+                            
+                            foreach (var url in sitemapUrls)
+                            {
+                                // Check cancellation periodically during enqueueing
+                                if (cancellationToken.IsCancellationRequested)
+                                {
+                                    _logger.LogInformation("Sitemap discovery cancelled after enqueueing {Count} of {Total} URLs", enqueuedCount, sitemapUrls.Count);
+                                    break;
+                                }
+                                
+                                await EnqueueUrlAsync(projectId, url, 0, 900, settings.BaseUrl, settings.MaxUrlsToCrawl, allowRecrawl: true).ConfigureAwait(false);
+                                enqueuedCount++;
+                            }
+                            
+                            if (!cancellationToken.IsCancellationRequested)
+                            {
+                                _logger.LogInformation("Enqueued {Count} URLs from sitemap discovery", enqueuedCount);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogInformation("Sitemap discovery completed. No sitemap URLs discovered");
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _logger.LogInformation("Sitemap discovery was cancelled");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error during sitemap discovery");
+                    }
+                }, cancellationToken);
             }
         }
 
@@ -348,18 +348,25 @@ public class CrawlEngine(
         var progressTask = ReportProgressAsync(projectId, cancellationToken);
 
         // Wait for all worker tasks to complete (not including progress reporter)
-        await Task.WhenAll(workers).ConfigureAwait(false);
-        
-        _logger.LogInformation("Phase 1 complete. Crawled {UrlsCrawled} URLs, discovered {TotalDiscovered} total", 
-            _urlsCrawled, _totalDiscovered);
+        try
+        {
+            await Task.WhenAll(workers).ConfigureAwait(false);
+            _logger.LogInformation("Phase 1 complete. Crawled {UrlsCrawled} URLs, discovered {TotalDiscovered} total", 
+                _urlsCrawled, _totalDiscovered);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Phase 1 stopped early. Crawled {UrlsCrawled} URLs before stopping. Proceeding to analyze crawled URLs", _urlsCrawled);
+        }
         
         // PHASE 2: Analysis - Execute plugins on all crawled URLs
+        // Use CancellationToken.None to ensure plugins always run on crawled URLs, even if Phase 1 was stopped
         _logger.LogInformation("=== PHASE 2: ANALYSIS ===");
         _currentPhase = CrawlPhase.Analysis;
         _urlsAnalyzed = 0;
         SendProgressUpdate(projectId);
         
-        await RunAnalysisPhaseAsync(projectId, settings, cancellationToken).ConfigureAwait(false);
+        await RunAnalysisPhaseAsync(projectId, settings, CancellationToken.None).ConfigureAwait(false);
         
         _logger.LogInformation("Phase 2 complete. Analyzed {UrlsAnalyzed} URLs", _urlsAnalyzed);
 
@@ -519,7 +526,7 @@ public class CrawlEngine(
                 // Skip link extraction for external URLs (we don't want to crawl the entire internet)
                 if (urlData.IsSuccess && urlData.IsHtml && queueItem.Depth < settings.MaxCrawlDepth && !isExternalUrl)
                 {
-                    await ProcessLinksAsync(projectId, urlEntity, renderedHtml ?? "", queueItem.Address, queueItem.Depth, settings.BaseUrl, page).ConfigureAwait(false);
+                    await ProcessLinksAsync(projectId, urlEntity, renderedHtml ?? "", queueItem.Address, queueItem.Depth, settings.BaseUrl, settings.MaxUrlsToCrawl, page).ConfigureAwait(false);
                 }
 
                     // PHASE 1: Plugin execution is deferred to Phase 2 (Analysis)
@@ -608,28 +615,30 @@ public class CrawlEngine(
     /// </summary>
     private async Task RunAnalysisPhaseAsync(int projectId, Configuration.ProjectSettings settings, CancellationToken cancellationToken)
     {
-        // Query all successfully crawled URLs
-        List<Url> urlsToAnalyze;
+        // Query only URL IDs to minimize memory usage (avoids loading all RenderedHtml content)
+        List<int> urlIdsToAnalyze;
         using (var scope = _serviceProvider.CreateScope())
         {
             var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
-            urlsToAnalyze = await urlRepository.GetCompletedUrlsAsync(projectId).ConfigureAwait(false);
+            urlIdsToAnalyze = await urlRepository.GetCompletedUrlIdsAsync(projectId).ConfigureAwait(false);
         }
         
-        _logger.LogInformation("Found {Count} URLs to analyze", urlsToAnalyze.Count);
+        _logger.LogInformation("Found {Count} URLs to analyze", urlIdsToAnalyze.Count);
         
-        if (urlsToAnalyze.Count == 0)
+        if (urlIdsToAnalyze.Count == 0)
         {
             _logger.LogWarning("No URLs to analyze in Phase 2");
             return;
         }
         
         // Create a queue of URL IDs to process
-        var analysisQueue = new System.Collections.Concurrent.ConcurrentQueue<int>(urlsToAnalyze.Select(u => u.Id));
+        var analysisQueue = new System.Collections.Concurrent.ConcurrentQueue<int>(urlIdsToAnalyze);
         
         // Create analysis worker tasks
         var workers = new List<Task>();
-        int workerCount = Math.Min(settings.ConcurrentRequests, 4); // Limit analysis workers (no network needed)
+        // Limit to 4 workers max - analysis is memory-intensive, not CPU-bound
+        // Each worker holds ~4MB (HTML + DOM tree), so 4 workers = ~16MB vs 64MB+ with 16 cores
+        int workerCount = Math.Min(4, settings.ConcurrentRequests);
         
         for (int i = 0; i < workerCount; i++)
         {
@@ -649,6 +658,8 @@ public class CrawlEngine(
         System.Collections.Concurrent.ConcurrentQueue<int> analysisQueue,
         CancellationToken cancellationToken)
     {
+        int urlsProcessed = 0;
+        
         while (!cancellationToken.IsCancellationRequested)
         {
             // Wait if paused
@@ -660,28 +671,38 @@ public class CrawlEngine(
                 break;
             }
             
+            UrlAnalysisDto? urlData = null;
+            string? renderedHtml = null;
+            
             try
             {
-                Interlocked.Increment(ref _activeWorkers);
-                
-                // Load URL entity from database with headers
-                Url? urlEntity;
+                // Load URL metadata WITHOUT the huge RenderedHtml field (memory optimization)
                 using (var scope = _serviceProvider.CreateScope())
                 {
                     var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
-                    urlEntity = await urlRepository.GetByIdAsync(urlId).ConfigureAwait(false);
+                    urlData = await urlRepository.GetForAnalysisAsync(urlId).ConfigureAwait(false);
                 }
                 
-                if (urlEntity == null)
+                if (urlData == null)
                 {
                     _logger.LogWarning("URL ID {UrlId} not found for analysis", urlId);
                     continue;
                 }
                 
-                _logger.LogDebug("Analyzing URL: {Url}", urlEntity.Address);
+                // Increment active workers AFTER we've confirmed URL exists
+                Interlocked.Increment(ref _activeWorkers);
+                
+                _logger.LogDebug("Analyzing URL: {Url}", urlData.Address);
+                
+                // Load HTML separately (only when needed, and keeps memory footprint smaller)
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
+                    renderedHtml = await urlRepository.GetRenderedHtmlAsync(urlId).ConfigureAwait(false);
+                }
                 
                 // Extract headers from loaded entity
-                var headers = urlEntity.Headers
+                var headers = urlData.Headers
                     .GroupBy(h => h.Name.ToLowerInvariant())
                     .ToDictionary(g => g.Key, g => g.First().Value);
                 
@@ -693,9 +714,9 @@ public class CrawlEngine(
                     
                     // Pass NULL for page - plugins will work from saved HTML
                     await pluginExecutor.ExecuteTasksAsync(
-                        urlEntity, 
+                        urlData, 
                         page: null,  // No live browser page in Phase 2
-                        urlEntity.RenderedHtml, 
+                        renderedHtml, 
                         headers, 
                         settings, 
                         userAgent, 
@@ -704,10 +725,23 @@ public class CrawlEngine(
                 }
                 
                 Interlocked.Increment(ref _urlsAnalyzed);
+                urlsProcessed++;
                 
                 // Update last analyzed URL for progress display
-                _lastCrawledUrl = urlEntity.Address;
-                _lastCrawledStatus = urlEntity.HttpStatus ?? 0;
+                _lastCrawledUrl = urlData.Address;
+                _lastCrawledStatus = urlData.HttpStatus ?? 0;
+                
+                // Explicit cleanup to help GC reclaim memory immediately
+                renderedHtml = null;
+                urlData = null;
+                
+                // Periodic garbage collection to prevent memory buildup (every 50 URLs)
+                // More aggressive than Phase 1 since plugins can accumulate significant data
+                if (urlsProcessed % 50 == 0)
+                {
+                    GC.Collect(2, GCCollectionMode.Aggressive, true, true);
+                    _logger.LogDebug("Performed GC after analyzing {Count} URLs in this worker", urlsProcessed);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -828,13 +862,17 @@ public class CrawlEngine(
         {
             _logger.LogError(ex, "Error fetching URL with Playwright: {Url}", url);
             
+            // Check if this is a redirect loop error
+            bool isRedirectLoop = ex.Message.Contains("ERR_TOO_MANY_REDIRECTS", StringComparison.OrdinalIgnoreCase);
+            
             // Return error result WITH the page - caller owns disposal in all cases
             // This ensures single ownership and prevents double-disposal attempts
             return (new UrlFetchResult
             {
                 StatusCode = 0,
                 IsSuccess = false,
-                ErrorMessage = ex.Message
+                ErrorMessage = ex.Message,
+                IsRedirectLoop = isRedirectLoop
             }, page, null, redirectChain);
         }
     }
@@ -1150,6 +1188,7 @@ public class CrawlEngine(
             existing.ContentLength = fetchResult.ContentLength;
             existing.LastCrawledUtc = DateTime.UtcNow;
             existing.RobotsAllowed = robotsAllowed;
+            existing.IsRedirectLoop = fetchResult.IsRedirectLoop;
             
             // Store rendered HTML for Phase 2 analysis (only for successful HTML pages)
             if (fetchResult.IsSuccess && fetchResult.IsHtml && !string.IsNullOrEmpty(renderedHtml))
@@ -1226,6 +1265,7 @@ public class CrawlEngine(
             ContentType = fetchResult.ContentType,
             ContentLength = fetchResult.ContentLength,
             RobotsAllowed = robotsAllowed,
+            IsRedirectLoop = fetchResult.IsRedirectLoop,
             
             // Store rendered HTML for Phase 2 analysis (only for successful HTML pages)
             RenderedHtml = (fetchResult.IsSuccess && fetchResult.IsHtml && !string.IsNullOrEmpty(renderedHtml)) ? renderedHtml : null,
@@ -1635,17 +1675,38 @@ public class CrawlEngine(
                     try
                     {
                         using var jsonDoc = System.Text.Json.JsonDocument.Parse(json);
-                        var type = jsonDoc.RootElement.TryGetProperty("@type", out var typeEl) ? typeEl.GetString() : "Unknown";
+                        var root = jsonDoc.RootElement;
                         
-                        result.Add(new StructuredDataInfo
+                        // JSON-LD can be either a single object or an array of objects
+                        if (root.ValueKind == System.Text.Json.JsonValueKind.Array)
                         {
-                            Type = "json-ld",
-                            SchemaType = type ?? "Unknown",
-                            RawData = json,
-                            IsValid = true
-                        });
+                            // Handle array of objects
+                            foreach (var item in root.EnumerateArray())
+                            {
+                                var type = item.TryGetProperty("@type", out var typeEl) ? typeEl.GetString() : "Unknown";
+                                result.Add(new StructuredDataInfo
+                                {
+                                    Type = "json-ld",
+                                    SchemaType = type ?? "Unknown",
+                                    RawData = item.GetRawText(),
+                                    IsValid = true
+                                });
+                            }
+                        }
+                        else if (root.ValueKind == System.Text.Json.JsonValueKind.Object)
+                        {
+                            // Handle single object
+                            var type = root.TryGetProperty("@type", out var typeEl) ? typeEl.GetString() : "Unknown";
+                            result.Add(new StructuredDataInfo
+                            {
+                                Type = "json-ld",
+                                SchemaType = type ?? "Unknown",
+                                RawData = json,
+                                IsValid = true
+                            });
+                        }
                     }
-                    catch (System.Text.Json.JsonException)
+                    catch (System.Text.Json.JsonException ex)
                     {
                         result.Add(new StructuredDataInfo
                         {
@@ -1653,7 +1714,19 @@ public class CrawlEngine(
                             SchemaType = "Unknown",
                             RawData = json,
                             IsValid = false,
-                            ValidationErrors = "Invalid JSON"
+                            ValidationErrors = $"Invalid JSON: {ex.Message}"
+                        });
+                    }
+                    catch (System.InvalidOperationException ex)
+                    {
+                        // Handle cases where the JSON structure is unexpected
+                        result.Add(new StructuredDataInfo
+                        {
+                            Type = "json-ld",
+                            SchemaType = "Unknown",
+                            RawData = json,
+                            IsValid = false,
+                            ValidationErrors = $"Unexpected JSON structure: {ex.Message}"
                         });
                     }
                 }
@@ -1686,7 +1759,7 @@ public class CrawlEngine(
         }
     }
 
-    private async Task ProcessLinksAsync(int projectId, Url fromUrl, string htmlContent, string currentPageUrl, int currentDepth, string projectBaseUrl, Microsoft.Playwright.IPage? page)
+    private async Task ProcessLinksAsync(int projectId, Url fromUrl, string htmlContent, string currentPageUrl, int currentDepth, string projectBaseUrl, int maxUrlsToCrawl, Microsoft.Playwright.IPage? page)
     {
         var extractedLinksEnum = await _linkExtractor.ExtractLinksAsync(htmlContent, currentPageUrl).ConfigureAwait(false);
         var extractedLinks = extractedLinksEnum.ToList(); // Materialize to avoid multiple enumeration
@@ -1715,14 +1788,14 @@ public class CrawlEngine(
                     {
                         // Internal link - use depth+1 for hyperlinks; static resources stay at same depth to avoid hitting depth limit
                         int resourceDepth = link.LinkType == LinkType.Hyperlink ? currentDepth + 1 : currentDepth;
-                        await EnqueueUrlAsync(projectId, link.Url, resourceDepth, 100, projectBaseUrl).ConfigureAwait(false);
+                        await EnqueueUrlAsync(projectId, link.Url, resourceDepth, 100, projectBaseUrl, maxUrlsToCrawl).ConfigureAwait(false);
                     }
                     else
                     {
                         // External link - enqueue for status checking with a special depth marker (-1)
                         // Negative depth clearly marks external URLs and can't conflict with any valid internal depth
                         _logger.LogDebug("Enqueueing external link for status check: {Url} (external domain: {FromDomain})", link.Url, linkUri.Host);
-                        await EnqueueUrlAsync(projectId, link.Url, -1, 50, projectBaseUrl).ConfigureAwait(false);
+                        await EnqueueUrlAsync(projectId, link.Url, -1, 50, projectBaseUrl, maxUrlsToCrawl).ConfigureAwait(false);
                     }
                 }
             }
@@ -1968,7 +2041,7 @@ public class CrawlEngine(
         return diagnostics;
     }
 
-    private async Task EnqueueUrlAsync(int projectId, string url, int depth, int priority, string projectBaseUrl, bool allowRecrawl = false)
+    private async Task EnqueueUrlAsync(int projectId, string url, int depth, int priority, string projectBaseUrl, int maxUrlsToCrawl = int.MaxValue, bool allowRecrawl = false)
     {
         try
         {
@@ -1987,6 +2060,14 @@ public class CrawlEngine(
         if (isExternal && depth != -1)
         {
             _logger.LogDebug("URL from different domain, skipping: {Url} (expected: {BaseDomain})", url, projectBaseUri.Host);
+            return;
+        }
+        
+        // Check if we've already discovered enough URLs (respect MaxUrlsToCrawl for queue too)
+        // Allow seed URLs and external links to always be queued
+        if (!allowRecrawl && !isExternal && _totalDiscovered >= maxUrlsToCrawl)
+        {
+            _logger.LogDebug("Reached MaxUrlsToCrawl limit ({MaxUrls}), skipping URL: {Url}", maxUrlsToCrawl, url);
             return;
         }
 
@@ -2452,6 +2533,7 @@ public class CrawlEngine(
         public string? ErrorMessage { get; set; }
         public List<KeyValuePair<string, string>> Headers { get; set; } = [];
         public string? RedirectTarget { get; set; }
+        public bool IsRedirectLoop { get; set; }
     }
 
     private class RedirectHop

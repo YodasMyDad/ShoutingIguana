@@ -20,7 +20,6 @@
         <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenProjectCommand}"/>
         <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseProjectCommand}"/>
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveProjectCommand}"/>
-        <KeyBinding Key="E" Modifiers="Control" Command="{Binding ExportCommand}"/>
         <KeyBinding Key="Q" Modifiers="Control" Command="{Binding ExitCommand}"/>
         <!-- Edit -->
         <KeyBinding Key="C" Modifiers="Control" Command="{Binding CopyCommand}"/>
@@ -32,7 +31,6 @@
         <KeyBinding Key="D2" Modifiers="Control" Command="{Binding NavigateToCrawlDashboardCommand}"/>
         <KeyBinding Key="D3" Modifiers="Control" Command="{Binding NavigateToFindingsCommand}"/>
         <KeyBinding Key="E" Modifiers="Control+Shift" Command="{Binding NavigateToPluginManagementCommand}"/>
-        <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
         <KeyBinding Key="F11" Command="{Binding ToggleFullScreenCommand}"/>
         <!-- Crawl -->
         <KeyBinding Key="F6" Command="{Binding StartCrawlCommand}"/>
@@ -40,8 +38,6 @@
         <KeyBinding Key="F8" Command="{Binding StopCrawlCommand}"/>
         <!-- Tools -->
         <KeyBinding Key="OemComma" Modifiers="Control" Command="{Binding OptionsCommand}"/>
-        <!-- Help -->
-        <KeyBinding Key="F1" Command="{Binding DocumentationCommand}"/>
     </Window.InputBindings>
     
     <Grid>
@@ -99,15 +95,6 @@
                         <TextBlock Text="{StaticResource Icon.Close}" Style="{StaticResource Icon}"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <Separator Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                <MenuItem Header="_Export..."
-                          Command="{Binding ExportCommand}"
-                          InputGestureText="Ctrl+E"
-                          Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <MenuItem.Icon>
-                        <TextBlock Text="{StaticResource Icon.Save}" Style="{StaticResource Icon}"/>
-                    </MenuItem.Icon>
-                </MenuItem>
                 <Separator/>
                 <MenuItem Header="E_xit" Command="{Binding ExitCommand}">
                     <MenuItem.Icon>
@@ -141,12 +128,6 @@
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                <MenuItem Header="_Refresh" Command="{Binding RefreshCommand}" InputGestureText="F5"
-                          Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <MenuItem.Icon>
-                        <TextBlock Text="{StaticResource Icon.Refresh}" Style="{StaticResource Icon}"/>
-                    </MenuItem.Icon>
-                </MenuItem>
                 <MenuItem Header="Toggle _Full Screen" Command="{Binding ToggleFullScreenCommand}" InputGestureText="F11">
                     <MenuItem.Icon>
                         <TextBlock Text="{StaticResource Icon.Web}" Style="{StaticResource Icon}"/>
@@ -154,7 +135,7 @@
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_Crawl"
-                      Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
+                      Visibility="{Binding IsCrawling, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <MenuItem Header="_Start Crawl" Command="{Binding StartCrawlCommand}" InputGestureText="F6">
                     <MenuItem.Icon>
                         <TextBlock Text="{StaticResource Icon.Play}" Style="{StaticResource Icon}"/>
@@ -174,11 +155,6 @@
                 <MenuItem Header="C_lear Queue" Command="{Binding ClearQueueCommand}">
                     <MenuItem.Icon>
                         <TextBlock Text="{StaticResource Icon.Remove}" Style="{StaticResource Icon}"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="_Reset Project Data..." Command="{Binding ResetProjectDataCommand}">
-                    <MenuItem.Icon>
-                        <TextBlock Text="{StaticResource Icon.Delete}" Style="{StaticResource Icon}"/>
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
@@ -207,6 +183,13 @@
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator/>
+                <MenuItem Header="_Reset Project Data..." Command="{Binding ResetProjectDataCommand}"
+                          Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <MenuItem.Icon>
+                        <TextBlock Text="{StaticResource Icon.Delete}" Style="{StaticResource Icon}"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 <MenuItem Header="_Settings..." Command="{Binding OptionsCommand}" InputGestureText="Ctrl+,">
                     <MenuItem.Icon>
                         <TextBlock Text="{StaticResource Icon.Settings}" Style="{StaticResource Icon}"/>
@@ -214,30 +197,9 @@
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_Help">
-                <MenuItem Header="_Documentation" Command="{Binding DocumentationCommand}" InputGestureText="F1">
-                    <MenuItem.Icon>
-                        <TextBlock Text="{StaticResource Icon.Document}" Style="{StaticResource Icon}"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="_Plugin Development Guide" Command="{Binding PluginDevGuideCommand}">
-                    <MenuItem.Icon>
-                        <TextBlock Text="{StaticResource Icon.Code}" Style="{StaticResource Icon}"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-                <Separator/>
-                <MenuItem Header="_Check for Updates..." Command="{Binding CheckAppUpdatesCommand}">
-                    <MenuItem.Icon>
-                        <TextBlock Text="{StaticResource Icon.Refresh}" Style="{StaticResource Icon}"/>
-                    </MenuItem.Icon>
-                </MenuItem>
                 <MenuItem Header="View _Logs..." Command="{Binding ViewLogsCommand}">
                     <MenuItem.Icon>
                         <TextBlock Text="{StaticResource Icon.Document}" Style="{StaticResource Icon}"/>
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="_Report Issue..." Command="{Binding ReportIssueCommand}">
-                    <MenuItem.Icon>
-                        <TextBlock Text="{StaticResource Icon.Warning}" Style="{StaticResource Icon}"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator/>

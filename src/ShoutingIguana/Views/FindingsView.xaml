@@ -396,6 +396,8 @@
                                           Style="{StaticResource ModernDataGrid}"
                                           VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Auto"
+                                          Tag="OverviewTab"
+                                          ScrollViewer.ScrollChanged="DataGrid_ScrollChanged"
                                           AutomationProperties.Name="URLs List"
                                           AutomationProperties.HelpText="List of all URLs discovered during the crawl. Select a row to view details below.">
                                 <DataGrid.ContextMenu>
@@ -604,14 +606,181 @@
                             </Border>
 
                             <!-- Findings DataGrid -->
-                            <DataGrid Grid.Row="2" 
-                                      Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
-                                      ItemsSource="{Binding FilteredFindings}"
-                                      SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
-                                      Style="{StaticResource ModernDataGrid}"
-                                      VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Auto"
-                                      AutomationProperties.Name="Findings List">
+                            <Grid Grid.Row="2" MinHeight="250">
+                                <!-- Skeleton Loader (shown while loading) -->
+                                <ItemsControl Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                              Margin="12">
+                                    <ItemsControl.Items>
+                                        <!-- 8 skeleton rows -->
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="2*"/>
+                                                    <ColumnDefinition Width="3*"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="200"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="280"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="2*"/>
+                                                    <ColumnDefinition Width="3*"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="180"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="250"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="2*"/>
+                                                    <ColumnDefinition Width="3*"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="220"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="290"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="2*"/>
+                                                    <ColumnDefinition Width="3*"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="190"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="270"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="2*"/>
+                                                    <ColumnDefinition Width="3*"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="240"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="300"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="2*"/>
+                                                    <ColumnDefinition Width="3*"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="210"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="260"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="2*"/>
+                                                    <ColumnDefinition Width="3*"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="230"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="285"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SkeletonRow}">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="2*"/>
+                                                    <ColumnDefinition Width="3*"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Rectangle Grid.Column="0" Style="{StaticResource SkeletonCell}" Width="80"/>
+                                                <Rectangle Grid.Column="1" Style="{StaticResource SkeletonCell}" Width="200"/>
+                                                <Rectangle Grid.Column="2" Style="{StaticResource SkeletonCell}" Width="275"/>
+                                                <Rectangle Grid.Column="3" Style="{StaticResource SkeletonCell}" Width="130"/>
+                                            </Grid>
+                                        </Border>
+                                    </ItemsControl.Items>
+                                </ItemsControl>
+                                
+                                <!-- Empty State (shown when no findings after loading) -->
+                                <Grid>
+                                    <Grid.Style>
+                                        <Style TargetType="Grid">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsLoading}" Value="False"/>
+                                                        <Condition Binding="{Binding FilteredFindings.Count}" Value="0"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Grid.Style>
+                                    <StackPanel Style="{StaticResource EmptyStateContainer}">
+                                        <TextBlock Text="&#10004;"
+                                                   FontSize="72"
+                                                   FontWeight="Light"
+                                                   Foreground="{StaticResource SuccessBrush}"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,0,0,16"/>
+                                        <TextBlock Text="No Issues Found"
+                                                   Style="{StaticResource EmptyStateTitle}"/>
+                                        <TextBlock Text="This plugin did not detect any issues. Great work!"
+                                                   Style="{StaticResource EmptyStateMessage}"/>
+                                    </StackPanel>
+                                </Grid>
+                                
+                                <!-- Actual DataGrid (shown when loaded and has data) -->
+                                <DataGrid ItemsSource="{Binding FilteredFindings}"
+                                          SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          Tag="FindingsTab"
+                                          ScrollViewer.ScrollChanged="DataGrid_ScrollChanged"
+                                          AutomationProperties.Name="Findings List">
+                                    <DataGrid.Style>
+                                        <Style TargetType="DataGrid" BasedOn="{StaticResource ModernDataGrid}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsLoading}" Value="False"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </MultiDataTrigger>
+                                                <DataTrigger Binding="{Binding FilteredFindings.Count}" Value="0">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </DataGrid.Style>
                             <DataGrid.ContextMenu>
                                 <ContextMenu>
                                     <MenuItem Header="Copy URL" 
@@ -664,6 +833,7 @@
                                                     FontSize="12"/>
                                 </DataGrid.Columns>
                             </DataGrid>
+                            </Grid>
                         </Grid>
                     </DataTemplate>
                 </TabControl.Resources>

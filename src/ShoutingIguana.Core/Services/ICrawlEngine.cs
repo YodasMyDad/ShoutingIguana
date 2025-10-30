@@ -2,7 +2,7 @@ namespace ShoutingIguana.Core.Services;
 
 public interface ICrawlEngine : IDisposable
 {
-    Task StartCrawlAsync(int projectId, CancellationToken cancellationToken = default);
+    Task StartCrawlAsync(int projectId, bool resumeFromCheckpoint = false, CancellationToken cancellationToken = default);
     Task StopCrawlAsync();
     Task PauseCrawlAsync();
     Task ResumeCrawlAsync();

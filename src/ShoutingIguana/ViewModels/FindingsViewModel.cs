@@ -84,11 +84,8 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         {
             findingTab.PropertyChanged += OnTabPropertyChanged;
 
-            // If no selection on the new tab, select the first item to show details
-            if (findingTab.SelectedFinding == null && findingTab.FilteredFindings.Count > 0)
-            {
-                findingTab.SelectedFinding = findingTab.FilteredFindings[0];
-            }
+            // Lazy load data if not already loaded - MUST run on background thread to not block UI
+            _ = Task.Run(async () => await LoadTabDataAsync(findingTab));
 
             _previousTab = findingTab;
             UpdateDetailsPanel();
@@ -190,6 +187,35 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         }
     }
 
+    private async Task LoadTabDataAsync(FindingTabViewModel findingTab)
+    {
+        try
+        {
+            // Yield immediately to let UI update with IsLoading state
+            await Task.Yield();
+            
+            await findingTab.EnsureDataLoadedAsync();
+            
+            // After loading, select first item on UI thread
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                if (findingTab.SelectedFinding == null && findingTab.FilteredFindings.Count > 0)
+                {
+                    findingTab.SelectedFinding = findingTab.FilteredFindings[0];
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load findings for tab: {DisplayName}", findingTab.DisplayName);
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                MessageBox.Show($"Failed to load findings for {findingTab.DisplayName}: {ex.Message}", 
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            });
+        }
+    }
+
     public async Task LoadFindingsAsync()
     {
         if (!_projectContext.HasOpenProject)
@@ -212,48 +238,30 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             var project = await projectRepository.GetByIdAsync(projectId);
             var baseUrl = project?.BaseUrl;
             
-            // Load all URLs for Overview tab
+            // Load all URLs for Overview tab only (immediate)
             var allUrls = (await urlRepository.GetByProjectIdAsync(projectId)).ToList();
-            
-            // Load all findings for plugin tabs
-            var allFindings = await findingRepository.GetByProjectIdAsync(projectId);
             
             // Get task metadata from plugin registry
             var registeredTasks = pluginRegistry.RegisteredTasks;
             var taskMetadata = registeredTasks.ToDictionary(t => t.Key, t => (t.DisplayName, t.Description));
             
-            // Get enabled tasks to filter findings
+            // Get enabled tasks to filter tabs
             var enabledTasks = pluginRegistry.EnabledTasks;
             var enabledTaskKeys = new HashSet<string>(enabledTasks.Select(t => t.Key));
-            
-            // Group findings by task key
-            var grouped = allFindings.GroupBy(f => f.TaskKey);
 
             var tabs = new List<object>();
             
-            // Create Overview tab first
+            // Create Overview tab first and load it immediately
             var overviewTab = new OverviewTabViewModel();
-            overviewTab.LoadUrls(allUrls, baseUrl);
+            await overviewTab.LoadUrlsAsync(allUrls, baseUrl);
             tabs.Add(overviewTab);
             
-            // Create plugin tabs
-            foreach (var group in grouped.OrderBy(g => g.Key))
+            // Create plugin tabs with lazy loading (no data loaded yet)
+            foreach (var taskInfo in registeredTasks.Where(t => enabledTaskKeys.Contains(t.Key)).OrderBy(t => t.Key))
             {
-                var taskKey = group.Key;
-                
-                // Only show tabs for enabled plugins
-                if (!enabledTaskKeys.Contains(taskKey))
-                {
-                    _logger.LogDebug("Skipping tab for disabled plugin task: {TaskKey}", taskKey);
-                    continue;
-                }
-                
-                var displayName = taskMetadata.TryGetValue(taskKey, out var metadata) 
-                    ? metadata.DisplayName 
-                    : taskKey;
-                var description = taskMetadata.TryGetValue(taskKey, out var meta) 
-                    ? meta.Description 
-                    : string.Empty;
+                var taskKey = taskInfo.Key;
+                var displayName = taskInfo.DisplayName;
+                var description = taskInfo.Description;
                 
                 var tab = new FindingTabViewModel
                 {
@@ -261,7 +269,17 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
                     DisplayName = displayName,
                     Description = description
                 };
-                tab.LoadFindings(group);
+                
+                // Set up lazy loading function - data will load when tab is clicked
+                tab.SetLazyLoadFunction(async () =>
+                {
+                    _logger.LogDebug("Lazy loading findings for task: {TaskKey}", taskKey);
+                    using var lazyScope = _serviceProvider.CreateScope();
+                    var lazyFindingRepository = lazyScope.ServiceProvider.GetRequiredService<IFindingRepository>();
+                    // Use GetByTaskKeyAsync to only load findings for THIS plugin (much faster!)
+                    return await lazyFindingRepository.GetByTaskKeyAsync(projectId, taskKey);
+                });
+                
                 tabs.Add(tab);
             }
 
@@ -292,8 +310,8 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
                 SelectedTab = Tabs[0];
             }
             
-            _logger.LogInformation("Loaded findings: {TabCount} tabs ({UrlCount} URLs, {FindingCount} findings)", 
-                Tabs.Count, allUrls.Count, allFindings.Count);
+            _logger.LogInformation("Loaded findings view: {TabCount} tabs ({UrlCount} URLs loaded, plugin tabs lazy-loaded)", 
+                Tabs.Count, allUrls.Count);
         }
         catch (Exception ex)
         {
@@ -315,108 +333,155 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
 
         try
         {
-            // Show export options dialog
-            string exportFormat = "Excel";
-            bool includeTechnicalMetadata = false;
-            bool includeErrors = true;
-            bool includeWarnings = true;
-            bool includeInfo = true;
-            bool? optionsResult = null;
-            
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            // Context-aware export: Different behavior for Overview vs Plugin tabs
+            if (SelectedTab is OverviewTabViewModel)
             {
-                var optionsDialog = new Views.ExportOptionsDialog
-                {
-                    Owner = Application.Current.MainWindow
-                };
-                
-                optionsResult = optionsDialog.ShowDialog();
-                if (optionsResult == true)
-                {
-                    exportFormat = optionsDialog.ExportFormat;
-                    includeTechnicalMetadata = optionsDialog.IncludeTechnicalMetadata;
-                    includeErrors = optionsDialog.IncludeErrors;
-                    includeWarnings = optionsDialog.IncludeWarnings;
-                    includeInfo = optionsDialog.IncludeInfo;
-                }
-            });
-            
-            // User cancelled export options
-            if (optionsResult != true)
-            {
-                return;
-            }
-            
-            // Validate at least one severity is selected
-            if (!includeErrors && !includeWarnings && !includeInfo)
-            {
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                    MessageBox.Show("Please select at least one severity level to export.", "No Severity Selected", 
-                        MessageBoxButton.OK, MessageBoxImage.Warning));
-                return;
-            }
-            
-            // Determine file filter and extension based on format
-            string filter, defaultExt, fileName;
-            if (exportFormat == "CSV")
-            {
-                filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*";
-                defaultExt = "csv";
-                fileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+                // Overview export: Direct Excel export with all URL data (no dialog)
+                await ExportOverviewAsync();
             }
             else
             {
-                filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*";
-                defaultExt = "xlsx";
-                fileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx";
-            }
-            
-            var dialog = new VistaSaveFileDialog
-            {
-                Filter = filter,
-                DefaultExt = defaultExt,
-                FileName = fileName
-            };
-
-            if (dialog.ShowDialog() == true)
-            {
-                var projectId = _projectContext.CurrentProjectId!.Value;
-                
-                if (exportFormat == "CSV")
-                {
-                    await _csvExportService.ExportFindingsAsync(projectId, dialog.FileName, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                        MessageBox.Show($"Exported to {dialog.FileName}", "Export Successful", 
-                            MessageBoxButton.OK, MessageBoxImage.Information));
-                    _logger.LogInformation("Exported findings to CSV: {FilePath} (Technical: {Tech}, Errors: {Err}, Warnings: {Warn}, Info: {Info})", 
-                        dialog.FileName, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
-                }
-                else
-                {
-                    var success = await _excelExportService.ExportFindingsAsync(projectId, dialog.FileName, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
-                    
-                    if (success)
-                    {
-                        await Application.Current.Dispatcher.InvokeAsync(() =>
-                            MessageBox.Show($"Exported to {dialog.FileName}", "Export Successful", 
-                                MessageBoxButton.OK, MessageBoxImage.Information));
-                        _logger.LogInformation("Exported findings to Excel: {FilePath} (Technical: {Tech}, Errors: {Err}, Warnings: {Warn}, Info: {Info})", 
-                            dialog.FileName, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
-                    }
-                    else
-                    {
-                        await Application.Current.Dispatcher.InvokeAsync(() =>
-                            MessageBox.Show("Export failed. Check logs for details.", "Export Failed", 
-                                MessageBoxButton.OK, MessageBoxImage.Error));
-                    }
-                }
+                // Plugin tab export: Show export options dialog (existing behavior)
+                await ExportFindingsAsync();
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to export findings");
+            _logger.LogError(ex, "Failed to export");
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show($"Failed to export: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+        }
+    }
+
+    private async Task ExportOverviewAsync()
+    {
+        var projectId = _projectContext.CurrentProjectId!.Value;
+        var fileName = $"shouting-iguana-urls-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx";
+        
+        var dialog = new VistaSaveFileDialog
+        {
+            Filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*",
+            DefaultExt = "xlsx",
+            FileName = fileName
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            var success = await _excelExportService.ExportUrlsAsync(projectId, dialog.FileName);
+            
+            if (success)
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show($"Exported to {dialog.FileName}", "Export Successful", 
+                        MessageBoxButton.OK, MessageBoxImage.Information));
+                _logger.LogInformation("Exported URLs to Excel: {FilePath}", dialog.FileName);
+            }
+            else
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show("Export failed. Check logs for details.", "Export Failed", 
+                        MessageBoxButton.OK, MessageBoxImage.Error));
+            }
+        }
+    }
+
+    private async Task ExportFindingsAsync()
+    {
+        // Show export options dialog
+        string exportFormat = "Excel";
+        bool includeTechnicalMetadata = false;
+        bool includeErrors = true;
+        bool includeWarnings = true;
+        bool includeInfo = true;
+        bool? optionsResult = null;
+        
+        await Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            var optionsDialog = new Views.ExportOptionsDialog
+            {
+                Owner = Application.Current.MainWindow
+            };
+            
+            optionsResult = optionsDialog.ShowDialog();
+            if (optionsResult == true)
+            {
+                exportFormat = optionsDialog.ExportFormat;
+                includeTechnicalMetadata = optionsDialog.IncludeTechnicalMetadata;
+                includeErrors = optionsDialog.IncludeErrors;
+                includeWarnings = optionsDialog.IncludeWarnings;
+                includeInfo = optionsDialog.IncludeInfo;
+            }
+        });
+        
+        // User cancelled export options
+        if (optionsResult != true)
+        {
+            return;
+        }
+        
+        // Validate at least one severity is selected
+        if (!includeErrors && !includeWarnings && !includeInfo)
+        {
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+                MessageBox.Show("Please select at least one severity level to export.", "No Severity Selected", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning));
+            return;
+        }
+        
+        // Determine file filter and extension based on format
+        string filter, defaultExt, fileName;
+        if (exportFormat == "CSV")
+        {
+            filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*";
+            defaultExt = "csv";
+            fileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+        }
+        else
+        {
+            filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*";
+            defaultExt = "xlsx";
+            fileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx";
+        }
+        
+        var dialog = new VistaSaveFileDialog
+        {
+            Filter = filter,
+            DefaultExt = defaultExt,
+            FileName = fileName
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            var projectId = _projectContext.CurrentProjectId!.Value;
+            
+            if (exportFormat == "CSV")
+            {
+                await _csvExportService.ExportFindingsAsync(projectId, dialog.FileName, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    MessageBox.Show($"Exported to {dialog.FileName}", "Export Successful", 
+                        MessageBoxButton.OK, MessageBoxImage.Information));
+                _logger.LogInformation("Exported findings to CSV: {FilePath} (Technical: {Tech}, Errors: {Err}, Warnings: {Warn}, Info: {Info})", 
+                    dialog.FileName, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
+            }
+            else
+            {
+                var success = await _excelExportService.ExportFindingsAsync(projectId, dialog.FileName, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
+                
+                if (success)
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                        MessageBox.Show($"Exported to {dialog.FileName}", "Export Successful", 
+                            MessageBoxButton.OK, MessageBoxImage.Information));
+                    _logger.LogInformation("Exported findings to Excel: {FilePath} (Technical: {Tech}, Errors: {Err}, Warnings: {Warn}, Info: {Info})", 
+                        dialog.FileName, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
+                }
+                else
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                        MessageBox.Show("Export failed. Check logs for details.", "Export Failed", 
+                            MessageBoxButton.OK, MessageBoxImage.Error));
+                }
+            }
         }
     }
 

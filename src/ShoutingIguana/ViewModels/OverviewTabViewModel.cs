@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
+using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -45,37 +46,68 @@ public partial class OverviewTabViewModel : ObservableObject
     [ObservableProperty]
     private bool _isLoading;
 
+    [ObservableProperty]
+    private bool _isLoadingMore;
+
+    [ObservableProperty]
+    private bool _hasMoreItems;
+
     private List<UrlDisplayModel> _allUrls = [];
+    private List<UrlDisplayModel> _currentFilteredSet = [];
+    private int _currentPage = 0;
+    private const int PageSize = 100;
     private string? _baseUrl;
 
-    public string TabHeader => $"{DisplayName} ({TotalCount})";
+    public string TabHeader => DisplayName;
 
-    partial void OnTotalCountChanged(int value)
+    public async Task LoadUrlsAsync(IEnumerable<Url> urls, string? baseUrl = null)
     {
-        _ = value; // Suppress unused parameter warning
-        OnPropertyChanged(nameof(TabHeader));
-    }
-
-    public void LoadUrls(IEnumerable<Url> urls, string? baseUrl = null)
-    {
-        IsLoading = true;
+        await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = true);
         _baseUrl = baseUrl;
         
-        // Wrap URLs in display models with type determination
-        _allUrls = urls.Select(url =>
+        try
         {
-            var isInternal = IsInternalUrl(url.Address, baseUrl);
-            return new UrlDisplayModel
+            // Offload ALL expensive processing to background thread
+            var urlList = urls.ToList();
+            var (allUrls, sortedUrls, firstPage) = await Task.Run(() =>
             {
-                Url = url,
-                IsInternal = isInternal,
-                Type = isInternal ? "Internal" : "External"
-            };
-        }).ToList();
-        
-        TotalCount = _allUrls.Count;
-        ApplyFilters();
-        IsLoading = false;
+                var all = urlList.Select(url =>
+                {
+                    var isInternal = IsInternalUrl(url.Address, baseUrl);
+                    return new UrlDisplayModel
+                    {
+                        Url = url,
+                        IsInternal = isInternal,
+                        Type = isInternal ? "Internal" : "External"
+                    };
+                }).ToList();
+                
+                // Sort in background thread (expensive with 20K URLs!)
+                var sorted = all.OrderBy(u => u.Url.Address).ToList();
+                
+                // Get first page
+                var page = sorted.Take(PageSize).ToList();
+                
+                return (all, sorted, page);
+            });
+            
+            // Only update UI elements on UI thread (fast operation - just assignments)
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                _allUrls = allUrls;
+                _currentFilteredSet = sortedUrls;
+                _currentPage = 0;
+                
+                TotalCount = _currentFilteredSet.Count;
+                FilteredUrls = new ObservableCollection<UrlDisplayModel>(firstPage);
+                HasMoreItems = _currentFilteredSet.Count > PageSize;
+            });
+        }
+        finally
+        {
+            // Must set IsLoading on UI thread
+            await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = false);
+        }
     }
     
     private bool IsInternalUrl(string urlAddress, string? baseUrl)
@@ -100,7 +132,7 @@ public partial class OverviewTabViewModel : ObservableObject
     partial void OnSearchTextChanged(string value)
     {
         _ = value; // Suppress unused warning
-        ApplyFilters();
+        _ = ApplyFiltersAsync();
     }
 
     partial void OnSelectedUrlModelChanged(UrlDisplayModel? value)
@@ -115,21 +147,74 @@ public partial class OverviewTabViewModel : ObservableObject
         }
     }
 
-    private void ApplyFilters()
+    private async Task ApplyFiltersAsync()
     {
-        var filtered = _allUrls.AsEnumerable();
-
-        // Filter by search text
-        if (!string.IsNullOrWhiteSpace(SearchText))
+        // Show loading state
+        await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = true);
+        
+        try
         {
-            filtered = filtered.Where(u =>
-                u.Url.Address.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                (u.Url.Title != null && u.Url.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase)) ||
-                (u.Url.ContentType != null && u.Url.ContentType.Contains(SearchText, StringComparison.OrdinalIgnoreCase)));
-        }
+            var searchText = SearchText; // Capture for Task.Run
+            
+            // Do expensive filtering and sorting in background
+            var (filteredSet, firstPage) = await Task.Run(() =>
+            {
+                var filtered = _allUrls.AsEnumerable();
 
-        FilteredUrls = new ObservableCollection<UrlDisplayModel>(filtered.OrderBy(u => u.Url.Address));
-        TotalCount = FilteredUrls.Count;
+                // Filter by search text
+                if (!string.IsNullOrWhiteSpace(searchText))
+                {
+                    filtered = filtered.Where(u =>
+                        u.Url.Address.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                        (u.Url.Title != null && u.Url.Title.Contains(searchText, StringComparison.OrdinalIgnoreCase)) ||
+                        (u.Url.ContentType != null && u.Url.ContentType.Contains(searchText, StringComparison.OrdinalIgnoreCase)));
+                }
+
+                // Store the filtered and sorted set
+                var sorted = filtered.OrderBy(u => u.Url.Address).ToList();
+                var page = sorted.Take(PageSize).ToList();
+                
+                return (sorted, page);
+            });
+            
+            // Update UI on UI thread
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                _currentFilteredSet = filteredSet;
+                _currentPage = 0;
+                TotalCount = _currentFilteredSet.Count;
+                
+                FilteredUrls = new ObservableCollection<UrlDisplayModel>(firstPage);
+                HasMoreItems = _currentFilteredSet.Count > PageSize;
+            });
+        }
+        finally
+        {
+            // Must set IsLoading on UI thread
+            await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = false);
+        }
+    }
+
+    [RelayCommand]
+    private void LoadNextPage()
+    {
+        if (IsLoadingMore || !HasMoreItems) return;
+        
+        IsLoadingMore = true;
+        _currentPage++;
+        
+        var nextItems = _currentFilteredSet
+            .Skip(_currentPage * PageSize)
+            .Take(PageSize)
+            .ToList();
+        
+        foreach (var item in nextItems)
+        {
+            FilteredUrls.Add(item);
+        }
+        
+        HasMoreItems = (_currentPage + 1) * PageSize < _currentFilteredSet.Count;
+        IsLoadingMore = false;
     }
 
     private void UpdateUrlProperties(Url url)

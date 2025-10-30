@@ -185,5 +185,39 @@ public partial class FindingsView
             
         return FindVisualParent<T>(parent);
     }
+    
+    private void DataGrid_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        // Only trigger on scroll down
+        if (e.VerticalChange <= 0) return;
+        
+        var scrollViewer = e.OriginalSource as ScrollViewer;
+        if (scrollViewer == null || scrollViewer.ScrollableHeight == 0) return;
+        
+        // Trigger load when scrolled to 80% of content
+        var threshold = 0.8;
+        var scrollPosition = scrollViewer.VerticalOffset / scrollViewer.ScrollableHeight;
+        
+        if (scrollPosition >= threshold)
+        {
+            var dataGrid = sender as DataGrid;
+            var tag = dataGrid?.Tag as string;
+            
+            if (tag == "OverviewTab" && DataContext is FindingsViewModel vm)
+            {
+                if (vm.SelectedTab is OverviewTabViewModel overviewVm)
+                {
+                    overviewVm.LoadNextPageCommand?.Execute(null);
+                }
+            }
+            else if (tag == "FindingsTab" && DataContext is FindingsViewModel vm2)
+            {
+                if (vm2.SelectedTab is FindingTabViewModel findingVm)
+                {
+                    findingVm.LoadNextPageCommand?.Execute(null);
+                }
+            }
+        }
+    }
 }
 
