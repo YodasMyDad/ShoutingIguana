@@ -202,11 +202,11 @@
                 <TabControl.Resources>
                     <!-- DataTemplate for OverviewTabViewModel -->
                     <DataTemplate DataType="{x:Type vm:OverviewTabViewModel}">
-                        <Grid Margin="16" MinHeight="350">
+                        <Grid Margin="16" MaxHeight="450" MinHeight="250">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*" MinHeight="250" MaxHeight="450"/>
+                                <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
                             <!-- Description -->
@@ -394,7 +394,6 @@
                                           ItemsSource="{Binding FilteredUrls}"
                                           SelectedItem="{Binding SelectedUrlModel, Mode=TwoWay}"
                                           Style="{StaticResource ModernDataGrid}"
-                                          MaxHeight="450"
                                           VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Auto"
                                           AutomationProperties.Name="URLs List"
@@ -489,11 +488,11 @@
                     
                     <!-- DataTemplate for FindingTabViewModel -->
                     <DataTemplate DataType="{x:Type vm:FindingTabViewModel}">
-                        <Grid Margin="16" MinHeight="350">
+                        <Grid Margin="16" MaxHeight="450" MinHeight="250">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*" MinHeight="250" MaxHeight="450"/>
+                                <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
                             <!-- Description -->
@@ -610,7 +609,6 @@
                                       ItemsSource="{Binding FilteredFindings}"
                                       SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
                                       Style="{StaticResource ModernDataGrid}"
-                                      MaxHeight="450"
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Auto"
                                       AutomationProperties.Name="Findings List">

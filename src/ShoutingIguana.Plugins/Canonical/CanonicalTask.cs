@@ -35,6 +35,12 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             return;
         }
 
+        // Only analyze internal URLs (external URLs are for BrokenLinks status checking only)
+        if (UrlHelper.IsExternal(ctx.Project.BaseUrl, ctx.Url.ToString()))
+        {
+            return;
+        }
+
         try
         {
             // Get canonical URL (HTML meta or HTTP header)

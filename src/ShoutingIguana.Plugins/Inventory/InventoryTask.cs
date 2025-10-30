@@ -1,5 +1,6 @@
 using HtmlAgilityPack;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.PluginSdk.Helpers;
 using System.Text.RegularExpressions;
 
 namespace ShoutingIguana.Plugins.Inventory;
@@ -102,7 +103,20 @@ public class InventoryTask : UrlTaskBase
 
     private async Task AnalyzeUrlStructureAsync(UrlContext ctx)
     {
+        // Only analyze HTML pages for SEO-related URL structure issues
+        // Skip JS, CSS, images, and other static resources
+        if (ctx.Metadata.ContentType?.Contains("text/html") != true)
+        {
+            return;
+        }
+        
         var url = ctx.Url.ToString();
+        
+        // Only analyze internal URLs (external URLs are for BrokenLinks status checking only)
+        if (UrlHelper.IsExternal(ctx.Project.BaseUrl, url))
+        {
+            return;
+        }
         // Calculate URL length WITHOUT query string (SEO best practice)
         var urlWithoutQuery = ctx.Url.GetLeftPart(UriPartial.Path);
         var urlLength = urlWithoutQuery.Length;
@@ -266,6 +280,19 @@ public class InventoryTask : UrlTaskBase
 
     private async Task AnalyzeIndexabilityAsync(UrlContext ctx)
     {
+        // Only analyze HTML pages for SEO-related indexability issues
+        // Skip JS, CSS, images, and other static resources
+        if (ctx.Metadata.ContentType?.Contains("text/html") != true)
+        {
+            return;
+        }
+        
+        // Only analyze internal URLs (external URLs are for BrokenLinks status checking only)
+        if (UrlHelper.IsExternal(ctx.Project.BaseUrl, ctx.Url.ToString()))
+        {
+            return;
+        }
+        
         // Use crawler-parsed robots data
         if (ctx.Metadata.RobotsNoindex == true)
         {
@@ -328,6 +355,19 @@ public class InventoryTask : UrlTaskBase
     {
         if (string.IsNullOrEmpty(ctx.RenderedHtml))
             return;
+
+        // Only analyze HTML pages for SEO-related content quality issues
+        // Skip JS, CSS, images, and other static resources
+        if (ctx.Metadata.ContentType?.Contains("text/html") != true)
+        {
+            return;
+        }
+        
+        // Only analyze internal URLs (external URLs are for BrokenLinks status checking only)
+        if (UrlHelper.IsExternal(ctx.Project.BaseUrl, ctx.Url.ToString()))
+        {
+            return;
+        }
 
         // Check for thin content
         var doc = new HtmlDocument();

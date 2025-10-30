@@ -2,6 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.PluginSdk.Helpers;
 
 namespace ShoutingIguana.Plugins.LinkGraph;
 
@@ -27,6 +28,12 @@ public class LinkGraphTask : UrlTaskBase
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     {
+        // Only analyze internal URLs (external URLs are for BrokenLinks status checking only)
+        if (UrlHelper.IsExternal(ctx.Project.BaseUrl, ctx.Url.ToString()))
+        {
+            return;
+        }
+
         // This task runs once per URL crawled and generates findings
         // for all outgoing links FROM this URL
         

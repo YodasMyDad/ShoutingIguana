@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.PluginSdk.Helpers;
 using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Xml.Linq;
@@ -27,6 +28,12 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     {
+        // Only analyze internal URLs (external URLs are for BrokenLinks status checking only)
+        if (UrlHelper.IsExternal(ctx.Project.BaseUrl, ctx.Url.ToString()))
+        {
+            return;
+        }
+
         try
         {
             // Check if this is the base URL - try to discover sitemap (only if enabled)

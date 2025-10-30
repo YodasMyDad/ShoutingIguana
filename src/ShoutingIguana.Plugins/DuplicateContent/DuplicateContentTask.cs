@@ -73,6 +73,12 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             return;
         }
 
+        // Only analyze internal URLs (external URLs are for BrokenLinks status checking only)
+        if (UrlHelper.IsExternal(ctx.Project.BaseUrl, ctx.Url.ToString()))
+        {
+            return;
+        }
+
         try
         {
             // Extract and clean content

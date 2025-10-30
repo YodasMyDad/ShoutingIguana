@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.PluginSdk.Helpers;
 
 namespace ShoutingIguana.Plugins.Robots;
 
@@ -17,6 +18,12 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     {
+        // Only analyze internal URLs (external URLs are for BrokenLinks status checking only)
+        if (UrlHelper.IsExternal(ctx.Project.BaseUrl, ctx.Url.ToString()))
+        {
+            return;
+        }
+
         try
         {
             // Check for missing robots.txt on the homepage only (depth 0)

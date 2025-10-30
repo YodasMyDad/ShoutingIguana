@@ -1,6 +1,7 @@
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.PluginSdk.Helpers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -33,6 +34,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         // Only analyze successful pages (skip 4xx, 5xx errors)
         if (ctx.Metadata.StatusCode < 200 || ctx.Metadata.StatusCode >= 300)
+        {
+            return;
+        }
+
+        // Only analyze internal URLs (external URLs are for BrokenLinks status checking only)
+        if (UrlHelper.IsExternal(ctx.Project.BaseUrl, ctx.Url.ToString()))
         {
             return;
         }

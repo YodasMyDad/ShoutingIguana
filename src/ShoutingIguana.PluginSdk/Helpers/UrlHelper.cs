@@ -78,8 +78,9 @@ public static class UrlHelper
             // Build normalized URL
             var normalized = uri.GetLeftPart(UriPartial.Path);
             
-            // Remove trailing slash from path (except for root)
-            if (normalized.EndsWith("/") && uri.PathAndQuery.Length > 1)
+            // Remove trailing slash from path (including root for consistent comparison)
+            // e.g., "https://example.com/" and "https://example.com" should normalize to the same URL
+            if (normalized.EndsWith("/"))
             {
                 normalized = normalized.TrimEnd('/');
             }

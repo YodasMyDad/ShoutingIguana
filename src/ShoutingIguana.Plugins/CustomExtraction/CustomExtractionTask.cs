@@ -3,6 +3,7 @@ using Fizzler.Systems.HtmlAgilityPack;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.PluginSdk.Helpers;
 
 namespace ShoutingIguana.Plugins.CustomExtraction;
 
@@ -37,6 +38,12 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
 
         // Only analyze successful pages (skip 4xx, 5xx errors)
         if (ctx.Metadata.StatusCode < 200 || ctx.Metadata.StatusCode >= 300)
+        {
+            return;
+        }
+
+        // Only analyze internal URLs (external URLs are for BrokenLinks status checking only)
+        if (UrlHelper.IsExternal(ctx.Project.BaseUrl, ctx.Url.ToString()))
         {
             return;
         }
