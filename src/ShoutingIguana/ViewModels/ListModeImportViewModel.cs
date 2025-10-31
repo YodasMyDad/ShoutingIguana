@@ -11,13 +11,18 @@ using ShoutingIguana.Services;
 
 namespace ShoutingIguana.ViewModels;
 
-public partial class ListModeImportViewModel : ObservableObject
+public partial class ListModeImportViewModel(
+    ILogger<ListModeImportViewModel> logger,
+    IListModeService listModeService,
+    IToastService toastService,
+    int projectId,
+    Window dialog) : ObservableObject
 {
-    private readonly ILogger<ListModeImportViewModel> _logger;
-    private readonly IListModeService _listModeService;
-    private readonly IToastService _toastService;
-    private readonly int _projectId;
-    private readonly Window _dialog;
+    private readonly ILogger<ListModeImportViewModel> _logger = logger;
+    private readonly IListModeService _listModeService = listModeService;
+    private readonly IToastService _toastService = toastService;
+    private readonly int _projectId = projectId;
+    private readonly Window _dialog = dialog;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanImport))]
@@ -43,20 +48,6 @@ public partial class ListModeImportViewModel : ObservableObject
     private string _resultMessage = string.Empty;
 
     public bool CanImport => !string.IsNullOrWhiteSpace(CsvFilePath) && !IsImporting;
-
-    public ListModeImportViewModel(
-        ILogger<ListModeImportViewModel> logger,
-        IListModeService listModeService,
-        IToastService toastService,
-        int projectId,
-        Window dialog)
-    {
-        _logger = logger;
-        _listModeService = listModeService;
-        _toastService = toastService;
-        _projectId = projectId;
-        _dialog = dialog;
-    }
 
     [RelayCommand]
     private void BrowseFile()

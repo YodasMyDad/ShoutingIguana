@@ -2,23 +2,17 @@ using System;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Threading;
-using CommunityToolkit.Mvvm.Input;
+using ShoutingIguana.Services.Models;
 
 namespace ShoutingIguana.Services;
 
 /// <summary>
 /// Service for displaying toast notifications.
 /// </summary>
-public class ToastService : IToastService
+public class ToastService() : IToastService
 {
-    private readonly ObservableCollection<ToastViewModel> _toasts;
-    private readonly Dispatcher _dispatcher;
-
-    public ToastService()
-    {
-        _toasts = new ObservableCollection<ToastViewModel>();
-        _dispatcher = Application.Current.Dispatcher;
-    }
+    private readonly ObservableCollection<ToastViewModel> _toasts = [];
+    private readonly Dispatcher _dispatcher = Application.Current.Dispatcher;
 
     public ObservableCollection<ToastViewModel> Toasts => _toasts;
 
@@ -90,51 +84,4 @@ public class ToastService : IToastService
         });
     }
 }
-
-/// <summary>
-/// Toast notification type.
-/// </summary>
-public enum ToastType
-{
-    Success,
-    Error,
-    Info,
-    Warning
-}
-
-/// <summary>
-/// ViewModel for a toast notification.
-/// </summary>
-public partial class ToastViewModel
-{
-    public ToastViewModel(string title, string message, ToastType type)
-    {
-        Title = title;
-        Message = message;
-        Type = type;
-        
-        Icon = type switch
-        {
-            ToastType.Success => "\uE73E", // Icon.Success
-            ToastType.Error => "\uE783",   // Icon.Error
-            ToastType.Info => "\uE946",     // Icon.Info
-            ToastType.Warning => "\uE7BA", // Icon.Warning
-            _ => "\uE946"
-        };
-    }
-
-    public string Title { get; }
-    public string Message { get; }
-    public ToastType Type { get; }
-    public string Icon { get; }
-
-    public event Action? CloseRequested;
-
-    [RelayCommand]
-    private void Close()
-    {
-        CloseRequested?.Invoke();
-    }
-}
-
 

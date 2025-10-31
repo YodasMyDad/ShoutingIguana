@@ -116,7 +116,7 @@ public class FindingDetailsBuilder
         if (_currentParent != null)
         {
             // We're inside a nested section
-            _currentParent.Children ??= new List<FindingDetail>();
+            _currentParent.Children ??= [];
             _currentParent.Children.Add(item);
         }
         else
@@ -148,7 +148,7 @@ public class FindingDetailsBuilder
         
         if (_currentParent != null)
         {
-            _currentParent.Children ??= new List<FindingDetail>();
+            _currentParent.Children ??= [];
             _currentParent.Children.Add(item);
         }
         else
@@ -184,13 +184,13 @@ public class FindingDetailsBuilder
         var nestedParent = new FindingDetail 
         { 
             Text = headerText,
-            Children = new List<FindingDetail>()
+            Children = []
         };
         
         if (_currentParent != null)
         {
             // Nested within another nested section
-            _currentParent.Children ??= new List<FindingDetail>();
+            _currentParent.Children ??= [];
             _currentParent.Children.Add(nestedParent);
             _nestedStack.Push(_currentParent);
         }
@@ -253,7 +253,7 @@ public class FindingDetailsBuilder
     /// </example>
     public FindingDetailsBuilder WithTechnicalMetadata(string key, object? value)
     {
-        _details.TechnicalMetadata ??= new Dictionary<string, object?>();
+        _details.TechnicalMetadata ??= [];
         _details.TechnicalMetadata[key] = value;
         return this;
     }
@@ -276,7 +276,7 @@ public class FindingDetailsBuilder
     /// </example>
     public FindingDetailsBuilder WithTechnicalMetadata(Dictionary<string, object?> metadata)
     {
-        _details.TechnicalMetadata ??= new Dictionary<string, object?>();
+        _details.TechnicalMetadata ??= [];
         
         foreach (var kvp in metadata)
         {

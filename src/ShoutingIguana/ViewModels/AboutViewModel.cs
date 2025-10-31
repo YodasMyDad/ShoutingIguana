@@ -6,19 +6,13 @@ using Microsoft.Extensions.Logging;
 
 namespace ShoutingIguana.ViewModels;
 
-public partial class AboutViewModel : ObservableObject
+public partial class AboutViewModel(ILogger<AboutViewModel> logger, Window dialog) : ObservableObject
 {
-    private readonly ILogger<AboutViewModel> _logger;
-    private readonly Window _dialog;
+    private readonly ILogger<AboutViewModel> _logger = logger;
+    private readonly Window _dialog = dialog;
 
     [ObservableProperty]
     private string _buildDate = DateTime.Now.ToString("MMMM dd, yyyy");
-
-    public AboutViewModel(ILogger<AboutViewModel> logger, Window dialog)
-    {
-        _logger = logger;
-        _dialog = dialog;
-    }
 
     [RelayCommand]
     private void Close()

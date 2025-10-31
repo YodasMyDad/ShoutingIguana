@@ -1,7 +1,7 @@
 <UserControl x:Class="ShoutingIguana.Controls.ToastNotification"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:services="clr-namespace:ShoutingIguana.Services">
+             xmlns:models="clr-namespace:ShoutingIguana.Services.Models">
     
     <UserControl.Resources>
         <!-- Exit animation storyboard -->
@@ -57,15 +57,15 @@
                 <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
                 <Setter Property="BorderBrush" Value="{StaticResource InfoBrush}"/>
                 <Style.Triggers>
-                    <DataTrigger Binding="{Binding Type}" Value="{x:Static services:ToastType.Success}">
+                    <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ToastType.Success}">
                         <Setter Property="Background" Value="{StaticResource SuccessBackgroundBrush}"/>
                         <Setter Property="BorderBrush" Value="{StaticResource SuccessBrush}"/>
                     </DataTrigger>
-                    <DataTrigger Binding="{Binding Type}" Value="{x:Static services:ToastType.Error}">
+                    <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ToastType.Error}">
                         <Setter Property="Background" Value="{StaticResource ErrorBackgroundBrush}"/>
                         <Setter Property="BorderBrush" Value="{StaticResource ErrorBrush}"/>
                     </DataTrigger>
-                    <DataTrigger Binding="{Binding Type}" Value="{x:Static services:ToastType.Warning}">
+                    <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ToastType.Warning}">
                         <Setter Property="Background" Value="{StaticResource WarningBackgroundBrush}"/>
                         <Setter Property="BorderBrush" Value="{StaticResource WarningBrush}"/>
                     </DataTrigger>
@@ -95,13 +95,13 @@
                     <Style TargetType="Border">
                         <Setter Property="Background" Value="{StaticResource InfoBrush}"/>
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding Type}" Value="{x:Static services:ToastType.Success}">
+                            <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ToastType.Success}">
                                 <Setter Property="Background" Value="{StaticResource SuccessBrush}"/>
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding Type}" Value="{x:Static services:ToastType.Error}">
+                            <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ToastType.Error}">
                                 <Setter Property="Background" Value="{StaticResource ErrorBrush}"/>
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding Type}" Value="{x:Static services:ToastType.Warning}">
+                            <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ToastType.Warning}">
                                 <Setter Property="Background" Value="{StaticResource WarningBrush}"/>
                             </DataTrigger>
                         </Style.Triggers>

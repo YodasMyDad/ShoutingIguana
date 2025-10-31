@@ -26,8 +26,8 @@ public class PackageSecurityService : IPackageSecurityService
         string feedUrl,
         CancellationToken cancellationToken = default)
     {
-        var warnings = new List<string>();
-        var errors = new List<string>();
+        List<string> warnings = [];
+        List<string> errors = [];
 
         try
         {

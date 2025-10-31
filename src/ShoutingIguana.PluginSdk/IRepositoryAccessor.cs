@@ -75,7 +75,7 @@ namespace ShoutingIguana.PluginSdk;
 /// 
 /// <para><b>Get all URLs for duplicate detection:</b></para>
 /// <code>
-/// var urlsByTitle = new Dictionary&lt;string, List&lt;string&gt;&gt;();
+/// Dictionary&lt;string, List&lt;string&gt;&gt; urlsByTitle = [];
 /// 
 /// await foreach (var url in accessor.GetUrlsAsync(projectId))
 /// {
@@ -169,19 +169,19 @@ public interface IRepositoryAccessor
     /// to distinguish between them.
     /// </remarks>
     /// <example>
-    /// <code>
-    /// var redirectChains = new Dictionary&lt;string, List&lt;RedirectInfo&gt;&gt;();
-    /// 
-    /// await foreach (var redirect in accessor.GetRedirectsAsync(projectId, ct))
-    /// {
-    ///     // Group by source URL to build redirect chains
-    ///     if (!redirectChains.ContainsKey(redirect.SourceUrl))
-    ///     {
-    ///         redirectChains[redirect.SourceUrl] = new List&lt;RedirectInfo&gt;();
-    ///     }
-    ///     redirectChains[redirect.SourceUrl].Add(redirect);
-    /// }
-    /// </code>
+/// <code>
+/// Dictionary&lt;string, List&lt;RedirectInfo&gt;&gt; redirectChains = [];
+/// 
+/// await foreach (var redirect in accessor.GetRedirectsAsync(projectId, ct))
+/// {
+///     // Group by source URL to build redirect chains
+///     if (!redirectChains.ContainsKey(redirect.SourceUrl))
+///     {
+///         redirectChains[redirect.SourceUrl] = [];
+///     }
+///     redirectChains[redirect.SourceUrl].Add(redirect);
+/// }
+/// </code>
     /// </example>
     IAsyncEnumerable<RedirectInfo> GetRedirectsAsync(int projectId, CancellationToken cancellationToken = default);
     

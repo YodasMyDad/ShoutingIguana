@@ -7,9 +7,9 @@ namespace ShoutingIguana.ViewModels;
 /// <summary>
 /// ViewModel for the export options dialog.
 /// </summary>
-public partial class ExportOptionsViewModel : ObservableObject
+public partial class ExportOptionsViewModel(Window dialog) : ObservableObject
 {
-    private readonly Window _dialog;
+    private readonly Window _dialog = dialog;
     
     [ObservableProperty]
     private bool _includeTechnicalMetadata;
@@ -25,11 +25,6 @@ public partial class ExportOptionsViewModel : ObservableObject
     
     [ObservableProperty]
     private bool _includeInfo = true;
-    
-    public ExportOptionsViewModel(Window dialog)
-    {
-        _dialog = dialog;
-    }
     
     [RelayCommand]
     private void Ok()

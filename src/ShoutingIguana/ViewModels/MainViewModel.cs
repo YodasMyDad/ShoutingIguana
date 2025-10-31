@@ -12,6 +12,7 @@ using ShoutingIguana.Core.Repositories;
 using ShoutingIguana.Core.Services;
 using ShoutingIguana.Data;
 using ShoutingIguana.Services;
+using ShoutingIguana.Services.Models;
 using ShoutingIguana.Views;
 
 namespace ShoutingIguana.ViewModels;

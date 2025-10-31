@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using ShoutingIguana.Services.Models;
 
 namespace ShoutingIguana.Services;
 
