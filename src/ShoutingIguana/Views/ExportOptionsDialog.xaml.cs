@@ -1,29 +1,41 @@
+using System.ComponentModel;
 using System.Windows;
+using Microsoft.Extensions.Logging;
+using ShoutingIguana.Services;
 using ShoutingIguana.ViewModels;
 
 namespace ShoutingIguana.Views;
 
 public partial class ExportOptionsDialog : Window
 {
-    public ExportOptionsDialog()
+    public ExportOptionsDialog(
+        ICsvExportService csvExportService,
+        IExcelExportService excelExportService,
+        IProjectContext projectContext,
+        ILogger<ExportOptionsViewModel> logger)
     {
         InitializeComponent();
-        DataContext = new ExportOptionsViewModel(this);
+        DataContext = new ExportOptionsViewModel(
+            this, 
+            csvExportService, 
+            excelExportService, 
+            projectContext, 
+            logger);
+        
+        // Prevent closing the dialog during export
+        Closing += OnClosing;
     }
     
-    public string ExportFormat => 
-        DataContext is ExportOptionsViewModel vm ? vm.ExportFormat : "Excel";
+    private void OnClosing(object? sender, CancelEventArgs e)
+    {
+        // Prevent closing if export is in progress
+        if (DataContext is ExportOptionsViewModel vm && vm.IsExporting)
+        {
+            e.Cancel = true;
+        }
+    }
     
-    public bool IncludeTechnicalMetadata => 
-        DataContext is ExportOptionsViewModel vm && vm.IncludeTechnicalMetadata;
-    
-    public bool IncludeErrors => 
-        DataContext is ExportOptionsViewModel vm && vm.IncludeErrors;
-    
-    public bool IncludeWarnings => 
-        DataContext is ExportOptionsViewModel vm && vm.IncludeWarnings;
-    
-    public bool IncludeInfo => 
-        DataContext is ExportOptionsViewModel vm && vm.IncludeInfo;
+    public bool ExportSucceeded => 
+        DataContext is ExportOptionsViewModel vm && vm.ExportSucceeded;
 }
 

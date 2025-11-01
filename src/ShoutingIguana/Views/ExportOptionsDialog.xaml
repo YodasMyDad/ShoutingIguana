@@ -25,7 +25,8 @@
                 Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderLightBrush}"
                 BorderThickness="0,0,0,1"
-                Padding="{StaticResource SpacingL}">
+                Padding="{StaticResource SpacingL}"
+                IsEnabled="{Binding IsExporting, Converter={StaticResource InverseBooleanConverter}}">
             <StackPanel Orientation="Horizontal">
                 <Border Background="{StaticResource SuccessBrush}"
                         Width="44" Height="44"
@@ -53,7 +54,8 @@
         <ScrollViewer Grid.Row="1"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
-                      Padding="{StaticResource SpacingL}">
+                      Padding="{StaticResource SpacingL}"
+                      IsEnabled="{Binding IsExporting, Converter={StaticResource InverseBooleanConverter}}">
             <Border Style="{StaticResource Card}">
                 <StackPanel>
                     <!-- Format Selection -->
@@ -117,7 +119,8 @@
                 Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderLightBrush}"
                 BorderThickness="0,1,0,0"
-                Padding="{StaticResource SpacingL}">
+                Padding="{StaticResource SpacingL}"
+                IsEnabled="{Binding IsExporting, Converter={StaticResource InverseBooleanConverter}}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Cancel"
                         Command="{Binding CancelCommand}"
@@ -128,7 +131,7 @@
                         IsCancel="True"
                         AutomationProperties.Name="Cancel Export"
                         AutomationProperties.HelpText="Closes the export dialog without exporting"/>
-                <Button Command="{Binding OkCommand}"
+                <Button Command="{Binding OkAsyncCommand}"
                         Style="{StaticResource PrimaryButton}"
                         MinWidth="120"
                         Height="48"
@@ -146,6 +149,65 @@
                 </Button>
             </StackPanel>
         </Border>
+        
+        <!-- Loading Overlay -->
+        <Grid Grid.RowSpan="3"
+              Background="#CC000000"
+              Visibility="{Binding IsExporting, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border Background="{StaticResource SurfaceBrush}"
+                    CornerRadius="8"
+                    Padding="32"
+                    MaxWidth="350"
+                    MaxHeight="200"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Center">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <!-- Spinning loader -->
+                    <Viewbox Width="48" Height="48" Margin="0,0,0,16">
+                        <Grid>
+                            <Ellipse Width="48" Height="48" 
+                                    Stroke="{StaticResource BorderLightBrush}" 
+                                    StrokeThickness="4"/>
+                            <Ellipse Width="48" Height="48" 
+                                    Stroke="{StaticResource PrimaryBrush}" 
+                                    StrokeThickness="4"
+                                    StrokeDashArray="32 100"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Ellipse.RenderTransform>
+                                    <RotateTransform x:Name="SpinnerRotation"/>
+                                </Ellipse.RenderTransform>
+                                <Ellipse.Triggers>
+                                    <EventTrigger RoutedEvent="Loaded">
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="SpinnerRotation"
+                                                               Storyboard.TargetProperty="Angle"
+                                                               From="0" To="360"
+                                                               Duration="0:0:1"
+                                                               RepeatBehavior="Forever"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                </Ellipse.Triggers>
+                            </Ellipse>
+                        </Grid>
+                    </Viewbox>
+                    
+                    <TextBlock Text="{Binding ExportStatus}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               TextAlignment="Center"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               TextWrapping="Wrap"/>
+                    
+                    <TextBlock Text="Please wait..."
+                               FontSize="14"
+                               TextAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Margin="0,8,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>
 

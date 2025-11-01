@@ -5,7 +5,7 @@ namespace ShoutingIguana.Core.Configuration;
 /// </summary>
 public class CrawlSettings
 {
-    public int ConcurrentRequests { get; set; } = 3;
+    public int ConcurrentRequests { get; set; } = 5;
     public int TimeoutSeconds { get; set; } = 30;
     public int MaxCrawlDepth { get; set; } = 5;
     public int MaxUrlsToCrawl { get; set; } = 10000;
