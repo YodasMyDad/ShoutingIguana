@@ -303,6 +303,10 @@ public interface IRepositoryAccessor
 /// Contains essential URL data without coupling to internal domain models.
 /// </summary>
 /// <param name="Address">The full URL address.</param>
+/// <param name="NormalizedUrl">
+/// The normalized version of the URL used for database lookups and comparisons.
+/// Normalized URLs are lowercase and maintain trailing slashes for consistency.
+/// </param>
 /// <param name="Status">HTTP status code (200, 404, 301, etc.).</param>
 /// <param name="ContentType">Content-Type header value (e.g., "text/html", "image/jpeg").</param>
 /// <param name="Depth">Crawl depth from the start URL (0 = start URL, 1 = linked from start, etc.).</param>
@@ -336,7 +340,8 @@ public interface IRepositoryAccessor
 /// </code>
 /// </example>
 public record UrlInfo(
-    string Address, 
+    string Address,
+    string NormalizedUrl,
     int Status, 
     string? ContentType, 
     int Depth, 

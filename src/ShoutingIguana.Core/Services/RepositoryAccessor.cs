@@ -45,6 +45,7 @@ public class RepositoryAccessor(
             
             return new UrlInfo(
                 url.Address,
+                url.NormalizedUrl,
                 url.HttpStatus.Value,
                 url.ContentType,
                 url.Depth,
@@ -77,6 +78,7 @@ public class RepositoryAccessor(
                 .Where(url => url.HttpStatus.HasValue) // Filter out pending/uncrawled URLs
                 .Select(url => new UrlInfo(
                     url.Address,
+                    url.NormalizedUrl,
                     url.HttpStatus!.Value,
                     url.ContentType,
                     url.Depth,

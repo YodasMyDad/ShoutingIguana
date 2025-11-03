@@ -78,12 +78,10 @@ public static class UrlHelper
             // Build normalized URL
             var normalized = uri.GetLeftPart(UriPartial.Path);
             
-            // Remove trailing slash from path (including root for consistent comparison)
-            // e.g., "https://example.com/" and "https://example.com" should normalize to the same URL
-            if (normalized.EndsWith("/"))
-            {
-                normalized = normalized.TrimEnd('/');
-            }
+            // IMPORTANT: Keep trailing slash for consistency with database normalization
+            // This ensures URL comparisons work correctly across the entire application
+            // The CrawlEngine and UrlRepository both keep trailing slashes, so we must do the same
+            // DO NOT remove trailing slash - this matches how URLs are stored in the database
             
             // Convert to lowercase (scheme and host are case-insensitive, path is case-sensitive in some servers)
             // For SEO purposes, we normalize the whole URL to lowercase

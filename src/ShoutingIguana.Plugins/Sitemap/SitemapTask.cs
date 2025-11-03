@@ -714,9 +714,9 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             
             await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId, ct))
             {
-                if (!string.IsNullOrEmpty(url.Address))
+                if (!string.IsNullOrEmpty(url.NormalizedUrl))
                 {
-                    statusCache[url.Address] = url.Status;
+                    statusCache[url.NormalizedUrl] = url.Status;
                 }
             }
             
@@ -757,7 +757,9 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 try
                 {
                     // Look up status from cache instead of database query
-                    if (statusCache == null || !statusCache.TryGetValue(sitemapUrl, out var status))
+                    // Normalize URL before lookup to ensure consistency with database
+                    var normalizedUrl = NormalizeUrlForCache(sitemapUrl);
+                    if (statusCache == null || !statusCache.TryGetValue(normalizedUrl, out var status))
                     {
                         // URL not found in crawl database - might be out of scope or not yet crawled
                         notCrawled.Add(sitemapUrl);
@@ -1023,6 +1025,23 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
         {
             _logger.LogError(ex, "Error comparing sitemap with crawled URLs");
             // Don't fail the whole task if comparison fails
+        }
+    }
+    
+    /// <summary>
+    /// Normalizes a URL for cache lookups (matching database normalization).
+    /// This ensures consistent lookups regardless of trailing slash variations.
+    /// </summary>
+    private static string NormalizeUrlForCache(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            return uri.GetLeftPart(UriPartial.Path).ToLowerInvariant();
+        }
+        catch
+        {
+            return url.ToLowerInvariant();
         }
     }
     

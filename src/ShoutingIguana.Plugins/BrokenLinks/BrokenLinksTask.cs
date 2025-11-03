@@ -269,9 +269,9 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
             
             await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId, ct))
             {
-                if (!string.IsNullOrEmpty(url.Address))
+                if (!string.IsNullOrEmpty(url.NormalizedUrl))
                 {
-                    statusCache[url.Address] = url.Status;
+                    statusCache[url.NormalizedUrl] = url.Status;
                 }
             }
             
@@ -293,12 +293,31 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
     {
         if (UrlStatusCacheByProject.TryGetValue(projectId, out var cache))
         {
-            if (cache.TryGetValue(url, out var status))
+            // Normalize URL before lookup to ensure consistency with database
+            var normalizedUrl = NormalizeUrlForCache(url);
+            if (cache.TryGetValue(normalizedUrl, out var status))
             {
                 return status;
             }
         }
         return null;
+    }
+    
+    /// <summary>
+    /// Normalizes a URL for cache lookups (matching database normalization).
+    /// This ensures consistent lookups regardless of trailing slash variations.
+    /// </summary>
+    private static string NormalizeUrlForCache(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            return uri.GetLeftPart(UriPartial.Path).ToLowerInvariant();
+        }
+        catch
+        {
+            return url.ToLowerInvariant();
+        }
     }
     
     /// <summary>

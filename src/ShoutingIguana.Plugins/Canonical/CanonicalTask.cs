@@ -306,9 +306,9 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             
             await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId, ct))
             {
-                if (!string.IsNullOrEmpty(url.Address))
+                if (!string.IsNullOrEmpty(url.NormalizedUrl))
                 {
-                    statusCache[url.Address] = url.Status;
+                    statusCache[url.NormalizedUrl] = url.Status;
                 }
             }
             
@@ -331,7 +331,8 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             
             // Check if canonical target was crawled using cache (FAST!)
             var statusCache = UrlStatusCacheByProject.GetValueOrDefault(ctx.Project.ProjectId);
-            var status = statusCache?.GetValueOrDefault(canonicalUrl);
+            // Normalize canonical URL before lookup to ensure consistency with database
+            var status = statusCache?.GetValueOrDefault(NormalizeUrlForCache(canonicalUrl));
 
             if (status.HasValue)
             {
@@ -670,6 +671,23 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         }
     }
 
+    /// <summary>
+    /// Normalizes a URL for cache lookups (matching database normalization).
+    /// This ensures consistent lookups regardless of trailing slash variations.
+    /// </summary>
+    private static string NormalizeUrlForCache(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            return uri.GetLeftPart(UriPartial.Path).ToLowerInvariant();
+        }
+        catch
+        {
+            return url.ToLowerInvariant();
+        }
+    }
+    
     /// <summary>
     /// Cleanup per-project data when project is closed.
     /// </summary>
