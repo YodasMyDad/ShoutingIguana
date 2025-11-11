@@ -43,6 +43,7 @@ public class PluginExecutor(
         IBrowserPage? browserPage = page != null ? new BrowserPage(page) : null;
         
         var findingSink = new FindingSink(urlData.Id, projectId, _serviceProvider, _logger);
+        var reportSink = new ReportSink(urlData.Id, projectId, _serviceProvider, _logger);
         
         var urlContext = new UrlContext(
             Url: new Uri(urlData.Address),
@@ -78,6 +79,7 @@ public class PluginExecutor(
                 HtmlLang: urlData.HtmlLang,
                 IsRedirectLoop: urlData.IsRedirectLoop),
             Findings: findingSink,
+            Reports: reportSink,
             Enqueue: new UrlEnqueueStub(), // Not implemented in Stage 2
             Logger: _logger);
 
@@ -107,8 +109,9 @@ public class PluginExecutor(
         }
         finally
         {
-            // Always flush findings, even if an error occurred
+            // Always flush findings and reports, even if an error occurred
             await findingSink.FlushAsync();
+            await reportSink.FlushAsync();
         }
     }
 }
@@ -178,6 +181,72 @@ internal class FindingSink(int urlId, int projectId, IServiceProvider servicePro
         {
             _logger.LogError(ex, "Error flushing findings to database");
             // Findings remain in _pendingFindings for potential retry or investigation
+        }
+    }
+}
+
+/// <summary>
+/// Implementation of IReportSink that batches report rows for better performance.
+/// </summary>
+internal class ReportSink(int? urlId, int projectId, IServiceProvider serviceProvider, ILogger logger) : IReportSink
+{
+    private readonly int? _urlId = urlId;
+    private readonly int _projectId = projectId;
+    private readonly IServiceProvider _serviceProvider = serviceProvider;
+    private readonly ILogger _logger = logger;
+    private readonly List<ShoutingIguana.Core.Models.ReportRow> _pendingRows = [];
+
+    public async Task ReportAsync(string taskKey, PluginSdk.ReportRow row, int? urlId = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var reportRow = new ShoutingIguana.Core.Models.ReportRow
+            {
+                ProjectId = _projectId,
+                TaskKey = taskKey,
+                UrlId = urlId ?? _urlId,
+                CreatedUtc = DateTime.UtcNow
+            };
+            
+            // Set row data using the helper method
+            reportRow.SetData(row);
+
+            // Batch rows - don't save immediately
+            _pendingRows.Add(reportRow);
+            _logger.LogDebug("Report row queued for task: {TaskKey}", taskKey);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error queueing report row for task: {TaskKey}", taskKey);
+        }
+        
+        await Task.CompletedTask;
+    }
+    
+    /// <summary>
+    /// Flush all pending report rows to database in a single transaction.
+    /// </summary>
+    public async Task FlushAsync()
+    {
+        if (_pendingRows.Count == 0)
+            return;
+            
+        try
+        {
+            // Create a new scope to get a fresh DbContext
+            using var scope = _serviceProvider.CreateScope();
+            var reportRepository = scope.ServiceProvider.GetRequiredService<IReportDataRepository>();
+            
+            // Use the batch insert method which handles transactions internally
+            await reportRepository.CreateBatchAsync(_pendingRows);
+            
+            _logger.LogDebug("Flushed {Count} report rows to database", _pendingRows.Count);
+            _pendingRows.Clear();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error flushing report rows to database");
+            // Rows remain in _pendingRows for potential retry or investigation
         }
     }
 }

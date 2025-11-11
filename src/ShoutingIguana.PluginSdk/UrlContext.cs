@@ -14,6 +14,7 @@ namespace ShoutingIguana.PluginSdk;
 /// <param name="Project">Project-wide crawl settings.</param>
 /// <param name="Metadata">URL metadata (status code, content type, depth, etc.).</param>
 /// <param name="Findings">Sink for reporting findings discovered by this task.</param>
+/// <param name="Reports">Sink for reporting custom data rows with plugin-defined columns.</param>
 /// <param name="Enqueue">Service for enqueueing new URLs discovered during analysis.</param>
 /// <param name="Logger">Logger for this task execution.</param>
 /// <remarks>
@@ -26,7 +27,8 @@ namespace ShoutingIguana.PluginSdk;
 /// - <c>ctx.Url</c> - The current URL
 /// - <c>ctx.RenderedHtml</c> - HTML content to analyze
 /// - <c>ctx.Metadata.StatusCode</c> - HTTP status
-/// - <c>ctx.Findings.ReportAsync()</c> - Report issues
+/// - <c>ctx.Findings.ReportAsync()</c> - Report issues (legacy)
+/// - <c>ctx.Reports.ReportAsync()</c> - Report custom data rows
 /// - <c>ctx.Logger</c> - Log messages
 /// </para>
 /// </remarks>
@@ -60,6 +62,7 @@ public sealed record UrlContext(
     ProjectSettings Project,
     UrlMetadata Metadata,
     IFindingSink Findings,
+    IReportSink Reports,
     IUrlEnqueue Enqueue,
     ILogger Logger);
 

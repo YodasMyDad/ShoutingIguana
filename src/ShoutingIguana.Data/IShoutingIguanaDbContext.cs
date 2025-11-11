@@ -19,6 +19,8 @@ public interface IShoutingIguanaDbContext : IDisposable
     DbSet<Hreflang> Hreflangs { get; }
     DbSet<StructuredData> StructuredData { get; }
     DbSet<CustomExtractionRule> CustomExtractionRules { get; }
+    DbSet<ReportSchema> ReportSchemas { get; }
+    DbSet<ReportRow> ReportRows { get; }
     
     int SaveChanges();
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

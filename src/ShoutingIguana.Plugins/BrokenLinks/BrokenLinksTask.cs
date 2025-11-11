@@ -726,7 +726,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
     }
 
     /// <summary>
-    /// Report all unique findings with occurrence counts to the findings sink.
+    /// Report all unique findings as structured report rows for easy scanning.
     /// </summary>
     private async Task ReportUniqueFindings(UrlContext ctx, Dictionary<string, FindingTracker> findingsMap)
     {
@@ -734,28 +734,35 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         {
             var tracker = kvp;
             
-            // Add occurrence count to the message if > 1
-            var message = tracker.Message;
-            if (tracker.OccurrenceCount > 1)
+            // Extract data from technical metadata
+            var techData = tracker.Data?.TechnicalMetadata;
+            var targetUrl = techData?.GetValueOrDefault("targetUrl")?.ToString() ?? "";
+            var anchorText = techData?.GetValueOrDefault("anchorText")?.ToString() ?? "";
+            var linkType = techData?.GetValueOrDefault("linkType")?.ToString() ?? "";
+            var httpStatus = techData?.GetValueOrDefault("httpStatus");
+            var isExternal = techData?.GetValueOrDefault("isExternal") as bool? ?? false;
+            
+            // Format status for display
+            var statusDisplay = httpStatus switch
             {
-                message += $" (occurs {tracker.OccurrenceCount} times on this page)";
-            }
-
-            // Add occurrence count to finding details if there are duplicates
-            var details = tracker.Data;
-            if (details != null && tracker.OccurrenceCount > 1)
-            {
-                // Add occurrence count to technical metadata
-                details.TechnicalMetadata ??= new Dictionary<string, object?>();
-                details.TechnicalMetadata["occurrenceCount"] = tracker.OccurrenceCount;
-            }
-
-            await ctx.Findings.ReportAsync(
-                Key,
-                tracker.Severity,
-                tracker.Code,
-                message,
-                details);
+                null => "Unknown",
+                0 => "Connection Failed",
+                int status => status.ToString(),
+                _ => "Unknown"
+            };
+            
+            // Create report row with SEO-friendly columns
+            var row = ReportRow.Create()
+                .Set("Severity", tracker.Severity.ToString())
+                .Set("LinkedFrom", ctx.Url.ToString())
+                .Set("BrokenLink", targetUrl)
+                .Set("Status", statusDisplay)
+                .Set("LinkText", anchorText)
+                .Set("LinkType", linkType)
+                .Set("IsExternal", isExternal ? "Yes" : "No")
+                .Set("Occurrences", tracker.OccurrenceCount);
+            
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
     }
 

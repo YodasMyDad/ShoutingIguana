@@ -24,6 +24,8 @@ public abstract class ShoutingIguanaDbContextBase : DbContext
     public DbSet<Hreflang> Hreflangs => Set<Hreflang>();
     public DbSet<StructuredData> StructuredData => Set<StructuredData>();
     public DbSet<CustomExtractionRule> CustomExtractionRules => Set<CustomExtractionRule>();
+    public DbSet<ReportSchema> ReportSchemas => Set<ReportSchema>();
+    public DbSet<ReportRow> ReportRows => Set<ReportRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

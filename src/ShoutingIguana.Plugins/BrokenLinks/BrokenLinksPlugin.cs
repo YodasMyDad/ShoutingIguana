@@ -12,6 +12,20 @@ public class BrokenLinksPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema for broken links
+        var schema = ReportSchema.Create("BrokenLinks")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .AddPrimaryColumn("LinkedFrom", ReportColumnType.Url, "Linked From")
+            .AddColumn("BrokenLink", ReportColumnType.Url, "Broken Link")
+            .AddColumn("Status", ReportColumnType.String, "HTTP Status")
+            .AddColumn("LinkText", ReportColumnType.String, "Link Text")
+            .AddColumn("LinkType", ReportColumnType.String, "Type")
+            .AddColumn("IsExternal", ReportColumnType.String, "External")
+            .AddColumn("Occurrences", ReportColumnType.Integer, "Count")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         // Create checker with repository accessor
         var accessor = context.GetRepositoryAccessor();
         var checker = new BrokenLinksChecker(accessor, context.CreateLogger<BrokenLinksChecker>());

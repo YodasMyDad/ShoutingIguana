@@ -16,6 +16,7 @@ internal class PluginMetadata
     public required string SourcePath { get; init; }
     public List<IUrlTask> Tasks { get; init; } = [];
     public List<IExportProvider> Exporters { get; init; } = [];
+    public List<string> SchemaKeys { get; init; } = [];
     public DateTime UnloadedAt { get; set; }
 }
 
@@ -31,6 +32,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
     private readonly Dictionary<string, PluginMetadata> _pluginMetadata = [];
     private readonly List<IUrlTask> _registeredTasks = [];
     private readonly List<IExportProvider> _registeredExporters = [];
+    private readonly Dictionary<string, IReportSchema> _registeredSchemas = [];
     private readonly SemaphoreSlim _lock = new(1, 1);
     private bool _isLoaded;
 
@@ -508,8 +510,10 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                             _serviceProvider, 
                             _registeredTasks, 
                             _registeredExporters,
+                            _registeredSchemas,
                             metadata.Tasks,
-                            metadata.Exporters);
+                            metadata.Exporters,
+                            metadata.SchemaKeys);
                         
                         // Initialize plugin
                         plugin.Initialize(hostContext);
@@ -589,15 +593,19 @@ internal class HostContext(
     IServiceProvider serviceProvider,
     List<IUrlTask> globalTasks,
     List<IExportProvider> globalExporters,
+    Dictionary<string, IReportSchema> globalSchemas,
     List<IUrlTask> pluginTasks,
-    List<IExportProvider> pluginExporters) : IHostContext
+    List<IExportProvider> pluginExporters,
+    List<string> pluginSchemaKeys) : IHostContext
 {
     private readonly ILoggerFactory _loggerFactory = loggerFactory;
     private readonly IServiceProvider _serviceProvider = serviceProvider;
     private readonly List<IUrlTask> _globalTasks = globalTasks;
     private readonly List<IExportProvider> _globalExporters = globalExporters;
+    private readonly Dictionary<string, IReportSchema> _globalSchemas = globalSchemas;
     private readonly List<IUrlTask> _pluginTasks = pluginTasks;
     private readonly List<IExportProvider> _pluginExporters = pluginExporters;
+    private readonly List<string> _pluginSchemaKeys = pluginSchemaKeys;
 
     public void RegisterTask(IUrlTask task)
     {
@@ -609,6 +617,12 @@ internal class HostContext(
     {
         _globalExporters.Add(export);
         _pluginExporters.Add(export);
+    }
+
+    public void RegisterReportSchema(IReportSchema schema)
+    {
+        _globalSchemas[schema.TaskKey] = schema;
+        _pluginSchemaKeys.Add(schema.TaskKey);
     }
 
     public ILogger CreateLogger(string categoryName)

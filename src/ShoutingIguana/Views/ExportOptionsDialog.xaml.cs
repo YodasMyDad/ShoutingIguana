@@ -9,17 +9,19 @@ namespace ShoutingIguana.Views;
 public partial class ExportOptionsDialog : Window
 {
     public ExportOptionsDialog(
-        ICsvExportService csvExportService,
         IExcelExportService excelExportService,
         IProjectContext projectContext,
+        Core.Services.IPluginRegistry pluginRegistry,
+        System.IServiceProvider serviceProvider,
         ILogger<ExportOptionsViewModel> logger)
     {
         InitializeComponent();
         DataContext = new ExportOptionsViewModel(
             this, 
-            csvExportService, 
             excelExportService, 
-            projectContext, 
+            projectContext,
+            pluginRegistry,
+            serviceProvider,
             logger);
         
         // Prevent closing the dialog during export

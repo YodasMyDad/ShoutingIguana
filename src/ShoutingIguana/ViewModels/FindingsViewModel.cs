@@ -19,7 +19,6 @@ namespace ShoutingIguana.ViewModels;
 public partial class FindingsViewModel : ObservableObject, IDisposable
 {
     private readonly ILogger<FindingsViewModel> _logger;
-    private readonly ICsvExportService _csvExportService;
     private readonly IExcelExportService _excelExportService;
     private readonly IProjectContext _projectContext;
     private readonly IServiceProvider _serviceProvider;
@@ -54,14 +53,12 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
 
     public FindingsViewModel(
         ILogger<FindingsViewModel> logger,
-        ICsvExportService csvExportService,
         IExcelExportService excelExportService,
         IProjectContext projectContext,
         IServiceProvider serviceProvider,
         IPluginConfigurationService pluginConfig)
     {
         _logger = logger;
-        _csvExportService = csvExportService;
         _excelExportService = excelExportService;
         _projectContext = projectContext;
         _serviceProvider = serviceProvider;
@@ -256,6 +253,11 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             await overviewTab.LoadUrlsAsync(allUrls, baseUrl);
             tabs.Add(overviewTab);
             
+            // Check which tasks have custom schemas
+            var schemaRepository = scope.ServiceProvider.GetRequiredService<Core.Repositories.IReportSchemaRepository>();
+            var allSchemas = await schemaRepository.GetAllAsync();
+            var schemasDict = allSchemas.ToDictionary(s => s.TaskKey, s => s);
+            
             // Create plugin tabs with lazy loading (no data loaded yet)
             foreach (var taskInfo in registeredTasks.Where(t => enabledTaskKeys.Contains(t.Key)).OrderBy(t => t.Key))
             {
@@ -270,15 +272,38 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
                     Description = description
                 };
                 
-                // Set up lazy loading function - data will load when tab is clicked
-                tab.SetLazyLoadFunction(async () =>
+                // Check if this plugin has a custom schema
+                if (schemasDict.TryGetValue(taskKey, out var schema))
                 {
-                    _logger.LogDebug("Lazy loading findings for task: {TaskKey}", taskKey);
-                    using var lazyScope = _serviceProvider.CreateScope();
-                    var lazyFindingRepository = lazyScope.ServiceProvider.GetRequiredService<IFindingRepository>();
-                    // Use GetByTaskKeyAsync to only load findings for THIS plugin (much faster!)
-                    return await lazyFindingRepository.GetByTaskKeyAsync(projectId, taskKey);
-                });
+                    // Use new dynamic report system
+                    tab.SetDynamicLazyLoadFunction(projectId, async () =>
+                    {
+                        _logger.LogDebug("Lazy loading dynamic report data for task: {TaskKey}", taskKey);
+                        // Create scope inside lambda to ensure proper disposal
+                        using var lazyScope = _serviceProvider.CreateScope();
+                        var schemaRepo = lazyScope.ServiceProvider.GetRequiredService<Core.Repositories.IReportSchemaRepository>();
+                        var reportDataRepo = lazyScope.ServiceProvider.GetRequiredService<Core.Repositories.IReportDataRepository>();
+                        
+                        // Load schema and data
+                        var taskSchema = await schemaRepo.GetByTaskKeyAsync(taskKey);
+                        if (taskSchema != null)
+                        {
+                            await tab.LoadDynamicReportAsync(taskSchema, reportDataRepo, projectId);
+                        }
+                    });
+                }
+                else
+                {
+                    // Use legacy finding system
+                    tab.SetLazyLoadFunction(async () =>
+                    {
+                        _logger.LogDebug("Lazy loading findings for task: {TaskKey}", taskKey);
+                        using var lazyScope = _serviceProvider.CreateScope();
+                        var lazyFindingRepository = lazyScope.ServiceProvider.GetRequiredService<Core.Repositories.IFindingRepository>();
+                        // Use GetByTaskKeyAsync to only load findings for THIS plugin (much faster!)
+                        return await lazyFindingRepository.GetByTaskKeyAsync(projectId, taskKey);
+                    });
+                }
                 
                 tabs.Add(tab);
             }
@@ -394,11 +419,13 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         {
             var loggerFactory = _serviceProvider.GetRequiredService<ILoggerFactory>();
             var viewModelLogger = loggerFactory.CreateLogger<ExportOptionsViewModel>();
+            var pluginRegistry = _serviceProvider.GetRequiredService<IPluginRegistry>();
             
             var optionsDialog = new Views.ExportOptionsDialog(
-                _csvExportService,
                 _excelExportService,
                 _projectContext,
+                pluginRegistry,
+                _serviceProvider,
                 viewModelLogger)
             {
                 Owner = Application.Current.MainWindow

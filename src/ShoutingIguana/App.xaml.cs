@@ -24,6 +24,11 @@ public partial class App : Application
 {
     private IHost? _host;
     private CancellationTokenSource? _startupCts;
+    
+    /// <summary>
+    /// Gets the application's service host for dependency injection.
+    /// </summary>
+    public IHost? ServiceHost => _host;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -93,6 +98,8 @@ public partial class App : Application
                     services.AddScoped<IHreflangRepository, HreflangRepository>();
                     services.AddScoped<IStructuredDataRepository, StructuredDataRepository>();
                     services.AddScoped<ICustomExtractionRuleRepository, CustomExtractionRuleRepository>();
+                    services.AddScoped<IReportSchemaRepository, ReportSchemaRepository>();
+                    services.AddScoped<IReportDataRepository, ReportDataRepository>();
 
                     // Core Services
                     services.AddSingleton<IAppSettingsService, AppSettingsService>();
@@ -108,6 +115,8 @@ public partial class App : Application
                     services.AddSingleton<IProxyTestService, ProxyTestService>();
                     services.AddSingleton<IListModeService, ListModeService>();
                     services.AddSingleton<ICustomExtractionService, CustomExtractionService>();
+                    services.AddSingleton<FindingToReportAdapter>();
+                    services.AddSingleton<ReportDataMigrationService>();
 
                     // NuGet Services
                     services.AddSingleton<ShoutingIguana.Core.Services.NuGet.IFeedConfigurationService, ShoutingIguana.Core.Services.NuGet.FeedConfigurationService>();
@@ -120,7 +129,6 @@ public partial class App : Application
                     // Application Services
                     services.AddSingleton<IProjectContext, ProjectContext>();
                     services.AddSingleton<INavigationService, NavigationService>();
-                    services.AddSingleton<ICsvExportService, CsvExportService>();
                     services.AddSingleton<IExcelExportService, ExcelExportService>();
                     services.AddSingleton<IToastService, ToastService>();
                     services.AddSingleton<IStatusService, StatusService>();

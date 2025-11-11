@@ -8,13 +8,16 @@ using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using ShoutingIguana.Core.Models;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.ViewModels.Models;
 
 namespace ShoutingIguana.ViewModels;
 
 /// <summary>
 /// ViewModel for a single findings tab (one per plugin).
+/// Supports both legacy Finding-based reports and new dynamic ReportRow-based reports.
 /// </summary>
 public partial class FindingTabViewModel : ObservableObject
 {
@@ -27,6 +30,7 @@ public partial class FindingTabViewModel : ObservableObject
     [ObservableProperty]
     private string _description = string.Empty;
 
+    // Legacy Finding support
     [ObservableProperty]
     private ObservableCollection<Finding> _findings = new();
 
@@ -35,6 +39,27 @@ public partial class FindingTabViewModel : ObservableObject
 
     [ObservableProperty]
     private Finding? _selectedFinding;
+    
+    // New dynamic Report support
+    [ObservableProperty]
+    private ObservableCollection<ReportColumnViewModel> _reportColumns = new();
+    
+    [ObservableProperty]
+    private ObservableCollection<DynamicReportRowViewModel> _reportRows = new();
+    
+    [ObservableProperty]
+    private DynamicReportRowViewModel? _selectedReportRow;
+    
+    [ObservableProperty]
+    private bool _hasDynamicSchema;
+    
+    private Core.Models.ReportSchema? _schema;
+    
+    /// <summary>
+    /// Gets the count of visible items (works for both legacy and dynamic modes).
+    /// Used by XAML for empty state visibility.
+    /// </summary>
+    public int VisibleItemCount => HasDynamicSchema ? ReportRows.Count : FilteredFindings.Count;
     
     [ObservableProperty]
     private FindingDetails? _selectedFindingDetails;
@@ -68,21 +93,37 @@ public partial class FindingTabViewModel : ObservableObject
 
     private List<Finding> _allFindings = [];
     private List<Finding> _currentFilteredSet = [];
+    private int _projectId;
     private int _currentPage = 0;
     private const int PageSize = 100;
     private Func<Task<IEnumerable<Finding>>>? _lazyLoadFunc;
+    private Func<Task>? _lazyLoadDynamicFunc;
     private readonly object _loadLock = new();
     private Task? _loadingTask;
 
     public string TabHeader => DisplayName;
 
     /// <summary>
-    /// Set up lazy loading function without loading data yet
+    /// Set up lazy loading function for legacy Finding-based reports
     /// </summary>
     public void SetLazyLoadFunction(Func<Task<IEnumerable<Finding>>> loadFunc)
     {
         _lazyLoadFunc = loadFunc;
+        _lazyLoadDynamicFunc = null;
         IsDataLoaded = false;
+        HasDynamicSchema = false;
+    }
+    
+    /// <summary>
+    /// Set up lazy loading function for new dynamic Report-based reports
+    /// </summary>
+    public void SetDynamicLazyLoadFunction(int projectId, Func<Task> loadFunc)
+    {
+        _projectId = projectId;
+        _lazyLoadDynamicFunc = loadFunc;
+        _lazyLoadFunc = null;
+        IsDataLoaded = false;
+        HasDynamicSchema = true;
     }
 
     /// <summary>
@@ -110,7 +151,7 @@ public partial class FindingTabViewModel : ObservableObject
                 // Already loading, capture task to await outside lock
                 existingTask = _loadingTask;
             }
-            else if (IsDataLoaded || _lazyLoadFunc == null)
+            else if (IsDataLoaded || (_lazyLoadFunc == null && _lazyLoadDynamicFunc == null))
             {
                 // Need to reset IsLoading on UI thread
                 _ = Application.Current.Dispatcher.InvokeAsync(() => IsLoading = false);
@@ -118,8 +159,8 @@ public partial class FindingTabViewModel : ObservableObject
             }
             else
             {
-                // Create new loading task
-                _loadingTask = LoadDataAsync();
+                // Create new loading task - either dynamic or legacy
+                _loadingTask = HasDynamicSchema ? LoadDynamicDataAsync() : LoadDataAsync();
                 existingTask = _loadingTask;
             }
         }
@@ -180,12 +221,38 @@ public partial class FindingTabViewModel : ObservableObject
                 HasMoreItems = _currentFilteredSet.Count > PageSize;
                 
                 IsDataLoaded = true;
+                OnPropertyChanged(nameof(VisibleItemCount)); // Update count for UI
             });
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"Error loading findings for {DisplayName}: {ex.Message}");
             // Set IsDataLoaded to false so user can retry
+            IsDataLoaded = false;
+            throw;
+        }
+        finally
+        {
+            await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = false);
+        }
+    }
+    
+    private async Task LoadDynamicDataAsync()
+    {
+        // IsLoading already set to true in EnsureDataLoadedAsync
+        
+        try
+        {
+            // Call the lazy load function which will load schema and initial data
+            if (_lazyLoadDynamicFunc != null)
+            {
+                await _lazyLoadDynamicFunc();
+                await Application.Current.Dispatcher.InvokeAsync(() => IsDataLoaded = true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error loading dynamic report data for {DisplayName}: {ex.Message}");
             IsDataLoaded = false;
             throw;
         }
@@ -223,13 +290,27 @@ public partial class FindingTabViewModel : ObservableObject
     partial void OnSelectedSeverityChanged(Severity? value)
     {
         _ = value; // Suppress unused warning - required by partial method signature
-        _ = ApplyFiltersAsync();
+        if (HasDynamicSchema)
+        {
+            _ = ApplyDynamicFiltersAsync();
+        }
+        else
+        {
+            _ = ApplyFiltersAsync();
+        }
     }
 
     partial void OnSearchTextChanged(string value)
     {
         _ = value; // Suppress unused warning - required by partial method signature
-        _ = ApplyFiltersAsync();
+        if (HasDynamicSchema)
+        {
+            _ = ApplyDynamicFiltersAsync();
+        }
+        else
+        {
+            _ = ApplyFiltersAsync();
+        }
     }
     
     partial void OnSelectedFindingChanged(Finding? value)
@@ -317,6 +398,7 @@ public partial class FindingTabViewModel : ObservableObject
                 
                 FilteredFindings = new ObservableCollection<Finding>(firstPage);
                 HasMoreItems = _currentFilteredSet.Count > PageSize;
+                OnPropertyChanged(nameof(VisibleItemCount)); // Update count for UI
             });
         }
         finally
@@ -359,25 +441,165 @@ public partial class FindingTabViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void LoadNextPage()
+    private async Task LoadNextPageAsync()
     {
         if (IsLoadingMore || !HasMoreItems) return;
         
         IsLoadingMore = true;
         _currentPage++;
         
-        var nextItems = _currentFilteredSet
-            .Skip(_currentPage * PageSize)
-            .Take(PageSize)
-            .ToList();
-        
-        foreach (var item in nextItems)
+        if (HasDynamicSchema)
         {
-            FilteredFindings.Add(item);
+            // Load next page from database for dynamic reports
+            await LoadNextDynamicPageAsync();
+        }
+        else
+        {
+            // Load from in-memory filtered set for legacy findings
+            var nextItems = _currentFilteredSet
+                .Skip(_currentPage * PageSize)
+                .Take(PageSize)
+                .ToList();
+            
+            foreach (var item in nextItems)
+            {
+                FilteredFindings.Add(item);
+            }
+            
+            HasMoreItems = (_currentPage + 1) * PageSize < _currentFilteredSet.Count;
         }
         
-        HasMoreItems = (_currentPage + 1) * PageSize < _currentFilteredSet.Count;
         IsLoadingMore = false;
+    }
+    
+    private async Task LoadNextDynamicPageAsync()
+    {
+        if (_schema == null) return;
+        
+        try
+        {
+            // Create a new scope for this paging request
+            var host = ((App)Application.Current).ServiceHost;
+            if (host == null)
+            {
+                Debug.WriteLine("ServiceHost is null - cannot load next page");
+                return;
+            }
+            
+            using var scope = host.Services.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<Core.Repositories.IReportDataRepository>();
+            
+            // Load next page from database
+            var nextRows = await repository.GetByTaskKeyAsync(_projectId, _schema.TaskKey, page: _currentPage, pageSize: PageSize);
+            var rowVms = nextRows.Select(DynamicReportRowViewModel.FromModel).ToList();
+            
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                foreach (var row in rowVms)
+                {
+                    ReportRows.Add(row);
+                }
+                
+                HasMoreItems = rowVms.Count == PageSize; // If we got a full page, there might be more
+                OnPropertyChanged(nameof(VisibleItemCount)); // Update count for UI
+            });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error loading next page for {DisplayName}: {ex.Message}");
+        }
+    }
+    
+    private async Task ApplyDynamicFiltersAsync()
+    {
+        if (_schema == null) return;
+        
+        await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = true);
+        
+        try
+        {
+            // Create a new scope for filtering
+            var host = ((App)Application.Current).ServiceHost;
+            if (host == null)
+            {
+                Debug.WriteLine("ServiceHost is null - cannot apply filters");
+                await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = false);
+                return;
+            }
+            
+            using var scope = host.Services.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<Core.Repositories.IReportDataRepository>();
+            
+            // For now, reload first page with filters (can be optimized later with in-memory filtering)
+            var reportRows = await repository.GetByTaskKeyAsync(_projectId, _schema.TaskKey, page: 0, pageSize: PageSize, searchText: SearchText);
+            
+            // Client-side severity filtering (since it's stored as string in JSON)
+            var rowVms = reportRows.Select(DynamicReportRowViewModel.FromModel).ToList();
+            
+            if (SelectedSeverity.HasValue)
+            {
+                var severityFilter = SelectedSeverity.Value.ToString();
+                rowVms = rowVms.Where(r => r.GetValue("Severity")?.ToString() == severityFilter).ToList();
+            }
+            
+            var totalCount = await repository.GetCountByTaskKeyAsync(_projectId, _schema.TaskKey, SearchText);
+            
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                ReportRows = new ObservableCollection<DynamicReportRowViewModel>(rowVms);
+                TotalCount = totalCount;
+                HasMoreItems = totalCount > PageSize;
+                _currentPage = 0;
+                OnPropertyChanged(nameof(VisibleItemCount)); // Notify for empty state binding
+            });
+        }
+        finally
+        {
+            await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = false);
+        }
+    }
+    
+    /// <summary>
+    /// Loads dynamic report data with schema from the database.
+    /// </summary>
+    public async Task LoadDynamicReportAsync(Core.Models.ReportSchema schema, Core.Repositories.IReportDataRepository repository, int projectId)
+    {
+        try
+        {
+            _schema = schema;
+            
+            // Load columns from schema
+            var columnDefs = schema.GetColumns();
+            if (columnDefs != null)
+            {
+                var columnVms = columnDefs.Select(ReportColumnViewModel.FromModel).ToList();
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    ReportColumns = new ObservableCollection<ReportColumnViewModel>(columnVms);
+                });
+            }
+            
+            // Load first page of data from database
+            var reportRows = await repository.GetByTaskKeyAsync(projectId, schema.TaskKey, page: 0, pageSize: PageSize);
+            var rowVms = reportRows.Select(DynamicReportRowViewModel.FromModel).ToList();
+            
+            // Get total count
+            var totalCount = await repository.GetCountByTaskKeyAsync(projectId, schema.TaskKey);
+            
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                ReportRows = new ObservableCollection<DynamicReportRowViewModel>(rowVms);
+                TotalCount = totalCount;
+                HasMoreItems = totalCount > PageSize;
+                _currentPage = 0;
+                OnPropertyChanged(nameof(VisibleItemCount)); // Notify for empty state binding
+            });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error loading dynamic report for {DisplayName}: {ex.Message}");
+            throw;
+        }
     }
 
     [RelayCommand]

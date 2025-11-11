@@ -736,7 +736,7 @@
                                                 <MultiDataTrigger>
                                                     <MultiDataTrigger.Conditions>
                                                         <Condition Binding="{Binding IsLoading}" Value="False"/>
-                                                        <Condition Binding="{Binding FilteredFindings.Count}" Value="0"/>
+                                                        <Condition Binding="{Binding VisibleItemCount}" Value="0"/>
                                                     </MultiDataTrigger.Conditions>
                                                     <Setter Property="Visibility" Value="Visible"/>
                                                 </MultiDataTrigger>
@@ -775,7 +775,7 @@
                                                     </MultiDataTrigger.Conditions>
                                                     <Setter Property="Visibility" Value="Visible"/>
                                                 </MultiDataTrigger>
-                                                <DataTrigger Binding="{Binding FilteredFindings.Count}" Value="0">
+                                                <DataTrigger Binding="{Binding VisibleItemCount}" Value="0">
                                                     <Setter Property="Visibility" Value="Collapsed"/>
                                                 </DataTrigger>
                                             </Style.Triggers>

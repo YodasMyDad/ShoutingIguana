@@ -20,7 +20,7 @@ public class ExcelExportService(
     private readonly IServiceProvider _serviceProvider = serviceProvider;
     private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    public async Task<bool> ExportFindingsAsync(int projectId, string filePath, bool includeTechnicalMetadata = false, bool includeErrors = true, bool includeWarnings = true, bool includeInfo = true)
+    public async Task<bool> ExportFindingsAsync(int projectId, string filePath, List<string>? selectedTaskKeys = null, bool includeTechnicalMetadata = false, bool includeErrors = true, bool includeWarnings = true, bool includeInfo = true, Action<string, int, int>? progressCallback = null)
     {
         try
         {
@@ -40,6 +40,14 @@ public class ExcelExportService(
                 return false;
             }
 
+            // Get repositories
+            var schemaRepository = scope.ServiceProvider.GetRequiredService<IReportSchemaRepository>();
+            var reportDataRepository = scope.ServiceProvider.GetRequiredService<IReportDataRepository>();
+            
+            // Get all schemas to determine which plugins use custom reports
+            var schemas = await schemaRepository.GetAllAsync();
+            var schemasDict = schemas.ToDictionary(s => s.TaskKey, s => s);
+            
             // Get all findings
             var allFindings = (await findingRepo.GetByProjectIdAsync(projectId)).ToList();
             
@@ -50,9 +58,38 @@ public class ExcelExportService(
                 (includeInfo && f.Severity == Severity.Info)
             ).ToList();
             
-            if (filteredFindings.Count == 0)
+            var taskKeys = filteredFindings.Select(f => f.TaskKey).Distinct().ToList();
+            
+            // Also include tasks that have report data but no findings
+            foreach (var schema in schemas)
             {
-                _logger.LogWarning("No findings to export for project {ProjectId} after applying severity filters", projectId);
+                if (!taskKeys.Contains(schema.TaskKey))
+                {
+                    var count = await reportDataRepository.GetCountByTaskKeyAsync(projectId, schema.TaskKey);
+                    if (count > 0)
+                    {
+                        taskKeys.Add(schema.TaskKey);
+                    }
+                }
+            }
+            
+            // Filter by selected task keys if provided
+            if (selectedTaskKeys != null && selectedTaskKeys.Count > 0)
+            {
+                taskKeys = taskKeys.Where(tk => selectedTaskKeys.Contains(tk)).ToList();
+                
+                if (taskKeys.Count == 0)
+                {
+                    _logger.LogWarning("No selected plugins have data to export for project {ProjectId}", projectId);
+                    return false;
+                }
+                
+                _logger.LogInformation("Filtering export to {Count} selected plugin(s): {Plugins}", 
+                    taskKeys.Count, string.Join(", ", taskKeys));
+            }
+            else if (taskKeys.Count == 0)
+            {
+                _logger.LogWarning("No data to export for project {ProjectId}", projectId);
                 return false;
             }
             
@@ -69,13 +106,30 @@ public class ExcelExportService(
             // Create summary sheet
             CreateSummarySheet(workbook, project.Name, filteredFindings, findingsByTask);
 
-            // Create a sheet for each plugin's findings (skip empty groups)
-            foreach (var taskGroup in findingsByTask.OrderBy(g => g.Key))
+            // Create a sheet for each plugin's data
+            var currentIndex = 0;
+            var totalCount = taskKeys.Count;
+            
+            foreach (var taskKey in taskKeys.OrderBy(k => k))
             {
-                var taskFindings = taskGroup.ToList();
-                if (taskFindings.Count > 0)
+                currentIndex++;
+                
+                // Report progress
+                progressCallback?.Invoke(taskKey, currentIndex, totalCount);
+                
+                if (schemasDict.TryGetValue(taskKey, out var schema))
                 {
-                    CreateTaskSheet(workbook, taskGroup.Key, taskFindings, includeTechnicalMetadata);
+                    // Create sheet with custom columns
+                    await CreateDynamicReportSheetAsync(workbook, taskKey, schema, projectId, reportDataRepository);
+                }
+                else
+                {
+                    // Create legacy finding sheet
+                    var taskFindings = filteredFindings.Where(f => f.TaskKey == taskKey).ToList();
+                    if (taskFindings.Count > 0)
+                    {
+                        CreateTaskSheet(workbook, taskKey, taskFindings, includeTechnicalMetadata);
+                    }
                 }
             }
 
@@ -100,6 +154,174 @@ public class ExcelExportService(
         }
     }
 
+    private async Task CreateDynamicReportSheetAsync(XLWorkbook workbook, string taskKey, Core.Models.ReportSchema schema, int projectId, IReportDataRepository repository)
+    {
+        try
+        {
+            var columns = schema.GetColumns();
+            if (columns == null || columns.Count == 0)
+            {
+                _logger.LogWarning("No columns defined for schema: {TaskKey}", taskKey);
+                return;
+            }
+            
+            // Sanitize sheet name
+            var sheetName = SanitizeSheetName(taskKey);
+            var ws = workbook.Worksheets.Add(sheetName);
+            
+            // Write column headers
+            var colIndex = 1;
+            foreach (var column in columns)
+            {
+                ws.Cell(1, colIndex).Value = column.DisplayName ?? column.Name;
+                colIndex++;
+            }
+            
+            var headerEndCol = colIndex - 1;
+            ws.Range(1, 1, 1, headerEndCol).Style.Font.Bold = true;
+            ws.Range(1, 1, 1, headerEndCol).Style.Fill.BackgroundColor = XLColor.LightBlue;
+            ws.Row(1).Height = 20;
+            
+            // Load all data for this task (paged)
+            var allRows = new List<Core.Models.ReportRow>();
+            int page = 0;
+            bool hasMore = true;
+            
+            while (hasMore)
+            {
+                var pageData = await repository.GetByTaskKeyAsync(projectId, taskKey, page, pageSize: 1000);
+                if (pageData.Count == 0) break;
+                
+                allRows.AddRange(pageData);
+                hasMore = pageData.Count == 1000;
+                page++;
+            }
+            
+            // Write data rows
+            var row = 2;
+            foreach (var reportRow in allRows)
+            {
+                var data = reportRow.GetData();
+                if (data != null)
+                {
+                    colIndex = 1;
+                    foreach (var column in columns)
+                    {
+                        var value = data.TryGetValue(column.Name, out var val) ? val : null;
+                        var cell = ws.Cell(row, colIndex);
+                        
+                        // Format based on column type
+                        if (value != null)
+                        {
+                            switch ((ReportColumnType)column.ColumnType)
+                            {
+                                case ReportColumnType.DateTime:
+                                    if (value is DateTime dt)
+                                    {
+                                        cell.Value = dt;
+                                        cell.Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss";
+                                    }
+                                    else
+                                    {
+                                        cell.Value = value.ToString();
+                                    }
+                                    break;
+                                
+                                case ReportColumnType.Integer:
+                                    if (value is int intVal)
+                                    {
+                                        cell.Value = intVal;
+                                    }
+                                    else if (value is long longVal)
+                                    {
+                                        cell.Value = longVal;
+                                    }
+                                    else
+                                    {
+                                        cell.Value = value.ToString();
+                                    }
+                                    break;
+                                
+                                case ReportColumnType.Decimal:
+                                    if (value is decimal decVal)
+                                    {
+                                        cell.Value = decVal;
+                                    }
+                                    else if (value is double dblVal)
+                                    {
+                                        cell.Value = dblVal;
+                                    }
+                                    else
+                                    {
+                                        cell.Value = value.ToString();
+                                    }
+                                    break;
+                                
+                                case ReportColumnType.Boolean:
+                                    if (value is bool boolVal)
+                                    {
+                                        cell.Value = boolVal ? "Yes" : "No";
+                                    }
+                                    else
+                                    {
+                                        cell.Value = value.ToString();
+                                    }
+                                    break;
+                                
+                                case ReportColumnType.Url:
+                                case ReportColumnType.String:
+                                default:
+                                    cell.Value = value.ToString();
+                                    if ((ReportColumnType)column.ColumnType == ReportColumnType.Url)
+                                    {
+                                        // Make URLs clickable
+                                        var urlValue = value.ToString();
+                                        if (!string.IsNullOrWhiteSpace(urlValue) && Uri.IsWellFormedUriString(urlValue, UriKind.Absolute))
+                                        {
+                                            cell.SetHyperlink(new XLHyperlink(urlValue));
+                                            cell.Style.Font.FontColor = XLColor.Blue;
+                                            cell.Style.Font.Underline = XLFontUnderlineValues.Single;
+                                        }
+                                    }
+                                    break;
+                            }
+                        }
+                        
+                        colIndex++;
+                    }
+                    row++;
+                }
+            }
+            
+            // Auto-filter
+            if (row > 2)
+            {
+                ws.Range(1, 1, row - 1, headerEndCol).SetAutoFilter();
+            }
+            
+            // Auto-fit columns
+            ws.Columns().AdjustToContents();
+            
+            // Set max column width to avoid extremely wide columns
+            foreach (var column in ws.ColumnsUsed())
+            {
+                if (column.Width > 80)
+                {
+                    column.Width = 80;
+                }
+            }
+            
+            // Freeze header row
+            ws.SheetView.FreezeRows(1);
+            
+            _logger.LogInformation("Created worksheet '{SheetName}' with {Count} rows", sheetName, allRows.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating dynamic report sheet for {TaskKey}", taskKey);
+        }
+    }
+    
     private void CreateSummarySheet(XLWorkbook workbook, string projectName, List<Core.Models.Finding> allFindings, IEnumerable<IGrouping<string, Core.Models.Finding>> findingsByTask)
     {
         var ws = workbook.Worksheets.Add("Summary");

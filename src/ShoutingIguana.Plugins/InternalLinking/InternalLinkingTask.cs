@@ -157,56 +157,57 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
 
     private async Task AnalyzeOutlinksAsync(UrlContext ctx, int outlinkCount)
     {
+        // Get inlink count for this URL
+        var inlinkCount = 0;
+        if (InlinkCountsByProject.TryGetValue(ctx.Project.ProjectId, out var projectInlinks))
+        {
+            inlinkCount = projectInlinks.GetValueOrDefault(ctx.Url.ToString(), 0);
+        }
+        
         // Check for pages with no outlinks (dead ends)
         if (outlinkCount == 0)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem("Page has no internal links")
-                .AddItem($"Page depth: {ctx.Metadata.Depth}")
-                .AddItem("⚠️ Dead end - visitors have nowhere to go")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Add internal links to improve site navigation")
-                    .AddItem("Links help distribute link equity")
-                    .AddItem("Improve user experience with related content links")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
-                .Build();
+            var row = ReportRow.Create()
+                .Set("Severity", "Info")
+                .Set("Page", ctx.Url.ToString())
+                .Set("IssueType", "No Outlinks")
+                .Set("FromURL", "") // Not applicable
+                .Set("ToURL", "") // Not applicable
+                .Set("AnchorText", "")
+                .Set("Inlinks", inlinkCount)
+                .Set("Outlinks", outlinkCount)
+                .Set("Depth", ctx.Metadata.Depth);
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "NO_OUTLINKS",
-                "Page has no internal links (dead end)",
-                details);
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
 
         // Check for pages with very few outlinks (might be thin content or poor navigation)
         if (outlinkCount > 0 && outlinkCount < 3 && ctx.Metadata.Depth <= 2)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"Internal links: {outlinkCount}")
-                .AddItem($"Page depth: {ctx.Metadata.Depth} (important page)")
-                .AddItem("ℹ️ Few outlinks may indicate poor navigation")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Add more contextual internal links")
-                    .AddItem("Link to related content")
-                    .AddItem("Aim for 3-5 contextual links per page")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("outlinkCount", outlinkCount)
-                .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
-                .Build();
+            var row = ReportRow.Create()
+                .Set("Severity", "Info")
+                .Set("Page", ctx.Url.ToString())
+                .Set("IssueType", "Few Outlinks")
+                .Set("FromURL", "") // Not applicable
+                .Set("ToURL", "") // Not applicable
+                .Set("AnchorText", "")
+                .Set("Inlinks", inlinkCount)
+                .Set("Outlinks", outlinkCount)
+                .Set("Depth", ctx.Metadata.Depth);
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "FEW_OUTLINKS",
-                $"Important page has few internal links ({outlinkCount})",
-                details);
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
     }
 
     private async Task AnalyzeOrphanStatusAsync(UrlContext ctx)
     {
+        // Get outlink count for this URL
+        var outlinkCount = 0;
+        if (OutlinkCountsByProject.TryGetValue(ctx.Project.ProjectId, out var projectOutlinks))
+        {
+            outlinkCount = projectOutlinks.GetValueOrDefault(ctx.Url.ToString(), 0);
+        }
+        
         // Check if this URL has any inlinks
         if (InlinkCountsByProject.TryGetValue(ctx.Project.ProjectId, out var projectInlinks))
         {
@@ -226,37 +227,37 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
             
             if (!isHomepage)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem("No internal links pointing to this page")
-                    .AddItem($"Page depth: {ctx.Metadata.Depth}")
-                    .AddItem("⚠️ Potential orphan page")
-                    .BeginNested("ℹ️ Impact")
-                        .AddItem("Orphan pages are harder for users to find")
-                        .AddItem("May not rank well without internal link equity")
-                        .AddItem("Search engines may not discover or prioritize them")
-                        .AddItem("Misses opportunity to build topical authority through content clusters")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Add links from navigation or relevant content")
-                        .AddItem("Ensure important pages are discoverable")
-                        .AddItem("Build internal linking structure with topic clusters")
-                        .AddItem("Connect related content to establish topical authority")
-                        .AddItem("Link from pillar pages to supporting content")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
-                    .Build();
+                var row = ReportRow.Create()
+                    .Set("Severity", "Warning")
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("IssueType", "Orphan Page")
+                    .Set("FromURL", "") // No links to this page
+                    .Set("ToURL", "")
+                    .Set("AnchorText", "")
+                    .Set("Inlinks", 0)
+                    .Set("Outlinks", outlinkCount)
+                    .Set("Depth", ctx.Metadata.Depth);
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "POTENTIAL_ORPHAN",
-                    "Page has no detected internal links pointing to it (potential orphan)",
-                    details);
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
         }
     }
 
     private async Task AnalyzeAnchorTextAsync(UrlContext ctx)
     {
+        // Get outlink and inlink counts
+        var outlinkCount = 0;
+        if (OutlinkCountsByProject.TryGetValue(ctx.Project.ProjectId, out var projectOutlinks))
+        {
+            outlinkCount = projectOutlinks.GetValueOrDefault(ctx.Url.ToString(), 0);
+        }
+        
+        var inlinkCount = 0;
+        if (InlinkCountsByProject.TryGetValue(ctx.Project.ProjectId, out var projectInlinks))
+        {
+            inlinkCount = projectInlinks.GetValueOrDefault(ctx.Url.ToString(), 0);
+        }
+        
         if (!AnchorTextsByProject.TryGetValue(ctx.Project.ProjectId, out var projectAnchors))
         {
             return;
@@ -287,46 +288,22 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
 
         if (genericCount > totalLinks * 0.5)
         {
-            // Get source pages with generic anchor text
-            var genericSourcePages = genericLinks
-                .Select(t => t.SourceUrl)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(10)
-                .ToList();
-            
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"Generic anchor text: {genericCount} of {totalLinks} links")
-                .AddItem($"Percentage: {(genericCount * 100 / totalLinks)}%");
-            
-            builder.BeginNested("📄 Pages with generic anchor text");
-            foreach (var sourcePage in genericSourcePages.Take(5))
+            // Report each generic anchor link as a row for easy scanning
+            foreach (var genericLink in genericLinks.Take(10)) // Limit to first 10 to avoid spam
             {
-                var genericAnchor = genericLinks.FirstOrDefault(l => l.SourceUrl.Equals(sourcePage, StringComparison.OrdinalIgnoreCase)).AnchorText;
-                builder.AddItem($"{sourcePage} (\"{genericAnchor}\")");
+                var row = ReportRow.Create()
+                    .Set("Severity", "Info")
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("IssueType", "Generic Anchor")
+                    .Set("FromURL", genericLink.SourceUrl)
+                    .Set("ToURL", ctx.Url.ToString())
+                    .Set("AnchorText", genericLink.AnchorText)
+                    .Set("Inlinks", inlinkCount)
+                    .Set("Outlinks", outlinkCount)
+                    .Set("Depth", ctx.Metadata.Depth);
+                
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
-            if (genericSourcePages.Count > 5)
-            {
-                builder.AddItem($"... and {genericSourcePages.Count - 5} more");
-            }
-            
-            builder.BeginNested("⚠️ Impact")
-                    .AddItem("Generic anchors provide little SEO value")
-                    .AddItem("Miss opportunity to use relevant keywords")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Use descriptive anchor text that explains the destination")
-                    .AddItem("Instead of \"click here\", use \"view our pricing plans\"")
-                    .AddItem("Include relevant keywords naturally")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("genericCount", genericCount)
-                .WithTechnicalMetadata("totalLinks", totalLinks)
-                .WithTechnicalMetadata("sourcePages", genericSourcePages.ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "GENERIC_ANCHOR_TEXT",
-                $"Many links use generic anchor text ({genericCount}/{totalLinks})",
-                builder.Build());
         }
     }
     

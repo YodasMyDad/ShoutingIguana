@@ -1,11 +1,16 @@
 using System;
+using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Ookii.Dialogs.Wpf;
+using ShoutingIguana.Core.Services;
 using ShoutingIguana.Services;
+using ShoutingIguana.ViewModels.Models;
 
 namespace ShoutingIguana.ViewModels;
 
@@ -15,16 +20,14 @@ namespace ShoutingIguana.ViewModels;
 public partial class ExportOptionsViewModel : ObservableObject
 {
     private readonly Window _dialog;
-    private readonly ICsvExportService _csvExportService;
     private readonly IExcelExportService _excelExportService;
     private readonly IProjectContext _projectContext;
+    private readonly IPluginRegistry _pluginRegistry;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ExportOptionsViewModel> _logger;
     
     [ObservableProperty]
     private bool _includeTechnicalMetadata;
-    
-    [ObservableProperty]
-    private string _exportFormat = "Excel";
     
     [ObservableProperty]
     private bool _includeErrors = true;
@@ -41,20 +44,101 @@ public partial class ExportOptionsViewModel : ObservableObject
     [ObservableProperty]
     private string _exportStatus = "";
     
+    [ObservableProperty]
+    private ObservableCollection<PluginSelectionItem> _pluginSelectionItems = new();
+    
     public bool ExportSucceeded { get; private set; }
     
     public ExportOptionsViewModel(
         Window dialog, 
-        ICsvExportService csvExportService,
         IExcelExportService excelExportService,
         IProjectContext projectContext,
+        IPluginRegistry pluginRegistry,
+        IServiceProvider serviceProvider,
         ILogger<ExportOptionsViewModel> logger)
     {
         _dialog = dialog;
-        _csvExportService = csvExportService;
         _excelExportService = excelExportService;
         _projectContext = projectContext;
+        _pluginRegistry = pluginRegistry;
+        _serviceProvider = serviceProvider;
         _logger = logger;
+        
+        // Load plugins asynchronously
+        _ = LoadPluginsAsync();
+    }
+    
+    private async Task LoadPluginsAsync()
+    {
+        try
+        {
+            var projectId = _projectContext.CurrentProjectId;
+            if (!projectId.HasValue) return;
+            
+            // Get enabled tasks from plugin registry
+            var enabledTasks = _pluginRegistry.EnabledTasks;
+            
+            // Get finding/report counts per plugin
+            using var scope = _serviceProvider.CreateScope();
+            var findingRepository = scope.ServiceProvider.GetRequiredService<Core.Repositories.IFindingRepository>();
+            var reportSchemaRepository = scope.ServiceProvider.GetRequiredService<Core.Repositories.IReportSchemaRepository>();
+            var reportDataRepository = scope.ServiceProvider.GetRequiredService<Core.Repositories.IReportDataRepository>();
+            
+            var allSchemas = await reportSchemaRepository.GetAllAsync();
+            var schemasDict = allSchemas.ToDictionary(s => s.TaskKey, s => s);
+            
+            var items = new ObservableCollection<PluginSelectionItem>();
+            
+            foreach (var task in enabledTasks.OrderBy(t => t.DisplayName))
+            {
+                int count = 0;
+                
+                // Check if has custom schema (use report count) or legacy (use finding count)
+                if (schemasDict.ContainsKey(task.Key))
+                {
+                    count = await reportDataRepository.GetCountByTaskKeyAsync(projectId.Value, task.Key);
+                }
+                else
+                {
+                    count = await findingRepository.GetCountByTaskKeyAsync(projectId.Value, task.Key);
+                }
+                
+                items.Add(new PluginSelectionItem
+                {
+                    TaskKey = task.Key,
+                    DisplayName = task.DisplayName,
+                    IsSelected = true,
+                    FindingCount = count
+                });
+            }
+            
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                PluginSelectionItems = items;
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading plugins for export dialog");
+        }
+    }
+    
+    [RelayCommand]
+    private void SelectAllPlugins()
+    {
+        foreach (var item in PluginSelectionItems)
+        {
+            item.IsSelected = true;
+        }
+    }
+    
+    [RelayCommand]
+    private void DeselectAllPlugins()
+    {
+        foreach (var item in PluginSelectionItems)
+        {
+            item.IsSelected = false;
+        }
     }
     
     [RelayCommand]
@@ -73,26 +157,25 @@ public partial class ExportOptionsViewModel : ObservableObject
                 return;
             }
             
-            // Determine file filter and extension based on format
-            string filter, defaultExt, fileName;
-            if (ExportFormat == "CSV")
+            // Validate at least one plugin is selected
+            var selectedPlugins = PluginSelectionItems.Where(p => p.IsSelected).ToList();
+            if (selectedPlugins.Count == 0)
             {
-                filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*";
-                defaultExt = "csv";
-                fileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+                MessageBox.Show(
+                    "Please select at least one plugin to export.", 
+                    "No Plugins Selected", 
+                    MessageBoxButton.OK, 
+                    MessageBoxImage.Warning);
+                return;
             }
-            else
-            {
-                filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*";
-                defaultExt = "xlsx";
-                fileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx";
-            }
+            
+            var selectedTaskKeys = selectedPlugins.Select(p => p.TaskKey).ToList();
             
             var dialog = new VistaSaveFileDialog
             {
-                Filter = filter,
-                DefaultExt = defaultExt,
-                FileName = fileName
+                Filter = "Excel files (*.xlsx)|*.xlsx|All files (*.*)|*.*",
+                DefaultExt = "xlsx",
+                FileName = $"shouting-iguana-findings-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx"
             };
 
             if (dialog.ShowDialog() != true)
@@ -114,42 +197,31 @@ public partial class ExportOptionsViewModel : ObservableObject
             
             try
             {
-                if (ExportFormat == "CSV")
-                {
-                    await Application.Current.Dispatcher.InvokeAsync(() => 
-                        ExportStatus = "Exporting findings to CSV...");
-                    
-                    await _csvExportService.ExportFindingsAsync(
-                        projectId, 
-                        filePath, 
-                        IncludeTechnicalMetadata, 
-                        IncludeErrors, 
-                        IncludeWarnings, 
-                        IncludeInfo);
-                    success = true;
-                    _logger.LogInformation(
-                        "Exported findings to CSV: {FilePath} (Technical: {Tech}, Errors: {Err}, Warnings: {Warn}, Info: {Info})", 
-                        filePath, IncludeTechnicalMetadata, IncludeErrors, IncludeWarnings, IncludeInfo);
-                }
-                else
-                {
-                    await Application.Current.Dispatcher.InvokeAsync(() => 
-                        ExportStatus = "Exporting findings to Excel...");
-                    
-                    success = await _excelExportService.ExportFindingsAsync(
-                        projectId, 
-                        filePath, 
-                        IncludeTechnicalMetadata, 
-                        IncludeErrors, 
-                        IncludeWarnings, 
-                        IncludeInfo);
-                    
-                    if (success)
+                await Application.Current.Dispatcher.InvokeAsync(() => 
+                    ExportStatus = $"Exporting {selectedPlugins.Count} plugin(s) to Excel...");
+                
+                success = await _excelExportService.ExportFindingsAsync(
+                    projectId, 
+                    filePath, 
+                    selectedTaskKeys,
+                    IncludeTechnicalMetadata, 
+                    IncludeErrors, 
+                    IncludeWarnings, 
+                    IncludeInfo,
+                    (pluginName, current, total) =>
                     {
-                        _logger.LogInformation(
-                            "Exported findings to Excel: {FilePath} (Technical: {Tech}, Errors: {Err}, Warnings: {Warn}, Info: {Info})", 
-                            filePath, IncludeTechnicalMetadata, IncludeErrors, IncludeWarnings, IncludeInfo);
-                    }
+                        // Update progress on UI thread
+                        Application.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            ExportStatus = $"Exporting plugin {current} of {total}: {pluginName}";
+                        });
+                    });
+                
+                if (success)
+                {
+                    _logger.LogInformation(
+                        "Exported {Count} plugin(s) to Excel: {FilePath}", 
+                        selectedPlugins.Count, filePath);
                 }
                 
                 // Update UI and show messages on UI thread

@@ -1,11 +1,11 @@
 <Window x:Class="ShoutingIguana.Views.ExportOptionsDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Export Options"
-        Height="550"
-        Width="500"
-        MinHeight="450"
-        MinWidth="450"
+        Title="Export to Excel"
+        Height="700"
+        Width="650"
+        MinHeight="600"
+        MinWidth="550"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource BackgroundBrush}"
         Foreground="{StaticResource TextPrimaryBrush}"
@@ -38,11 +38,11 @@
                                Foreground="White"/>
                 </Border>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="Export Options"
+                    <TextBlock Text="Export to Excel"
                                Style="{StaticResource TitleTextStyle}"
                                Margin="0"
                                AutomationProperties.HeadingLevel="Level1"/>
-                    <TextBlock Text="Configure how findings should be exported"
+                    <TextBlock Text="Select plugins and configure export options"
                                Style="{StaticResource BodyTextStyle}"
                                Foreground="{StaticResource TextSecondaryBrush}"
                                Margin="0,4,0,0"/>
@@ -58,35 +58,73 @@
                       IsEnabled="{Binding IsExporting, Converter={StaticResource InverseBooleanConverter}}">
             <Border Style="{StaticResource Card}">
                 <StackPanel>
-                    <!-- Format Selection -->
+                    <!-- Plugin Selection Section -->
                     <StackPanel Margin="0,0,0,24">
-                        <TextBlock Text="Export Format"
-                                   FontWeight="SemiBold"
-                                   FontSize="14"
-                                   Margin="0,0,0,8"/>
-                        <ComboBox SelectedValue="{Binding ExportFormat}"
-                                  SelectedValuePath="Content"
-                                  Style="{StaticResource ModernComboBox}">
-                            <ComboBoxItem Content="Excel" IsSelected="True"/>
-                            <ComboBoxItem Content="CSV"/>
-                        </ComboBox>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <TextBlock Grid.Column="0"
+                                       Text="Select Plugins to Export"
+                                       FontWeight="SemiBold"
+                                       FontSize="14"
+                                       VerticalAlignment="Center"/>
+                            
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button Content="Select All"
+                                        Command="{Binding SelectAllPluginsCommand}"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Height="28"
+                                        Padding="12,4"
+                                        FontSize="12"
+                                        Margin="0,0,8,0"/>
+                                <Button Content="Deselect All"
+                                        Command="{Binding DeselectAllPluginsCommand}"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Height="28"
+                                        Padding="12,4"
+                                        FontSize="12"/>
+                            </StackPanel>
+                        </Grid>
+                        
+                        <TextBlock Text="Choose which plugins' findings to include in the export"
+                                   Style="{StaticResource HelperText}"
+                                   Margin="0,0,0,12"/>
+                        
+                        <!-- Plugin List with Scrolling -->
+                        <Border Background="{StaticResource SurfaceAltBrush}"
+                                CornerRadius="6"
+                                Padding="12"
+                                MaxHeight="200">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                         HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl ItemsSource="{Binding PluginSelectionItems}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding IsSelected}"
+                                                      Margin="0,0,0,8"
+                                                      FontSize="14">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding DisplayName}"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding FindingCount, StringFormat=' ({0} findings)'}"
+                                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                                               VerticalAlignment="Center"
+                                                               Margin="4,0,0,0"
+                                                               FontSize="12"/>
+                                                </StackPanel>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
                     </StackPanel>
                     
-                    <!-- Technical Metadata Option -->
-                    <CheckBox IsChecked="{Binding IncludeTechnicalMetadata}"
-                              FontSize="14"
-                              Margin="0,0,0,24">
-                        <StackPanel>
-                            <TextBlock Text="Include Technical Metadata" 
-                                       FontWeight="SemiBold"
-                                       TextWrapping="Wrap"/>
-                            <TextBlock Text="Adds an additional column with raw technical data (JSON format) for advanced analysis"
-                                       Style="{StaticResource HelperText}"/>
-                        </StackPanel>
-                    </CheckBox>
-                    
                     <!-- Severity Filter Section -->
-                    <StackPanel Margin="0,0,0,0">
+                    <StackPanel Margin="0,0,0,24">
                         <TextBlock Text="Include Severity Levels"
                                    FontWeight="SemiBold"
                                    FontSize="14"
@@ -110,6 +148,19 @@
                                   FontSize="14"
                                   Margin="0,0,0,0"/>
                     </StackPanel>
+                    
+                    <!-- Technical Metadata Option -->
+                    <CheckBox IsChecked="{Binding IncludeTechnicalMetadata}"
+                              FontSize="14"
+                              Margin="0,0,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Include Technical Metadata" 
+                                       FontWeight="SemiBold"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock Text="Adds an additional column with raw technical data (JSON format) for advanced analysis"
+                                       Style="{StaticResource HelperText}"/>
+                        </StackPanel>
+                    </CheckBox>
                 </StackPanel>
             </Border>
         </ScrollViewer>
@@ -133,18 +184,18 @@
                         AutomationProperties.HelpText="Closes the export dialog without exporting"/>
                 <Button Command="{Binding OkAsyncCommand}"
                         Style="{StaticResource PrimaryButton}"
-                        MinWidth="120"
+                        MinWidth="140"
                         Height="48"
                         IsDefault="True"
-                        AutomationProperties.Name="Export Findings"
-                        AutomationProperties.HelpText="Exports findings with the selected options">
+                        AutomationProperties.Name="Export to Excel"
+                        AutomationProperties.HelpText="Exports findings to Excel with the selected options">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{StaticResource Icon.Save}"
                                    Style="{StaticResource Icon}"
                                    Width="16"
                                    Height="16"
                                    Margin="0,0,8,0"/>
-                        <TextBlock Text="Export" VerticalAlignment="Center"/>
+                        <TextBlock Text="Export to Excel" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
             </StackPanel>

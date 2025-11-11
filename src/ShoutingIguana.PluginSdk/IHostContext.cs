@@ -104,6 +104,37 @@ public interface IHostContext
     void RegisterExport(IExportProvider export);
     
     /// <summary>
+    /// Registers a report schema that defines custom columns for a plugin's report data.
+    /// </summary>
+    /// <param name="schema">The report schema defining columns and metadata.</param>
+    /// <remarks>
+    /// <para>
+    /// Call this during plugin initialization to define custom columns for your plugin's reports.
+    /// Once registered, use <c>ctx.Reports.ReportAsync()</c> in your task to submit data rows.
+    /// </para>
+    /// <para>
+    /// The schema's TaskKey must match your IUrlTask.Key value.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// public void Initialize(IHostContext context)
+    /// {
+    ///     var schema = ReportSchema.Create("BrokenLinks")
+    ///         .AddPrimaryColumn("SourceUrl", ReportColumnType.Url)
+    ///         .AddColumn("BrokenUrl", ReportColumnType.Url)
+    ///         .AddColumn("StatusCode", ReportColumnType.Integer)
+    ///         .AddColumn("LinkText", ReportColumnType.String)
+    ///         .Build();
+    ///     
+    ///     context.RegisterReportSchema(schema);
+    ///     context.RegisterTask(new BrokenLinksTask(logger));
+    /// }
+    /// </code>
+    /// </example>
+    void RegisterReportSchema(IReportSchema schema);
+    
+    /// <summary>
     /// Creates a logger instance for the plugin with the specified category name.
     /// </summary>
     /// <param name="categoryName">
