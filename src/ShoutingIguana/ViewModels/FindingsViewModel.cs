@@ -50,6 +50,12 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     public bool IsFindingTabSelected => SelectedTab is FindingTabViewModel;
     
     public string DetailsHeaderText => SelectedTab is OverviewTabViewModel ? "URL Details" : "Finding Details";
+    
+    /// <summary>
+    /// Show details panel for overview and finding tabs.
+    /// Overview shows URL properties, finding tabs show structured details/technical metadata.
+    /// </summary>
+    public bool ShowDetailsPanel => SelectedTab is OverviewTabViewModel or FindingTabViewModel;
 
     public FindingsViewModel(
         ILogger<FindingsViewModel> logger,
@@ -106,6 +112,7 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         // Notify that computed properties changed
         OnPropertyChanged(nameof(IsFindingTabSelected));
         OnPropertyChanged(nameof(DetailsHeaderText));
+        OnPropertyChanged(nameof(ShowDetailsPanel));
     }
 
     private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -115,7 +122,8 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         if (e.PropertyName == nameof(FindingTabViewModel.SelectedFinding)
             || e.PropertyName == nameof(FindingTabViewModel.SelectedFindingDetails)
             || e.PropertyName == nameof(FindingTabViewModel.HasTechnicalMetadata)
-            || e.PropertyName == nameof(FindingTabViewModel.TechnicalMetadataJson))
+            || e.PropertyName == nameof(FindingTabViewModel.TechnicalMetadataJson)
+            || e.PropertyName == nameof(FindingTabViewModel.SelectedReportRow))
         {
             _logger.LogDebug("SelectedFinding changed, updating details panel");
             // Use Dispatcher to ensure UI updates happen on the UI thread
@@ -128,19 +136,16 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         // Handle FindingTabViewModel
         if (SelectedTab is FindingTabViewModel findingTab)
         {
+            if (findingTab.HasDynamicSchema)
+            {
+                UpdateDynamicDetails(findingTab);
+                return;
+            }
+
             if (findingTab.SelectedFinding == null)
             {
                 _logger.LogDebug("No selected finding, clearing details");
-#pragma warning disable MVVMTK0034 // Direct field reference instead of property
-                _selectedFindingDetails = null;
-                _hasTechnicalMetadata = false;
-                _technicalMetadataJson = string.Empty;
-                _hasStructuredDetails = false;
-#pragma warning restore MVVMTK0034
-                OnPropertyChanged(nameof(SelectedFindingDetails));
-                OnPropertyChanged(nameof(HasTechnicalMetadata));
-                OnPropertyChanged(nameof(TechnicalMetadataJson));
-                OnPropertyChanged(nameof(HasStructuredDetails));
+                ClearDetailsPanel();
                 return;
             }
 
@@ -148,40 +153,63 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             _logger.LogDebug("Updating details panel for finding: {FindingId}, URL: {Url}", 
                 finding.Id, finding.Url.Address);
             
-            // Directly update backing fields and manually raise PropertyChanged events
-            // This bypasses the equality check in the generated property setters to force UI updates
-#pragma warning disable MVVMTK0034 // Direct field reference instead of property
-            _selectedFindingDetails = findingTab.SelectedFindingDetails;
-            _hasTechnicalMetadata = findingTab.HasTechnicalMetadata;
-            _technicalMetadataJson = findingTab.TechnicalMetadataJson;
-            _hasStructuredDetails = _selectedFindingDetails?.Items.Count > 0;
-#pragma warning restore MVVMTK0034
-            
-            // Manually raise property changed events
-            OnPropertyChanged(nameof(SelectedFindingDetails));
-            OnPropertyChanged(nameof(HasTechnicalMetadata));
-            OnPropertyChanged(nameof(TechnicalMetadataJson));
-            OnPropertyChanged(nameof(HasStructuredDetails));
-            
-            _logger.LogDebug("Details updated - HasDetails: {HasDetails}, HasTechMetadata: {HasTechMetadata}", 
-                SelectedFindingDetails != null, HasTechnicalMetadata);
+            ApplyDetailsFromTab(findingTab);
         }
         // Handle OverviewTabViewModel - no details panel update needed, it manages its own properties
         else if (SelectedTab is OverviewTabViewModel)
         {
             // Overview tab manages its own UrlProperties, no need to update details panel here
             _logger.LogDebug("Overview tab selected, details managed by OverviewTabViewModel");
-#pragma warning disable MVVMTK0034 // Direct field reference instead of property
-            _selectedFindingDetails = null;
-            _hasTechnicalMetadata = false;
-            _technicalMetadataJson = string.Empty;
-            _hasStructuredDetails = false;
-#pragma warning restore MVVMTK0034
-            OnPropertyChanged(nameof(SelectedFindingDetails));
-            OnPropertyChanged(nameof(HasTechnicalMetadata));
-            OnPropertyChanged(nameof(TechnicalMetadataJson));
-            OnPropertyChanged(nameof(HasStructuredDetails));
+            ClearDetailsPanel();
         }
+    }
+
+    private void UpdateDynamicDetails(FindingTabViewModel findingTab)
+    {
+        if (findingTab.SelectedReportRow == null)
+        {
+            _logger.LogDebug("No selected report row, clearing details");
+            ClearDetailsPanel();
+            return;
+        }
+
+        _logger.LogDebug("Updating details panel for dynamic row: {TaskKey}", findingTab.TaskKey);
+        ApplyDetailsFromTab(findingTab);
+    }
+
+    private void ApplyDetailsFromTab(FindingTabViewModel findingTab)
+    {
+        // Directly update backing fields and manually raise PropertyChanged events
+        // This bypasses the equality check in the generated property setters to force UI updates
+#pragma warning disable MVVMTK0034 // Direct field reference instead of property
+        _selectedFindingDetails = findingTab.SelectedFindingDetails;
+        _hasTechnicalMetadata = findingTab.HasTechnicalMetadata;
+        _technicalMetadataJson = findingTab.TechnicalMetadataJson;
+        _hasStructuredDetails = _selectedFindingDetails?.Items.Count > 0;
+#pragma warning restore MVVMTK0034
+        
+        // Manually raise property changed events
+        OnPropertyChanged(nameof(SelectedFindingDetails));
+        OnPropertyChanged(nameof(HasTechnicalMetadata));
+        OnPropertyChanged(nameof(TechnicalMetadataJson));
+        OnPropertyChanged(nameof(HasStructuredDetails));
+        
+        _logger.LogDebug("Details updated - HasDetails: {HasDetails}, HasTechMetadata: {HasTechMetadata}", 
+            SelectedFindingDetails != null, HasTechnicalMetadata);
+    }
+
+    private void ClearDetailsPanel()
+    {
+#pragma warning disable MVVMTK0034 // Direct field reference instead of property
+        _selectedFindingDetails = null;
+        _hasTechnicalMetadata = false;
+        _technicalMetadataJson = string.Empty;
+        _hasStructuredDetails = false;
+#pragma warning restore MVVMTK0034
+        OnPropertyChanged(nameof(SelectedFindingDetails));
+        OnPropertyChanged(nameof(HasTechnicalMetadata));
+        OnPropertyChanged(nameof(TechnicalMetadataJson));
+        OnPropertyChanged(nameof(HasStructuredDetails));
     }
 
     private async Task LoadTabDataAsync(FindingTabViewModel findingTab)
@@ -253,6 +281,9 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             await overviewTab.LoadUrlsAsync(allUrls, baseUrl);
             tabs.Add(overviewTab);
             
+            // Sync plugin schemas to database before loading tabs
+            await pluginRegistry.SyncSchemasToDatabase();
+            
             // Check which tasks have custom schemas
             var schemaRepository = scope.ServiceProvider.GetRequiredService<Core.Repositories.IReportSchemaRepository>();
             var allSchemas = await schemaRepository.GetAllAsync();
@@ -272,13 +303,13 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
                     Description = description
                 };
                 
-                // Check if this plugin has a custom schema
+                // All plugins now use report schemas - load report data
                 if (schemasDict.TryGetValue(taskKey, out var schema))
                 {
-                    // Use new dynamic report system
+                    // Load report rows with custom columns
                     tab.SetDynamicLazyLoadFunction(projectId, async () =>
                     {
-                        _logger.LogDebug("Lazy loading dynamic report data for task: {TaskKey}", taskKey);
+                        _logger.LogDebug("Lazy loading report data for task: {TaskKey}", taskKey);
                         // Create scope inside lambda to ensure proper disposal
                         using var lazyScope = _serviceProvider.CreateScope();
                         var schemaRepo = lazyScope.ServiceProvider.GetRequiredService<Core.Repositories.IReportSchemaRepository>();
@@ -294,15 +325,8 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
                 }
                 else
                 {
-                    // Use legacy finding system
-                    tab.SetLazyLoadFunction(async () =>
-                    {
-                        _logger.LogDebug("Lazy loading findings for task: {TaskKey}", taskKey);
-                        using var lazyScope = _serviceProvider.CreateScope();
-                        var lazyFindingRepository = lazyScope.ServiceProvider.GetRequiredService<Core.Repositories.IFindingRepository>();
-                        // Use GetByTaskKeyAsync to only load findings for THIS plugin (much faster!)
-                        return await lazyFindingRepository.GetByTaskKeyAsync(projectId, taskKey);
-                    });
+                    // No schema registered - plugin may not generate data
+                    _logger.LogWarning("Plugin {TaskKey} has no registered schema", taskKey);
                 }
                 
                 tabs.Add(tab);
@@ -571,20 +595,11 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Recursively extracts text from a FindingDetail and its children.
+    /// Extracts text from detail items (now flat strings, not hierarchical).
     /// </summary>
-    private void ExtractTextFromDetail(FindingDetail detail, List<string> lines, int indentLevel)
+    private void ExtractTextFromDetail(string detail, List<string> lines, int indentLevel)
     {
-        var indent = new string(' ', indentLevel * 2);
-        lines.Add(indent + detail.Text);
-
-        if (detail.Children != null)
-        {
-            foreach (var child in detail.Children)
-            {
-                ExtractTextFromDetail(child, lines, indentLevel + 1);
-            }
-        }
+        lines.Add(detail);
     }
 
     private async void OnPluginStateChanged(object? sender, PluginStateChangedEventArgs e)

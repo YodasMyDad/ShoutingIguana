@@ -11,8 +11,8 @@ using ShoutingIguana.Data;
 namespace ShoutingIguana.Data.Migrations
 {
     [DbContext(typeof(SqliteShoutingIguanaDbContext))]
-    [Migration("20251111075224_AddReportTables")]
-    partial class AddReportTables
+    [Migration("20251111112330_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

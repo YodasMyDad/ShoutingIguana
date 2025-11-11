@@ -12,6 +12,17 @@ public class StructuredDataPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema for structured data analysis
+        var schema = ReportSchema.Create("StructuredData")
+            .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
+            .AddColumn("SchemaType", ReportColumnType.String, "Schema Type")
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
+            .AddColumn("Property", ReportColumnType.String, "Property")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         context.RegisterTask(new StructuredDataTask(context.CreateLogger(nameof(StructuredDataTask))));
     }
 }

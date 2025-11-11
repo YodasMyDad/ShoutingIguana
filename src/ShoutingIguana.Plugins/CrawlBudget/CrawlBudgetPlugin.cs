@@ -12,6 +12,17 @@ public class CrawlBudgetPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema for crawl budget analysis
+        var schema = ReportSchema.Create("CrawlBudget")
+            .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
+            .AddColumn("StatusCode", ReportColumnType.Integer, "Status")
+            .AddColumn("Depth", ReportColumnType.Integer, "Depth")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         context.RegisterTask(new CrawlBudgetTask(
             context.CreateLogger(nameof(CrawlBudgetTask)),
             context.GetRepositoryAccessor()));

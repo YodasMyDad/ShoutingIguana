@@ -5,32 +5,32 @@
              Background="Transparent">
     
     <UserControl.Resources>
-        <!-- Template for displaying a single FindingDetail with its children -->
-        <HierarchicalDataTemplate x:Key="FindingDetailTemplate"
-                                  DataType="{x:Type sdk:FindingDetail}"
-                                  ItemsSource="{Binding Children}">
-            <TextBlock Text="{Binding Text}"
+        <!-- Template for displaying a single detail item (now strings, not objects) -->
+        <DataTemplate x:Key="FindingDetailTemplate"
+                      DataType="{x:Type system:String}"
+                      xmlns:system="clr-namespace:System;assembly=mscorlib">
+            <TextBlock Text="{Binding}"
                        TextWrapping="Wrap"
                        Margin="0,2"
                        FontSize="13"
                        Foreground="{StaticResource TextPrimaryBrush}"/>
-        </HierarchicalDataTemplate>
+        </DataTemplate>
     </UserControl.Resources>
     
-    <!-- Bind the TreeView directly to Items and rely on the HierarchicalDataTemplate -->
-    <TreeView x:Name="DetailsTreeView"
-              BorderThickness="0"
-              Background="Transparent"
-              ItemsSource="{Binding Details.Items, RelativeSource={RelativeSource AncestorType=UserControl}}"
-              ItemTemplate="{StaticResource FindingDetailTemplate}"
-              HorizontalAlignment="Stretch"
-              VerticalAlignment="Stretch">
-        <TreeView.ItemContainerStyle>
-            <Style TargetType="TreeViewItem">
-                <Setter Property="IsExpanded" Value="True"/>
+    <!-- Bind the ListBox directly to Items (now a flat list of strings) -->
+    <ListBox x:Name="DetailsListBox"
+             BorderThickness="0"
+             Background="Transparent"
+             ItemsSource="{Binding Details.Items, RelativeSource={RelativeSource AncestorType=UserControl}}"
+             ItemTemplate="{StaticResource FindingDetailTemplate}"
+             HorizontalAlignment="Stretch"
+             VerticalAlignment="Stretch"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox.ItemContainerStyle>
+            <Style TargetType="ListBoxItem">
                 <Setter Property="Padding" Value="4,2"/>
                 <Setter Property="Margin" Value="0,1"/>
             </Style>
-        </TreeView.ItemContainerStyle>
-    </TreeView>
+        </ListBox.ItemContainerStyle>
+    </ListBox>
 </UserControl>

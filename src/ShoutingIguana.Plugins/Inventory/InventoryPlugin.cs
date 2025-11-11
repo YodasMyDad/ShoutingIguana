@@ -12,6 +12,18 @@ public class InventoryPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema for inventory
+        var schema = ReportSchema.Create("Inventory")
+            .AddPrimaryColumn("URL", ReportColumnType.Url, "URL")
+            .AddColumn("ContentType", ReportColumnType.String, "Content Type")
+            .AddColumn("Status", ReportColumnType.Integer, "Status")
+            .AddColumn("Depth", ReportColumnType.Integer, "Depth")
+            .AddColumn("Indexable", ReportColumnType.String, "Indexable")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         context.RegisterTask(new InventoryTask());
     }
 }

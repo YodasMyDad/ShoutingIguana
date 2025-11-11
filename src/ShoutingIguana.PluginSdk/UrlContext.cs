@@ -13,7 +13,6 @@ namespace ShoutingIguana.PluginSdk;
 /// <param name="Headers">HTTP response headers.</param>
 /// <param name="Project">Project-wide crawl settings.</param>
 /// <param name="Metadata">URL metadata (status code, content type, depth, etc.).</param>
-/// <param name="Findings">Sink for reporting findings discovered by this task.</param>
 /// <param name="Reports">Sink for reporting custom data rows with plugin-defined columns.</param>
 /// <param name="Enqueue">Service for enqueueing new URLs discovered during analysis.</param>
 /// <param name="Logger">Logger for this task execution.</param>
@@ -27,7 +26,6 @@ namespace ShoutingIguana.PluginSdk;
 /// - <c>ctx.Url</c> - The current URL
 /// - <c>ctx.RenderedHtml</c> - HTML content to analyze
 /// - <c>ctx.Metadata.StatusCode</c> - HTTP status
-/// - <c>ctx.Findings.ReportAsync()</c> - Report issues (legacy)
 /// - <c>ctx.Reports.ReportAsync()</c> - Report custom data rows
 /// - <c>ctx.Logger</c> - Log messages
 /// </para>
@@ -44,12 +42,12 @@ namespace ShoutingIguana.PluginSdk;
 ///     if (ctx.Metadata.StatusCode &lt; 200 || ctx.Metadata.StatusCode &gt;= 300)
 ///         return;
 ///     
-///     // Parse HTML
-///     var doc = new HtmlDocument();
-///     doc.LoadHtml(ctx.RenderedHtml);
+///     // Create report row
+///     var row = ReportRow.Create()
+///         .Set("Page", ctx.Url.ToString())
+///         .Set("Issue", "Example Issue");
 ///     
-///     // Analyze and report findings
-///     await ctx.Findings.ReportAsync(Key, Severity.Warning, "CODE", "Message", details);
+///     await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
 /// }
 /// </code>
 /// </example>
@@ -61,7 +59,6 @@ public sealed record UrlContext(
     IReadOnlyDictionary<string, string> Headers,
     ProjectSettings Project,
     UrlMetadata Metadata,
-    IFindingSink Findings,
     IReportSink Reports,
     IUrlEnqueue Enqueue,
     ILogger Logger);

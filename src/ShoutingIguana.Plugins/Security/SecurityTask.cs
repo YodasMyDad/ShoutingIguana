@@ -164,46 +164,15 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
         {
             var groupedByType = mixedContentResources.GroupBy(r => r.Type).ToList();
             
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"Found {mixedContentResources.Count} HTTP resources on HTTPS page")
-                .AddItem("❌ CRITICAL SECURITY ISSUE");
+            var resourceSummary = string.Join(", ", groupedByType.Select(g => $"{g.Count()} {g.Key}(s)"));
+            var row = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("Issue", $"Mixed Content ({mixedContentResources.Count} HTTP resources)")
+                .Set("Protocol", "HTTPS")
+                .Set("Details", resourceSummary)
+                .Set("Severity", "Error");
             
-            foreach (var group in groupedByType)
-            {
-                builder.BeginNested($"🔓 {group.Key}s loading over HTTP ({group.Count()})");
-                foreach (var resource in group.Take(5))
-                {
-                    builder.AddItem(resource.Url);
-                }
-                if (group.Count() > 5)
-                {
-                    builder.AddItem($"... and {group.Count() - 5} more");
-                }
-            }
-            
-            builder.BeginNested("⚠️ Impact")
-                .AddItem("Browser shows 'Not Secure' warning")
-                .AddItem("Breaks HTTPS encryption - user data at risk")
-                .AddItem("Google ranking penalty for mixed content")
-                .AddItem("Users may see security warnings and leave");
-            
-            builder.BeginNested("💡 Recommendations")
-                .AddItem("Change all HTTP:// URLs to HTTPS://")
-                .AddItem("Use protocol-relative URLs (//example.com) if needed")
-                .AddItem("Or use relative URLs (/images/photo.jpg)")
-                .AddItem("Test all resources load correctly over HTTPS");
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("mixedContentCount", mixedContentResources.Count)
-                .WithTechnicalMetadata("resourceTypes", groupedByType.Select(g => new { type = g.Key, count = g.Count() }).ToArray())
-                .WithTechnicalMetadata("examples", mixedContentResources.Take(10).Select(r => new { type = r.Type, url = r.Url }).ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Error,
-                "MIXED_CONTENT",
-                $"HTTPS page loads {mixedContentResources.Count} HTTP resources (mixed content security issue)",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
     }
 
@@ -266,50 +235,15 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
         // Report missing security headers
         if (missingHeaders.Any() || weakHeaders.Any())
         {
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"Security headers: {missingHeaders.Count} missing, {weakHeaders.Count} weak");
+            var headersSummary = $"{missingHeaders.Count} missing, {weakHeaders.Count} weak";
+            var row = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("Issue", "Missing/Weak Security Headers")
+                .Set("Protocol", "HTTPS")
+                .Set("Details", headersSummary)
+                .Set("Severity", "Warning");
             
-            if (missingHeaders.Any())
-            {
-                builder.BeginNested("🔒 Missing Security Headers");
-                foreach (var header in missingHeaders)
-                {
-                    builder.AddItem(header);
-                }
-            }
-            
-            if (weakHeaders.Any())
-            {
-                builder.BeginNested("⚠️ Weak Security Headers");
-                foreach (var (header, issue) in weakHeaders)
-                {
-                    builder.AddItem($"{header}: {issue}");
-                }
-            }
-            
-            builder.BeginNested("ℹ️ Security Headers Purpose")
-                .AddItem("HSTS: Force HTTPS for all future visits")
-                .AddItem("CSP: Prevent XSS and code injection attacks")
-                .AddItem("X-Content-Type-Options: Prevent MIME-type sniffing")
-                .AddItem("X-Frame-Options: Prevent clickjacking attacks")
-                .AddItem("Referrer-Policy: Control referrer information leakage");
-            
-            builder.BeginNested("💡 Recommendations")
-                .AddItem("Add missing security headers via server configuration")
-                .AddItem("HSTS example: Strict-Transport-Security: max-age=31536000; includeSubDomains")
-                .AddItem("CSP example: Content-Security-Policy: default-src 'self'")
-                .AddItem("These headers protect users and improve trust signals");
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("missingHeaders", missingHeaders.ToArray())
-                .WithTechnicalMetadata("weakHeaders", weakHeaders.Select(h => new { header = h.Header, issue = h.Issue }).ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "MISSING_SECURITY_HEADERS",
-                $"Missing or weak security headers: {string.Join(", ", missingHeaders.Concat(weakHeaders.Select(h => h.Header)))}",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
 
         // Check for secure cookies
@@ -367,54 +301,15 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
 
             if (insecureCookies.Any() || missingHttpOnly.Any())
             {
-                var builder = FindingDetailsBuilder.Create()
-                    .AddItem($"Found {cookies.Count} cookie(s) with security issues");
+                var cookieDetails = $"{insecureCookies.Count} without Secure, {missingHttpOnly.Count} without HttpOnly";
+                var row = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("Issue", "Insecure Cookies")
+                    .Set("Protocol", "HTTPS")
+                    .Set("Details", cookieDetails)
+                    .Set("Severity", "Warning");
                 
-                if (insecureCookies.Any())
-                {
-                    builder.BeginNested("🔓 Cookies without Secure flag");
-                    foreach (var name in insecureCookies.Take(5))
-                    {
-                        builder.AddItem(name);
-                    }
-                    if (insecureCookies.Count > 5)
-                    {
-                        builder.AddItem($"... and {insecureCookies.Count - 5} more");
-                    }
-                }
-                
-                if (missingHttpOnly.Any())
-                {
-                    builder.BeginNested("⚠️ Cookies without HttpOnly flag");
-                    foreach (var name in missingHttpOnly.Take(5))
-                    {
-                        builder.AddItem(name);
-                    }
-                    if (missingHttpOnly.Count > 5)
-                    {
-                        builder.AddItem($"... and {missingHttpOnly.Count - 5} more");
-                    }
-                }
-                
-                builder.BeginNested("⚠️ Security Risk")
-                    .AddItem("Secure flag: Prevents cookies sent over unencrypted HTTP")
-                    .AddItem("HttpOnly flag: Prevents JavaScript access (XSS protection)");
-                
-                builder.BeginNested("💡 Recommendations")
-                    .AddItem("Add Secure flag to all cookies on HTTPS sites")
-                    .AddItem("Add HttpOnly flag to session cookies")
-                    .AddItem("Example: Set-Cookie: sessionid=abc123; Secure; HttpOnly");
-                
-                builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("insecureCookies", insecureCookies.ToArray())
-                    .WithTechnicalMetadata("missingHttpOnly", missingHttpOnly.ToArray());
-                
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "INSECURE_COOKIES",
-                    $"Cookies missing security flags: {insecureCookies.Count} without Secure, {missingHttpOnly.Count} without HttpOnly",
-                    builder.Build());
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
         }
     }
@@ -424,31 +319,14 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
         // Only report on important pages (depth <= 2)
         if (ctx.Metadata.Depth <= 2)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"Page URL: {ctx.Url}")
-                .AddItem($"Protocol: HTTP (insecure)")
-                .AddItem($"Page depth: {ctx.Metadata.Depth} (important page)")
-                .BeginNested("⚠️ Impact")
-                    .AddItem("Google confirmed HTTPS is a ranking signal")
-                    .AddItem("Browsers show 'Not Secure' warning")
-                    .AddItem("Users may not trust your site")
-                    .AddItem("Data transmitted in plain text (security risk)")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Obtain an SSL/TLS certificate (free from Let's Encrypt)")
-                    .AddItem("Configure server to serve site over HTTPS")
-                    .AddItem("Redirect all HTTP traffic to HTTPS (301 permanent)")
-                    .AddItem("Update internal links to use HTTPS")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("protocol", "HTTP")
-                .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
-                .Build();
+            var row = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("Issue", "HTTP Instead of HTTPS")
+                .Set("Protocol", "HTTP")
+                .Set("Details", $"Depth {ctx.Metadata.Depth} (important page)")
+                .Set("Severity", "Warning");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "HTTP_NOT_HTTPS",
-                "Important page served over HTTP instead of HTTPS (ranking signal + user trust)",
-                details);
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
     }
 

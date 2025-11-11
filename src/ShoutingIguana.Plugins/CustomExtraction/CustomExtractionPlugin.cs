@@ -12,6 +12,18 @@ public class CustomExtractionPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema for custom extraction
+        var schema = ReportSchema.Create("CustomExtraction")
+            .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
+            .AddColumn("RuleName", ReportColumnType.String, "Rule Name")
+            .AddColumn("ExtractedValue", ReportColumnType.String, "Extracted Value")
+            .AddColumn("Selector", ReportColumnType.String, "Selector")
+            .AddColumn("Count", ReportColumnType.Integer, "Count")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         context.RegisterTask(new CustomExtractionTask(
             context.CreateLogger(nameof(CustomExtractionTask)),
             context.GetRepositoryAccessor()));

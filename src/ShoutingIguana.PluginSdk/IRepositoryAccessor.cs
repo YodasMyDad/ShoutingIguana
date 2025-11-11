@@ -198,26 +198,21 @@ public interface IRepositoryAccessor
     /// For checking multiple URLs, consider using <see cref="GetRedirectsAsync"/> and building a lookup dictionary.
     /// </remarks>
     /// <example>
-    /// <code>
+    /// <code><![CDATA[
     /// var redirect = await accessor.GetRedirectAsync(projectId, currentUrl);
     /// 
-    /// if (redirect != null)
+    /// if (redirect != null && !redirect.IsPermanent)
     /// {
-    ///     if (!redirect.IsPermanent)
-    ///     {
-    ///         await ctx.Findings.ReportAsync(
-    ///             Key,
-    ///             Severity.Warning,
-    ///             "TEMPORARY_REDIRECT",
-    ///             $"URL uses temporary redirect (HTTP {redirect.StatusCode})",
-    ///             FindingDetailsBuilder.Simple(
-    ///                 $"From: {currentUrl}",
-    ///                 $"To: {redirect.ToUrl}",
-    ///                 "Consider using 301 for permanent redirects"
-    ///             ));
-    ///     }
+    ///     var row = ReportRow.Create()
+    ///         .Set("Source", currentUrl)
+    ///         .Set("Target", redirect.ToUrl)
+    ///         .Set("StatusCode", redirect.StatusCode)
+    ///         .Set("Issue", "Temporary Redirect")
+    ///         .Set("Severity", "Warning");
+    ///     
+    ///     await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     /// }
-    /// </code>
+    /// ]]></code>
     /// </example>
     Task<RedirectInfo?> GetRedirectAsync(int projectId, string sourceUrl);
     
@@ -251,16 +246,13 @@ public interface IRepositoryAccessor
     /// 
     /// foreach (var link in outgoingLinks)
     /// {
-    ///     // Analyze each link
-    ///     await ctx.Findings.ReportAsync(
-    ///         Key,
-    ///         Severity.Info,
-    ///         "LINK_FOUND",
-    ///         $"Links to: {link.ToUrl}",
-    ///         FindingDetailsBuilder.Create()
-    ///             .AddItem($"Anchor text: {link.AnchorText}")
-    ///             .AddItem($"Link type: {link.LinkType}")
-    ///             .Build());
+    ///     var row = ReportRow.Create()
+    ///         .Set("FromURL", ctx.Url.ToString())
+    ///         .Set("ToURL", link.ToUrl)
+    ///         .Set("AnchorText", link.AnchorText)
+    ///         .Set("LinkType", link.LinkType);
+    ///     
+    ///     await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     /// }
     /// </code>
     /// </example>

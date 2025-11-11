@@ -160,136 +160,34 @@ public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAcces
                 confidence = "medium";
             }
             
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"HTTP Status: 200 OK (but appears to be an error page)")
-                .AddItem($"Content length: {contentLength} characters")
-                .AddItem($"Detection confidence: {confidence}");
+            var row = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("Issue", $"Soft 404 ({confidence}% confidence)")
+                .Set("StatusCode", ctx.Metadata.StatusCode)
+                .Set("Depth", ctx.Metadata.Depth)
+                .Set("Severity", "Warning");
             
-            if (matchedPatterns.Any())
-            {
-                builder.BeginNested($"🔍 Soft 404 indicators found in {string.Join(", ", matchLocations)}");
-                foreach (var pattern in matchedPatterns.Distinct().Take(5))
-                {
-                    builder.AddItem($"\"{pattern}\"");
-                }
-            }
-            
-            builder.BeginNested("⚠️ Impact")
-                .AddItem("Wastes Googlebot crawl budget on non-existent pages")
-                .AddItem("These pages should return 404 status, not 200 OK")
-                .AddItem("Confuses search engines about site quality");
-            
-            builder.BeginNested("💡 Recommendations")
-                .AddItem("Return proper 404 HTTP status code for missing pages")
-                .AddItem("Return 410 (Gone) for permanently deleted content")
-                .AddItem("Use 301 redirects if content moved to new URL")
-                .AddItem("Soft 404s waste crawl budget and reduce indexation efficiency");
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("statusCode", ctx.Metadata.StatusCode)
-                .WithTechnicalMetadata("contentLength", contentLength)
-                .WithTechnicalMetadata("patterns", matchedPatterns.Distinct().ToArray())
-                .WithTechnicalMetadata("locations", matchLocations.ToArray())
-                .WithTechnicalMetadata("confidence", confidence);
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "SOFT_404",
-                $"Soft 404 detected: Page returns 200 OK but appears to show error content",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
     }
 
     private async Task CheckCrawledButNotIndexedAsync(UrlContext ctx)
     {
-        var reasons = new List<string>();
-        
-        // Check if page has noindex
-        if (ctx.Metadata.RobotsNoindex == true)
-        {
-            reasons.Add("noindex directive");
-        }
-        
-        // Check if canonical points elsewhere
-        var canonical = ctx.Metadata.CanonicalHtml ?? ctx.Metadata.CanonicalHttp;
-        if (!string.IsNullOrEmpty(canonical))
-        {
-            var normalizedCurrent = UrlHelper.Normalize(ctx.Url.ToString());
-            var normalizedCanonical = UrlHelper.Normalize(canonical);
-            
-            if (normalizedCurrent != normalizedCanonical)
-            {
-                reasons.Add("canonical points to different URL");
-            }
-        }
-        
-        // Check if robots.txt blocks it (project setting)
-        // Note: If we got here, robots.txt allowed crawling, but we can mention indexation concerns
-        
-        // Only report if there are reasons and this is an important page
-        if (reasons.Any() && ctx.Metadata.Depth <= 3)
-        {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"Page will be crawled but NOT indexed")
-                .AddItem($"Page depth: {ctx.Metadata.Depth}")
-                .BeginNested("🚫 Reasons page won't be indexed");
-            
-            foreach (var reason in reasons)
-            {
-                details.AddItem(reason);
-            }
-            
-            details.BeginNested("⚠️ Crawl Budget Impact")
-                .AddItem("Googlebot wastes time crawling pages that won't be indexed")
-                .AddItem("This is OK for truly non-indexable pages (filters, search results)")
-                .AddItem("But if this is important content, it wastes crawl budget");
-            
-            details.BeginNested("💡 Recommendations")
-                .AddItem("If page should be indexed: Remove noindex/canonical")
-                .AddItem("If page shouldn't exist: Return 404 or 410")
-                .AddItem("If page is low-value: Consider blocking in robots.txt to save budget");
-            
-            details.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
-                .WithTechnicalMetadata("reasons", reasons.ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "CRAWLED_NOT_INDEXED",
-                $"Page crawled but won't be indexed: {string.Join(", ", reasons)}",
-                details.Build());
-        }
+        // NOTE: Noindex/canonical checks are duplicates
+        // These are already handled by Robots and Canonical plugins
+        // Skipping to avoid duplicate reporting
     }
 
     private async Task ReportServerErrorAsync(UrlContext ctx)
     {
-        var details = FindingDetailsBuilder.Create()
-            .AddItem($"HTTP Status: {ctx.Metadata.StatusCode}")
-            .AddItem($"Page URL: {ctx.Url}")
-            .AddItem($"Page depth: {ctx.Metadata.Depth}")
-            .BeginNested("⚠️ Server Error Impact")
-                .AddItem("5xx errors waste crawl budget")
-                .AddItem("Search engines cannot index error pages")
-                .AddItem("High error rate triggers quality concerns")
-                .AddItem("May cause site-wide crawl rate reduction");
+        var row = ReportRow.Create()
+            .Set("Page", ctx.Url.ToString())
+            .Set("Issue", $"Server Error (HTTP {ctx.Metadata.StatusCode})")
+            .Set("StatusCode", ctx.Metadata.StatusCode)
+            .Set("Depth", ctx.Metadata.Depth)
+            .Set("Severity", "Warning");
         
-        details.BeginNested("💡 Recommendations")
-            .AddItem("Investigate and fix server/application errors immediately")
-            .AddItem("Check server logs for error details")
-            .AddItem("High 5xx rate = serious crawl budget waste");
-        
-        details.WithTechnicalMetadata("url", ctx.Url.ToString())
-            .WithTechnicalMetadata("statusCode", ctx.Metadata.StatusCode)
-            .WithTechnicalMetadata("depth", ctx.Metadata.Depth);
-        
-        await ctx.Findings.ReportAsync(
-            Key,
-            Severity.Warning,
-            $"SERVER_ERROR_{ctx.Metadata.StatusCode}",
-            $"Server error {ctx.Metadata.StatusCode} wastes crawl budget",
-            details.Build());
+        await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     }
 
     private async Task CheckServerErrorRateAsync(UrlContext ctx)
@@ -311,36 +209,14 @@ public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAcces
             {
                 var errorPercentage = (int)(errorRate * 100);
                 
-                var builder = FindingDetailsBuilder.Create()
-                    .AddItem($"Total pages analyzed: {totalPages}")
-                    .AddItem($"Server errors (5xx): {errorCount}")
-                    .AddItem($"Error rate: {errorPercentage}%")
-                    .AddItem("❌ HIGH ERROR RATE DETECTED");
+                var row = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("Issue", $"High Server Error Rate ({errorPercentage}%)")
+                    .Set("StatusCode", 0)
+                    .Set("Depth", 0)
+                    .Set("Severity", "Error");
                 
-                builder.BeginNested("⚠️ Critical Crawl Budget Impact")
-                    .AddItem($"{errorPercentage}% of your pages return server errors")
-                    .AddItem("This wastes massive amounts of crawl budget")
-                    .AddItem("Search engines may reduce crawl rate site-wide")
-                    .AddItem("Indicates serious server/application problems");
-                
-                builder.BeginNested("💡 Urgent Actions")
-                    .AddItem("Investigate server errors immediately - check logs")
-                    .AddItem("Fix application bugs causing 500 errors")
-                    .AddItem("Check server resources (CPU, memory, disk)")
-                    .AddItem("Verify database connections and queries")
-                    .AddItem("High error rate = poor user experience + SEO damage");
-                
-                builder.WithTechnicalMetadata("totalPages", totalPages)
-                    .WithTechnicalMetadata("errorCount", errorCount)
-                    .WithTechnicalMetadata("errorRate", errorRate)
-                    .WithTechnicalMetadata("errorPercentage", errorPercentage);
-                
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Error,
-                    "HIGH_SERVER_ERROR_RATE",
-                    $"High server error rate detected: {errorPercentage}% of pages return 5xx errors",
-                    builder.Build());
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                 
                 _logger.LogWarning("High server error rate detected for project {ProjectId}: {ErrorRate:P1} ({ErrorCount}/{TotalPages})",
                     ctx.Project.ProjectId, errorRate, errorCount, totalPages);

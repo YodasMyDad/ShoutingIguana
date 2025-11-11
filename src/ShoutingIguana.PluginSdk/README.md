@@ -27,6 +27,16 @@ public class MyPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema
+        var schema = ReportSchema.Create("MySEOCheck")
+            .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
+            .AddColumn("Title", ReportColumnType.String, "Title")
+            .AddColumn("Length", ReportColumnType.Integer, "Length")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         var logger = context.CreateLogger<MyTask>();
         context.RegisterTask(new MyTask(logger));
     }
@@ -55,20 +65,13 @@ public class MyTask : UrlTaskBase
 
         if (title.Length < 30)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"Title: \"{title}\"")
-                .AddItem($"Length: {title.Length} characters")
-                .BeginNested("💡 Recommendation")
-                    .AddItem("Titles should be at least 30 characters")
-                    .AddItem("Include relevant keywords")
-                .Build();
+            var row = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("Issue", "Title Too Short")
+                .Set("Title", title)
+                .Set("Length", title.Length);
 
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "SHORT_TITLE",
-                $"Title is too short ({title.Length} chars)",
-                details);
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
     }
 }
@@ -112,46 +115,88 @@ Install from NuGet → Initialize() → Register Tasks → Crawl → ExecuteAsyn
 
 - **IPlugin** - Entry point for your plugin
 - **UrlTaskBase** - Analysis logic that runs for each crawled URL
-- **FindingDetailsBuilder** - Create structured, user-friendly reports
+- **ReportSchema** - Define custom datagrid columns with typed data
+- **ReportRow** - Populate custom columns with data
 - **IRepositoryAccessor** - Query crawled data efficiently
 - **IHostContext** - Access logging and task registration
 
-## Building Findings
+## Custom Report Schemas (Advanced Datagrid)
 
-### Simple Finding
+Plugins can define custom column layouts for the datagrid view, providing a specialized, scannable interface for findings. This is optional—findings work without custom schemas, but schemas dramatically improve the user experience for tabular data.
+
+### When to Use Custom Schemas
+
+- **Use schemas for**: Tabular data with consistent fields (broken links, internal linking, redirects)
+- **Skip schemas for**: One-off issues or highly variable findings
+
+### Registering a Schema
+
+Define columns in your plugin's `Initialize()` method:
 
 ```csharp
-var details = FindingDetailsBuilder.Simple(
-    "Page URL: https://example.com",
-    "Missing H1 tag",
-    "H1 tags are important for SEO"
-);
-
-await ctx.Findings.ReportAsync(
-    Key,
-    Severity.Error,
-    "MISSING_H1",
-    "Page has no H1 tag",
-    details);
+public void Initialize(IHostContext context)
+{
+    // Register custom report schema with specialized columns
+    var schema = ReportSchema.Create("LinkGraph")
+        .AddPrimaryColumn("FromURL", ReportColumnType.Url, "From URL")
+        .AddColumn("ToURL", ReportColumnType.Url, "To URL")
+        .AddColumn("AnchorText", ReportColumnType.String, "Anchor Text")
+        .AddColumn("LinkType", ReportColumnType.String, "Link Type")
+        .Build();
+    
+    context.RegisterReportSchema(schema);
+    
+    // Register your task as usual
+    context.RegisterTask(new LinkGraphTask(context.CreateLogger<LinkGraphTask>()));
+}
 ```
 
-### Structured Finding with Sections
+### Creating Report Rows
+
+In your task, create rows that match your schema:
 
 ```csharp
-var details = FindingDetailsBuilder.Create()
-    .AddItem($"Page: {ctx.Url}")
-    .AddItem($"Found {count} broken links")
-    .BeginNested("📉 SEO Impact")
-        .AddItem("Broken links harm user experience")
-        .AddItem("May reduce page authority")
-    .BeginNested("💡 Recommendations")
-        .AddItem("Fix or remove broken links")
-        .AddItem("Implement 301 redirects where appropriate")
-    .WithTechnicalMetadata("brokenLinkCount", count)
+public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
+{
+    // Create report row with custom columns
+    // IMPORTANT: Plugins with registered schemas should create ONLY report rows, not findings
+    // Do NOT call ctx.Findings.ReportAsync() - this causes UI to show legacy columns
+    var row = ReportRow.Create()
+        .Set("FromURL", ctx.Url.ToString())
+        .Set("ToURL", targetUrl)
+        .Set("AnchorText", anchorText)
+        .Set("LinkType", linkType);
+    
+    await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+}
+```
+
+**IMPORTANT:** If you register a custom schema, create **ONLY** report rows using `ctx.Reports.ReportAsync()`. Do NOT also call `ctx.Findings.ReportAsync()`, as this creates duplicate data and causes the UI to display legacy columns instead of your custom columns.
+
+### Column Types
+
+- **String** - Text values (anchor text, descriptions)
+- **Integer** - Whole numbers (counts, depths)
+- **Decimal** - Numbers with decimals (percentages, ratios)
+- **DateTime** - Timestamps (last modified dates)
+- **Boolean** - True/false (rendered as checkboxes)
+- **Url** - Hyperlinks (clickable, monospace font)
+
+### Column Configuration
+
+```csharp
+var schema = ReportSchema.Create("MyPlugin")
+    .AddPrimaryColumn("URL", ReportColumnType.Url, "Page URL")  // Primary column (bold, shown first)
+    .AddColumn("Count", ReportColumnType.Integer, "Issue Count")
+    .AddColumn("LastChecked", ReportColumnType.DateTime, "Last Checked")
     .Build();
 ```
 
-> **Note:** `EndNested()` is optional - `Build()` automatically closes any open nested sections. You can still use `EndNested()` for explicit control when working with complex multi-level nesting or when you need to add items at different nesting levels.
+Primary columns are shown first and typically bold—use for the main identifier (URL, page title, etc.).
+
+## Reporting Issues
+
+All plugins must use **report schemas** to display data with custom columns. There is no legacy "findings" system - everything uses typed report rows.
 
 ## Accessing Crawled Data
 
@@ -181,12 +226,14 @@ public class CanonicalTask : UrlTaskBase
             
             if (targetUrl == null)
             {
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "CANONICAL_TARGET_NOT_FOUND",
-                    $"Canonical points to uncrawled URL: {canonical}",
-                    null);
+                var row = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("Issue", "Canonical Target Not Found")
+                    .Set("CanonicalURL", canonical)
+                    .Set("Status", "Not Crawled")
+                    .Set("Severity", "Warning");
+                
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
         }
     }
@@ -226,17 +273,18 @@ var domain = UrlHelper.GetDomain("https://www.example.com/page");
 
 - Use `UrlTaskBase` instead of implementing `IUrlTask` directly
 - Return early for non-applicable URLs (check content type, status)
-- Use `FindingDetailsBuilder` for structured findings
-- Add technical metadata for debugging
-- Use emojis in section headers (📉, 💡, ⚠️, ✅)
-- Implement `CleanupProject()` if using static state
+- **Always register a custom report schema** - this is required for all plugins
+- **Create ONLY report rows** using `ctx.Reports.ReportAsync()`
+- Design columns that make sense for your data type
+- Implement `CleanupProject()` if using static state for memory management
 
 ### ❌ Don't
 
 - Don't block the thread (use async/await)
-- Don't create `IExportProvider` unless you need specialized formats
-- Don't store per-URL state in instance fields
-- Don't parse HTML twice (use `ctx.RenderedHtml`)
+- **Don't use `ctx.Findings.ReportAsync()`** - the legacy findings system has been removed
+- Don't create `IExportProvider` unless you need specialized export formats
+- Don't store per-URL state in instance fields (use static dictionaries with CleanupProject)
+- Don't parse HTML twice (use `ctx.RenderedHtml` which is already parsed)
 
 ## Severity Levels
 
@@ -266,16 +314,34 @@ public class MyTask : UrlTaskBase
 }
 ```
 
-## Example: Duplicate Content Detector
+## Complete Example: Duplicate Content Detector
 
 ```csharp
+// 1. Register schema in plugin
+public class DuplicateContentPlugin : IPlugin
+{
+    public void Initialize(IHostContext context)
+    {
+        var schema = ReportSchema.Create("DuplicateContent")
+            .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
+            .AddColumn("DuplicateOf", ReportColumnType.Url, "Duplicate Of")
+            .AddColumn("ContentHash", ReportColumnType.String, "Hash")
+            .AddColumn("Similarity", ReportColumnType.Integer, "Similarity %")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        context.RegisterTask(new DuplicateContentTask(context.CreateLogger<DuplicateContentTask>()));
+    }
+}
+
+// 2. Create report rows in task
 public class DuplicateContentTask : UrlTaskBase
 {
     private static readonly ConcurrentDictionary<int, Dictionary<string, List<string>>> _contentHashes = new();
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     {
-        if (ctx.Metadata.Status != 200) return;
+        if (ctx.Metadata.StatusCode != 200) return;
         
         var hash = ComputeContentHash(ctx.RenderedHtml);
         var hashes = _contentHashes.GetOrAdd(ctx.Project.ProjectId, _ => new());
@@ -289,18 +355,15 @@ public class DuplicateContentTask : UrlTaskBase
             
             if (hashes[hash].Count > 1)
             {
-                var others = hashes[hash].Where(u => u != ctx.Url.ToString());
+                var duplicateOf = hashes[hash].First(u => u != ctx.Url.ToString());
                 
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"Duplicate content detected")
-                    .BeginNested("📄 Other pages with same content")
-                        .AddItems(others.ToArray())
-                    .WithTechnicalMetadata("contentHash", hash)
-                    .Build();
+                var row = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("DuplicateOf", duplicateOf)
+                    .Set("ContentHash", hash[..12])
+                    .Set("Similarity", 100);
                 
-                await ctx.Findings.ReportAsync(
-                    Key, Severity.Warning, "DUPLICATE_CONTENT",
-                    "Page has duplicate content", details);
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
         }
     }
@@ -320,9 +383,10 @@ public class DuplicateContentTask : UrlTaskBase
 - Ensure package references `ShoutingIguana.PluginSdk`
 - Check logs in `%LocalAppData%/ShoutingIguana/logs/`
 
-**Findings Not Appearing**
-- Verify `ctx.Findings.ReportAsync()` is awaited
-- Check task is registered in `Initialize()`
+**Data Not Appearing**
+- Verify you registered a report schema in `Initialize()`
+- Verify `ctx.Reports.ReportAsync()` is awaited in your task
+- Check that column names in `ReportRow.Create().Set()` match your schema
 - Ensure your condition logic isn't filtering out all pages
 
 **Memory Leaks**

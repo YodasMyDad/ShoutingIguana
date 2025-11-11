@@ -12,6 +12,17 @@ public class RedirectsPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema for redirect analysis
+        var schema = ReportSchema.Create("Redirects")
+            .AddPrimaryColumn("Source", ReportColumnType.Url, "Source URL")
+            .AddColumn("Target", ReportColumnType.Url, "Target URL")
+            .AddColumn("StatusCode", ReportColumnType.Integer, "Status")
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         context.RegisterTask(new RedirectsTask(context.CreateLogger(nameof(RedirectsTask))));
     }
 }

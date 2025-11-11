@@ -12,6 +12,17 @@ public class SecurityPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema for security analysis
+        var schema = ReportSchema.Create("Security")
+            .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
+            .AddColumn("Protocol", ReportColumnType.String, "Protocol")
+            .AddColumn("Details", ReportColumnType.String, "Details")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         context.RegisterTask(new SecurityTask(
             context.CreateLogger(nameof(SecurityTask))));
     }

@@ -12,6 +12,17 @@ public class HreflangPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema for hreflang validation
+        var schema = ReportSchema.Create("Hreflang")
+            .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
+            .AddColumn("HreflangTag", ReportColumnType.String, "Hreflang Tag")
+            .AddColumn("TargetURL", ReportColumnType.Url, "Target URL")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         context.RegisterTask(new HreflangTask(
             context.CreateLogger(nameof(HreflangTask))));
     }

@@ -88,58 +88,33 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
 
             if (extractedValues.Any())
             {
-                // Report extracted data as findings - show only the values, metadata goes to technical section
-                var builder = FindingDetailsBuilder.Create();
+                var valueSummary = extractedValues.Count > 0 ? extractedValues.First() : "(no values)";
+                if (valueSummary.Length > 100) valueSummary = valueSummary[..100] + "...";
                 
-                // Just show the extracted values - that's what users care about
-                foreach (var value in extractedValues.Take(100)) // Show up to 100 values
-                {
-                    builder.AddItem(value);
-                }
-                if (extractedValues.Count > 100)
-                {
-                    builder.AddItem($"... and {extractedValues.Count - 100} more (see technical metadata for full list)");
-                }
+                var row = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("RuleName", rule.Name)
+                    .Set("ExtractedValue", valueSummary)
+                    .Set("Selector", rule.Selector)
+                    .Set("Count", extractedValues.Count)
+                    .Set("Severity", "Info");
                 
-                // All the rule metadata goes to technical metadata for power users
-                builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("ruleName", rule.Name)
-                    .WithTechnicalMetadata("fieldName", rule.FieldName)
-                    .WithTechnicalMetadata("selectorType", rule.SelectorType.ToString())
-                    .WithTechnicalMetadata("selector", rule.Selector)
-                    .WithTechnicalMetadata("extractedValues", extractedValues.ToArray())
-                    .WithTechnicalMetadata("totalCount", extractedValues.Count);
-                
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    $"CUSTOM_DATA_EXTRACTED_{rule.Name.ToUpperInvariant()}",
-                    $"Extracted {extractedValues.Count} value(s) for '{rule.Name}'",
-                    builder.Build());
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to apply extraction rule '{RuleName}' for {Url}", rule.Name, ctx.Url);
             
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"Rule: {rule.Name}")
-                .AddItem($"Error: {ex.Message}")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Check your selector syntax")
-                    .AddItem("Verify the pattern is valid")
-                    .AddItem("Test selector on sample HTML")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("ruleName", rule.Name)
-                .WithTechnicalMetadata("error", ex.Message)
-                .Build();
+            var row = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("RuleName", rule.Name)
+                .Set("ExtractedValue", "ERROR")
+                .Set("Selector", rule.Selector)
+                .Set("Count", 0)
+                .Set("Severity", "Warning");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "EXTRACTION_RULE_ERROR",
-                $"Failed to apply extraction rule '{rule.Name}': {ex.Message}",
-                details);
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
     }
 

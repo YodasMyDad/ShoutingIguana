@@ -12,7 +12,7 @@
     <Authors>Shouting Iguana</Authors>
     <Company>Shouting Iguana</Company>
     <Product>Shouting Iguana SEO Crawler</Product>
-    <Description>Plugin SDK for creating Shouting Iguana crawler extensions. Provides interfaces, helpers, and utilities for building custom SEO analysis plugins. Includes FindingDetailsBuilder, repository accessors, and URL helpers for rapid plugin development.</Description>
+    <Description>Plugin SDK for creating Shouting Iguana crawler extensions. Provides interfaces, helpers, and utilities for building custom SEO analysis plugins. Includes custom report schemas, repository accessors, and URL helpers for rapid plugin development.</Description>
     <PackageProjectUrl>https://github.com/yourorg/ShoutingIguana</PackageProjectUrl>
     <RepositoryUrl>https://github.com/yourorg/ShoutingIguana</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -20,7 +20,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Initial release with core plugin interfaces, FindingDetailsBuilder, IRepositoryAccessor, and UrlHelper utilities.</PackageReleaseNotes>
+    <PackageReleaseNotes>Plugin SDK with custom report schemas for datagrids, core plugin interfaces, IRepositoryAccessor, and UrlHelper utilities.</PackageReleaseNotes>
     
     <!-- Documentation -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

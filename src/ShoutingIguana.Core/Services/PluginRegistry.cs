@@ -174,6 +174,23 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
         }
     }
 
+    public IReadOnlyDictionary<string, IReportSchema> RegisteredSchemas
+    {
+        get
+        {
+            _lock.Wait();
+            try
+            {
+                // Return a copy to prevent external modification and ensure thread safety
+                return new Dictionary<string, IReportSchema>(_registeredSchemas);
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+    }
+
     public async Task LoadPluginsAsync()
     {
         await _lock.WaitAsync();
@@ -576,6 +593,68 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
     {
         var baseDir = AppDomain.CurrentDomain.BaseDirectory;
         return Path.Combine(baseDir, "plugins");
+    }
+
+    public async Task SyncSchemasToDatabase()
+    {
+        await _lock.WaitAsync();
+        try
+        {
+            // Create a scope to get the schema repository
+            using var scope = _serviceProvider.CreateScope();
+            var schemaRepository = scope.ServiceProvider.GetRequiredService<Repositories.IReportSchemaRepository>();
+            
+            foreach (var kvp in _registeredSchemas)
+            {
+                var taskKey = kvp.Key;
+                var sdkSchema = kvp.Value;
+                
+                // Check if schema exists in database
+                var existingSchema = await schemaRepository.GetByTaskKeyAsync(taskKey).ConfigureAwait(false);
+                
+                // Convert SDK schema to Core model
+                var columns = sdkSchema.Columns.Select(c => new ShoutingIguana.Core.Models.ReportColumnDefinition
+                {
+                    Name = c.Name,
+                    DisplayName = c.DisplayName,
+                    ColumnType = (int)c.ColumnType,
+                    Width = c.Width,
+                    IsSortable = c.IsSortable,
+                    IsFilterable = c.IsFilterable,
+                    IsPrimaryKey = c.IsPrimaryKey
+                }).ToList();
+                
+                if (existingSchema == null)
+                {
+                    // Create new schema
+                    var newSchema = new ShoutingIguana.Core.Models.ReportSchema
+                    {
+                        TaskKey = taskKey,
+                        SchemaVersion = sdkSchema.SchemaVersion,
+                        IsUrlBased = sdkSchema.IsUrlBased,
+                        CreatedUtc = DateTime.UtcNow
+                    };
+                    newSchema.SetColumns(columns);
+                    
+                    await schemaRepository.CreateAsync(newSchema).ConfigureAwait(false);
+                    _logger.LogInformation("Created schema for task: {TaskKey}", taskKey);
+                }
+                else if (existingSchema.SchemaVersion != sdkSchema.SchemaVersion)
+                {
+                    // Update existing schema if version changed
+                    existingSchema.SchemaVersion = sdkSchema.SchemaVersion;
+                    existingSchema.IsUrlBased = sdkSchema.IsUrlBased;
+                    existingSchema.SetColumns(columns);
+                    
+                    await schemaRepository.UpdateAsync(existingSchema).ConfigureAwait(false);
+                    _logger.LogInformation("Updated schema for task: {TaskKey}", taskKey);
+                }
+            }
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     public void Dispose()

@@ -12,6 +12,18 @@ public class TitlesMetaPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema for titles & meta analysis
+        var schema = ReportSchema.Create("TitlesMeta")
+            .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
+            .AddColumn("Title", ReportColumnType.String, "Title")
+            .AddColumn("MetaDescription", ReportColumnType.String, "Meta Description")
+            .AddColumn("Length", ReportColumnType.Integer, "Length")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         context.RegisterTask(new TitlesMetaTask(
             context.CreateLogger(nameof(TitlesMetaTask)),
             context.GetRepositoryAccessor()));

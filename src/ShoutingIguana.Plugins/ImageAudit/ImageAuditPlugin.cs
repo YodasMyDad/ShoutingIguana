@@ -13,6 +13,18 @@ public class ImageAuditPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema for image audit
+        var schema = ReportSchema.Create("ImageAudit")
+            .AddPrimaryColumn("ImageURL", ReportColumnType.Url, "Image URL")
+            .AddColumn("Page", ReportColumnType.Url, "Page")
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
+            .AddColumn("AltText", ReportColumnType.String, "Alt Text")
+            .AddColumn("FileSize", ReportColumnType.Integer, "Size (bytes)")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         var logger = context.CreateLogger<ImageAuditTask>();
         context.RegisterTask(new ImageAuditTask(logger));
     }

@@ -12,6 +12,17 @@ public class SitemapPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema for sitemap analysis
+        var schema = ReportSchema.Create("Sitemap")
+            .AddPrimaryColumn("URL", ReportColumnType.Url, "URL")
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
+            .AddColumn("InSitemap", ReportColumnType.String, "In Sitemap")
+            .AddColumn("StatusCode", ReportColumnType.Integer, "Status")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         var accessor = context.GetRepositoryAccessor();
         
         context.RegisterTask(new SitemapTask(

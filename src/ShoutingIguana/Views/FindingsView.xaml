@@ -29,6 +29,26 @@
                 <DataTrigger Binding="{Binding Severity}" Value="{x:Static sdk:Severity.Info}">
                     <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
                 </DataTrigger>
+                <!-- Support string-based severity values from dynamic reports -->
+                <DataTrigger Binding="{Binding Severity}" Value="Error">
+                    <Setter Property="Background" Value="{StaticResource ErrorBackgroundBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="Warning">
+                    <Setter Property="Background" Value="{StaticResource WarningBackgroundBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="Info">
+                    <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
+                </DataTrigger>
+                <!-- Indexer binding support for dynamic rows -->
+                <DataTrigger Binding="{Binding Path=[Severity]}" Value="Error">
+                    <Setter Property="Background" Value="{StaticResource ErrorBackgroundBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Path=[Severity]}" Value="Warning">
+                    <Setter Property="Background" Value="{StaticResource WarningBackgroundBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Path=[Severity]}" Value="Info">
+                    <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
         
@@ -44,6 +64,26 @@
                     <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Severity}" Value="{x:Static sdk:Severity.Info}">
+                    <Setter Property="Foreground" Value="{StaticResource InfoBrush}"/>
+                </DataTrigger>
+                <!-- String fallbacks -->
+                <DataTrigger Binding="{Binding Severity}" Value="Error">
+                    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="Warning">
+                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="Info">
+                    <Setter Property="Foreground" Value="{StaticResource InfoBrush}"/>
+                </DataTrigger>
+                <!-- Indexer binding fallback for dynamic rows -->
+                <DataTrigger Binding="{Binding Path=[Severity]}" Value="Error">
+                    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Path=[Severity]}" Value="Warning">
+                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Path=[Severity]}" Value="Info">
                     <Setter Property="Foreground" Value="{StaticResource InfoBrush}"/>
                 </DataTrigger>
             </Style.Triggers>
@@ -757,14 +797,26 @@
                                     </StackPanel>
                                 </Grid>
                                 
-                                <!-- Actual DataGrid (shown when loaded and has data) -->
-                                <DataGrid ItemsSource="{Binding FilteredFindings}"
+                                <!-- Actual DataGrid (code-behind dynamically switches binding between FilteredFindings and ReportRows) -->
+                                <DataGrid x:Name="DynamicFindingsDataGrid"
+                                          ItemsSource="{Binding FilteredFindings}"
                                           SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
                                           VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Auto"
                                           Tag="FindingsTab"
                                           ScrollViewer.ScrollChanged="DataGrid_ScrollChanged"
-                                          AutomationProperties.Name="Findings List">
+                                          AutomationProperties.Name="Findings List"
+                                          Loaded="DynamicFindingsDataGrid_Loaded">
+                                    <DataGrid.Resources>
+                                        <Style TargetType="Hyperlink">
+                                            <Setter Property="Foreground">
+                                                <Setter.Value>
+                                                    <Binding Path="Foreground"
+                                                             RelativeSource="{RelativeSource AncestorType=DataGridCell}"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </DataGrid.Resources>
                                     <DataGrid.Style>
                                         <Style TargetType="DataGrid" BasedOn="{StaticResource ModernDataGrid}">
                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -841,19 +893,21 @@
             </Grid>
         </Border>
 
-        <!-- Splitter -->
+        <!-- Splitter (hidden for dynamic schemas since all data is in columns) -->
         <GridSplitter Grid.Row="2" 
                       Height="8" 
                       HorizontalAlignment="Stretch" 
                       Style="{StaticResource ModernGridSplitter}"
                       Cursor="SizeNS"
                       Margin="0,8"
-                      AutomationProperties.Name="Resize Findings and Details Panels"/>
+                      AutomationProperties.Name="Resize Findings and Details Panels"
+                      Visibility="{Binding ShowDetailsPanel, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
-        <!-- Details Panel -->
+        <!-- Details Panel (hidden for dynamic schemas since all data is in columns) -->
         <Border Grid.Row="3" 
                 Style="{StaticResource Card}"
-                Padding="0">
+                Padding="0"
+                Visibility="{Binding ShowDetailsPanel, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid KeyboardNavigation.TabNavigation="Local">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>

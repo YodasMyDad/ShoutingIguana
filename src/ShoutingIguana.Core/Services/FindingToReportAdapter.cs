@@ -115,7 +115,7 @@ public class FindingToReportAdapter
             // Flatten details into a string representation
             if (details.Items.Count > 0)
             {
-                var detailsText = string.Join(" | ", details.Items.Select(i => i.Text));
+                var detailsText = string.Join(" | ", details.Items);
                 data["Details"] = detailsText;
             }
         }

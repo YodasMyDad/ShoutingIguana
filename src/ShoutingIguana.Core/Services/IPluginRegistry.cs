@@ -38,6 +38,11 @@ public interface IPluginRegistry : IDisposable
     IReadOnlyList<IExportProvider> EnabledExporters { get; }
     
     /// <summary>
+    /// All registered report schemas from plugins.
+    /// </summary>
+    IReadOnlyDictionary<string, IReportSchema> RegisteredSchemas { get; }
+    
+    /// <summary>
     /// Discover and load plugins from the plugins directory.
     /// </summary>
     Task LoadPluginsAsync();
@@ -81,6 +86,11 @@ public interface IPluginRegistry : IDisposable
     /// Check if a plugin is currently active.
     /// </summary>
     Task<bool> IsPluginActiveAsync(string pluginId);
+    
+    /// <summary>
+    /// Synchronizes registered plugin schemas to the database.
+    /// </summary>
+    Task SyncSchemasToDatabase();
 }
 
 /// <summary>

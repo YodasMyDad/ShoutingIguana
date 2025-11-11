@@ -102,9 +102,20 @@ public class ExcelExportService(
 
             // Group findings by task key
             var findingsByTask = filteredFindings.GroupBy(f => f.TaskKey).ToList();
+            
+            // Get report row counts for summary
+            var reportRowCounts = new Dictionary<string, int>();
+            foreach (var taskKey in taskKeys)
+            {
+                if (schemasDict.ContainsKey(taskKey))
+                {
+                    var count = await reportDataRepository.GetCountByTaskKeyAsync(projectId, taskKey);
+                    reportRowCounts[taskKey] = count;
+                }
+            }
 
             // Create summary sheet
-            CreateSummarySheet(workbook, project.Name, filteredFindings, findingsByTask);
+            await CreateSummarySheetAsync(workbook, project.Name, filteredFindings, findingsByTask, reportRowCounts, reportDataRepository, projectId, taskKeys, schemasDict);
 
             // Create a sheet for each plugin's data
             var currentIndex = 0;
@@ -322,7 +333,7 @@ public class ExcelExportService(
         }
     }
     
-    private void CreateSummarySheet(XLWorkbook workbook, string projectName, List<Core.Models.Finding> allFindings, IEnumerable<IGrouping<string, Core.Models.Finding>> findingsByTask)
+    private async Task CreateSummarySheetAsync(XLWorkbook workbook, string projectName, List<Core.Models.Finding> allFindings, IEnumerable<IGrouping<string, Core.Models.Finding>> findingsByTask, Dictionary<string, int> reportRowCounts, IReportDataRepository reportDataRepository, int projectId, List<string> taskKeys, Dictionary<string, Core.Models.ReportSchema> schemasDict)
     {
         var ws = workbook.Worksheets.Add("Summary");
 
@@ -335,37 +346,62 @@ public class ExcelExportService(
         ws.Cell(2, 2).Value = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
         ws.Cell(2, 1).Style.Font.Bold = true;
 
-        ws.Cell(3, 1).Value = "Total Findings:";
-        ws.Cell(3, 2).Value = allFindings.Count;
+        // Calculate total data rows (findings + report rows)
+        var totalReportRows = reportRowCounts.Values.Sum();
+        var totalDataRows = allFindings.Count + totalReportRows;
+        
+        ws.Cell(3, 1).Value = "Total Data Rows:";
+        ws.Cell(3, 2).Value = totalDataRows;
         ws.Cell(3, 1).Style.Font.Bold = true;
 
         // Summary by task
-        ws.Cell(5, 1).Value = "Findings by Plugin";
+        ws.Cell(5, 1).Value = "Data by Plugin";
         ws.Cell(5, 1).Style.Font.Bold = true;
         ws.Cell(5, 1).Style.Font.FontSize = 14;
 
         var row = 7;
         ws.Cell(row, 1).Value = "Plugin";
-        ws.Cell(row, 2).Value = "Total";
-        ws.Cell(row, 3).Value = "Errors";
-        ws.Cell(row, 4).Value = "Warnings";
-        ws.Cell(row, 5).Value = "Info";
-        ws.Range(row, 1, row, 5).Style.Font.Bold = true;
-        ws.Range(row, 1, row, 5).Style.Fill.BackgroundColor = XLColor.LightGray;
+        ws.Cell(row, 2).Value = "Total Rows";
+        ws.Cell(row, 3).Value = "Data Type";
+        ws.Range(row, 1, row, 3).Style.Font.Bold = true;
+        ws.Range(row, 1, row, 3).Style.Fill.BackgroundColor = XLColor.LightGray;
 
         row++;
-        foreach (var taskGroup in findingsByTask.OrderBy(g => g.Key))
+        
+        // Add all task keys (both legacy findings and report rows)
+        foreach (var taskKey in taskKeys.OrderBy(k => k))
         {
-            ws.Cell(row, 1).Value = taskGroup.Key;
-            ws.Cell(row, 2).Value = taskGroup.Count();
-            ws.Cell(row, 3).Value = taskGroup.Count(f => f.Severity == Severity.Error);
-            ws.Cell(row, 4).Value = taskGroup.Count(f => f.Severity == Severity.Warning);
-            ws.Cell(row, 5).Value = taskGroup.Count(f => f.Severity == Severity.Info);
+            ws.Cell(row, 1).Value = taskKey;
+            
+            int totalCount = 0;
+            string dataType = "";
+            
+            // Check if this task has report rows
+            if (reportRowCounts.TryGetValue(taskKey, out var reportCount) && reportCount > 0)
+            {
+                totalCount = reportCount;
+                dataType = "Report (Custom Columns)";
+            }
+            else
+            {
+                // Legacy findings
+                var taskGroup = findingsByTask.FirstOrDefault(g => g.Key == taskKey);
+                if (taskGroup != null)
+                {
+                    totalCount = taskGroup.Count();
+                    dataType = "Legacy Finding";
+                }
+            }
+            
+            ws.Cell(row, 2).Value = totalCount;
+            ws.Cell(row, 3).Value = dataType;
             row++;
         }
 
         // Auto-fit columns
         ws.Columns().AdjustToContents();
+        
+        await Task.CompletedTask;
     }
 
     private void CreateTaskSheet(XLWorkbook workbook, string taskKey, List<Core.Models.Finding> findings, bool includeTechnicalMetadata)
@@ -503,27 +539,13 @@ public class ExcelExportService(
     }
     
     /// <summary>
-    /// Recursively formats detail items with indentation.
+    /// Formats detail items (now flat strings, not hierarchical).
     /// </summary>
-    private void FormatDetailItems(List<FindingDetail> items, int indentLevel, List<string> lines)
+    private void FormatDetailItems(List<string> items, int indentLevel, List<string> lines)
     {
-        // Guard against excessive nesting to prevent stack overflow
-        if (indentLevel > 10)
-        {
-            lines.Add($"{new string(' ', indentLevel * 2)}[Max nesting depth reached]");
-            return;
-        }
-        
         foreach (var item in items)
         {
-            var indent = new string(' ', indentLevel * 2);
-            var bullet = indentLevel > 0 ? "• " : "";
-            lines.Add($"{indent}{bullet}{item.Text}");
-            
-            if (item.Children != null && item.Children.Count > 0)
-            {
-                FormatDetailItems(item.Children, indentLevel + 1, lines);
-            }
+            lines.Add(item);
         }
     }
     

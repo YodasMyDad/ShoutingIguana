@@ -78,7 +78,6 @@ public class PluginExecutor(
                 MetaRefreshTarget: urlData.MetaRefreshTarget,
                 HtmlLang: urlData.HtmlLang,
                 IsRedirectLoop: urlData.IsRedirectLoop),
-            Findings: findingSink,
             Reports: reportSink,
             Enqueue: new UrlEnqueueStub(), // Not implemented in Stage 2
             Logger: _logger);
@@ -119,7 +118,7 @@ public class PluginExecutor(
 /// <summary>
 /// Implementation of IFindingSink that batches findings for better performance.
 /// </summary>
-internal class FindingSink(int urlId, int projectId, IServiceProvider serviceProvider, ILogger logger) : IFindingSink
+internal class FindingSink(int urlId, int projectId, IServiceProvider serviceProvider, ILogger logger)
 {
     private readonly int _urlId = urlId;
     private readonly int _projectId = projectId;

@@ -97,28 +97,14 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
     
     private async Task ReportRedirectLoopErrorAsync(UrlContext ctx)
     {
-        var details = FindingDetailsBuilder.Create()
-            .AddItem("❌ Infinite redirect loop detected (ERR_TOO_MANY_REDIRECTS)")
-            .AddItem($"URL: {ctx.Url}")
-            .BeginNested("⚠️ Impact")
-                .AddItem("Page cannot be loaded - browser stops after too many redirects")
-                .AddItem("This URL is completely inaccessible to users and search engines")
-                .AddItem("Critical issue that prevents crawling and indexing")
-            .BeginNested("💡 Recommendations")
-                .AddItem("Check your server redirect configuration")
-                .AddItem("Ensure the redirect chain doesn't loop back to itself")
-                .AddItem("Test the URL in a browser to see the redirect chain")
-                .AddItem("Common causes: conflicting .htaccess rules, CMS misconfiguration, CDN settings")
-            .WithTechnicalMetadata("url", ctx.Url.ToString())
-            .WithTechnicalMetadata("errorType", "ERR_TOO_MANY_REDIRECTS")
-            .Build();
+        var row = ReportRow.Create()
+            .Set("Source", ctx.Url.ToString())
+            .Set("Target", "(Loop)")
+            .Set("StatusCode", 0)
+            .Set("Issue", "Infinite Redirect Loop (ERR_TOO_MANY_REDIRECTS)")
+            .Set("Severity", "Error");
         
-        await ctx.Findings.ReportAsync(
-            Key,
-            Severity.Error,
-            "REDIRECT_LOOP_ERROR",
-            "Infinite redirect loop - page cannot be loaded (ERR_TOO_MANY_REDIRECTS)",
-            details);
+        await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     }
 
     private async Task AnalyzeHttpRedirectAsync(UrlContext ctx)
@@ -128,109 +114,64 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
         
         if (string.IsNullOrEmpty(location))
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"HTTP Status: {statusCode}")
-                .AddItem("❌ Missing Location header")
-                .BeginNested("⚠️ Impact")
-                    .AddItem("Browsers won't know where to redirect")
-                    .AddItem("This is a server configuration error")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("statusCode", statusCode)
-                .Build();
+            var row = ReportRow.Create()
+                .Set("Source", ctx.Url.ToString())
+                .Set("Target", "")
+                .Set("StatusCode", statusCode)
+                .Set("Issue", "Missing Location Header")
+                .Set("Severity", "Error");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Error,
-                "MISSING_LOCATION",
-                $"Redirect status {statusCode} but missing Location header",
-                details);
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             return;
         }
 
         // Report the redirect
-        var redirectDetails = FindingDetailsBuilder.Create()
-            .AddItem($"From: {ctx.Url}")
-            .AddItem($"To: {location}")
-            .AddItem($"Type: {GetRedirectType(statusCode)} ({statusCode})")
-            .WithTechnicalMetadata("fromUrl", ctx.Url.ToString())
-            .WithTechnicalMetadata("toUrl", location)
-            .WithTechnicalMetadata("statusCode", statusCode)
-            .WithTechnicalMetadata("redirectType", GetRedirectType(statusCode))
-            .Build();
+        var redirectRow = ReportRow.Create()
+            .Set("Source", ctx.Url.ToString())
+            .Set("Target", location)
+            .Set("StatusCode", statusCode)
+            .Set("Issue", $"{GetRedirectType(statusCode)} Redirect")
+            .Set("Severity", "Info");
         
-        await ctx.Findings.ReportAsync(
-            Key,
-            Severity.Info,
-            $"REDIRECT_{statusCode}",
-            $"Redirects to: {location}",
-            redirectDetails);
+        await ctx.Reports.ReportAsync(Key, redirectRow, ctx.Metadata.UrlId, default);
 
         // Check for temporary vs permanent redirects
         if (statusCode == 302 || statusCode == 307)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"Redirect type: {GetRedirectType(statusCode)}")
-                .AddItem($"To: {location}")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Use 301 (permanent) redirects for permanent moves")
-                    .AddItem("Permanent redirects pass more link equity")
-                    .AddItem("Only use 302/307 for truly temporary redirects")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("toUrl", location)
-                .WithTechnicalMetadata("statusCode", statusCode)
-                .Build();
+            var row = ReportRow.Create()
+                .Set("Source", ctx.Url.ToString())
+                .Set("Target", location)
+                .Set("StatusCode", statusCode)
+                .Set("Issue", "Temporary Redirect - Consider 301")
+                .Set("Severity", "Warning");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "TEMPORARY_REDIRECT",
-                $"Using {statusCode} (temporary) redirect - consider 301 for permanent moves",
-                details);
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
 
         // Check for mixed content (HTTPS -> HTTP)
         if (ctx.Url.Scheme == "https" && location.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem("🔒 HTTPS page redirects to HTTP")
-                .AddItem($"From: {ctx.Url}")
-                .AddItem($"To: {location}")
-                .BeginNested("⚠️ Security Issue")
-                    .AddItem("This breaks HTTPS and causes browser security warnings")
-                    .AddItem("Users may see 'Not Secure' warnings")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Update redirect to point to HTTPS version")
-                    .AddItem("Never downgrade from HTTPS to HTTP")
-                .WithTechnicalMetadata("fromUrl", ctx.Url.ToString())
-                .WithTechnicalMetadata("toUrl", location)
-                .Build();
+            var row = ReportRow.Create()
+                .Set("Source", ctx.Url.ToString())
+                .Set("Target", location)
+                .Set("StatusCode", statusCode)
+                .Set("Issue", "HTTPS to HTTP Redirect (Security Issue)")
+                .Set("Severity", "Error");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Error,
-                "MIXED_CONTENT_REDIRECT",
-                "HTTPS page redirects to HTTP (security issue)",
-                details);
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
 
         // Check for protocol canonicalization (http -> https)
         if (ctx.Url.Scheme == "http" && location.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem("🔒 HTTP to HTTPS redirect")
-                .AddItem($"From: {ctx.Url}")
-                .AddItem($"To: {location}")
-                .AddItem("✅ Good practice for security")
-                .WithTechnicalMetadata("fromUrl", ctx.Url.ToString())
-                .WithTechnicalMetadata("toUrl", location)
-                .Build();
+            var row = ReportRow.Create()
+                .Set("Source", ctx.Url.ToString())
+                .Set("Target", location)
+                .Set("StatusCode", statusCode)
+                .Set("Issue", "HTTP to HTTPS Redirect (Good)")
+                .Set("Severity", "Info");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "HTTPS_REDIRECT",
-                "HTTP to HTTPS redirect detected",
-                details);
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
 
         // Check for www canonicalization
@@ -241,39 +182,25 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
             
             if (fromHost.StartsWith("www.") && !toHost.StartsWith("www."))
             {
-                var details = FindingDetailsBuilder.WithMetadata(
-                    new Dictionary<string, object?> {
-                        ["fromUrl"] = ctx.Url.ToString(),
-                        ["toUrl"] = location
-                    },
-                    "WWW to non-WWW redirect",
-                    $"From: {ctx.Url}",
-                    $"To: {location}");
+                var row = ReportRow.Create()
+                    .Set("Source", ctx.Url.ToString())
+                    .Set("Target", location)
+                    .Set("StatusCode", statusCode)
+                    .Set("Issue", "WWW to Non-WWW Redirect")
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "WWW_REDIRECT",
-                    "WWW to non-WWW redirect detected",
-                    details);
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
             else if (!fromHost.StartsWith("www.") && toHost.StartsWith("www."))
             {
-                var details = FindingDetailsBuilder.WithMetadata(
-                    new Dictionary<string, object?> {
-                        ["fromUrl"] = ctx.Url.ToString(),
-                        ["toUrl"] = location
-                    },
-                    "Non-WWW to WWW redirect",
-                    $"From: {ctx.Url}",
-                    $"To: {location}");
+                var row = ReportRow.Create()
+                    .Set("Source", ctx.Url.ToString())
+                    .Set("Target", location)
+                    .Set("StatusCode", statusCode)
+                    .Set("Issue", "Non-WWW to WWW Redirect")
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "NON_WWW_REDIRECT",
-                    "Non-WWW to WWW redirect detected",
-                    details);
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
 
             // Check for trailing slash inconsistencies
@@ -283,23 +210,14 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
             if (fromPath.TrimEnd('/') == toPath.TrimEnd('/') && 
                 fromPath.EndsWith("/") != toPath.EndsWith("/"))
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem("Redirect due to trailing slash")
-                    .AddItem($"From: {ctx.Url}")
-                    .AddItem($"To: {location}")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Ensure consistent trailing slash usage across the site")
-                        .AddItem("Decide on a standard (with or without slash) and apply everywhere")
-                    .WithTechnicalMetadata("fromUrl", ctx.Url.ToString())
-                    .WithTechnicalMetadata("toUrl", location)
-                    .Build();
+                var row = ReportRow.Create()
+                    .Set("Source", ctx.Url.ToString())
+                    .Set("Target", location)
+                    .Set("StatusCode", statusCode)
+                    .Set("Issue", "Trailing Slash Redirect")
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "TRAILING_SLASH_REDIRECT",
-                    "Redirect due to trailing slash inconsistency",
-                    details);
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
         }
     }
@@ -310,26 +228,14 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
         var delay = ctx.Metadata.MetaRefreshDelay ?? 0;
         var targetUrl = ctx.Metadata.MetaRefreshTarget ?? "unknown";
 
-        var details = FindingDetailsBuilder.Create()
-            .AddItem($"Target: {targetUrl}")
-            .AddItem($"Delay: {delay} seconds")
-            .BeginNested("⚠️ SEO Impact")
-                .AddItem("Meta refresh is not recommended for SEO")
-                .AddItem("Search engines may not follow these redirects")
-            .BeginNested("💡 Recommendations")
-                .AddItem("Use HTTP 301/302 redirects instead")
-                .AddItem("Server-side redirects are faster and more reliable")
-            .WithTechnicalMetadata("url", ctx.Url.ToString())
-            .WithTechnicalMetadata("targetUrl", targetUrl)
-            .WithTechnicalMetadata("delay", delay)
-            .Build();
+        var row = ReportRow.Create()
+            .Set("Source", ctx.Url.ToString())
+            .Set("Target", targetUrl)
+            .Set("StatusCode", 0)
+            .Set("Issue", $"Meta Refresh Redirect ({delay}s delay)")
+            .Set("Severity", "Warning");
         
-        await ctx.Findings.ReportAsync(
-            Key,
-            Severity.Warning,
-            "META_REFRESH_REDIRECT",
-            $"Page uses meta refresh redirect (not SEO-friendly): {targetUrl}",
-            details);
+        await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     }
 
     private async Task CheckJavaScriptRedirectAsync(UrlContext ctx)
@@ -374,26 +280,14 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                     // Filter out obvious false positives
                     if (IsLikelyRedirectUrl(targetUrl))
                     {
-                        var details = FindingDetailsBuilder.Create()
-                            .AddItem("JavaScript redirect detected")
-                            .AddItem($"Target: {targetUrl}")
-                            .BeginNested("⚠️ SEO Impact")
-                                .AddItem("JavaScript redirects are not ideal for SEO")
-                                .AddItem("Search engines may not follow them")
-                                .AddItem("Can impact page ranking and crawlability")
-                            .BeginNested("💡 Recommendations")
-                                .AddItem("Use HTTP 301/302 redirects instead")
-                                .AddItem("Server-side redirects are instant and SEO-friendly")
-                            .WithTechnicalMetadata("url", ctx.Url.ToString())
-                            .WithTechnicalMetadata("targetUrl", targetUrl)
-                            .Build();
+                        var row = ReportRow.Create()
+                            .Set("Source", ctx.Url.ToString())
+                            .Set("Target", targetUrl)
+                            .Set("StatusCode", 0)
+                            .Set("Issue", "JavaScript Redirect (Not SEO-Friendly)")
+                            .Set("Severity", "Warning");
                         
-                        await ctx.Findings.ReportAsync(
-                            Key,
-                            Severity.Warning,
-                            "JAVASCRIPT_REDIRECT",
-                            $"Page uses JavaScript redirect (not ideal for SEO): {targetUrl}",
-                            details);
+                        await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                         return; // Report only once per page
                     }
                 }
@@ -491,33 +385,15 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                 {
                     chain.Add(redirectInfo);
                     
-                    var builder = FindingDetailsBuilder.Create()
-                        .AddItem($"❌ Infinite redirect loop detected!")
-                        .AddItem($"Chain length: {chain.Count} redirects");
+                    var chainString = string.Join(" → ", chain.Select(r => $"{r.FromUrl} ({r.StatusCode})"));
+                    var row = ReportRow.Create()
+                        .Set("Source", ctx.Url.ToString())
+                        .Set("Target", chainString)
+                        .Set("StatusCode", 0)
+                        .Set("Issue", $"Redirect Loop ({chain.Count} hops)")
+                        .Set("Severity", "Error");
                     
-                    builder.BeginNested("🔄 Redirect Loop");
-                    foreach (var hop in chain)
-                    {
-                        builder.AddItem($"{hop.FromUrl} → {hop.ToUrl} ({hop.StatusCode})");
-                    }
-                    
-                    builder.BeginNested("⚠️ Impact")
-                        .AddItem("Page will never load - infinite loop")
-                        .AddItem("Browsers will show an error");
-                    
-                    builder.BeginNested("💡 Recommendations")
-                        .AddItem("Fix redirect configuration to eliminate the loop")
-                        .AddItem("Ensure final destination doesn't redirect back");
-                    
-                    builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                        .WithTechnicalMetadata("loop", chain.Select(r => new { from = r.FromUrl, to = r.ToUrl, status = r.StatusCode }).ToArray());
-                    
-                    await ctx.Findings.ReportAsync(
-                        Key,
-                        Severity.Error,
-                        "REDIRECT_LOOP",
-                        $"Redirect loop detected: {string.Join(" → ", chain.Select(r => $"{r.FromUrl} ({r.StatusCode})"))}",
-                        builder.Build());
+                    await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                     return;
                 }
                 
@@ -535,38 +411,17 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
         // Report chain if longer than 1 hop
         if (chain.Count > 1)
         {
-            var severity = chain.Count >= 3 ? Severity.Error : Severity.Warning;
-            var chainString = string.Join(" → ", chain.Select(r => $"{r.FromUrl} ({r.StatusCode})"));
+            var severityStr = chain.Count >= 3 ? "Error" : "Warning";
+            var finalTarget = chain[^1].ToUrl;
             
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"Redirect chain: {chain.Count} hops")
-                .AddItem($"Estimated delay: ~{chain.Count * 150}ms");
+            var row = ReportRow.Create()
+                .Set("Source", ctx.Url.ToString())
+                .Set("Target", finalTarget)
+                .Set("StatusCode", ctx.Metadata.StatusCode)
+                .Set("Issue", $"Redirect Chain ({chain.Count} hops)")
+                .Set("Severity", severityStr);
             
-            builder.BeginNested("🔗 Chain");
-            foreach (var hop in chain)
-            {
-                builder.AddItem($"{hop.FromUrl} → {hop.ToUrl} ({hop.StatusCode})");
-            }
-            
-            builder.BeginNested("⚠️ Impact")
-                .AddItem("Each redirect adds latency (slower page loads)")
-                .AddItem("Consumes crawl budget unnecessarily")
-                .AddItem("May dilute link equity");
-            
-            builder.BeginNested("💡 Recommendations")
-                .AddItem("Redirect directly to the final URL in a single hop")
-                .AddItem("Update all links to point to the final destination");
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("chainLength", chain.Count)
-                .WithTechnicalMetadata("chain", chain.Select(r => new { from = r.FromUrl, to = r.ToUrl, status = r.StatusCode }).ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                severity,
-                "REDIRECT_CHAIN",
-                $"Redirect chain detected ({chain.Count} hops): {chainString}",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
     }
     
@@ -618,28 +473,16 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                 if ((statusCode == 302 || statusCode == 307) && maxAge > 86400) // > 1 day
                 {
                     var days = maxAge / 86400;
-                    var details = FindingDetailsBuilder.Create()
-                        .AddItem($"Redirect type: Temporary ({statusCode})")
-                        .AddItem($"Cache duration: {days} days ({maxAge} seconds)")
-                        .AddItem($"Cache-Control: {cacheControl}")
-                        .BeginNested("⚠️ Issue")
-                            .AddItem("Temporary redirects shouldn't be cached for long periods")
-                            .AddItem("Clients will cache the redirect and may not see updates")
-                        .BeginNested("💡 Recommendations")
-                            .AddItem("Use 301/308 for permanent redirects")
-                            .AddItem("Or reduce cache duration for truly temporary redirects")
-                        .WithTechnicalMetadata("url", ctx.Url.ToString())
-                        .WithTechnicalMetadata("statusCode", statusCode)
-                        .WithTechnicalMetadata("maxAge", maxAge)
-                        .WithTechnicalMetadata("cacheControl", cacheControl)
-                        .Build();
+                    var location = ctx.Headers.TryGetValue("location", out var loc) ? loc : "";
                     
-                    await ctx.Findings.ReportAsync(
-                        Key,
-                        Severity.Warning,
-                        "TEMPORARY_REDIRECT_LONG_CACHE",
-                        $"Temporary redirect ({statusCode}) has long cache duration ({maxAge} seconds / {days} days)",
-                        details);
+                    var row = ReportRow.Create()
+                        .Set("Source", ctx.Url.ToString())
+                        .Set("Target", location)
+                        .Set("StatusCode", statusCode)
+                        .Set("Issue", $"Temporary Redirect with Long Cache ({days} days)")
+                        .Set("Severity", "Warning");
+                    
+                    await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                 }
             }
         }

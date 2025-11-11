@@ -12,6 +12,18 @@ public class DuplicateContentPlugin : IPlugin
 
     public void Initialize(IHostContext context)
     {
+        // Register custom report schema for duplicate content analysis
+        var schema = ReportSchema.Create("DuplicateContent")
+            .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
+            .AddColumn("DuplicateOf", ReportColumnType.Url, "Duplicate Of")
+            .AddColumn("ContentHash", ReportColumnType.String, "Hash")
+            .AddColumn("Similarity", ReportColumnType.Integer, "Similarity %")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .Build();
+        
+        context.RegisterReportSchema(schema);
+        
         context.RegisterTask(new DuplicateContentTask(
             context.CreateLogger(nameof(DuplicateContentTask)),
             context.GetRepositoryAccessor()));

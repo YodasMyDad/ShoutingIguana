@@ -60,81 +60,40 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 if (httpStatus == 404)
                 {
                     // Sitemap not found
-                    var details = FindingDetailsBuilder.Create()
-                        .AddItem($"Sitemap URL: {ctx.Url}")
-                        .AddItem($"HTTP Status: {httpStatus}")
-                        .BeginNested("💡 Recommendations")
-                            .AddItem("Consider creating an XML sitemap to help search engines discover your content")
-                            .AddItem("Sitemaps improve crawl efficiency and coverage")
-                        .WithTechnicalMetadata("url", ctx.Url.ToString())
-                        .WithTechnicalMetadata("httpStatus", httpStatus)
-                        .Build();
+                    var row1 = ReportRow.Create()
+                        .Set("URL", ctx.Url.ToString())
+                        .Set("Issue", "Sitemap Not Found")
+                        .Set("InSitemap", "N/A")
+                        .Set("StatusCode", httpStatus)
+                        .Set("Severity", "Warning");
                     
-                    await ctx.Findings.ReportAsync(
-                        Key,
-                        Severity.Warning,
-                        "SITEMAP_NOT_FOUND",
-                        string.Format("Sitemap not found at {0} (HTTP {1})", ctx.Url, httpStatus),
-                        details);
+                    await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
                 }
                 else if (httpStatus >= 400)
                 {
-                    // Check for restricted status codes
                     var isRestricted = httpStatus == 401 || httpStatus == 403 || httpStatus == 451;
                     
                     if (isRestricted)
                     {
-                        // Restricted sitemap - informational
-                        var restrictionType = httpStatus switch
-                        {
-                            401 => "requires authentication",
-                            403 => "is forbidden/restricted",
-                            451 => "is unavailable for legal reasons",
-                            _ => "is restricted"
-                        };
+                        var row2 = ReportRow.Create()
+                            .Set("URL", ctx.Url.ToString())
+                            .Set("Issue", $"Sitemap Restricted (HTTP {httpStatus})")
+                            .Set("InSitemap", "N/A")
+                            .Set("StatusCode", httpStatus)
+                            .Set("Severity", "Info");
                         
-                        var note = httpStatus switch
-                        {
-                            401 => "This sitemap requires authentication/login to access",
-                            403 => "This sitemap is restricted and access is forbidden",
-                            451 => "This sitemap is unavailable for legal reasons",
-                            _ => "This sitemap has restricted access"
-                        };
-                        
-                        var details = FindingDetailsBuilder.Create()
-                            .AddItem($"Sitemap URL: {ctx.Url}")
-                            .AddItem($"HTTP Status: {httpStatus}")
-                            .AddItem($"ℹ️ {note}")
-                            .BeginNested("💡 Note")
-                                .AddItem("If this is expected, ensure search engines can access the sitemap")
-                                .AddItem("Or provide an accessible alternative")
-                            .WithTechnicalMetadata("url", ctx.Url.ToString())
-                            .WithTechnicalMetadata("httpStatus", httpStatus)
-                            .Build();
-                        
-                        await ctx.Findings.ReportAsync(
-                            Key,
-                            Severity.Info,
-                            "SITEMAP_RESTRICTED",
-                            string.Format("Sitemap at {0} {1} (HTTP {2})", ctx.Url, restrictionType, httpStatus),
-                            details);
+                        await ctx.Reports.ReportAsync(Key, row2, ctx.Metadata.UrlId, default);
                     }
                     else
                     {
-                        // Other error
-                        var details = FindingDetailsBuilder.WithMetadata(
-                            new Dictionary<string, object?> {
-                                ["url"] = ctx.Url.ToString(),
-                                ["httpStatus"] = httpStatus
-                            },
-                            $"Error accessing sitemap: HTTP {httpStatus}");
+                        var row = ReportRow.Create()
+                            .Set("URL", ctx.Url.ToString())
+                            .Set("Issue", $"Sitemap Error (HTTP {httpStatus})")
+                            .Set("InSitemap", "N/A")
+                            .Set("StatusCode", httpStatus)
+                            .Set("Severity", "Error");
                         
-                        await ctx.Findings.ReportAsync(
-                            Key,
-                            Severity.Error,
-                            "SITEMAP_ERROR",
-                            string.Format("Error accessing sitemap at {0} (HTTP {1})", ctx.Url, httpStatus),
-                            details);
+                        await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                     }
                 }
                 else if (httpStatus >= 200 && httpStatus < 300)
@@ -193,21 +152,14 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
         if (string.IsNullOrEmpty(ctx.RenderedHtml))
         {
             _logger.LogWarning("Sitemap URL {Url} returned no content", ctx.Url);
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"Sitemap URL: {ctx.Url}")
-                .AddItem("❌ No content returned")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Ensure your sitemap.xml file contains valid XML content")
-                    .AddItem("Check server configuration")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .Build();
+            var rowNoContent = ReportRow.Create()
+                .Set("URL", ctx.Url.ToString())
+                .Set("Issue", "Sitemap Returned No Content")
+                .Set("InSitemap", "N/A")
+                .Set("StatusCode", ctx.Metadata.StatusCode)
+                .Set("Severity", "Warning");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "SITEMAP_EMPTY_CONTENT",
-                $"Sitemap at {ctx.Url} returned no content",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowNoContent, ctx.Metadata.UrlId, default);
             return;
         }
 
@@ -245,18 +197,14 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                         !xmlContent.TrimStart().StartsWith("<urlset", StringComparison.OrdinalIgnoreCase) &&
                         !xmlContent.TrimStart().StartsWith("<sitemapindex", StringComparison.OrdinalIgnoreCase))
                     {
-                        var details = FindingDetailsBuilder.WithMetadata(
-                            new Dictionary<string, object?> { ["url"] = ctx.Url.ToString() },
-                            "Gzipped sitemap could not be decompressed",
-                            "Content doesn't appear to be XML",
-                            "ℹ️ May already be decompressed by HTTP client");
+                        var rowGzip = ReportRow.Create()
+                            .Set("URL", ctx.Url.ToString())
+                            .Set("Issue", "Gzip Decompression Error")
+                            .Set("InSitemap", "N/A")
+                            .Set("StatusCode", ctx.Metadata.StatusCode)
+                            .Set("Severity", "Error");
                         
-                        await ctx.Findings.ReportAsync(
-                            Key,
-                            Severity.Error,
-                            "SITEMAP_GZIP_ERROR",
-                            $"Gzipped sitemap could not be decompressed and content doesn't appear to be XML",
-                            details);
+                        await ctx.Reports.ReportAsync(Key, rowGzip, ctx.Metadata.UrlId, default);
                         return;
                     }
                 }
@@ -268,45 +216,25 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             
             if (sizeMB > 50)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"Sitemap size: {sizeMB:F2}MB")
-                    .AddItem($"Limit: 50MB")
-                    .AddItem("❌ Exceeds maximum allowed size")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Split into multiple sitemaps")
-                        .AddItem("Create a sitemap index file")
-                        .AddItem("Each sitemap should be under 50MB")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("sizeBytes", sizeBytes)
-                    .WithTechnicalMetadata("sizeMB", sizeMB)
-                    .Build();
+                var rowSize = ReportRow.Create()
+                    .Set("URL", ctx.Url.ToString())
+                    .Set("Issue", $"Sitemap Too Large ({sizeMB:F2}MB)")
+                    .Set("InSitemap", "N/A")
+                    .Set("StatusCode", ctx.Metadata.StatusCode)
+                    .Set("Severity", "Error");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Error,
-                    "SITEMAP_SIZE_LIMIT_EXCEEDED",
-                    $"Sitemap exceeds 50MB limit (current size: {sizeMB:F2}MB)",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowSize, ctx.Metadata.UrlId, default);
             }
             else if (sizeMB > 40)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"Sitemap size: {sizeMB:F2}MB")
-                    .AddItem($"Limit: 50MB")
-                    .AddItem("⚠️ Approaching size limit")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Consider splitting before reaching the limit")
-                        .AddItem("Plan for sitemap index structure")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("sizeMB", sizeMB)
-                    .Build();
+                var rowWarn = ReportRow.Create()
+                    .Set("URL", ctx.Url.ToString())
+                    .Set("Issue", $"Sitemap Large ({sizeMB:F2}MB)")
+                    .Set("InSitemap", "N/A")
+                    .Set("StatusCode", ctx.Metadata.StatusCode)
+                    .Set("Severity", "Warning");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "SITEMAP_APPROACHING_SIZE_LIMIT",
-                    $"Sitemap approaching 50MB limit (current size: {sizeMB:F2}MB)",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowWarn, ctx.Metadata.UrlId, default);
             }
 
             // Parse XML sitemap
@@ -315,17 +243,14 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
 
             if (ns == null)
             {
-                var details = FindingDetailsBuilder.WithMetadata(
-                    new Dictionary<string, object?> { ["url"] = ctx.Url.ToString() },
-                    "Sitemap XML is missing namespace",
-                    "⚠️ Should include xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"");
+                var rowNs = ReportRow.Create()
+                    .Set("URL", ctx.Url.ToString())
+                    .Set("Issue", "Invalid Sitemap XML (Missing Namespace)")
+                    .Set("InSitemap", "N/A")
+                    .Set("StatusCode", ctx.Metadata.StatusCode)
+                    .Set("Severity", "Warning");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "INVALID_SITEMAP_XML",
-                    "Sitemap XML is missing namespace",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowNs, ctx.Metadata.UrlId, default);
                 return;
             }
 
@@ -346,23 +271,14 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error parsing sitemap XML for {Url}", ctx.Url);
-            var details = FindingDetailsBuilder.Create()
-                .AddItem("Failed to parse sitemap XML")
-                .AddItem($"Error: {ex.Message}")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Validate XML syntax")
-                    .AddItem("Ensure proper XML structure")
-                    .AddItem("Use sitemap validator tools")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("error", ex.Message)
-                .Build();
+            var rowParse = ReportRow.Create()
+                .Set("URL", ctx.Url.ToString())
+                .Set("Issue", $"Sitemap Parse Error: {ex.Message}")
+                .Set("InSitemap", "N/A")
+                .Set("StatusCode", ctx.Metadata.StatusCode)
+                .Set("Severity", "Error");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Error,
-                "SITEMAP_PARSE_ERROR",
-                $"Failed to parse sitemap XML: {ex.Message}",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowParse, ctx.Metadata.UrlId, default);
         }
     }
 
@@ -370,20 +286,14 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
     {
         var sitemapElements = doc.Descendants(ns + "sitemap").ToList();
 
-        var details = FindingDetailsBuilder.WithMetadata(
-            new Dictionary<string, object?> {
-                ["url"] = ctx.Url.ToString(),
-                ["sitemapCount"] = sitemapElements.Count
-            },
-            $"Sitemap index found with {sitemapElements.Count} sitemap(s)",
-            "✅ Good practice for large sites");
+        var row = ReportRow.Create()
+            .Set("URL", ctx.Url.ToString())
+            .Set("Issue", $"Sitemap Index ({sitemapElements.Count} sitemaps)")
+            .Set("InSitemap", "N/A")
+            .Set("StatusCode", ctx.Metadata.StatusCode)
+            .Set("Severity", "Info");
         
-        await ctx.Findings.ReportAsync(
-            Key,
-            Severity.Info,
-            "SITEMAP_INDEX_FOUND",
-            $"Sitemap index contains {sitemapElements.Count} sitemap(s)",
-            details);
+        await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
 
         // Extract child sitemaps
         foreach (var sitemapElement in sitemapElements)
@@ -407,77 +317,49 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
 
         if (urlElements.Count == 0)
         {
-            var details = FindingDetailsBuilder.WithMetadata(
-                new Dictionary<string, object?> { ["url"] = ctx.Url.ToString() },
-                "Sitemap contains no URLs",
-                "⚠️ Empty sitemap provides no value");
+            var rowEmpty = ReportRow.Create()
+                .Set("URL", ctx.Url.ToString())
+                .Set("Issue", "Empty Sitemap")
+                .Set("InSitemap", "N/A")
+                .Set("StatusCode", ctx.Metadata.StatusCode)
+                .Set("Severity", "Warning");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "EMPTY_SITEMAP",
-                "Sitemap contains no URLs",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowEmpty, ctx.Metadata.UrlId, default);
             return;
         }
 
         // Check 50,000 URL limit
         if (urlElements.Count > 50000)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"URL count: {urlElements.Count:N0}")
-                .AddItem($"Limit: 50,000 URLs")
-                .AddItem("❌ Exceeds maximum")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Split into multiple sitemaps")
-                    .AddItem("Create a sitemap index file")
-                    .AddItem("Each sitemap: max 50,000 URLs")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("urlCount", urlElements.Count)
-                .Build();
+            var rowLimit = ReportRow.Create()
+                .Set("URL", ctx.Url.ToString())
+                .Set("Issue", $"URL Limit Exceeded ({urlElements.Count:N0} URLs)")
+                .Set("InSitemap", "N/A")
+                .Set("StatusCode", ctx.Metadata.StatusCode)
+                .Set("Severity", "Error");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Error,
-                "SITEMAP_URL_LIMIT_EXCEEDED",
-                $"Sitemap exceeds 50,000 URL limit (contains {urlElements.Count} URLs)",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowLimit, ctx.Metadata.UrlId, default);
         }
         else if (urlElements.Count > 45000)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"URL count: {urlElements.Count:N0}")
-                .AddItem($"Limit: 50,000 URLs")
-                .AddItem("⚠️ Approaching limit")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Consider splitting before reaching the limit")
-                    .AddItem("Plan sitemap architecture now")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("urlCount", urlElements.Count)
-                .Build();
+            var rowApproach = ReportRow.Create()
+                .Set("URL", ctx.Url.ToString())
+                .Set("Issue", $"Approaching URL Limit ({urlElements.Count:N0} URLs)")
+                .Set("InSitemap", "N/A")
+                .Set("StatusCode", ctx.Metadata.StatusCode)
+                .Set("Severity", "Warning");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "SITEMAP_APPROACHING_URL_LIMIT",
-                $"Sitemap approaching 50,000 URL limit (contains {urlElements.Count} URLs)",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowApproach, ctx.Metadata.UrlId, default);
         }
 
-        var sitemapDetails = FindingDetailsBuilder.WithMetadata(
-            new Dictionary<string, object?> {
-                ["url"] = ctx.Url.ToString(),
-                ["urlCount"] = urlElements.Count
-            },
-            $"Sitemap contains {urlElements.Count:N0} URLs",
-            "✅ Successfully parsed");
+        var rowFound = ReportRow.Create()
+            .Set("URL", ctx.Url.ToString())
+            .Set("Issue", $"Sitemap Parsed ({urlElements.Count:N0} URLs)")
+            .Set("InSitemap", "N/A")
+            .Set("StatusCode", ctx.Metadata.StatusCode)
+            .Set("Severity", "Info");
         
-        await ctx.Findings.ReportAsync(
-            Key,
-            Severity.Info,
-            "SITEMAP_FOUND",
-            $"Sitemap contains {urlElements.Count} URL(s)",
-            sitemapDetails);
+        await ctx.Reports.ReportAsync(Key, rowFound, ctx.Metadata.UrlId, default);
 
         // Track sitemap URLs for later comparison
         HashSet<string> sitemapUrls = [];
@@ -585,101 +467,63 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             allMaxPriority = priorities.Count(p => p >= 0.99);
             if (allMaxPriority == priorities.Count && priorities.Count >= 10)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem("All URLs have priority 1.0")
-                    .AddItem("⚠️ This defeats the purpose of priority values")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Use priority to indicate relative importance (0.0 to 1.0)")
-                        .AddItem("Homepage: 1.0, important pages: 0.8, others: 0.5")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .Build();
+                var rowPriority = ReportRow.Create()
+                    .Set("URL", ctx.Url.ToString())
+                    .Set("Issue", "All Priority 1.0 (Defeats Purpose)")
+                    .Set("InSitemap", "N/A")
+                    .Set("StatusCode", ctx.Metadata.StatusCode)
+                    .Set("Severity", "Warning");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "ALL_PRIORITY_MAX",
-                    "All URLs have priority 1.0 (defeats the purpose of priorities)",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowPriority, ctx.Metadata.UrlId, default);
             }
         }
 
         if (invalidUrls > 0)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"Invalid URLs found: {invalidUrls}")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Remove or fix invalid URLs in sitemap")
-                    .AddItem("All URLs must be absolute and valid")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("invalidCount", invalidUrls)
-                .Build();
+            var rowInv = ReportRow.Create()
+                .Set("URL", ctx.Url.ToString())
+                .Set("Issue", $"Invalid URLs ({invalidUrls})")
+                .Set("InSitemap", "N/A")
+                .Set("StatusCode", ctx.Metadata.StatusCode)
+                .Set("Severity", "Warning");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "INVALID_SITEMAP_URLS",
-                $"Sitemap contains {invalidUrls} invalid URL(s)",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowInv, ctx.Metadata.UrlId, default);
         }
         
         if (futureLastmod > 0)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"URLs with future lastmod dates: {futureLastmod}")
-                .AddItem("⚠️ lastmod dates should not be in the future")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Use current or past dates only")
-                    .AddItem("Check server clock if dates are consistently wrong")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("futureCount", futureLastmod)
-                .Build();
+            var rowFuture = ReportRow.Create()
+                .Set("URL", ctx.Url.ToString())
+                .Set("Issue", $"Future Lastmod Dates ({futureLastmod})")
+                .Set("InSitemap", "N/A")
+                .Set("StatusCode", ctx.Metadata.StatusCode)
+                .Set("Severity", "Warning");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "FUTURE_LASTMOD_DATES",
-                $"Sitemap contains {futureLastmod} URL(s) with lastmod dates in the future",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowFuture, ctx.Metadata.UrlId, default);
         }
 
         if (tooOldUrls > 10)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"URLs with lastmod > 2 years old: {tooOldUrls}")
-                .AddItem("ℹ️ May indicate stale content")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Review these URLs for relevance")
-                    .AddItem("Update or remove outdated content")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("outdatedCount", tooOldUrls)
-                .Build();
+            var rowOld = ReportRow.Create()
+                .Set("URL", ctx.Url.ToString())
+                .Set("Issue", $"Outdated URLs ({tooOldUrls} > 2 years old)")
+                .Set("InSitemap", "N/A")
+                .Set("StatusCode", ctx.Metadata.StatusCode)
+                .Set("Severity", "Info");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "OUTDATED_SITEMAP_URLS",
-                $"Sitemap contains {tooOldUrls} URL(s) with lastmod > 2 years old",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowOld, ctx.Metadata.UrlId, default);
         }
         
         if (invalidPriority > 0)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"URLs with invalid priority: {invalidPriority}")
-                .AddItem("❌ Priority must be between 0.0 and 1.0")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Fix priority values to be in valid range")
-                    .AddItem("Use 1.0 for most important, 0.5 for medium, 0.1 for least")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("invalidCount", invalidPriority)
-                .Build();
+            var rowInvPri = ReportRow.Create()
+                .Set("URL", ctx.Url.ToString())
+                .Set("Issue", $"Invalid Priority Values ({invalidPriority})")
+                .Set("InSitemap", "N/A")
+                .Set("StatusCode", ctx.Metadata.StatusCode)
+                .Set("Severity", "Error");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Error,
-                "INVALID_PRIORITY_VALUES",
-                $"Sitemap contains {invalidPriority} URL(s) with invalid priority (must be 0.0-1.0)",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowInvPri, ctx.Metadata.UrlId, default);
         }
     }
 
@@ -789,113 +633,40 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             // Report 404 errors (ERROR severity)
             if (errors404.Count > 0)
             {
-                var builder = FindingDetailsBuilder.Create()
-                    .AddItem($"Found {errors404.Count} URLs returning 404 Not Found")
-                    .AddItem("❌ 404 pages waste crawl budget and confuse indexation");
-
-                builder.BeginNested("📄 Example 404 URLs in sitemap");
-                foreach (var url in errors404.Take(10))
-                {
-                    builder.AddItem(url);
-                }
-                if (errors404.Count > 10)
-                {
-                    builder.AddItem($"... and {errors404.Count - 10} more");
-                }
-
-                builder.BeginNested("⚠️ Impact")
-                    .AddItem("Wastes Googlebot crawl budget")
-                    .AddItem("These pages cannot be indexed")
-                    .AddItem("May indicate broken internal links");
-
-                builder.BeginNested("💡 Recommendations")
-                    .AddItem("Remove 404 URLs from sitemap")
-                    .AddItem("Fix the pages or redirect them with 301s")
-                    .AddItem("Update sitemap generation logic");
-
-                builder.WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
-                    .WithTechnicalMetadata("error404Count", errors404.Count)
-                    .WithTechnicalMetadata("urls", errors404.Take(20).ToArray());
-
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Error,
-                    "SITEMAP_CONTAINS_404S",
-                    $"Sitemap contains {errors404.Count} URL(s) returning 404 errors",
-                    builder.Build());
+                var row404 = ReportRow.Create()
+                    .Set("URL", ctx.Url.ToString())
+                    .Set("Issue", $"Sitemap Contains 404s ({errors404.Count} URLs)")
+                    .Set("InSitemap", "Yes")
+                    .Set("StatusCode", 404)
+                    .Set("Severity", "Error");
+                
+                await ctx.Reports.ReportAsync(Key, row404, ctx.Metadata.UrlId, default);
             }
 
             // Report 5xx server errors (ERROR severity)
             if (errors5xx.Count > 0)
             {
-                var builder = FindingDetailsBuilder.Create()
-                    .AddItem($"Found {errors5xx.Count} URLs returning server errors (5xx)")
-                    .AddItem("❌ Server errors indicate serious problems");
-
-                builder.BeginNested("📄 URLs with server errors");
-                foreach (var url in errors5xx.Take(10))
-                {
-                    builder.AddItem(url);
-                }
-                if (errors5xx.Count > 10)
-                {
-                    builder.AddItem($"... and {errors5xx.Count - 10} more");
-                }
-
-                builder.BeginNested("⚠️ Impact")
-                    .AddItem("Search engines cannot index error pages")
-                    .AddItem("May trigger site-wide quality signals")
-                    .AddItem("Wastes crawl budget");
-
-                builder.BeginNested("💡 Recommendations")
-                    .AddItem("Fix server errors immediately")
-                    .AddItem("Remove broken URLs from sitemap")
-                    .AddItem("Investigate server/application issues");
-
-                builder.WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
-                    .WithTechnicalMetadata("error5xxCount", errors5xx.Count)
-                    .WithTechnicalMetadata("urls", errors5xx.Take(20).ToArray());
-
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Error,
-                    "SITEMAP_CONTAINS_5XX_ERRORS",
-                    $"Sitemap contains {errors5xx.Count} URL(s) returning server errors",
-                    builder.Build());
+                var row5xx = ReportRow.Create()
+                    .Set("URL", ctx.Url.ToString())
+                    .Set("Issue", $"Sitemap Contains 5xx Errors ({errors5xx.Count} URLs)")
+                    .Set("InSitemap", "Yes")
+                    .Set("StatusCode", 500)
+                    .Set("Severity", "Error");
+                
+                await ctx.Reports.ReportAsync(Key, row5xx, ctx.Metadata.UrlId, default);
             }
 
             // Report redirects (WARNING severity)
             if (redirects.Count > 0)
             {
-                var builder = FindingDetailsBuilder.Create()
-                    .AddItem($"Found {redirects.Count} URLs that redirect (3xx)")
-                    .AddItem("⚠️ Sitemap should contain final destination URLs");
-
-                builder.BeginNested("📄 Redirecting URLs");
-                foreach (var url in redirects.Take(10))
-                {
-                    builder.AddItem(url);
-                }
-                if (redirects.Count > 10)
-                {
-                    builder.AddItem($"... and {redirects.Count - 10} more");
-                }
-
-                builder.BeginNested("💡 Recommendations")
-                    .AddItem("Update sitemap to point to final destination URLs")
-                    .AddItem("Remove redirect URLs and add their targets instead")
-                    .AddItem("Saves search engines an extra hop");
-
-                builder.WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
-                    .WithTechnicalMetadata("redirectCount", redirects.Count)
-                    .WithTechnicalMetadata("urls", redirects.Take(20).ToArray());
-
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "SITEMAP_CONTAINS_REDIRECTS",
-                    $"Sitemap contains {redirects.Count} URL(s) that redirect",
-                    builder.Build());
+                var rowRedir = ReportRow.Create()
+                    .Set("URL", ctx.Url.ToString())
+                    .Set("Issue", $"Sitemap Contains Redirects ({redirects.Count} URLs)")
+                    .Set("InSitemap", "Yes")
+                    .Set("StatusCode", 301)
+                    .Set("Severity", "Warning");
+                
+                await ctx.Reports.ReportAsync(Key, rowRedir, ctx.Metadata.UrlId, default);
             }
 
             _logger.LogDebug("Validated {Total} sitemap URLs: {Errors404} 404s, {Errors5xx} 5xxs, {Redirects} redirects, {NotCrawled} not crawled",
@@ -960,35 +731,14 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             {
                 _logger.LogInformation("Found {Count} potential orphan URLs in sitemap", orphanUrls.Count);
 
-                var builder = FindingDetailsBuilder.Create()
-                    .AddItem($"Found {orphanUrls.Count} potential orphan URLs")
-                    .AddItem("ℹ️ URLs in sitemap but not discovered through crawling");
+                var rowOrphan = ReportRow.Create()
+                    .Set("URL", ctx.Url.ToString())
+                    .Set("Issue", $"Orphan URLs in Sitemap ({orphanUrls.Count})")
+                    .Set("InSitemap", "Yes")
+                    .Set("StatusCode", 200)
+                    .Set("Severity", "Warning");
                 
-                builder.BeginNested("📄 Example orphan URLs");
-                foreach (var url in orphanUrls.Take(5))
-                {
-                    builder.AddItem(url);
-                }
-                if (orphanUrls.Count > 5)
-                {
-                    builder.AddItem($"... and {orphanUrls.Count - 5} more");
-                }
-                
-                builder.BeginNested("💡 Recommendations")
-                    .AddItem("Review these URLs for internal linking")
-                    .AddItem("Orphan URLs may not rank well without internal links")
-                    .AddItem("Consider adding links from relevant pages");
-                
-                builder.WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
-                    .WithTechnicalMetadata("orphanCount", orphanUrls.Count)
-                    .WithTechnicalMetadata("orphanUrls", orphanUrls.Take(10).ToList());
-                
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "ORPHAN_SITEMAP_URLS",
-                    $"Found {orphanUrls.Count} URL(s) in sitemap that may not be linked internally",
-                    builder.Build());
+                await ctx.Reports.ReportAsync(Key, rowOrphan, ctx.Metadata.UrlId, default);
             }
 
             // Find missing URLs (crawled but not in sitemap)
@@ -1000,22 +750,14 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             {
                 _logger.LogInformation("Found {Count} crawled URLs missing from sitemap", missingFromSitemap.Count);
 
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"Crawled URLs missing from sitemap: {missingFromSitemap.Count}")
-                    .AddItem("ℹ️ These URLs exist but aren't in your sitemap")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Consider adding important URLs to your sitemap.xml")
-                        .AddItem("Sitemaps help search engines discover all content")
-                    .WithTechnicalMetadata("sitemapUrl", ctx.Url.ToString())
-                    .WithTechnicalMetadata("missingCount", missingFromSitemap.Count)
-                    .Build();
+                var rowMissing = ReportRow.Create()
+                    .Set("URL", ctx.Url.ToString())
+                    .Set("Issue", $"URLs Missing from Sitemap ({missingFromSitemap.Count})")
+                    .Set("InSitemap", "No")
+                    .Set("StatusCode", 200)
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "URLS_MISSING_FROM_SITEMAP",
-                    $"Found {missingFromSitemap.Count} crawled URL(s) not listed in sitemap",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowMissing, ctx.Metadata.UrlId, default);
             }
 
             _logger.LogDebug("Sitemap comparison complete: {OrphanCount} orphans, {MissingCount} missing",

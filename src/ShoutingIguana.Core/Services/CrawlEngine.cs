@@ -243,6 +243,12 @@ public class CrawlEngine(
             globalProxySettings = appSettings.CrawlSettings.GlobalProxy;
             checkpointInterval = appSettings.CrawlSettings.CheckpointInterval;
 
+            // Sync plugin schemas to database BEFORE crawl starts
+            // This ensures schemas exist before any report rows are created during URL analysis
+            var pluginRegistry = scope.ServiceProvider.GetRequiredService<IPluginRegistry>();
+            await pluginRegistry.SyncSchemasToDatabase().ConfigureAwait(false);
+            _logger.LogInformation("Plugin schemas synchronized to database");
+
             var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
             var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
             

@@ -120,11 +120,14 @@ public partial class FindingsView
     {
         if (e.PropertyName == nameof(FindingTabViewModel.ReportColumns) && sender is FindingTabViewModel tab)
         {
+            System.Diagnostics.Debug.WriteLine($"[FindingsView] ReportColumns changed for {tab.DisplayName}: HasDynamicSchema={tab.HasDynamicSchema}, Columns={tab.ReportColumns.Count}, LastTab={_lastDynamicTab?.DisplayName}");
+            
             // Dynamic columns loaded - regenerate DataGrid columns
             // Guard: Only do this once per tab to avoid re-generating on every property change
             if (tab.HasDynamicSchema && tab.ReportColumns.Count > 0 && _lastDynamicTab != tab)
             {
                 _lastDynamicTab = tab;
+                System.Diagnostics.Debug.WriteLine($"[FindingsView] Triggering GenerateDynamicColumns for {tab.DisplayName}");
                 Dispatcher.InvokeAsync(() => GenerateDynamicColumns(tab), System.Windows.Threading.DispatcherPriority.Normal);
             }
         }
@@ -134,10 +137,13 @@ public partial class FindingsView
     {
         try
         {
+            System.Diagnostics.Debug.WriteLine($"[FindingsView] GenerateDynamicColumns called for {tab.DisplayName}");
+            
             // Find the findings DataGrid for this tab
             var dataGrid = FindFindingsDataGrid();
             if (dataGrid == null)
             {
+                System.Diagnostics.Debug.WriteLine($"[FindingsView] DataGrid not found yet, scheduling retry");
                 // DataGrid not found yet - might be in visual tree initialization
                 // Schedule retry after a short delay
                 Dispatcher.InvokeAsync(() =>
@@ -145,7 +151,12 @@ public partial class FindingsView
                     var retryDataGrid = FindFindingsDataGrid();
                     if (retryDataGrid != null)
                     {
+                        System.Diagnostics.Debug.WriteLine($"[FindingsView] Retry successful, applying columns");
                         ApplyDynamicColumnsToDataGrid(retryDataGrid, tab);
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[FindingsView] Retry failed - DataGrid still not found!");
                     }
                 }, System.Windows.Threading.DispatcherPriority.Loaded);
                 return;
@@ -155,12 +166,14 @@ public partial class FindingsView
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Error generating dynamic columns: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[FindingsView] Error generating dynamic columns: {ex.Message}");
         }
     }
     
     private void ApplyDynamicColumnsToDataGrid(DataGrid dataGrid, FindingTabViewModel tab)
     {
+        System.Diagnostics.Debug.WriteLine($"[FindingsView] Applying dynamic columns for {tab.DisplayName}: {tab.ReportColumns.Count} columns, {tab.ReportRows.Count} rows");
+        
         // Clear existing columns
         dataGrid.Columns.Clear();
         
@@ -174,10 +187,17 @@ public partial class FindingsView
             var dataGridColumn = CreateColumnFromDefinition(column);
             dataGrid.Columns.Add(dataGridColumn);
         }
+        
+        System.Diagnostics.Debug.WriteLine($"[FindingsView] Applied {dataGrid.Columns.Count} columns to DataGrid, ItemsSource bound to ReportRows");
     }
     
     private DataGridColumn CreateColumnFromDefinition(ReportColumnViewModel column)
     {
+        if (string.Equals(column.Name, "Severity", StringComparison.OrdinalIgnoreCase))
+        {
+            return CreateSeverityColumn(column);
+        }
+        
         switch (column.ColumnType)
         {
             case ReportColumnType.Url:
@@ -197,6 +217,35 @@ public partial class FindingsView
             default:
                 return CreateTextColumn(column);
         }
+    }
+    
+    private DataGridTemplateColumn CreateSeverityColumn(ReportColumnViewModel column)
+    {
+        // Reuse existing badge/text styles for consistent visuals
+        var badgeStyle = (Style)FindResource("SeverityBadgeStyle");
+        var textStyle = (Style)FindResource("SeverityTextStyle");
+        
+        var textFactory = new FrameworkElementFactory(typeof(TextBlock));
+        textFactory.SetBinding(TextBlock.TextProperty, new Binding($"[{column.Name}]"));
+        textFactory.SetValue(TextBlock.StyleProperty, textStyle);
+        
+        var borderFactory = new FrameworkElementFactory(typeof(Border));
+        borderFactory.SetValue(Border.StyleProperty, badgeStyle);
+        borderFactory.AppendChild(textFactory);
+        
+        var template = new DataTemplate
+        {
+            VisualTree = borderFactory
+        };
+        
+        return new DataGridTemplateColumn
+        {
+            Header = column.DisplayName,
+            CellTemplate = template,
+            Width = new DataGridLength(column.Width),
+            MinWidth = 100,
+            CanUserSort = column.IsSortable
+        };
     }
     
     private DataGridTextColumn CreateTextColumn(ReportColumnViewModel column)
@@ -277,15 +326,22 @@ public partial class FindingsView
         };
     }
     
+    private void DynamicFindingsDataGrid_Loaded(object sender, RoutedEventArgs e)
+    {
+        _findingsDataGrid = sender as DataGrid;
+        System.Diagnostics.Debug.WriteLine($"[FindingsView] DynamicFindingsDataGrid loaded and cached");
+        
+        // If current tab has dynamic schema ready, apply columns immediately
+        if (_viewModel.SelectedTab is FindingTabViewModel tab && tab.HasDynamicSchema && tab.ReportColumns.Count > 0)
+        {
+            ApplyDynamicColumnsToDataGrid(_findingsDataGrid!, tab);
+        }
+    }
+    
     private DataGrid? FindFindingsDataGrid()
     {
-        // Find the FindingsTab DataGrid in the visual tree
-        _findingsDataGrid = FindVisualChild<DataGrid>(this);
-        if (_findingsDataGrid?.Tag as string == "FindingsTab")
-        {
-            return _findingsDataGrid;
-        }
-        return null;
+        // Return cached reference if available
+        return _findingsDataGrid;
     }
     
     private void UrlProperties_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -350,6 +351,54 @@ public partial class FindingTabViewModel : ObservableObject
             TechnicalMetadataJson = string.Empty;
         }
     }
+    
+    partial void OnSelectedReportRowChanged(DynamicReportRowViewModel? value)
+    {
+        if (value == null)
+        {
+            SelectedFindingDetails = null;
+            HasTechnicalMetadata = false;
+            TechnicalMetadataJson = string.Empty;
+            return;
+        }
+
+        var columns = GetActiveReportColumns().ToList();
+        var detailItems = new List<string>();
+        var technicalMetadata = new Dictionary<string, object?>();
+
+        if (columns.Count == 0)
+        {
+            var columnNames = value.GetColumnNames().ToList();
+            foreach (var columnName in columnNames)
+            {
+                var rawValue = value.GetValue(columnName);
+                technicalMetadata[columnName] = rawValue;
+                var formatted = rawValue?.ToString() ?? "(none)";
+                detailItems.Add($"{columnName}: {formatted}");
+            }
+        }
+        else
+        {
+            foreach (var column in columns)
+            {
+                var rawValue = value.GetValue(column.Name);
+                technicalMetadata[column.Name] = rawValue;
+                var formatted = FormatColumnValue(rawValue, column.ColumnType);
+                detailItems.Add($"{column.DisplayName}: {formatted}");
+            }
+        }
+
+        SelectedFindingDetails = new FindingDetails
+        {
+            Items = detailItems,
+            TechnicalMetadata = technicalMetadata.Count > 0 ? technicalMetadata : null
+        };
+
+        HasTechnicalMetadata = technicalMetadata.Count > 0;
+        TechnicalMetadataJson = technicalMetadata.Count > 0
+            ? SerializeTechnicalMetadata(technicalMetadata)
+            : string.Empty;
+    }
 
     private async Task ApplyFiltersAsync()
     {
@@ -599,6 +648,68 @@ public partial class FindingTabViewModel : ObservableObject
         {
             Debug.WriteLine($"Error loading dynamic report for {DisplayName}: {ex.Message}");
             throw;
+        }
+    }
+    
+    private IEnumerable<ReportColumnViewModel> GetActiveReportColumns()
+    {
+        if (ReportColumns?.Count > 0)
+        {
+            return ReportColumns;
+        }
+
+        var schemaColumns = _schema?.GetColumns();
+        if (schemaColumns == null)
+        {
+            return Enumerable.Empty<ReportColumnViewModel>();
+        }
+
+        return schemaColumns.Select(ReportColumnViewModel.FromModel);
+    }
+
+    private static string FormatColumnValue(object? value, ReportColumnType columnType)
+    {
+        if (value == null)
+        {
+            return "(none)";
+        }
+
+        return columnType switch
+        {
+            ReportColumnType.Boolean => value is bool b ? (b ? "Yes" : "No") : value.ToString() ?? "(none)",
+            ReportColumnType.DateTime => FormatDateTimeValue(value),
+            ReportColumnType.Integer or ReportColumnType.Decimal => value.ToString() ?? "(none)",
+            _ => value.ToString() ?? "(none)"
+        };
+    }
+
+    private static string FormatDateTimeValue(object value)
+    {
+        if (value is DateTime dt)
+        {
+            return dt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+        }
+
+        if (value is string str &&
+            DateTime.TryParse(str, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var parsed))
+        {
+            return parsed.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+        }
+
+        return value.ToString() ?? "(none)";
+    }
+
+    private static string SerializeTechnicalMetadata(Dictionary<string, object?> metadata)
+    {
+        try
+        {
+            return JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            return string.Empty;
         }
     }
 

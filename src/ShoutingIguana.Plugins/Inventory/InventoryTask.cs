@@ -48,47 +48,8 @@ public class InventoryTask : UrlTaskBase
                     _ => "This page has restricted access"
                 };
                 
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"URL: {ctx.Url}")
-                    .AddItem($"HTTP Status: {statusCode}")
-                    .AddItem($"Page Depth: {ctx.Metadata.Depth}")
-                    .AddItem($"ℹ️ {note}")
-                    .BeginNested("💡 Note")
-                        .AddItem("If this is expected (e.g., members-only area), this is not an error")
-                        .AddItem("Otherwise, check access permissions")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("status", statusCode)
-                    .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
-                    .Build();
-                
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    $"HTTP_{statusCode}",
-                    $"HTTP {statusCode} - {restrictionType}",
-                    details);
-            }
-            else
-            {
-                // Actual errors
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"URL: {ctx.Url}")
-                    .AddItem($"HTTP Status: {statusCode}")
-                    .AddItem($"Page Depth: {ctx.Metadata.Depth}")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Investigate why this page returns an error")
-                        .AddItem("Fix the page or implement a 301 redirect")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("status", statusCode)
-                    .WithTechnicalMetadata("depth", ctx.Metadata.Depth)
-                    .Build();
-                
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Error,
-                    $"HTTP_{statusCode}",
-                    $"HTTP error {statusCode}",
-                    details);
+                // NOTE: HTTP error checks are duplicates of BrokenLinks plugin
+                // Skipping to avoid duplicate reporting
             }
         }
         
@@ -125,60 +86,41 @@ public class InventoryTask : UrlTaskBase
         // Check URL length
         if (urlLength > MAX_URL_LENGTH)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"URL length: {urlLength} characters")
-                .AddItem($"Recommended: Under {MAX_URL_LENGTH} characters")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Shorter URLs are easier to share and remember")
-                    .AddItem("They may also rank slightly better in search results")
-                .WithTechnicalMetadata("url", url)
-                .WithTechnicalMetadata("length", urlLength)
-                .Build();
+            var rowTooLong = ReportRow.Create()
+                .Set("URL", url)
+                .Set("ContentType", ctx.Metadata.ContentType ?? "")
+                .Set("Status", ctx.Metadata.StatusCode)
+                .Set("Depth", ctx.Metadata.Depth)
+                .Set("Indexable", "Yes")
+                .Set("Severity", "Warning");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "URL_TOO_LONG",
-                $"URL is {urlLength} characters (recommend <{MAX_URL_LENGTH})",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowTooLong, ctx.Metadata.UrlId, default);
         }
         else if (urlLength > WARNING_URL_LENGTH)
         {
-            var details = FindingDetailsBuilder.WithMetadata(
-                new Dictionary<string, object?> {
-                    ["url"] = url,
-                    ["length"] = urlLength
-                },
-                $"URL length: {urlLength} characters",
-                $"Recommended: Under {WARNING_URL_LENGTH} characters");
+            var row1 = ReportRow.Create()
+                .Set("URL", url)
+                .Set("ContentType", ctx.Metadata.ContentType ?? "")
+                .Set("Status", ctx.Metadata.StatusCode)
+                .Set("Depth", ctx.Metadata.Depth)
+                .Set("Indexable", "Yes")
+                .Set("Severity", "Info");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "URL_LONG",
-                $"URL is {urlLength} characters (consider shortening)",
-                details);
+            await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
         }
 
         // Check for uppercase in URL
         if (url != url.ToLowerInvariant())
         {
-            var uppercaseParts = Regex.Matches(url, "[A-Z]+").Select(m => m.Value).ToArray();
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"Uppercase characters found: {string.Join(", ", uppercaseParts)}")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Use lowercase URLs to avoid case-sensitivity issues")
-                    .AddItem("Some servers treat /Page and /page as different resources")
-                .WithTechnicalMetadata("url", url)
-                .WithTechnicalMetadata("uppercaseParts", uppercaseParts)
-                .Build();
+            var row = ReportRow.Create()
+                .Set("URL", url)
+                .Set("ContentType", ctx.Metadata.ContentType ?? "")
+                .Set("Status", ctx.Metadata.StatusCode)
+                .Set("Depth", ctx.Metadata.Depth)
+                .Set("Indexable", "Yes")
+                .Set("Severity", "Warning");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "UPPERCASE_IN_URL",
-                "URL contains uppercase characters (case-sensitivity risk)",
-                details);
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
 
         // Check query parameters
@@ -187,50 +129,30 @@ public class InventoryTask : UrlTaskBase
             var queryParams = ctx.Url.Query.TrimStart('?').Split('&');
             if (queryParams.Length > MAX_QUERY_PARAMETERS)
             {
-                var builder = FindingDetailsBuilder.Create()
-                    .AddItem($"Query parameters: {queryParams.Length}")
-                    .AddItem($"Recommended: {MAX_QUERY_PARAMETERS} or fewer");
+                var row = ReportRow.Create()
+                    .Set("URL", url)
+                    .Set("ContentType", ctx.Metadata.ContentType ?? "")
+                    .Set("Status", ctx.Metadata.StatusCode)
+                    .Set("Depth", ctx.Metadata.Depth)
+                    .Set("Indexable", "Yes")
+                    .Set("Severity", "Info");
                 
-                builder.BeginNested("📊 Parameters");
-                foreach (var param in queryParams.Take(5))
-                {
-                    builder.AddItem(param);
-                }
-                if (queryParams.Length > 5)
-                {
-                    builder.AddItem($"... and {queryParams.Length - 5} more");
-                }
-                
-                builder.WithTechnicalMetadata("url", url)
-                    .WithTechnicalMetadata("parameterCount", queryParams.Length)
-                    .WithTechnicalMetadata("parameters", queryParams);
-                
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "TOO_MANY_PARAMETERS",
-                    $"URL has {queryParams.Length} query parameters (recommend <{MAX_QUERY_PARAMETERS})",
-                    builder.Build());
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
 
             // Check for pagination parameters
             var paginationPattern = @"[?&](page|p|pg|offset|start)=";
             if (Regex.IsMatch(url, paginationPattern, RegexOptions.IgnoreCase))
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem("This appears to be a pagination page")
-                    .BeginNested("💡 Best Practices")
-                        .AddItem("Consider using rel=prev/next link tags")
-                        .AddItem("Use canonical tags to avoid duplicate content issues")
-                    .WithTechnicalMetadata("url", url)
-                    .Build();
+                var rowPag = ReportRow.Create()
+                    .Set("URL", url)
+                    .Set("ContentType", ctx.Metadata.ContentType ?? "")
+                    .Set("Status", ctx.Metadata.StatusCode)
+                    .Set("Depth", ctx.Metadata.Depth)
+                    .Set("Indexable", "Yes")
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "PAGINATION_DETECTED",
-                    "URL appears to be a pagination page",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowPag, ctx.Metadata.UrlId, default);
             }
             
             // Check for session IDs in URL (CRITICAL SEO ISSUE)
@@ -241,44 +163,29 @@ public class InventoryTask : UrlTaskBase
         var specialCharsPattern = @"[^a-zA-Z0-9\-_.~:/?#\[\]@!$&'()*+,;=%]";
         if (Regex.IsMatch(url, specialCharsPattern))
         {
-            var specialChars = Regex.Matches(url, specialCharsPattern)
-                .Select(m => m.Value)
-                .Distinct()
-                .ToArray();
-            
-            var details = FindingDetailsBuilder.WithMetadata(
-                new Dictionary<string, object?> {
-                    ["url"] = url,
-                    ["specialChars"] = specialChars
-                },
-                $"Non-standard characters: {string.Join(", ", specialChars)}",
-                "⚠️ May cause encoding issues in some contexts");
+            var rowSpecial = ReportRow.Create()
+                .Set("URL", url)
+                .Set("ContentType", ctx.Metadata.ContentType ?? "")
+                .Set("Status", ctx.Metadata.StatusCode)
+                .Set("Depth", ctx.Metadata.Depth)
+                .Set("Indexable", "Yes")
+                .Set("Severity", "Info");
                 
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "SPECIAL_CHARS_IN_URL",
-                "URL contains non-standard characters",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowSpecial, ctx.Metadata.UrlId, default);
         }
 
         // Check for underscores (Google treats them differently than hyphens)
         if (ctx.Url.AbsolutePath.Contains('_'))
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem("URL contains underscores")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Use hyphens (-) instead of underscores (_) for word separation")
-                    .AddItem("Google treats hyphens as word separators but underscores as word connectors")
-                .WithTechnicalMetadata("url", url)
-                .Build();
+            var rowUnder = ReportRow.Create()
+                .Set("URL", url)
+                .Set("ContentType", ctx.Metadata.ContentType ?? "")
+                .Set("Status", ctx.Metadata.StatusCode)
+                .Set("Depth", ctx.Metadata.Depth)
+                .Set("Indexable", "Yes")
+                .Set("Severity", "Info");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "UNDERSCORES_IN_URL",
-                "URL contains underscores (hyphens are preferred for SEO)",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowUnder, ctx.Metadata.UrlId, default);
         }
     }
 
@@ -311,33 +218,15 @@ public class InventoryTask : UrlTaskBase
         {
             if (Regex.IsMatch(url, Pattern, RegexOptions.IgnoreCase))
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"Session ID detected: {Name}")
-                    .AddItem($"URL: {url}")
-                    .AddItem("❌ CRITICAL DUPLICATE CONTENT ISSUE")
-                    .BeginNested("⚠️ Impact")
-                        .AddItem("Creates infinite duplicate content variations")
-                        .AddItem("Each user session = new URL for same content")
-                        .AddItem("Completely ruins site indexation")
-                        .AddItem("Wastes massive crawl budget")
-                        .AddItem("Can cause site-wide deindexation in severe cases")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Use cookies for session tracking instead of URLs")
-                        .AddItem("Configure your application server to use cookie-based sessions")
-                        .AddItem("Add robots.txt rules to block session ID parameters if immediate fix impossible")
-                        .AddItem($"Example robots.txt: Disallow: /*?{Example}*")
-                        .AddItem("This is a CRITICAL issue - fix immediately")
-                    .WithTechnicalMetadata("url", url)
-                    .WithTechnicalMetadata("sessionIdType", Name)
-                    .WithTechnicalMetadata("pattern", Pattern)
-                    .Build();
+                var rowSession = ReportRow.Create()
+                    .Set("URL", url)
+                    .Set("ContentType", ctx.Metadata.ContentType ?? "")
+                    .Set("Status", ctx.Metadata.StatusCode)
+                    .Set("Depth", ctx.Metadata.Depth)
+                    .Set("Indexable", "No")
+                    .Set("Severity", "Error");
 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Error,
-                    "SESSION_ID_IN_URL",
-                    $"CRITICAL: Session ID in URL causes infinite duplicate content: {Name}",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowSession, ctx.Metadata.UrlId, default);
                 
                 // Only report once per URL (first match found)
                 return;
@@ -371,50 +260,9 @@ public class InventoryTask : UrlTaskBase
                 source = "conflicting meta and X-Robots-Tag (most restrictive applied)";
             }
             
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"Source: {source}")
-                .AddItem("⚠️ This page will not appear in search engine results")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("xRobotsTag", ctx.Metadata.XRobotsTag)
-                .WithTechnicalMetadata("hasConflict", ctx.Metadata.HasRobotsConflict)
-                .Build();
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "NOINDEX_DIRECTIVE",
-                $"Page has noindex directive (will not be indexed) - Source: {source}",
-                details);
-        }
-
-        // Use crawler-parsed canonical data
-        var canonical = ctx.Metadata.CanonicalHtml ?? ctx.Metadata.CanonicalHttp;
-        if (!string.IsNullOrEmpty(canonical))
-        {
-            var normalizedCurrent = NormalizeUrl(ctx.Url.ToString());
-            var normalizedCanonical = NormalizeUrl(canonical);
-
-            if (normalizedCurrent != normalizedCanonical)
-            {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"Current URL: {ctx.Url}")
-                    .AddItem($"Canonical URL: {canonical}")
-                    .AddItem($"Cross-domain: {(ctx.Metadata.HasCrossDomainCanonical ? "Yes" : "No")}")
-                    .BeginNested("ℹ️ Impact")
-                        .AddItem("This page defers indexing to the canonical URL")
-                        .AddItem("Search engines will index the canonical URL instead")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("canonical", canonical)
-                    .WithTechnicalMetadata("isCrossDomain", ctx.Metadata.HasCrossDomainCanonical)
-                    .Build();
-                
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "CANONICALIZED_PAGE",
-                    "Page canonical points elsewhere (will not be indexed)",
-                    details);
-            }
+            // NOTE: Noindex and canonical checks are duplicates
+            // Already handled by Robots and Canonical plugins
+            // Skipping to avoid duplicate reporting
         }
     }
 
@@ -450,48 +298,27 @@ public class InventoryTask : UrlTaskBase
             // Check content length thresholds in order: most severe first
             if (contentLength < WARNING_CONTENT_LENGTH)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"Content length: {contentLength} characters (~{estimatedWords} words)")
-                    .AddItem($"Recommended: At least {MIN_CONTENT_LENGTH} characters (~300 words)")
-                    .BeginNested("⚠️ SEO Impact")
-                        .AddItem("Thin content rarely ranks in modern search engines")
-                        .AddItem("Google's 'Helpful Content Update' favors comprehensive content")
-                        .AddItem("Competitive keywords typically need 1,000-2,000+ words")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Add substantive, unique content that thoroughly covers the topic")
-                        .AddItem("Include relevant details, examples, and explanations")
-                        .AddItem("Focus on user value and answering search intent completely")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("contentLength", contentLength)
-                    .WithTechnicalMetadata("estimatedWords", estimatedWords)
-                    .Build();
+                var rowThin = ReportRow.Create()
+                    .Set("URL", ctx.Url.ToString())
+                    .Set("ContentType", ctx.Metadata.ContentType ?? "")
+                    .Set("Status", ctx.Metadata.StatusCode)
+                    .Set("Depth", ctx.Metadata.Depth)
+                    .Set("Indexable", "Yes")
+                    .Set("Severity", "Warning");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "THIN_CONTENT",
-                    $"Page has thin content ({estimatedWords} words, recommend 300+ for ranking)",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowThin, ctx.Metadata.UrlId, default);
             }
             else if (contentLength < MIN_CONTENT_LENGTH)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"Content length: {contentLength} characters (~{estimatedWords} words)")
-                    .AddItem($"Minimum met but could be improved")
-                    .BeginNested("ℹ️ Note")
-                        .AddItem("While technically adequate, more content often ranks better")
-                        .AddItem("Consider expanding to 300-500+ words for competitive topics")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("contentLength", contentLength)
-                    .WithTechnicalMetadata("estimatedWords", estimatedWords)
-                    .Build();
+                var rowLimited = ReportRow.Create()
+                    .Set("URL", ctx.Url.ToString())
+                    .Set("ContentType", ctx.Metadata.ContentType ?? "")
+                    .Set("Status", ctx.Metadata.StatusCode)
+                    .Set("Depth", ctx.Metadata.Depth)
+                    .Set("Indexable", "Yes")
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "LIMITED_CONTENT",
-                    $"Page has limited content ({estimatedWords} words, consider expanding for better rankings)",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowLimited, ctx.Metadata.UrlId, default);
             }
         }
     }
@@ -612,53 +439,15 @@ public class InventoryTask : UrlTaskBase
         // Report if excessive third-party domains (> 10)
         if (thirdPartyDomains.Count > 10)
         {
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"Third-party domains: {thirdPartyDomains.Count}")
-                .AddItem("⚠️ Excessive external resource loading");
+            var rowThirdParty = ReportRow.Create()
+                .Set("URL", ctx.Url.ToString())
+                .Set("ContentType", ctx.Metadata.ContentType ?? "")
+                .Set("Status", ctx.Metadata.StatusCode)
+                .Set("Depth", ctx.Metadata.Depth)
+                .Set("Indexable", "Yes")
+                .Set("Severity", "Warning");
             
-            builder.BeginNested("🌐 Third-party domains");
-            foreach (var domain in thirdPartyDomains.Take(15))
-            {
-                builder.AddItem(domain);
-            }
-            if (thirdPartyDomains.Count > 15)
-            {
-                builder.AddItem($"... and {thirdPartyDomains.Count - 15} more");
-            }
-            
-            if (heavyThirdPartyScripts.Any())
-            {
-                builder.BeginNested("📊 Known analytics/tracking services");
-                foreach (var service in heavyThirdPartyScripts)
-                {
-                    builder.AddItem(service);
-                }
-            }
-            
-            builder.BeginNested("⚠️ Performance Impact")
-                .AddItem("Each third-party domain requires DNS lookup + connection")
-                .AddItem("Analytics and ad scripts slow page load significantly")
-                .AddItem("Impacts Core Web Vitals (LCP, FID/INP)")
-                .AddItem("Slower pages = lower rankings");
-            
-            builder.BeginNested("💡 Recommendations")
-                .AddItem("Audit third-party scripts - remove unnecessary ones")
-                .AddItem("Consolidate analytics (e.g., use only GTM instead of multiple)")
-                .AddItem("Defer non-critical scripts with async or defer attributes")
-                .AddItem("Consider self-hosting critical third-party resources")
-                .AddItem("Limit to essential tracking and functionality only");
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("thirdPartyCount", thirdPartyDomains.Count)
-                .WithTechnicalMetadata("domains", thirdPartyDomains.ToArray())
-                .WithTechnicalMetadata("heavyServices", heavyThirdPartyScripts.ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "EXCESSIVE_THIRD_PARTY_RESOURCES",
-                $"Excessive third-party resources: {thirdPartyDomains.Count} external domains (impacts performance)",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, rowThirdParty, ctx.Metadata.UrlId, default);
         }
     }
     

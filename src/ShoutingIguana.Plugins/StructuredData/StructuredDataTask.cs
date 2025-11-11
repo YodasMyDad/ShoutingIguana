@@ -139,49 +139,30 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             }
             catch (JsonException ex)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem("JSON-LD syntax error")
-                    .AddItem($"Error: {ex.Message}")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Fix JSON syntax in ld+json script tag")
-                        .AddItem("Use JSON validator to check structure")
-                        .AddItem("Common issues: trailing commas, unescaped quotes")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("error", ex.Message)
-                    .Build();
+                var rowError = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", "JSON-LD")
+                    .Set("Issue", $"JSON Syntax Error: {ex.Message}")
+                    .Set("Property", "")
+                    .Set("Severity", "Error");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Error,
-                    "INVALID_JSON_LD",
-                    $"JSON-LD syntax error: {ex.Message}",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowError, ctx.Metadata.UrlId, default);
             }
         }
 
         if (validSchemas.Any())
         {
             var distinctSchemas = validSchemas.Distinct().ToList();
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"Found {validSchemas.Count} JSON-LD schema(s)");
+            var schemaList = string.Join(", ", distinctSchemas);
             
-            builder.BeginNested("📋 Schema types");
-            foreach (var schema in distinctSchemas)
-            {
-                builder.AddItem(schema);
-            }
+            var rowFound = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", schemaList)
+                .Set("Issue", $"JSON-LD Found ({validSchemas.Count} schemas)")
+                .Set("Property", "")
+                .Set("Severity", "Info");
             
-            builder.AddItem("✅ Structured data helps search engines understand your content")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("schemas", validSchemas.ToArray())
-                .WithTechnicalMetadata("count", validSchemas.Count);
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "JSON_LD_FOUND",
-                $"Found {validSchemas.Count} JSON-LD schema(s): {string.Join(", ", distinctSchemas)}",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, rowFound, ctx.Metadata.UrlId, default);
         }
     }
 
@@ -255,29 +236,14 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"Schema type: {schemaType}");
+            var rowArticle = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", schemaType)
+                .Set("Issue", "Incomplete Article Schema")
+                .Set("Property", string.Join(", ", missingProps))
+                .Set("Severity", "Warning");
             
-            builder.BeginNested("❌ Missing required properties");
-            foreach (var prop in missingProps)
-            {
-                builder.AddItem(prop);
-            }
-            
-            builder.BeginNested("💡 Recommendations")
-                .AddItem("Add missing properties for complete Article markup")
-                .AddItem("Complete schemas qualify for rich results");
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("schemaType", schemaType)
-                .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "INCOMPLETE_ARTICLE_SCHEMA",
-                $"{schemaType} schema missing required properties: {string.Join(", ", missingProps)}",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, rowArticle, ctx.Metadata.UrlId, default);
         }
     }
 
@@ -349,82 +315,37 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem("Product schema incomplete");
+            var rowProdMissing = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "Product")
+                .Set("Issue", "Incomplete Product Schema")
+                .Set("Property", string.Join(", ", missingProps))
+                .Set("Severity", "Error");
             
-            builder.BeginNested("❌ Missing required properties");
-            foreach (var prop in missingProps)
-            {
-                builder.AddItem(prop);
-            }
-            
-            builder.BeginNested("💡 Recommendations")
-                .AddItem("Add missing properties per Google guidelines")
-                .AddItem("Complete Product schema qualifies for rich results");
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Error,
-                "INCOMPLETE_PRODUCT_SCHEMA",
-                $"Product schema missing required properties: {string.Join(", ", missingProps)}",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, rowProdMissing, ctx.Metadata.UrlId, default);
         }
 
         if (warnings.Any())
         {
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"Product schema has {warnings.Count} recommended improvements");
+            var rowProdWarn = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "Product")
+                .Set("Issue", $"Product Recommendations ({warnings.Count})")
+                .Set("Property", hasAggregateRating ? "" : "aggregateRating")
+                .Set("Severity", "Warning");
             
-            builder.BeginNested("⚠️ Recommendations");
-            foreach (var warning in warnings)
-            {
-                builder.AddItem(warning);
-            }
-            
-            // Emphasize star ratings CTR impact if missing
-            if (!hasAggregateRating)
-            {
-                builder.BeginNested("🎯 Star Ratings CTR Impact")
-                    .AddItem("Product star ratings appear directly in Google search results")
-                    .AddItem("⭐⭐⭐⭐⭐ 4.8 stars (1,234 reviews) shown below your listing")
-                    .AddItem("Star ratings = MASSIVE CTR boost (30-50% higher click rates)")
-                    .AddItem("Users trust products with visible ratings")
-                    .AddItem("This is one of the highest-impact SEO optimizations");
-            }
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("warnings", warnings.ToArray())
-                .WithTechnicalMetadata("hasAggregateRating", hasAggregateRating);
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "PRODUCT_SCHEMA_RECOMMENDATIONS",
-                $"Product schema has {warnings.Count} recommended improvements",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, rowProdWarn, ctx.Metadata.UrlId, default);
         }
         else if (hasAggregateRating)
         {
-            // Product schema is complete with ratings - report success with CTR benefit
-            var details = FindingDetailsBuilder.Create()
-                .AddItem("✅ Product schema complete with aggregateRating")
-                .BeginNested("🎯 CTR Benefit")
-                    .AddItem("Star ratings will appear in Google search results")
-                    .AddItem("⭐ Ratings shown directly below your product listing")
-                    .AddItem("Massive CTR boost - users trust products with visible ratings")
-                    .AddItem("One of the highest-impact rich results for e-commerce")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .Build();
+            var rowComplete = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "Product")
+                .Set("Issue", "Complete with Star Ratings")
+                .Set("Property", "aggregateRating")
+                .Set("Severity", "Info");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "PRODUCT_SCHEMA_WITH_RATINGS",
-                "Product schema complete with star ratings - qualified for rich results",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowComplete, ctx.Metadata.UrlId, default);
         }
     }
 
@@ -606,50 +527,26 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem("VideoObject schema incomplete");
+            var rowVidMissing = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "VideoObject")
+                .Set("Issue", "Incomplete Video Schema")
+                .Set("Property", string.Join(", ", missingProps))
+                .Set("Severity", "Error");
             
-            builder.BeginNested("❌ Missing required properties");
-            foreach (var prop in missingProps)
-            {
-                builder.AddItem(prop);
-            }
-            
-            builder.BeginNested("💡 Recommendations")
-                .AddItem("Add missing properties for Video rich results")
-                .AddItem("Complete VideoObject appears in Google Video search");
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Error,
-                "INCOMPLETE_VIDEO_SCHEMA",
-                $"VideoObject schema missing required properties: {string.Join(", ", missingProps)}",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, rowVidMissing, ctx.Metadata.UrlId, default);
         }
 
         if (warnings.Any())
         {
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"VideoObject schema: {warnings.Count} improvements");
+            var rowVideo = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "VideoObject")
+                .Set("Issue", $"Video Recommendations ({warnings.Count})")
+                .Set("Property", string.Join(", ", warnings.Take(2)))
+                .Set("Severity", "Warning");
             
-            builder.BeginNested("⚠️ Recommendations");
-            foreach (var warning in warnings)
-            {
-                builder.AddItem(warning);
-            }
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("warnings", warnings.ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "VIDEO_SCHEMA_RECOMMENDATIONS",
-                $"VideoObject schema has {warnings.Count} recommended improvements",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, rowVideo, ctx.Metadata.UrlId, default);
         }
     }
 
@@ -714,75 +611,37 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem("Review schema incomplete");
+            var rowRevMissing = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "Review")
+                .Set("Issue", "Incomplete Review Schema")
+                .Set("Property", string.Join(", ", missingProps))
+                .Set("Severity", "Error");
             
-            builder.BeginNested("❌ Missing required properties");
-            foreach (var prop in missingProps)
-            {
-                builder.AddItem(prop);
-            }
-            
-            builder.BeginNested("🎯 Missed CTR Opportunity")
-                .AddItem("Review star ratings appear directly in Google search results")
-                .AddItem("⭐ Rating shown below your listing = significantly higher CTR")
-                .AddItem("Users trust content with visible review ratings");
-            
-            builder.BeginNested("💡 Recommendations")
-                .AddItem("Add missing properties to qualify for rich results")
-                .AddItem("Complete Review schema shows star ratings in search");
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Error,
-                "INCOMPLETE_REVIEW_SCHEMA",
-                $"Review schema missing required properties: {string.Join(", ", missingProps)}",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, rowRevMissing, ctx.Metadata.UrlId, default);
         }
 
         if (warnings.Any())
         {
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"Review schema: {warnings.Count} improvements");
+            var rowRevWarn = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "Review")
+                .Set("Issue", $"Review Recommendations ({warnings.Count})")
+                .Set("Property", string.Join(", ", warnings.Take(2)))
+                .Set("Severity", "Warning");
             
-            builder.BeginNested("⚠️ Recommendations");
-            foreach (var warning in warnings)
-            {
-                builder.AddItem(warning);
-            }
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("warnings", warnings.ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "REVIEW_SCHEMA_RECOMMENDATIONS",
-                $"Review schema has {warnings.Count} recommended improvements",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, rowRevWarn, ctx.Metadata.UrlId, default);
         }
         else if (!missingProps.Any())
         {
-            // Review schema is complete - emphasize CTR benefit
-            var details = FindingDetailsBuilder.Create()
-                .AddItem("✅ Review schema properly implemented")
-                .BeginNested("🎯 CTR Benefit")
-                    .AddItem("Review star ratings appear in Google search results")
-                    .AddItem("⭐ Rating displayed directly with your listing")
-                    .AddItem("Significantly higher CTR than listings without ratings")
-                    .AddItem("Builds trust and credibility before click")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .Build();
+            var rowRevComplete = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "Review")
+                .Set("Issue", "Review Schema Complete")
+                .Set("Property", "")
+                .Set("Severity", "Info");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "REVIEW_SCHEMA_COMPLETE",
-                "Review schema complete - qualified for star rating rich results",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowRevComplete, ctx.Metadata.UrlId, default);
         }
     }
 
@@ -962,67 +821,27 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"{schemaType} schema incomplete");
+            var rowLocal = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", schemaType)
+                .Set("Issue", "Incomplete LocalBusiness Schema")
+                .Set("Property", string.Join(", ", missingProps))
+                .Set("Severity", "Warning");
             
-            builder.BeginNested("❌ Missing required properties");
-            foreach (var prop in missingProps)
-            {
-                builder.AddItem(prop);
-            }
-            
-            if (schemaType == "LocalBusiness")
-            {
-                builder.BeginNested("⚠️ Local Pack Impact")
-                    .AddItem("Missing properties prevent appearing in Google's local pack")
-                    .AddItem("Local pack is the map + 3 business results shown for local searches")
-                    .AddItem("Complete LocalBusiness schema is critical for local SEO");
-            }
-            
-            builder.BeginNested("💡 Recommendations")
-                .AddItem("Add all required properties for rich results")
-                .AddItem("Use structured PostalAddress for address field")
-                .AddItem("Include telephone in international format (+country-number)");
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("schemaType", schemaType)
-                .WithTechnicalMetadata("missingProperties", missingProps.ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "INCOMPLETE_LOCALBUSINESS_SCHEMA",
-                $"{schemaType} schema missing required properties: {string.Join(", ", missingProps)}",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, rowLocal, ctx.Metadata.UrlId, default);
         }
         
         // Report warnings for LocalBusiness
         if (warnings.Any() && schemaType == "LocalBusiness")
         {
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"LocalBusiness schema: {warnings.Count} recommended improvements");
+            var rowLocalWarn = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "LocalBusiness")
+                .Set("Issue", $"LocalBusiness Recommendations ({warnings.Count})")
+                .Set("Property", string.Join(", ", warnings.Take(2)))
+                .Set("Severity", "Warning");
             
-            builder.BeginNested("⚠️ Recommendations");
-            foreach (var warning in warnings)
-            {
-                builder.AddItem(warning);
-            }
-            
-            builder.BeginNested("💡 Why This Matters")
-                .AddItem("Complete LocalBusiness schema improves local pack visibility")
-                .AddItem("Google uses this data for Google My Business integration")
-                .AddItem("Proper formatting ensures rich results eligibility");
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("schemaType", schemaType)
-                .WithTechnicalMetadata("warnings", warnings.ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "LOCALBUSINESS_SCHEMA_RECOMMENDATIONS",
-                $"LocalBusiness schema has {warnings.Count} recommended improvements",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, rowLocalWarn, ctx.Metadata.UrlId, default);
         }
     }
 
@@ -1030,27 +849,14 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
     {
         if (!root.TryGetProperty("itemListElement", out var itemsElement))
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem("BreadcrumbList schema incomplete")
-                .AddItem("❌ Missing itemListElement property")
-                .BeginNested("🎯 CTR Impact")
-                    .AddItem("Breadcrumb rich snippets appear directly in Google SERPs")
-                    .AddItem("Shows page hierarchy: Home > Category > Product")
-                    .AddItem("Makes your result more prominent = higher CTR")
-                    .AddItem("Users can see exact page location before clicking")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Add itemListElement array with breadcrumb items")
-                    .AddItem("Each item needs: @type=ListItem, position, name, item URL")
-                    .AddItem("Complete breadcrumb schema = rich snippets in search results")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .Build();
+            var rowBreadInv = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "BreadcrumbList")
+                .Set("Issue", "Missing itemListElement")
+                .Set("Property", "itemListElement")
+                .Set("Severity", "Warning");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "INVALID_BREADCRUMB_SCHEMA",
-                "BreadcrumbList missing itemListElement - losing rich snippet opportunity",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowBreadInv, ctx.Metadata.UrlId, default);
             return;
         }
         
@@ -1060,41 +866,25 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             var items = itemsElement.EnumerateArray().ToList();
             if (items.Count == 0)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem("BreadcrumbList has empty itemListElement array")
-                    .AddItem("❌ No breadcrumb items defined")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Add breadcrumb items to the array")
-                        .AddItem("Each item should represent a level in your site hierarchy")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .Build();
+                var rowBreadEmpty = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", "BreadcrumbList")
+                    .Set("Issue", "Empty BreadcrumbList")
+                    .Set("Property", "itemListElement")
+                    .Set("Severity", "Warning");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "EMPTY_BREADCRUMB_SCHEMA",
-                    "BreadcrumbList has no items",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowBreadEmpty, ctx.Metadata.UrlId, default);
             }
             else
             {
-                // Successfully found breadcrumb schema - report as INFO with CTR benefit
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"✅ BreadcrumbList schema found with {items.Count} item(s)")
-                    .BeginNested("🎯 CTR Benefit")
-                        .AddItem("Breadcrumbs will appear in Google search results")
-                        .AddItem("Rich snippets increase visibility and CTR")
-                        .AddItem("Users see page hierarchy before clicking")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("breadcrumbCount", items.Count)
-                    .Build();
+                var rowBreadFound = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", "BreadcrumbList")
+                    .Set("Issue", $"Breadcrumb Found ({items.Count} levels)")
+                    .Set("Property", "")
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "BREADCRUMB_SCHEMA_FOUND",
-                    $"Breadcrumb schema properly implemented ({items.Count} levels) - enables rich snippets",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowBreadFound, ctx.Metadata.UrlId, default);
             }
         }
     }
@@ -1105,23 +895,14 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (!root.TryGetProperty(requiredProp, out var mainEntityElement))
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"{schemaType} schema incomplete")
-                .AddItem($"❌ Missing required '{requiredProp}' property")
-                .BeginNested("💡 Recommendations")
-                    .AddItem($"Add {requiredProp} array to the schema")
-                    .AddItem("This property is required for rich results")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("schemaType", schemaType)
-                .WithTechnicalMetadata("missingProperty", requiredProp)
-                .Build();
+            var rowFaqHow = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", schemaType)
+                .Set("Issue", $"Missing {requiredProp}")
+                .Set("Property", requiredProp)
+                .Set("Severity", "Warning");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                $"INCOMPLETE_{schemaType.ToUpperInvariant()}_SCHEMA",
-                $"{schemaType} schema missing required '{requiredProp}' property",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowFaqHow, ctx.Metadata.UrlId, default);
             return;
         }
         
@@ -1160,74 +941,37 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             // Report issues with FAQ structure
             if (questionsWithoutAnswers > 0)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"FAQ has {questions.Count} question(s)")
-                    .AddItem($"{questionsWithoutAnswers} question(s) missing acceptedAnswer")
-                    .BeginNested("❌ Issue")
-                        .AddItem("Every FAQ question MUST have an acceptedAnswer")
-                        .AddItem("Missing answers = no FAQ rich results")
-                    .BeginNested("🎯 Missed CTR Opportunity")
-                        .AddItem("FAQ rich results show expandable Q&A directly in SERPs")
-                        .AddItem("Take up MORE space in search results = higher visibility")
-                        .AddItem("Can appear as featured snippets (position 0)")
-                        .AddItem("Massive CTR boost when implemented correctly")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Add acceptedAnswer with text property for each question")
-                        .AddItem("Answers should be substantive (at least 50 characters)")
-                        .AddItem("Complete FAQPage schema shows expandable Q&A in search results")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("questionCount", questions.Count)
-                    .WithTechnicalMetadata("missingAnswers", questionsWithoutAnswers)
-                    .Build();
+                var rowFaqMiss = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", "FAQPage")
+                    .Set("Issue", $"FAQ Missing Answers ({questionsWithoutAnswers})")
+                    .Set("Property", "acceptedAnswer")
+                    .Set("Severity", "Warning");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Warning,
-                    "FAQ_MISSING_ANSWERS",
-                    $"FAQPage has {questionsWithoutAnswers} question(s) without acceptedAnswer - losing rich result opportunity",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowFaqMiss, ctx.Metadata.UrlId, default);
             }
             else if (questionsWithShortAnswers == 0 && questions.Count > 0)
             {
-                // FAQ schema is complete and well-formed - emphasize CTR benefit
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"✅ FAQPage schema properly implemented with {questions.Count} question(s)")
-                    .BeginNested("🎯 CTR Benefit")
-                        .AddItem("FAQ rich results show expandable Q&A directly in Google SERPs")
-                        .AddItem("Takes up significantly more SERP real estate")
-                        .AddItem("Can appear as featured snippets (position 0)")
-                        .AddItem("Studies show FAQ rich results = 20-40% higher CTR")
-                        .AddItem("Users see answers without clicking = trust + engagement")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("questionCount", questions.Count)
-                    .Build();
+                var rowFaqComplete = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", "FAQPage")
+                    .Set("Issue", $"FAQ Complete ({questions.Count} Q&As)")
+                    .Set("Property", "")
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "FAQ_SCHEMA_COMPLETE",
-                    $"FAQ schema complete ({questions.Count} Q&As) - qualified for rich results with high CTR potential",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowFaqComplete, ctx.Metadata.UrlId, default);
             }
             
             if (questionsWithShortAnswers > 0)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"{questionsWithShortAnswers} answer(s) are very short (<50 chars)")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("FAQ answers should be substantive")
-                        .AddItem("Google requires meaningful content for rich results")
-                        .AddItem("Aim for at least 50-100 characters per answer")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("shortAnswerCount", questionsWithShortAnswers)
-                    .Build();
+                var rowFaqShort = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", "FAQPage")
+                    .Set("Issue", $"FAQ Short Answers ({questionsWithShortAnswers})")
+                    .Set("Property", "acceptedAnswer")
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "FAQ_SHORT_ANSWERS",
-                    $"FAQPage has {questionsWithShortAnswers} short answer(s) - may not qualify for rich results",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowFaqShort, ctx.Metadata.UrlId, default);
             }
         }
     }
@@ -1256,26 +1000,15 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         if (itemTypes.Any())
         {
             var distinctTypes = itemTypes.Distinct().ToList();
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"Found {itemTypes.Count} Microdata item(s)");
             
-            builder.BeginNested("📋 Item types");
-            foreach (var type in distinctTypes)
-            {
-                builder.AddItem(type);
-            }
-            
-            builder.AddItem("ℹ️ Consider using JSON-LD instead for easier maintenance")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("itemTypes", distinctTypes.ToArray())
-                .WithTechnicalMetadata("count", itemTypes.Count);
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "MICRODATA_FOUND",
-                $"Found {itemTypes.Count} Microdata item(s)",
-                builder.Build());
+            var rowMicro = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", string.Join(", ", distinctTypes))
+                    .Set("Issue", $"Microdata Found ({itemTypes.Count} items)")
+                    .Set("Property", "")
+                    .Set("Severity", "Info");
+                
+                await ctx.Reports.ReportAsync(Key, rowMicro, ctx.Metadata.UrlId, default);
         }
     }
 
@@ -1309,24 +1042,14 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
             if (recommendedSchema != null)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem($"Page appears to be: {recommendedSchema}")
-                    .AddItem("❌ No structured data found")
-                    .AddItem($"Page depth: {ctx.Metadata.Depth} (important page)")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Add JSON-LD structured data")
-                        .AddItem("Structured data improves search appearance")
-                        .AddItem("Can qualify for rich results and enhanced listings")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .WithTechnicalMetadata("recommendedSchema", recommendedSchema)
-                    .Build();
+                var rowMissing = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", recommendedSchema)
+                    .Set("Issue", "Missing Structured Data")
+                    .Set("Property", "")
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "MISSING_STRUCTURED_DATA",
-                    $"Page appears to be a {recommendedSchema} page but has no structured data",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowMissing, ctx.Metadata.UrlId, default);
             }
         }
     }
@@ -1359,24 +1082,14 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         
         if (!hasAuthorLink && !hasAuthorByline)
         {
-            var details = FindingDetailsBuilder.Create()
-                .AddItem("Article page detected")
-                .AddItem("❌ No author markup found")
-                .AddItem("ℹ️ No rel=\"author\" links or visible author bylines detected")
-                .BeginNested("💡 Recommendations")
-                    .AddItem("Add author attribution to articles")
-                    .AddItem("Use rel=\"author\" link to author profile")
-                    .AddItem("Or add author to Article schema (author property)")
-                    .AddItem("Include visible byline: 'By [Author Name]'")
-                .WithTechnicalMetadata("url", ctx.Url.ToString())
-                .Build();
+            var rowAuthor = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "Article")
+                .Set("Issue", "Missing Author Markup")
+                .Set("Property", "author")
+                .Set("Severity", "Info");
             
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "MISSING_AUTHOR_MARKUP",
-                "Article page missing author attribution (rel=author or visible byline)",
-                details);
+            await ctx.Reports.ReportAsync(Key, rowAuthor, ctx.Metadata.UrlId, default);
         }
     }
     
@@ -1428,56 +1141,36 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         {
             if (!hasPhone && !hasAddress)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem("Contact/about page detected")
-                    .AddItem("ℹ️ No phone number or address detected in visible content")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Include contact phone number and physical address")
-                        .AddItem("Visible contact info builds trust with users")
-                        .AddItem("Important for local businesses and service pages")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .Build();
+                var rowContact = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", "Contact")
+                    .Set("Issue", "Missing Contact Info")
+                    .Set("Property", "phone, address")
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "MISSING_CONTACT_INFO",
-                    "Contact page missing visible phone number or address",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowContact, ctx.Metadata.UrlId, default);
             }
             else if (!hasPhone)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem("Contact/about page has address but no phone number")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Include phone number for better user trust")
-                        .AddItem("Use international format: +1-555-123-4567")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .Build();
+                var rowPhone = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", "Contact")
+                    .Set("Issue", "Missing Phone Number")
+                    .Set("Property", "phone")
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "MISSING_PHONE_NUMBER",
-                    "Contact page missing visible phone number",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowPhone, ctx.Metadata.UrlId, default);
             }
             else if (!hasAddress)
             {
-                var details = FindingDetailsBuilder.Create()
-                    .AddItem("Contact/about page has phone but no address")
-                    .BeginNested("💡 Recommendations")
-                        .AddItem("Include physical address if applicable")
-                        .AddItem("Important for local businesses")
-                    .WithTechnicalMetadata("url", ctx.Url.ToString())
-                    .Build();
+                var rowAddr = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", "Contact")
+                    .Set("Issue", "Missing Address")
+                    .Set("Property", "address")
+                    .Set("Severity", "Info");
                 
-                await ctx.Findings.ReportAsync(
-                    Key,
-                    Severity.Info,
-                    "MISSING_ADDRESS",
-                    "Contact page missing visible address",
-                    details);
+                await ctx.Reports.ReportAsync(Key, rowAddr, ctx.Metadata.UrlId, default);
             }
         }
     }
@@ -1523,62 +1216,14 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         // Only report once per project using TryAdd (atomic operation)
         if (hasInconsistency && NAPInconsistencyReportedByProject.TryAdd(ctx.Project.ProjectId, true))
         {
-            var builder = FindingDetailsBuilder.Create()
-                .AddItem($"NAP inconsistency detected across {allNAPs.Count} LocalBusiness schemas")
-                .AddItem("⚠️ Name, Address, Phone (NAP) should be identical everywhere");
+            var rowNAP = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "LocalBusiness")
+                .Set("Issue", $"NAP Inconsistency ({uniqueNames.Count} names, {uniquePhones.Count} phones)")
+                .Set("Property", "name, address, telephone")
+                .Set("Severity", "Warning");
             
-            if (uniqueNames.Count > 1)
-            {
-                builder.BeginNested($"📛 {uniqueNames.Count} different business names found");
-                foreach (var name in uniqueNames.Take(5))
-                {
-                    builder.AddItem($"\"{name}\"");
-                }
-            }
-            
-            if (uniqueAddresses.Count > 1)
-            {
-                builder.BeginNested($"📍 {uniqueAddresses.Count} different addresses found");
-                foreach (var addr in uniqueAddresses.Take(5))
-                {
-                    var preview = addr.Length > 60 ? addr.Substring(0, 60) + "..." : addr;
-                    builder.AddItem($"\"{preview}\"");
-                }
-            }
-            
-            if (uniquePhones.Count > 1)
-            {
-                builder.BeginNested($"📞 {uniquePhones.Count} different phone numbers found");
-                foreach (var ph in uniquePhones.Take(5))
-                {
-                    builder.AddItem(ph);
-                }
-            }
-            
-            builder.BeginNested("⚠️ Local SEO Impact")
-                .AddItem("Inconsistent NAP confuses search engines")
-                .AddItem("Hurts local pack rankings")
-                .AddItem("Google may not trust your business information")
-                .AddItem("Critical for local businesses to have identical NAP everywhere");
-            
-            builder.BeginNested("💡 Recommendations")
-                .AddItem("Use EXACTLY the same Name, Address, and Phone on all pages")
-                .AddItem("Even small differences (abbreviations, formatting) cause problems")
-                .AddItem("Example: '123 Main St' vs '123 Main Street' = inconsistency")
-                .AddItem("Fix all LocalBusiness schemas to use identical NAP information");
-            
-            builder.WithTechnicalMetadata("url", ctx.Url.ToString())
-                .WithTechnicalMetadata("totalLocations", allNAPs.Count)
-                .WithTechnicalMetadata("uniqueNames", uniqueNames.ToArray())
-                .WithTechnicalMetadata("uniqueAddresses", uniqueAddresses.ToArray())
-                .WithTechnicalMetadata("uniquePhones", uniquePhones.ToArray());
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Warning,
-                "NAP_INCONSISTENCY",
-                $"NAP inconsistency: {uniqueNames.Count} names, {uniqueAddresses.Count} addresses, {uniquePhones.Count} phones - critical for local SEO",
-                builder.Build());
+            await ctx.Reports.ReportAsync(Key, rowNAP, ctx.Metadata.UrlId, default);
         }
     }
     

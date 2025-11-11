@@ -57,25 +57,16 @@ public class LinkGraphTask : UrlTaskBase
                 ? "(no text)" 
                 : link.AnchorText;
             
-            var message = $"Links to: {link.ToUrl}";
+            // Create report row with custom columns
+            // NOTE: Plugins with registered schemas should create ONLY report rows, not findings
+            // This ensures the UI displays custom columns instead of legacy finding columns
+            var row = ReportRow.Create()
+                .Set("FromURL", fromUrlAddress)
+                .Set("ToURL", link.ToUrl)
+                .Set("AnchorText", anchorText)
+                .Set("LinkType", link.LinkType);
             
-            var details = FindingDetailsBuilder.Create()
-                .AddItem($"From URL: {fromUrlAddress}")
-                .AddItem($"To URL: {link.ToUrl}")
-                .AddItem($"Anchor Text: \"{anchorText}\"")
-                .AddItem($"Link Type: {link.LinkType}")
-                .WithTechnicalMetadata("fromUrl", fromUrlAddress)
-                .WithTechnicalMetadata("toUrl", link.ToUrl)
-                .WithTechnicalMetadata("anchorText", anchorText)
-                .WithTechnicalMetadata("linkType", link.LinkType)
-                .Build();
-            
-            await ctx.Findings.ReportAsync(
-                Key,
-                Severity.Info,
-                "LINK_GRAPH",
-                message,
-                details);
+            await ctx.Reports.ReportAsync(Key, row, fromUrlId, default);
         }
         
         _logger.LogDebug("Generated {Count} link graph findings for {Url}", 
