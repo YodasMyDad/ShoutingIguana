@@ -29,7 +29,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly Window _dialog;
 
     // Crawling settings
-    [ObservableProperty] private int _concurrentRequests = 3;
+    [ObservableProperty] private int _concurrentRequests = 4;
     [ObservableProperty] private int _timeoutSeconds = 30;
     [ObservableProperty] private int _maxCrawlDepth = 5;
     [ObservableProperty] private int _maxUrlsToCrawl = 10000;

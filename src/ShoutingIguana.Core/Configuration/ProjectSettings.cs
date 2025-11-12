@@ -38,7 +38,7 @@ public class ProjectSettings
     public bool UseSitemapXml { get; set; } = true;
     public UserAgentType UserAgentType { get; set; } = UserAgentType.Chrome;
     public double CrawlDelaySeconds { get; set; } = 1.5;
-    public int ConcurrentRequests { get; set; } = 3;
+    public int ConcurrentRequests { get; set; } = 4;
     public int TimeoutSeconds { get; set; } = 10;
     
     /// <summary>

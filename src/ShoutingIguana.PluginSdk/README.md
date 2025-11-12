@@ -324,9 +324,10 @@ public class DuplicateContentPlugin : IPlugin
     {
         var schema = ReportSchema.Create("DuplicateContent")
             .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
             .AddColumn("DuplicateOf", ReportColumnType.Url, "Duplicate Of")
-            .AddColumn("ContentHash", ReportColumnType.String, "Hash")
             .AddColumn("Similarity", ReportColumnType.Integer, "Similarity %")
+            .AddColumn("Severity", ReportColumnType.String, "Severity")
             .Build();
         
         context.RegisterReportSchema(schema);
@@ -359,9 +360,10 @@ public class DuplicateContentTask : UrlTaskBase
                 
                 var row = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
+                    .Set("Issue", "Exact duplicate content")
                     .Set("DuplicateOf", duplicateOf)
-                    .Set("ContentHash", hash[..12])
-                    .Set("Similarity", 100);
+                    .Set("Similarity", 100)
+                    .Set("Severity", "Error");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
