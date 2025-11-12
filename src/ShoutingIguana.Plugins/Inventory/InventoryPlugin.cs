@@ -14,6 +14,7 @@ public class InventoryPlugin : IPlugin
     {
         // Register custom report schema for inventory
         var schema = ReportSchema.Create("Inventory")
+            .WithVersion(2)
             .AddPrimaryColumn("URL", ReportColumnType.Url, "URL")
             .AddColumn("ContentType", ReportColumnType.String, "Content Type")
             .AddColumn("Status", ReportColumnType.Integer, "Status")

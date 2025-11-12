@@ -73,11 +73,11 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             var charset = ExtractCharset(doc);
             var language = ExtractLanguage(doc);
 
-            // Analyze title
-            await AnalyzeTitleAsync(ctx, title);
-            
-            // Track for duplicate detection
+            // Track for duplicate detection before analysis so current page participates
             TrackTitleAndDescription(ctx.Project.ProjectId, title, description, ctx.Url.ToString());
+
+            // Analyze title (runs after tracking so duplicate detection sees this page)
+            await AnalyzeTitleAsync(ctx, title);
             
             // Analyze description
             await AnalyzeDescriptionAsync(ctx, description);

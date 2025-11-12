@@ -14,6 +14,7 @@ public class CustomExtractionPlugin : IPlugin
     {
         // Register custom report schema for custom extraction
         var schema = ReportSchema.Create("CustomExtraction")
+            .WithVersion(2)
             .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
             .AddColumn("RuleName", ReportColumnType.String, "Rule Name")
             .AddColumn("ExtractedValue", ReportColumnType.String, "Extracted Value")

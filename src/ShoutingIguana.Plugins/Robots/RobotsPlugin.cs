@@ -14,6 +14,7 @@ public class RobotsPlugin : IPlugin
     {
         // Register custom report schema for robots/indexability analysis
         var schema = ReportSchema.Create("Robots")
+            .WithVersion(2)
             .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
             .AddColumn("Issue", ReportColumnType.String, "Issue")
             .AddColumn("RobotsMeta", ReportColumnType.String, "Robots Meta")

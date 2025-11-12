@@ -2,6 +2,8 @@ using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.PluginSdk.Helpers;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 
 namespace ShoutingIguana.Plugins.Redirects;
@@ -9,15 +11,24 @@ namespace ShoutingIguana.Plugins.Redirects;
 /// <summary>
 /// Analyzes redirect chains, loops, and canonicalization issues.
 /// </summary>
-public class RedirectsTask(ILogger logger) : UrlTaskBase
+public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
     private readonly ILogger _logger = logger;
+    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
     private const int MAX_REDIRECT_CHAIN_LENGTH = 3;
     private const int WARNING_REDIRECT_CHAIN_LENGTH = 2;
     private const int MAX_CHAIN_HOPS = 5;
     
-    // Track redirects per project for chain and loop detection
-    private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, RedirectInfo>> RedirectsByProject = new();
+    // Track redirects seen during Stage 2 analysis (per project)
+    private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, RedirectHop>> RuntimeRedirectsByProject = new();
+    
+    // Cache redirect graph from repository (Stage 1 crawl data)
+    private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, RedirectHop>> RedirectCacheByProject = new();
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> RedirectCacheLoadingSemaphores = new();
+    
+    // Cache URL statuses for validating redirect targets
+    private static readonly ConcurrentDictionary<int, Dictionary<string, int>> UrlStatusCacheByProject = new();
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> UrlStatusLoadingSemaphores = new();
 
     public override string Key => "Redirects";
     public override string DisplayName => "Redirects";
@@ -47,23 +58,26 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
             if (statusCode >= 300 && statusCode < 400)
             {
                 var location = ctx.Headers.TryGetValue("location", out var loc) ? loc : null;
+                var resolvedTarget = string.IsNullOrEmpty(location)
+                    ? null
+                    : ResolveRedirectTarget(ctx.Url, location);
                 
                 // Track redirect for chain/loop detection
-                if (!string.IsNullOrEmpty(location))
+                if (!string.IsNullOrEmpty(resolvedTarget))
                 {
-                    TrackRedirect(ctx.Project.ProjectId, ctx.Url.ToString(), location, statusCode);
+                    TrackRedirect(ctx.Project.ProjectId, ctx.Url.ToString(), resolvedTarget, statusCode);
                 }
                 
-                await AnalyzeHttpRedirectAsync(ctx);
+                await AnalyzeHttpRedirectAsync(ctx, resolvedTarget);
                 
-                // NEW: Check for redirect chains and loops
-                await CheckRedirectChainsAsync(ctx, location);
+                // Check for redirect chains and loops using repository cache
+                await CheckRedirectChainsAsync(ctx, resolvedTarget, ct);
                 
-                // NEW: Validate redirect target status
-                await ValidateRedirectTargetAsync(ctx, location);
+                // Validate redirect target status using repository cache
+                await ValidateRedirectTargetAsync(ctx, resolvedTarget, ct);
                 
-                // NEW: Check redirect caching headers
-                await CheckRedirectCachingAsync(ctx, statusCode);
+                // Check redirect caching headers
+                await CheckRedirectCachingAsync(ctx, statusCode, resolvedTarget);
             }
             
             // Check for meta refresh redirects (even on 200 OK pages) - using crawler-parsed data
@@ -86,13 +100,18 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
     
     private void TrackRedirect(int projectId, string fromUrl, string toUrl, int statusCode)
     {
-        var projectRedirects = RedirectsByProject.GetOrAdd(projectId, _ => new ConcurrentDictionary<string, RedirectInfo>());
-        projectRedirects[fromUrl] = new RedirectInfo
+        var normalizedSource = NormalizeUrl(fromUrl);
+        var projectRedirects = RuntimeRedirectsByProject.GetOrAdd(
+            projectId,
+            _ => new ConcurrentDictionary<string, RedirectHop>(StringComparer.OrdinalIgnoreCase));
+
+        var hop = new RedirectHop(fromUrl, toUrl, statusCode);
+        projectRedirects[normalizedSource] = hop;
+
+        if (RedirectCacheByProject.TryGetValue(projectId, out var cachedRedirects))
         {
-            FromUrl = fromUrl,
-            ToUrl = toUrl,
-            StatusCode = statusCode
-        };
+            cachedRedirects[normalizedSource] = hop;
+        }
     }
     
     private async Task ReportRedirectLoopErrorAsync(UrlContext ctx)
@@ -107,12 +126,11 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     }
 
-    private async Task AnalyzeHttpRedirectAsync(UrlContext ctx)
+    private async Task AnalyzeHttpRedirectAsync(UrlContext ctx, string? targetUrl)
     {
         var statusCode = ctx.Metadata.StatusCode;
-        var location = ctx.Headers.TryGetValue("location", out var loc) ? loc : null;
         
-        if (string.IsNullOrEmpty(location))
+        if (string.IsNullOrEmpty(targetUrl))
         {
             var row = ReportRow.Create()
                 .Set("Source", ctx.Url.ToString())
@@ -128,7 +146,7 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
         // Report the redirect
         var redirectRow = ReportRow.Create()
             .Set("Source", ctx.Url.ToString())
-            .Set("Target", location)
+            .Set("Target", targetUrl)
             .Set("StatusCode", statusCode)
             .Set("Issue", $"{GetRedirectType(statusCode)} Redirect")
             .Set("Severity", "Info");
@@ -140,7 +158,7 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
         {
             var row = ReportRow.Create()
                 .Set("Source", ctx.Url.ToString())
-                .Set("Target", location)
+                .Set("Target", targetUrl)
                 .Set("StatusCode", statusCode)
                 .Set("Issue", "Temporary Redirect - Consider 301")
                 .Set("Severity", "Warning");
@@ -149,11 +167,11 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
         }
 
         // Check for mixed content (HTTPS -> HTTP)
-        if (ctx.Url.Scheme == "https" && location.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        if (ctx.Url.Scheme == "https" && targetUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
         {
             var row = ReportRow.Create()
                 .Set("Source", ctx.Url.ToString())
-                .Set("Target", location)
+                .Set("Target", targetUrl)
                 .Set("StatusCode", statusCode)
                 .Set("Issue", "HTTPS to HTTP Redirect (Security Issue)")
                 .Set("Severity", "Error");
@@ -162,11 +180,11 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
         }
 
         // Check for protocol canonicalization (http -> https)
-        if (ctx.Url.Scheme == "http" && location.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        if (ctx.Url.Scheme == "http" && targetUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
             var row = ReportRow.Create()
                 .Set("Source", ctx.Url.ToString())
-                .Set("Target", location)
+                .Set("Target", targetUrl)
                 .Set("StatusCode", statusCode)
                 .Set("Issue", "HTTP to HTTPS Redirect (Good)")
                 .Set("Severity", "Info");
@@ -176,29 +194,29 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
 
         // Check for www canonicalization
         var fromHost = ctx.Url.Host;
-        if (Uri.TryCreate(location, UriKind.Absolute, out var toUri))
+        if (Uri.TryCreate(targetUrl, UriKind.Absolute, out var toUri))
         {
             var toHost = toUri.Host;
             
             if (fromHost.StartsWith("www.") && !toHost.StartsWith("www."))
             {
-                var row = ReportRow.Create()
-                    .Set("Source", ctx.Url.ToString())
-                    .Set("Target", location)
-                    .Set("StatusCode", statusCode)
-                    .Set("Issue", "WWW to Non-WWW Redirect")
-                    .Set("Severity", "Info");
+                    var row = ReportRow.Create()
+                        .Set("Source", ctx.Url.ToString())
+                        .Set("Target", targetUrl)
+                        .Set("StatusCode", statusCode)
+                        .Set("Issue", "WWW to Non-WWW Redirect")
+                        .Set("Severity", "Info");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
             else if (!fromHost.StartsWith("www.") && toHost.StartsWith("www."))
             {
-                var row = ReportRow.Create()
-                    .Set("Source", ctx.Url.ToString())
-                    .Set("Target", location)
-                    .Set("StatusCode", statusCode)
-                    .Set("Issue", "Non-WWW to WWW Redirect")
-                    .Set("Severity", "Info");
+                    var row = ReportRow.Create()
+                        .Set("Source", ctx.Url.ToString())
+                        .Set("Target", targetUrl)
+                        .Set("StatusCode", statusCode)
+                        .Set("Issue", "Non-WWW to WWW Redirect")
+                        .Set("Severity", "Info");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -212,7 +230,7 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
             {
                 var row = ReportRow.Create()
                     .Set("Source", ctx.Url.ToString())
-                    .Set("Target", location)
+                    .Set("Target", targetUrl)
                     .Set("StatusCode", statusCode)
                     .Set("Issue", "Trailing Slash Redirect")
                     .Set("Severity", "Info");
@@ -331,6 +349,23 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                url.Contains(".");  // Contains domain or file extension
     }
 
+    private static string NormalizeUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return UrlHelper.Normalize(url);
+        }
+        catch
+        {
+            return url.TrimEnd('/').ToLowerInvariant();
+        }
+    }
+
     private string GetRedirectType(int statusCode)
     {
         return statusCode switch
@@ -347,120 +382,240 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
     /// <summary>
     /// Check for redirect chains and loops
     /// </summary>
-    private async Task CheckRedirectChainsAsync(UrlContext ctx, string? initialTarget)
+    private async Task CheckRedirectChainsAsync(UrlContext ctx, string? initialTarget, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(initialTarget))
         {
             return;
         }
         
-        var projectId = ctx.Project.ProjectId;
+        await EnsureRedirectCacheLoadedAsync(ctx.Project.ProjectId, ct);
         
-        if (!RedirectsByProject.TryGetValue(projectId, out var projectRedirects))
+        var chain = new List<RedirectHop>
         {
-            return;
-        }
+            new(ctx.Url.ToString(), initialTarget, ctx.Metadata.StatusCode)
+        };
         
-        // Build the complete redirect chain
-        var chain = new List<RedirectInfo>();
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var current = ctx.Url.ToString();
-        
-        chain.Add(new RedirectInfo
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            FromUrl = current,
-            ToUrl = initialTarget,
-            StatusCode = ctx.Metadata.StatusCode
-        });
-        visited.Add(current.ToLowerInvariant());
+            NormalizeUrl(ctx.Url.ToString())
+        };
         
-        // Follow the chain up to MAX_CHAIN_HOPS
-        current = initialTarget;
+        var current = initialTarget;
         for (int i = 0; i < MAX_CHAIN_HOPS; i++)
         {
-            if (projectRedirects.TryGetValue(current, out var redirectInfo))
+            if (!TryGetRedirectHop(ctx.Project.ProjectId, current, out var hop))
             {
-                // Check for loop
-                if (visited.Contains(current.ToLowerInvariant()))
-                {
-                    chain.Add(redirectInfo);
-                    
-                    var chainString = string.Join(" → ", chain.Select(r => $"{r.FromUrl} ({r.StatusCode})"));
-                    var row = ReportRow.Create()
-                        .Set("Source", ctx.Url.ToString())
-                        .Set("Target", chainString)
-                        .Set("StatusCode", 0)
-                        .Set("Issue", $"Redirect Loop ({chain.Count} hops)")
-                        .Set("Severity", "Error");
-                    
-                    await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
-                    return;
-                }
-                
-                chain.Add(redirectInfo);
-                visited.Add(current.ToLowerInvariant());
-                current = redirectInfo.ToUrl;
-            }
-            else
-            {
-                // End of chain
                 break;
             }
+            
+            var normalizedCurrent = NormalizeUrl(hop.FromUrl);
+            if (!visited.Add(normalizedCurrent))
+            {
+                chain.Add(hop);
+                await ReportRedirectChainAsync(ctx, chain, isLoop: true);
+                return;
+            }
+            
+            chain.Add(hop);
+            current = hop.ToUrl;
         }
         
-        // Report chain if longer than 1 hop
         if (chain.Count > 1)
         {
-            var severityStr = chain.Count >= 3 ? "Error" : "Warning";
-            var finalTarget = chain[^1].ToUrl;
-            
-            var row = ReportRow.Create()
-                .Set("Source", ctx.Url.ToString())
-                .Set("Target", finalTarget)
-                .Set("StatusCode", ctx.Metadata.StatusCode)
-                .Set("Issue", $"Redirect Chain ({chain.Count} hops)")
-                .Set("Severity", severityStr);
-            
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ReportRedirectChainAsync(ctx, chain, isLoop: false);
         }
+    }
+
+    private bool TryGetRedirectHop(int projectId, string sourceUrl, [NotNullWhen(true)] out RedirectHop? hop)
+    {
+        var normalized = NormalizeUrl(sourceUrl);
+        
+        if (RuntimeRedirectsByProject.TryGetValue(projectId, out var runtime) &&
+            runtime.TryGetValue(normalized, out hop))
+        {
+            return true;
+        }
+        
+        if (RedirectCacheByProject.TryGetValue(projectId, out var cached) &&
+            cached.TryGetValue(normalized, out hop))
+        {
+            return true;
+        }
+        
+        hop = null;
+        return false;
+    }
+
+    private async Task ReportRedirectChainAsync(UrlContext ctx, List<RedirectHop> chain, bool isLoop)
+    {
+        var hopCount = chain.Count;
+        var issueType = isLoop ? "Redirect Loop" : "Redirect Chain";
+        var severity = isLoop
+            ? "Error"
+            : hopCount >= MAX_REDIRECT_CHAIN_LENGTH ? "Error"
+            : hopCount >= WARNING_REDIRECT_CHAIN_LENGTH ? "Warning"
+            : "Info";
+        
+        var description = BuildChainDescription(chain);
+        var finalHop = chain[^1];
+        
+        var row = ReportRow.Create()
+            .Set("Source", ctx.Url.ToString())
+            .Set("Target", finalHop.ToUrl)
+            .Set("StatusCode", finalHop.StatusCode)
+            .Set("Issue", $"{issueType} ({hopCount} hops) - {description}")
+            .Set("Severity", severity);
+        
+        await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+    }
+
+    private static string BuildChainDescription(IReadOnlyList<RedirectHop> chain)
+    {
+        if (chain.Count == 0)
+        {
+            return string.Empty;
+        }
+        
+        var parts = new List<string>(chain.Count + 1);
+        foreach (var hop in chain)
+        {
+            parts.Add($"{hop.FromUrl} ({hop.StatusCode})");
+        }
+        
+        parts.Add(chain[^1].ToUrl);
+        return string.Join(" → ", parts);
     }
     
     /// <summary>
     /// Validate redirect target status
     /// </summary>
-    private Task ValidateRedirectTargetAsync(UrlContext ctx, string? targetUrl)
+    private async Task ValidateRedirectTargetAsync(UrlContext ctx, string? targetUrl, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(targetUrl))
         {
-            return Task.CompletedTask;
+            return;
         }
         
-        var projectId = ctx.Project.ProjectId;
+        await EnsureUrlStatusCacheLoadedAsync(ctx.Project.ProjectId, ct);
         
-        if (!RedirectsByProject.TryGetValue(projectId, out var projectRedirects))
+        if (!UrlStatusCacheByProject.TryGetValue(ctx.Project.ProjectId, out var statusCache))
         {
-            return Task.CompletedTask;
+            return;
         }
         
-        // Check if target URL has been crawled and what its status is
-        // Look for it in our redirect tracking or mark for future validation
-        if (projectRedirects.TryGetValue(targetUrl, out var targetRedirect))
+        var normalizedTarget = NormalizeUrl(targetUrl);
+        
+        if (!statusCache.TryGetValue(normalizedTarget, out var status))
         {
-            // Target is also a redirect - will be caught by chain detection
-            return Task.CompletedTask;
+            _logger.LogDebug("Redirect target {Target} not found in status cache", targetUrl);
+            return;
         }
         
-        // Note: Full validation would require querying the URL repository
-        // For now, we log that we should check this
-        _logger.LogDebug("Redirect target {Target} should be validated for status", targetUrl);
+        if (status >= 400)
+        {
+            var severity = status >= 500 ? "Error" : "Warning";
+            
+            var row = ReportRow.Create()
+                .Set("Source", ctx.Url.ToString())
+                .Set("Target", targetUrl)
+                .Set("StatusCode", status)
+                .Set("Issue", $"Redirect Target Error (HTTP {status})")
+                .Set("Severity", severity);
+            
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+        }
+        else if (status >= 300 && status < 400)
+        {
+            var row = ReportRow.Create()
+                .Set("Source", ctx.Url.ToString())
+                .Set("Target", targetUrl)
+                .Set("StatusCode", status)
+                .Set("Issue", "Redirect Target Is Another Redirect")
+                .Set("Severity", "Warning");
+            
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+        }
+    }
+    
+    private async Task EnsureRedirectCacheLoadedAsync(int projectId, CancellationToken ct)
+    {
+        if (RedirectCacheByProject.ContainsKey(projectId))
+        {
+            return;
+        }
         
-        return Task.CompletedTask;
+        var semaphore = RedirectCacheLoadingSemaphores.GetOrAdd(projectId, _ => new SemaphoreSlim(1, 1));
+        await semaphore.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (RedirectCacheByProject.ContainsKey(projectId))
+            {
+                return;
+            }
+            
+            var cache = new ConcurrentDictionary<string, RedirectHop>(StringComparer.OrdinalIgnoreCase);
+            
+            await foreach (var redirect in _repositoryAccessor.GetRedirectsAsync(projectId, ct))
+            {
+                if (string.IsNullOrWhiteSpace(redirect.SourceUrl) || string.IsNullOrWhiteSpace(redirect.ToUrl))
+                {
+                    continue;
+                }
+                
+                var normalizedSource = NormalizeUrl(redirect.SourceUrl);
+                cache[normalizedSource] = new RedirectHop(redirect.SourceUrl, redirect.ToUrl, redirect.StatusCode);
+            }
+            
+            RedirectCacheByProject[projectId] = cache;
+            _logger.LogInformation("Cached {Count} redirect entries for project {ProjectId}", cache.Count, projectId);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+    
+    private async Task EnsureUrlStatusCacheLoadedAsync(int projectId, CancellationToken ct)
+    {
+        if (UrlStatusCacheByProject.ContainsKey(projectId))
+        {
+            return;
+        }
+        
+        var semaphore = UrlStatusLoadingSemaphores.GetOrAdd(projectId, _ => new SemaphoreSlim(1, 1));
+        await semaphore.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (UrlStatusCacheByProject.ContainsKey(projectId))
+            {
+                return;
+            }
+            
+            var statusCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            
+            await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId, ct))
+            {
+                if (!string.IsNullOrEmpty(url.NormalizedUrl))
+                {
+                    var normalizedKey = NormalizeUrl(url.NormalizedUrl);
+                    statusCache[normalizedKey] = url.Status;
+                }
+            }
+            
+            UrlStatusCacheByProject[projectId] = statusCache;
+            _logger.LogInformation("Cached {Count} URL statuses for project {ProjectId}", statusCache.Count, projectId);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
     }
     
     /// <summary>
     /// Check redirect caching headers
     /// </summary>
-    private async Task CheckRedirectCachingAsync(UrlContext ctx, int statusCode)
+    private async Task CheckRedirectCachingAsync(UrlContext ctx, int statusCode, string? targetUrl)
     {
         // Check Cache-Control header
         if (ctx.Headers.TryGetValue("cache-control", out var cacheControl))
@@ -473,11 +628,10 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
                 if ((statusCode == 302 || statusCode == 307) && maxAge > 86400) // > 1 day
                 {
                     var days = maxAge / 86400;
-                    var location = ctx.Headers.TryGetValue("location", out var loc) ? loc : "";
                     
                     var row = ReportRow.Create()
                         .Set("Source", ctx.Url.ToString())
-                        .Set("Target", location)
+                        .Set("Target", targetUrl ?? string.Empty)
                         .Set("StatusCode", statusCode)
                         .Set("Issue", $"Temporary Redirect with Long Cache ({days} days)")
                         .Set("Severity", "Warning");
@@ -488,20 +642,50 @@ public class RedirectsTask(ILogger logger) : UrlTaskBase
         }
     }
     
+    private string ResolveRedirectTarget(Uri currentUrl, string location)
+    {
+        if (string.IsNullOrWhiteSpace(location))
+        {
+            return location;
+        }
+        
+        try
+        {
+            if (Uri.TryCreate(location, UriKind.Absolute, out var absolute))
+            {
+                return absolute.ToString();
+            }
+            
+            return UrlHelper.Resolve(currentUrl, location);
+        }
+        catch
+        {
+            return location;
+        }
+    }
+    
     /// <summary>
     /// Cleanup per-project data when project is closed
     /// </summary>
     public override void CleanupProject(int projectId)
     {
-        RedirectsByProject.TryRemove(projectId, out _);
+        RuntimeRedirectsByProject.TryRemove(projectId, out _);
+        RedirectCacheByProject.TryRemove(projectId, out _);
+        UrlStatusCacheByProject.TryRemove(projectId, out _);
+        
+        if (RedirectCacheLoadingSemaphores.TryRemove(projectId, out var redirectSemaphore))
+        {
+            redirectSemaphore.Dispose();
+        }
+        
+        if (UrlStatusLoadingSemaphores.TryRemove(projectId, out var statusSemaphore))
+        {
+            statusSemaphore.Dispose();
+        }
+        
         _logger.LogDebug("Cleaned up redirect data for project {ProjectId}", projectId);
     }
     
-    private class RedirectInfo
-    {
-        public string FromUrl { get; set; } = string.Empty;
-        public string ToUrl { get; set; } = string.Empty;
-        public int StatusCode { get; set; }
-    }
+    private sealed record RedirectHop(string FromUrl, string ToUrl, int StatusCode);
 }
 

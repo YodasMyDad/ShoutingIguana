@@ -14,6 +14,7 @@ public class StructuredDataPlugin : IPlugin
     {
         // Register custom report schema for structured data analysis
         var schema = ReportSchema.Create("StructuredData")
+            .WithVersion(2)
             .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
             .AddColumn("SchemaType", ReportColumnType.String, "Schema Type")
             .AddColumn("Issue", ReportColumnType.String, "Issue")

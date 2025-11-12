@@ -14,6 +14,7 @@ public class SecurityPlugin : IPlugin
     {
         // Register custom report schema for security analysis
         var schema = ReportSchema.Create("Security")
+            .WithVersion(2)
             .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
             .AddColumn("Issue", ReportColumnType.String, "Issue")
             .AddColumn("Protocol", ReportColumnType.String, "Protocol")

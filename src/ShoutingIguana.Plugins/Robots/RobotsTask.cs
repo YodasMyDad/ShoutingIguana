@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.PluginSdk.Helpers;
+using System.Collections.Concurrent;
 
 namespace ShoutingIguana.Plugins.Robots;
 
@@ -10,10 +11,14 @@ namespace ShoutingIguana.Plugins.Robots;
 public class RobotsTask(ILogger logger) : UrlTaskBase
 {
     private readonly ILogger _logger = logger;
+    
     private static readonly HttpClient HttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(10)
     };
+    
+    private static readonly ConcurrentDictionary<int, RobotsTxtStatus> RobotsTxtStatusByProject = new();
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> RobotsTxtSemaphores = new();
 
     public override string Key => "Robots";
     public override string DisplayName => "Indexability";
@@ -33,7 +38,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             // Check for missing robots.txt on the homepage only (depth 0)
             if (ctx.Metadata.Depth == 0)
             {
-                await CheckForRobotsTxtAsync(ctx);
+                await CheckForRobotsTxtAsync(ctx, ct);
             }
             
             // Compute IsIndexable status
@@ -88,20 +93,14 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         return true;
     }
 
-    private async Task CheckForRobotsTxtAsync(UrlContext ctx)
+    private async Task CheckForRobotsTxtAsync(UrlContext ctx, CancellationToken ct)
     {
         try
         {
-            // Build robots.txt URL from the base URL
-            var baseUri = new Uri(ctx.Project.BaseUrl);
-            var robotsTxtUrl = $"{baseUri.Scheme}://{baseUri.Host}/robots.txt";
+            var status = await EnsureRobotsTxtStatusAsync(ctx, ct);
             
-            // Use static HttpClient instance (best practice for .NET HttpClient lifetime management)
-            var response = await HttpClient.GetAsync(robotsTxtUrl);
-            
-            if (!response.IsSuccessStatusCode)
+            if (!status.Exists && !status.ReportedMissing)
             {
-                // No robots.txt found
                 var row = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("Issue", "No robots.txt Found")
@@ -111,11 +110,8 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                     .Set("Severity", "Info");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
-            }
-            else
-            {
-                // robots.txt exists - optionally could analyze its content here
-                _logger.LogDebug("robots.txt found at {Url}", robotsTxtUrl);
+                
+                status.ReportedMissing = true;
             }
         }
         catch (Exception ex)
@@ -150,15 +146,14 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         // Check for noindex
         if (ctx.Metadata.RobotsNoindex == true)
         {
-            var severity = ctx.Metadata.Depth <= 2 ? Severity.Warning : Severity.Info;
-            var source = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) ? "X-Robots-Tag header" : "meta robots tag";
-            
+            var isHeaderSource = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag);
             var severityStr = ctx.Metadata.Depth <= 2 ? "Warning" : "Info";
+            
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", "Noindex Detected")
-                .Set("RobotsMeta", source.Contains("meta") ? "noindex" : "")
-                .Set("XRobotsTag", source.Contains("header") ? "noindex" : "")
+                .Set("RobotsMeta", isHeaderSource ? "" : "noindex")
+                .Set("XRobotsTag", isHeaderSource ? "noindex" : "")
                 .Set("Indexable", "No")
                 .Set("Severity", severityStr);
             
@@ -168,12 +163,12 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         // Check for nofollow
         if (ctx.Metadata.RobotsNofollow == true)
         {
-            var source = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag) ? "X-Robots-Tag header" : "meta robots tag";
+            var isHeaderSource = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag);
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", "Nofollow Detected")
-                .Set("RobotsMeta", source.Contains("meta") ? "nofollow" : "")
-                .Set("XRobotsTag", source.Contains("header") ? "nofollow" : "")
+                .Set("RobotsMeta", isHeaderSource ? "" : "nofollow")
+                .Set("XRobotsTag", isHeaderSource ? "nofollow" : "")
                 .Set("Indexable", "Yes")
                 .Set("Severity", "Info");
             
@@ -182,6 +177,53 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
 
         // Check for other robots directives that might be present
         await CheckAdvancedRobotsDirectivesAsync(ctx);
+    }
+    
+    private async Task<RobotsTxtStatus> EnsureRobotsTxtStatusAsync(UrlContext ctx, CancellationToken ct)
+    {
+        if (RobotsTxtStatusByProject.TryGetValue(ctx.Project.ProjectId, out var cached))
+        {
+            return cached;
+        }
+        
+        var semaphore = RobotsTxtSemaphores.GetOrAdd(ctx.Project.ProjectId, _ => new SemaphoreSlim(1, 1));
+        await semaphore.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (RobotsTxtStatusByProject.TryGetValue(ctx.Project.ProjectId, out cached))
+            {
+                return cached;
+            }
+            
+            var baseUri = new Uri(ctx.Project.BaseUrl);
+            var robotsTxtUrl = $"{baseUri.Scheme}://{baseUri.Host}/robots.txt";
+            bool exists = false;
+            
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, robotsTxtUrl);
+                using var response = await HttpClient.SendAsync(request, ct).ConfigureAwait(false);
+                exists = response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Error fetching robots.txt at {Url}", robotsTxtUrl);
+            }
+
+            var status = new RobotsTxtStatus
+            {
+                Exists = exists,
+                RobotsUrl = robotsTxtUrl,
+                CheckedUtc = DateTime.UtcNow
+            };
+            
+            RobotsTxtStatusByProject[ctx.Project.ProjectId] = status;
+            return status;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
     }
 
     private async Task AnalyzeXRobotsTagAsync(UrlContext ctx, bool isIndexable)
@@ -244,7 +286,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
 
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
-                .Set("Issue", $"Important Page Not Indexable (Depth {ctx.Metadata.Depth})")
+                .Set("Issue", $"Important Page Not Indexable (Depth {ctx.Metadata.Depth}) - {reason}")
                 .Set("RobotsMeta", ctx.Metadata.RobotsNoindex == true ? "noindex" : "")
                 .Set("XRobotsTag", ctx.Metadata.XRobotsTag ?? "")
                 .Set("Indexable", "No")
@@ -403,6 +445,24 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             
             await ctx.Reports.ReportAsync(Key, row5, ctx.Metadata.UrlId, default);
         }
+    }
+
+    public override void CleanupProject(int projectId)
+    {
+        RobotsTxtStatusByProject.TryRemove(projectId, out _);
+        
+        if (RobotsTxtSemaphores.TryRemove(projectId, out var semaphore))
+        {
+            semaphore.Dispose();
+        }
+    }
+    
+    private sealed class RobotsTxtStatus
+    {
+        public bool Exists { get; set; }
+        public string RobotsUrl { get; set; } = string.Empty;
+        public DateTime CheckedUtc { get; set; }
+        public bool ReportedMissing { get; set; }
     }
 }
 

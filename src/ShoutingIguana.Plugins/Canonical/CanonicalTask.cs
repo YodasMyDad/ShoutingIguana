@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.PluginSdk.Helpers;
+using System;
 using System.Collections.Concurrent;
 
 namespace ShoutingIguana.Plugins.Canonical;
@@ -29,14 +30,17 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     {
-        // Only analyze HTML pages
-        if (ctx.Metadata.ContentType?.Contains("text/html") != true)
+        var statusCode = ctx.Metadata.StatusCode;
+        var isRedirect = statusCode >= 300 && statusCode < 400;
+
+        // Redirects may not have HTML bodies, but we still want to inspect canonical metadata
+        if (!isRedirect && ctx.Metadata.ContentType?.Contains("text/html") != true)
         {
             return;
         }
 
-        // Only analyze successful pages (skip 4xx, 5xx errors)
-        if (ctx.Metadata.StatusCode < 200 || ctx.Metadata.StatusCode >= 300)
+        // Allow analysis for successful pages and redirects (skip only <200 and >=400 responses)
+        if (statusCode < 200 || statusCode >= 400)
         {
             return;
         }
@@ -99,8 +103,12 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
 
     private void TrackCanonical(int projectId, string url, string canonical)
     {
-        var projectCanonicals = CanonicalsByProject.GetOrAdd(projectId, _ => new ConcurrentDictionary<string, string>());
-        projectCanonicals[url] = canonical;
+        var projectCanonicals = CanonicalsByProject.GetOrAdd(
+            projectId,
+            _ => new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        var normalizedSource = NormalizeUrl(url);
+        projectCanonicals[normalizedSource] = canonical;
     }
 
     private async Task CheckMissingCanonicalAsync(UrlContext ctx, string? canonical)
@@ -195,9 +203,10 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         // Check if the canonical URL itself has a different canonical (chain)
         if (CanonicalsByProject.TryGetValue(ctx.Project.ProjectId, out var projectCanonicals))
         {
-            if (projectCanonicals.TryGetValue(canonical, out var canonicalOfCanonical))
+            var normalizedCanonical = NormalizeUrl(canonical);
+
+            if (projectCanonicals.TryGetValue(normalizedCanonical, out var canonicalOfCanonical))
             {
-                var normalizedCanonical = NormalizeUrl(canonical);
                 var normalizedCanonicalOfCanonical = NormalizeUrl(canonicalOfCanonical);
 
                 if (normalizedCanonical != normalizedCanonicalOfCanonical)
@@ -259,7 +268,8 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             {
                 if (!string.IsNullOrEmpty(url.NormalizedUrl))
                 {
-                    statusCache[url.NormalizedUrl] = url.Status;
+                    var normalizedKey = NormalizeUrlForCache(url.NormalizedUrl);
+                    statusCache[normalizedKey] = url.Status;
                 }
             }
             
@@ -441,7 +451,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         // Follow the chain up to 5 hops
         for (int i = 0; i < 5; i++)
         {
-            if (!projectCanonicals.TryGetValue(current, out var nextCanonical))
+            if (!projectCanonicals.TryGetValue(NormalizeUrl(current), out var nextCanonical))
             {
                 break;
             }
@@ -543,14 +553,18 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
     /// </summary>
     private static string NormalizeUrlForCache(string url)
     {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return url;
+        }
+
         try
         {
-            var uri = new Uri(url);
-            return uri.GetLeftPart(UriPartial.Path).ToLowerInvariant();
+            return UrlHelper.Normalize(url);
         }
         catch
         {
-            return url.ToLowerInvariant();
+            return url.TrimEnd('/').ToLowerInvariant();
         }
     }
     

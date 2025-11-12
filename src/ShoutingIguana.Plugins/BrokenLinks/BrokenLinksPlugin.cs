@@ -14,6 +14,7 @@ public class BrokenLinksPlugin : IPlugin
     {
         // Register custom report schema for broken links
         var schema = ReportSchema.Create("BrokenLinks")
+            .WithVersion(2)
             .AddColumn("Severity", ReportColumnType.String, "Severity")
             .AddPrimaryColumn("LinkedFrom", ReportColumnType.Url, "Linked From")
             .AddColumn("BrokenLink", ReportColumnType.Url, "Broken Link")
