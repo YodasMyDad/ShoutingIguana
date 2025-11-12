@@ -14,7 +14,7 @@ public class LinkGraphPlugin : IPlugin
     {
         // Register custom report schema for link graph visualization
         var schema = ReportSchema.Create("LinkGraph")
-            .WithVersion(2)
+            
             .AddPrimaryColumn("FromURL", ReportColumnType.Url, "From URL")
             .AddColumn("ToURL", ReportColumnType.Url, "To URL")
             .AddColumn("AnchorText", ReportColumnType.String, "Anchor Text")

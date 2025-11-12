@@ -626,11 +626,10 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                 
                 if (existingSchema == null)
                 {
-                    // Create new schema
                     var newSchema = new ShoutingIguana.Core.Models.ReportSchema
                     {
                         TaskKey = taskKey,
-                        SchemaVersion = sdkSchema.SchemaVersion,
+                        SchemaVersion = 1,
                         IsUrlBased = sdkSchema.IsUrlBased,
                         CreatedUtc = DateTime.UtcNow
                     };
@@ -639,15 +638,23 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                     await schemaRepository.CreateAsync(newSchema).ConfigureAwait(false);
                     _logger.LogInformation("Created schema for task: {TaskKey}", taskKey);
                 }
-                else if (existingSchema.SchemaVersion != sdkSchema.SchemaVersion)
+                else
                 {
-                    // Update existing schema if version changed
-                    existingSchema.SchemaVersion = sdkSchema.SchemaVersion;
-                    existingSchema.IsUrlBased = sdkSchema.IsUrlBased;
-                    existingSchema.SetColumns(columns);
+                    var existingColumns = existingSchema.GetColumns() ?? [];
+                    var needsUpdate =
+                        existingSchema.SchemaVersion != 1 ||
+                        existingSchema.IsUrlBased != sdkSchema.IsUrlBased ||
+                        !ColumnsMatch(existingColumns, columns);
                     
-                    await schemaRepository.UpdateAsync(existingSchema).ConfigureAwait(false);
-                    _logger.LogInformation("Updated schema for task: {TaskKey}", taskKey);
+                    if (needsUpdate)
+                    {
+                        existingSchema.SchemaVersion = 1;
+                        existingSchema.IsUrlBased = sdkSchema.IsUrlBased;
+                        existingSchema.SetColumns(columns);
+                        
+                        await schemaRepository.UpdateAsync(existingSchema).ConfigureAwait(false);
+                        _logger.LogInformation("Updated schema for task: {TaskKey}", taskKey);
+                    }
                 }
             }
         }
@@ -655,6 +662,35 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
         {
             _lock.Release();
         }
+    }
+
+    private static bool ColumnsMatch(
+        IReadOnlyList<ShoutingIguana.Core.Models.ReportColumnDefinition> existing,
+        IReadOnlyList<ShoutingIguana.Core.Models.ReportColumnDefinition> updated)
+    {
+        if (existing.Count != updated.Count)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < existing.Count; i++)
+        {
+            var a = existing[i];
+            var b = updated[i];
+
+            if (!string.Equals(a.Name, b.Name, StringComparison.Ordinal) ||
+                !string.Equals(a.DisplayName, b.DisplayName, StringComparison.Ordinal) ||
+                a.ColumnType != b.ColumnType ||
+                a.Width != b.Width ||
+                a.IsSortable != b.IsSortable ||
+                a.IsFilterable != b.IsFilterable ||
+                a.IsPrimaryKey != b.IsPrimaryKey)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public void Dispose()

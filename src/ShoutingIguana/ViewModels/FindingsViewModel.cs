@@ -119,13 +119,12 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     {
         // Update when the selected finding changes
         // The FindingTabViewModel will have already updated its detail properties in its partial method
-        if (e.PropertyName == nameof(FindingTabViewModel.SelectedFinding)
-            || e.PropertyName == nameof(FindingTabViewModel.SelectedFindingDetails)
+        if (e.PropertyName == nameof(FindingTabViewModel.SelectedFindingDetails)
             || e.PropertyName == nameof(FindingTabViewModel.HasTechnicalMetadata)
             || e.PropertyName == nameof(FindingTabViewModel.TechnicalMetadataJson)
             || e.PropertyName == nameof(FindingTabViewModel.SelectedReportRow))
         {
-            _logger.LogDebug("SelectedFinding changed, updating details panel");
+            _logger.LogDebug("Selected finding data changed, updating details panel");
             // Use Dispatcher to ensure UI updates happen on the UI thread
             Application.Current.Dispatcher.InvokeAsync(() => UpdateDetailsPanel());
         }
@@ -136,24 +135,7 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         // Handle FindingTabViewModel
         if (SelectedTab is FindingTabViewModel findingTab)
         {
-            if (findingTab.HasDynamicSchema)
-            {
-                UpdateDynamicDetails(findingTab);
-                return;
-            }
-
-            if (findingTab.SelectedFinding == null)
-            {
-                _logger.LogDebug("No selected finding, clearing details");
-                ClearDetailsPanel();
-                return;
-            }
-
-            var finding = findingTab.SelectedFinding;
-            _logger.LogDebug("Updating details panel for finding: {FindingId}, URL: {Url}", 
-                finding.Id, finding.Url.Address);
-            
-            ApplyDetailsFromTab(findingTab);
+            UpdateDynamicDetails(findingTab);
         }
         // Handle OverviewTabViewModel - no details panel update needed, it manages its own properties
         else if (SelectedTab is OverviewTabViewModel)
@@ -224,9 +206,9 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             // After loading, select first item on UI thread
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                if (findingTab.SelectedFinding == null && findingTab.FilteredFindings.Count > 0)
+                if (findingTab.SelectedReportRow == null && findingTab.ReportRows.Count > 0)
                 {
-                    findingTab.SelectedFinding = findingTab.FilteredFindings[0];
+                    findingTab.SelectedReportRow = findingTab.ReportRows[0];
                 }
             });
         }
@@ -252,7 +234,6 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var findingRepository = scope.ServiceProvider.GetRequiredService<IFindingRepository>();
             var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
             var projectRepository = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
             var pluginRegistry = scope.ServiceProvider.GetRequiredService<IPluginRegistry>();
@@ -268,7 +249,6 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             
             // Get task metadata from plugin registry
             var registeredTasks = pluginRegistry.RegisteredTasks;
-            var taskMetadata = registeredTasks.ToDictionary(t => t.Key, t => (t.DisplayName, t.Description));
             
             // Get enabled tasks to filter tabs
             var enabledTasks = pluginRegistry.EnabledTasks;
@@ -337,12 +317,7 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
             {
                 foreach (var oldTab in Tabs)
                 {
-                    if (oldTab is FindingTabViewModel findingTab)
-                    {
-                        findingTab.Findings.Clear();
-                        findingTab.FilteredFindings.Clear();
-                    }
-                    else if (oldTab is OverviewTabViewModel oldOverviewTab)
+                    if (oldTab is OverviewTabViewModel oldOverviewTab)
                     {
                         oldOverviewTab.Urls.Clear();
                         oldOverviewTab.FilteredUrls.Clear();
@@ -481,12 +456,22 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     {
         try
         {
-            if (SelectedTab is FindingTabViewModel findingTab && findingTab.SelectedFinding != null)
+            if (SelectedTab is FindingTabViewModel findingTab && findingTab.SelectedReportRow != null)
             {
-                var finding = findingTab.SelectedFinding;
-                var textToCopy = $"{finding.Url.Address}\t{finding.Message}\t{finding.Severity}";
-                Clipboard.SetText(textToCopy);
-                _logger.LogDebug("Copied finding to clipboard");
+                var detailItems = findingTab.SelectedFindingDetails?.Items;
+                if (detailItems != null && detailItems.Count > 0)
+                {
+                    Clipboard.SetText(string.Join(Environment.NewLine, detailItems));
+                }
+                else
+                {
+                    var summary = string.Join(Environment.NewLine, findingTab.SelectedReportRow
+                        .GetColumnNames()
+                        .Select(name => $"{name}: {findingTab.SelectedReportRow.GetValue(name)}"));
+                    Clipboard.SetText(summary);
+                }
+                
+                _logger.LogDebug("Copied dynamic finding to clipboard");
             }
             else if (SelectedTab is OverviewTabViewModel overviewTab && overviewTab.SelectedUrlModel?.Url != null)
             {
@@ -638,12 +623,7 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         {
             foreach (var tab in Tabs)
             {
-                if (tab is FindingTabViewModel findingTab)
-                {
-                    findingTab.Findings.Clear();
-                    findingTab.FilteredFindings.Clear();
-                }
-                else if (tab is OverviewTabViewModel overviewTabDispose)
+                if (tab is OverviewTabViewModel overviewTabDispose)
                 {
                     overviewTabDispose.Urls.Clear();
                     overviewTabDispose.FilteredUrls.Clear();

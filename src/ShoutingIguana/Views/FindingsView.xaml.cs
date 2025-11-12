@@ -24,11 +24,12 @@ public partial class FindingsView
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
+
+        _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         
         // Subscribe to events
         Loaded += FindingsView_Loaded;
         Unloaded += FindingsView_Unloaded;
-        DataContextChanged += FindingsView_DataContextChanged;
     }
     
     private async void FindingsView_Loaded(object sender, RoutedEventArgs e)
@@ -41,7 +42,6 @@ public partial class FindingsView
         // Unsubscribe from events to prevent memory leaks
         Loaded -= FindingsView_Loaded;
         Unloaded -= FindingsView_Unloaded;
-        DataContextChanged -= FindingsView_DataContextChanged;
         
         if (_viewModel != null)
         {
@@ -63,17 +63,7 @@ public partial class FindingsView
         
         // Clear references
         _currentFindingTab = null;
-        _lastDynamicTab = null;
         _findingsDataGrid = null;
-    }
-    
-    private void FindingsView_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
-    {
-        // Subscribe to SelectedTab changes to handle URL properties grouping
-        if (_viewModel != null)
-        {
-            _viewModel.PropertyChanged += ViewModel_PropertyChanged;
-        }
     }
     
     private OverviewTabViewModel? _currentOverviewTab;
@@ -110,24 +100,24 @@ public partial class FindingsView
                 // Subscribe to property changes to detect when dynamic schema is loaded
                 _currentFindingTab = findingTab;
                 findingTab.PropertyChanged += FindingTab_PropertyChanged;
+                
+                 // If columns already loaded (tab revisited), apply them immediately
+                if (findingTab.ReportColumns.Count > 0)
+                {
+                    Dispatcher.InvokeAsync(() => GenerateDynamicColumns(findingTab), System.Windows.Threading.DispatcherPriority.Normal);
+                }
             }
         }
     }
-    
-    private FindingTabViewModel? _lastDynamicTab;
     
     private void FindingTab_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(FindingTabViewModel.ReportColumns) && sender is FindingTabViewModel tab)
         {
-            System.Diagnostics.Debug.WriteLine($"[FindingsView] ReportColumns changed for {tab.DisplayName}: HasDynamicSchema={tab.HasDynamicSchema}, Columns={tab.ReportColumns.Count}, LastTab={_lastDynamicTab?.DisplayName}");
+            System.Diagnostics.Debug.WriteLine($"[FindingsView] ReportColumns changed for {tab.DisplayName}: Columns={tab.ReportColumns.Count}");
             
-            // Dynamic columns loaded - regenerate DataGrid columns
-            // Guard: Only do this once per tab to avoid re-generating on every property change
-            if (tab.HasDynamicSchema && tab.ReportColumns.Count > 0 && _lastDynamicTab != tab)
+            if (tab.ReportColumns.Count > 0)
             {
-                _lastDynamicTab = tab;
-                System.Diagnostics.Debug.WriteLine($"[FindingsView] Triggering GenerateDynamicColumns for {tab.DisplayName}");
                 Dispatcher.InvokeAsync(() => GenerateDynamicColumns(tab), System.Windows.Threading.DispatcherPriority.Normal);
             }
         }
@@ -177,7 +167,7 @@ public partial class FindingsView
         // Clear existing columns
         dataGrid.Columns.Clear();
         
-        // Bind to ReportRows instead of FilteredFindings
+        // Bind to ReportRows (dynamic data source)
         dataGrid.SetBinding(DataGrid.ItemsSourceProperty, new Binding("ReportRows"));
         dataGrid.SetBinding(DataGrid.SelectedItemProperty, new Binding("SelectedReportRow") { Mode = BindingMode.TwoWay });
         
@@ -332,7 +322,7 @@ public partial class FindingsView
         System.Diagnostics.Debug.WriteLine($"[FindingsView] DynamicFindingsDataGrid loaded and cached");
         
         // If current tab has dynamic schema ready, apply columns immediately
-        if (_viewModel.SelectedTab is FindingTabViewModel tab && tab.HasDynamicSchema && tab.ReportColumns.Count > 0)
+        if (_viewModel.SelectedTab is FindingTabViewModel tab && tab.ReportColumns.Count > 0)
         {
             ApplyDynamicColumnsToDataGrid(_findingsDataGrid!, tab);
         }

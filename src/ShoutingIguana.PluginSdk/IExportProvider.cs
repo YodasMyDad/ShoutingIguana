@@ -9,7 +9,7 @@ namespace ShoutingIguana.PluginSdk;
 /// </para>
 /// <para>
 /// <b>Plugin findings are AUTOMATICALLY exported to CSV/Excel/PDF.</b>
-/// When you report findings via <c>ctx.Findings.ReportAsync()</c>, they are automatically
+/// When you report findings via <c>ctx.Reports.ReportAsync()</c>, they are automatically
 /// included in the built-in export formats. The application handles formatting,
 /// grouping by plugin, and export options for you.
 /// </para>
@@ -37,7 +37,7 @@ namespace ShoutingIguana.PluginSdk;
 /// <para><b>✅ You DON'T need IExportProvider for this (automatic):</b></para>
 /// <code>
 /// // This automatically exports to CSV/Excel/PDF:
-/// await ctx.Findings.ReportAsync(
+/// await ctx.Reports.ReportAsync(
 ///     Key,
 ///     Severity.Warning,
 ///     "BROKEN_LINK",

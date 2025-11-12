@@ -14,7 +14,7 @@ public class TitlesMetaPlugin : IPlugin
     {
         // Register custom report schema for titles & meta analysis
         var schema = ReportSchema.Create("TitlesMeta")
-            .WithVersion(2)
+            
             .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
             .AddColumn("Issue", ReportColumnType.String, "Issue")
             .AddColumn("Title", ReportColumnType.String, "Title")

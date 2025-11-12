@@ -11,7 +11,7 @@ public class ReportSchema : IReportSchema
     public string TaskKey { get; set; } = string.Empty;
     
     /// <inheritdoc/>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion => 1;
     
     /// <inheritdoc/>
     public IReadOnlyList<IReportColumn> Columns => _columns.AsReadOnly();
@@ -70,15 +70,6 @@ public class ReportSchema : IReportSchema
     public ReportSchema AddPrimaryColumn(string name, ReportColumnType columnType, string displayName)
     {
         _columns.Add(ReportColumn.Create(name, columnType).WithDisplayName(displayName).AsPrimaryKey());
-        return this;
-    }
-    
-    /// <summary>
-    /// Sets the schema version.
-    /// </summary>
-    public ReportSchema WithVersion(int version)
-    {
-        SchemaVersion = version;
         return this;
     }
     

@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -7,6 +8,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,10 +20,12 @@ namespace ShoutingIguana.ViewModels;
 
 /// <summary>
 /// ViewModel for a single findings tab (one per plugin).
-/// Supports both legacy Finding-based reports and new dynamic ReportRow-based reports.
+/// Handles dynamic ReportRow-based data exclusively.
 /// </summary>
 public partial class FindingTabViewModel : ObservableObject
 {
+    private static readonly SeverityIssueComparer ReportRowComparer = new();
+    
     [ObservableProperty]
     private string _taskKey = string.Empty;
 
@@ -31,17 +35,7 @@ public partial class FindingTabViewModel : ObservableObject
     [ObservableProperty]
     private string _description = string.Empty;
 
-    // Legacy Finding support
-    [ObservableProperty]
-    private ObservableCollection<Finding> _findings = new();
-
-    [ObservableProperty]
-    private ObservableCollection<Finding> _filteredFindings = new();
-
-    [ObservableProperty]
-    private Finding? _selectedFinding;
-    
-    // New dynamic Report support
+    // Dynamic report support
     [ObservableProperty]
     private ObservableCollection<ReportColumnViewModel> _reportColumns = new();
     
@@ -51,16 +45,12 @@ public partial class FindingTabViewModel : ObservableObject
     [ObservableProperty]
     private DynamicReportRowViewModel? _selectedReportRow;
     
-    [ObservableProperty]
-    private bool _hasDynamicSchema;
-    
     private Core.Models.ReportSchema? _schema;
     
     /// <summary>
-    /// Gets the count of visible items (works for both legacy and dynamic modes).
-    /// Used by XAML for empty state visibility.
+    /// Gets the count of visible items.
     /// </summary>
-    public int VisibleItemCount => HasDynamicSchema ? ReportRows.Count : FilteredFindings.Count;
+    public int VisibleItemCount => ReportRows.Count;
     
     [ObservableProperty]
     private FindingDetails? _selectedFindingDetails;
@@ -92,27 +82,20 @@ public partial class FindingTabViewModel : ObservableObject
     [ObservableProperty]
     private bool _isDataLoaded;
 
-    private List<Finding> _allFindings = [];
-    private List<Finding> _currentFilteredSet = [];
     private int _projectId;
     private int _currentPage = 0;
     private const int PageSize = 100;
-    private Func<Task<IEnumerable<Finding>>>? _lazyLoadFunc;
     private Func<Task>? _lazyLoadDynamicFunc;
     private readonly object _loadLock = new();
     private Task? _loadingTask;
 
     public string TabHeader => DisplayName;
-
-    /// <summary>
-    /// Set up lazy loading function for legacy Finding-based reports
-    /// </summary>
-    public void SetLazyLoadFunction(Func<Task<IEnumerable<Finding>>> loadFunc)
+    
+    partial void OnReportRowsChanged(ObservableCollection<DynamicReportRowViewModel> value)
     {
-        _lazyLoadFunc = loadFunc;
-        _lazyLoadDynamicFunc = null;
-        IsDataLoaded = false;
-        HasDynamicSchema = false;
+        _ = value;
+        OnPropertyChanged(nameof(VisibleItemCount));
+        ApplyReportRowSorting();
     }
     
     /// <summary>
@@ -122,9 +105,7 @@ public partial class FindingTabViewModel : ObservableObject
     {
         _projectId = projectId;
         _lazyLoadDynamicFunc = loadFunc;
-        _lazyLoadFunc = null;
         IsDataLoaded = false;
-        HasDynamicSchema = true;
     }
 
     /// <summary>
@@ -149,19 +130,16 @@ public partial class FindingTabViewModel : ObservableObject
         {
             if (_loadingTask != null)
             {
-                // Already loading, capture task to await outside lock
                 existingTask = _loadingTask;
             }
-            else if (IsDataLoaded || (_lazyLoadFunc == null && _lazyLoadDynamicFunc == null))
+            else if (IsDataLoaded || _lazyLoadDynamicFunc == null)
             {
-                // Need to reset IsLoading on UI thread
                 _ = Application.Current.Dispatcher.InvokeAsync(() => IsLoading = false);
                 return;
             }
             else
             {
-                // Create new loading task - either dynamic or legacy
-                _loadingTask = HasDynamicSchema ? LoadDynamicDataAsync() : LoadDataAsync();
+                _loadingTask = LoadDynamicDataAsync();
                 existingTask = _loadingTask;
             }
         }
@@ -184,60 +162,6 @@ public partial class FindingTabViewModel : ObservableObject
         }
     }
 
-    private async Task LoadDataAsync()
-    {
-        // IsLoading already set to true in EnsureDataLoadedAsync
-        
-        try
-        {
-            var findings = await _lazyLoadFunc!();
-            
-            // Do ALL expensive work in background thread
-            var (allFindings, sortedFindings, firstPage) = await Task.Run(() =>
-            {
-                var allList = findings.ToList();
-                
-                // Sort and filter (expensive operation)
-                var sorted = allList
-                    .OrderByDescending(f => f.Severity)
-                    .ThenBy(f => f.Code)
-                    .ThenByDescending(f => f.CreatedUtc)
-                    .ToList();
-                
-                // Get first page
-                var page = sorted.Take(PageSize).ToList();
-                
-                return (allList, sorted, page);
-            });
-            
-            // Only update UI elements on UI thread (fast operation - just assignments)
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                _allFindings = allFindings;
-                _currentFilteredSet = sortedFindings;
-                _currentPage = 0;
-                TotalCount = allFindings.Count;
-                
-                FilteredFindings = new ObservableCollection<Finding>(firstPage);
-                HasMoreItems = _currentFilteredSet.Count > PageSize;
-                
-                IsDataLoaded = true;
-                OnPropertyChanged(nameof(VisibleItemCount)); // Update count for UI
-            });
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Error loading findings for {DisplayName}: {ex.Message}");
-            // Set IsDataLoaded to false so user can retry
-            IsDataLoaded = false;
-            throw;
-        }
-        finally
-        {
-            await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = false);
-        }
-    }
-    
     private async Task LoadDynamicDataAsync()
     {
         // IsLoading already set to true in EnsureDataLoadedAsync
@@ -263,93 +187,16 @@ public partial class FindingTabViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Load findings immediately (for backwards compatibility or when data is already available)
-    /// </summary>
-    public async Task LoadFindingsAsync(IEnumerable<Finding> findings)
-    {
-        await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = true);
-        
-        try
-        {
-            // Offload list creation to background thread to avoid blocking UI
-            _allFindings = await Task.Run(() => findings.ToList());
-            
-            // Apply filters on UI thread since it modifies ObservableCollections
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                ApplyFilters();
-                IsDataLoaded = true;
-            });
-        }
-        finally
-        {
-            await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = false);
-        }
-    }
-
     partial void OnSelectedSeverityChanged(Severity? value)
     {
         _ = value; // Suppress unused warning - required by partial method signature
-        if (HasDynamicSchema)
-        {
-            _ = ApplyDynamicFiltersAsync();
-        }
-        else
-        {
-            _ = ApplyFiltersAsync();
-        }
+        _ = ApplyDynamicFiltersAsync();
     }
 
     partial void OnSearchTextChanged(string value)
     {
         _ = value; // Suppress unused warning - required by partial method signature
-        if (HasDynamicSchema)
-        {
-            _ = ApplyDynamicFiltersAsync();
-        }
-        else
-        {
-            _ = ApplyFiltersAsync();
-        }
-    }
-    
-    partial void OnSelectedFindingChanged(Finding? value)
-    {
-        if (value != null)
-        {
-            // Parse the FindingDetails from the JSON
-            SelectedFindingDetails = value.GetDetails();
-            
-            // Check if there's technical metadata
-            HasTechnicalMetadata = SelectedFindingDetails?.TechnicalMetadata != null && 
-                                   SelectedFindingDetails.TechnicalMetadata.Count > 0;
-            
-            // Format technical metadata JSON for display
-            if (HasTechnicalMetadata && SelectedFindingDetails?.TechnicalMetadata != null)
-            {
-                try
-                {
-                    TechnicalMetadataJson = JsonSerializer.Serialize(
-                        SelectedFindingDetails.TechnicalMetadata,
-                        new JsonSerializerOptions { WriteIndented = true });
-                }
-                catch
-                {
-                    TechnicalMetadataJson = "Error formatting technical metadata";
-                }
-            }
-            else
-            {
-                TechnicalMetadataJson = string.Empty;
-            }
-        }
-        else
-        {
-            SelectedFindingDetails = null;
-            HasTechnicalMetadata = false;
-            TechnicalMetadataJson = string.Empty;
-        }
+        _ = ApplyDynamicFiltersAsync();
     }
     
     partial void OnSelectedReportRowChanged(DynamicReportRowViewModel? value)
@@ -400,95 +247,6 @@ public partial class FindingTabViewModel : ObservableObject
             : string.Empty;
     }
 
-    private async Task ApplyFiltersAsync()
-    {
-        // Show loading state
-        await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = true);
-        
-        try
-        {
-            // Capture filter values for Task.Run
-            var selectedSeverity = SelectedSeverity;
-            var searchText = SearchText;
-            
-            // Do expensive filtering and sorting in background
-            var (filteredSet, firstPage) = await Task.Run(() =>
-            {
-                var filtered = _allFindings.AsEnumerable();
-
-                // Filter by severity
-                if (selectedSeverity.HasValue)
-                {
-                    filtered = filtered.Where(f => f.Severity == selectedSeverity.Value);
-                }
-
-                // Filter by search text
-                if (!string.IsNullOrWhiteSpace(searchText))
-                {
-                    filtered = filtered.Where(f =>
-                        f.Message.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-                        f.Code.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-                        f.Url.Address.Contains(searchText, StringComparison.OrdinalIgnoreCase));
-                }
-
-                // Store the filtered and sorted set
-                var sorted = filtered.OrderByDescending(f => f.Severity).ThenBy(f => f.Code).ThenByDescending(f => f.CreatedUtc).ToList();
-                var page = sorted.Take(PageSize).ToList();
-                
-                return (sorted, page);
-            });
-            
-            // Update UI on UI thread
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                _currentFilteredSet = filteredSet;
-                _currentPage = 0;
-                TotalCount = _currentFilteredSet.Count;
-                
-                FilteredFindings = new ObservableCollection<Finding>(firstPage);
-                HasMoreItems = _currentFilteredSet.Count > PageSize;
-                OnPropertyChanged(nameof(VisibleItemCount)); // Update count for UI
-            });
-        }
-        finally
-        {
-            // Must set IsLoading on UI thread
-            await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = false);
-        }
-    }
-    
-    // Keep synchronous version for initial load only
-    private void ApplyFilters()
-    {
-        var filtered = _allFindings.AsEnumerable();
-
-        // Filter by severity
-        if (SelectedSeverity.HasValue)
-        {
-            filtered = filtered.Where(f => f.Severity == SelectedSeverity.Value);
-        }
-
-        // Filter by search text
-        if (!string.IsNullOrWhiteSpace(SearchText))
-        {
-            filtered = filtered.Where(f =>
-                f.Message.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                f.Code.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                f.Url.Address.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
-        }
-
-        // Note: This is only called during initial background load in LoadDataAsync
-        // So it's already on a background thread
-        _currentFilteredSet = filtered.OrderByDescending(f => f.Severity).ThenBy(f => f.Code).ThenByDescending(f => f.CreatedUtc).ToList();
-        TotalCount = _currentFilteredSet.Count;
-        
-        // Load only first page
-        _currentPage = 0;
-        var firstPage = _currentFilteredSet.Take(PageSize).ToList();
-        FilteredFindings = new ObservableCollection<Finding>(firstPage);
-        HasMoreItems = _currentFilteredSet.Count > PageSize;
-    }
-
     [RelayCommand]
     private async Task LoadNextPageAsync()
     {
@@ -497,28 +255,14 @@ public partial class FindingTabViewModel : ObservableObject
         IsLoadingMore = true;
         _currentPage++;
         
-        if (HasDynamicSchema)
+        try
         {
-            // Load next page from database for dynamic reports
             await LoadNextDynamicPageAsync();
         }
-        else
+        finally
         {
-            // Load from in-memory filtered set for legacy findings
-            var nextItems = _currentFilteredSet
-                .Skip(_currentPage * PageSize)
-                .Take(PageSize)
-                .ToList();
-            
-            foreach (var item in nextItems)
-            {
-                FilteredFindings.Add(item);
-            }
-            
-            HasMoreItems = (_currentPage + 1) * PageSize < _currentFilteredSet.Count;
+            IsLoadingMore = false;
         }
-        
-        IsLoadingMore = false;
     }
     
     private async Task LoadNextDynamicPageAsync()
@@ -549,7 +293,7 @@ public partial class FindingTabViewModel : ObservableObject
                     ReportRows.Add(row);
                 }
                 
-                HasMoreItems = rowVms.Count == PageSize; // If we got a full page, there might be more
+                HasMoreItems = ReportRows.Count < TotalCount;
                 OnPropertyChanged(nameof(VisibleItemCount)); // Update count for UI
             });
         }
@@ -716,38 +460,227 @@ public partial class FindingTabViewModel : ObservableObject
     [RelayCommand]
     private void CopyUrl()
     {
-        if (SelectedFinding?.Url.Address != null)
+        var url = GetUrlFromSelectedRow();
+        if (!string.IsNullOrWhiteSpace(url))
         {
-            Clipboard.SetText(SelectedFinding.Url.Address);
+            Clipboard.SetText(url);
         }
     }
 
     [RelayCommand]
     private void CopyMessage()
     {
-        if (SelectedFinding?.Message != null)
+        var message = GetMessageFromSelectedRow();
+        if (!string.IsNullOrWhiteSpace(message))
         {
-            Clipboard.SetText(SelectedFinding.Message);
+            Clipboard.SetText(message);
         }
     }
 
     [RelayCommand]
     private void OpenInBrowser()
     {
-        if (SelectedFinding?.Url.Address != null)
+        var url = GetUrlFromSelectedRow();
+        if (string.IsNullOrWhiteSpace(url))
         {
-            try
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
             {
-                Process.Start(new ProcessStartInfo
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception)
+        {
+            // Silently fail if browser cannot be opened
+        }
+    }
+
+    private string? GetUrlFromSelectedRow()
+    {
+        if (SelectedReportRow == null)
+        {
+            return null;
+        }
+
+        var columns = GetActiveReportColumns().ToList();
+        var urlColumn = columns.FirstOrDefault(c => c.ColumnType == ReportColumnType.Url);
+        if (urlColumn != null)
+        {
+            var value = SelectedReportRow.GetValue(urlColumn.Name);
+            if (value is string direct && !string.IsNullOrWhiteSpace(direct))
+            {
+                return direct;
+            }
+        }
+
+        var fallbackNames = new[] { "Page", "Url", "URL", "LinkedFrom", "BrokenLink", "TargetUrl" };
+        foreach (var candidate in fallbackNames)
+        {
+            var value = SelectedReportRow.GetValue(candidate);
+            if (value is string text && !string.IsNullOrWhiteSpace(text))
+            {
+                return text;
+            }
+        }
+
+        var fuzzy = columns.FirstOrDefault(c =>
+            c.Name.Contains("url", StringComparison.OrdinalIgnoreCase) ||
+            c.Name.Contains("page", StringComparison.OrdinalIgnoreCase));
+
+        if (fuzzy != null)
+        {
+            return SelectedReportRow.GetValue(fuzzy.Name)?.ToString();
+        }
+
+        return null;
+    }
+
+    private string? GetMessageFromSelectedRow()
+    {
+        if (SelectedReportRow == null)
+        {
+            return null;
+        }
+
+        var columns = GetActiveReportColumns().ToList();
+        var messageColumn = columns.FirstOrDefault(c =>
+            c.Name.Contains("message", StringComparison.OrdinalIgnoreCase) ||
+            c.Name.Contains("issue", StringComparison.OrdinalIgnoreCase) ||
+            c.Name.Contains("description", StringComparison.OrdinalIgnoreCase));
+
+        if (messageColumn != null)
+        {
+            var value = SelectedReportRow.GetValue(messageColumn.Name);
+            if (value is string text && !string.IsNullOrWhiteSpace(text))
+            {
+                return text;
+            }
+        }
+
+        var fallbackNames = new[] { "Message", "Issue", "Description", "Notes" };
+        foreach (var candidate in fallbackNames)
+        {
+            var value = SelectedReportRow.GetValue(candidate);
+            if (value is string text && !string.IsNullOrWhiteSpace(text))
+            {
+                return text;
+            }
+        }
+
+        // Fallback to the first detail item if available
+        return SelectedFindingDetails?.Items.FirstOrDefault();
+    }
+    
+    private void ApplyReportRowSorting()
+    {
+        if (ReportRows == null || Application.Current == null)
+        {
+            return;
+        }
+
+        if (!Application.Current.Dispatcher.CheckAccess())
+        {
+            Application.Current.Dispatcher.Invoke(ApplyReportRowSorting);
+            return;
+        }
+
+        var view = CollectionViewSource.GetDefaultView(ReportRows);
+        if (view is ListCollectionView listView)
+        {
+            listView.CustomSort = ReportRowComparer;
+            listView.Refresh();
+        }
+        else
+        {
+            view?.Refresh();
+        }
+    }
+    
+    private sealed class SeverityIssueComparer : IComparer
+    {
+        private static readonly Dictionary<string, int> SeverityRankings = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { Severity.Error.ToString(), 0 },
+            { Severity.Warning.ToString(), 1 },
+            { Severity.Info.ToString(), 2 }
+        };
+
+        private static readonly string[] IssueColumnCandidates = { "Issue", "Message", "Description" };
+
+        public int Compare(object? x, object? y)
+        {
+            if (ReferenceEquals(x, y)) return 0;
+            if (x is not DynamicReportRowViewModel left) return -1;
+            if (y is not DynamicReportRowViewModel right) return 1;
+
+            var severityComparison = GetSeverityRank(left).CompareTo(GetSeverityRank(right));
+            if (severityComparison != 0)
+            {
+                return severityComparison;
+            }
+
+            var issueComparison = string.Compare(GetIssueText(left), GetIssueText(right), StringComparison.OrdinalIgnoreCase);
+            if (issueComparison != 0)
+            {
+                return issueComparison;
+            }
+
+            return left.Id.CompareTo(right.Id);
+        }
+
+        private static int GetSeverityRank(DynamicReportRowViewModel row)
+        {
+            var raw = row.GetValue("Severity");
+            if (raw is Severity severityEnum)
+            {
+                return severityEnum switch
                 {
-                    FileName = SelectedFinding.Url.Address,
-                    UseShellExecute = true
-                });
+                    Severity.Error => 0,
+                    Severity.Warning => 1,
+                    Severity.Info => 2,
+                    _ => SeverityRankings.Count
+                };
             }
-            catch (Exception)
+
+            var text = raw?.ToString();
+            if (!string.IsNullOrWhiteSpace(text) && SeverityRankings.TryGetValue(text, out var rank))
             {
-                // Silently fail if browser cannot be opened
+                return rank;
             }
+
+            return SeverityRankings.Count;
+        }
+
+        private static string GetIssueText(DynamicReportRowViewModel row)
+        {
+            foreach (var column in IssueColumnCandidates)
+            {
+                var value = row.GetValue(column)?.ToString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+
+            var fuzzyColumn = row.GetColumnNames().FirstOrDefault(name =>
+                name.Contains("issue", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("message", StringComparison.OrdinalIgnoreCase));
+
+            if (fuzzyColumn != null)
+            {
+                var value = row.GetValue(fuzzyColumn)?.ToString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+
+            return string.Empty;
         }
     }
 }

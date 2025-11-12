@@ -15,7 +15,7 @@ public class ImageAuditPlugin : IPlugin
     {
         // Register custom report schema for image audit
         var schema = ReportSchema.Create("ImageAudit")
-            .WithVersion(2)
+            
             .AddPrimaryColumn("ImageURL", ReportColumnType.Url, "Image URL")
             .AddColumn("Page", ReportColumnType.Url, "Page")
             .AddColumn("Issue", ReportColumnType.String, "Issue")

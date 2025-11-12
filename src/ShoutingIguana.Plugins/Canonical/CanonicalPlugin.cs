@@ -14,7 +14,7 @@ public class CanonicalPlugin : IPlugin
     {
         // Register custom report schema for canonical validation
         var schema = ReportSchema.Create("Canonical")
-            .WithVersion(2)
+            
             .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
             .AddColumn("Issue", ReportColumnType.String, "Issue")
             .AddColumn("CanonicalURL", ReportColumnType.Url, "Canonical URL")

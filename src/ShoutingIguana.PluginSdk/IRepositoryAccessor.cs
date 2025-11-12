@@ -37,21 +37,23 @@ namespace ShoutingIguana.PluginSdk;
 ///         
 ///         if (targetUrl == null)
 ///         {
-///             await ctx.Findings.ReportAsync(
-///                 Key,
-///                 Severity.Warning,
-///                 "CANONICAL_TARGET_NOT_FOUND",
-///                 $"Canonical points to uncrawled URL: {canonical}",
-///                 null);
+///             var row = ReportRow.Create()
+///                 .Set("Severity", Severity.Warning.ToString())
+///                 .Set("Page", ctx.Url.ToString())
+///                 .Set("Issue", "Canonical target not crawled")
+///                 .Set("TargetUrl", canonical);
+///             
+///             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, ct);
 ///         }
 ///         else if (targetUrl.Status >= 400)
 ///         {
-///             await ctx.Findings.ReportAsync(
-///                 Key,
-///                 Severity.Error,
-///                 "CANONICAL_TARGET_ERROR",
-///                 $"Canonical points to error page ({targetUrl.Status}): {canonical}",
-///                 null);
+///             var row = ReportRow.Create()
+///                 .Set("Severity", Severity.Error.ToString())
+///                 .Set("Page", ctx.Url.ToString())
+///                 .Set("Issue", $"Canonical points to HTTP {targetUrl.Status}")
+///                 .Set("TargetUrl", canonical);
+///             
+///             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, ct);
 ///         }
 ///     }
 /// }

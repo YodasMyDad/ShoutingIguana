@@ -75,7 +75,7 @@ public abstract class UrlTaskBase : IUrlTask
     /// Return early for non-applicable URLs (check status code, content type, etc.)
     /// </para>
     /// <para>
-    /// Report findings using <c>await ctx.Findings.ReportAsync()</c>.
+    /// Report findings using <c>await ctx.Reports.ReportAsync()</c>.
     /// </para>
     /// </remarks>
     public abstract Task ExecuteAsync(UrlContext ctx, CancellationToken ct);

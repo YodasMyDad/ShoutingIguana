@@ -797,10 +797,10 @@
                                     </StackPanel>
                                 </Grid>
                                 
-                                <!-- Actual DataGrid (code-behind dynamically switches binding between FilteredFindings and ReportRows) -->
+                                <!-- Actual DataGrid (columns are injected dynamically once schema loads) -->
                                 <DataGrid x:Name="DynamicFindingsDataGrid"
-                                          ItemsSource="{Binding FilteredFindings}"
-                                          SelectedItem="{Binding SelectedFinding, Mode=TwoWay}"
+                                          ItemsSource="{Binding ReportRows}"
+                                          SelectedItem="{Binding SelectedReportRow, Mode=TwoWay}"
                                           VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Auto"
                                           Tag="FindingsTab"
@@ -856,34 +856,6 @@
                                     </MenuItem>
                                 </ContextMenu>
                             </DataGrid.ContextMenu>
-                            <DataGrid.Columns>
-                                <DataGridTemplateColumn Header="Severity" Width="120" MinWidth="100">
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <Border Style="{StaticResource SeverityBadgeStyle}">
-                                                <TextBlock Text="{Binding Severity}" 
-                                                           Style="{StaticResource SeverityTextStyle}"/>
-                                            </Border>
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTextColumn Header="Message" 
-                                                    Binding="{Binding Message}" 
-                                                    Width="2*"
-                                                    MinWidth="200"/>
-                                <DataGridTextColumn Header="URL" 
-                                                    Binding="{Binding Url.Address}" 
-                                                    Width="3*"
-                                                    MinWidth="250"
-                                                    FontFamily="Consolas"
-                                                    FontSize="12"/>
-                                <DataGridTextColumn Header="Date" 
-                                                    Binding="{Binding CreatedUtc, StringFormat='yyyy-MM-dd HH:mm:ss'}" 
-                                                    Width="150"
-                                                    MinWidth="140"
-                                                    FontFamily="Consolas"
-                                                    FontSize="12"/>
-                                </DataGrid.Columns>
                             </DataGrid>
                             </Grid>
                         </Grid>

@@ -14,7 +14,7 @@ public class InternalLinkingPlugin : IPlugin
     {
         // Register custom report schema for internal linking analysis
         var schema = ReportSchema.Create("InternalLinking")
-            .WithVersion(2)
+            
             .AddColumn("Severity", ReportColumnType.String, "Severity")
             .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
             .AddColumn("IssueType", ReportColumnType.String, "Issue")

@@ -14,7 +14,7 @@ public class CrawlBudgetPlugin : IPlugin
     {
         // Register custom report schema for crawl budget analysis
         var schema = ReportSchema.Create("CrawlBudget")
-            .WithVersion(2)
+            
             .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
             .AddColumn("Issue", ReportColumnType.String, "Issue")
             .AddColumn("StatusCode", ReportColumnType.Integer, "Status")

@@ -14,7 +14,7 @@ public class SitemapPlugin : IPlugin
     {
         // Register custom report schema for sitemap analysis
         var schema = ReportSchema.Create("Sitemap")
-            .WithVersion(2)
+            
             .AddPrimaryColumn("URL", ReportColumnType.Url, "URL")
             .AddColumn("Issue", ReportColumnType.String, "Issue")
             .AddColumn("InSitemap", ReportColumnType.String, "In Sitemap")

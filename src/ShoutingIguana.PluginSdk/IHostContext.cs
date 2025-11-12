@@ -91,7 +91,7 @@ public interface IHostContext
     /// </para>
     /// <para>
     /// For 95% of plugins, you don't need to implement <see cref="IExportProvider"/>.
-    /// Just report findings via <c>ctx.Findings.ReportAsync()</c> and they'll be available
+    /// Just report findings via <c>ctx.Reports.ReportAsync()</c> and they'll be available
     /// in all standard exports automatically.
     /// </para>
     /// </remarks>

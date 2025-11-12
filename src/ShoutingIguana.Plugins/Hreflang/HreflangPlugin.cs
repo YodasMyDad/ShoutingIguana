@@ -14,7 +14,7 @@ public class HreflangPlugin : IPlugin
     {
         // Register custom report schema for hreflang validation
         var schema = ReportSchema.Create("Hreflang")
-            .WithVersion(2)
+            
             .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
             .AddColumn("Issue", ReportColumnType.String, "Issue")
             .AddColumn("HreflangTag", ReportColumnType.String, "Hreflang Tag")

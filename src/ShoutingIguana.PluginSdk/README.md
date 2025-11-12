@@ -160,7 +160,7 @@ public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
 {
     // Create report row with custom columns
     // IMPORTANT: Plugins with registered schemas should create ONLY report rows, not findings
-    // Do NOT call ctx.Findings.ReportAsync() - this causes UI to show legacy columns
+    // Only report via ctx.Reports.ReportAsync() so the UI can build dynamic columns
     var row = ReportRow.Create()
         .Set("FromURL", ctx.Url.ToString())
         .Set("ToURL", targetUrl)
@@ -171,7 +171,7 @@ public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
 }
 ```
 
-**IMPORTANT:** If you register a custom schema, create **ONLY** report rows using `ctx.Reports.ReportAsync()`. Do NOT also call `ctx.Findings.ReportAsync()`, as this creates duplicate data and causes the UI to display legacy columns instead of your custom columns.
+**IMPORTANT:** If you register a custom schema, create **ONLY** report rows using `ctx.Reports.ReportAsync()`. Legacy `ctx.Findings` APIs have been removed.
 
 ### Column Types
 
@@ -281,7 +281,7 @@ var domain = UrlHelper.GetDomain("https://www.example.com/page");
 ### ❌ Don't
 
 - Don't block the thread (use async/await)
-- **Don't use `ctx.Findings.ReportAsync()`** - the legacy findings system has been removed
+- **Use `ctx.Reports.ReportAsync()` exclusively** - the legacy findings system has been removed
 - Don't create `IExportProvider` unless you need specialized export formats
 - Don't store per-URL state in instance fields (use static dictionaries with CleanupProject)
 - Don't parse HTML twice (use `ctx.RenderedHtml` which is already parsed)

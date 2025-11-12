@@ -115,8 +115,6 @@ public partial class App : Application
                     services.AddSingleton<IProxyTestService, ProxyTestService>();
                     services.AddSingleton<IListModeService, ListModeService>();
                     services.AddSingleton<ICustomExtractionService, CustomExtractionService>();
-                    services.AddSingleton<FindingToReportAdapter>();
-                    services.AddSingleton<ReportDataMigrationService>();
 
                     // NuGet Services
                     services.AddSingleton<ShoutingIguana.Core.Services.NuGet.IFeedConfigurationService, ShoutingIguana.Core.Services.NuGet.FeedConfigurationService>();

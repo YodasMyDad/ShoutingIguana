@@ -14,7 +14,7 @@ public class RedirectsPlugin : IPlugin
     {
         // Register custom report schema for redirect analysis
         var schema = ReportSchema.Create("Redirects")
-            .WithVersion(2)
+            
             .AddPrimaryColumn("Source", ReportColumnType.Url, "Source URL")
             .AddColumn("Target", ReportColumnType.Url, "Target URL")
             .AddColumn("StatusCode", ReportColumnType.Integer, "Status")

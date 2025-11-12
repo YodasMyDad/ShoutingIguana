@@ -14,7 +14,7 @@ public class DuplicateContentPlugin : IPlugin
     {
         // Register custom report schema for duplicate content analysis
         var schema = ReportSchema.Create("DuplicateContent")
-            .WithVersion(2)
+            
             .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
             .AddColumn("Issue", ReportColumnType.String, "Issue")
             .AddColumn("DuplicateOf", ReportColumnType.Url, "Duplicate Of")

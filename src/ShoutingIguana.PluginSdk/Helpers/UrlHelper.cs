@@ -335,15 +335,16 @@ public static class UrlHelper
     /// bool secure = UrlHelper.IsHttps("https://example.com");
     /// // Result: true
     /// 
-    /// if (!UrlHelper.IsHttps(url))
-    /// {
-    ///     await ctx.Findings.ReportAsync(
-    ///         Key,
-    ///         Severity.Warning,
-    ///         "HTTP_NOT_HTTPS",
-    ///         $"Page uses HTTP instead of HTTPS: {url}",
-    ///         null);
-    /// }
+/// if (!UrlHelper.IsHttps(url))
+/// {
+///     var row = ReportRow.Create()
+///         .Set("Severity", Severity.Warning.ToString())
+///         .Set("Page", ctx.Url.ToString())
+///         .Set("Issue", "Page served over HTTP")
+///         .Set("TargetUrl", url);
+///     
+///     await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, ct);
+/// }
     /// </code>
     /// </example>
     public static bool IsHttps(string url)
