@@ -87,6 +87,7 @@ public class InventoryTask : UrlTaskBase
         if (urlLength > MAX_URL_LENGTH)
         {
             var rowTooLong = ReportRow.Create()
+                .Set("Issue", "URL length > 100 characters (excluding query)")
                 .Set("URL", url)
                 .Set("ContentType", ctx.Metadata.ContentType ?? "")
                 .Set("Status", ctx.Metadata.StatusCode)
@@ -99,6 +100,7 @@ public class InventoryTask : UrlTaskBase
         else if (urlLength > WARNING_URL_LENGTH)
         {
             var row1 = ReportRow.Create()
+                .Set("Issue", "URL length > 75 characters (excluding query)")
                 .Set("URL", url)
                 .Set("ContentType", ctx.Metadata.ContentType ?? "")
                 .Set("Status", ctx.Metadata.StatusCode)
@@ -113,6 +115,7 @@ public class InventoryTask : UrlTaskBase
         if (url != url.ToLowerInvariant())
         {
             var row = ReportRow.Create()
+                .Set("Issue", "Uppercase characters detected in URL")
                 .Set("URL", url)
                 .Set("ContentType", ctx.Metadata.ContentType ?? "")
                 .Set("Status", ctx.Metadata.StatusCode)
@@ -130,6 +133,7 @@ public class InventoryTask : UrlTaskBase
             if (queryParams.Length > MAX_QUERY_PARAMETERS)
             {
                 var row = ReportRow.Create()
+                    .Set("Issue", $"Too many query parameters ({queryParams.Length})")
                     .Set("URL", url)
                     .Set("ContentType", ctx.Metadata.ContentType ?? "")
                     .Set("Status", ctx.Metadata.StatusCode)
@@ -145,6 +149,7 @@ public class InventoryTask : UrlTaskBase
             if (Regex.IsMatch(url, paginationPattern, RegexOptions.IgnoreCase))
             {
                 var rowPag = ReportRow.Create()
+                    .Set("Issue", "Pagination parameter detected in URL")
                     .Set("URL", url)
                     .Set("ContentType", ctx.Metadata.ContentType ?? "")
                     .Set("Status", ctx.Metadata.StatusCode)
@@ -164,6 +169,7 @@ public class InventoryTask : UrlTaskBase
         if (Regex.IsMatch(url, specialCharsPattern))
         {
             var rowSpecial = ReportRow.Create()
+                .Set("Issue", "Special characters found in URL")
                 .Set("URL", url)
                 .Set("ContentType", ctx.Metadata.ContentType ?? "")
                 .Set("Status", ctx.Metadata.StatusCode)
@@ -178,6 +184,7 @@ public class InventoryTask : UrlTaskBase
         if (ctx.Url.AbsolutePath.Contains('_'))
         {
             var rowUnder = ReportRow.Create()
+                .Set("Issue", "Underscore detected in path")
                 .Set("URL", url)
                 .Set("ContentType", ctx.Metadata.ContentType ?? "")
                 .Set("Status", ctx.Metadata.StatusCode)
@@ -219,6 +226,7 @@ public class InventoryTask : UrlTaskBase
             if (Regex.IsMatch(url, Pattern, RegexOptions.IgnoreCase))
             {
                 var rowSession = ReportRow.Create()
+                    .Set("Issue", $"{Name} parameter detected ({Example})")
                     .Set("URL", url)
                     .Set("ContentType", ctx.Metadata.ContentType ?? "")
                     .Set("Status", ctx.Metadata.StatusCode)
@@ -299,6 +307,7 @@ public class InventoryTask : UrlTaskBase
             if (contentLength < WARNING_CONTENT_LENGTH)
             {
                 var rowThin = ReportRow.Create()
+                    .Set("Issue", $"Very short content (<{WARNING_CONTENT_LENGTH} characters)")
                     .Set("URL", ctx.Url.ToString())
                     .Set("ContentType", ctx.Metadata.ContentType ?? "")
                     .Set("Status", ctx.Metadata.StatusCode)
@@ -311,6 +320,7 @@ public class InventoryTask : UrlTaskBase
             else if (contentLength < MIN_CONTENT_LENGTH)
             {
                 var rowLimited = ReportRow.Create()
+                    .Set("Issue", $"Limited content length (<{MIN_CONTENT_LENGTH} characters)")
                     .Set("URL", ctx.Url.ToString())
                     .Set("ContentType", ctx.Metadata.ContentType ?? "")
                     .Set("Status", ctx.Metadata.StatusCode)
@@ -440,6 +450,7 @@ public class InventoryTask : UrlTaskBase
         if (thirdPartyDomains.Count > 10)
         {
             var rowThirdParty = ReportRow.Create()
+                .Set("Issue", $"More than 10 third-party domains ({thirdPartyDomains.Count})")
                 .Set("URL", ctx.Url.ToString())
                 .Set("ContentType", ctx.Metadata.ContentType ?? "")
                 .Set("Status", ctx.Metadata.StatusCode)

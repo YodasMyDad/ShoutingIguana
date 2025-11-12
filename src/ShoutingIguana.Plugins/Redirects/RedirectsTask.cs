@@ -132,12 +132,12 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         
         if (string.IsNullOrEmpty(targetUrl))
         {
-            var row = ReportRow.Create()
-                .Set("Source", ctx.Url.ToString())
-                .Set("Target", "")
-                .Set("StatusCode", statusCode)
-                .Set("Issue", "Missing Location Header")
-                .Set("Severity", "Error");
+                var row = ReportRow.Create()
+                    .Set("Source", ctx.Url.ToString())
+                    .Set("Target", "(missing location header)")
+                    .Set("StatusCode", statusCode)
+                    .Set("Issue", "Missing Location Header")
+                    .Set("Severity", "Error");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             return;

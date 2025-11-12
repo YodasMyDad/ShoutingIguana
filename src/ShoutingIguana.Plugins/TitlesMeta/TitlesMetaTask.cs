@@ -77,14 +77,14 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             TrackTitleAndDescription(ctx.Project.ProjectId, title, description, ctx.Url.ToString());
 
             // Analyze title (runs after tracking so duplicate detection sees this page)
-            await AnalyzeTitleAsync(ctx, title);
+            await AnalyzeTitleAsync(ctx, title, description);
             
             // Analyze description
-            await AnalyzeDescriptionAsync(ctx, description);
+            await AnalyzeDescriptionAsync(ctx, description, title);
             
             // CTR optimization checks
-            await CheckDescriptionCTRAsync(ctx, description);
-            await CheckTitleCTRAsync(ctx, title);
+            await CheckDescriptionCTRAsync(ctx, description, title);
+            await CheckTitleCTRAsync(ctx, title, description);
             
             // Analyze canonical (using crawler-parsed data)
             await AnalyzeCanonicalAsync(ctx);
@@ -93,25 +93,25 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             await AnalyzeRobotsAsync(ctx);
             
             // Analyze viewport
-            await AnalyzeViewportAsync(ctx, viewport, doc);
+            await AnalyzeViewportAsync(ctx, viewport, doc, title, description);
             
             // Analyze charset
-            await AnalyzeCharsetAsync(ctx, doc, charset);
+            await AnalyzeCharsetAsync(ctx, doc, charset, title, description);
             
             // Analyze language
-            await AnalyzeLanguageAsync(ctx, language);
+            await AnalyzeLanguageAsync(ctx, language, title, description);
             
             // Analyze Open Graph tags
-            await AnalyzeOpenGraphAsync(ctx, doc);
+            await AnalyzeOpenGraphAsync(ctx, doc, title, description);
             
             // Analyze Twitter Cards
-            await AnalyzeTwitterCardsAsync(ctx, doc);
+            await AnalyzeTwitterCardsAsync(ctx, doc, title, description);
             
             // Analyze heading structure
-            await AnalyzeHeadingStructureAsync(ctx, doc, title);
+            await AnalyzeHeadingStructureAsync(ctx, doc, title, description);
             
             // Check for outdated meta keywords
-            await CheckMetaKeywordsAsync(ctx, doc);
+            await CheckMetaKeywordsAsync(ctx, doc, title, description);
         }
         catch (Exception ex)
         {
@@ -187,7 +187,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         }
     }
 
-    private async Task AnalyzeTitleAsync(UrlContext ctx, string title)
+    private async Task AnalyzeTitleAsync(UrlContext ctx, string title, string description)
     {
         if (string.IsNullOrEmpty(title))
         {
@@ -199,7 +199,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Error");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
             return;
         }
 
@@ -213,7 +213,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", title.Length)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
         else if (title.Length > MAX_TITLE_WARNING_LENGTH)
         {
@@ -225,7 +225,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", title.Length)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
         else if (title.Length > MAX_TITLE_LENGTH)
         {
@@ -237,11 +237,11 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", title.Length)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
         
         // Check pixel width (more accurate than character count for SERP appearance)
-        await CheckTitlePixelWidthAsync(ctx, title);
+        await CheckTitlePixelWidthAsync(ctx, title, description);
 
         // Check for duplicate titles (will be reported later in batch)
         if (_titlesByProject.TryGetValue(ctx.Project.ProjectId, out var projectTitles))
@@ -282,7 +282,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                                 .Set("Length", title.Length)
                                 .Set("Severity", "Warning");
                             
-                            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+                            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
                         }
                         
                         // Only report true duplicates (no redirect relationship)
@@ -296,7 +296,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                                 .Set("Length", title.Length)
                                 .Set("Severity", "Error");
                             
-                            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+                            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
                         }
                     }
                     else
@@ -310,7 +310,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                             .Set("Length", title.Length)
                             .Set("Severity", "Error");
                         
-                        await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+                        await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
                     }
                 }
             }
@@ -321,7 +321,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
     /// Check title pixel width for more accurate SERP appearance prediction.
     /// Google displays ~600px of title, not a fixed character count.
     /// </summary>
-    private async Task CheckTitlePixelWidthAsync(UrlContext ctx, string title)
+    private async Task CheckTitlePixelWidthAsync(UrlContext ctx, string title, string description)
     {
         // Calculate approximate pixel width
         // Different characters have different widths in Google's SERP display
@@ -363,7 +363,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", title.Length)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row1, title, description), ctx.Metadata.UrlId, default);
         }
         else if (pixelWidth > SAFE_PIXEL_WIDTH)
         {
@@ -375,11 +375,11 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", title.Length)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
     }
 
-    private async Task AnalyzeDescriptionAsync(UrlContext ctx, string description)
+    private async Task AnalyzeDescriptionAsync(UrlContext ctx, string description, string title)
     {
         if (string.IsNullOrEmpty(description))
         {
@@ -391,7 +391,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
             return;
         }
 
@@ -405,7 +405,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", description.Length)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
         else if (description.Length > MAX_DESCRIPTION_WARNING_LENGTH)
         {
@@ -417,7 +417,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", description.Length)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
         else if (description.Length > MAX_DESCRIPTION_LENGTH)
         {
@@ -429,7 +429,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", description.Length)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
 
         // Check for duplicate descriptions
@@ -457,7 +457,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                         .Set("Length", description.Length)
                         .Set("Severity", "Warning");
                     
-                    await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+                    await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
                 }
             }
         }
@@ -482,7 +482,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         // Skipping to avoid duplicate reporting - handled by Robots plugin
     }
 
-    private async Task AnalyzeViewportAsync(UrlContext ctx, string viewport, HtmlDocument doc)
+    private async Task AnalyzeViewportAsync(UrlContext ctx, string viewport, HtmlDocument doc, string title, string description)
     {
         // Check for multiple viewport declarations
         var viewportNodes = doc.DocumentNode.SelectNodes("//meta[@name='viewport']");
@@ -498,7 +498,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row1, title, description), ctx.Metadata.UrlId, default);
         }
         
         if (string.IsNullOrEmpty(viewport))
@@ -511,11 +511,11 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
     }
 
-    private async Task AnalyzeCharsetAsync(UrlContext ctx, HtmlDocument doc, string charset)
+    private async Task AnalyzeCharsetAsync(UrlContext ctx, HtmlDocument doc, string charset, string title, string description)
     {
         if (string.IsNullOrEmpty(charset))
         {
@@ -527,7 +527,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row1, title, description), ctx.Metadata.UrlId, default);
             return;
         }
 
@@ -542,7 +542,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, row2, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row2, title, description), ctx.Metadata.UrlId, default);
         }
 
         // Check for multiple charset declarations
@@ -560,11 +560,11 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row3, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row3, title, description), ctx.Metadata.UrlId, default);
         }
     }
 
-    private async Task AnalyzeLanguageAsync(UrlContext ctx, string language)
+    private async Task AnalyzeLanguageAsync(UrlContext ctx, string language, string title, string description)
     {
         if (string.IsNullOrEmpty(language))
         {
@@ -576,11 +576,11 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
     }
 
-    private async Task AnalyzeOpenGraphAsync(UrlContext ctx, HtmlDocument doc)
+    private async Task AnalyzeOpenGraphAsync(UrlContext ctx, HtmlDocument doc, string title, string description)
     {
         var ogTitle = doc.DocumentNode.SelectSingleNode("//meta[@property='og:title']")?.GetAttributeValue("content", "");
         var ogDescription = doc.DocumentNode.SelectSingleNode("//meta[@property='og:description']")?.GetAttributeValue("content", "");
@@ -600,7 +600,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row1, title, description), ctx.Metadata.UrlId, default);
         }
         else if (ogTagCount < 4)
         {
@@ -618,11 +618,11 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", ogTagCount)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
     }
 
-    private async Task AnalyzeTwitterCardsAsync(UrlContext ctx, HtmlDocument doc)
+    private async Task AnalyzeTwitterCardsAsync(UrlContext ctx, HtmlDocument doc, string title, string description)
     {
         var twitterCard = doc.DocumentNode.SelectSingleNode("//meta[@name='twitter:card']")?.GetAttributeValue("content", "");
         var twitterTitle = doc.DocumentNode.SelectSingleNode("//meta[@name='twitter:title']")?.GetAttributeValue("content", "");
@@ -641,11 +641,11 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
     }
 
-    private async Task AnalyzeHeadingStructureAsync(UrlContext ctx, HtmlDocument doc, string title)
+    private async Task AnalyzeHeadingStructureAsync(UrlContext ctx, HtmlDocument doc, string title, string description)
     {
         var h1Nodes = doc.DocumentNode.SelectNodes("//h1");
         var h2Nodes = doc.DocumentNode.SelectNodes("//h2");
@@ -666,7 +666,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Error");
             
-            await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row1, title, description), ctx.Metadata.UrlId, default);
         }
         else if (h1Count > 1)
         {
@@ -679,7 +679,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", h1Count)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
         else
         {
@@ -696,7 +696,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                     .Set("Length", 0)
                     .Set("Severity", "Warning");
                 
-                await ctx.Reports.ReportAsync(Key, row2, ctx.Metadata.UrlId, default);
+                await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row2, title, description), ctx.Metadata.UrlId, default);
             }
             else if (!string.IsNullOrEmpty(title))
             {
@@ -714,7 +714,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                         .Set("Length", title.Length)
                         .Set("Severity", "Info");
                     
-                    await ctx.Reports.ReportAsync(Key, row3, ctx.Metadata.UrlId, default);
+                    await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row3, title, description), ctx.Metadata.UrlId, default);
                 }
                 
                 // Check H1/Title alignment (should be complementary, not unrelated)
@@ -729,7 +729,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                         .Set("Length", (int)(similarity * 100))
                         .Set("Severity", "Info");
                     
-                    await ctx.Reports.ReportAsync(Key, row4, ctx.Metadata.UrlId, default);
+                    await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row4, title, description), ctx.Metadata.UrlId, default);
                 }
             }
         }
@@ -751,7 +751,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, row5, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row5, title, description), ctx.Metadata.UrlId, default);
         }
         else if (!hasH3 && (hasH4 || hasH5 || hasH6))
         {
@@ -763,11 +763,11 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
     }
 
-    private async Task CheckMetaKeywordsAsync(UrlContext ctx, HtmlDocument doc)
+    private async Task CheckMetaKeywordsAsync(UrlContext ctx, HtmlDocument doc, string title, string description)
     {
         var keywordsNode = doc.DocumentNode.SelectSingleNode("//meta[@name='keywords']");
         if (keywordsNode != null)
@@ -780,7 +780,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
     }
 
@@ -805,6 +805,18 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         var union = words1.Union(words2).Count();
 
         return (double)intersection / union;
+    }
+
+    private static string NormalizeMetaValue(string? value, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    }
+
+    private static ReportRow WithNormalizedMetadata(ReportRow row, string title, string description)
+    {
+        return row
+            .Set("Title", NormalizeMetaValue(title, "(missing title)"))
+            .Set("MetaDescription", NormalizeMetaValue(description, "(missing meta description)"));
     }
     
     /// <summary>
@@ -934,7 +946,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
     /// <summary>
     /// Check meta description for CTR-driving action words
     /// </summary>
-    private async Task CheckDescriptionCTRAsync(UrlContext ctx, string description)
+    private async Task CheckDescriptionCTRAsync(UrlContext ctx, string description, string title)
     {
         if (string.IsNullOrWhiteSpace(description))
         {
@@ -963,14 +975,14 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", description.Length)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, row6, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row6, title, description), ctx.Metadata.UrlId, default);
         }
     }
     
     /// <summary>
     /// Check title for special characters that improve SERP visibility
     /// </summary>
-    private async Task CheckTitleCTRAsync(UrlContext ctx, string title)
+    private async Task CheckTitleCTRAsync(UrlContext ctx, string title, string description)
     {
         if (string.IsNullOrWhiteSpace(title))
         {
@@ -999,7 +1011,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", title.Length)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
         }
     }
     

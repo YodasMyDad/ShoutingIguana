@@ -104,8 +104,8 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 var row = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("Issue", "No robots.txt Found")
-                    .Set("RobotsMeta", "")
-                    .Set("XRobotsTag", "")
+                    .Set("RobotsMeta", "(robots.txt missing)")
+                    .Set("XRobotsTag", "(none)")
                     .Set("Indexable", "Yes")
                     .Set("Severity", "Info");
                 
@@ -234,10 +234,12 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         }
 
         // Report that X-Robots-Tag is being used
+        var metaSource = ctx.Metadata.RobotsNoindex == true ? "noindex" :
+                         ctx.Metadata.RobotsNofollow == true ? "nofollow" : "(none)";
         var row = ReportRow.Create()
             .Set("Page", ctx.Url.ToString())
             .Set("Issue", "X-Robots-Tag Present")
-            .Set("RobotsMeta", "")
+            .Set("RobotsMeta", metaSource)
             .Set("XRobotsTag", ctx.Metadata.XRobotsTag ?? "")
             .Set("Indexable", isIndexable ? "Yes" : "No")
             .Set("Severity", "Info");
@@ -287,7 +289,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", $"Important Page Not Indexable (Depth {ctx.Metadata.Depth}) - {reason}")
-                .Set("RobotsMeta", ctx.Metadata.RobotsNoindex == true ? "noindex" : "")
+                .Set("RobotsMeta", ctx.Metadata.RobotsNoindex == true ? "noindex" : "(none)")
                 .Set("XRobotsTag", ctx.Metadata.XRobotsTag ?? "")
                 .Set("Indexable", "No")
                 .Set("Severity", "Warning");
@@ -309,10 +311,10 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         // Check for noarchive
         if (tag.Contains("noarchive"))
         {
-            var row1 = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
-                .Set("Issue", "Noarchive Directive")
-                .Set("RobotsMeta", "")
+                var row1 = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("Issue", "Noarchive Directive")
+                    .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", "noarchive")
                 .Set("Indexable", "Yes")
                 .Set("Severity", "Info");
@@ -326,7 +328,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", "Nosnippet Directive")
-                .Set("RobotsMeta", "")
+                .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", "nosnippet")
                 .Set("Indexable", "Yes")
                 .Set("Severity", "Info");
@@ -340,7 +342,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", "Noimageindex Directive")
-                .Set("RobotsMeta", "")
+                .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", "noimageindex")
                 .Set("Indexable", "Yes")
                 .Set("Severity", "Info");
@@ -354,7 +356,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", "Unavailable After Directive (Time-Limited)")
-                .Set("RobotsMeta", "")
+                .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", "unavailable_after")
                 .Set("Indexable", "Yes")
                 .Set("Severity", "Info");
@@ -368,7 +370,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", "Indexifembedded Directive")
-                .Set("RobotsMeta", "")
+                .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", "indexifembedded")
                 .Set("Indexable", "Conditional")
                 .Set("Severity", "Info");
@@ -387,7 +389,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             var row2 = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", $"Max-Snippet: {snippetValue}")
-                .Set("RobotsMeta", "")
+                .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", $"max-snippet:{maxSnippet}")
                 .Set("Indexable", "Yes")
                 .Set("Severity", snippetSeverity);
@@ -405,7 +407,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             var row3 = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", $"Max-Image-Preview: {maxImage}")
-                .Set("RobotsMeta", "")
+                .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", $"max-image-preview:{maxImage}")
                 .Set("Indexable", "Yes")
                 .Set("Severity", imageSeverity);
@@ -424,7 +426,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             var row4 = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", $"Max-Video-Preview: {videoValue}")
-                .Set("RobotsMeta", "")
+                .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", $"max-video-preview:{maxVideo}")
                 .Set("Indexable", "Yes")
                 .Set("Severity", videoSeverity);
@@ -438,7 +440,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             var row5 = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", "Googlebot-News Directive")
-                .Set("RobotsMeta", "")
+                .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", "googlebot-news")
                 .Set("Indexable", "Yes")
                 .Set("Severity", "Info");

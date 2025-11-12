@@ -64,7 +64,8 @@ public class LinkGraphTask : UrlTaskBase
                 .Set("FromURL", fromUrlAddress)
                 .Set("ToURL", link.ToUrl)
                 .Set("AnchorText", anchorText)
-                .Set("LinkType", link.LinkType);
+                .Set("LinkType", link.LinkType)
+                .Set("Severity", "Info");
             
             await ctx.Reports.ReportAsync(Key, row, fromUrlId, default);
         }

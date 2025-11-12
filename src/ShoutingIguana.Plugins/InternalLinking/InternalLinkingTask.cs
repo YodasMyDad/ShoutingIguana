@@ -171,9 +171,9 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
                 .Set("Severity", "Info")
                 .Set("Page", ctx.Url.ToString())
                 .Set("IssueType", "No Outlinks")
-                .Set("FromURL", "") // Not applicable
-                .Set("ToURL", "") // Not applicable
-                .Set("AnchorText", "")
+                .Set("FromURL", ctx.Url.ToString())
+                .Set("ToURL", "(none)")
+                .Set("AnchorText", "(none)")
                 .Set("Inlinks", inlinkCount)
                 .Set("Outlinks", outlinkCount)
                 .Set("Depth", ctx.Metadata.Depth);
@@ -188,9 +188,9 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
                 .Set("Severity", "Info")
                 .Set("Page", ctx.Url.ToString())
                 .Set("IssueType", "Few Outlinks")
-                .Set("FromURL", "") // Not applicable
-                .Set("ToURL", "") // Not applicable
-                .Set("AnchorText", "")
+                .Set("FromURL", ctx.Url.ToString())
+                .Set("ToURL", "(none)")
+                .Set("AnchorText", "(none)")
                 .Set("Inlinks", inlinkCount)
                 .Set("Outlinks", outlinkCount)
                 .Set("Depth", ctx.Metadata.Depth);
@@ -231,9 +231,9 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
                     .Set("Severity", "Warning")
                     .Set("Page", ctx.Url.ToString())
                     .Set("IssueType", "Orphan Page")
-                    .Set("FromURL", "") // No links to this page
-                    .Set("ToURL", "")
-                    .Set("AnchorText", "")
+                    .Set("FromURL", "(no linking page)")
+                    .Set("ToURL", ctx.Url.ToString())
+                    .Set("AnchorText", "(none)")
                     .Set("Inlinks", 0)
                     .Set("Outlinks", outlinkCount)
                     .Set("Depth", ctx.Metadata.Depth);

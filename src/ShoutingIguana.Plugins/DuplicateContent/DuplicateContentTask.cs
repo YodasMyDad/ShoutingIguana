@@ -398,7 +398,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 var row = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("Issue", $"High Boilerplate Ratio ({boilerplatePercentage}%)")
-                    .Set("DuplicateOf", "")
+                    .Set("DuplicateOf", "(boilerplate ratio check)")
                     .Set("Similarity", boilerplatePercentage)
                     .Set("Severity", "Warning");
                 

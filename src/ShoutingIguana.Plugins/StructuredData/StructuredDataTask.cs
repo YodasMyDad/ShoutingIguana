@@ -139,11 +139,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             }
             catch (JsonException ex)
             {
+                var jsonPath = string.IsNullOrEmpty(ex.Path) ? "JSON-LD" : ex.Path;
                 var rowError = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "JSON-LD")
                     .Set("Issue", $"JSON Syntax Error: {ex.Message}")
-                    .Set("Property", "")
+                    .Set("Property", jsonPath)
                     .Set("Severity", "Error");
                 
                 await ctx.Reports.ReportAsync(Key, rowError, ctx.Metadata.UrlId, default);
@@ -159,7 +160,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", schemaList)
                 .Set("Issue", $"JSON-LD Found ({validSchemas.Count} schemas)")
-                .Set("Property", "")
+                .Set("Property", schemaList)
                 .Set("Severity", "Info");
             
             await ctx.Reports.ReportAsync(Key, rowFound, ctx.Metadata.UrlId, default);
@@ -638,7 +639,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Review")
                 .Set("Issue", "Review Schema Complete")
-                .Set("Property", "")
+                .Set("Property", "Review fields complete")
                 .Set("Severity", "Info");
             
             await ctx.Reports.ReportAsync(Key, rowRevComplete, ctx.Metadata.UrlId, default);
@@ -877,11 +878,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             }
             else
             {
+                var breadcrumbLevels = items.Count > 0 ? $"{items.Count} levels" : "(none)";
                 var rowBreadFound = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "BreadcrumbList")
                     .Set("Issue", $"Breadcrumb Found ({items.Count} levels)")
-                    .Set("Property", "")
+                    .Set("Property", breadcrumbLevels)
                     .Set("Severity", "Info");
                 
                 await ctx.Reports.ReportAsync(Key, rowBreadFound, ctx.Metadata.UrlId, default);
@@ -952,11 +954,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             }
             else if (questionsWithShortAnswers == 0 && questions.Count > 0)
             {
+                var faqSummary = $"{questions.Count} Q&A entries";
                 var rowFaqComplete = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "FAQPage")
                     .Set("Issue", $"FAQ Complete ({questions.Count} Q&As)")
-                    .Set("Property", "")
+                    .Set("Property", faqSummary)
                     .Set("Severity", "Info");
                 
                 await ctx.Reports.ReportAsync(Key, rowFaqComplete, ctx.Metadata.UrlId, default);
@@ -1005,7 +1008,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", string.Join(", ", distinctTypes))
                     .Set("Issue", $"Microdata Found ({itemTypes.Count} items)")
-                    .Set("Property", "")
+                    .Set("Property", string.Join(", ", distinctTypes))
                     .Set("Severity", "Info");
                 
                 await ctx.Reports.ReportAsync(Key, rowMicro, ctx.Metadata.UrlId, default);
@@ -1042,11 +1045,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
             if (recommendedSchema != null)
             {
+                var propertyValue = recommendedSchema ?? "(recommended schema)";
                 var rowMissing = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", recommendedSchema)
                     .Set("Issue", "Missing Structured Data")
-                    .Set("Property", "")
+                    .Set("Property", propertyValue)
                     .Set("Severity", "Info");
                 
                 await ctx.Reports.ReportAsync(Key, rowMissing, ctx.Metadata.UrlId, default);

@@ -119,7 +119,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", "Missing Canonical")
-                .Set("CanonicalURL", "")
+                .Set("CanonicalURL", "(missing)")
                 .Set("Status", "Info")
                 .Set("Severity", "Info");
             

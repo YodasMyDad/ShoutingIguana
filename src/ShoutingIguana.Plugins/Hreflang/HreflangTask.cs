@@ -155,7 +155,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
 
     private async Task ValidateHreflangSyntaxAsync(UrlContext ctx, List<HreflangLink> hreflangs)
     {
-        var invalidSyntax = new List<(string Language, string Issue)>();
+        var invalidSyntax = new List<(HreflangLink Link, string Issue)>();
         
         // ISO 639-1 language codes (2 letters)
         var validLanguageCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -187,7 +187,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
             // Validate language code
             if (!validLanguageCodes.Contains(languageCode))
             {
-                invalidSyntax.Add((lang, $"Invalid language code '{languageCode}' (not ISO 639-1)"));
+                invalidSyntax.Add((link, $"Invalid language code '{languageCode}' (not ISO 639-1)"));
                 continue;
             }
 
@@ -196,33 +196,34 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
             {
                 if (regionCode.Length != 2)
                 {
-                    invalidSyntax.Add((lang, $"Region code '{regionCode}' should be 2 letters (ISO 3166-1 Alpha-2)"));
+                invalidSyntax.Add((link, $"Region code '{regionCode}' should be 2 letters (ISO 3166-1 Alpha-2)"));
                 }
                 else if (!validRegionCodes.Contains(regionCode))
                 {
-                    invalidSyntax.Add((lang, $"Invalid region code '{regionCode}' (not ISO 3166-1 Alpha-2)"));
+                    invalidSyntax.Add((link, $"Invalid region code '{regionCode}' (not ISO 3166-1 Alpha-2)"));
                 }
                 else if (regionCode != regionCode.ToUpperInvariant())
                 {
-                    invalidSyntax.Add((lang, $"Region code should be uppercase ('{regionCode}' should be '{regionCode.ToUpperInvariant()}')"));
+                    invalidSyntax.Add((link, $"Region code should be uppercase ('{regionCode}' should be '{regionCode.ToUpperInvariant()}')"));
                 }
             }
 
             // Check for invalid format (more than 2 parts)
             if (parts.Length > 2)
             {
-                invalidSyntax.Add((lang, $"Invalid format - should be 'language' or 'language-REGION'"));
+                invalidSyntax.Add((link, $"Invalid format - should be 'language' or 'language-REGION'"));
             }
         }
 
         if (invalidSyntax.Any())
         {
-            var errorSummary = string.Join(", ", invalidSyntax.Take(3).Select(e => e.Language));
+            var errorSummary = string.Join(", ", invalidSyntax.Take(3).Select(e => e.Link.Language));
+            var exampleTarget = invalidSyntax.First().Link.Url ?? ctx.Url.ToString();
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", $"Invalid Hreflang Syntax ({invalidSyntax.Count} tags)")
                 .Set("HreflangTag", errorSummary)
-                .Set("TargetURL", "")
+                .Set("TargetURL", exampleTarget)
                 .Set("Severity", "Error");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -236,11 +237,12 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
 
         if (selfReference == null)
         {
+            var languages = string.Join(", ", hreflangs.Select(h => h.Language));
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", "Missing Self-Referencing Hreflang")
-                .Set("HreflangTag", "")
-                .Set("TargetURL", "")
+                .Set("HreflangTag", string.IsNullOrEmpty(languages) ? "(no hreflang)" : languages)
+                .Set("TargetURL", ctx.Url.ToString())
                 .Set("Severity", "Error");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -257,11 +259,12 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
         if (duplicates.Any())
         {
             var duplicateTags = string.Join(", ", duplicates.Select(d => $"{d.Key} ({d.Count()}x)"));
+            var exampleTarget = duplicates.First().FirstOrDefault()?.Url ?? ctx.Url.ToString();
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", "Duplicate Hreflang Codes")
                 .Set("HreflangTag", duplicateTags)
-                .Set("TargetURL", "")
+                .Set("TargetURL", exampleTarget)
                 .Set("Severity", "Error");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -275,11 +278,12 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
 
         if (!hasXDefault && hasMultipleLanguages)
         {
+            var targetUrl = hreflangs.FirstOrDefault()?.Url ?? ctx.Url.ToString();
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", "Missing x-default Hreflang")
                 .Set("HreflangTag", "x-default")
-                .Set("TargetURL", "")
+                .Set("TargetURL", targetUrl)
                 .Set("Severity", "Warning");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -296,12 +300,12 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
 
             if (!htmlSet.SetEquals(httpSet))
             {
-                var row = ReportRow.Create()
-                    .Set("Page", ctx.Url.ToString())
-                    .Set("Issue", "HTML/HTTP Hreflang Mismatch")
-                    .Set("HreflangTag", $"HTML: {htmlHreflangs.Count}, HTTP: {httpHreflangs.Count}")
-                    .Set("TargetURL", "")
-                    .Set("Severity", "Warning");
+            var row = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("Issue", "HTML/HTTP Hreflang Mismatch")
+                .Set("HreflangTag", $"HTML: {htmlHreflangs.Count}, HTTP: {httpHreflangs.Count}")
+                .Set("TargetURL", ctx.Url.ToString())
+                .Set("Severity", "Warning");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
