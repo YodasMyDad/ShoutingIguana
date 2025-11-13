@@ -33,6 +33,36 @@ public class ReportRow
     }
     
     /// <summary>
+    /// Sets the Severity column using the Severity enum.
+    /// Preferred over Set("Severity", "Info") for type safety.
+    /// </summary>
+    public ReportRow SetSeverity(Severity severity)
+    {
+        _data["Severity"] = severity;
+        return this;
+    }
+    
+    /// <summary>
+    /// Sets the Page column using a Uri.
+    /// Preferred over Set("Page", url.ToString()) for convenience.
+    /// </summary>
+    public ReportRow SetPage(Uri url)
+    {
+        _data["Page"] = url.ToString();
+        return this;
+    }
+    
+    /// <summary>
+    /// Sets the Page column using a string URL.
+    /// Preferred over Set("Page", url) for convenience.
+    /// </summary>
+    public ReportRow SetPage(string url)
+    {
+        _data["Page"] = url;
+        return this;
+    }
+    
+    /// <summary>
     /// Gets a column value.
     /// </summary>
     public object? Get(string columnName)

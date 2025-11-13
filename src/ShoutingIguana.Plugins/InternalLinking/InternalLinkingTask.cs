@@ -174,7 +174,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         if (outlinkCount == 0)
         {
             var row = ReportRow.Create()
-                .Set("Severity", "Info")
+                .SetSeverity(Severity.Info)
                 .Set("Page", ctx.Url.ToString())
                 .Set("IssueType", IssueNoOutlinks)
                 .Set("FromURL", ctx.Url.ToString())
@@ -192,7 +192,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         if (outlinkCount > 0 && outlinkCount < 3 && ctx.Metadata.Depth <= 2)
         {
             var row = ReportRow.Create()
-                .Set("Severity", "Info")
+                .SetSeverity(Severity.Info)
                 .Set("Page", ctx.Url.ToString())
                 .Set("IssueType", IssueFewOutlinks)
                 .Set("FromURL", ctx.Url.ToString())
@@ -236,7 +236,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
             if (!isHomepage)
             {
                 var row = ReportRow.Create()
-                    .Set("Severity", "Warning")
+                    .SetSeverity(Severity.Warning)
                     .Set("Page", ctx.Url.ToString())
                     .Set("IssueType", IssueOrphanPage)
                     .Set("FromURL", "(no linking page)")
@@ -301,7 +301,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
             foreach (var genericLink in genericLinks.Take(10)) // Limit to first 10 to avoid spam
             {
                 var row = ReportRow.Create()
-                    .Set("Severity", "Info")
+                    .SetSeverity(Severity.Info)
                     .Set("Page", ctx.Url.ToString())
                     .Set("IssueType", IssueGenericAnchor)
                     .Set("FromURL", genericLink.SourceUrl)

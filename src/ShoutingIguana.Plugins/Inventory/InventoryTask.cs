@@ -90,7 +90,7 @@ public class InventoryTask : UrlTaskBase
             await ReportIssueAsync(
                 ctx,
                 "URL length > 100 characters (excluding query)",
-                "Warning",
+                Severity.Warning,
                 "Search engines and visitors prefer short, descriptive URLs; keep this URL under roughly 100 characters (excluding the query) for clarity.");
         }
         else if (urlLength > WARNING_URL_LENGTH)
@@ -98,7 +98,7 @@ public class InventoryTask : UrlTaskBase
             await ReportIssueAsync(
                 ctx,
                 "URL length > 75 characters (excluding query)",
-                "Info",
+                Severity.Info,
                 "This URL is getting long; consider trimming optional segments so it stays easy to read and share.");
         }
 
@@ -108,7 +108,7 @@ public class InventoryTask : UrlTaskBase
             await ReportIssueAsync(
                 ctx,
                 "Uppercase characters detected in URL",
-                "Warning",
+                Severity.Warning,
                 "Uppercase characters can lead to duplicate URLs on case-sensitive servers; keep the path lowercase to maintain consistency.");
         }
 
@@ -121,7 +121,7 @@ public class InventoryTask : UrlTaskBase
                 await ReportIssueAsync(
                     ctx,
                     $"Too many query parameters ({queryParams.Length})",
-                    "Info",
+                    Severity.Info,
                     $"Having {queryParams.Length} query parameters can produce many near-duplicate URLs; reduce optional parameters or canonicalize to keep indexing clean.");
             }
 
@@ -132,7 +132,7 @@ public class InventoryTask : UrlTaskBase
                 await ReportIssueAsync(
                     ctx,
                     "Pagination parameter detected in URL",
-                    "Info",
+                    Severity.Info,
                     "Pagination parameters (page, offset, start, etc.) create extra URLs; use rel=\"next\"/\"prev\" or canonical tags to signal the canonical entry point.");
             }
             
@@ -147,7 +147,7 @@ public class InventoryTask : UrlTaskBase
             await ReportIssueAsync(
                 ctx,
                 "Special characters found in URL",
-                "Info",
+                Severity.Info,
                 "Characters outside the safe URL set may be percent-encoded inconsistently; keep the path simple with alphanumerics, hyphens, and dots.");
         }
 
@@ -157,7 +157,7 @@ public class InventoryTask : UrlTaskBase
             await ReportIssueAsync(
                 ctx,
                 "Underscore detected in path",
-                "Info",
+                Severity.Info,
                 "Google treats hyphens as word separators and underscores as literal characters; replace underscores with hyphens for better readability.");
         }
     }
@@ -194,7 +194,7 @@ public class InventoryTask : UrlTaskBase
                 await ReportIssueAsync(
                     ctx,
                     $"{Name} parameter detected ({Example})",
-                    "Error",
+                    Severity.Error,
                     "Session identifiers in the URL create infinite near-duplicate pages; store session state in cookies or headers so the URL remains canonical.",
                     indexable: false);
                 
@@ -271,7 +271,7 @@ public class InventoryTask : UrlTaskBase
                 await ReportIssueAsync(
                     ctx,
                     $"Very short content (<{WARNING_CONTENT_LENGTH} characters)",
-                    "Warning",
+                    Severity.Warning,
                     "This page contains less than ~150 words, which search engines often consider thin content; add more helpful detail.");
             }
             else if (contentLength < MIN_CONTENT_LENGTH)
@@ -279,7 +279,7 @@ public class InventoryTask : UrlTaskBase
                 await ReportIssueAsync(
                     ctx,
                     $"Limited content length (<{MIN_CONTENT_LENGTH} characters)",
-                    "Info",
+                    Severity.Info,
                     "Content under ~300 words may not fully address the topic; expand it so the page can satisfy user intent.");
             }
         }
@@ -404,12 +404,12 @@ public class InventoryTask : UrlTaskBase
             await ReportIssueAsync(
                 ctx,
                 $"More than 10 third-party domains ({thirdPartyDomains.Count})",
-                "Warning",
+                Severity.Warning,
                 $"Loading {thirdPartyDomains.Count} external domains adds DNS lookups and scripts that slow the page; try to consolidate or drop unnecessary services.");
         }
     }
 
-    private Task ReportIssueAsync(UrlContext ctx, string issue, string severity, string explanation, bool indexable = true)
+    private Task ReportIssueAsync(UrlContext ctx, string issue, Severity severity, string explanation, bool indexable = true)
     {
         var row = ReportRow.Create()
             .Set("Issue", issue)
@@ -419,7 +419,7 @@ public class InventoryTask : UrlTaskBase
             .Set("Status", ctx.Metadata.StatusCode)
             .Set("Depth", ctx.Metadata.Depth)
             .Set("Indexable", indexable ? "Yes" : "No")
-            .Set("Severity", severity);
+            .SetSeverity(severity);
 
         return ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     }

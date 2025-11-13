@@ -167,9 +167,9 @@ public partial class FindingsView
         // Clear existing columns
         dataGrid.Columns.Clear();
         
-        // Bind to ReportRows (dynamic data source)
-        dataGrid.SetBinding(DataGrid.ItemsSourceProperty, new Binding("ReportRows"));
-        dataGrid.SetBinding(DataGrid.SelectedItemProperty, new Binding("SelectedReportRow") { Mode = BindingMode.TwoWay });
+        // Note: ItemsSource is already bound in XAML
+        // ItemsSource="{Binding ReportRows}"
+        // SelectedItem="{Binding SelectedReportRow, Mode=TwoWay}"
         
         // Generate columns from schema
         foreach (var column in tab.ReportColumns)
@@ -178,7 +178,7 @@ public partial class FindingsView
             dataGrid.Columns.Add(dataGridColumn);
         }
         
-        System.Diagnostics.Debug.WriteLine($"[FindingsView] Applied {dataGrid.Columns.Count} columns to DataGrid, ItemsSource bound to ReportRows");
+        System.Diagnostics.Debug.WriteLine($"[FindingsView] Applied {dataGrid.Columns.Count} columns to DataGrid");
     }
     
     private DataGridColumn CreateColumnFromDefinition(ReportColumnViewModel column)
@@ -211,16 +211,86 @@ public partial class FindingsView
     
     private DataGridTemplateColumn CreateSeverityColumn(ReportColumnViewModel column)
     {
-        // Reuse existing badge/text styles for consistent visuals
-        var badgeStyle = (Style)FindResource("SeverityBadgeStyle");
-        var textStyle = (Style)FindResource("SeverityTextStyle");
+        // Get the converter to convert enum to string
+        var severityConverter = (IValueConverter)FindResource("SeverityToStringConverter");
         
+        // Create binding with converter
+        var textBinding = new Binding($"[{column.Name}]")
+        {
+            Converter = severityConverter
+        };
+        
+        // Create TextBlock with binding
         var textFactory = new FrameworkElementFactory(typeof(TextBlock));
-        textFactory.SetBinding(TextBlock.TextProperty, new Binding($"[{column.Name}]"));
+        textFactory.SetBinding(TextBlock.TextProperty, textBinding);
+        textFactory.SetValue(TextBlock.FontWeightProperty, System.Windows.FontWeights.Bold);
+        textFactory.SetValue(TextBlock.FontSizeProperty, 12.0);
+        textFactory.SetValue(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        
+        // Create triggers for text color based on converted string value
+        var errorTextTrigger = new DataTrigger
+        {
+            Binding = textBinding,
+            Value = "Error"
+        };
+        errorTextTrigger.Setters.Add(new Setter(TextBlock.ForegroundProperty, FindResource("ErrorBrush")));
+        
+        var warningTextTrigger = new DataTrigger
+        {
+            Binding = textBinding,
+            Value = "Warning"
+        };
+        warningTextTrigger.Setters.Add(new Setter(TextBlock.ForegroundProperty, FindResource("WarningBrush")));
+        
+        var infoTextTrigger = new DataTrigger
+        {
+            Binding = textBinding,
+            Value = "Info"
+        };
+        infoTextTrigger.Setters.Add(new Setter(TextBlock.ForegroundProperty, FindResource("InfoBrush")));
+        
+        // Create style for TextBlock
+        var textStyle = new Style(typeof(TextBlock));
+        textStyle.Triggers.Add(errorTextTrigger);
+        textStyle.Triggers.Add(warningTextTrigger);
+        textStyle.Triggers.Add(infoTextTrigger);
         textFactory.SetValue(TextBlock.StyleProperty, textStyle);
         
+        // Create Border with binding for background color
         var borderFactory = new FrameworkElementFactory(typeof(Border));
-        borderFactory.SetValue(Border.StyleProperty, badgeStyle);
+        borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+        borderFactory.SetValue(Border.PaddingProperty, new Thickness(8, 4, 8, 4));
+        borderFactory.SetValue(Border.HorizontalAlignmentProperty, HorizontalAlignment.Stretch);
+        
+        // Create triggers for border background based on converted string value
+        var errorBorderTrigger = new DataTrigger
+        {
+            Binding = textBinding,
+            Value = "Error"
+        };
+        errorBorderTrigger.Setters.Add(new Setter(Border.BackgroundProperty, FindResource("ErrorBackgroundBrush")));
+        
+        var warningBorderTrigger = new DataTrigger
+        {
+            Binding = textBinding,
+            Value = "Warning"
+        };
+        warningBorderTrigger.Setters.Add(new Setter(Border.BackgroundProperty, FindResource("WarningBackgroundBrush")));
+        
+        var infoBorderTrigger = new DataTrigger
+        {
+            Binding = textBinding,
+            Value = "Info"
+        };
+        infoBorderTrigger.Setters.Add(new Setter(Border.BackgroundProperty, FindResource("InfoBackgroundBrush")));
+        
+        // Create style for Border
+        var borderStyle = new Style(typeof(Border));
+        borderStyle.Triggers.Add(errorBorderTrigger);
+        borderStyle.Triggers.Add(warningBorderTrigger);
+        borderStyle.Triggers.Add(infoBorderTrigger);
+        borderFactory.SetValue(Border.StyleProperty, borderStyle);
+        
         borderFactory.AppendChild(textFactory);
         
         var template = new DataTemplate

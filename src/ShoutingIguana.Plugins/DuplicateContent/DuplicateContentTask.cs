@@ -241,7 +241,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                         .Set("Description", DescribeDuplicateTemporaryRedirects())
                         .Set("DuplicateOf", redirectInfo.TemporaryRedirects.First())
                         .Set("Similarity", 100)
-                        .Set("Severity", "Warning");
+                        .SetSeverity(Severity.Warning);
                     
                     await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
                 }
@@ -255,7 +255,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                         .Set("Description", DescribeExactDuplicate(nonRedirectDuplicates.Length + 1))
                         .Set("DuplicateOf", nonRedirectDuplicates.First())
                         .Set("Similarity", 100)
-                        .Set("Severity", "Error");
+                        .SetSeverity(Severity.Error);
                     
                     await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                 }
@@ -269,7 +269,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     .Set("Description", DescribeExactDuplicate(urlsCopy.Count))
                     .Set("DuplicateOf", otherUrls.First())
                     .Set("Similarity", 100)
-                    .Set("Severity", "Error");
+                    .SetSeverity(Severity.Error);
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -330,7 +330,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 .Set("Description", DescribeNearDuplicate(nearDuplicates.Count, topDup.Similarity, topDup.Url))
                 .Set("DuplicateOf", topDup.Url)
                 .Set("Similarity", (int)topDup.Similarity)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -406,7 +406,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 .Set("Description", DescribeBoilerplateRatio(boilerplatePercentage))
                 .Set("DuplicateOf", "(boilerplate ratio check)")
                     .Set("Similarity", boilerplatePercentage)
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                     
@@ -526,7 +526,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     .Set("Description", DescribeDomainVariantUnreachable(variantUrl))
                     .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 0)
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
                 return;
@@ -539,7 +539,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     .Set("Description", DescribeDomainVariantTimeout(variantUrl))
                     .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 0)
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, row2, ctx.Metadata.UrlId, default);
                 return;
@@ -568,7 +568,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                         .Set("Description", DescribeDomainVariantCorrect(variantUrl, canonicalUrl, statusCode))
                         .Set("DuplicateOf", variantUrl)
                         .Set("Similarity", 100)
-                        .Set("Severity", "Info");
+                        .SetSeverity(Severity.Info);
                     
                     await ctx.Reports.ReportAsync(Key, row3, ctx.Metadata.UrlId, default);
                 }
@@ -580,7 +580,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                         .Set("Description", DescribeDomainVariantWrongTarget(variantUrl, canonicalUrl))
                         .Set("DuplicateOf", variantUrl)
                         .Set("Similarity", 100)
-                        .Set("Severity", "Warning");
+                        .SetSeverity(Severity.Warning);
                     
                     await ctx.Reports.ReportAsync(Key, row4, ctx.Metadata.UrlId, default);
                 }
@@ -594,7 +594,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                         .Set("Description", DescribeDomainVariantTemporaryRedirect(variantUrl, statusCode))
                         .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 100)
-                    .Set("Severity", "Error");
+                    .SetSeverity(Severity.Error);
                 
                 await ctx.Reports.ReportAsync(Key, row5, ctx.Metadata.UrlId, default);
             }
@@ -607,7 +607,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                         .Set("Description", DescribeDomainVariantDuplicateContent(variantUrl))
                         .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 100)
-                    .Set("Severity", "Error");
+                    .SetSeverity(Severity.Error);
                 
                 await ctx.Reports.ReportAsync(Key, row6, ctx.Metadata.UrlId, default);
             }
@@ -619,7 +619,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 .Set("Description", DescribeDomainVariantError(variantUrl, statusCode))
                 .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 0)
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, row7, ctx.Metadata.UrlId, default);
             }

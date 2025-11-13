@@ -601,7 +601,7 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
             var friendlyIssue = ConvertCodeToFriendlyText(tracker.Code, tracker.LinkType);
 
             var row = ReportRow.Create()
-                .Set("Severity", tracker.Severity.ToString())
+                .SetSeverity(tracker.Severity)
                 .Set("Issue", friendlyIssue)
                 .Set("Description", tracker.Message)
                 .Set("LinkedFrom", ctx.Url.ToString())

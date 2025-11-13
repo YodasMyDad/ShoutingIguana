@@ -193,12 +193,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (string.IsNullOrEmpty(title))
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Missing Title")
                 .Set("Title", "")
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Error");
+                .SetSeverity(Severity.Error);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -212,12 +212,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (title.Length < MIN_TITLE_LENGTH)
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Title Too Short")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
                 .Set("Length", title.Length)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -229,12 +229,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         else if (title.Length > MAX_TITLE_WARNING_LENGTH)
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Title Too Long (Will Truncate)")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
                 .Set("Length", title.Length)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -246,12 +246,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         else if (title.Length > MAX_TITLE_LENGTH)
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Title Long (May Truncate)")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
                 .Set("Length", title.Length)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -301,7 +301,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                                 .Set("Title", title)
                                 .Set("MetaDescription", "")
                                 .Set("Length", title.Length)
-                                .Set("Severity", "Warning");
+                                .SetSeverity(Severity.Warning);
                             
                             await ReportWithExplanationAsync(
                                 ctx,
@@ -320,7 +320,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                                 .Set("Title", title)
                                 .Set("MetaDescription", "")
                                 .Set("Length", title.Length)
-                                .Set("Severity", "Error");
+                                .SetSeverity(Severity.Error);
                             
                             await ReportWithExplanationAsync(
                                 ctx,
@@ -339,7 +339,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                             .Set("Title", title)
                             .Set("MetaDescription", "")
                             .Set("Length", title.Length)
-                            .Set("Severity", "Error");
+                            .SetSeverity(Severity.Error);
                         
                         await ReportWithExplanationAsync(
                             ctx,
@@ -392,12 +392,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (pixelWidth > MAX_PIXEL_WIDTH)
         {
             var row1 = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", $"Title Pixel Width Exceeded (~{(int)pixelWidth}px)")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
                 .Set("Length", title.Length)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -409,12 +409,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         else if (pixelWidth > SAFE_PIXEL_WIDTH)
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", $"Title May Truncate on Mobile (~{(int)pixelWidth}px)")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
                 .Set("Length", title.Length)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -430,12 +430,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (string.IsNullOrEmpty(description))
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Missing Meta Description")
                 .Set("Title", "")
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -449,12 +449,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (description.Length < MIN_DESCRIPTION_LENGTH)
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Meta Description Too Short")
                 .Set("Title", "")
                 .Set("MetaDescription", description)
                 .Set("Length", description.Length)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -466,12 +466,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         else if (description.Length > MAX_DESCRIPTION_WARNING_LENGTH)
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Meta Description Too Long (Will Truncate)")
                 .Set("Title", "")
                 .Set("MetaDescription", description)
                 .Set("Length", description.Length)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -483,12 +483,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         else if (description.Length > MAX_DESCRIPTION_LENGTH)
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Meta Description Long (May Truncate)")
                 .Set("Title", "")
                 .Set("MetaDescription", description)
                 .Set("Length", description.Length)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -516,12 +516,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 {
                     var preview = description.Length > 80 ? description.Substring(0, 80) + "..." : description;
                     var row = ReportRow.Create()
-                        .Set("Page", ctx.Url.ToString())
+                        .SetPage(ctx.Url)
                         .Set("Issue", $"Duplicate Meta Description ({duplicateCount} pages)")
                         .Set("Title", "")
                         .Set("MetaDescription", preview)
                         .Set("Length", description.Length)
-                        .Set("Severity", "Warning");
+                        .SetSeverity(Severity.Warning);
                     
                     await ReportWithExplanationAsync(
                         ctx,
@@ -562,12 +562,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (viewportCount > 1)
         {
             var row1 = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", $"Multiple Viewport Declarations ({viewportCount})")
                 .Set("Title", "")
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -580,12 +580,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (string.IsNullOrEmpty(viewport))
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Missing Viewport Meta Tag")
                 .Set("Title", "")
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -601,12 +601,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (string.IsNullOrEmpty(charset))
         {
             var row1 = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Missing Charset Declaration")
                 .Set("Title", "")
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -621,12 +621,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (!charset.Equals("utf-8", StringComparison.OrdinalIgnoreCase))
         {
             var row2 = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", $"Non-UTF8 Charset ({charset})")
                 .Set("Title", "")
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -644,12 +644,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (totalCharsetDeclarations > 1)
         {
             var row3 = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", $"Multiple Charset Declarations ({totalCharsetDeclarations})")
                 .Set("Title", "")
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -665,12 +665,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (string.IsNullOrEmpty(language))
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Missing Lang Attribute")
                 .Set("Title", "")
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -694,12 +694,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (ogTagCount == 0)
         {
             var row1 = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Missing Open Graph Tags")
                 .Set("Title", "")
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -717,12 +717,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             if (string.IsNullOrEmpty(ogUrl)) missing.Add("og:url");
 
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", $"Incomplete Open Graph ({ogTagCount}/4)")
                 .Set("Title", "")
                 .Set("MetaDescription", string.Join(", ", missing))
                 .Set("Length", ogTagCount)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -745,12 +745,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (twitterTagCount == 0)
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Missing Twitter Card Tags")
                 .Set("Title", "")
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -775,12 +775,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (h1Count == 0)
         {
             var row1 = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Missing H1 Tag")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Error");
+                .SetSeverity(Severity.Error);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -793,12 +793,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         {
             var h1Texts = h1Nodes!.Take(5).Select(n => n.InnerText?.Trim()).ToArray();
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", $"Multiple H1 Tags ({h1Count})")
                 .Set("Title", title)
                 .Set("MetaDescription", string.Join(", ", h1Texts))
                 .Set("Length", h1Count)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -815,12 +815,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             if (string.IsNullOrEmpty(h1Text))
             {
                 var row2 = ReportRow.Create()
-                    .Set("Page", ctx.Url.ToString())
+                    .SetPage(ctx.Url)
                     .Set("Issue", "Empty H1 Tag")
                     .Set("Title", title)
                     .Set("MetaDescription", "")
                     .Set("Length", 0)
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ReportWithExplanationAsync(
                     ctx,
@@ -838,12 +838,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 if (normalizedH1 == normalizedTitle)
                 {
                     var row3 = ReportRow.Create()
-                        .Set("Page", ctx.Url.ToString())
+                        .SetPage(ctx.Url)
                         .Set("Issue", "Identical H1 and Title")
                         .Set("Title", title)
                         .Set("MetaDescription", h1Text)
                         .Set("Length", title.Length)
-                        .Set("Severity", "Info");
+                        .SetSeverity(Severity.Info);
                     
                     await ReportWithExplanationAsync(
                         ctx,
@@ -858,12 +858,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 if (similarity < 0.3) // Less than 30% similar
                 {
                     var row4 = ReportRow.Create()
-                        .Set("Page", ctx.Url.ToString())
+                        .SetPage(ctx.Url)
                         .Set("Issue", "H1 and Title Unrelated")
                         .Set("Title", title)
                         .Set("MetaDescription", h1Text)
                         .Set("Length", (int)(similarity * 100))
-                        .Set("Severity", "Info");
+                        .SetSeverity(Severity.Info);
                     
                     await ReportWithExplanationAsync(
                         ctx,
@@ -885,12 +885,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (!hasH2 && (hasH3 || hasH4 || hasH5 || hasH6))
         {
             var row5 = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Heading Hierarchy Skips H2")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -902,12 +902,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         else if (!hasH3 && (hasH4 || hasH5 || hasH6))
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Heading Hierarchy Skips H3")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -924,12 +924,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (keywordsNode != null)
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Meta Keywords Tag Found (Outdated)")
                 .Set("Title", "")
                 .Set("MetaDescription", "")
             .Set("Length", 0)
-            .Set("Severity", "Info");
+            .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -1135,12 +1135,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (!hasActionWord)
         {
             var row6 = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Description Lacks Action Words")
                 .Set("Title", "")
                 .Set("MetaDescription", description)
                 .Set("Length", description.Length)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
                 ctx,
@@ -1176,12 +1176,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         if (!hasSeparators)
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Title Lacks Visual Separators")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
                 .Set("Length", title.Length)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
                 ctx,

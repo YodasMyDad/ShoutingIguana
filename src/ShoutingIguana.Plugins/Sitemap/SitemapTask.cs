@@ -66,7 +66,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                         .Set("Issue", "Sitemap Not Found")
                         .Set("InSitemap", "N/A")
                         .Set("StatusCode", httpStatus)
-                        .Set("Severity", "Warning");
+                        .SetSeverity(Severity.Warning);
                     
                     await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
                 }
@@ -81,7 +81,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                             .Set("Issue", $"Sitemap Restricted (HTTP {httpStatus})")
                             .Set("InSitemap", "N/A")
                             .Set("StatusCode", httpStatus)
-                            .Set("Severity", "Info");
+                            .SetSeverity(Severity.Info);
                         
                         await ctx.Reports.ReportAsync(Key, row2, ctx.Metadata.UrlId, default);
                     }
@@ -92,7 +92,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                             .Set("Issue", $"Sitemap Error (HTTP {httpStatus})")
                             .Set("InSitemap", "N/A")
                             .Set("StatusCode", httpStatus)
-                            .Set("Severity", "Error");
+                            .SetSeverity(Severity.Error);
                         
                         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                     }
@@ -158,7 +158,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", "Sitemap Returned No Content")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowNoContent, ctx.Metadata.UrlId, default);
             return;
@@ -203,7 +203,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                             .Set("Issue", "Gzip Decompression Error")
                             .Set("InSitemap", "N/A")
                             .Set("StatusCode", ctx.Metadata.StatusCode)
-                            .Set("Severity", "Error");
+                            .SetSeverity(Severity.Error);
                         
                         await ctx.Reports.ReportAsync(Key, rowGzip, ctx.Metadata.UrlId, default);
                         return;
@@ -222,7 +222,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"Sitemap Too Large ({sizeMB:F2}MB)")
                     .Set("InSitemap", "N/A")
                     .Set("StatusCode", ctx.Metadata.StatusCode)
-                    .Set("Severity", "Error");
+                            .SetSeverity(Severity.Error);
                 
                 await ctx.Reports.ReportAsync(Key, rowSize, ctx.Metadata.UrlId, default);
             }
@@ -233,7 +233,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"Sitemap Large ({sizeMB:F2}MB)")
                     .Set("InSitemap", "N/A")
                     .Set("StatusCode", ctx.Metadata.StatusCode)
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, rowWarn, ctx.Metadata.UrlId, default);
             }
@@ -249,7 +249,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", "Invalid Sitemap XML (Missing Namespace)")
                     .Set("InSitemap", "N/A")
                     .Set("StatusCode", ctx.Metadata.StatusCode)
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, rowNs, ctx.Metadata.UrlId, default);
                 return;
@@ -277,7 +277,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"Sitemap Parse Error: {ex.Message}")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .Set("Severity", "Error");
+                            .SetSeverity(Severity.Error);
             
             await ctx.Reports.ReportAsync(Key, rowParse, ctx.Metadata.UrlId, default);
         }
@@ -292,7 +292,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             .Set("Issue", $"Sitemap Index ({sitemapElements.Count} sitemaps)")
             .Set("InSitemap", "N/A")
             .Set("StatusCode", ctx.Metadata.StatusCode)
-            .Set("Severity", "Info");
+            .SetSeverity(Severity.Info);
         
         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
 
@@ -323,7 +323,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", "Empty Sitemap")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowEmpty, ctx.Metadata.UrlId, default);
             return;
@@ -337,7 +337,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"URL Limit Exceeded ({urlElements.Count:N0} URLs)")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .Set("Severity", "Error");
+                            .SetSeverity(Severity.Error);
             
             await ctx.Reports.ReportAsync(Key, rowLimit, ctx.Metadata.UrlId, default);
         }
@@ -348,7 +348,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"Approaching URL Limit ({urlElements.Count:N0} URLs)")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowApproach, ctx.Metadata.UrlId, default);
         }
@@ -358,7 +358,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             .Set("Issue", $"Sitemap Parsed ({urlElements.Count:N0} URLs)")
             .Set("InSitemap", "N/A")
             .Set("StatusCode", ctx.Metadata.StatusCode)
-            .Set("Severity", "Info");
+            .SetSeverity(Severity.Info);
         
         await ctx.Reports.ReportAsync(Key, rowFound, ctx.Metadata.UrlId, default);
 
@@ -473,7 +473,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", "All Priority 1.0 (Defeats Purpose)")
                     .Set("InSitemap", "N/A")
                     .Set("StatusCode", ctx.Metadata.StatusCode)
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, rowPriority, ctx.Metadata.UrlId, default);
             }
@@ -486,7 +486,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"Invalid URLs ({invalidUrls})")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowInv, ctx.Metadata.UrlId, default);
         }
@@ -498,7 +498,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"Future Lastmod Dates ({futureLastmod})")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowFuture, ctx.Metadata.UrlId, default);
         }
@@ -510,7 +510,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"Outdated URLs ({tooOldUrls} > 2 years old)")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, rowOld, ctx.Metadata.UrlId, default);
         }
@@ -522,7 +522,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"Invalid Priority Values ({invalidPriority})")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .Set("Severity", "Error");
+                            .SetSeverity(Severity.Error);
             
             await ctx.Reports.ReportAsync(Key, rowInvPri, ctx.Metadata.UrlId, default);
         }
@@ -639,7 +639,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"Sitemap Contains 404s ({errors404.Count} URLs)")
                     .Set("InSitemap", "Yes")
                     .Set("StatusCode", 404)
-                    .Set("Severity", "Error");
+                            .SetSeverity(Severity.Error);
                 
                 await ctx.Reports.ReportAsync(Key, row404, ctx.Metadata.UrlId, default);
             }
@@ -652,7 +652,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"Sitemap Contains 5xx Errors ({errors5xx.Count} URLs)")
                     .Set("InSitemap", "Yes")
                     .Set("StatusCode", 500)
-                    .Set("Severity", "Error");
+                            .SetSeverity(Severity.Error);
                 
                 await ctx.Reports.ReportAsync(Key, row5xx, ctx.Metadata.UrlId, default);
             }
@@ -665,7 +665,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"Sitemap Contains Redirects ({redirects.Count} URLs)")
                     .Set("InSitemap", "Yes")
                     .Set("StatusCode", 301)
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, rowRedir, ctx.Metadata.UrlId, default);
             }
@@ -737,7 +737,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"Orphan URLs in Sitemap ({orphanUrls.Count})")
                     .Set("InSitemap", "Yes")
                     .Set("StatusCode", 200)
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, rowOrphan, ctx.Metadata.UrlId, default);
             }
@@ -756,7 +756,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"URLs Missing from Sitemap ({missingFromSitemap.Count})")
                     .Set("InSitemap", "No")
                     .Set("StatusCode", 200)
-                    .Set("Severity", "Info");
+                    .SetSeverity(Severity.Info);
                 
                 await ctx.Reports.ReportAsync(Key, rowMissing, ctx.Metadata.UrlId, default);
             }

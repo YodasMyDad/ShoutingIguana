@@ -4,9 +4,10 @@
              xmlns:sdk="clr-namespace:ShoutingIguana.PluginSdk;assembly=ShoutingIguana.PluginSdk"
              xmlns:controls="clr-namespace:ShoutingIguana.Controls"
              xmlns:vm="clr-namespace:ShoutingIguana.ViewModels"
+             xmlns:converters="clr-namespace:ShoutingIguana.Converters"
              x:Name="Root"
              Background="{StaticResource BackgroundBrush}">
-    
+   
     <UserControl.InputBindings>
         <KeyBinding Key="C" Modifiers="Control" Command="{Binding SelectedTab.CopyUrlCommand}"/>
         <KeyBinding Key="C" Modifiers="Control+Shift" Command="{Binding SelectedTab.CopyMessageCommand}"/>
@@ -14,6 +15,8 @@
     </UserControl.InputBindings>
     
     <UserControl.Resources>
+        <!-- Converters -->
+        <converters:SeverityToStringConverter x:Key="SeverityToStringConverter"/>
         <!-- Severity Badge Selector -->
         <Style x:Key="SeverityBadgeStyle" TargetType="Border">
             <Setter Property="CornerRadius" Value="4"/>
@@ -39,7 +42,7 @@
                 <DataTrigger Binding="{Binding Severity}" Value="Info">
                     <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
                 </DataTrigger>
-                <!-- Indexer binding support for dynamic rows -->
+                <!-- Indexer binding support for dynamic rows (string values) -->
                 <DataTrigger Binding="{Binding Path=[Severity]}" Value="Error">
                     <Setter Property="Background" Value="{StaticResource ErrorBackgroundBrush}"/>
                 </DataTrigger>
@@ -47,6 +50,16 @@
                     <Setter Property="Background" Value="{StaticResource WarningBackgroundBrush}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Path=[Severity]}" Value="Info">
+                    <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
+                </DataTrigger>
+                <!-- Indexer binding support for enum values -->
+                <DataTrigger Binding="{Binding Path=[Severity]}" Value="{x:Static sdk:Severity.Error}">
+                    <Setter Property="Background" Value="{StaticResource ErrorBackgroundBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Path=[Severity]}" Value="{x:Static sdk:Severity.Warning}">
+                    <Setter Property="Background" Value="{StaticResource WarningBackgroundBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Path=[Severity]}" Value="{x:Static sdk:Severity.Info}">
                     <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
                 </DataTrigger>
             </Style.Triggers>
@@ -76,7 +89,7 @@
                 <DataTrigger Binding="{Binding Severity}" Value="Info">
                     <Setter Property="Foreground" Value="{StaticResource InfoBrush}"/>
                 </DataTrigger>
-                <!-- Indexer binding fallback for dynamic rows -->
+                <!-- Indexer binding fallback for dynamic rows (string values) -->
                 <DataTrigger Binding="{Binding Path=[Severity]}" Value="Error">
                     <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
                 </DataTrigger>
@@ -84,6 +97,16 @@
                     <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Path=[Severity]}" Value="Info">
+                    <Setter Property="Foreground" Value="{StaticResource InfoBrush}"/>
+                </DataTrigger>
+                <!-- Indexer binding fallback for enum values -->
+                <DataTrigger Binding="{Binding Path=[Severity]}" Value="{x:Static sdk:Severity.Error}">
+                    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Path=[Severity]}" Value="{x:Static sdk:Severity.Warning}">
+                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Path=[Severity]}" Value="{x:Static sdk:Severity.Info}">
                     <Setter Property="Foreground" Value="{StaticResource InfoBrush}"/>
                 </DataTrigger>
             </Style.Triggers>

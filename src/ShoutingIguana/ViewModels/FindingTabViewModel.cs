@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -8,7 +7,6 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,8 +22,6 @@ namespace ShoutingIguana.ViewModels;
 /// </summary>
 public partial class FindingTabViewModel : ObservableObject
 {
-    private static readonly SeverityIssueComparer ReportRowComparer = new();
-    
     [ObservableProperty]
     private string _taskKey = string.Empty;
 
@@ -95,7 +91,6 @@ public partial class FindingTabViewModel : ObservableObject
     {
         _ = value;
         OnPropertyChanged(nameof(VisibleItemCount));
-        ApplyReportRowSorting();
     }
     
     /// <summary>
@@ -310,6 +305,8 @@ public partial class FindingTabViewModel : ObservableObject
                 
                 HasMoreItems = ReportRows.Count < TotalCount;
                 OnPropertyChanged(nameof(VisibleItemCount)); // Update count for UI
+                
+                Debug.WriteLine($"[{DisplayName}] Loaded page {_currentPage}: Added {rowVms.Count} rows, total now {ReportRows.Count}/{TotalCount}");
             });
         }
         catch (Exception ex)
@@ -589,114 +586,6 @@ public partial class FindingTabViewModel : ObservableObject
 
         // Fallback to the first detail item if available
         return SelectedFindingDetails?.Items.FirstOrDefault();
-    }
-    
-    private void ApplyReportRowSorting()
-    {
-        if (ReportRows == null || Application.Current == null)
-        {
-            return;
-        }
-
-        if (!Application.Current.Dispatcher.CheckAccess())
-        {
-            Application.Current.Dispatcher.Invoke(ApplyReportRowSorting);
-            return;
-        }
-
-        var view = CollectionViewSource.GetDefaultView(ReportRows);
-        if (view is ListCollectionView listView)
-        {
-            listView.CustomSort = ReportRowComparer;
-            listView.Refresh();
-        }
-        else
-        {
-            view?.Refresh();
-        }
-    }
-    
-    private sealed class SeverityIssueComparer : IComparer
-    {
-        private static readonly Dictionary<string, int> SeverityRankings = new(StringComparer.OrdinalIgnoreCase)
-        {
-            { Severity.Error.ToString(), 0 },
-            { Severity.Warning.ToString(), 1 },
-            { Severity.Info.ToString(), 2 }
-        };
-
-        private static readonly string[] IssueColumnCandidates = { "Issue", "Message", "Description" };
-
-        public int Compare(object? x, object? y)
-        {
-            if (ReferenceEquals(x, y)) return 0;
-            if (x is not DynamicReportRowViewModel left) return -1;
-            if (y is not DynamicReportRowViewModel right) return 1;
-
-            var severityComparison = GetSeverityRank(left).CompareTo(GetSeverityRank(right));
-            if (severityComparison != 0)
-            {
-                return severityComparison;
-            }
-
-            var issueComparison = string.Compare(GetIssueText(left), GetIssueText(right), StringComparison.OrdinalIgnoreCase);
-            if (issueComparison != 0)
-            {
-                return issueComparison;
-            }
-
-            return left.Id.CompareTo(right.Id);
-        }
-
-        private static int GetSeverityRank(DynamicReportRowViewModel row)
-        {
-            var raw = row.GetValue("Severity");
-            if (raw is Severity severityEnum)
-            {
-                return severityEnum switch
-                {
-                    Severity.Error => 0,
-                    Severity.Warning => 1,
-                    Severity.Info => 2,
-                    _ => SeverityRankings.Count
-                };
-            }
-
-            var text = raw?.ToString();
-            if (!string.IsNullOrWhiteSpace(text) && SeverityRankings.TryGetValue(text, out var rank))
-            {
-                return rank;
-            }
-
-            return SeverityRankings.Count;
-        }
-
-        private static string GetIssueText(DynamicReportRowViewModel row)
-        {
-            foreach (var column in IssueColumnCandidates)
-            {
-                var value = row.GetValue(column)?.ToString();
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    return value;
-                }
-            }
-
-            var fuzzyColumn = row.GetColumnNames().FirstOrDefault(name =>
-                name.Contains("issue", StringComparison.OrdinalIgnoreCase) ||
-                name.Contains("message", StringComparison.OrdinalIgnoreCase));
-
-            if (fuzzyColumn != null)
-            {
-                var value = row.GetValue(fuzzyColumn)?.ToString();
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    return value;
-                }
-            }
-
-            return string.Empty;
-        }
     }
 }
 

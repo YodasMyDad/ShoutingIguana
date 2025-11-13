@@ -148,7 +148,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", $"JSON Syntax Error: {ex.Message}")
                     .Set("Description", errorDescription)
                     .Set("Property", jsonPath)
-                    .Set("Severity", "Error");
+                    .SetSeverity(Severity.Error);
                 
                 await ctx.Reports.ReportAsync(Key, rowError, ctx.Metadata.UrlId, default);
             }
@@ -166,7 +166,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", $"JSON-LD Found ({validSchemas.Count} schemas)")
                 .Set("Description", foundDescription)
                 .Set("Property", schemaList)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, rowFound, ctx.Metadata.UrlId, default);
         }
@@ -250,7 +250,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "Incomplete Article Schema")
                 .Set("Description", articleDescription)
                 .Set("Property", missingList)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowArticle, ctx.Metadata.UrlId, default);
         }
@@ -332,7 +332,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "Incomplete Product Schema")
                 .Set("Description", productMissingDescription)
                 .Set("Property", missingList)
-                .Set("Severity", "Error");
+                .SetSeverity(Severity.Error);
             
             await ctx.Reports.ReportAsync(Key, rowProdMissing, ctx.Metadata.UrlId, default);
         }
@@ -347,7 +347,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", $"Product Recommendations ({warnings.Count})")
                 .Set("Description", warningDescription)
                 .Set("Property", hasAggregateRating ? "" : "aggregateRating")
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowProdWarn, ctx.Metadata.UrlId, default);
         }
@@ -360,7 +360,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "Complete with Star Ratings")
                 .Set("Description", completeDescription)
                 .Set("Property", "aggregateRating")
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, rowComplete, ctx.Metadata.UrlId, default);
         }
@@ -552,7 +552,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "Incomplete Video Schema")
                 .Set("Description", videoMissingDescription)
                 .Set("Property", missingList)
-                .Set("Severity", "Error");
+                .SetSeverity(Severity.Error);
             
             await ctx.Reports.ReportAsync(Key, rowVidMissing, ctx.Metadata.UrlId, default);
         }
@@ -567,7 +567,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", $"Video Recommendations ({warnings.Count})")
                 .Set("Description", videoWarningDescription)
                 .Set("Property", string.Join(", ", warnings.Take(2)))
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowVideo, ctx.Metadata.UrlId, default);
         }
@@ -642,7 +642,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "Incomplete Review Schema")
                 .Set("Description", reviewMissingDescription)
                 .Set("Property", missingList)
-                .Set("Severity", "Error");
+                .SetSeverity(Severity.Error);
             
             await ctx.Reports.ReportAsync(Key, rowRevMissing, ctx.Metadata.UrlId, default);
         }
@@ -657,7 +657,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", $"Review Recommendations ({warnings.Count})")
                 .Set("Description", reviewWarningDescription)
                 .Set("Property", string.Join(", ", warnings.Take(2)))
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowRevWarn, ctx.Metadata.UrlId, default);
         }
@@ -670,7 +670,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "Review Schema Complete")
                 .Set("Description", reviewCompleteDescription)
                 .Set("Property", "Review fields complete")
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, rowRevComplete, ctx.Metadata.UrlId, default);
         }
@@ -860,7 +860,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "Incomplete LocalBusiness Schema")
                 .Set("Description", localMissingDescription)
                 .Set("Property", missingList)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowLocal, ctx.Metadata.UrlId, default);
         }
@@ -876,7 +876,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", $"LocalBusiness Recommendations ({warnings.Count})")
                 .Set("Description", localWarningDescription)
                 .Set("Property", string.Join(", ", warnings.Take(2)))
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowLocalWarn, ctx.Metadata.UrlId, default);
         }
@@ -893,7 +893,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "Missing itemListElement")
                 .Set("Description", breadMissingDescription)
                 .Set("Property", "itemListElement")
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowBreadInv, ctx.Metadata.UrlId, default);
             return;
@@ -912,7 +912,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", "Empty BreadcrumbList")
                     .Set("Description", breadEmptyDescription)
                     .Set("Property", "itemListElement")
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, rowBreadEmpty, ctx.Metadata.UrlId, default);
             }
@@ -926,7 +926,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", $"Breadcrumb Found ({items.Count} levels)")
                     .Set("Description", breadcrumbDescription)
                     .Set("Property", breadcrumbLevels)
-                    .Set("Severity", "Info");
+                    .SetSeverity(Severity.Info);
                 
                 await ctx.Reports.ReportAsync(Key, rowBreadFound, ctx.Metadata.UrlId, default);
             }
@@ -951,7 +951,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", $"Missing {requiredProp}")
                 .Set("Description", missingRequiredDescription)
                 .Set("Property", requiredProp)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowFaqHow, ctx.Metadata.UrlId, default);
             return;
@@ -999,7 +999,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", $"FAQ Missing Answers ({questionsWithoutAnswers})")
                     .Set("Description", faqMissingAnswerDescription)
                     .Set("Property", "acceptedAnswer")
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, rowFaqMiss, ctx.Metadata.UrlId, default);
             }
@@ -1013,7 +1013,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", $"FAQ Complete ({questions.Count} Q&As)")
                     .Set("Description", faqCompleteDescription)
                     .Set("Property", faqSummary)
-                    .Set("Severity", "Info");
+                    .SetSeverity(Severity.Info);
                 
                 await ctx.Reports.ReportAsync(Key, rowFaqComplete, ctx.Metadata.UrlId, default);
             }
@@ -1027,7 +1027,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", $"FAQ Short Answers ({questionsWithShortAnswers})")
                     .Set("Description", faqShortDescription)
                     .Set("Property", "acceptedAnswer")
-                    .Set("Severity", "Info");
+                    .SetSeverity(Severity.Info);
                 
                 await ctx.Reports.ReportAsync(Key, rowFaqShort, ctx.Metadata.UrlId, default);
             }
@@ -1067,7 +1067,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", $"Microdata Found ({itemTypes.Count} items)")
                     .Set("Description", microDescription)
                     .Set("Property", microProperty)
-                    .Set("Severity", "Info");
+                    .SetSeverity(Severity.Info);
                 
                 await ctx.Reports.ReportAsync(Key, rowMicro, ctx.Metadata.UrlId, default);
         }
@@ -1111,7 +1111,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", "Missing Structured Data")
                     .Set("Description", missingDescription)
                     .Set("Property", propertyValue)
-                    .Set("Severity", "Info");
+                    .SetSeverity(Severity.Info);
                 
                 await ctx.Reports.ReportAsync(Key, rowMissing, ctx.Metadata.UrlId, default);
             }
@@ -1153,7 +1153,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "Missing Author Markup")
                 .Set("Description", authorDescription)
                 .Set("Property", "author")
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, rowAuthor, ctx.Metadata.UrlId, default);
         }
@@ -1214,7 +1214,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", "Missing Contact Info")
                     .Set("Description", contactDescription)
                     .Set("Property", "phone, address")
-                    .Set("Severity", "Info");
+                    .SetSeverity(Severity.Info);
                 
                 await ctx.Reports.ReportAsync(Key, rowContact, ctx.Metadata.UrlId, default);
             }
@@ -1227,7 +1227,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", "Missing Phone Number")
                     .Set("Description", phoneDescription)
                     .Set("Property", "phone")
-                    .Set("Severity", "Info");
+                    .SetSeverity(Severity.Info);
                 
                 await ctx.Reports.ReportAsync(Key, rowPhone, ctx.Metadata.UrlId, default);
             }
@@ -1240,7 +1240,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", "Missing Address")
                     .Set("Description", addressDescription)
                     .Set("Property", "address")
-                    .Set("Severity", "Info");
+                    .SetSeverity(Severity.Info);
                 
                 await ctx.Reports.ReportAsync(Key, rowAddr, ctx.Metadata.UrlId, default);
             }
@@ -1295,7 +1295,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", $"NAP Inconsistency ({uniqueNames.Count} names, {uniquePhones.Count} phones)")
                 .Set("Description", napDescription)
                 .Set("Property", "name, address, telephone")
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, rowNAP, ctx.Metadata.UrlId, default);
         }

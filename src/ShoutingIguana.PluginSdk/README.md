@@ -66,10 +66,11 @@ public class MyTask : UrlTaskBase
         if (title.Length < 30)
         {
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Title Too Short")
                 .Set("Title", title)
-                .Set("Length", title.Length);
+                .Set("Length", title.Length)
+                .SetSeverity(Severity.Warning);
 
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -162,10 +163,11 @@ public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     // IMPORTANT: Plugins with registered schemas should create ONLY report rows, not findings
     // Only report via ctx.Reports.ReportAsync() so the UI can build dynamic columns
     var row = ReportRow.Create()
-        .Set("FromURL", ctx.Url.ToString())
+        .SetPage(ctx.Url)
         .Set("ToURL", targetUrl)
         .Set("AnchorText", anchorText)
-        .Set("LinkType", linkType);
+        .Set("LinkType", linkType)
+        .SetSeverity(Severity.Info);
     
     await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
 }
@@ -186,13 +188,15 @@ public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
 
 ```csharp
 var schema = ReportSchema.Create("MyPlugin")
-    .AddPrimaryColumn("URL", ReportColumnType.Url, "Page URL")  // Primary column (bold, shown first)
+    .AddPrimaryColumn("Page", ReportColumnType.Url, "Page URL")  // Primary column (bold, shown first)
     .AddColumn("Count", ReportColumnType.Integer, "Issue Count")
     .AddColumn("LastChecked", ReportColumnType.DateTime, "Last Checked")
     .Build();
 ```
 
 Primary columns are shown first and typically bold—use for the main identifier (URL, page title, etc.).
+
+**Note:** The `Severity` column is automatically added to all schemas by `Build()`. You don't need to add it manually.
 
 ## Reporting Issues
 
@@ -227,11 +231,11 @@ public class CanonicalTask : UrlTaskBase
             if (targetUrl == null)
             {
                 var row = ReportRow.Create()
-                    .Set("Page", ctx.Url.ToString())
+                    .SetPage(ctx.Url)
                     .Set("Issue", "Canonical Target Not Found")
                     .Set("CanonicalURL", canonical)
                     .Set("Status", "Not Crawled")
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -275,6 +279,8 @@ var domain = UrlHelper.GetDomain("https://www.example.com/page");
 - Return early for non-applicable URLs (check content type, status)
 - **Always register a custom report schema** - this is required for all plugins
 - **Create ONLY report rows** using `ctx.Reports.ReportAsync()`
+- **Use helper methods** - prefer `.SetSeverity(Severity.Error)` over `.Set("Severity", "Error")`
+- **Use `.SetPage(ctx.Url)`** instead of `.Set("Page", ctx.Url.ToString())` for cleaner code
 - Design columns that make sense for your data type
 - Implement `CleanupProject()` if using static state for memory management
 
@@ -282,15 +288,49 @@ var domain = UrlHelper.GetDomain("https://www.example.com/page");
 
 - Don't block the thread (use async/await)
 - **Use `ctx.Reports.ReportAsync()` exclusively** - the legacy findings system has been removed
+- **Don't use magic strings for Severity** - use `.SetSeverity(Severity.Info)` instead of `.Set("Severity", "Info")`
 - Don't create `IExportProvider` unless you need specialized export formats
 - Don't store per-URL state in instance fields (use static dictionaries with CleanupProject)
 - Don't parse HTML twice (use `ctx.RenderedHtml` which is already parsed)
+
+## Helper Methods
+
+ReportRow provides convenient helper methods for common columns:
+
+### SetSeverity
+
+Use the `Severity` enum instead of magic strings:
+
+```csharp
+var row = ReportRow.Create()
+    .SetSeverity(Severity.Error)    // ✅ Preferred - type-safe
+    // .Set("Severity", "Error")    // ❌ Avoid - magic string
+```
+
+### SetPage
+
+Convenient helper for the common "Page" column:
+
+```csharp
+var row = ReportRow.Create()
+    .SetPage(ctx.Url)               // ✅ Preferred - cleaner
+    // .Set("Page", ctx.Url.ToString())  // ❌ Works but verbose
+```
+
+You can also use `SetPage(string url)` if you already have a URL string.
 
 ## Severity Levels
 
 - **Error** - Critical issues (404s, broken links, missing required tags)
 - **Warning** - Issues to review (suboptimal titles, missing meta)
 - **Info** - Informational notices (redirects, statistics)
+
+Use the `Severity` enum with `SetSeverity()` for type safety:
+```csharp
+.SetSeverity(Severity.Error)
+.SetSeverity(Severity.Warning)
+.SetSeverity(Severity.Info)
+```
 
 ## Memory Management
 
@@ -327,7 +367,7 @@ public class DuplicateContentPlugin : IPlugin
             .AddColumn("Issue", ReportColumnType.String, "Issue")
             .AddColumn("DuplicateOf", ReportColumnType.Url, "Duplicate Of")
             .AddColumn("Similarity", ReportColumnType.Integer, "Similarity %")
-            .AddColumn("Severity", ReportColumnType.String, "Severity")
+            // Severity column is automatically added by Build()
             .Build();
         
         context.RegisterReportSchema(schema);
@@ -359,11 +399,11 @@ public class DuplicateContentTask : UrlTaskBase
                 var duplicateOf = hashes[hash].First(u => u != ctx.Url.ToString());
                 
                 var row = ReportRow.Create()
-                    .Set("Page", ctx.Url.ToString())
+                    .SetPage(ctx.Url)
                     .Set("Issue", "Exact duplicate content")
                     .Set("DuplicateOf", duplicateOf)
                     .Set("Similarity", 100)
-                    .Set("Severity", "Error");
+                    .SetSeverity(Severity.Error);
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }

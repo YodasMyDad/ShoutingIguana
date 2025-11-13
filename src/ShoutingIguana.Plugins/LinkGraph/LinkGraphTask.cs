@@ -68,7 +68,7 @@ public class LinkGraphTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .Set("ToURL", link.ToUrl)
                 .Set("AnchorText", anchorText)
                 .Set("LinkType", link.LinkType)
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, row, fromUrlId, default);
         }

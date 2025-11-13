@@ -2,13 +2,14 @@ namespace ShoutingIguana.PluginSdk;
 
 /// <summary>
 /// Severity level for issues.
+/// Ordered by priority: Error (highest), Warning, Info (lowest).
 /// </summary>
 public enum Severity
 {
     /// <summary>
-    /// Informational - no action required.
+    /// Error - requires immediate attention.
     /// </summary>
-    Info = 0,
+    Error = 0,
     
     /// <summary>
     /// Warning - should be reviewed.
@@ -16,8 +17,8 @@ public enum Severity
     Warning = 1,
     
     /// <summary>
-    /// Error - requires attention.
+    /// Informational - no action required.
     /// </summary>
-    Error = 2
+    Info = 2
 }
 

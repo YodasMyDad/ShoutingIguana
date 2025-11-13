@@ -109,7 +109,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                     .Set("RobotsMeta", "(robots.txt missing)")
                     .Set("XRobotsTag", "(none)")
                     .Set("Indexable", "Yes")
-                    .Set("Severity", "Info");
+                    .SetSeverity(Severity.Info);
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                 
@@ -149,16 +149,16 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         if (ctx.Metadata.RobotsNoindex == true)
         {
             var isHeaderSource = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag);
-            var severityStr = ctx.Metadata.Depth <= 2 ? "Warning" : "Info";
+            var severity = ctx.Metadata.Depth <= 2 ? Severity.Warning : Severity.Info;
             
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("Issue", "Noindex Detected")
                 .Set("Description", "The page explicitly forbids indexing (meta or header), so it will not appear in search results.")
                 .Set("RobotsMeta", isHeaderSource ? "" : "noindex")
                 .Set("XRobotsTag", isHeaderSource ? "noindex" : "")
                 .Set("Indexable", "No")
-                .Set("Severity", severityStr);
+                .SetSeverity(severity);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -174,7 +174,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 .Set("RobotsMeta", isHeaderSource ? "" : "nofollow")
                 .Set("XRobotsTag", isHeaderSource ? "nofollow" : "")
                 .Set("Indexable", "Yes")
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -247,7 +247,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             .Set("RobotsMeta", metaSource)
             .Set("XRobotsTag", ctx.Metadata.XRobotsTag ?? "")
             .Set("Indexable", isIndexable ? "Yes" : "No")
-            .Set("Severity", "Info");
+            .SetSeverity(Severity.Info);
         
         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     }
@@ -266,7 +266,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             .Set("RobotsMeta", $"noindex: {ctx.Metadata.RobotsNoindex}, nofollow: {ctx.Metadata.RobotsNofollow}")
             .Set("XRobotsTag", ctx.Metadata.XRobotsTag ?? "")
             .Set("Indexable", "See Details")
-            .Set("Severity", "Warning");
+            .SetSeverity(Severity.Warning);
         
         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     }
@@ -303,7 +303,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 .Set("RobotsMeta", ctx.Metadata.RobotsNoindex == true ? "noindex" : "(none)")
                 .Set("XRobotsTag", ctx.Metadata.XRobotsTag ?? "")
                 .Set("Indexable", "No")
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -329,7 +329,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                     .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", "noarchive")
                 .Set("Indexable", "Yes")
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
         }
@@ -344,7 +344,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", "nosnippet")
                 .Set("Indexable", "Yes")
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -359,7 +359,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", "noimageindex")
                 .Set("Indexable", "Yes")
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -374,7 +374,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", "unavailable_after")
                 .Set("Indexable", "Yes")
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -389,7 +389,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", "indexifembedded")
                 .Set("Indexable", "Conditional")
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -401,7 +401,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             var maxSnippet = maxSnippetMatch.Groups[1].Value;
             var snippetValue = maxSnippet == "-1" ? "unlimited" : $"{maxSnippet} characters";
             
-            var snippetSeverity = maxSnippet == "0" ? "Warning" : "Info";
+            var snippetSeverity = maxSnippet == "0" ? Severity.Warning : Severity.Info;
             var snippetDescription = maxSnippet switch
             {
                 "0" => "Snippets are disabled for this page, so search results will not show descriptive text.",
@@ -415,7 +415,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", $"max-snippet:{maxSnippet}")
                 .Set("Indexable", "Yes")
-                .Set("Severity", snippetSeverity);
+                .SetSeverity(snippetSeverity);
             
             await ctx.Reports.ReportAsync(Key, row2, ctx.Metadata.UrlId, default);
         }
@@ -425,7 +425,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         if (maxImageMatch.Success)
         {
             var maxImage = maxImageMatch.Groups[1].Value;
-            var imageSeverity = maxImage == "none" ? "Warning" : "Info";
+            var imageSeverity = maxImage == "none" ? Severity.Warning : Severity.Info;
             var imageDescription = maxImage switch
             {
                 "none" => "Image previews are disabled, so thumbnails will not appear for this page.",
@@ -441,7 +441,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", $"max-image-preview:{maxImage}")
                 .Set("Indexable", "Yes")
-                .Set("Severity", imageSeverity);
+                .SetSeverity(imageSeverity);
             
             await ctx.Reports.ReportAsync(Key, row3, ctx.Metadata.UrlId, default);
         }
@@ -452,7 +452,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         {
             var maxVideo = maxVideoMatch.Groups[1].Value;
             var videoValue = maxVideo == "-1" ? "unlimited" : $"{maxVideo} seconds";
-            var videoSeverity = maxVideo == "0" ? "Warning" : "Info";
+            var videoSeverity = maxVideo == "0" ? Severity.Warning : Severity.Info;
             var videoDescription = maxVideo switch
             {
                 "0" => "Video previews are disabled for this page.",
@@ -467,7 +467,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", $"max-video-preview:{maxVideo}")
                 .Set("Indexable", "Yes")
-                .Set("Severity", videoSeverity);
+                .SetSeverity(videoSeverity);
             
             await ctx.Reports.ReportAsync(Key, row4, ctx.Metadata.UrlId, default);
         }
@@ -482,7 +482,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
                 .Set("RobotsMeta", "(header only)")
                 .Set("XRobotsTag", "googlebot-news")
                 .Set("Indexable", "Yes")
-                .Set("Severity", "Info");
+                .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, row5, ctx.Metadata.UrlId, default);
         }

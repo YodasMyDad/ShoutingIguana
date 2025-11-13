@@ -175,7 +175,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
                 .Set("Protocol", "HTTPS")
                 .Set("Details", resourceSummary)
                 .Set("Description", BuildMixedContentDescription(resourceSummary))
-                .Set("Severity", "Error");
+                .SetSeverity(Severity.Error);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -247,7 +247,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
                 .Set("Protocol", "HTTPS")
                 .Set("Details", headersSummary)
                 .Set("Description", BuildSecurityHeadersDescription(missingHeaders, weakHeaders))
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -314,7 +314,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
                     .Set("Protocol", "HTTPS")
                     .Set("Details", cookieDetails)
                     .Set("Description", BuildCookieDescription(insecureCookies, missingHttpOnly))
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -332,7 +332,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
                 .Set("Protocol", "HTTP")
                 .Set("Details", $"Depth {ctx.Metadata.Depth} (important page)")
                 .Set("Description", BuildHttpRecommendationDescription(ctx.Metadata.Depth))
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }

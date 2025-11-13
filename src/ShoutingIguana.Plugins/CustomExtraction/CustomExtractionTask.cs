@@ -93,12 +93,12 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
                 if (valueSummary.Length > 100) valueSummary = valueSummary[..100] + "...";
                 
                 var row = ReportRow.Create()
-                    .Set("Page", ctx.Url.ToString())
+                    .SetPage(ctx.Url)
                     .Set("RuleName", rule.Name)
                     .Set("ExtractedValue", valueSummary)
                     .Set("Selector", rule.Selector)
                     .Set("Count", extractedValues.Count)
-                    .Set("Severity", "Info");
+                    .SetSeverity(Severity.Info);
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -108,12 +108,12 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
             _logger.LogWarning(ex, "Failed to apply extraction rule '{RuleName}' for {Url}", rule.Name, ctx.Url);
             
             var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
+                .SetPage(ctx.Url)
                 .Set("RuleName", rule.Name)
                 .Set("ExtractedValue", "ERROR")
                 .Set("Selector", rule.Selector)
                 .Set("Count", 0)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }

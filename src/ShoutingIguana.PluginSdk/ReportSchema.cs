@@ -100,11 +100,13 @@ public class ReportSchema : IReportSchema
             throw new InvalidOperationException($"Duplicate column names found: {string.Join(", ", duplicates)}");
         
         // CRITICAL: Ensure Severity column is always present and always first
+        // Plugins should use ReportRow.SetSeverity(Severity enum) instead of Set("Severity", "Info")
         var severityColumn = _columns.FirstOrDefault(c => c.Name.Equals("Severity", StringComparison.OrdinalIgnoreCase));
         
         if (severityColumn == null)
         {
             // Add Severity column if not present
+            // Note: Severity values should use the Severity enum via ReportRow.SetSeverity()
             severityColumn = ReportColumn.Create("Severity", ReportColumnType.String)
                 .WithDisplayName("Severity")
                 .WithWidth(120);

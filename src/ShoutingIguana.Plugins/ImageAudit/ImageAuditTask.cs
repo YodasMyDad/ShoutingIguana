@@ -381,7 +381,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
                 .Set("Description", tracker.Description)
                 .Set("AltText", tracker.AltText)
                 .Set("FileSize", tracker.FileSizeBytes ?? 0)
-                .Set("Severity", tracker.Severity.ToString());
+                .SetSeverity(tracker.Severity);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }

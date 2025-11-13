@@ -32,29 +32,52 @@ public class ReportDataRepository(IShoutingIguanaDbContext context) : IReportDat
                 (rr.Url != null && rr.Url.Address.Contains(searchText)));
         }
 
-        // Apply sorting
-        // Default sort by CreatedUtc descending
-        if (string.IsNullOrWhiteSpace(sortColumn))
-        {
-            query = sortDescending
-                ? query.OrderBy(rr => rr.CreatedUtc)
-                : query.OrderByDescending(rr => rr.CreatedUtc);
-        }
-        else
-        {
-            // For custom column sorting, we would need to extract from JSON
-            // For now, fall back to CreatedUtc
-            query = sortDescending
-                ? query.OrderBy(rr => rr.CreatedUtc)
-                : query.OrderByDescending(rr => rr.CreatedUtc);
-        }
-
-        // Apply paging
-        query = query
+        // Load data without paging first (we'll sort in memory)
+        var allRows = await query.ToListAsync().ConfigureAwait(false);
+        
+        // Sort in memory by Severity (Error=0 > Warning=1 > Info=2), then by Issue text
+        var sorted = allRows
+            .OrderBy(rr =>
+            {
+                // Extract severity from JSON
+                var data = rr.GetData();
+                if (data != null && data.TryGetValue("Severity", out var severityValue))
+                {
+                    // Handle enum values directly (now: Error=0, Warning=1, Info=2)
+                    if (severityValue is PluginSdk.Severity sev)
+                    {
+                        return (int)sev; // Natural ordering: Error=0, Warning=1, Info=2
+                    }
+                    // Handle string values
+                    if (Enum.TryParse<PluginSdk.Severity>(severityValue?.ToString(), true, out var sevParsed))
+                    {
+                        return (int)sevParsed;
+                    }
+                }
+                return 999; // Unknown severity goes last
+            })
+            .ThenBy(rr =>
+            {
+                // Extract Issue/Message/Description for secondary sort
+                var data = rr.GetData();
+                if (data != null)
+                {
+                    // Try common column names for issue text
+                    if (data.TryGetValue("Issue", out var issue) && issue != null)
+                        return issue.ToString() ?? string.Empty;
+                    if (data.TryGetValue("Message", out var message) && message != null)
+                        return message.ToString() ?? string.Empty;
+                    if (data.TryGetValue("Description", out var description) && description != null)
+                        return description.ToString() ?? string.Empty;
+                }
+                return string.Empty;
+            }, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(rr => rr.Id) // Final tiebreaker
             .Skip(page * pageSize)
-            .Take(pageSize);
+            .Take(pageSize)
+            .ToList();
 
-        return await query.ToListAsync().ConfigureAwait(false);
+        return sorted;
     }
 
     public async Task<int> GetCountByTaskKeyAsync(int projectId, string taskKey, string? searchText = null)

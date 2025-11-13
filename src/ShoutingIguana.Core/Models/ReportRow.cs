@@ -36,7 +36,32 @@ public class ReportRow
             
             foreach (var property in doc.RootElement.EnumerateObject())
             {
-                result[property.Name] = ConvertJsonElement(property.Value);
+                var value = ConvertJsonElement(property.Value);
+                
+                // Special handling for Severity column - convert to enum
+                if (string.Equals(property.Name, "Severity", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Handle string values (e.g., "Error", "Warning", "Info")
+                    if (value is string severityStr &&
+                        Enum.TryParse<PluginSdk.Severity>(severityStr, true, out var severityEnumFromStr))
+                    {
+                        result[property.Name] = severityEnumFromStr;
+                    }
+                    // Handle integer values (e.g., 0=Error, 1=Warning, 2=Info)
+                    else if (value is int severityInt &&
+                             Enum.IsDefined(typeof(PluginSdk.Severity), severityInt))
+                    {
+                        result[property.Name] = (PluginSdk.Severity)severityInt;
+                    }
+                    else
+                    {
+                        result[property.Name] = value;
+                    }
+                }
+                else
+                {
+                    result[property.Name] = value;
+                }
             }
             
             return result;

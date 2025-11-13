@@ -227,7 +227,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
                 .Set("Description", GetIssueDescription(issue))
                 .Set("HreflangTag", errorSummary)
                 .Set("TargetURL", exampleTarget)
-                .Set("Severity", "Error");
+                .SetSeverity(Severity.Error);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -248,7 +248,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
                 .Set("Description", GetIssueDescription(issue))
                 .Set("HreflangTag", string.IsNullOrEmpty(languages) ? "(no hreflang)" : languages)
                 .Set("TargetURL", ctx.Url.ToString())
-                .Set("Severity", "Error");
+                .SetSeverity(Severity.Error);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -272,7 +272,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
                 .Set("Description", GetIssueDescription(issue))
                 .Set("HreflangTag", duplicateTags)
                 .Set("TargetURL", exampleTarget)
-                .Set("Severity", "Error");
+                .SetSeverity(Severity.Error);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -293,7 +293,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
                 .Set("Description", GetIssueDescription(issue))
                 .Set("HreflangTag", "x-default")
                 .Set("TargetURL", targetUrl)
-                .Set("Severity", "Warning");
+                .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -316,7 +316,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
                     .Set("Description", GetIssueDescription(issue))
                     .Set("HreflangTag", $"HTML: {htmlHreflangs.Count}, HTTP: {httpHreflangs.Count}")
                     .Set("TargetURL", ctx.Url.ToString())
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -342,7 +342,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
                     .Set("Description", GetIssueDescription(issue))
                     .Set("HreflangTag", $"{hreflangs.Count} tags")
                     .Set("TargetURL", canonical)
-                    .Set("Severity", "Warning");
+                    .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -393,7 +393,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
                 .Set("Description", GetIssueDescription(issue))
                 .Set("HreflangTag", targetSummary)
                 .Set("TargetURL", missingReturnLinks.First().TargetUrl)
-                .Set("Severity", "Error");
+                .SetSeverity(Severity.Error);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
