@@ -1,7 +1,8 @@
+using System;
+using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.PluginSdk.Helpers;
-using System.Text.RegularExpressions;
 
 namespace ShoutingIguana.Plugins.Inventory;
 

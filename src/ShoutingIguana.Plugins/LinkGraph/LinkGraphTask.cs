@@ -1,5 +1,4 @@
-using System.Threading;
-using System.Threading.Tasks;
+using System;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.PluginSdk.Helpers;
@@ -10,21 +9,15 @@ namespace ShoutingIguana.Plugins.LinkGraph;
 /// Generates findings for each internal link to visualize the link graph.
 /// Each link becomes an Info-level finding showing FROM URL -> TO URL with anchor text.
 /// </summary>
-public class LinkGraphTask : UrlTaskBase
+public class LinkGraphTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
-    private readonly ILogger _logger;
-    private readonly IRepositoryAccessor _repositoryAccessor;
+    private readonly ILogger _logger = logger;
+    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
 
     public override string Key => "LinkGraph";
     public override string DisplayName => "Link Graph";
     public override string Description => "Internal linking structure visualization";
     public override int Priority => 1000; // Run after other analysis tasks
-
-    public LinkGraphTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
-    {
-        _logger = logger;
-        _repositoryAccessor = repositoryAccessor;
-    }
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     {

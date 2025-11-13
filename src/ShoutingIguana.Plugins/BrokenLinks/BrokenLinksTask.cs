@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Concurrent;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
@@ -9,47 +11,21 @@ namespace ShoutingIguana.Plugins.BrokenLinks;
 /// <summary>
 /// Analyzes pages for broken links (404s, 500s, etc.) with comprehensive diagnostics.
 /// </summary>
-public class BrokenLinksTask : UrlTaskBase, IDisposable
+public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepositoryAccessor repositoryAccessor, bool checkExternalLinks = false, bool checkAnchorLinks = true) : UrlTaskBase, IDisposable
 {
-    private readonly ILogger _logger;
-    private readonly IBrokenLinksChecker _checker;
-    private readonly IRepositoryAccessor _repositoryAccessor;
-    private readonly ExternalLinkChecker _externalChecker;
-    private readonly bool _checkExternalLinks;
-    private readonly bool _checkAnchorLinks;
+    private readonly ILogger _logger = logger;
+    private readonly IBrokenLinksChecker _checker = checker;
+    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
+    private readonly ExternalLinkChecker _externalChecker = new ExternalLinkChecker(logger, TimeSpan.FromSeconds(5));
+    private readonly bool _checkExternalLinks = checkExternalLinks;
+    private readonly bool _checkAnchorLinks = checkAnchorLinks;
     private bool _disposed;
     
     // Cache URL statuses per project to avoid database queries for every link (critical for performance)
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, Dictionary<string, int>> UrlStatusCacheByProject = new();
+    private static readonly ConcurrentDictionary<int, Dictionary<string, int>> UrlStatusCacheByProject = new();
     
     // Semaphore to ensure only one thread loads URL statuses per project
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, SemaphoreSlim> UrlStatusLoadingSemaphores = new();
-
-    // Helper class to track unique findings with occurrence counts
-    private class FindingTracker
-    {
-        public Severity Severity { get; set; }
-        public string Code { get; set; } = string.Empty;
-        public string Message { get; set; } = string.Empty;
-        public string TargetUrl { get; set; } = string.Empty;
-        public string AnchorText { get; set; } = string.Empty;
-        public string LinkType { get; set; } = string.Empty;
-        public string HttpStatus { get; set; } = string.Empty;
-        public bool IsExternal { get; set; }
-        public int OccurrenceCount { get; set; } = 1;
-    }
-
-    public BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepositoryAccessor repositoryAccessor, bool checkExternalLinks = false, bool checkAnchorLinks = true)
-    {
-        _logger = logger;
-        _checker = checker;
-        _repositoryAccessor = repositoryAccessor;
-        _checkExternalLinks = checkExternalLinks;
-        _checkAnchorLinks = checkAnchorLinks;
-        
-        // Always create ExternalLinkChecker - needed for external link checking
-        _externalChecker = new ExternalLinkChecker(logger, TimeSpan.FromSeconds(5));
-    }
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> UrlStatusLoadingSemaphores = new();
 
     public override string Key => "BrokenLinks";
     public override string DisplayName => "Broken Links";
@@ -640,25 +616,6 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
         }
     }
 
-    private string ResolveUrl(Uri baseUri, string relativeUrl, Uri? baseTagUri = null)
-    {
-        return UrlHelper.Resolve(baseUri, relativeUrl, baseTagUri);
-    }
-
-    private bool IsExternalLink(string baseUrl, string targetUrl)
-    {
-        return UrlHelper.IsExternal(baseUrl, targetUrl);
-    }
-
-    private class LinkInfo
-    {
-        public string Url { get; set; } = string.Empty;
-        public string AnchorText { get; set; } = string.Empty;
-        public string LinkType { get; set; } = string.Empty;
-        public bool HasNofollow { get; set; }
-        public string? AnchorId { get; set; }
-    }
-
     /// <summary>
     /// Cleanup per-project data when project is closed.
     /// </summary>
@@ -685,6 +642,39 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
 
         _externalChecker.Dispose();
         _disposed = true;
+    }
+    
+    private string ResolveUrl(Uri baseUri, string relativeUrl, Uri? baseTagUri = null)
+    {
+        return UrlHelper.Resolve(baseUri, relativeUrl, baseTagUri);
+    }
+
+    private bool IsExternalLink(string baseUrl, string targetUrl)
+    {
+        return UrlHelper.IsExternal(baseUrl, targetUrl);
+    }
+    
+    // Private classes at end
+    private class FindingTracker
+    {
+        public Severity Severity { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public string TargetUrl { get; set; } = string.Empty;
+        public string AnchorText { get; set; } = string.Empty;
+        public string LinkType { get; set; } = string.Empty;
+        public string HttpStatus { get; set; } = string.Empty;
+        public bool IsExternal { get; set; }
+        public int OccurrenceCount { get; set; } = 1;
+    }
+    
+    private class LinkInfo
+    {
+        public string Url { get; set; } = string.Empty;
+        public string AnchorText { get; set; } = string.Empty;
+        public string LinkType { get; set; } = string.Empty;
+        public bool HasNofollow { get; set; }
+        public string? AnchorId { get; set; }
     }
 }
 

@@ -1,12 +1,12 @@
 using System;
-using HtmlAgilityPack;
-using Microsoft.Extensions.Logging;
-using ShoutingIguana.PluginSdk;
-using ShoutingIguana.PluginSdk.Helpers;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using HtmlAgilityPack;
+using Microsoft.Extensions.Logging;
+using ShoutingIguana.PluginSdk;
+using ShoutingIguana.PluginSdk.Helpers;
 
 namespace ShoutingIguana.Plugins.DuplicateContent;
 

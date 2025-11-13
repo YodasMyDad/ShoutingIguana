@@ -1,8 +1,8 @@
+using System;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.PluginSdk.Helpers;
-using System;
-using System.Collections.Concurrent;
 
 namespace ShoutingIguana.Plugins.Canonical;
 

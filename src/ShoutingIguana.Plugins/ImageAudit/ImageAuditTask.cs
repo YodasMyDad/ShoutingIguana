@@ -1,8 +1,9 @@
+using System;
+using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.PluginSdk.Helpers;
-using System.Text.RegularExpressions;
 
 namespace ShoutingIguana.Plugins.ImageAudit;
 
@@ -22,18 +23,6 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
     public override string DisplayName => "Images";
     public override string Description => "Checks image alt text, file sizes, formats, and optimization opportunities";
     public override int Priority => 60;
-
-    // Helper class to track unique findings with occurrence counts
-    private class FindingTracker
-    {
-        public Severity Severity { get; set; }
-        public string Code { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
-        public string ImageUrl { get; set; } = string.Empty;
-        public string AltText { get; set; } = string.Empty;
-        public int? FileSizeBytes { get; set; }
-        public int OccurrenceCount { get; set; } = 1;
-    }
 
     public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
     {
@@ -454,6 +443,18 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         }
 
         return false; // Relative URL is internal
+    }
+    
+    // Private classes at end
+    private class FindingTracker
+    {
+        public Severity Severity { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string ImageUrl { get; set; } = string.Empty;
+        public string AltText { get; set; } = string.Empty;
+        public int? FileSizeBytes { get; set; }
+        public int OccurrenceCount { get; set; } = 1;
     }
 }
 

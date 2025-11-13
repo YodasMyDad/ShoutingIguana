@@ -1,8 +1,9 @@
+using System;
+using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.PluginSdk.Helpers;
-using System.Text.RegularExpressions;
 
 namespace ShoutingIguana.Plugins.Security;
 
@@ -12,6 +13,9 @@ namespace ShoutingIguana.Plugins.Security;
 public class SecurityTask(ILogger logger) : UrlTaskBase
 {
     private readonly ILogger _logger = logger;
+    
+    // Constants
+    private const int MIN_HSTS_MAX_AGE_SECONDS = 31536000; // 1 year in seconds
 
     public override string Key => "Security";
     public override string DisplayName => "Security & HTTPS";
@@ -190,9 +194,9 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
             if (maxAgeMatch.Success)
             {
                 var maxAge = int.Parse(maxAgeMatch.Groups[1].Value);
-                if (maxAge < 31536000) // Less than 1 year
+                if (maxAge < MIN_HSTS_MAX_AGE_SECONDS)
                 {
-                    weakHeaders.Add(("Strict-Transport-Security", $"max-age is {maxAge} seconds (recommend 31536000+ for 1 year)"));
+                    weakHeaders.Add(("Strict-Transport-Security", $"max-age is {maxAge} seconds (recommend {MIN_HSTS_MAX_AGE_SECONDS}+ for 1 year)"));
                 }
             }
             else

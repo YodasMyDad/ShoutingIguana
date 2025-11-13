@@ -1,8 +1,9 @@
+using System;
+using System.Collections.Concurrent;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.PluginSdk.Helpers;
-using System.Collections.Concurrent;
 
 namespace ShoutingIguana.Plugins.InternalLinking;
 

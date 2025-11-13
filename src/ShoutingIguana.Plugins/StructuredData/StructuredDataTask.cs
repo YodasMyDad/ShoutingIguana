@@ -1,10 +1,11 @@
+using System;
+using System.Collections.Concurrent;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.PluginSdk.Helpers;
-using System.Collections.Concurrent;
-using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace ShoutingIguana.Plugins.StructuredData;
 
