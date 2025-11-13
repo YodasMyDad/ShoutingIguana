@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.BrokenLinks;
 
-[Plugin(Id = "com.shoutingiguana.brokenlinks", Name = "Broken Links", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.brokenlinks", Name = "Broken Links", MinSdkVersion = "0.1.0")]
 public class BrokenLinksPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.brokenlinks";
@@ -16,6 +16,7 @@ public class BrokenLinksPlugin : IPlugin
         var schema = ReportSchema.Create("BrokenLinks")
             
             .AddColumn("Severity", ReportColumnType.String, "Severity")
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
             .AddPrimaryColumn("LinkedFrom", ReportColumnType.Url, "Linked From")
             .AddColumn("BrokenLink", ReportColumnType.Url, "Broken Link")
             .AddColumn("Status", ReportColumnType.String, "HTTP Status")

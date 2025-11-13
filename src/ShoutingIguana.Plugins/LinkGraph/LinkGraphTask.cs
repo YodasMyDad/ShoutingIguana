@@ -55,12 +55,22 @@ public class LinkGraphTask : UrlTaskBase
         {
             var anchorText = string.IsNullOrWhiteSpace(link.AnchorText) 
                 ? "(no text)" 
-                : link.AnchorText;
+                : link.AnchorText.Trim();
+            var anchorDisplay = anchorText.Replace("\r", " ").Replace("\n", " ").Replace("\t", " ");
+            var friendlyLinkType = GetFriendlyLinkType(link.LinkType);
+            var issueSummary = anchorText == "(no text)"
+                ? $"Internal {friendlyLinkType} without anchor text"
+                : $"Internal {friendlyLinkType} with anchor text";
+            var description = anchorText == "(no text)"
+                ? $"Link graph shows this {friendlyLinkType} from {fromUrlAddress} to {link.ToUrl} lacks anchor text, so the destination may be unclear to visitors and search engines."
+                : $"Link graph shows this {friendlyLinkType} from {fromUrlAddress} to {link.ToUrl} using \"{anchorDisplay}\" anchor text so you can verify that the text matches the target page.";
             
             // Create report row with custom columns
             // NOTE: Plugins with registered schemas should create ONLY report rows, not findings
             // This ensures the UI displays custom columns instead of legacy finding columns
             var row = ReportRow.Create()
+                .Set("Issue", issueSummary)
+                .Set("Description", description)
                 .Set("FromURL", fromUrlAddress)
                 .Set("ToURL", link.ToUrl)
                 .Set("AnchorText", anchorText)
@@ -72,6 +82,19 @@ public class LinkGraphTask : UrlTaskBase
         
         _logger.LogDebug("Generated {Count} link graph findings for {Url}", 
             outgoingLinks.Count, fromUrlAddress);
+    }
+
+    private static string GetFriendlyLinkType(string linkType)
+    {
+        return linkType switch
+        {
+            "Hyperlink" => "hyperlink",
+            "Image" => "image link",
+            "Script" => "script",
+            "Stylesheet" => "stylesheet",
+            "Other" => "resource",
+            _ => linkType.ToLowerInvariant()
+        };
     }
 }
 

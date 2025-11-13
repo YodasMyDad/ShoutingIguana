@@ -3,7 +3,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.ImageAudit;
 
-[Plugin(Id = "com.shoutingiguana.imageaudit", Name = "Image Audit", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.imageaudit", Name = "Image Audit", MinSdkVersion = "0.1.0")]
 public class ImageAuditPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.imageaudit";

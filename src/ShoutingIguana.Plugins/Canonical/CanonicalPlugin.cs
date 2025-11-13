@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.Canonical;
 
-[Plugin(Id = "com.shoutingiguana.canonical", Name = "Canonical Validation", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.canonical", Name = "Canonical Validation", MinSdkVersion = "0.1.0")]
 public class CanonicalPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.canonical";

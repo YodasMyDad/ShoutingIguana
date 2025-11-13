@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.Hreflang;
 
-[Plugin(Id = "com.shoutingiguana.hreflang", Name = "International (Hreflang)", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.hreflang", Name = "International (Hreflang)", MinSdkVersion = "0.1.0")]
 public class HreflangPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.hreflang";

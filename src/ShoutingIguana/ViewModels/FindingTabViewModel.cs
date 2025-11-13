@@ -213,6 +213,12 @@ public partial class FindingTabViewModel : ObservableObject
         var detailItems = new List<string>();
         var technicalMetadata = new Dictionary<string, object?>();
 
+        // Add plugin description at the beginning of the details panel
+        if (!string.IsNullOrWhiteSpace(Description))
+        {
+            detailItems.Add($"Description: {Description}");
+        }
+
         if (columns.Count == 0)
         {
             var columnNames = value.GetColumnNames().ToList();
@@ -232,6 +238,15 @@ public partial class FindingTabViewModel : ObservableObject
                 technicalMetadata[column.Name] = rawValue;
                 var formatted = FormatColumnValue(rawValue, column.ColumnType);
                 detailItems.Add($"{column.DisplayName}: {formatted}");
+            }
+            
+            // Include "Explanation" field in details panel even if not in columns (displayed as "Description")
+            var explanationValue = value.GetValue("Explanation");
+            if (explanationValue != null && !string.IsNullOrWhiteSpace(explanationValue.ToString()))
+            {
+                technicalMetadata["Explanation"] = explanationValue;
+                var formatted = explanationValue.ToString() ?? "(none)";
+                detailItems.Add($"Description: {formatted}");
             }
         }
 

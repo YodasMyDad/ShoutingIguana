@@ -199,7 +199,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Error");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Page is missing a <title> tag; add a unique descriptive title for browsers and search engines.");
             return;
         }
 
@@ -213,7 +218,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", title.Length)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Title is shorter than the recommended 30-60 characters; expand it so it clearly describes the page and includes key terms.");
         }
         else if (title.Length > MAX_TITLE_WARNING_LENGTH)
         {
@@ -225,7 +235,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", title.Length)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Title is too long for search results and will be truncated; trim it so the most important words stay visible.");
         }
         else if (title.Length > MAX_TITLE_LENGTH)
         {
@@ -237,7 +252,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", title.Length)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Title exceeds the ideal length and may truncate on some devices; shorten or reprioritize words to avoid losing context.");
         }
         
         // Check pixel width (more accurate than character count for SERP appearance)
@@ -282,7 +302,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                                 .Set("Length", title.Length)
                                 .Set("Severity", "Warning");
                             
-                            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+                            await ReportWithExplanationAsync(
+                                ctx,
+                                row,
+                                title,
+                                description,
+                                "Temporary redirects share this title; ensure the final destination has its own descriptive title so search engines treat it distinctly.");
                         }
                         
                         // Only report true duplicates (no redirect relationship)
@@ -296,7 +321,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                                 .Set("Length", title.Length)
                                 .Set("Severity", "Error");
                             
-                            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+                            await ReportWithExplanationAsync(
+                                ctx,
+                                row,
+                                title,
+                                description,
+                                $"Multiple distinct pages ({nonRedirectDuplicates.Length + 1}) share this exact title, which can trigger duplicate-content signals; give each page its own descriptive title.");
                         }
                     }
                     else
@@ -310,7 +340,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                             .Set("Length", title.Length)
                             .Set("Severity", "Error");
                         
-                        await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+                        await ReportWithExplanationAsync(
+                            ctx,
+                            row,
+                            title,
+                            description,
+                            $"Multiple pages ({duplicateCount}) share this title; differentiate them so search engines and visitors see distinct listings.");
                     }
                 }
             }
@@ -363,7 +398,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", title.Length)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row1, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row1,
+                title,
+                description,
+                $"Title exceeds roughly {(int)pixelWidth}px, so Google will almost certainly truncate it; keep the width under about 580px.");
         }
         else if (pixelWidth > SAFE_PIXEL_WIDTH)
         {
@@ -375,7 +415,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", title.Length)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                $"Title width (~{(int)pixelWidth}px) may exceed mobile SERP display; shorten it to stay within the ~580px safe limit.");
         }
     }
 
@@ -391,7 +436,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Page lacks a meta description; add a concise summary so you control how search snippets appear.");
             return;
         }
 
@@ -405,7 +455,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", description.Length)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Meta description is shorter than 50 characters; expand it so searchers get meaningful context about this page.");
         }
         else if (description.Length > MAX_DESCRIPTION_WARNING_LENGTH)
         {
@@ -417,7 +472,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", description.Length)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Meta description exceeds the safe limit and will be truncated; trim it to around 110-160 characters so the full message shows.");
         }
         else if (description.Length > MAX_DESCRIPTION_LENGTH)
         {
@@ -429,7 +489,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", description.Length)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Meta description is longer than the ideal range and may be trimmed; shorten it so the key message stays visible.");
         }
 
         // Check for duplicate descriptions
@@ -457,7 +522,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                         .Set("Length", description.Length)
                         .Set("Severity", "Warning");
                     
-                    await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+                    await ReportWithExplanationAsync(
+                        ctx,
+                        row,
+                        title,
+                        description,
+                        $"Multiple pages ({duplicateCount}) share this meta description; write a unique summary for each so search results stay distinct.");
                 }
             }
         }
@@ -498,7 +568,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row1, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row1,
+                title,
+                description,
+                $"Detected {viewportCount} viewport declarations; keep only one <meta name='viewport'> so the browser follows the intended scaling instructions.");
         }
         
         if (string.IsNullOrEmpty(viewport))
@@ -511,7 +586,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "No viewport meta tag found; add <meta name='viewport' content='width=device-width, initial-scale=1'> to ensure the page scales correctly on mobile.");
         }
     }
 
@@ -527,7 +607,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row1, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row1,
+                title,
+                description,
+                "No charset declaration found; add <meta charset='utf-8'> so browsers decode the page correctly.");
             return;
         }
 
@@ -542,7 +627,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row2, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row2,
+                title,
+                description,
+                $"Document declares {charset} instead of UTF-8; switch to UTF-8 for the widest compatibility.");
         }
 
         // Check for multiple charset declarations
@@ -560,7 +650,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row3, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row3,
+                title,
+                description,
+                $"Found {totalCharsetDeclarations} charset declarations; keep a single <meta charset='utf-8'> to avoid conflicting signals.");
         }
     }
 
@@ -576,7 +671,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Document lacks <html lang='...'>; add the correct language code for accessibility and search engines.");
         }
     }
 
@@ -600,7 +700,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row1, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row1,
+                title,
+                description,
+                "Open Graph tags are missing; add og:title, og:description, og:url, and og:image to control how links look on social platforms.");
         }
         else if (ogTagCount < 4)
         {
@@ -618,7 +723,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", ogTagCount)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                $"Only {ogTagCount}/4 key Open Graph tags are present; add the missing ones so social previews show the right title, description, URL, and image.");
         }
     }
 
@@ -641,7 +751,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Twitter card tags are missing; add twitter:card, twitter:title, and twitter:description so tweets display a proper preview.");
         }
     }
 
@@ -666,7 +781,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Error");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row1, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row1,
+                title,
+                description,
+                "H1 is missing; add a single descriptive H1 so the main topic is clear.");
         }
         else if (h1Count > 1)
         {
@@ -679,7 +799,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", h1Count)
                 .Set("Severity", "Warning");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                $"Found {h1Count} H1 tags; limit to one primary H1 to keep the document hierarchy clear.");
         }
         else
         {
@@ -696,7 +821,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                     .Set("Length", 0)
                     .Set("Severity", "Warning");
                 
-                await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row2, title, description), ctx.Metadata.UrlId, default);
+                await ReportWithExplanationAsync(
+                    ctx,
+                    row2,
+                    title,
+                    description,
+                    "H1 exists but has no text; add descriptive, keyword-rich content to explain the page topic.");
             }
             else if (!string.IsNullOrEmpty(title))
             {
@@ -714,7 +844,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                         .Set("Length", title.Length)
                         .Set("Severity", "Info");
                     
-                    await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row3, title, description), ctx.Metadata.UrlId, default);
+                    await ReportWithExplanationAsync(
+                        ctx,
+                        row3,
+                        title,
+                        description,
+                        "H1 matches the title exactly; consider varying them slightly to avoid redundancy while keeping the topic aligned.");
                 }
                 
                 // Check H1/Title alignment (should be complementary, not unrelated)
@@ -729,7 +864,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                         .Set("Length", (int)(similarity * 100))
                         .Set("Severity", "Info");
                     
-                    await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row4, title, description), ctx.Metadata.UrlId, default);
+                    await ReportWithExplanationAsync(
+                        ctx,
+                        row4,
+                        title,
+                        description,
+                        "H1 and title appear unrelated; align them so both describe the same focus of the page.");
                 }
             }
         }
@@ -751,7 +891,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row5, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row5,
+                title,
+                description,
+                "Heading hierarchy jumps straight to H3+; insert an H2 before deeper headings to keep the structure logical.");
         }
         else if (!hasH3 && (hasH4 || hasH5 || hasH6))
         {
@@ -763,7 +908,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", 0)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Heading hierarchy skips H3 even though deeper headings are present; add an H3 level for clearer semantics.");
         }
     }
 
@@ -777,10 +927,15 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Issue", "Meta Keywords Tag Found (Outdated)")
                 .Set("Title", "")
                 .Set("MetaDescription", "")
-                .Set("Length", 0)
-                .Set("Severity", "Info");
+            .Set("Length", 0)
+            .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Meta keywords tag is obsolete and ignored by search engines; remove it to keep the markup clean.");
         }
     }
 
@@ -817,6 +972,17 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         return row
             .Set("Title", NormalizeMetaValue(title, "(missing title)"))
             .Set("MetaDescription", NormalizeMetaValue(description, "(missing meta description)"));
+    }
+
+    private async Task ReportWithExplanationAsync(
+        UrlContext ctx,
+        ReportRow row,
+        string title,
+        string description,
+        string explanation)
+    {
+        row.Set("Explanation", explanation);
+        await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
     }
     
     /// <summary>
@@ -975,7 +1141,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", description.Length)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row6, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row6,
+                title,
+                description,
+                "Meta description lacks action words; add verbs like learn, discover, or shop to encourage clicks.");
         }
     }
     
@@ -1011,7 +1182,12 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Length", title.Length)
                 .Set("Severity", "Info");
             
-            await ctx.Reports.ReportAsync(Key, WithNormalizedMetadata(row, title, description), ctx.Metadata.UrlId, default);
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Title lacks separators; adding characters such as '|', '-', or ':' makes the search listing easier to scan.");
         }
     }
     

@@ -28,7 +28,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
     {
         public Severity Severity { get; set; }
         public string Code { get; set; } = string.Empty;
-        public string Message { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
         public string ImageUrl { get; set; } = string.Empty;
         public string AltText { get; set; } = string.Empty;
         public int? FileSizeBytes { get; set; }
@@ -115,7 +115,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
                 "missing_src",
                 Severity.Error,
                 "IMAGE_MISSING_SRC",
-                "Image element has no src attribute",
+                "Image element is missing its src attribute so nothing will render.",
                 "[missing src attribute]",
                 alt,
                 null);
@@ -152,7 +152,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
             {
                 var key = $"{absoluteSrc}|IMAGE_NO_DIMENSIONS|{width.HasValue}|{height.HasValue}";
                 TrackFinding(findingsMap, key, Severity.Warning, "IMAGE_NO_DIMENSIONS",
-                    $"Image missing width/height attributes (causes Cumulative Layout Shift): {absoluteSrc}",
+                    "Add width and height attributes to reserve layout space and prevent Cumulative Layout Shift.",
                     absoluteSrc,
                     alt,
                     null);
@@ -167,7 +167,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
             {
                 var key = $"{absoluteSrc}|IMAGE_NO_LAZY_LOADING";
                 TrackFinding(findingsMap, key, Severity.Info, "IMAGE_NO_LAZY_LOADING",
-                    $"Large image not lazy-loaded (causes slow page load): {absoluteSrc}",
+                    "Lazy-load large or off-screen images so the initial viewport renders faster.",
                     absoluteSrc,
                     alt,
                     null);
@@ -181,7 +181,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
             {
                 var key = $"{absoluteSrc}|IMAGE_MISSING_SRCSET";
                 TrackFinding(findingsMap, key, Severity.Info, "IMAGE_MISSING_SRCSET",
-                    $"Image lacks srcset for responsive optimization: {absoluteSrc}",
+                    "Provide a srcset so browsers can choose the most appropriate image size for the device.",
                     absoluteSrc,
                     alt,
                     null);
@@ -193,7 +193,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         {
             var key = $"{absoluteSrc}|IMAGE_LEGACY_FORMAT";
             TrackFinding(findingsMap, key, Severity.Info, "IMAGE_LEGACY_FORMAT",
-                $"Image uses legacy format (consider WebP/AVIF for better compression): {absoluteSrc}",
+                "Convert legacy formats to WebP or AVIF to benefit from more efficient compression.",
                 absoluteSrc,
                 alt,
                 null);
@@ -204,7 +204,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         {
             var key = $"{absoluteSrc}|IMAGE_EXTERNAL_HOTLINK";
             TrackFinding(findingsMap, key, Severity.Info, "IMAGE_EXTERNAL_HOTLINK",
-                $"Image hotlinked from external source: {absoluteSrc}",
+                "Host this image locally so it does not rely on an external server you don't control.",
                 absoluteSrc,
                 alt,
                 null);
@@ -217,7 +217,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
             {
                 var key = $"{absoluteSrc}|SVG_WITH_PIXEL_DIMENSIONS|{width}|{height}";
                 TrackFinding(findingsMap, key, Severity.Info, "SVG_WITH_PIXEL_DIMENSIONS",
-                    $"SVG image has pixel dimensions (should use CSS for scalability): {absoluteSrc}",
+                    "Let SVGs scale by definition (use CSS/viewBox) rather than fixed pixel width/height.",
                     absoluteSrc,
                     alt,
                     null);
@@ -232,7 +232,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         {
             var key = $"{imageUrl}|MISSING_ALT_TEXT";
             TrackFinding(findingsMap, key, Severity.Warning, "MISSING_ALT_TEXT",
-                $"Image missing alt text: {imageUrl}",
+                "Add descriptive alt text so assistive technologies can explain this image.",
                 imageUrl,
                 alt,
                 null);
@@ -244,7 +244,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         {
             var key = $"{imageUrl}|ALT_TEXT_TOO_SHORT|{alt}";
             TrackFinding(findingsMap, key, Severity.Info, "ALT_TEXT_TOO_SHORT",
-                $"Alt text is very short ({alt.Length} chars): \"{alt}\"",
+                $"Alt text is very short ({alt.Length} chars); provide a concise descriptive phrase.",
                 imageUrl,
                 alt,
                 null);
@@ -255,7 +255,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
             var altKey = alt.Length > 100 ? alt.Substring(0, 100) : alt;
             var key = $"{imageUrl}|ALT_TEXT_TOO_LONG|{altKey}";
             TrackFinding(findingsMap, key, Severity.Warning, "ALT_TEXT_TOO_LONG",
-                $"Alt text is too long ({alt.Length} chars, recommend <{MAX_ALT_TEXT_LENGTH}): \"{preview}\"",
+                $"Alt text is {alt.Length} characters; keep it under {MAX_ALT_TEXT_LENGTH} and focus on the key content: \"{preview}\"",
                 imageUrl,
                 alt,
                 null);
@@ -266,7 +266,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         {
             var key = $"{imageUrl}|POTENTIALLY_DECORATIVE|{alt}";
             TrackFinding(findingsMap, key, Severity.Info, "POTENTIALLY_DECORATIVE",
-                $"Image appears decorative but has alt text (consider alt=\"\"): {imageUrl}",
+                "Decorative image should use an empty alt attribute so screen readers skip it.",
                 imageUrl,
                 alt,
                 null);
@@ -277,7 +277,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         {
             var key = $"{imageUrl}|REDUNDANT_TITLE_ATTRIBUTE|{alt}";
             TrackFinding(findingsMap, key, Severity.Info, "REDUNDANT_TITLE_ATTRIBUTE",
-                $"Image title attribute duplicates alt text: {imageUrl}",
+                "Title attribute duplicates alt text; remove it to avoid being read twice.",
                 imageUrl,
                 alt,
                 null);
@@ -288,7 +288,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         {
             var key = $"{imageUrl}|ALT_TEXT_BAD_PATTERN|{alt}";
             TrackFinding(findingsMap, key, Severity.Info, "ALT_TEXT_BAD_PATTERN",
-                $"Alt text starts with redundant word (image/picture/photo): \"{alt}\"",
+                "Avoid starting alt text with words like \"image\" or \"photo\"; describe what is shown instead.",
                 imageUrl,
                 alt,
                 null);
@@ -310,7 +310,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
                 var key = $"datauri_{dataUriHash}|LARGE_DATA_URI";
                 var displayUri = dataUri.Length > 120 ? dataUri.Substring(0, 120) + "..." : dataUri;
                 TrackFinding(findingsMap, key, Severity.Warning, "LARGE_DATA_URI",
-                    $"Large data URI embedded in HTML ({sizeKB}KB, recommend <{MAX_DATA_URI_SIZE_KB}KB)",
+                    $"Large data URI (~{sizeKB}KB) bloats HTML; keep embedded images under {MAX_DATA_URI_SIZE_KB}KB or host them externally.",
                     displayUri,
                     altText,
                     estimatedSize);
@@ -327,7 +327,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
     /// <summary>
     /// Track a finding in the deduplication map. If the same finding already exists, increment its occurrence count.
     /// </summary>
-    private void TrackFinding(Dictionary<string, FindingTracker> findingsMap, string key, Severity severity, string code, string message, string imageUrl, string altText, int? fileSizeBytes)
+    private void TrackFinding(Dictionary<string, FindingTracker> findingsMap, string key, Severity severity, string code, string description, string imageUrl, string altText, int? fileSizeBytes)
     {
         if (findingsMap.TryGetValue(key, out var existing))
         {
@@ -341,7 +341,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
             {
                 Severity = severity,
                 Code = code,
-                Message = message,
+                Description = description,
                 ImageUrl = imageUrl ?? string.Empty,
                 AltText = altText ?? string.Empty,
                 FileSizeBytes = fileSizeBytes,
@@ -351,16 +351,45 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
     }
 
     /// <summary>
+    /// Converts issue codes to friendly readable text for display in the UI.
+    /// </summary>
+    private static string ConvertCodeToFriendlyText(string code)
+    {
+        return code switch
+        {
+            "IMAGE_MISSING_SRC" => "Missing Image Source",
+            "IMAGE_NO_DIMENSIONS" => "Missing Image Dimensions",
+            "IMAGE_NO_LAZY_LOADING" => "Missing Lazy Loading",
+            "IMAGE_MISSING_SRCSET" => "Missing Responsive Images",
+            "IMAGE_LEGACY_FORMAT" => "Legacy Image Format",
+            "IMAGE_EXTERNAL_HOTLINK" => "External Image Hotlink",
+            "SVG_WITH_PIXEL_DIMENSIONS" => "SVG with Pixel Dimensions",
+            "MISSING_ALT_TEXT" => "Missing Alt Text",
+            "ALT_TEXT_TOO_SHORT" => "Alt Text Too Short",
+            "ALT_TEXT_TOO_LONG" => "Alt Text Too Long",
+            "POTENTIALLY_DECORATIVE" => "Potentially Decorative Image",
+            "REDUNDANT_TITLE_ATTRIBUTE" => "Redundant Title Attribute",
+            "ALT_TEXT_BAD_PATTERN" => "Alt Text Bad Pattern",
+            "LARGE_DATA_URI" => "Large Data URI",
+            _ => code // Fallback to code if no match
+        };
+    }
+
+    /// <summary>
     /// Report all unique findings with occurrence counts to the findings sink.
     /// </summary>
     private async Task ReportUniqueFindings(UrlContext ctx, Dictionary<string, FindingTracker> findingsMap)
     {
         foreach (var tracker in findingsMap.Values)
         {
+            // Convert code to friendly text for display
+            var friendlyIssue = ConvertCodeToFriendlyText(tracker.Code);
+
             var row = ReportRow.Create()
                 .Set("ImageURL", tracker.ImageUrl)
                 .Set("Page", ctx.Url.ToString())
-                .Set("Issue", tracker.Code)
+                .Set("Issue", friendlyIssue)
+                .Set("Description", tracker.Description)
                 .Set("AltText", tracker.AltText)
                 .Set("FileSize", tracker.FileSizeBytes ?? 0)
                 .Set("Severity", tracker.Severity.ToString());

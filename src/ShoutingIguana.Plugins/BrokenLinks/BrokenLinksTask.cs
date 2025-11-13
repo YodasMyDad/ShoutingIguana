@@ -323,6 +323,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
     private async Task CheckLinkAsync(UrlContext ctx, LinkInfo link, Dictionary<string, FindingTracker> findingsMap, CancellationToken ct)
     {
         bool isExternal = IsExternalLink(ctx.Project.BaseUrl, link.Url);
+        var displayLinkType = string.IsNullOrWhiteSpace(link.LinkType) ? "link" : link.LinkType;
 
         // Check anchor links
         if (link.LinkType == "anchor" && !string.IsNullOrEmpty(link.AnchorId))
@@ -351,7 +352,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                     key,
                     Severity.Warning,
                     "LINK_NOT_CRAWLED",
-                    $"Uncrawled {link.LinkType}: {link.Url} (not found in crawl database)",
+                    $"Link target {link.Url} was not crawled yet, so we cannot confirm the status of this {displayLinkType}. Re-run the crawl or validate the URL manually.",
                     link.Url,
                     link.AnchorText,
                     link.LinkType,
@@ -380,7 +381,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                     key,
                     Severity.Info,
                     "SLOW_EXTERNAL_LINK",
-                    $"External {link.LinkType} is slow to respond ({result.ResponseTime.TotalSeconds:F1}s): {link.Url}",
+                    $"External {displayLinkType} is slow to respond ({result.ResponseTime.TotalSeconds:F1}s) and can delay page load; consider optimizing, caching, or replacing this resource: {link.Url}",
                     link.Url,
                     link.AnchorText,
                     link.LinkType,
@@ -407,7 +408,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
             {
                 // Connection failures - warnings (transient issues)
                 code = $"CONNECTION_FAILED_{link.LinkType.ToUpperInvariant()}";
-                message = $"{link.LinkType} connection failed: {link.Url} (could be temporary)";
+                message = $"Cannot reach {link.Url}; the {displayLinkType} failed to connect, so visitors will hit a missing resource. Confirm the host is online or update the link.";
             }
             else if (isRestricted)
             {
@@ -430,13 +431,13 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                     _ => "is restricted"
                 };
                 
-                message = $"Link to restricted area: {link.Url} {restrictionType} (HTTP {status.Value})";
+                message = $"Restricted {displayLinkType} ({restrictionType}): {link.Url} returns HTTP {status.Value}. Public visitors cannot access it, so remove or replace the link or provide credentials.";
             }
             else
             {
                 // Broken links - errors
                 code = $"BROKEN_{link.LinkType.ToUpperInvariant()}";
-                message = $"Broken {link.LinkType}: {link.Url} returns {statusText}";
+                message = $"Broken {displayLinkType}: {link.Url} returns HTTP {statusText}, so visitors land on an error page. Update or remove the link to keep navigation working.";
             }
             
             // Dedupe by link URL, code, and status code
@@ -461,7 +462,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 key,
                 Severity.Info,
                 "LINK_TO_REDIRECT",
-                $"Link points to URL that redirects: {link.Url}",
+                $"This {displayLinkType} points to {link.Url}, which redirects before serving content. Link directly to the final destination to avoid extra hops and keep the navigation snappy.",
                 link.Url,
                 link.AnchorText,
                 link.LinkType,
@@ -476,7 +477,7 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 key,
                 Severity.Warning,
                 "NOFOLLOW_INTERNAL_LINK",
-                $"Internal link has nofollow attribute (prevents link equity): {link.Url}",
+                $"Internal {displayLinkType} includes rel=\"nofollow\", so crawlers won't pass link equity through it. Remove the attribute if the link should stay crawlable: {link.Url}",
                 link.Url,
                 link.AnchorText,
                 link.LinkType,
@@ -517,10 +518,10 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 // Dedupe by anchor ID only
                 var key = $"#{link.AnchorId}|BROKEN_ANCHOR_LINK";
                 TrackFinding(findingsMap,
-                    key,
-                    Severity.Warning,
-                    "BROKEN_ANCHOR_LINK",
-                    $"Anchor link points to non-existent ID: #{link.AnchorId}",
+                key,
+                Severity.Warning,
+                "BROKEN_ANCHOR_LINK",
+                $"Anchor link #{link.AnchorId} does not exist on this page, so clicking it will not move the user. Add a matching id or name attribute or remove the reference.",
                     ctx.Url.ToString() + "#" + link.AnchorId,
                     link.AnchorText,
                     "anchor",
@@ -563,6 +564,50 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
     }
 
     /// <summary>
+    /// Converts issue codes to friendly readable text for display in the UI.
+    /// </summary>
+    private static string ConvertCodeToFriendlyText(string code, string linkType)
+    {
+        return code switch
+        {
+            "FORBIDDEN_LINK" => "Forbidden Link",
+            "AUTH_REQUIRED_LINK" => "Authentication Required",
+            "METHOD_NOT_ALLOWED_LINK" => "Method Not Allowed",
+            "UNAVAILABLE_LEGAL" => "Unavailable for Legal Reasons",
+            "LINK_NOT_CRAWLED" => "Link Not Crawled",
+            "SLOW_EXTERNAL_LINK" => "Slow External Link",
+            "NOFOLLOW_INTERNAL_LINK" => "Nofollow on Internal Link",
+            "BROKEN_ANCHOR_LINK" => "Broken Anchor Link",
+            "LINK_TO_REDIRECT" => "Link Points to Redirect",
+            "RESTRICTED_LINK" => "Restricted Link",
+            _ when code.StartsWith("CONNECTION_FAILED_", StringComparison.OrdinalIgnoreCase) =>
+                $"Connection Failed ({CapitalizeLinkType(linkType)})",
+            _ when code.StartsWith("BROKEN_", StringComparison.OrdinalIgnoreCase) =>
+                $"Broken {CapitalizeLinkType(linkType)}",
+            _ => code // Fallback to code if no match
+        };
+    }
+
+    /// <summary>
+    /// Capitalizes link type for display (e.g., "hyperlink" -> "Hyperlink").
+    /// </summary>
+    private static string CapitalizeLinkType(string linkType)
+    {
+        if (string.IsNullOrWhiteSpace(linkType))
+            return "Link";
+        
+        return linkType switch
+        {
+            "hyperlink" => "Hyperlink",
+            "image" => "Image",
+            "stylesheet" => "Stylesheet",
+            "script" => "Script",
+            "anchor" => "Anchor",
+            _ => char.ToUpperInvariant(linkType[0]) + (linkType.Length > 1 ? linkType.Substring(1) : "")
+        };
+    }
+
+    /// <summary>
     /// Report all unique findings as structured report rows for easy scanning.
     /// </summary>
     private async Task ReportUniqueFindings(UrlContext ctx, Dictionary<string, FindingTracker> findingsMap)
@@ -576,8 +621,13 @@ public class BrokenLinksTask : UrlTaskBase, IDisposable
                 ? tracker.TargetUrl
                 : tracker.AnchorText;
 
+            // Convert code to friendly text for display
+            var friendlyIssue = ConvertCodeToFriendlyText(tracker.Code, tracker.LinkType);
+
             var row = ReportRow.Create()
                 .Set("Severity", tracker.Severity.ToString())
+                .Set("Issue", friendlyIssue)
+                .Set("Description", tracker.Message)
                 .Set("LinkedFrom", ctx.Url.ToString())
                 .Set("BrokenLink", tracker.TargetUrl)
                 .Set("Status", tracker.HttpStatus)

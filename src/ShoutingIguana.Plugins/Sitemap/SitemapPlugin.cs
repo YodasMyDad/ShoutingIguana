@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.Sitemap;
 
-[Plugin(Id = "com.shoutingiguana.sitemap", Name = "XML Sitemap", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.sitemap", Name = "XML Sitemap", MinSdkVersion = "0.1.0")]
 public class SitemapPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.sitemap";

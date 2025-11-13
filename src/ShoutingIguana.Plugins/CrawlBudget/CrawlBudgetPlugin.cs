@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.CrawlBudget;
 
-[Plugin(Id = "com.shoutingiguana.crawlbudget", Name = "Crawl Budget", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.crawlbudget", Name = "Crawl Budget", MinSdkVersion = "0.1.0")]
 public class CrawlBudgetPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.crawlbudget";
@@ -17,6 +17,7 @@ public class CrawlBudgetPlugin : IPlugin
             
             .AddPrimaryColumn("Page", ReportColumnType.Url, "Page")
             .AddColumn("Issue", ReportColumnType.String, "Issue")
+            .AddColumn("Details", ReportColumnType.String, "Details")
             .AddColumn("StatusCode", ReportColumnType.Integer, "Status")
             .AddColumn("Depth", ReportColumnType.Integer, "Depth")
             .AddColumn("Severity", ReportColumnType.String, "Severity")

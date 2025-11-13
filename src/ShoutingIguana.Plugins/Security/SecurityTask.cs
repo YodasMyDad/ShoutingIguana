@@ -170,6 +170,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", $"Mixed Content ({mixedContentResources.Count} HTTP resources)")
                 .Set("Protocol", "HTTPS")
                 .Set("Details", resourceSummary)
+                .Set("Description", BuildMixedContentDescription(resourceSummary))
                 .Set("Severity", "Error");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -241,6 +242,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "Missing/Weak Security Headers")
                 .Set("Protocol", "HTTPS")
                 .Set("Details", headersSummary)
+                .Set("Description", BuildSecurityHeadersDescription(missingHeaders, weakHeaders))
                 .Set("Severity", "Warning");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -307,6 +309,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", "Insecure Cookies")
                     .Set("Protocol", "HTTPS")
                     .Set("Details", cookieDetails)
+                    .Set("Description", BuildCookieDescription(insecureCookies, missingHttpOnly))
                     .Set("Severity", "Warning");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -324,10 +327,65 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "HTTP Instead of HTTPS")
                 .Set("Protocol", "HTTP")
                 .Set("Details", $"Depth {ctx.Metadata.Depth} (important page)")
+                .Set("Description", BuildHttpRecommendationDescription(ctx.Metadata.Depth))
                 .Set("Severity", "Warning");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
+    }
+
+    private static string BuildMixedContentDescription(string resourceSummary)
+    {
+        return $"Mixing HTTP resources ({resourceSummary}) into this HTTPS page weakens the TLS connection and may lead browsers to block or warn about those assets; serve them over HTTPS or remove them.";
+    }
+
+    private static string BuildSecurityHeadersDescription(
+        List<string> missingHeaders,
+        List<(string Header, string Issue)> weakHeaders)
+    {
+        var segments = new List<string>
+        {
+            "Security headers give browsers guardrails that block clickjacking, MIME sniffing, and other browser-based attacks."
+        };
+
+        if (missingHeaders.Any())
+        {
+            segments.Add($"Missing: {string.Join(", ", missingHeaders)}.");
+        }
+
+        if (weakHeaders.Any())
+        {
+            var weakDetails = string.Join("; ", weakHeaders.Select(h => $"{h.Header} ({h.Issue})"));
+            segments.Add($"Weak settings: {weakDetails}.");
+        }
+
+        segments.Add("Add or harden the recommended headers to keep the page protected.");
+        return string.Join(" ", segments);
+    }
+
+    private static string BuildCookieDescription(List<string> insecureCookies, List<string> missingHttpOnly)
+    {
+        var segments = new List<string>
+        {
+            "Set-Cookie headers should include Secure and HttpOnly so cookie data stays encrypted and is unavailable to scripts."
+        };
+
+        if (insecureCookies.Any())
+        {
+            segments.Add($"Missing Secure: {string.Join(", ", insecureCookies)}.");
+        }
+
+        if (missingHttpOnly.Any())
+        {
+            segments.Add($"Missing HttpOnly: {string.Join(", ", missingHttpOnly)}.");
+        }
+
+        return string.Join(" ", segments);
+    }
+
+    private static string BuildHttpRecommendationDescription(int depth)
+    {
+        return $"Important page (depth {depth}) should be served over HTTPS so visitors stay protected, browsers avoid warnings, and sensitive data stays encrypted.";
     }
 
     private bool IsHttpUrl(string url)

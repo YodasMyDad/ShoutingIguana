@@ -23,6 +23,11 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
     // Key: ProjectId -> TargetUrl -> List<(SourceUrl, AnchorText)>
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, List<(string SourceUrl, string AnchorText)>>> AnchorTextsByProject = new();
 
+    private const string IssueNoOutlinks = "No Outlinks";
+    private const string IssueFewOutlinks = "Few Outlinks";
+    private const string IssueOrphanPage = "Orphan Page";
+    private const string IssueGenericAnchor = "Generic Anchor";
+
     public override string Key => "InternalLinking";
     public override string DisplayName => "Internal Linking";
     public override string Description => "Analyzes internal links, anchor text, orphan pages, and link equity";
@@ -170,13 +175,14 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
             var row = ReportRow.Create()
                 .Set("Severity", "Info")
                 .Set("Page", ctx.Url.ToString())
-                .Set("IssueType", "No Outlinks")
+                .Set("IssueType", IssueNoOutlinks)
                 .Set("FromURL", ctx.Url.ToString())
                 .Set("ToURL", "(none)")
                 .Set("AnchorText", "(none)")
                 .Set("Inlinks", inlinkCount)
                 .Set("Outlinks", outlinkCount)
-                .Set("Depth", ctx.Metadata.Depth);
+                .Set("Depth", ctx.Metadata.Depth)
+                .Set("Description", DescribeIssue(IssueNoOutlinks, ctx, outlinkCount, inlinkCount));
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -187,13 +193,14 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
             var row = ReportRow.Create()
                 .Set("Severity", "Info")
                 .Set("Page", ctx.Url.ToString())
-                .Set("IssueType", "Few Outlinks")
+                .Set("IssueType", IssueFewOutlinks)
                 .Set("FromURL", ctx.Url.ToString())
                 .Set("ToURL", "(none)")
                 .Set("AnchorText", "(none)")
                 .Set("Inlinks", inlinkCount)
                 .Set("Outlinks", outlinkCount)
-                .Set("Depth", ctx.Metadata.Depth);
+                .Set("Depth", ctx.Metadata.Depth)
+                .Set("Description", DescribeIssue(IssueFewOutlinks, ctx, outlinkCount, inlinkCount));
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -230,13 +237,14 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
                 var row = ReportRow.Create()
                     .Set("Severity", "Warning")
                     .Set("Page", ctx.Url.ToString())
-                    .Set("IssueType", "Orphan Page")
+                    .Set("IssueType", IssueOrphanPage)
                     .Set("FromURL", "(no linking page)")
                     .Set("ToURL", ctx.Url.ToString())
                     .Set("AnchorText", "(none)")
                     .Set("Inlinks", 0)
                     .Set("Outlinks", outlinkCount)
-                    .Set("Depth", ctx.Metadata.Depth);
+                    .Set("Depth", ctx.Metadata.Depth)
+                    .Set("Description", DescribeIssue(IssueOrphanPage, ctx, outlinkCount, 0));
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -294,13 +302,14 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
                 var row = ReportRow.Create()
                     .Set("Severity", "Info")
                     .Set("Page", ctx.Url.ToString())
-                    .Set("IssueType", "Generic Anchor")
+                    .Set("IssueType", IssueGenericAnchor)
                     .Set("FromURL", genericLink.SourceUrl)
                     .Set("ToURL", ctx.Url.ToString())
                     .Set("AnchorText", genericLink.AnchorText)
                     .Set("Inlinks", inlinkCount)
                     .Set("Outlinks", outlinkCount)
-                    .Set("Depth", ctx.Metadata.Depth);
+                    .Set("Depth", ctx.Metadata.Depth)
+                    .Set("Description", DescribeIssue(IssueGenericAnchor, ctx, outlinkCount, inlinkCount, genericLink.AnchorText));
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -316,6 +325,31 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         InlinkCountsByProject.TryRemove(projectId, out _);
         AnchorTextsByProject.TryRemove(projectId, out _);
         _logger.LogDebug("Cleaned up internal linking data for project {ProjectId}", projectId);
+    }
+
+    private static string DescribeIssue(string issueType, UrlContext ctx, int outlinkCount, int inlinkCount, string anchorText = "")
+    {
+        string NormalizeAnchor(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return "(no anchor text)";
+            }
+
+            var cleaned = text.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            return cleaned.Length > 120 ? cleaned[..120] + "..." : cleaned;
+        }
+
+        var anchorPreview = NormalizeAnchor(anchorText);
+
+        return issueType switch
+        {
+            IssueNoOutlinks => $"Page {ctx.Url.AbsolutePath} currently links to no other internal destinations; add relevant anchors so visitors and crawlers can keep exploring.",
+            IssueFewOutlinks => $"Page {ctx.Url.AbsolutePath} has {inlinkCount} inbound link(s) but only {outlinkCount} internal link(s) at depth {ctx.Metadata.Depth}; strengthen navigation by adding more relevant outbound links.",
+            IssueOrphanPage => $"Page {ctx.Url.AbsolutePath} has no inbound links and still shows up as orphaned; add internal links from related pages or navigation to make it discoverable.",
+            IssueGenericAnchor => $"Anchor text \"{anchorPreview}\" is too generic; use descriptive wording so users and search engines understand what the link points to.",
+            _ => string.Empty
+        };
     }
 
     private class InternalLink

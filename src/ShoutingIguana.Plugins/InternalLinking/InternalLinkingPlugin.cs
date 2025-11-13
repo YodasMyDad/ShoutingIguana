@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.InternalLinking;
 
-[Plugin(Id = "com.shoutingiguana.internallinking", Name = "Internal Linking", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.internallinking", Name = "Internal Linking", MinSdkVersion = "0.1.0")]
 public class InternalLinkingPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.internallinking";

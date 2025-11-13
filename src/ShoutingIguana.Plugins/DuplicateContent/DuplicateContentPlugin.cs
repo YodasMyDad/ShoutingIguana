@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.DuplicateContent;
 
-[Plugin(Id = "com.shoutingiguana.duplicatecontent", Name = "Duplicate Content", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.duplicatecontent", Name = "Duplicate Content", MinSdkVersion = "0.1.0")]
 public class DuplicateContentPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.duplicatecontent";

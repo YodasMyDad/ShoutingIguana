@@ -46,7 +46,7 @@
                                    Style="{StaticResource TitleTextStyle}"
                                    Margin="0"
                                    AutomationProperties.HeadingLevel="Level1"/>
-                        <TextBlock Text="Version 1.0.0"
+                        <TextBlock Text="Version 0.1.0"
                                    Style="{StaticResource BodyTextStyle}"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    Margin="0,4,0,0"/>

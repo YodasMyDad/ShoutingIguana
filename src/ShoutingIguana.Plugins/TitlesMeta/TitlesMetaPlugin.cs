@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.TitlesMeta;
 
-[Plugin(Id = "com.shoutingiguana.titlesmeta", Name = "Titles & Meta", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.titlesmeta", Name = "Titles & Meta", MinSdkVersion = "0.1.0")]
 public class TitlesMetaPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.titlesmeta";

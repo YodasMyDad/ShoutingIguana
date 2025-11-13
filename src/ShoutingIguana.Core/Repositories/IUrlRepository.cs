@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ShoutingIguana.Core.Models;
 
 namespace ShoutingIguana.Core.Repositories;
@@ -14,7 +15,7 @@ public interface IUrlRepository
     Task<UrlAnalysisDto?> GetForAnalysisAsync(int id);
     Task<string?> GetRenderedHtmlAsync(int id);
     Task<Url> CreateAsync(Url url);
-    Task<Url> UpdateAsync(Url url);
+    Task<Url> UpdateAsync(Url url, IEnumerable<KeyValuePair<string, string>>? headers = null);
     Task<int> CountByProjectIdAsync(int projectId);
     Task<int> CountByStatusAsync(int projectId, UrlStatus status);
     Task DeleteByProjectIdAsync(int projectId);

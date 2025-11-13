@@ -1,3 +1,4 @@
+using System;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
@@ -237,6 +238,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     var row1 = ReportRow.Create()
                         .Set("Page", currentUrl)
                         .Set("Issue", "Duplicate (Temporary Redirects)")
+                        .Set("Description", DescribeDuplicateTemporaryRedirects())
                         .Set("DuplicateOf", redirectInfo.TemporaryRedirects.First())
                         .Set("Similarity", 100)
                         .Set("Severity", "Warning");
@@ -250,6 +252,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     var row = ReportRow.Create()
                         .Set("Page", currentUrl)
                         .Set("Issue", $"Exact Duplicate ({nonRedirectDuplicates.Length + 1} pages)")
+                        .Set("Description", DescribeExactDuplicate(nonRedirectDuplicates.Length + 1))
                         .Set("DuplicateOf", nonRedirectDuplicates.First())
                         .Set("Similarity", 100)
                         .Set("Severity", "Error");
@@ -263,6 +266,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 var row = ReportRow.Create()
                     .Set("Page", currentUrl)
                     .Set("Issue", $"Exact Duplicate ({urlsCopy.Count} pages)")
+                    .Set("Description", DescribeExactDuplicate(urlsCopy.Count))
                     .Set("DuplicateOf", otherUrls.First())
                     .Set("Similarity", 100)
                     .Set("Severity", "Error");
@@ -323,6 +327,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", $"Near Duplicate ({nearDuplicates.Count} pages, {topDup.Similarity:F0}% similar)")
+                .Set("Description", DescribeNearDuplicate(nearDuplicates.Count, topDup.Similarity, topDup.Url))
                 .Set("DuplicateOf", topDup.Url)
                 .Set("Similarity", (int)topDup.Similarity)
                 .Set("Severity", "Warning");
@@ -395,10 +400,11 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             {
                 var boilerplatePercentage = (int)((1 - contentRatio) * 100);
 
-                var row = ReportRow.Create()
-                    .Set("Page", ctx.Url.ToString())
-                    .Set("Issue", $"High Boilerplate Ratio ({boilerplatePercentage}%)")
-                    .Set("DuplicateOf", "(boilerplate ratio check)")
+            var row = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("Issue", $"High Boilerplate Ratio ({boilerplatePercentage}%)")
+                .Set("Description", DescribeBoilerplateRatio(boilerplatePercentage))
+                .Set("DuplicateOf", "(boilerplate ratio check)")
                     .Set("Similarity", boilerplatePercentage)
                     .Set("Severity", "Warning");
                 
@@ -517,6 +523,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 var row1 = ReportRow.Create()
                     .Set("Page", canonicalPage)
                     .Set("Issue", "Domain Variant Unreachable")
+                    .Set("Description", DescribeDomainVariantUnreachable(variantUrl))
                     .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 0)
                     .Set("Severity", "Warning");
@@ -529,6 +536,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 var row2 = ReportRow.Create()
                     .Set("Page", canonicalPage)
                     .Set("Issue", "Domain Variant Timeout")
+                    .Set("Description", DescribeDomainVariantTimeout(variantUrl))
                     .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 0)
                     .Set("Severity", "Warning");
@@ -557,6 +565,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     var row3 = ReportRow.Create()
                         .Set("Page", canonicalPage)
                         .Set("Issue", $"Domain Variant Correct ({statusCode})")
+                        .Set("Description", DescribeDomainVariantCorrect(variantUrl, canonicalUrl, statusCode))
                         .Set("DuplicateOf", variantUrl)
                         .Set("Similarity", 100)
                         .Set("Severity", "Info");
@@ -568,6 +577,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     var row4 = ReportRow.Create()
                         .Set("Page", canonicalPage)
                         .Set("Issue", "Domain Variant Wrong Target")
+                        .Set("Description", DescribeDomainVariantWrongTarget(variantUrl, canonicalUrl))
                         .Set("DuplicateOf", variantUrl)
                         .Set("Similarity", 100)
                         .Set("Severity", "Warning");
@@ -577,11 +587,12 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             }
             // Check if it's a temporary redirect (should be permanent)
             else if (statusCode >= 300 && statusCode < 400)
-            {
-                var row5 = ReportRow.Create()
-                    .Set("Page", canonicalPage)
-                    .Set("Issue", $"Domain Variant Temporary Redirect ({statusCode})")
-                    .Set("DuplicateOf", variantUrl)
+                {
+                    var row5 = ReportRow.Create()
+                        .Set("Page", canonicalPage)
+                        .Set("Issue", $"Domain Variant Temporary Redirect ({statusCode})")
+                        .Set("Description", DescribeDomainVariantTemporaryRedirect(variantUrl, statusCode))
+                        .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 100)
                     .Set("Severity", "Error");
                 
@@ -589,22 +600,24 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             }
             // Check if it returns 200 OK (duplicate content!)
             else if (statusCode == 200)
-            {
-                var row6 = ReportRow.Create()
-                    .Set("Page", canonicalPage)
-                    .Set("Issue", "Domain Variant Duplicate Content")
-                    .Set("DuplicateOf", variantUrl)
+                {
+                    var row6 = ReportRow.Create()
+                        .Set("Page", canonicalPage)
+                        .Set("Issue", "Domain Variant Duplicate Content")
+                        .Set("Description", DescribeDomainVariantDuplicateContent(variantUrl))
+                        .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 100)
                     .Set("Severity", "Error");
                 
                 await ctx.Reports.ReportAsync(Key, row6, ctx.Metadata.UrlId, default);
             }
             else
-            {
-                var row7 = ReportRow.Create()
-                    .Set("Page", canonicalPage)
-                    .Set("Issue", $"Domain Variant Error (HTTP {statusCode})")
-                    .Set("DuplicateOf", variantUrl)
+        {
+            var row7 = ReportRow.Create()
+                .Set("Page", canonicalPage)
+                .Set("Issue", $"Domain Variant Error (HTTP {statusCode})")
+                .Set("Description", DescribeDomainVariantError(variantUrl, statusCode))
+                .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 0)
                     .Set("Severity", "Warning");
                 
@@ -617,7 +630,72 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             _logger.LogWarning(ex, "Error testing domain variant {VariantUrl}", variantUrl);
         }
     }
-    
+
+    private static string DescribeDuplicateTemporaryRedirects()
+    {
+        return "This page only exists because of temporary redirects. Replace those redirects with a permanent 301/308 or canonical tag so crawlers index a single URL.";
+    }
+
+    private static string DescribeExactDuplicate(int totalPages)
+    {
+        var otherCount = Math.Max(totalPages - 1, 1);
+        var plural = otherCount == 1 ? "page" : "pages";
+        return $"Identical content exists on this URL and {otherCount} other {plural}. Choose one canonical URL and redirect or rewrite the duplicates so search engines know which version to index.";
+    }
+
+    private static string DescribeNearDuplicate(int nearCount, double similarity, string duplicateUrl)
+    {
+        var reference = string.IsNullOrWhiteSpace(duplicateUrl) ? "another page" : duplicateUrl;
+        if (nearCount <= 1)
+        {
+            return $"This page is {similarity:F0}% similar to {reference}. Add unique content or canonicalize one of the URLs to avoid confusing search engines.";
+        }
+
+        var extra = nearCount - 1;
+        return $"This page is {similarity:F0}% similar to multiple pages ({reference} plus {extra} more). Differentiate the copy or canonicalize so only one version ranks.";
+    }
+
+    private static string DescribeBoilerplateRatio(int boilerplatePercentage)
+    {
+        return $"Boilerplate (headers/footers/navigation) accounts for {boilerplatePercentage}% of this page. Add more unique main content so the page is perceived as higher quality.";
+    }
+
+    private static string DescribeDomainVariantUnreachable(string variantUrl)
+    {
+        return $"Variant {variantUrl} could not be reached (DNS or connectivity issue). Fix the host so it can redirect cleanly to the canonical URL.";
+    }
+
+    private static string DescribeDomainVariantTimeout(string variantUrl)
+    {
+        return $"Variant {variantUrl} timed out. Ensure the host responds quickly so redirects can be followed and duplicate content is avoided.";
+    }
+
+    private static string DescribeDomainVariantCorrect(string variantUrl, string canonicalUrl, int statusCode)
+    {
+        return $"Variant {variantUrl} permanently redirects ({statusCode}) to {canonicalUrl}, which is the correct behavior.";
+    }
+
+    private static string DescribeDomainVariantWrongTarget(string variantUrl, string canonicalUrl)
+    {
+        return $"Variant {variantUrl} redirects, but the target is not the canonical URL ({canonicalUrl}). Update the redirect target so all variants resolve to the same host.";
+    }
+
+    private static string DescribeDomainVariantTemporaryRedirect(string variantUrl, int statusCode)
+    {
+        var redirectName = GetRedirectTypeName(statusCode);
+        return $"Variant {variantUrl} issues a {redirectName} redirect, which is temporary. Switch to a permanent 301/308 redirect so search engines treat it as canonical.";
+    }
+
+    private static string DescribeDomainVariantDuplicateContent(string variantUrl)
+    {
+        return $"Variant {variantUrl} returns HTTP 200 with the same content as the canonical URL. Serve a permanent redirect so duplicates are not indexed.";
+    }
+
+    private static string DescribeDomainVariantError(string variantUrl, int statusCode)
+    {
+        return $"Variant {variantUrl} returns HTTP {statusCode}. Resolve the server error or remove the variant so search engines do not index a broken duplicate.";
+    }
+
     /// <summary>
     /// Normalize URL for comparison (remove trailing slashes, lowercase)
     /// </summary>
@@ -651,7 +729,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
     /// <summary>
     /// Get human-readable redirect type name
     /// </summary>
-    private string GetRedirectTypeName(int statusCode)
+    private static string GetRedirectTypeName(int statusCode)
     {
         return statusCode switch
         {

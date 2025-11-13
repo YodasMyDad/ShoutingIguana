@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.StructuredData;
 
-[Plugin(Id = "com.shoutingiguana.structureddata", Name = "Structured Data", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.structureddata", Name = "Structured Data", MinSdkVersion = "0.1.0")]
 public class StructuredDataPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.structureddata";

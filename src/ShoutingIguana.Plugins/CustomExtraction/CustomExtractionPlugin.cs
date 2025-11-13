@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.CustomExtraction;
 
-[Plugin(Id = "com.shoutingiguana.customextraction", Name = "Custom Extraction", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.customextraction", Name = "Custom Extraction", MinSdkVersion = "0.1.0")]
 public class CustomExtractionPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.customextraction";

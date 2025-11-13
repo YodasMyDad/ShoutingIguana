@@ -504,7 +504,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             _logger.LogError(ex, "Failed to show About dialog");
             MessageBox.Show(
-                "Shouting Iguana\nVersion 1.0.0 (Stage 3 MVP)\n\nA professional web crawler and SEO analysis tool.",
+                "Shouting Iguana\nVersion 0.1.0 (Stage 3 MVP)\n\nA professional web crawler and SEO analysis tool.",
                 "About Shouting Iguana",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);

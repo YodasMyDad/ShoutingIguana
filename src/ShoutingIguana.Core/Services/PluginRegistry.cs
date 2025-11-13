@@ -35,6 +35,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
     private readonly Dictionary<string, IReportSchema> _registeredSchemas = [];
     private readonly SemaphoreSlim _lock = new(1, 1);
     private bool _isLoaded;
+    private static readonly Lazy<Version> _sdkVersion = new(GetSdkVersion);
 
     public event EventHandler<PluginEventArgs>? PluginLoaded;
     public event EventHandler<PluginEventArgs>? PluginUnloaded;
@@ -580,13 +581,51 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
         try
         {
             var minVersion = Version.Parse(minVersionString);
-            var currentVersion = new Version(1, 0, 0); // Current SDK version
+            var currentVersion = _sdkVersion.Value;
             return currentVersion >= minVersion;
         }
         catch
         {
             return false;
         }
+    }
+
+    private static Version GetSdkVersion()
+    {
+        try
+        {
+            // Get the PluginSdk assembly
+            var sdkAssembly = Assembly.GetAssembly(typeof(PluginAttribute));
+            if (sdkAssembly != null)
+            {
+                // Prioritize AssemblyInformationalVersion as it reflects the actual package version
+                // (AssemblyVersion might default to 1.0.0.0 even when Version=0.1.0 in csproj)
+                var informationalVersion = sdkAssembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
+                if (informationalVersion != null && !string.IsNullOrEmpty(informationalVersion.InformationalVersion))
+                {
+                    // Parse the informational version (may include additional info like "0.1.0+abc123")
+                    var versionPart = informationalVersion.InformationalVersion.Split('+', '-')[0];
+                    if (Version.TryParse(versionPart, out var parsedVersion))
+                    {
+                        return parsedVersion;
+                    }
+                }
+
+                // Fallback to AssemblyVersion if informational version is not available
+                var assemblyVersion = sdkAssembly.GetName().Version;
+                if (assemblyVersion != null)
+                {
+                    return assemblyVersion;
+                }
+            }
+        }
+        catch
+        {
+            // Fall through to default version
+        }
+
+        // Fallback to hardcoded version if assembly version cannot be determined
+        return new Version(0, 1, 0);
     }
 
     private static string GetPluginsPath()

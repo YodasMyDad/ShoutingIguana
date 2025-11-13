@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.Redirects;
 
-[Plugin(Id = "com.shoutingiguana.redirects", Name = "Redirects", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.redirects", Name = "Redirects", MinSdkVersion = "0.1.0")]
 public class RedirectsPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.redirects";

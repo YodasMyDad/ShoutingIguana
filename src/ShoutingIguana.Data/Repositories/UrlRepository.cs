@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using ShoutingIguana.Core.Models;
 using ShoutingIguana.Core.Repositories;
@@ -144,8 +146,23 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
         return url;
     }
 
-    public async Task<Url> UpdateAsync(Url url)
+    public async Task<Url> UpdateAsync(Url url, IEnumerable<KeyValuePair<string, string>>? headers = null)
     {
+        if (headers != null)
+        {
+            var existingHeaders = _context.Headers.Where(h => h.UrlId == url.Id);
+            _context.Headers.RemoveRange(existingHeaders);
+
+            var newHeaders = headers.Select(h => new Header
+            {
+                UrlId = url.Id,
+                Name = h.Key,
+                Value = h.Value
+            });
+
+            await _context.Headers.AddRangeAsync(newHeaders).ConfigureAwait(false);
+        }
+
         _context.Entry(url).State = EntityState.Modified;
         await _context.SaveChangesAsync().ConfigureAwait(false);
         return url;

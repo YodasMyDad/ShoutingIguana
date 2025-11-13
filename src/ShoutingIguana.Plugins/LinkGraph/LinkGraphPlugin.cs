@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.LinkGraph;
 
-[Plugin(Id = "com.shoutingiguana.linkgraph", Name = "Link Graph", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.linkgraph", Name = "Link Graph", MinSdkVersion = "0.1.0")]
 public class LinkGraphPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.linkgraph";
@@ -14,7 +14,7 @@ public class LinkGraphPlugin : IPlugin
     {
         // Register custom report schema for link graph visualization
         var schema = ReportSchema.Create("LinkGraph")
-            
+            .AddColumn("Issue", ReportColumnType.String, "Issue")
             .AddPrimaryColumn("FromURL", ReportColumnType.Url, "From URL")
             .AddColumn("ToURL", ReportColumnType.Url, "To URL")
             .AddColumn("AnchorText", ReportColumnType.String, "Anchor Text")

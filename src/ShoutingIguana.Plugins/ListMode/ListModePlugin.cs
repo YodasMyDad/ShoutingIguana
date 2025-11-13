@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.ListMode;
 
-[Plugin(Id = "com.shoutingiguana.listmode", Name = "List-Mode Crawling", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.listmode", Name = "List-Mode Crawling", MinSdkVersion = "0.1.0")]
 public class ListModePlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.listmode";

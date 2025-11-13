@@ -2,7 +2,7 @@ using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Plugins.Inventory;
 
-[Plugin(Id = "com.shoutingiguana.inventory", Name = "Inventory", MinSdkVersion = "1.0.0")]
+[Plugin(Id = "com.shoutingiguana.inventory", Name = "Inventory", MinSdkVersion = "0.1.0")]
 public class InventoryPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.inventory";

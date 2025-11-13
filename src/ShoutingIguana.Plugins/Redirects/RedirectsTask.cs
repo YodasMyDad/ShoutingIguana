@@ -120,7 +120,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             .Set("Source", ctx.Url.ToString())
             .Set("Target", "(Loop)")
             .Set("StatusCode", 0)
-            .Set("Issue", "Infinite Redirect Loop (ERR_TOO_MANY_REDIRECTS)")
+            .Set("Issue", "Infinite redirect loop detected; browsers abort with ERR_TOO_MANY_REDIRECTS, so break the loop and point to a resolvable destination.")
             .Set("Severity", "Error");
         
         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -132,23 +132,25 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         
         if (string.IsNullOrEmpty(targetUrl))
         {
-                var row = ReportRow.Create()
-                    .Set("Source", ctx.Url.ToString())
-                    .Set("Target", "(missing location header)")
-                    .Set("StatusCode", statusCode)
-                    .Set("Issue", "Missing Location Header")
-                    .Set("Severity", "Error");
+            var row = ReportRow.Create()
+                .Set("Source", ctx.Url.ToString())
+                .Set("Target", "(missing location header)")
+                .Set("StatusCode", statusCode)
+                .Set("Issue", "Redirect response missing a Location header, so browsers never know where to go; add a valid Location URL.")
+                .Set("Severity", "Error");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             return;
         }
 
         // Report the redirect
+        var redirectType = GetRedirectType(statusCode);
+        var redirectSummary = GetRedirectSummary(statusCode);
         var redirectRow = ReportRow.Create()
             .Set("Source", ctx.Url.ToString())
             .Set("Target", targetUrl)
             .Set("StatusCode", statusCode)
-            .Set("Issue", $"{GetRedirectType(statusCode)} Redirect")
+            .Set("Issue", $"{redirectType} - {redirectSummary}")
             .Set("Severity", "Info");
         
         await ctx.Reports.ReportAsync(Key, redirectRow, ctx.Metadata.UrlId, default);
@@ -160,7 +162,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .Set("Source", ctx.Url.ToString())
                 .Set("Target", targetUrl)
                 .Set("StatusCode", statusCode)
-                .Set("Issue", "Temporary Redirect - Consider 301")
+                .Set("Issue", "Temporary redirect detected; switch to a permanent 301 if this move is meant to be long-lived so search engines index the correct URL.")
                 .Set("Severity", "Warning");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -173,7 +175,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .Set("Source", ctx.Url.ToString())
                 .Set("Target", targetUrl)
                 .Set("StatusCode", statusCode)
-                .Set("Issue", "HTTPS to HTTP Redirect (Security Issue)")
+                .Set("Issue", "Redirecting from HTTPS to HTTP downgrades security and can trigger mixed-content warnings; keep the destination on HTTPS.")
                 .Set("Severity", "Error");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -186,7 +188,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .Set("Source", ctx.Url.ToString())
                 .Set("Target", targetUrl)
                 .Set("StatusCode", statusCode)
-                .Set("Issue", "HTTP to HTTPS Redirect (Good)")
+                .Set("Issue", "Redirecting to HTTPS improves privacy and search visibility; keep the secure URL as the canonical destination.")
                 .Set("Severity", "Info");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -200,23 +202,23 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             
             if (fromHost.StartsWith("www.") && !toHost.StartsWith("www."))
             {
-                    var row = ReportRow.Create()
-                        .Set("Source", ctx.Url.ToString())
-                        .Set("Target", targetUrl)
-                        .Set("StatusCode", statusCode)
-                        .Set("Issue", "WWW to Non-WWW Redirect")
-                        .Set("Severity", "Info");
+                var row = ReportRow.Create()
+                    .Set("Source", ctx.Url.ToString())
+                    .Set("Target", targetUrl)
+                    .Set("StatusCode", statusCode)
+                    .Set("Issue", "Redirecting from www to the apex domain keeps a single canonical hostname and avoids duplicate content.")
+                    .Set("Severity", "Info");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
             else if (!fromHost.StartsWith("www.") && toHost.StartsWith("www."))
             {
-                    var row = ReportRow.Create()
-                        .Set("Source", ctx.Url.ToString())
-                        .Set("Target", targetUrl)
-                        .Set("StatusCode", statusCode)
-                        .Set("Issue", "Non-WWW to WWW Redirect")
-                        .Set("Severity", "Info");
+                var row = ReportRow.Create()
+                    .Set("Source", ctx.Url.ToString())
+                    .Set("Target", targetUrl)
+                    .Set("StatusCode", statusCode)
+                    .Set("Issue", "Redirecting to www canonicalizes the site to that hostname; keep the choice consistent across URLs.")
+                    .Set("Severity", "Info");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -232,7 +234,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                     .Set("Source", ctx.Url.ToString())
                     .Set("Target", targetUrl)
                     .Set("StatusCode", statusCode)
-                    .Set("Issue", "Trailing Slash Redirect")
+                    .Set("Issue", "Redirect to add/remove a trailing slash indicates mismatched canonicalisation; serve one preferred version without redirecting.")
                     .Set("Severity", "Info");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -250,7 +252,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             .Set("Source", ctx.Url.ToString())
             .Set("Target", targetUrl)
             .Set("StatusCode", 0)
-            .Set("Issue", $"Meta Refresh Redirect ({delay}s delay)")
+            .Set("Issue", $"Meta refresh redirect ({delay}s delay) waits before navigating, which hurts UX and SEO; use an HTTP redirect instead.")
             .Set("Severity", "Warning");
         
         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -302,7 +304,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                             .Set("Source", ctx.Url.ToString())
                             .Set("Target", targetUrl)
                             .Set("StatusCode", 0)
-                            .Set("Issue", "JavaScript Redirect (Not SEO-Friendly)")
+                            .Set("Issue", "JavaScript-based redirects rely on script execution, which search engines may not follow and can delay page stability; prefer HTTP redirects.")
                             .Set("Severity", "Warning");
                         
                         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -366,16 +368,29 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         }
     }
 
-    private string GetRedirectType(int statusCode)
+    private static string GetRedirectType(int statusCode)
     {
         return statusCode switch
         {
-            301 => "Permanent",
-            302 => "Temporary (Found)",
-            303 => "See Other",
-            307 => "Temporary (Preserve Method)",
-            308 => "Permanent (Preserve Method)",
-            _ => "Unknown"
+            301 => "Permanent Redirect (301)",
+            302 => "Temporary Redirect (302)",
+            303 => "See Other (303)",
+            307 => "Temporary Redirect (307)",
+            308 => "Permanent Redirect (308)",
+            _ => $"Redirect ({statusCode})"
+        };
+    }
+
+    private static string GetRedirectSummary(int statusCode)
+    {
+        return statusCode switch
+        {
+            301 => "Preserves ranking signals by pointing users and crawlers to the canonical URL.",
+            302 => "Best for short-lived changes; search engines typically keep the original URL indexed.",
+            303 => "Tells clients to follow up with a GET request, which is handy after form submissions.",
+            307 => "Temporary move that preserves the HTTP method; switch to 301 if the move is permanent.",
+            308 => "Permanent move that also preserves the HTTP method, useful for APIs that must stay RESTful.",
+            _ => "Uses an uncommon redirect code; verify that it matches your intended flow."
         };
     }
     
@@ -459,12 +474,13 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         
         var description = BuildChainDescription(chain);
         var finalHop = chain[^1];
+        var reason = BuildChainReason(isLoop);
         
         var row = ReportRow.Create()
             .Set("Source", ctx.Url.ToString())
             .Set("Target", finalHop.ToUrl)
             .Set("StatusCode", finalHop.StatusCode)
-            .Set("Issue", $"{issueType} ({hopCount} hops) - {description}")
+            .Set("Issue", $"{issueType} ({hopCount} hops) - {description}. {reason}")
             .Set("Severity", severity);
         
         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -476,17 +492,24 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         {
             return string.Empty;
         }
-        
+
         var parts = new List<string>(chain.Count + 1);
         foreach (var hop in chain)
         {
             parts.Add($"{hop.FromUrl} ({hop.StatusCode})");
         }
-        
+
         parts.Add(chain[^1].ToUrl);
-        return string.Join(" → ", parts);
+        return string.Join(" -> ", parts);
     }
-    
+
+    private static string BuildChainReason(bool isLoop)
+    {
+        return isLoop
+            ? "Loop prevents browsers and crawlers from ever reaching the destination."
+            : "Each extra hop slows load times and risks losing ranking signals; keep redirects to a single hop.";
+    }
+
     /// <summary>
     /// Validate redirect target status
     /// </summary>
@@ -520,7 +543,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .Set("Source", ctx.Url.ToString())
                 .Set("Target", targetUrl)
                 .Set("StatusCode", status)
-                .Set("Issue", $"Redirect Target Error (HTTP {status})")
+                .Set("Issue", $"Redirect target returns HTTP {status}, so visitors land on a failing page; fix the endpoint or stop redirecting there.")
                 .Set("Severity", severity);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -531,7 +554,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .Set("Source", ctx.Url.ToString())
                 .Set("Target", targetUrl)
                 .Set("StatusCode", status)
-                .Set("Issue", "Redirect Target Is Another Redirect")
+                .Set("Issue", "Redirect target is itself another redirect, which adds latency and increases loop risk; point directly to the final destination.")
                 .Set("Severity", "Warning");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -633,7 +656,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                         .Set("Source", ctx.Url.ToString())
                         .Set("Target", targetUrl ?? string.Empty)
                         .Set("StatusCode", statusCode)
-                        .Set("Issue", $"Temporary Redirect with Long Cache ({days} days)")
+                        .Set("Issue", $"Temporary redirect cached for {days} days; browsers may keep following it even after it should change, so lower the max-age or use a permanent redirect.")
                         .Set("Severity", "Warning");
                     
                     await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);

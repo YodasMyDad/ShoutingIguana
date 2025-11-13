@@ -86,44 +86,29 @@ public class InventoryTask : UrlTaskBase
         // Check URL length
         if (urlLength > MAX_URL_LENGTH)
         {
-            var rowTooLong = ReportRow.Create()
-                .Set("Issue", "URL length > 100 characters (excluding query)")
-                .Set("URL", url)
-                .Set("ContentType", ctx.Metadata.ContentType ?? "")
-                .Set("Status", ctx.Metadata.StatusCode)
-                .Set("Depth", ctx.Metadata.Depth)
-                .Set("Indexable", "Yes")
-                .Set("Severity", "Warning");
-            
-            await ctx.Reports.ReportAsync(Key, rowTooLong, ctx.Metadata.UrlId, default);
+            await ReportIssueAsync(
+                ctx,
+                "URL length > 100 characters (excluding query)",
+                "Warning",
+                "Search engines and visitors prefer short, descriptive URLs; keep this URL under roughly 100 characters (excluding the query) for clarity.");
         }
         else if (urlLength > WARNING_URL_LENGTH)
         {
-            var row1 = ReportRow.Create()
-                .Set("Issue", "URL length > 75 characters (excluding query)")
-                .Set("URL", url)
-                .Set("ContentType", ctx.Metadata.ContentType ?? "")
-                .Set("Status", ctx.Metadata.StatusCode)
-                .Set("Depth", ctx.Metadata.Depth)
-                .Set("Indexable", "Yes")
-                .Set("Severity", "Info");
-            
-            await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
+            await ReportIssueAsync(
+                ctx,
+                "URL length > 75 characters (excluding query)",
+                "Info",
+                "This URL is getting long; consider trimming optional segments so it stays easy to read and share.");
         }
 
         // Check for uppercase in URL
         if (url != url.ToLowerInvariant())
         {
-            var row = ReportRow.Create()
-                .Set("Issue", "Uppercase characters detected in URL")
-                .Set("URL", url)
-                .Set("ContentType", ctx.Metadata.ContentType ?? "")
-                .Set("Status", ctx.Metadata.StatusCode)
-                .Set("Depth", ctx.Metadata.Depth)
-                .Set("Indexable", "Yes")
-                .Set("Severity", "Warning");
-            
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ReportIssueAsync(
+                ctx,
+                "Uppercase characters detected in URL",
+                "Warning",
+                "Uppercase characters can lead to duplicate URLs on case-sensitive servers; keep the path lowercase to maintain consistency.");
         }
 
         // Check query parameters
@@ -132,32 +117,22 @@ public class InventoryTask : UrlTaskBase
             var queryParams = ctx.Url.Query.TrimStart('?').Split('&');
             if (queryParams.Length > MAX_QUERY_PARAMETERS)
             {
-                var row = ReportRow.Create()
-                    .Set("Issue", $"Too many query parameters ({queryParams.Length})")
-                    .Set("URL", url)
-                    .Set("ContentType", ctx.Metadata.ContentType ?? "")
-                    .Set("Status", ctx.Metadata.StatusCode)
-                    .Set("Depth", ctx.Metadata.Depth)
-                    .Set("Indexable", "Yes")
-                    .Set("Severity", "Info");
-                
-                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+                await ReportIssueAsync(
+                    ctx,
+                    $"Too many query parameters ({queryParams.Length})",
+                    "Info",
+                    $"Having {queryParams.Length} query parameters can produce many near-duplicate URLs; reduce optional parameters or canonicalize to keep indexing clean.");
             }
 
             // Check for pagination parameters
             var paginationPattern = @"[?&](page|p|pg|offset|start)=";
             if (Regex.IsMatch(url, paginationPattern, RegexOptions.IgnoreCase))
             {
-                var rowPag = ReportRow.Create()
-                    .Set("Issue", "Pagination parameter detected in URL")
-                    .Set("URL", url)
-                    .Set("ContentType", ctx.Metadata.ContentType ?? "")
-                    .Set("Status", ctx.Metadata.StatusCode)
-                    .Set("Depth", ctx.Metadata.Depth)
-                    .Set("Indexable", "Yes")
-                    .Set("Severity", "Info");
-                
-                await ctx.Reports.ReportAsync(Key, rowPag, ctx.Metadata.UrlId, default);
+                await ReportIssueAsync(
+                    ctx,
+                    "Pagination parameter detected in URL",
+                    "Info",
+                    "Pagination parameters (page, offset, start, etc.) create extra URLs; use rel=\"next\"/\"prev\" or canonical tags to signal the canonical entry point.");
             }
             
             // Check for session IDs in URL (CRITICAL SEO ISSUE)
@@ -168,31 +143,21 @@ public class InventoryTask : UrlTaskBase
         var specialCharsPattern = @"[^a-zA-Z0-9\-_.~:/?#\[\]@!$&'()*+,;=%]";
         if (Regex.IsMatch(url, specialCharsPattern))
         {
-            var rowSpecial = ReportRow.Create()
-                .Set("Issue", "Special characters found in URL")
-                .Set("URL", url)
-                .Set("ContentType", ctx.Metadata.ContentType ?? "")
-                .Set("Status", ctx.Metadata.StatusCode)
-                .Set("Depth", ctx.Metadata.Depth)
-                .Set("Indexable", "Yes")
-                .Set("Severity", "Info");
-                
-            await ctx.Reports.ReportAsync(Key, rowSpecial, ctx.Metadata.UrlId, default);
+            await ReportIssueAsync(
+                ctx,
+                "Special characters found in URL",
+                "Info",
+                "Characters outside the safe URL set may be percent-encoded inconsistently; keep the path simple with alphanumerics, hyphens, and dots.");
         }
 
         // Check for underscores (Google treats them differently than hyphens)
         if (ctx.Url.AbsolutePath.Contains('_'))
         {
-            var rowUnder = ReportRow.Create()
-                .Set("Issue", "Underscore detected in path")
-                .Set("URL", url)
-                .Set("ContentType", ctx.Metadata.ContentType ?? "")
-                .Set("Status", ctx.Metadata.StatusCode)
-                .Set("Depth", ctx.Metadata.Depth)
-                .Set("Indexable", "Yes")
-                .Set("Severity", "Info");
-            
-            await ctx.Reports.ReportAsync(Key, rowUnder, ctx.Metadata.UrlId, default);
+            await ReportIssueAsync(
+                ctx,
+                "Underscore detected in path",
+                "Info",
+                "Google treats hyphens as word separators and underscores as literal characters; replace underscores with hyphens for better readability.");
         }
     }
 
@@ -225,16 +190,12 @@ public class InventoryTask : UrlTaskBase
         {
             if (Regex.IsMatch(url, Pattern, RegexOptions.IgnoreCase))
             {
-                var rowSession = ReportRow.Create()
-                    .Set("Issue", $"{Name} parameter detected ({Example})")
-                    .Set("URL", url)
-                    .Set("ContentType", ctx.Metadata.ContentType ?? "")
-                    .Set("Status", ctx.Metadata.StatusCode)
-                    .Set("Depth", ctx.Metadata.Depth)
-                    .Set("Indexable", "No")
-                    .Set("Severity", "Error");
-
-                await ctx.Reports.ReportAsync(Key, rowSession, ctx.Metadata.UrlId, default);
+                await ReportIssueAsync(
+                    ctx,
+                    $"{Name} parameter detected ({Example})",
+                    "Error",
+                    "Session identifiers in the URL create infinite near-duplicate pages; store session state in cookies or headers so the URL remains canonical.",
+                    indexable: false);
                 
                 // Only report once per URL (first match found)
                 return;
@@ -306,29 +267,19 @@ public class InventoryTask : UrlTaskBase
             // Check content length thresholds in order: most severe first
             if (contentLength < WARNING_CONTENT_LENGTH)
             {
-                var rowThin = ReportRow.Create()
-                    .Set("Issue", $"Very short content (<{WARNING_CONTENT_LENGTH} characters)")
-                    .Set("URL", ctx.Url.ToString())
-                    .Set("ContentType", ctx.Metadata.ContentType ?? "")
-                    .Set("Status", ctx.Metadata.StatusCode)
-                    .Set("Depth", ctx.Metadata.Depth)
-                    .Set("Indexable", "Yes")
-                    .Set("Severity", "Warning");
-                
-                await ctx.Reports.ReportAsync(Key, rowThin, ctx.Metadata.UrlId, default);
+                await ReportIssueAsync(
+                    ctx,
+                    $"Very short content (<{WARNING_CONTENT_LENGTH} characters)",
+                    "Warning",
+                    "This page contains less than ~150 words, which search engines often consider thin content; add more helpful detail.");
             }
             else if (contentLength < MIN_CONTENT_LENGTH)
             {
-                var rowLimited = ReportRow.Create()
-                    .Set("Issue", $"Limited content length (<{MIN_CONTENT_LENGTH} characters)")
-                    .Set("URL", ctx.Url.ToString())
-                    .Set("ContentType", ctx.Metadata.ContentType ?? "")
-                    .Set("Status", ctx.Metadata.StatusCode)
-                    .Set("Depth", ctx.Metadata.Depth)
-                    .Set("Indexable", "Yes")
-                    .Set("Severity", "Info");
-                
-                await ctx.Reports.ReportAsync(Key, rowLimited, ctx.Metadata.UrlId, default);
+                await ReportIssueAsync(
+                    ctx,
+                    $"Limited content length (<{MIN_CONTENT_LENGTH} characters)",
+                    "Info",
+                    "Content under ~300 words may not fully address the topic; expand it so the page can satisfy user intent.");
             }
         }
     }
@@ -449,17 +400,27 @@ public class InventoryTask : UrlTaskBase
         // Report if excessive third-party domains (> 10)
         if (thirdPartyDomains.Count > 10)
         {
-            var rowThirdParty = ReportRow.Create()
-                .Set("Issue", $"More than 10 third-party domains ({thirdPartyDomains.Count})")
-                .Set("URL", ctx.Url.ToString())
-                .Set("ContentType", ctx.Metadata.ContentType ?? "")
-                .Set("Status", ctx.Metadata.StatusCode)
-                .Set("Depth", ctx.Metadata.Depth)
-                .Set("Indexable", "Yes")
-                .Set("Severity", "Warning");
-            
-            await ctx.Reports.ReportAsync(Key, rowThirdParty, ctx.Metadata.UrlId, default);
+            await ReportIssueAsync(
+                ctx,
+                $"More than 10 third-party domains ({thirdPartyDomains.Count})",
+                "Warning",
+                $"Loading {thirdPartyDomains.Count} external domains adds DNS lookups and scripts that slow the page; try to consolidate or drop unnecessary services.");
         }
+    }
+
+    private Task ReportIssueAsync(UrlContext ctx, string issue, string severity, string explanation, bool indexable = true)
+    {
+        var row = ReportRow.Create()
+            .Set("Issue", issue)
+            .Set("Explanation", explanation)
+            .Set("URL", ctx.Url.ToString())
+            .Set("ContentType", ctx.Metadata.ContentType ?? "")
+            .Set("Status", ctx.Metadata.StatusCode)
+            .Set("Depth", ctx.Metadata.Depth)
+            .Set("Indexable", indexable ? "Yes" : "No")
+            .Set("Severity", severity);
+
+        return ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     }
     
     private string NormalizeUrl(string url)

@@ -140,10 +140,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             catch (JsonException ex)
             {
                 var jsonPath = string.IsNullOrEmpty(ex.Path) ? "JSON-LD" : ex.Path;
+                var errorDescription = $"Invalid JSON-LD at {jsonPath}: {ex.Message}. Fix the syntax so the structured data can be parsed.";
                 var rowError = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "JSON-LD")
                     .Set("Issue", $"JSON Syntax Error: {ex.Message}")
+                    .Set("Description", errorDescription)
                     .Set("Property", jsonPath)
                     .Set("Severity", "Error");
                 
@@ -156,10 +158,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             var distinctSchemas = validSchemas.Distinct().ToList();
             var schemaList = string.Join(", ", distinctSchemas);
             
+            var foundDescription = $"Detected {validSchemas.Count} JSON-LD schema definition(s) ({schemaList}); these help search engines understand the page.";
             var rowFound = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", schemaList)
                 .Set("Issue", $"JSON-LD Found ({validSchemas.Count} schemas)")
+                .Set("Description", foundDescription)
                 .Set("Property", schemaList)
                 .Set("Severity", "Info");
             
@@ -237,11 +241,14 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
+            var missingList = string.Join(", ", missingProps);
+            var articleDescription = $"Article schema missing required property(ies) ({missingList}). Add them so the article metadata (headline, author, date, image) is complete.";
             var rowArticle = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", schemaType)
                 .Set("Issue", "Incomplete Article Schema")
-                .Set("Property", string.Join(", ", missingProps))
+                .Set("Description", articleDescription)
+                .Set("Property", missingList)
                 .Set("Severity", "Warning");
             
             await ctx.Reports.ReportAsync(Key, rowArticle, ctx.Metadata.UrlId, default);
@@ -316,11 +323,14 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
+            var missingList = string.Join(", ", missingProps);
+            var productMissingDescription = $"Product schema missing required property(ies) ({missingList}); include them so the product can appear in rich results.";
             var rowProdMissing = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Product")
                 .Set("Issue", "Incomplete Product Schema")
-                .Set("Property", string.Join(", ", missingProps))
+                .Set("Description", productMissingDescription)
+                .Set("Property", missingList)
                 .Set("Severity", "Error");
             
             await ctx.Reports.ReportAsync(Key, rowProdMissing, ctx.Metadata.UrlId, default);
@@ -328,10 +338,13 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (warnings.Any())
         {
+            var warningPreview = string.Join("; ", warnings.Take(2));
+            var warningDescription = $"Product schema has {warnings.Count} optimization recommendation(s) (e.g., {warningPreview}); address them to improve eligibility for rich snippets.";
             var rowProdWarn = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Product")
                 .Set("Issue", $"Product Recommendations ({warnings.Count})")
+                .Set("Description", warningDescription)
                 .Set("Property", hasAggregateRating ? "" : "aggregateRating")
                 .Set("Severity", "Warning");
             
@@ -339,10 +352,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         }
         else if (hasAggregateRating)
         {
+            var completeDescription = "Product schema includes aggregateRating, so star ratings may appear in search results; keep rating data accurate.";
             var rowComplete = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Product")
                 .Set("Issue", "Complete with Star Ratings")
+                .Set("Description", completeDescription)
                 .Set("Property", "aggregateRating")
                 .Set("Severity", "Info");
             
@@ -528,11 +543,14 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
+            var missingList = string.Join(", ", missingProps);
+            var videoMissingDescription = $"VideoObject schema missing required property(ies) ({missingList}); add them so video rich results can recognize this content.";
             var rowVidMissing = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "VideoObject")
                 .Set("Issue", "Incomplete Video Schema")
-                .Set("Property", string.Join(", ", missingProps))
+                .Set("Description", videoMissingDescription)
+                .Set("Property", missingList)
                 .Set("Severity", "Error");
             
             await ctx.Reports.ReportAsync(Key, rowVidMissing, ctx.Metadata.UrlId, default);
@@ -540,10 +558,13 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (warnings.Any())
         {
+            var warningPreview = string.Join("; ", warnings.Take(2));
+            var videoWarningDescription = $"Video schema has {warnings.Count} recommendations (e.g., {warningPreview}); fix them so your video markup meets schema.org expectations.";
             var rowVideo = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "VideoObject")
                 .Set("Issue", $"Video Recommendations ({warnings.Count})")
+                .Set("Description", videoWarningDescription)
                 .Set("Property", string.Join(", ", warnings.Take(2)))
                 .Set("Severity", "Warning");
             
@@ -612,11 +633,14 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
+            var missingList = string.Join(", ", missingProps);
+            var reviewMissingDescription = $"Review schema missing required property(ies) ({missingList}); add them so reviews can appear in search results.";
             var rowRevMissing = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Review")
                 .Set("Issue", "Incomplete Review Schema")
-                .Set("Property", string.Join(", ", missingProps))
+                .Set("Description", reviewMissingDescription)
+                .Set("Property", missingList)
                 .Set("Severity", "Error");
             
             await ctx.Reports.ReportAsync(Key, rowRevMissing, ctx.Metadata.UrlId, default);
@@ -624,10 +648,13 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (warnings.Any())
         {
+            var warningPreview = string.Join("; ", warnings.Take(2));
+            var reviewWarningDescription = $"Review schema has {warnings.Count} recommendations (e.g., {warningPreview}); improve them so rating snippets stay trustworthy.";
             var rowRevWarn = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Review")
                 .Set("Issue", $"Review Recommendations ({warnings.Count})")
+                .Set("Description", reviewWarningDescription)
                 .Set("Property", string.Join(", ", warnings.Take(2)))
                 .Set("Severity", "Warning");
             
@@ -635,10 +662,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         }
         else if (!missingProps.Any())
         {
+            var reviewCompleteDescription = "Review schema has all required fields, so reviews can show rating snippets; keep the facts accurate.";
             var rowRevComplete = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Review")
                 .Set("Issue", "Review Schema Complete")
+                .Set("Description", reviewCompleteDescription)
                 .Set("Property", "Review fields complete")
                 .Set("Severity", "Info");
             
@@ -822,11 +851,14 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (missingProps.Any())
         {
+            var missingList = string.Join(", ", missingProps);
+            var localMissingDescription = $"LocalBusiness schema missing required property(ies) ({missingList}); add them so local pack visibility is not harmed.";
             var rowLocal = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", schemaType)
                 .Set("Issue", "Incomplete LocalBusiness Schema")
-                .Set("Property", string.Join(", ", missingProps))
+                .Set("Description", localMissingDescription)
+                .Set("Property", missingList)
                 .Set("Severity", "Warning");
             
             await ctx.Reports.ReportAsync(Key, rowLocal, ctx.Metadata.UrlId, default);
@@ -835,10 +867,13 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         // Report warnings for LocalBusiness
         if (warnings.Any() && schemaType == "LocalBusiness")
         {
+            var warningPreview = string.Join("; ", warnings.Take(2));
+            var localWarningDescription = $"LocalBusiness schema has {warnings.Count} recommendations (e.g., {warningPreview}); address them to keep local search data accurate.";
             var rowLocalWarn = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "LocalBusiness")
                 .Set("Issue", $"LocalBusiness Recommendations ({warnings.Count})")
+                .Set("Description", localWarningDescription)
                 .Set("Property", string.Join(", ", warnings.Take(2)))
                 .Set("Severity", "Warning");
             
@@ -850,10 +885,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
     {
         if (!root.TryGetProperty("itemListElement", out var itemsElement))
         {
+            var breadMissingDescription = "BreadcrumbList needs an 'itemListElement' array so search engines can read the navigation trail.";
             var rowBreadInv = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "BreadcrumbList")
                 .Set("Issue", "Missing itemListElement")
+                .Set("Description", breadMissingDescription)
                 .Set("Property", "itemListElement")
                 .Set("Severity", "Warning");
             
@@ -867,10 +904,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             var items = itemsElement.EnumerateArray().ToList();
             if (items.Count == 0)
             {
+                var breadEmptyDescription = "BreadcrumbList exists but 'itemListElement' has no entries; add breadcrumb steps to render a trail.";
                 var rowBreadEmpty = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "BreadcrumbList")
                     .Set("Issue", "Empty BreadcrumbList")
+                    .Set("Description", breadEmptyDescription)
                     .Set("Property", "itemListElement")
                     .Set("Severity", "Warning");
                 
@@ -879,10 +918,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             else
             {
                 var breadcrumbLevels = items.Count > 0 ? $"{items.Count} levels" : "(none)";
+                var breadcrumbDescription = $"BreadcrumbList with {items.Count} level(s) is present; this helps search engines show navigation paths.";
                 var rowBreadFound = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "BreadcrumbList")
                     .Set("Issue", $"Breadcrumb Found ({items.Count} levels)")
+                    .Set("Description", breadcrumbDescription)
                     .Set("Property", breadcrumbLevels)
                     .Set("Severity", "Info");
                 
@@ -897,10 +938,17 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
 
         if (!root.TryGetProperty(requiredProp, out var mainEntityElement))
         {
+            var missingRequiredDescription = schemaType switch
+            {
+                "FAQPage" => "FAQPage requires a 'mainEntity' array of question/answer pairs for the FAQ rich snippet.",
+                "HowTo" => "HowTo schema requires a 'step' property describing each instruction; without it the schema is incomplete.",
+                _ => $"Schema {schemaType} requires '{requiredProp}' to describe its content."
+            };
             var rowFaqHow = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", schemaType)
                 .Set("Issue", $"Missing {requiredProp}")
+                .Set("Description", missingRequiredDescription)
                 .Set("Property", requiredProp)
                 .Set("Severity", "Warning");
             
@@ -943,10 +991,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             // Report issues with FAQ structure
             if (questionsWithoutAnswers > 0)
             {
+                var faqMissingAnswerDescription = $"FAQPage has {questionsWithoutAnswers} question(s) without an acceptedAnswer; add meaningful answers for each to qualify for FAQ snippets.";
                 var rowFaqMiss = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "FAQPage")
                     .Set("Issue", $"FAQ Missing Answers ({questionsWithoutAnswers})")
+                    .Set("Description", faqMissingAnswerDescription)
                     .Set("Property", "acceptedAnswer")
                     .Set("Severity", "Warning");
                 
@@ -955,10 +1005,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             else if (questionsWithShortAnswers == 0 && questions.Count > 0)
             {
                 var faqSummary = $"{questions.Count} Q&A entries";
+                var faqCompleteDescription = $"FAQPage has {questions.Count} complete Q&A entries; these are ready for FAQ rich snippets.";
                 var rowFaqComplete = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "FAQPage")
                     .Set("Issue", $"FAQ Complete ({questions.Count} Q&As)")
+                    .Set("Description", faqCompleteDescription)
                     .Set("Property", faqSummary)
                     .Set("Severity", "Info");
                 
@@ -967,10 +1019,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             
             if (questionsWithShortAnswers > 0)
             {
+                var faqShortDescription = $"FAQPage has {questionsWithShortAnswers} answer(s) shorter than 50 characters; lengthen them to provide more helpful answers.";
                 var rowFaqShort = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "FAQPage")
                     .Set("Issue", $"FAQ Short Answers ({questionsWithShortAnswers})")
+                    .Set("Description", faqShortDescription)
                     .Set("Property", "acceptedAnswer")
                     .Set("Severity", "Info");
                 
@@ -1003,12 +1057,15 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         if (itemTypes.Any())
         {
             var distinctTypes = itemTypes.Distinct().ToList();
+            var microProperty = string.Join(", ", distinctTypes);
+            var microDescription = $"Detected {itemTypes.Count} microdata item(s) covering {microProperty}. Validate each so search engines can trust the markup.";
             
             var rowMicro = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
-                    .Set("SchemaType", string.Join(", ", distinctTypes))
+                    .Set("SchemaType", microProperty)
                     .Set("Issue", $"Microdata Found ({itemTypes.Count} items)")
-                    .Set("Property", string.Join(", ", distinctTypes))
+                    .Set("Description", microDescription)
+                    .Set("Property", microProperty)
                     .Set("Severity", "Info");
                 
                 await ctx.Reports.ReportAsync(Key, rowMicro, ctx.Metadata.UrlId, default);
@@ -1046,10 +1103,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             if (recommendedSchema != null)
             {
                 var propertyValue = recommendedSchema ?? "(recommended schema)";
+                var missingDescription = $"No structured data was detected; consider adding {propertyValue} markup so search engines understand this page.";
                 var rowMissing = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", recommendedSchema)
                     .Set("Issue", "Missing Structured Data")
+                    .Set("Description", missingDescription)
                     .Set("Property", propertyValue)
                     .Set("Severity", "Info");
                 
@@ -1086,10 +1145,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         
         if (!hasAuthorLink && !hasAuthorByline)
         {
+            var authorDescription = "Article lacks rel='author' links or a clear author byline; add author markup so Google can tie this content to the creator.";
             var rowAuthor = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Article")
                 .Set("Issue", "Missing Author Markup")
+                .Set("Description", authorDescription)
                 .Set("Property", "author")
                 .Set("Severity", "Info");
             
@@ -1145,10 +1206,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         {
             if (!hasPhone && !hasAddress)
             {
+                var contactDescription = "Contact page is missing both phone and address; add at least one so visitors and search engines can reach out.";
                 var rowContact = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "Contact")
                     .Set("Issue", "Missing Contact Info")
+                    .Set("Description", contactDescription)
                     .Set("Property", "phone, address")
                     .Set("Severity", "Info");
                 
@@ -1156,10 +1219,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             }
             else if (!hasPhone)
             {
+                var phoneDescription = "Contact page missing a phone number; include a properly formatted number for credibility.";
                 var rowPhone = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "Contact")
                     .Set("Issue", "Missing Phone Number")
+                    .Set("Description", phoneDescription)
                     .Set("Property", "phone")
                     .Set("Severity", "Info");
                 
@@ -1167,10 +1232,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             }
             else if (!hasAddress)
             {
+                var addressDescription = "Contact page missing an address; add street/city/zip or structured PostalAddress markup.";
                 var rowAddr = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "Contact")
                     .Set("Issue", "Missing Address")
+                    .Set("Description", addressDescription)
                     .Set("Property", "address")
                     .Set("Severity", "Info");
                 
@@ -1220,10 +1287,12 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         // Only report once per project using TryAdd (atomic operation)
         if (hasInconsistency && NAPInconsistencyReportedByProject.TryAdd(ctx.Project.ProjectId, true))
         {
+            var napDescription = $"LocalBusiness markup varies across the site ({uniqueNames.Count} names, {uniqueAddresses.Count} addresses, {uniquePhones.Count} phones); keep NAP consistent for stronger local signals.";
             var rowNAP = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "LocalBusiness")
                 .Set("Issue", $"NAP Inconsistency ({uniqueNames.Count} names, {uniquePhones.Count} phones)")
+                .Set("Description", napDescription)
                 .Set("Property", "name, address, telephone")
                 .Set("Severity", "Warning");
             

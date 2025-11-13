@@ -159,14 +159,11 @@ public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAcces
             {
                 confidence = "medium";
             }
-            
-            var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
-                .Set("Issue", $"Soft 404 ({confidence}% confidence)")
-                .Set("StatusCode", ctx.Metadata.StatusCode)
-                .Set("Depth", ctx.Metadata.Depth)
-                .Set("Severity", "Warning");
-            
+
+            var issueText = $"Soft 404 ({confidence} confidence)";
+            var detail = $"Identified as a soft 404 ({confidence} confidence). Return a proper 4xx status or redirect/remove the URL so crawl budget isn't wasted on a missing page.";
+
+            var row = CreateReportRow(ctx, issueText, "Warning", detail);
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
     }
@@ -180,13 +177,10 @@ public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAcces
 
     private async Task ReportServerErrorAsync(UrlContext ctx)
     {
-        var row = ReportRow.Create()
-            .Set("Page", ctx.Url.ToString())
-            .Set("Issue", $"Server Error (HTTP {ctx.Metadata.StatusCode})")
-            .Set("StatusCode", ctx.Metadata.StatusCode)
-            .Set("Depth", ctx.Metadata.Depth)
-            .Set("Severity", "Warning");
-        
+        var issueText = $"Server Error (HTTP {ctx.Metadata.StatusCode})";
+        var detail = $"Server returned HTTP {ctx.Metadata.StatusCode}, which wastes crawl budget and frustrates users. Resolve the 5xx response so crawlers and visitors see a healthy page.";
+
+        var row = CreateReportRow(ctx, issueText, "Warning", detail);
         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     }
 
@@ -209,12 +203,10 @@ public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAcces
             {
                 var errorPercentage = (int)(errorRate * 100);
                 
-                var row = ReportRow.Create()
-                    .Set("Page", ctx.Url.ToString())
-                    .Set("Issue", $"High Server Error Rate ({errorPercentage}%)")
-                    .Set("StatusCode", 0)
-                    .Set("Depth", 0)
-                    .Set("Severity", "Error");
+                var issueText = $"High Server Error Rate ({errorPercentage}%)";
+                var detail = $"High server error rate ({errorPercentage}%) means crawlers waste time retrying failing pages. Investigate why {errorCount} of {totalPages} pages returned 5xx and stabilise the backend.";
+
+                var row = CreateReportRow(ctx, issueText, "Error", detail, statusCode: 0, depth: 0);
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                 
@@ -230,6 +222,17 @@ public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAcces
         TotalPagesByProject.TryRemove(projectId, out _);
         ErrorRateReportedByProject.TryRemove(projectId, out _);
         _logger.LogDebug("Cleaned up crawl budget data for project {ProjectId}", projectId);
+    }
+
+    private static ReportRow CreateReportRow(UrlContext ctx, string issue, string severity, string details, int? statusCode = null, int? depth = null)
+    {
+        return ReportRow.Create()
+            .Set("Page", ctx.Url.ToString())
+            .Set("Issue", issue)
+            .Set("Details", details)
+            .Set("StatusCode", statusCode ?? ctx.Metadata.StatusCode)
+            .Set("Depth", depth ?? ctx.Metadata.Depth)
+            .Set("Severity", severity);
     }
 }
 

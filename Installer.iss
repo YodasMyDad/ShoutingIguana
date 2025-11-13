@@ -2,7 +2,7 @@
 ; Supports both x86 and x64 builds
 
 #define MyAppName "Shouting Iguana"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "0.1.0"
 #define MyAppPublisher "Lee Messenger"
 #define MyAppExeName "ShoutingIguana.exe"
 

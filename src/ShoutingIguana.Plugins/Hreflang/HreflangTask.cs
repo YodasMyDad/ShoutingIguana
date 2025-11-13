@@ -1,3 +1,4 @@
+using System;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
@@ -219,9 +220,11 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
         {
             var errorSummary = string.Join(", ", invalidSyntax.Take(3).Select(e => e.Link.Language));
             var exampleTarget = invalidSyntax.First().Link.Url ?? ctx.Url.ToString();
+            var issue = $"Invalid Hreflang Syntax ({invalidSyntax.Count} tags)";
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
-                .Set("Issue", $"Invalid Hreflang Syntax ({invalidSyntax.Count} tags)")
+                .Set("Issue", issue)
+                .Set("Description", GetIssueDescription(issue))
                 .Set("HreflangTag", errorSummary)
                 .Set("TargetURL", exampleTarget)
                 .Set("Severity", "Error");
@@ -238,9 +241,11 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
         if (selfReference == null)
         {
             var languages = string.Join(", ", hreflangs.Select(h => h.Language));
+            var issue = "Missing Self-Referencing Hreflang";
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
-                .Set("Issue", "Missing Self-Referencing Hreflang")
+                .Set("Issue", issue)
+                .Set("Description", GetIssueDescription(issue))
                 .Set("HreflangTag", string.IsNullOrEmpty(languages) ? "(no hreflang)" : languages)
                 .Set("TargetURL", ctx.Url.ToString())
                 .Set("Severity", "Error");
@@ -260,9 +265,11 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
         {
             var duplicateTags = string.Join(", ", duplicates.Select(d => $"{d.Key} ({d.Count()}x)"));
             var exampleTarget = duplicates.First().FirstOrDefault()?.Url ?? ctx.Url.ToString();
+            var issue = "Duplicate Hreflang Codes";
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
-                .Set("Issue", "Duplicate Hreflang Codes")
+                .Set("Issue", issue)
+                .Set("Description", GetIssueDescription(issue))
                 .Set("HreflangTag", duplicateTags)
                 .Set("TargetURL", exampleTarget)
                 .Set("Severity", "Error");
@@ -279,9 +286,11 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
         if (!hasXDefault && hasMultipleLanguages)
         {
             var targetUrl = hreflangs.FirstOrDefault()?.Url ?? ctx.Url.ToString();
+            var issue = "Missing x-default Hreflang";
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
-                .Set("Issue", "Missing x-default Hreflang")
+                .Set("Issue", issue)
+                .Set("Description", GetIssueDescription(issue))
                 .Set("HreflangTag", "x-default")
                 .Set("TargetURL", targetUrl)
                 .Set("Severity", "Warning");
@@ -300,12 +309,14 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
 
             if (!htmlSet.SetEquals(httpSet))
             {
-            var row = ReportRow.Create()
-                .Set("Page", ctx.Url.ToString())
-                .Set("Issue", "HTML/HTTP Hreflang Mismatch")
-                .Set("HreflangTag", $"HTML: {htmlHreflangs.Count}, HTTP: {httpHreflangs.Count}")
-                .Set("TargetURL", ctx.Url.ToString())
-                .Set("Severity", "Warning");
+                var issue = "HTML/HTTP Hreflang Mismatch";
+                var row = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("Issue", issue)
+                    .Set("Description", GetIssueDescription(issue))
+                    .Set("HreflangTag", $"HTML: {htmlHreflangs.Count}, HTTP: {httpHreflangs.Count}")
+                    .Set("TargetURL", ctx.Url.ToString())
+                    .Set("Severity", "Warning");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -324,9 +335,11 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
             // If canonical points elsewhere and this page has hreflang
             if (normalizedCanonical != normalizedCurrent && hreflangs.Any())
             {
+                var issue = "Hreflang/Canonical Conflict";
                 var row = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
-                    .Set("Issue", "Hreflang/Canonical Conflict")
+                    .Set("Issue", issue)
+                    .Set("Description", GetIssueDescription(issue))
                     .Set("HreflangTag", $"{hreflangs.Count} tags")
                     .Set("TargetURL", canonical)
                     .Set("Severity", "Warning");
@@ -373,15 +386,62 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
         if (missingReturnLinks.Any())
         {
             var targetSummary = string.Join(", ", missingReturnLinks.Take(3).Select(m => m.Language));
+            var issue = $"Missing Bidirectional Links ({missingReturnLinks.Count} targets)";
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
-                .Set("Issue", $"Missing Bidirectional Links ({missingReturnLinks.Count} targets)")
+                .Set("Issue", issue)
+                .Set("Description", GetIssueDescription(issue))
                 .Set("HreflangTag", targetSummary)
                 .Set("TargetURL", missingReturnLinks.First().TargetUrl)
                 .Set("Severity", "Error");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
+    }
+
+    private static string GetIssueDescription(string issue)
+    {
+        if (string.IsNullOrWhiteSpace(issue))
+        {
+            return "Review this hreflang entry to ensure it fits the multi-regional configuration.";
+        }
+
+        if (issue.StartsWith("Invalid Hreflang Syntax", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Each hreflang tag should use ISO 639-1 language codes and optional ISO 3166-1 alpha-2 regions; extra segments will be ignored.";
+        }
+
+        if (issue.StartsWith("Missing Self-Referencing Hreflang", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Include a hreflang tag that points back to this page so search engines know it belongs to the same language/region set.";
+        }
+
+        if (issue.StartsWith("Duplicate Hreflang Codes", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Avoid listing the same language or region combination more than once to prevent conflicting instructions.";
+        }
+
+        if (issue.StartsWith("Missing x-default Hreflang", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Add an x-default hreflang entry so visitors without a specific language preference are guided to your default page.";
+        }
+
+        if (issue.StartsWith("HTML/HTTP Hreflang Mismatch", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Keep the HTML <link rel=alternate> tags and the HTTP Link header in sync so crawlers see the same targets everywhere.";
+        }
+
+        if (issue.StartsWith("Hreflang/Canonical Conflict", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Ensure your canonical tag references the same URL that hreflang tags describe, avoiding contradictory signals.";
+        }
+
+        if (issue.StartsWith("Missing Bidirectional Links", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Every hreflang target should link back to this page with its own hreflang tag so search engines can confirm the relationship.";
+        }
+
+        return "Review this hreflang report so your multilingual setup stays aligned with best practices.";
     }
 
     public override void CleanupProject(int projectId)
