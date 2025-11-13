@@ -1,6 +1,4 @@
-using System;
 using System.Collections.Concurrent;
-using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
@@ -11,10 +9,8 @@ namespace ShoutingIguana.Plugins.CrawlBudget;
 /// <summary>
 /// Crawl budget optimization: soft 404s, server errors, crawled but not indexed pages.
 /// </summary>
-public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
+public class CrawlBudgetTask(ILogger logger) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
     
     // Track server error counts per project
     private static readonly ConcurrentDictionary<int, ConcurrentBag<int>> ServerErrorsByProject = new();
@@ -53,7 +49,7 @@ public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAcces
             TotalPagesByProject.AddOrUpdate(ctx.Project.ProjectId, 1, (_, count) => count + 1);
             
             // Track server errors (5xx)
-            if (ctx.Metadata.StatusCode >= 500 && ctx.Metadata.StatusCode < 600)
+            if (ctx.Metadata.StatusCode is >= 500 and < 600)
             {
                 var errorBag = ServerErrorsByProject.GetOrAdd(ctx.Project.ProjectId, _ => new ConcurrentBag<int>());
                 errorBag.Add(ctx.Metadata.StatusCode);
@@ -63,10 +59,9 @@ public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAcces
             }
             
             // Check for soft 404s on successful pages
-            if (ctx.Metadata.StatusCode >= 200 && ctx.Metadata.StatusCode < 300)
+            if (ctx.Metadata.StatusCode is >= 200 and < 300)
             {
                 await CheckSoft404Async(ctx);
-                await CheckCrawledButNotIndexedAsync(ctx);
             }
             
             // Periodically check if we should report error rate (every 100 pages)
@@ -78,7 +73,7 @@ public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAcces
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing crawl budget for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing crawl budget for {Url}", ctx.Url);
         }
     }
 
@@ -165,24 +160,17 @@ public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAcces
             var detail = $"Identified as a soft 404 ({confidence} confidence). Return a proper 4xx status or redirect/remove the URL so crawl budget isn't wasted on a missing page.";
 
             var row = CreateReportRow(ctx, issueText, Severity.Warning, detail);
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, CancellationToken.None);
         }
     }
-
-    private async Task CheckCrawledButNotIndexedAsync(UrlContext ctx)
-    {
-        // NOTE: Noindex/canonical checks are duplicates
-        // These are already handled by Robots and Canonical plugins
-        // Skipping to avoid duplicate reporting
-    }
-
+    
     private async Task ReportServerErrorAsync(UrlContext ctx)
     {
         var issueText = $"Server Error (HTTP {ctx.Metadata.StatusCode})";
         var detail = $"Server returned HTTP {ctx.Metadata.StatusCode}, which wastes crawl budget and frustrates users. Resolve the 5xx response so crawlers and visitors see a healthy page.";
 
         var row = CreateReportRow(ctx, issueText, Severity.Warning, detail);
-        await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+        await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, CancellationToken.None);
     }
 
     private async Task CheckServerErrorRateAsync(UrlContext ctx)
@@ -209,9 +197,9 @@ public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAcces
 
                 var row = CreateReportRow(ctx, issueText, Severity.Error, detail, statusCode: 0, depth: 0);
                 
-                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, CancellationToken.None);
                 
-                _logger.LogWarning("High server error rate detected for project {ProjectId}: {ErrorRate:P1} ({ErrorCount}/{TotalPages})",
+                logger.LogWarning("High server error rate detected for project {ProjectId}: {ErrorRate:P1} ({ErrorCount}/{TotalPages})",
                     ctx.Project.ProjectId, errorRate, errorCount, totalPages);
             }
         }
@@ -222,7 +210,7 @@ public class CrawlBudgetTask(ILogger logger, IRepositoryAccessor repositoryAcces
         ServerErrorsByProject.TryRemove(projectId, out _);
         TotalPagesByProject.TryRemove(projectId, out _);
         ErrorRateReportedByProject.TryRemove(projectId, out _);
-        _logger.LogDebug("Cleaned up crawl budget data for project {ProjectId}", projectId);
+        logger.LogDebug("Cleaned up crawl budget data for project {ProjectId}", projectId);
     }
 
     private static ReportRow CreateReportRow(UrlContext ctx, string issue, Severity severity, string details, int? statusCode = null, int? depth = null)

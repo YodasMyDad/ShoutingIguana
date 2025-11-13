@@ -12,29 +12,30 @@ public class SeverityToStringConverter : IValueConverter
 {
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value == null)
-            return null;
-        
-        // If it's already a string, return it
-        if (value is string str)
-            return str;
-        
-        // If it's a Severity enum, convert to string
-        if (value is Severity severity)
-            return severity.ToString();
-        
-        // Try to parse as Severity if it's some other type
-        try
+        switch (value)
         {
-            if (Enum.TryParse(value.ToString(), out Severity parsed))
-                return parsed.ToString();
-        }
-        catch
-        {
-            // Ignore parsing errors
-        }
+            case null:
+                return null;
+            // If it's already a string, return it
+            case string str:
+                return str;
+            // If it's a Severity enum, convert to string
+            case Severity severity:
+                return severity.ToString();
+            default:
+                // Try to parse as Severity if it's some other type
+                try
+                {
+                    if (Enum.TryParse(value.ToString(), out Severity parsed))
+                        return parsed.ToString();
+                }
+                catch
+                {
+                    // Ignore parsing errors
+                }
         
-        return value?.ToString();
+                return value.ToString();
+        }
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

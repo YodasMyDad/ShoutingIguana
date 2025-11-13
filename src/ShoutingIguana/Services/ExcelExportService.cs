@@ -16,19 +16,17 @@ public class ExcelExportService(
     ILogger<ExcelExportService> logger,
     IServiceProvider serviceProvider) : IExcelExportService
 {
-    private readonly ILogger<ExcelExportService> _logger = logger;
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
     private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public async Task<bool> ExportFindingsAsync(int projectId, string filePath, List<string>? selectedTaskKeys = null, bool includeTechnicalMetadata = false, bool includeErrors = true, bool includeWarnings = true, bool includeInfo = true, Action<string, int, int>? progressCallback = null)
     {
         try
         {
-            _logger.LogInformation("Exporting findings to Excel: {FilePath} (Include Technical Metadata: {IncludeTechnical}, Errors: {Errors}, Warnings: {Warnings}, Info: {Info})", 
+            logger.LogInformation("Exporting findings to Excel: {FilePath} (Include Technical Metadata: {IncludeTechnical}, Errors: {Errors}, Warnings: {Warnings}, Info: {Info})", 
                 filePath, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
 
             // Create scope for repositories
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = serviceProvider.CreateScope();
             var findingRepo = scope.ServiceProvider.GetRequiredService<IFindingRepository>();
             var projectRepo = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
 
@@ -36,7 +34,7 @@ public class ExcelExportService(
             var project = await projectRepo.GetByIdAsync(projectId);
             if (project == null)
             {
-                _logger.LogError("Project not found: {ProjectId}", projectId);
+                logger.LogError("Project not found: {ProjectId}", projectId);
                 return false;
             }
 
@@ -74,28 +72,28 @@ public class ExcelExportService(
             }
             
             // Filter by selected task keys if provided
-            if (selectedTaskKeys != null && selectedTaskKeys.Count > 0)
+            if (selectedTaskKeys is { Count: > 0 })
             {
-                taskKeys = taskKeys.Where(tk => selectedTaskKeys.Contains(tk)).ToList();
+                taskKeys = taskKeys.Where(selectedTaskKeys.Contains).ToList();
                 
                 if (taskKeys.Count == 0)
                 {
-                    _logger.LogWarning("No selected plugins have data to export for project {ProjectId}", projectId);
+                    logger.LogWarning("No selected plugins have data to export for project {ProjectId}", projectId);
                     return false;
                 }
                 
-                _logger.LogInformation("Filtering export to {Count} selected plugin(s): {Plugins}", 
+                logger.LogInformation("Filtering export to {Count} selected plugin(s): {Plugins}", 
                     taskKeys.Count, string.Join(", ", taskKeys));
             }
             else if (taskKeys.Count == 0)
             {
-                _logger.LogWarning("No data to export for project {ProjectId}", projectId);
+                logger.LogWarning("No data to export for project {ProjectId}", projectId);
                 return false;
             }
             
             if (filteredFindings.Count > 50000)
             {
-                _logger.LogWarning("Large export detected: {Count} findings. This may take some time.", filteredFindings.Count);
+                logger.LogWarning("Large export detected: {Count} findings. This may take some time.", filteredFindings.Count);
             }
             
             using var workbook = new XLWorkbook();
@@ -115,7 +113,7 @@ public class ExcelExportService(
             }
 
             // Create summary sheet
-            await CreateSummarySheetAsync(workbook, project.Name, filteredFindings, findingsByTask, reportRowCounts, reportDataRepository, projectId, taskKeys, schemasDict);
+            await CreateSummarySheetAsync(workbook, project.Name, filteredFindings, findingsByTask, reportRowCounts, taskKeys);
 
             // Create a sheet for each plugin's data
             var currentIndex = 0;
@@ -154,13 +152,13 @@ public class ExcelExportService(
             // Save workbook
             workbook.SaveAs(filePath);
 
-            _logger.LogInformation("Excel export completed: {Count} findings exported to {FilePath}", 
+            logger.LogInformation("Excel export completed: {Count} findings exported to {FilePath}", 
                 filteredFindings.Count, filePath);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error exporting to Excel");
+            logger.LogError(ex, "Error exporting to Excel");
             return false;
         }
     }
@@ -172,7 +170,7 @@ public class ExcelExportService(
             var columns = schema.GetColumns();
             if (columns == null || columns.Count == 0)
             {
-                _logger.LogWarning("No columns defined for schema: {TaskKey}", taskKey);
+                logger.LogWarning("No columns defined for schema: {TaskKey}", taskKey);
                 return;
             }
             
@@ -325,15 +323,15 @@ public class ExcelExportService(
             // Freeze header row
             ws.SheetView.FreezeRows(1);
             
-            _logger.LogInformation("Created worksheet '{SheetName}' with {Count} rows", sheetName, allRows.Count);
+            logger.LogInformation("Created worksheet '{SheetName}' with {Count} rows", sheetName, allRows.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating dynamic report sheet for {TaskKey}", taskKey);
+            logger.LogError(ex, "Error creating dynamic report sheet for {TaskKey}", taskKey);
         }
     }
     
-    private async Task CreateSummarySheetAsync(XLWorkbook workbook, string projectName, List<Core.Models.Finding> allFindings, IEnumerable<IGrouping<string, Core.Models.Finding>> findingsByTask, Dictionary<string, int> reportRowCounts, IReportDataRepository reportDataRepository, int projectId, List<string> taskKeys, Dictionary<string, Core.Models.ReportSchema> schemasDict)
+    private static async Task CreateSummarySheetAsync(XLWorkbook workbook, string projectName, List<Core.Models.Finding> allFindings, List<IGrouping<string, Core.Models.Finding>> findingsByTask, Dictionary<string, int> reportRowCounts, List<string> taskKeys)
     {
         var ws = workbook.Worksheets.Add("Summary");
 
@@ -373,8 +371,8 @@ public class ExcelExportService(
         {
             ws.Cell(row, 1).Value = taskKey;
             
-            int totalCount = 0;
-            string dataType = "";
+            var totalCount = 0;
+            var dataType = "";
             
             // Check if this task has report rows
             if (reportRowCounts.TryGetValue(taskKey, out var reportCount) && reportCount > 0)
@@ -437,14 +435,14 @@ public class ExcelExportService(
         foreach (var finding in findings.OrderByDescending(f => f.Severity).ThenByDescending(f => f.CreatedUtc))
         {
             colIndex = 1;
-            ws.Cell(row, colIndex++).Value = finding.Url?.Address ?? "";
+            ws.Cell(row, colIndex++).Value = finding.Url.Address;
             ws.Cell(row, colIndex++).Value = finding.Severity.ToString();
             ws.Cell(row, colIndex++).Value = finding.Code;
             ws.Cell(row, colIndex++).Value = finding.Message;
             
             // Add formatted structured details
             FindingDetails? details = null;
-            string detailsText = "";
+            string detailsText;
             try
             {
                 details = finding.GetDetails();
@@ -452,7 +450,7 @@ public class ExcelExportService(
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error parsing finding details for finding {FindingId}", finding.Id);
+                logger.LogWarning(ex, "Error parsing finding details for finding {FindingId}", finding.Id);
                 detailsText = "[Error parsing details]";
             }
             
@@ -534,14 +532,14 @@ public class ExcelExportService(
         }
         
         var lines = new List<string>();
-        FormatDetailItems(details.Items, 0, lines);
+        FormatDetailItems(details.Items, lines);
         return string.Join("\n", lines);
     }
     
     /// <summary>
     /// Formats detail items (now flat strings, not hierarchical).
     /// </summary>
-    private void FormatDetailItems(List<string> items, int indentLevel, List<string> lines)
+    private void FormatDetailItems(List<string> items, List<string> lines)
     {
         foreach (var item in items)
         {
@@ -567,7 +565,7 @@ public class ExcelExportService(
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error formatting technical metadata for export");
+            logger.LogWarning(ex, "Error formatting technical metadata for export");
             return "[Error formatting technical metadata]";
         }
     }
@@ -595,10 +593,10 @@ public class ExcelExportService(
     {
         try
         {
-            _logger.LogInformation("Exporting URLs to Excel: {FilePath}", filePath);
+            logger.LogInformation("Exporting URLs to Excel: {FilePath}", filePath);
 
             // Create scope for repositories
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = serviceProvider.CreateScope();
             var urlRepo = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
             var projectRepo = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
 
@@ -606,7 +604,7 @@ public class ExcelExportService(
             var project = await projectRepo.GetByIdAsync(projectId);
             if (project == null)
             {
-                _logger.LogError("Project not found: {ProjectId}", projectId);
+                logger.LogError("Project not found: {ProjectId}", projectId);
                 return false;
             }
 
@@ -615,13 +613,13 @@ public class ExcelExportService(
             
             if (allUrls.Count == 0)
             {
-                _logger.LogWarning("No URLs to export for project {ProjectId}", projectId);
+                logger.LogWarning("No URLs to export for project {ProjectId}", projectId);
                 return false;
             }
             
             if (allUrls.Count > 50000)
             {
-                _logger.LogWarning("Large export detected: {Count} URLs. This may take some time.", allUrls.Count);
+                logger.LogWarning("Large export detected: {Count} URLs. This may take some time.", allUrls.Count);
             }
             
             using var workbook = new XLWorkbook();
@@ -639,13 +637,13 @@ public class ExcelExportService(
             // Save workbook
             workbook.SaveAs(filePath);
 
-            _logger.LogInformation("Excel export completed: {Count} URLs exported to {FilePath}", 
+            logger.LogInformation("Excel export completed: {Count} URLs exported to {FilePath}", 
                 allUrls.Count, filePath);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error exporting URLs to Excel");
+            logger.LogError(ex, "Error exporting URLs to Excel");
             return false;
         }
     }
@@ -882,21 +880,21 @@ public class ExcelExportService(
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error extracting headings from HTML");
+            logger.LogWarning(ex, "Error extracting headings from HTML");
             return ("", "", "", "", "", "");
         }
     }
 
-    private string ExtractHeadingText(HtmlDocument doc, string xpath)
+    private static string ExtractHeadingText(HtmlDocument doc, string xpath)
     {
         var nodes = doc.DocumentNode.SelectNodes(xpath);
-        if (nodes == null || nodes.Count == 0)
+        if (nodes.Count == 0)
         {
             return "";
         }
 
         var texts = nodes
-            .Select(n => System.Net.WebUtility.HtmlDecode(n.InnerText?.Trim() ?? ""))
+            .Select(n => System.Net.WebUtility.HtmlDecode(n.InnerText.Trim() ?? ""))
             .Where(t => !string.IsNullOrWhiteSpace(t))
             .ToList();
 

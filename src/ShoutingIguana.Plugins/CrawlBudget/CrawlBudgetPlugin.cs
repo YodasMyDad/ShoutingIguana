@@ -26,8 +26,7 @@ public class CrawlBudgetPlugin : IPlugin
         context.RegisterReportSchema(schema);
         
         context.RegisterTask(new CrawlBudgetTask(
-            context.CreateLogger(nameof(CrawlBudgetTask)),
-            context.GetRepositoryAccessor()));
+            context.CreateLogger(nameof(CrawlBudgetTask))));
     }
 }
 
