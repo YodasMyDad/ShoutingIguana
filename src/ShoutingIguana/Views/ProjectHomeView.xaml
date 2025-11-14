@@ -80,6 +80,23 @@
               HorizontalAlignment="Center"
               VerticalAlignment="Center"
               KeyboardNavigation.TabNavigation="Local">
+            <Grid.RenderTransform>
+                <TranslateTransform/>
+            </Grid.RenderTransform>
+            <Grid.Triggers>
+                <EventTrigger RoutedEvent="Loaded">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                             From="20" To="0" Duration="0:0:0.4"
+                                             DecelerationRatio="0.7"/>
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                             From="0" To="1" Duration="0:0:0.4"
+                                             DecelerationRatio="0.7"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Grid.Triggers>
             
             <Border Padding="{StaticResource SpacingXl}" 
                     Margin="{StaticResource SpacingM}" 
@@ -190,6 +207,24 @@
         <Grid Visibility="{Binding IsWelcomeScreen, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
               Margin="{StaticResource SpacingL}"
               KeyboardNavigation.TabNavigation="Local">
+            <Grid.RenderTransform>
+                <TranslateTransform/>
+            </Grid.RenderTransform>
+            <Grid.Triggers>
+                <EventTrigger RoutedEvent="Loaded">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                             From="20" To="0" Duration="0:0:0.4"
+                                             DecelerationRatio="0.7"/>
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                             From="0" To="1" Duration="0:0:0.4"
+                                             DecelerationRatio="0.7"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Grid.Triggers>
+            
             <Border Background="{StaticResource SurfaceBrush}"
                     CornerRadius="12"
                     SnapsToDevicePixels="True"
