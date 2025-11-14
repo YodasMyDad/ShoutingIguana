@@ -961,6 +961,31 @@ public class CrawlEngine(
     /// </summary>
     private async Task<UrlFetchResult> FetchStaticResourceAsync(string url, string userAgent, ProxySettings? proxySettings, CancellationToken cancellationToken)
     {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var resourceUri))
+        {
+            _logger.LogWarning("Skipping static resource fetch due to invalid URL: {Url}", url);
+            return new UrlFetchResult
+            {
+                StatusCode = 0,
+                IsSuccess = false,
+                ErrorMessage = "Invalid URL",
+                IsHtml = false
+            };
+        }
+
+        if (!string.Equals(resourceUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(resourceUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogDebug("Skipping static resource with unsupported scheme {Scheme}: {Url}", resourceUri.Scheme, url);
+            return new UrlFetchResult
+            {
+                StatusCode = 0,
+                IsSuccess = false,
+                ErrorMessage = $"Unsupported scheme {resourceUri.Scheme}",
+                IsHtml = false
+            };
+        }
+
         // Create HttpClient with proxy and browser-like headers
         using var httpClient = CreateHttpClient(userAgent, proxySettings);
         
@@ -1755,17 +1780,24 @@ public class CrawlEngine(
     {
         try
         {
-            if (Uri.TryCreate(url, UriKind.Absolute, out var absoluteUri))
+            var baseUri = new Uri(baseUrl);
+            var normalizedUrl = url;
+            if (normalizedUrl.StartsWith("//", StringComparison.Ordinal))
+            {
+                normalizedUrl = $"{baseUri.Scheme}:{normalizedUrl}";
+            }
+
+            if (Uri.TryCreate(normalizedUrl, UriKind.Absolute, out var absoluteUri))
             {
                 return absoluteUri.ToString();
             }
             
-            if (Uri.TryCreate(new Uri(baseUrl), url, out var resolvedUri))
+            if (Uri.TryCreate(baseUri, normalizedUrl, out var resolvedUri))
             {
                 return resolvedUri.ToString();
             }
             
-            return url;
+            return normalizedUrl;
         }
         catch (UriFormatException)
         {

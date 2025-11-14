@@ -38,7 +38,6 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private double _crawlDelaySeconds = 1.5;
 
     // Browser settings
-    [ObservableProperty] private bool _headless = true;
     [ObservableProperty] private int _viewportWidth = 1920;
     [ObservableProperty] private int _viewportHeight = 1080;
     [ObservableProperty] private int _memoryLimitMb = 1536;
@@ -88,7 +87,6 @@ public partial class SettingsViewModel : ObservableObject
     private void LoadSettings()
     {
         // Load browser settings
-        Headless = _appSettings.BrowserSettings.Headless;
         ViewportWidth = _appSettings.BrowserSettings.ViewportWidth;
         ViewportHeight = _appSettings.BrowserSettings.ViewportHeight;
 
@@ -184,7 +182,6 @@ public partial class SettingsViewModel : ObservableObject
             }
 
             // Save browser settings
-            _appSettings.BrowserSettings.Headless = Headless;
             _appSettings.BrowserSettings.ViewportWidth = ViewportWidth;
             _appSettings.BrowserSettings.ViewportHeight = ViewportHeight;
 
@@ -266,7 +263,6 @@ public partial class SettingsViewModel : ObservableObject
 
             // Restore default browser settings from BrowserSettings defaults
             var defaultBrowserSettings = new BrowserSettings();
-            Headless = defaultBrowserSettings.Headless;
             ViewportWidth = defaultBrowserSettings.ViewportWidth;
             ViewportHeight = defaultBrowserSettings.ViewportHeight;
 

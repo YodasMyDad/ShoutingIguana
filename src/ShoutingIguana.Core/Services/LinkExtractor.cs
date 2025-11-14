@@ -150,16 +150,23 @@ public class LinkExtractor : ILinkExtractor
                 return null;
             }
 
+            var schemeSource = baseTagUri ?? baseUri;
+            var normalizedUrl = url;
+            if (normalizedUrl.StartsWith("//", StringComparison.Ordinal))
+            {
+                // Scheme-relative URL (e.g., //cdn.example.com/file.js) should inherit the current scheme
+                normalizedUrl = $"{schemeSource.Scheme}:{normalizedUrl}";
+            }
+
             Uri absoluteUri;
-            if (Uri.TryCreate(url, UriKind.Absolute, out var parsedUri))
+            if (Uri.TryCreate(normalizedUrl, UriKind.Absolute, out var parsedUri))
             {
                 absoluteUri = parsedUri;
             }
             else
             {
                 // Use base tag URI if present, otherwise use page URI
-                var resolveAgainst = baseTagUri ?? baseUri;
-                if (Uri.TryCreate(resolveAgainst, url, out parsedUri))
+                if (Uri.TryCreate(schemeSource, normalizedUrl, out parsedUri))
                 {
                     absoluteUri = parsedUri;
                 }

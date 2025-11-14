@@ -236,38 +236,6 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20">
                     <StackPanel MaxWidth="750">
                         
-                        <!-- Browser Mode Section -->
-                        <Border Background="{StaticResource SurfaceBrush}"
-                                CornerRadius="8"
-                                Padding="24"
-                                Margin="0,0,0,24">
-                            <StackPanel>
-                                <TextBlock Text="Browser Mode" 
-                                           Style="{StaticResource FormSectionHeader}"
-                                           Margin="0,0,0,16"
-                                           AutomationProperties.HeadingLevel="Level2"/>
-
-                                <Border Background="{StaticResource BackgroundBrush}"
-                                        BorderBrush="{StaticResource BorderLightBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="6"
-                                        Padding="12">
-                                    <StackPanel>
-                                        <CheckBox IsChecked="{Binding Headless}"
-                                                  FontSize="14"
-                                                  Margin="0"
-                                                  TabIndex="0"
-                                                  AutomationProperties.Name="Headless Mode">
-                                            <TextBlock Text="Run browser in headless mode" TextWrapping="Wrap" FontWeight="SemiBold"/>
-                                        </CheckBox>
-                                        <TextBlock Text="Recommended for better performance. Browser runs in background without GUI, using less memory and CPU."
-                                                   Style="{StaticResource HelperText}"
-                                                   Margin="32,6,0,0"/>
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
-                        </Border>
-
                         <!-- Viewport Settings Section -->
                         <Border Background="{StaticResource SurfaceBrush}"
                                 CornerRadius="8"
