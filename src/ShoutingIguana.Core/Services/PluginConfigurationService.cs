@@ -34,7 +34,7 @@ public class PluginConfigurationService : IPluginConfigurationService
     
     public async Task<bool> IsPluginEnabledAsync(string pluginId)
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             // Default to enabled if not configured
@@ -48,13 +48,13 @@ public class PluginConfigurationService : IPluginConfigurationService
     
     public async Task SetPluginEnabledAsync(string pluginId, bool enabled)
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             var previousState = _pluginStates.TryGetValue(pluginId, out var prevEnabled) ? prevEnabled : true;
             
             _pluginStates[pluginId] = enabled;
-            await SaveConfigurationAsync();
+            await SaveConfigurationAsync().ConfigureAwait(false);
             
             // Only raise event if state actually changed
             if (previousState != enabled)
@@ -77,7 +77,7 @@ public class PluginConfigurationService : IPluginConfigurationService
     
     public async Task<Dictionary<string, bool>> GetAllPluginStatesAsync()
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             return new Dictionary<string, bool>(_pluginStates);
@@ -90,7 +90,7 @@ public class PluginConfigurationService : IPluginConfigurationService
     
     private async Task LoadConfigurationAsync()
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             if (!File.Exists(_configFilePath))
@@ -99,7 +99,7 @@ public class PluginConfigurationService : IPluginConfigurationService
                 return;
             }
             
-            var json = await File.ReadAllTextAsync(_configFilePath);
+            var json = await File.ReadAllTextAsync(_configFilePath).ConfigureAwait(false);
             var config = JsonSerializer.Deserialize<PluginConfiguration>(json);
             
             if (config?.PluginStates != null)
@@ -133,7 +133,7 @@ public class PluginConfigurationService : IPluginConfigurationService
                 WriteIndented = true
             });
             
-            await File.WriteAllTextAsync(_configFilePath, json);
+            await File.WriteAllTextAsync(_configFilePath, json).ConfigureAwait(false);
             _logger.LogDebug("Saved plugin configuration to {Path}", _configFilePath);
         }
         catch (Exception ex)
