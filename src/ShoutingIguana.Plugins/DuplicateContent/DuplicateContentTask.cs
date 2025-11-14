@@ -238,7 +238,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     var row1 = ReportRow.Create()
                         .Set("Page", currentUrl)
                         .Set("Issue", "Duplicate (Temporary Redirects)")
-                        .Set("Description", DescribeDuplicateTemporaryRedirects())
+                        .SetExplanation( DescribeDuplicateTemporaryRedirects())
                         .Set("DuplicateOf", redirectInfo.TemporaryRedirects.First())
                         .Set("Similarity", 100)
                         .SetSeverity(Severity.Warning);
@@ -252,7 +252,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     var row = ReportRow.Create()
                         .Set("Page", currentUrl)
                         .Set("Issue", $"Exact Duplicate ({nonRedirectDuplicates.Length + 1} pages)")
-                        .Set("Description", DescribeExactDuplicate(nonRedirectDuplicates.Length + 1))
+                        .SetExplanation( DescribeExactDuplicate(nonRedirectDuplicates.Length + 1))
                         .Set("DuplicateOf", nonRedirectDuplicates.First())
                         .Set("Similarity", 100)
                         .SetSeverity(Severity.Error);
@@ -266,7 +266,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 var row = ReportRow.Create()
                     .Set("Page", currentUrl)
                     .Set("Issue", $"Exact Duplicate ({urlsCopy.Count} pages)")
-                    .Set("Description", DescribeExactDuplicate(urlsCopy.Count))
+                    .SetExplanation( DescribeExactDuplicate(urlsCopy.Count))
                     .Set("DuplicateOf", otherUrls.First())
                     .Set("Similarity", 100)
                     .SetSeverity(Severity.Error);
@@ -327,7 +327,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", $"Near Duplicate ({nearDuplicates.Count} pages, {topDup.Similarity:F0}% similar)")
-                .Set("Description", DescribeNearDuplicate(nearDuplicates.Count, topDup.Similarity, topDup.Url))
+                .SetExplanation( DescribeNearDuplicate(nearDuplicates.Count, topDup.Similarity, topDup.Url))
                 .Set("DuplicateOf", topDup.Url)
                 .Set("Similarity", (int)topDup.Similarity)
                 .SetSeverity(Severity.Warning);
@@ -403,7 +403,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", $"High Boilerplate Ratio ({boilerplatePercentage}%)")
-                .Set("Description", DescribeBoilerplateRatio(boilerplatePercentage))
+                .SetExplanation( DescribeBoilerplateRatio(boilerplatePercentage))
                 .Set("DuplicateOf", "(boilerplate ratio check)")
                     .Set("Similarity", boilerplatePercentage)
                     .SetSeverity(Severity.Warning);
@@ -523,7 +523,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 var row1 = ReportRow.Create()
                     .Set("Page", canonicalPage)
                     .Set("Issue", "Domain Variant Unreachable")
-                    .Set("Description", DescribeDomainVariantUnreachable(variantUrl))
+                    .SetExplanation( DescribeDomainVariantUnreachable(variantUrl))
                     .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 0)
                     .SetSeverity(Severity.Warning);
@@ -536,7 +536,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 var row2 = ReportRow.Create()
                     .Set("Page", canonicalPage)
                     .Set("Issue", "Domain Variant Timeout")
-                    .Set("Description", DescribeDomainVariantTimeout(variantUrl))
+                    .SetExplanation( DescribeDomainVariantTimeout(variantUrl))
                     .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 0)
                     .SetSeverity(Severity.Warning);
@@ -565,7 +565,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     var row3 = ReportRow.Create()
                         .Set("Page", canonicalPage)
                         .Set("Issue", $"Domain Variant Correct ({statusCode})")
-                        .Set("Description", DescribeDomainVariantCorrect(variantUrl, canonicalUrl, statusCode))
+                        .SetExplanation( DescribeDomainVariantCorrect(variantUrl, canonicalUrl, statusCode))
                         .Set("DuplicateOf", variantUrl)
                         .Set("Similarity", 100)
                         .SetSeverity(Severity.Info);
@@ -577,7 +577,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     var row4 = ReportRow.Create()
                         .Set("Page", canonicalPage)
                         .Set("Issue", "Domain Variant Wrong Target")
-                        .Set("Description", DescribeDomainVariantWrongTarget(variantUrl, canonicalUrl))
+                        .SetExplanation( DescribeDomainVariantWrongTarget(variantUrl, canonicalUrl))
                         .Set("DuplicateOf", variantUrl)
                         .Set("Similarity", 100)
                         .SetSeverity(Severity.Warning);
@@ -591,7 +591,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     var row5 = ReportRow.Create()
                         .Set("Page", canonicalPage)
                         .Set("Issue", $"Domain Variant Temporary Redirect ({statusCode})")
-                        .Set("Description", DescribeDomainVariantTemporaryRedirect(variantUrl, statusCode))
+                        .SetExplanation( DescribeDomainVariantTemporaryRedirect(variantUrl, statusCode))
                         .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 100)
                     .SetSeverity(Severity.Error);
@@ -604,7 +604,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                     var row6 = ReportRow.Create()
                         .Set("Page", canonicalPage)
                         .Set("Issue", "Domain Variant Duplicate Content")
-                        .Set("Description", DescribeDomainVariantDuplicateContent(variantUrl))
+                        .SetExplanation( DescribeDomainVariantDuplicateContent(variantUrl))
                         .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 100)
                     .SetSeverity(Severity.Error);
@@ -616,7 +616,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             var row7 = ReportRow.Create()
                 .Set("Page", canonicalPage)
                 .Set("Issue", $"Domain Variant Error (HTTP {statusCode})")
-                .Set("Description", DescribeDomainVariantError(variantUrl, statusCode))
+                .SetExplanation( DescribeDomainVariantError(variantUrl, statusCode))
                 .Set("DuplicateOf", variantUrl)
                     .Set("Similarity", 0)
                     .SetSeverity(Severity.Warning);
@@ -895,5 +895,6 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
         _logger.LogDebug("Cleaned up duplicate content data for project {ProjectId}", projectId);
     }
 }
+
 
 

@@ -31,6 +31,15 @@ public class ReportRow
         _data[columnName] = value;
         return this;
     }
+
+    /// <summary>
+    /// Sets the Explanation column to provide per-issue guidance.
+    /// </summary>
+    public ReportRow SetExplanation(string? explanation)
+    {
+        _data["Explanation"] = explanation;
+        return this;
+    }
     
     /// <summary>
     /// Sets the Severity column using the Severity enum.

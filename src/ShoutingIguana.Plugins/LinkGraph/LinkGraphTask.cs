@@ -63,7 +63,7 @@ public class LinkGraphTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             // This ensures the UI displays custom columns instead of legacy finding columns
             var row = ReportRow.Create()
                 .Set("Issue", issueSummary)
-                .Set("Description", description)
+                .SetExplanation(description)
                 .Set("FromURL", fromUrlAddress)
                 .Set("ToURL", link.ToUrl)
                 .Set("AnchorText", anchorText)

@@ -66,7 +66,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                         .Set("Issue", "Sitemap Not Found")
                         .Set("InSitemap", "N/A")
                         .Set("StatusCode", httpStatus)
-                        .SetSeverity(Severity.Warning);
+                        .SetSeverity(Severity.Warning)
+                        .SetExplanation("The sitemap URL returns 404, so search engines cannot fetch it; upload the XML file or fix the path.");
                     
                     await ctx.Reports.ReportAsync(Key, row1, ctx.Metadata.UrlId, default);
                 }
@@ -81,7 +82,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                             .Set("Issue", $"Sitemap Restricted (HTTP {httpStatus})")
                             .Set("InSitemap", "N/A")
                             .Set("StatusCode", httpStatus)
-                            .SetSeverity(Severity.Info);
+                            .SetSeverity(Severity.Info)
+                            .SetExplanation("This sitemap URL is restricted (401/403/451). Allow unauthenticated access so crawlers can read it.");
                         
                         await ctx.Reports.ReportAsync(Key, row2, ctx.Metadata.UrlId, default);
                     }
@@ -92,7 +94,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                             .Set("Issue", $"Sitemap Error (HTTP {httpStatus})")
                             .Set("InSitemap", "N/A")
                             .Set("StatusCode", httpStatus)
-                            .SetSeverity(Severity.Error);
+                            .SetSeverity(Severity.Error)
+                            .SetExplanation($"The sitemap request failed with HTTP {httpStatus}; fix the server response so the file can be downloaded.");
                         
                         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                     }
@@ -158,7 +161,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", "Sitemap Returned No Content")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .SetSeverity(Severity.Warning);
+                .SetSeverity(Severity.Warning)
+                .SetExplanation("The sitemap responds but contains no XML entries; ensure the file outputs valid sitemap markup.");
             
             await ctx.Reports.ReportAsync(Key, rowNoContent, ctx.Metadata.UrlId, default);
             return;
@@ -203,7 +207,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                             .Set("Issue", "Gzip Decompression Error")
                             .Set("InSitemap", "N/A")
                             .Set("StatusCode", ctx.Metadata.StatusCode)
-                            .SetSeverity(Severity.Error);
+                            .SetSeverity(Severity.Error)
+                            .SetExplanation("The sitemap file claims to be gzipped but could not be decompressed; verify the archive and content type.");
                         
                         await ctx.Reports.ReportAsync(Key, rowGzip, ctx.Metadata.UrlId, default);
                         return;
@@ -222,7 +227,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"Sitemap Too Large ({sizeMB:F2}MB)")
                     .Set("InSitemap", "N/A")
                     .Set("StatusCode", ctx.Metadata.StatusCode)
-                            .SetSeverity(Severity.Error);
+                    .SetSeverity(Severity.Error)
+                    .SetExplanation("Sitemaps must be under 50MB uncompressed; split this file or create an index to distribute URLs.");
                 
                 await ctx.Reports.ReportAsync(Key, rowSize, ctx.Metadata.UrlId, default);
             }
@@ -233,7 +239,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"Sitemap Large ({sizeMB:F2}MB)")
                     .Set("InSitemap", "N/A")
                     .Set("StatusCode", ctx.Metadata.StatusCode)
-                    .SetSeverity(Severity.Warning);
+                    .SetSeverity(Severity.Warning)
+                    .SetExplanation("This sitemap is approaching the 50MB maximum; plan to split it before it exceeds the limit.");
                 
                 await ctx.Reports.ReportAsync(Key, rowWarn, ctx.Metadata.UrlId, default);
             }
@@ -249,7 +256,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", "Invalid Sitemap XML (Missing Namespace)")
                     .Set("InSitemap", "N/A")
                     .Set("StatusCode", ctx.Metadata.StatusCode)
-                    .SetSeverity(Severity.Warning);
+                    .SetSeverity(Severity.Warning)
+                    .SetExplanation("The sitemap XML is missing the proper xmlns declaration, so search engines may ignore it.");
                 
                 await ctx.Reports.ReportAsync(Key, rowNs, ctx.Metadata.UrlId, default);
                 return;
@@ -277,7 +285,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"Sitemap Parse Error: {ex.Message}")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                            .SetSeverity(Severity.Error);
+                .SetSeverity(Severity.Error)
+                .SetExplanation($"The sitemap XML could not be parsed ({ex.Message}); validate the file formatting.");
             
             await ctx.Reports.ReportAsync(Key, rowParse, ctx.Metadata.UrlId, default);
         }
@@ -292,7 +301,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             .Set("Issue", $"Sitemap Index ({sitemapElements.Count} sitemaps)")
             .Set("InSitemap", "N/A")
             .Set("StatusCode", ctx.Metadata.StatusCode)
-            .SetSeverity(Severity.Info);
+            .SetSeverity(Severity.Info)
+            .SetExplanation($"This file is a sitemap index that links to {sitemapElements.Count} child sitemaps; ensure every child is accessible.");
         
         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
 
@@ -323,7 +333,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", "Empty Sitemap")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .SetSeverity(Severity.Warning);
+                .SetSeverity(Severity.Warning)
+                .SetExplanation("The sitemap contains no <url> entries; populate it with canonical URLs or remove the reference.");
             
             await ctx.Reports.ReportAsync(Key, rowEmpty, ctx.Metadata.UrlId, default);
             return;
@@ -337,7 +348,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"URL Limit Exceeded ({urlElements.Count:N0} URLs)")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                            .SetSeverity(Severity.Error);
+                .SetSeverity(Severity.Error)
+                .SetExplanation("Sitemaps are limited to 50,000 URLs. Split this file into multiple sitemaps and register them via a sitemap index.");
             
             await ctx.Reports.ReportAsync(Key, rowLimit, ctx.Metadata.UrlId, default);
         }
@@ -348,7 +360,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"Approaching URL Limit ({urlElements.Count:N0} URLs)")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .SetSeverity(Severity.Warning);
+                .SetSeverity(Severity.Warning)
+                .SetExplanation("This sitemap already contains more than 45k URLs; plan to split it before hitting the 50k hard limit.");
             
             await ctx.Reports.ReportAsync(Key, rowApproach, ctx.Metadata.UrlId, default);
         }
@@ -358,7 +371,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             .Set("Issue", $"Sitemap Parsed ({urlElements.Count:N0} URLs)")
             .Set("InSitemap", "N/A")
             .Set("StatusCode", ctx.Metadata.StatusCode)
-            .SetSeverity(Severity.Info);
+            .SetSeverity(Severity.Info)
+            .SetExplanation($"Successfully parsed {urlElements.Count:N0} URLs from this sitemap.");
         
         await ctx.Reports.ReportAsync(Key, rowFound, ctx.Metadata.UrlId, default);
 
@@ -473,7 +487,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", "All Priority 1.0 (Defeats Purpose)")
                     .Set("InSitemap", "N/A")
                     .Set("StatusCode", ctx.Metadata.StatusCode)
-                    .SetSeverity(Severity.Warning);
+                    .SetSeverity(Severity.Warning)
+                    .SetExplanation("All URLs use a priority of 1.0, so the field provides no guidance; vary priority values or omit them.");
                 
                 await ctx.Reports.ReportAsync(Key, rowPriority, ctx.Metadata.UrlId, default);
             }
@@ -486,7 +501,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"Invalid URLs ({invalidUrls})")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .SetSeverity(Severity.Warning);
+                .SetSeverity(Severity.Warning)
+                .SetExplanation($"{invalidUrls} sitemap entries have malformed or unsupported URLs; fix or remove them.");
             
             await ctx.Reports.ReportAsync(Key, rowInv, ctx.Metadata.UrlId, default);
         }
@@ -498,7 +514,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"Future Lastmod Dates ({futureLastmod})")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .SetSeverity(Severity.Warning);
+                .SetSeverity(Severity.Warning)
+                .SetExplanation($"{futureLastmod} URLs list lastmod dates in the future; update them to real publication dates.");
             
             await ctx.Reports.ReportAsync(Key, rowFuture, ctx.Metadata.UrlId, default);
         }
@@ -510,7 +527,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"Outdated URLs ({tooOldUrls} > 2 years old)")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                .SetSeverity(Severity.Info);
+                .SetSeverity(Severity.Info)
+                .SetExplanation($"More than {tooOldUrls} URLs have not changed in 2+ years; review whether they still need to be listed.");
             
             await ctx.Reports.ReportAsync(Key, rowOld, ctx.Metadata.UrlId, default);
         }
@@ -522,7 +540,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 .Set("Issue", $"Invalid Priority Values ({invalidPriority})")
                 .Set("InSitemap", "N/A")
                 .Set("StatusCode", ctx.Metadata.StatusCode)
-                            .SetSeverity(Severity.Error);
+                .SetSeverity(Severity.Error)
+                .SetExplanation("Priority values must be between 0.0 and 1.0; fix the invalid entries so search engines trust the sitemap.");
             
             await ctx.Reports.ReportAsync(Key, rowInvPri, ctx.Metadata.UrlId, default);
         }
@@ -639,7 +658,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"Sitemap Contains 404s ({errors404.Count} URLs)")
                     .Set("InSitemap", "Yes")
                     .Set("StatusCode", 404)
-                            .SetSeverity(Severity.Error);
+                    .SetSeverity(Severity.Error)
+                    .SetExplanation("The sitemap lists URLs that return 404 errors; remove or fix them so crawlers only fetch live pages.");
                 
                 await ctx.Reports.ReportAsync(Key, row404, ctx.Metadata.UrlId, default);
             }
@@ -652,7 +672,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"Sitemap Contains 5xx Errors ({errors5xx.Count} URLs)")
                     .Set("InSitemap", "Yes")
                     .Set("StatusCode", 500)
-                            .SetSeverity(Severity.Error);
+                    .SetSeverity(Severity.Error)
+                    .SetExplanation("Some sitemap URLs return 5xx server errors; resolve the backend issues before resubmitting.");
                 
                 await ctx.Reports.ReportAsync(Key, row5xx, ctx.Metadata.UrlId, default);
             }
@@ -665,7 +686,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"Sitemap Contains Redirects ({redirects.Count} URLs)")
                     .Set("InSitemap", "Yes")
                     .Set("StatusCode", 301)
-                    .SetSeverity(Severity.Warning);
+                    .SetSeverity(Severity.Warning)
+                    .SetExplanation("Sitemap URLs should be canonical destinations; replace redirected URLs with their final targets.");
                 
                 await ctx.Reports.ReportAsync(Key, rowRedir, ctx.Metadata.UrlId, default);
             }
@@ -737,7 +759,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"Orphan URLs in Sitemap ({orphanUrls.Count})")
                     .Set("InSitemap", "Yes")
                     .Set("StatusCode", 200)
-                    .SetSeverity(Severity.Warning);
+                    .SetSeverity(Severity.Warning)
+                    .SetExplanation("These sitemap URLs have no internal links and may never be discovered naturally; link to them or remove them.");
                 
                 await ctx.Reports.ReportAsync(Key, rowOrphan, ctx.Metadata.UrlId, default);
             }
@@ -756,7 +779,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     .Set("Issue", $"URLs Missing from Sitemap ({missingFromSitemap.Count})")
                     .Set("InSitemap", "No")
                     .Set("StatusCode", 200)
-                    .SetSeverity(Severity.Info);
+                    .SetSeverity(Severity.Info)
+                    .SetExplanation("These crawled pages are absent from the sitemap; include them to signal importance to search engines.");
                 
                 await ctx.Reports.ReportAsync(Key, rowMissing, ctx.Metadata.UrlId, default);
             }

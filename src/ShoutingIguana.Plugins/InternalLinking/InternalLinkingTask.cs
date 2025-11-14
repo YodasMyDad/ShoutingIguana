@@ -183,7 +183,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
                 .Set("Inlinks", inlinkCount)
                 .Set("Outlinks", outlinkCount)
                 .Set("Depth", ctx.Metadata.Depth)
-                .Set("Description", DescribeIssue(IssueNoOutlinks, ctx, outlinkCount, inlinkCount));
+                .SetExplanation( DescribeIssue(IssueNoOutlinks, ctx, outlinkCount, inlinkCount));
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -201,7 +201,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
                 .Set("Inlinks", inlinkCount)
                 .Set("Outlinks", outlinkCount)
                 .Set("Depth", ctx.Metadata.Depth)
-                .Set("Description", DescribeIssue(IssueFewOutlinks, ctx, outlinkCount, inlinkCount));
+                .SetExplanation( DescribeIssue(IssueFewOutlinks, ctx, outlinkCount, inlinkCount));
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -245,7 +245,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
                     .Set("Inlinks", 0)
                     .Set("Outlinks", outlinkCount)
                     .Set("Depth", ctx.Metadata.Depth)
-                    .Set("Description", DescribeIssue(IssueOrphanPage, ctx, outlinkCount, 0));
+                    .SetExplanation( DescribeIssue(IssueOrphanPage, ctx, outlinkCount, 0));
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -310,7 +310,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
                     .Set("Inlinks", inlinkCount)
                     .Set("Outlinks", outlinkCount)
                     .Set("Depth", ctx.Metadata.Depth)
-                    .Set("Description", DescribeIssue(IssueGenericAnchor, ctx, outlinkCount, inlinkCount, genericLink.AnchorText));
+                    .SetExplanation( DescribeIssue(IssueGenericAnchor, ctx, outlinkCount, inlinkCount, genericLink.AnchorText));
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -359,4 +359,5 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         public string AnchorText { get; set; } = string.Empty;
     }
 }
+
 

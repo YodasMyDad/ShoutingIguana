@@ -203,18 +203,18 @@ public partial class FindingTabViewModel : ObservableObject
 
         var columns = GetActiveReportColumns().ToList();
         var detailItems = new List<string>();
-
-        // Add plugin description at the beginning of the details panel
-        if (!string.IsNullOrWhiteSpace(Description))
-        {
-            detailItems.Add($"Description: {Description}");
-        }
+        var explanationValue = value.GetValue("Explanation");
 
         if (columns.Count == 0)
         {
             var columnNames = value.GetColumnNames().ToList();
             foreach (var columnName in columnNames)
             {
+                if (string.Equals(columnName, "Explanation", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 var rawValue = value.GetValue(columnName);
                 var formatted = rawValue?.ToString() ?? "(none)";
                 detailItems.Add($"{columnName}: {formatted}");
@@ -228,14 +228,12 @@ public partial class FindingTabViewModel : ObservableObject
                 var formatted = FormatColumnValue(rawValue, column.ColumnType);
                 detailItems.Add($"{column.DisplayName}: {formatted}");
             }
-            
-            // Include "Explanation" field in details panel even if not in columns (displayed as "Description")
-            var explanationValue = value.GetValue("Explanation");
-            if (explanationValue != null && !string.IsNullOrWhiteSpace(explanationValue.ToString()))
-            {
-                var formatted = explanationValue.ToString() ?? "(none)";
-                detailItems.Add($"Description: {formatted}");
-            }
+        }
+
+        if (explanationValue != null && !string.IsNullOrWhiteSpace(explanationValue.ToString()))
+        {
+            var formatted = explanationValue.ToString() ?? "(none)";
+            detailItems.Add($"Description: {formatted}");
         }
 
         SelectedFindingDetails = new FindingDetails

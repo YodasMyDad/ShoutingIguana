@@ -603,7 +603,7 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
             var row = ReportRow.Create()
                 .SetSeverity(tracker.Severity)
                 .Set("Issue", friendlyIssue)
-                .Set("Description", tracker.Message)
+                .SetExplanation(tracker.Message)
                 .Set("LinkedFrom", ctx.Url.ToString())
                 .Set("BrokenLink", tracker.TargetUrl)
                 .Set("Status", tracker.HttpStatus)

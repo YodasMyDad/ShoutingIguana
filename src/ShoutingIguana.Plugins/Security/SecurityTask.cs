@@ -174,7 +174,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", $"Mixed Content ({mixedContentResources.Count} HTTP resources)")
                 .Set("Protocol", "HTTPS")
                 .Set("Details", resourceSummary)
-                .Set("Description", BuildMixedContentDescription(resourceSummary))
+                .SetExplanation( BuildMixedContentDescription(resourceSummary))
                 .SetSeverity(Severity.Error);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -246,7 +246,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "Missing/Weak Security Headers")
                 .Set("Protocol", "HTTPS")
                 .Set("Details", headersSummary)
-                .Set("Description", BuildSecurityHeadersDescription(missingHeaders, weakHeaders))
+                .SetExplanation( BuildSecurityHeadersDescription(missingHeaders, weakHeaders))
                 .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -313,7 +313,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
                     .Set("Issue", "Insecure Cookies")
                     .Set("Protocol", "HTTPS")
                     .Set("Details", cookieDetails)
-                    .Set("Description", BuildCookieDescription(insecureCookies, missingHttpOnly))
+                    .SetExplanation( BuildCookieDescription(insecureCookies, missingHttpOnly))
                     .SetSeverity(Severity.Warning);
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -331,7 +331,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
                 .Set("Issue", "HTTP Instead of HTTPS")
                 .Set("Protocol", "HTTP")
                 .Set("Details", $"Depth {ctx.Metadata.Depth} (important page)")
-                .Set("Description", BuildHttpRecommendationDescription(ctx.Metadata.Depth))
+                .SetExplanation( BuildHttpRecommendationDescription(ctx.Metadata.Depth))
                 .SetSeverity(Severity.Warning);
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
@@ -404,4 +404,5 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
         return false;
     }
 }
+
 

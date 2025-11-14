@@ -146,7 +146,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "JSON-LD")
                     .Set("Issue", $"JSON Syntax Error: {ex.Message}")
-                    .Set("Description", errorDescription)
+                    .SetExplanation( errorDescription)
                     .Set("Property", jsonPath)
                     .SetSeverity(Severity.Error);
                 
@@ -164,7 +164,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", schemaList)
                 .Set("Issue", $"JSON-LD Found ({validSchemas.Count} schemas)")
-                .Set("Description", foundDescription)
+                .SetExplanation( foundDescription)
                 .Set("Property", schemaList)
                 .SetSeverity(Severity.Info);
             
@@ -248,7 +248,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", schemaType)
                 .Set("Issue", "Incomplete Article Schema")
-                .Set("Description", articleDescription)
+                .SetExplanation( articleDescription)
                 .Set("Property", missingList)
                 .SetSeverity(Severity.Warning);
             
@@ -330,7 +330,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Product")
                 .Set("Issue", "Incomplete Product Schema")
-                .Set("Description", productMissingDescription)
+                .SetExplanation( productMissingDescription)
                 .Set("Property", missingList)
                 .SetSeverity(Severity.Error);
             
@@ -345,7 +345,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Product")
                 .Set("Issue", $"Product Recommendations ({warnings.Count})")
-                .Set("Description", warningDescription)
+                .SetExplanation( warningDescription)
                 .Set("Property", hasAggregateRating ? "" : "aggregateRating")
                 .SetSeverity(Severity.Warning);
             
@@ -358,7 +358,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Product")
                 .Set("Issue", "Complete with Star Ratings")
-                .Set("Description", completeDescription)
+                .SetExplanation( completeDescription)
                 .Set("Property", "aggregateRating")
                 .SetSeverity(Severity.Info);
             
@@ -550,7 +550,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "VideoObject")
                 .Set("Issue", "Incomplete Video Schema")
-                .Set("Description", videoMissingDescription)
+                .SetExplanation( videoMissingDescription)
                 .Set("Property", missingList)
                 .SetSeverity(Severity.Error);
             
@@ -565,7 +565,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "VideoObject")
                 .Set("Issue", $"Video Recommendations ({warnings.Count})")
-                .Set("Description", videoWarningDescription)
+                .SetExplanation( videoWarningDescription)
                 .Set("Property", string.Join(", ", warnings.Take(2)))
                 .SetSeverity(Severity.Warning);
             
@@ -640,7 +640,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Review")
                 .Set("Issue", "Incomplete Review Schema")
-                .Set("Description", reviewMissingDescription)
+                .SetExplanation( reviewMissingDescription)
                 .Set("Property", missingList)
                 .SetSeverity(Severity.Error);
             
@@ -655,7 +655,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Review")
                 .Set("Issue", $"Review Recommendations ({warnings.Count})")
-                .Set("Description", reviewWarningDescription)
+                .SetExplanation( reviewWarningDescription)
                 .Set("Property", string.Join(", ", warnings.Take(2)))
                 .SetSeverity(Severity.Warning);
             
@@ -668,7 +668,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Review")
                 .Set("Issue", "Review Schema Complete")
-                .Set("Description", reviewCompleteDescription)
+                .SetExplanation( reviewCompleteDescription)
                 .Set("Property", "Review fields complete")
                 .SetSeverity(Severity.Info);
             
@@ -858,7 +858,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", schemaType)
                 .Set("Issue", "Incomplete LocalBusiness Schema")
-                .Set("Description", localMissingDescription)
+                .SetExplanation( localMissingDescription)
                 .Set("Property", missingList)
                 .SetSeverity(Severity.Warning);
             
@@ -874,7 +874,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "LocalBusiness")
                 .Set("Issue", $"LocalBusiness Recommendations ({warnings.Count})")
-                .Set("Description", localWarningDescription)
+                .SetExplanation( localWarningDescription)
                 .Set("Property", string.Join(", ", warnings.Take(2)))
                 .SetSeverity(Severity.Warning);
             
@@ -891,7 +891,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "BreadcrumbList")
                 .Set("Issue", "Missing itemListElement")
-                .Set("Description", breadMissingDescription)
+                .SetExplanation( breadMissingDescription)
                 .Set("Property", "itemListElement")
                 .SetSeverity(Severity.Warning);
             
@@ -910,7 +910,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "BreadcrumbList")
                     .Set("Issue", "Empty BreadcrumbList")
-                    .Set("Description", breadEmptyDescription)
+                    .SetExplanation( breadEmptyDescription)
                     .Set("Property", "itemListElement")
                     .SetSeverity(Severity.Warning);
                 
@@ -924,7 +924,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "BreadcrumbList")
                     .Set("Issue", $"Breadcrumb Found ({items.Count} levels)")
-                    .Set("Description", breadcrumbDescription)
+                    .SetExplanation( breadcrumbDescription)
                     .Set("Property", breadcrumbLevels)
                     .SetSeverity(Severity.Info);
                 
@@ -949,7 +949,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", schemaType)
                 .Set("Issue", $"Missing {requiredProp}")
-                .Set("Description", missingRequiredDescription)
+                .SetExplanation( missingRequiredDescription)
                 .Set("Property", requiredProp)
                 .SetSeverity(Severity.Warning);
             
@@ -997,7 +997,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "FAQPage")
                     .Set("Issue", $"FAQ Missing Answers ({questionsWithoutAnswers})")
-                    .Set("Description", faqMissingAnswerDescription)
+                    .SetExplanation( faqMissingAnswerDescription)
                     .Set("Property", "acceptedAnswer")
                     .SetSeverity(Severity.Warning);
                 
@@ -1011,7 +1011,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "FAQPage")
                     .Set("Issue", $"FAQ Complete ({questions.Count} Q&As)")
-                    .Set("Description", faqCompleteDescription)
+                    .SetExplanation( faqCompleteDescription)
                     .Set("Property", faqSummary)
                     .SetSeverity(Severity.Info);
                 
@@ -1025,7 +1025,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "FAQPage")
                     .Set("Issue", $"FAQ Short Answers ({questionsWithShortAnswers})")
-                    .Set("Description", faqShortDescription)
+                    .SetExplanation( faqShortDescription)
                     .Set("Property", "acceptedAnswer")
                     .SetSeverity(Severity.Info);
                 
@@ -1065,7 +1065,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", microProperty)
                     .Set("Issue", $"Microdata Found ({itemTypes.Count} items)")
-                    .Set("Description", microDescription)
+                    .SetExplanation( microDescription)
                     .Set("Property", microProperty)
                     .SetSeverity(Severity.Info);
                 
@@ -1109,7 +1109,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", recommendedSchema)
                     .Set("Issue", "Missing Structured Data")
-                    .Set("Description", missingDescription)
+                    .SetExplanation( missingDescription)
                     .Set("Property", propertyValue)
                     .SetSeverity(Severity.Info);
                 
@@ -1151,7 +1151,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "Article")
                 .Set("Issue", "Missing Author Markup")
-                .Set("Description", authorDescription)
+                .SetExplanation( authorDescription)
                 .Set("Property", "author")
                 .SetSeverity(Severity.Info);
             
@@ -1212,7 +1212,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "Contact")
                     .Set("Issue", "Missing Contact Info")
-                    .Set("Description", contactDescription)
+                    .SetExplanation( contactDescription)
                     .Set("Property", "phone, address")
                     .SetSeverity(Severity.Info);
                 
@@ -1225,7 +1225,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "Contact")
                     .Set("Issue", "Missing Phone Number")
-                    .Set("Description", phoneDescription)
+                    .SetExplanation( phoneDescription)
                     .Set("Property", "phone")
                     .SetSeverity(Severity.Info);
                 
@@ -1238,7 +1238,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .Set("Page", ctx.Url.ToString())
                     .Set("SchemaType", "Contact")
                     .Set("Issue", "Missing Address")
-                    .Set("Description", addressDescription)
+                    .SetExplanation( addressDescription)
                     .Set("Property", "address")
                     .SetSeverity(Severity.Info);
                 
@@ -1293,7 +1293,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .Set("Page", ctx.Url.ToString())
                 .Set("SchemaType", "LocalBusiness")
                 .Set("Issue", $"NAP Inconsistency ({uniqueNames.Count} names, {uniquePhones.Count} phones)")
-                .Set("Description", napDescription)
+                .SetExplanation( napDescription)
                 .Set("Property", "name, address, telephone")
                 .SetSeverity(Severity.Warning);
             
@@ -1371,5 +1371,6 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         public string Phone { get; set; } = string.Empty;
     }
 }
+
 
 

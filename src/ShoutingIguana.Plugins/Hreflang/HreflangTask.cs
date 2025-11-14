@@ -224,7 +224,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", issue)
-                .Set("Description", GetIssueDescription(issue))
+                .SetExplanation( GetIssueDescription(issue))
                 .Set("HreflangTag", errorSummary)
                 .Set("TargetURL", exampleTarget)
                 .SetSeverity(Severity.Error);
@@ -245,7 +245,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", issue)
-                .Set("Description", GetIssueDescription(issue))
+                .SetExplanation( GetIssueDescription(issue))
                 .Set("HreflangTag", string.IsNullOrEmpty(languages) ? "(no hreflang)" : languages)
                 .Set("TargetURL", ctx.Url.ToString())
                 .SetSeverity(Severity.Error);
@@ -269,7 +269,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", issue)
-                .Set("Description", GetIssueDescription(issue))
+                .SetExplanation( GetIssueDescription(issue))
                 .Set("HreflangTag", duplicateTags)
                 .Set("TargetURL", exampleTarget)
                 .SetSeverity(Severity.Error);
@@ -290,7 +290,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", issue)
-                .Set("Description", GetIssueDescription(issue))
+                .SetExplanation( GetIssueDescription(issue))
                 .Set("HreflangTag", "x-default")
                 .Set("TargetURL", targetUrl)
                 .SetSeverity(Severity.Warning);
@@ -313,7 +313,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
                 var row = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("Issue", issue)
-                    .Set("Description", GetIssueDescription(issue))
+                    .SetExplanation( GetIssueDescription(issue))
                     .Set("HreflangTag", $"HTML: {htmlHreflangs.Count}, HTTP: {httpHreflangs.Count}")
                     .Set("TargetURL", ctx.Url.ToString())
                     .SetSeverity(Severity.Warning);
@@ -339,7 +339,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
                 var row = ReportRow.Create()
                     .Set("Page", ctx.Url.ToString())
                     .Set("Issue", issue)
-                    .Set("Description", GetIssueDescription(issue))
+                    .SetExplanation( GetIssueDescription(issue))
                     .Set("HreflangTag", $"{hreflangs.Count} tags")
                     .Set("TargetURL", canonical)
                     .SetSeverity(Severity.Warning);
@@ -390,7 +390,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", issue)
-                .Set("Description", GetIssueDescription(issue))
+                .SetExplanation( GetIssueDescription(issue))
                 .Set("HreflangTag", targetSummary)
                 .Set("TargetURL", missingReturnLinks.First().TargetUrl)
                 .SetSeverity(Severity.Error);
@@ -457,4 +457,5 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
         public string Source { get; set; } = string.Empty; // "HTML" or "HTTP Header"
     }
 }
+
 

@@ -219,6 +219,7 @@ public class CrawlBudgetTask(ILogger logger) : UrlTaskBase
             .SetPage(ctx.Url)
             .Set("Issue", issue)
             .Set("Details", details)
+            .SetExplanation(details)
             .Set("StatusCode", statusCode ?? ctx.Metadata.StatusCode)
             .Set("Depth", depth ?? ctx.Metadata.Depth)
             .SetSeverity(severity);

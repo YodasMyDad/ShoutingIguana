@@ -413,7 +413,7 @@ public class InventoryTask : UrlTaskBase
     {
         var row = ReportRow.Create()
             .Set("Issue", issue)
-            .Set("Explanation", explanation)
+            .SetExplanation(explanation)
             .Set("URL", ctx.Url.ToString())
             .Set("ContentType", ctx.Metadata.ContentType ?? "")
             .Set("Status", ctx.Metadata.StatusCode)

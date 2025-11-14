@@ -122,7 +122,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .Set("CanonicalURL", "(missing)")
                 .Set("Status", "Info")
                 .SetSeverity(Severity.Info);
-            row.Set("Description", "Add a canonical tag (HTML meta or HTTP header) on this important page so search engines know which URL to index and to avoid duplicate content.");
+            row.SetExplanation( "Add a canonical tag (HTML meta or HTTP header) on this important page so search engines know which URL to index and to avoid duplicate content.");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -143,7 +143,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             .Set("CanonicalURL", canonicalUrl)
             .Set("Status", "Conflict")
             .SetSeverity(Severity.Error);
-        row.Set("Description", "Multiple canonical hints are present (HTML meta vs. HTTP header). Keep only one consistent canonical reference to avoid confusing crawlers about the preferred URL.");
+        row.SetExplanation( "Multiple canonical hints are present (HTML meta vs. HTTP header). Keep only one consistent canonical reference to avoid confusing crawlers about the preferred URL.");
         
         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     }
@@ -161,7 +161,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             .Set("CanonicalURL", canonical)
             .Set("Status", "External Domain")
             .SetSeverity(Severity.Warning);
-        row.Set("Description", "This page canonicals to a different domain; confirm that is intentional since it transfers ranking signals and indexing to the external site.");
+        row.SetExplanation( "This page canonicals to a different domain; confirm that is intentional since it transfers ranking signals and indexing to the external site.");
         
         await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
     }
@@ -191,7 +191,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .Set("CanonicalURL", canonical)
                 .Set("Status", "OK")
                 .SetSeverity(Severity.Info);
-            row.Set("Description", "This URL points to another page on the same domain as its canonical; confirm that is intentional or update it to self-reference to avoid scope confusion.");
+            row.SetExplanation( "This URL points to another page on the same domain as its canonical; confirm that is intentional or update it to self-reference to avoid scope confusion.");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
@@ -222,7 +222,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                         .Set("Status", "Chain Detected")
                         .SetSeverity(Severity.Warning);
                     var description = $"This page canonicalizes to {canonical}, but that URL canonicalizes to {canonicalOfCanonical}; point the original straight to {canonicalOfCanonical} to avoid multi-hop chains.";
-                    row.Set("Description", description);
+                    row.SetExplanation( description);
                     
                     await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                 }
@@ -313,7 +313,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                         .Set("CanonicalURL", canonicalUrl)
                         .Set("Status", $"HTTP {status.Value}")
                         .SetSeverity(Severity.Error);
-                    row.Set("Description", $"The canonical target returns HTTP {status.Value}; fix that endpoint or update the canonical so crawlers point to a healthy 200 OK URL.");
+                    row.SetExplanation( $"The canonical target returns HTTP {status.Value}; fix that endpoint or update the canonical so crawlers point to a healthy 200 OK URL.");
                     await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                     
                     _logger.LogWarning("Canonical target error: {Url} → {Canonical} (HTTP {Status})",
@@ -376,7 +376,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .Set("CanonicalURL", canonical)
                 .Set("Status", "Conflicting Directives")
                 .SetSeverity(Severity.Warning);
-            row.Set("Description", "Noindex tells crawlers to drop this page while the canonical says to consolidate signals elsewhere; remove one of these directives so the intent is clear.");
+            row.SetExplanation( "Noindex tells crawlers to drop this page while the canonical says to consolidate signals elsewhere; remove one of these directives so the intent is clear.");
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
     }
@@ -423,7 +423,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                     .Set("CanonicalURL", canonical)
                     .Set("Status", "Points to Page 1")
                     .SetSeverity(Severity.Warning);
-                row.Set("Description", "Pagination pages should canonicalize to themselves or follow rel=prev/next; pointing every page to page 1 makes crawlers treat them as duplicates.");
+                row.SetExplanation( "Pagination pages should canonicalize to themselves or follow rel=prev/next; pointing every page to page 1 makes crawlers treat them as duplicates.");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -487,7 +487,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                     .Set("CanonicalURL", canonical)
                     .Set("Status", "Loop Detected")
                     .SetSeverity(Severity.Error);
-                row.Set("Description", $"Canonical loop detected ({string.Join(" → ", chain)}); break the cycle by pointing each URL directly to the final canonical target instead of bouncing around.");
+                row.SetExplanation( $"Canonical loop detected ({string.Join(" → ", chain)}); break the cycle by pointing each URL directly to the final canonical target instead of bouncing around.");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                 return;
@@ -523,7 +523,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                     .Set("CanonicalURL", canonicalUrl)
                     .Set("Status", "Mismatch")
                     .SetSeverity(Severity.Warning);
-                row.Set("Description", "The HTML meta canonical does not match the HTTP header canonical; align these values so crawlers receive the same directive via either channel.");
+                row.SetExplanation( "The HTML meta canonical does not match the HTTP header canonical; align these values so crawlers receive the same directive via either channel.");
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
         }
@@ -550,7 +550,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .Set("CanonicalURL", canonical)
                 .Set("Status", $"HTTP {statusCode}")
                 .SetSeverity(Severity.Warning);
-            row.Set("Description", $"Redirected URLs (HTTP {statusCode}) should not declare a canonical; remove the tag so the destination page can be the canonical source.");
+            row.SetExplanation( $"Redirected URLs (HTTP {statusCode}) should not declare a canonical; remove the tag so the destination page can be the canonical source.");
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
     }
@@ -593,3 +593,4 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         _logger.LogDebug("Cleaned up canonical data for project {ProjectId}", projectId);
     }
 }
+

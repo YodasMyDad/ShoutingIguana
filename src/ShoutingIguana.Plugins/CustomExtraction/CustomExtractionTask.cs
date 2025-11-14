@@ -98,7 +98,8 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
                     .Set("ExtractedValuesRaw", extractedValues.ToArray())
                     .Set("Selector", rule.Selector)
                     .Set("Count", extractedValues.Count)
-                    .SetSeverity(Severity.Info);
+                    .SetSeverity(Severity.Info)
+                    .SetExplanation($"Extraction rule '{rule.Name}' matched {extractedValues.Count} value(s); verify the selector returns the content you expect.");
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
@@ -113,7 +114,8 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
                 .Set("ExtractedValue", "ERROR")
                 .Set("Selector", rule.Selector)
                 .Set("Count", 0)
-                .SetSeverity(Severity.Warning);
+                .SetSeverity(Severity.Warning)
+                .SetExplanation($"Extraction rule '{rule.Name}' failed; review the selector or regex syntax. {ex.Message}");
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
