@@ -14,6 +14,30 @@ Shouting Iguana is a powerful desktop application for comprehensive website audi
 - **Professional Exports** - Export findings to CSV and Excel for client reports and team collaboration
 - **Modern Technology** - Built with .NET 9, WPF, Entity Framework Core, and Playwright for JavaScript rendering
 
+## Built-in Plugins
+
+Shouting Iguana ships with these production-ready plugins out of the box:
+
+| Plugin | What it covers |
+| --- | --- |
+| Broken Links | Detects broken internal/external links, resources, and soft 404s with detailed diagnostics. |
+| Canonical Validation | Canonical URL extraction, validation, chain detection, and cross-domain analysis. |
+| Crawl Budget | Crawl budget optimization: soft 404s, server errors, crawled but not indexed pages. |
+| Custom Extraction | User-defined data extraction using CSS selectors, XPath, and Regex patterns. |
+| Duplicate Content | Exact and near-duplicate content detection using SHA-256 and SimHash algorithms, plus domain/protocol variant validation. |
+| Image Audit | Comprehensive image optimization, accessibility, and performance analysis. |
+| Internal Linking | Internal link analysis: inlinks, outlinks, anchor text, orphan pages, and link equity. |
+| Inventory | Tracks indexability, URL structure, and orphaned pages. |
+| International (Hreflang) | Validates hreflang implementation for multi-language and multi-region sites. |
+| Link Graph | Internal linking structure showing how pages link to each other with anchor text and link types. |
+| List-Mode Crawling | Import and crawl specific URL lists from CSV files with custom priorities. |
+| Redirects | Analyzes redirect chains, loops, and canonicalization issues. |
+| Robots & Indexability | Robots.txt compliance, meta robots, X-Robots-Tag, and indexability analysis. |
+| Security & HTTPS | Validates HTTPS implementation, detects mixed content, and checks security headers. |
+| Structured Data | JSON-LD, Microdata, and Schema.org structured data extraction and validation. |
+| Titles & Meta | Title, meta, Open Graph, Twitter Cards, and heading structure validation. |
+| XML Sitemap | XML sitemap discovery, parsing, validation, comparison, and generation. |
+
 ## Getting Started
 
 ### Prerequisites

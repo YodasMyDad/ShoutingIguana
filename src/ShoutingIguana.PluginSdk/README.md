@@ -85,25 +85,6 @@ dotnet pack -c Release
 dotnet nuget push bin/Release/YourPlugin.1.0.0.nupkg --api-key YOUR_KEY --source https://api.nuget.org/v3/index.json
 ```
 
-## Built-in Plugins
-
-Shouting Iguana ships with professional-grade plugins:
-
-- **Broken Links** - Detects 404s and unreachable resources
-- **Canonical Tags** - Validates canonical URL implementation
-- **Custom Extraction** - Extract custom data using CSS selectors
-- **Duplicate Content** - Identifies pages with identical content
-- **Image Audit** - Analyzes image attributes, alt text, and size
-- **Internal Linking** - Maps internal link structure and anchor text
-- **Inventory** - Catalogs all discovered URLs and page types
-- **Link Graph** - Generates visual site architecture maps
-- **List Mode** - Import and analyze specific URL lists
-- **Redirects** - Traces redirect chains and identifies issues
-- **Robots.txt** - Validates robots.txt directives and blocked URLs
-- **Sitemap** - Analyzes XML sitemaps and validates entries
-- **Structured Data** - Validates JSON-LD and microdata markup
-- **Titles & Meta** - Audits title tags, meta descriptions, and length
-
 ## Core Concepts
 
 ### Plugin Lifecycle
@@ -123,12 +104,12 @@ Install from NuGet → Initialize() → Register Tasks → Crawl → ExecuteAsyn
 
 ## Custom Report Schemas (Advanced Datagrid)
 
-Plugins can define custom column layouts for the datagrid view, providing a specialized, scannable interface for findings. This is optional—findings work without custom schemas, but schemas dramatically improve the user experience for tabular data.
+Every plugin registers a schema that tells the UI which columns to render. Think of this as configuring the datagrid: keep it minimal for simple checks (Page + Issue) or invest in richer layouts for data-heavy plugins like Broken Links or Link Graph.
 
-### When to Use Custom Schemas
+### Schema Design Tips
 
-- **Use schemas for**: Tabular data with consistent fields (broken links, internal linking, redirects)
-- **Skip schemas for**: One-off issues or highly variable findings
+- **Build richer schemas for**: Tabular data with consistent fields (broken links, internal linking, redirects)
+- **Keep schemas lean for**: One-off issues or highly variable findings (Page + Issue + Details is plenty)
 
 ### Registering a Schema
 
@@ -211,9 +192,8 @@ public class CanonicalTask : UrlTaskBase
 {
     private readonly IRepositoryAccessor _accessor;
 
-    public CanonicalTask(ILogger logger, IRepositoryAccessor accessor)
+    public CanonicalTask(IRepositoryAccessor accessor)
     {
-        _logger = logger;
         _accessor = accessor;
     }
 
@@ -261,7 +241,7 @@ var normalized = UrlHelper.Normalize("https://Example.COM/page/");
 // Result: "https://example.com/page"
 
 // Resolve relative URLs
-var absolute = UrlHelper.Resolve(new Uri(ctx.Url), "../other");
+var absolute = UrlHelper.Resolve(ctx.Url, "../other");
 
 // Check if external
 bool isExternal = UrlHelper.IsExternal(ctx.Project.BaseUrl, targetUrl);
@@ -273,7 +253,7 @@ var domain = UrlHelper.GetDomain("https://www.example.com/page");
 
 ## Best Practices
 
-### ✅ Do
+### Do
 
 - Use `UrlTaskBase` instead of implementing `IUrlTask` directly
 - Return early for non-applicable URLs (check content type, status)
@@ -284,7 +264,7 @@ var domain = UrlHelper.GetDomain("https://www.example.com/page");
 - Design columns that make sense for your data type
 - Implement `CleanupProject()` if using static state for memory management
 
-### ❌ Don't
+### Don't
 
 - Don't block the thread (use async/await)
 - **Use `ctx.Reports.ReportAsync()` exclusively** - the legacy findings system has been removed
@@ -303,8 +283,8 @@ Use the `Severity` enum instead of magic strings:
 
 ```csharp
 var row = ReportRow.Create()
-    .SetSeverity(Severity.Error)    // ✅ Preferred - type-safe
-    // .Set("Severity", "Error")    // ❌ Avoid - magic string
+    .SetSeverity(Severity.Error)    // Preferred - type-safe
+    // .Set("Severity", "Error")    // Avoid - magic string
 ```
 
 ### SetPage
@@ -313,8 +293,8 @@ Convenient helper for the common "Page" column:
 
 ```csharp
 var row = ReportRow.Create()
-    .SetPage(ctx.Url)               // ✅ Preferred - cleaner
-    // .Set("Page", ctx.Url.ToString())  // ❌ Works but verbose
+    .SetPage(ctx.Url)               // Preferred - cleaner
+    // .Set("Page", ctx.Url.ToString())  // Works but verbose
 ```
 
 You can also use `SetPage(string url)` if you already have a URL string.
