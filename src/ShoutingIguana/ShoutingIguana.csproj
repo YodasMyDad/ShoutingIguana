@@ -9,6 +9,7 @@
     <ApplicationIcon>..\..\Assets\logo.ico</ApplicationIcon>
     <!-- Enable XAML compilation to catch errors at build time -->
     <XamlDebuggingInformation>True</XamlDebuggingInformation>
+    <PluginOutputRoot>$(MSBuildProjectDirectory)\bin\$(Configuration)\$(TargetFramework)\plugins</PluginOutputRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -54,6 +55,17 @@
     <ProjectReference Include="..\ShoutingIguana.Data\ShoutingIguana.Data.csproj" />
     <ProjectReference Include="..\ShoutingIguana.Plugins\ShoutingIguana.Plugins.csproj" />
   </ItemGroup>
+
+  <Target Name="CopyPluginsToPublish" AfterTargets="Publish">
+    <ItemGroup Condition="Exists('$(PluginOutputRoot)')">
+      <PluginBuildFiles Include="$(PluginOutputRoot)\**\*.*" />
+    </ItemGroup>
+    <MakeDir Condition="'@(PluginBuildFiles)' != ''" Directories="$(PublishDir)plugins" />
+    <Copy Condition="'@(PluginBuildFiles)' != ''"
+          SourceFiles="@(PluginBuildFiles)"
+          DestinationFiles="@(PluginBuildFiles->'$(PublishDir)plugins\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>
 
