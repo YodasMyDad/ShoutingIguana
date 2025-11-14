@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Version>0.1.0</Version>
     <!-- Output to plugins folder in main app -->
-    <OutDir>..\ShoutingIguana\bin\$(Configuration)\net9.0-windows\plugins\$(AssemblyName)\</OutDir>
+    <OutDir>..\ShoutingIguana\bin\$(Configuration)\net10.0-windows\plugins\$(AssemblyName)\</OutDir>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
 

@@ -2,12 +2,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using System.Runtime.Versioning;
 
 namespace ShoutingIguana.Core.Services.NuGet;
 
 /// <summary>
 /// Implementation of IFeedConfigurationService that stores feeds in a JSON file with encrypted credentials.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public class FeedConfigurationService(ILogger<FeedConfigurationService> logger) : IFeedConfigurationService
 {
     private readonly ILogger<FeedConfigurationService> _logger = logger;

@@ -101,6 +101,9 @@ public partial class FindingsView
                 _currentFindingTab = findingTab;
                 findingTab.PropertyChanged += FindingTab_PropertyChanged;
                 
+                // Ensure new plugin tabs always start at the top of their data
+                ResetFindingsScrollPosition();
+                
                  // If columns already loaded (tab revisited), apply them immediately
                 if (findingTab.ReportColumns.Count > 0)
                 {
@@ -495,6 +498,29 @@ public partial class FindingsView
         }
         
         return null;
+    }
+    
+    private void ResetFindingsScrollPosition()
+    {
+        if (_findingsDataGrid == null)
+            return;
+        
+        var dataGrid = _findingsDataGrid;
+        dataGrid.Dispatcher.InvokeAsync(() =>
+        {
+            var scrollViewer = FindVisualChild<ScrollViewer>(dataGrid);
+            if (scrollViewer != null)
+            {
+                scrollViewer.ScrollToHorizontalOffset(0);
+                scrollViewer.ScrollToVerticalOffset(0);
+            }
+            
+            if (dataGrid.Items.Count > 0)
+            {
+                dataGrid.UpdateLayout();
+                dataGrid.ScrollIntoView(dataGrid.Items[0]);
+            }
+        }, System.Windows.Threading.DispatcherPriority.Background);
     }
     
     private void DataGrid_PreviewMouseWheel(object sender, MouseWheelEventArgs e)

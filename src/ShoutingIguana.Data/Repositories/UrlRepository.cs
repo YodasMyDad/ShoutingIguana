@@ -67,67 +67,75 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
 
     public async Task<UrlAnalysisDto?> GetForAnalysisAsync(int id)
     {
-        return await _context.Urls
+        var entity = await _context.Urls
             .AsNoTracking()
-            .Where(u => u.Id == id)
-            .Select(u => new UrlAnalysisDto
-            {
-                Id = u.Id,
-                ProjectId = u.ProjectId,
-                Address = u.Address,
-                NormalizedUrl = u.NormalizedUrl,
-                Scheme = u.Scheme,
-                Host = u.Host,
-                Path = u.Path,
-                Depth = u.Depth,
-                DiscoveredFromUrlId = u.DiscoveredFromUrlId,
-                FirstSeenUtc = u.FirstSeenUtc,
-                LastCrawledUtc = u.LastCrawledUtc,
-                Status = u.Status,
-                HttpStatus = u.HttpStatus,
-                ContentType = u.ContentType,
-                ContentLength = u.ContentLength,
-                RobotsAllowed = u.RobotsAllowed,
-                Title = u.Title,
-                MetaDescription = u.MetaDescription,
-                CanonicalUrl = u.CanonicalUrl,
-                MetaRobots = u.MetaRobots,
-                RedirectTarget = u.RedirectTarget,
-                CanonicalHtml = u.CanonicalHtml,
-                CanonicalHttp = u.CanonicalHttp,
-                HasMultipleCanonicals = u.HasMultipleCanonicals,
-                HasCrossDomainCanonical = u.HasCrossDomainCanonical,
-                CanonicalIssues = u.CanonicalIssues,
-                RobotsNoindex = u.RobotsNoindex,
-                RobotsNofollow = u.RobotsNofollow,
-                RobotsNoarchive = u.RobotsNoarchive,
-                RobotsNosnippet = u.RobotsNosnippet,
-                RobotsNoimageindex = u.RobotsNoimageindex,
-                RobotsSource = u.RobotsSource,
-                XRobotsTag = u.XRobotsTag,
-                HasRobotsConflict = u.HasRobotsConflict,
-                HtmlLang = u.HtmlLang,
-                ContentLanguageHeader = u.ContentLanguageHeader,
-                HasMetaRefresh = u.HasMetaRefresh,
-                MetaRefreshDelay = u.MetaRefreshDelay,
-                MetaRefreshTarget = u.MetaRefreshTarget,
-                HasJsChanges = u.HasJsChanges,
-                JsChangedElements = u.JsChangedElements,
-                IsRedirectLoop = u.IsRedirectLoop,
-                RedirectChainLength = u.RedirectChainLength,
-                IsSoft404 = u.IsSoft404,
-                CacheControl = u.CacheControl,
-                Vary = u.Vary,
-                ContentEncoding = u.ContentEncoding,
-                LinkHeader = u.LinkHeader,
-                HasHsts = u.HasHsts,
-                ContentHash = u.ContentHash,
-                SimHash = u.SimHash,
-                IsIndexable = u.IsIndexable,
-                // Note: RenderedHtml is intentionally excluded
-                Headers = u.Headers.ToList()
-            })
-            .FirstOrDefaultAsync().ConfigureAwait(false);
+            .Include(u => u.Headers)
+            .FirstOrDefaultAsync(u => u.Id == id)
+            .ConfigureAwait(false);
+
+        if (entity == null)
+        {
+            return null;
+        }
+
+        return new UrlAnalysisDto
+        {
+            Id = entity.Id,
+            ProjectId = entity.ProjectId,
+            Address = entity.Address,
+            NormalizedUrl = entity.NormalizedUrl,
+            Scheme = entity.Scheme,
+            Host = entity.Host,
+            Path = entity.Path,
+            Depth = entity.Depth,
+            DiscoveredFromUrlId = entity.DiscoveredFromUrlId,
+            FirstSeenUtc = entity.FirstSeenUtc,
+            LastCrawledUtc = entity.LastCrawledUtc,
+            Status = entity.Status,
+            HttpStatus = entity.HttpStatus,
+            ContentType = entity.ContentType,
+            ContentLength = entity.ContentLength,
+            RobotsAllowed = entity.RobotsAllowed,
+            Title = entity.Title,
+            MetaDescription = entity.MetaDescription,
+            CanonicalUrl = entity.CanonicalUrl,
+            MetaRobots = entity.MetaRobots,
+            RedirectTarget = entity.RedirectTarget,
+            CanonicalHtml = entity.CanonicalHtml,
+            CanonicalHttp = entity.CanonicalHttp,
+            HasMultipleCanonicals = entity.HasMultipleCanonicals,
+            HasCrossDomainCanonical = entity.HasCrossDomainCanonical,
+            CanonicalIssues = entity.CanonicalIssues,
+            RobotsNoindex = entity.RobotsNoindex,
+            RobotsNofollow = entity.RobotsNofollow,
+            RobotsNoarchive = entity.RobotsNoarchive,
+            RobotsNosnippet = entity.RobotsNosnippet,
+            RobotsNoimageindex = entity.RobotsNoimageindex,
+            RobotsSource = entity.RobotsSource,
+            XRobotsTag = entity.XRobotsTag,
+            HasRobotsConflict = entity.HasRobotsConflict,
+            HtmlLang = entity.HtmlLang,
+            ContentLanguageHeader = entity.ContentLanguageHeader,
+            HasMetaRefresh = entity.HasMetaRefresh,
+            MetaRefreshDelay = entity.MetaRefreshDelay,
+            MetaRefreshTarget = entity.MetaRefreshTarget,
+            HasJsChanges = entity.HasJsChanges,
+            JsChangedElements = entity.JsChangedElements,
+            IsRedirectLoop = entity.IsRedirectLoop,
+            RedirectChainLength = entity.RedirectChainLength,
+            IsSoft404 = entity.IsSoft404,
+            CacheControl = entity.CacheControl,
+            Vary = entity.Vary,
+            ContentEncoding = entity.ContentEncoding,
+            LinkHeader = entity.LinkHeader,
+            HasHsts = entity.HasHsts,
+            ContentHash = entity.ContentHash,
+            SimHash = entity.SimHash,
+            IsIndexable = entity.IsIndexable,
+            Headers = entity.Headers
+                .Select(h => new HeaderSnapshot(h.Name, h.Value))
+                .ToList()
+        };
     }
 
     public async Task<string?> GetRenderedHtmlAsync(int id)
@@ -137,6 +145,16 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
             .Where(u => u.Id == id)
             .Select(u => u.RenderedHtml)
             .FirstOrDefaultAsync().ConfigureAwait(false);
+    }
+
+    public async Task<List<HeaderSnapshot>> GetHeadersAsync(int urlId)
+    {
+        return await _context.Headers
+            .AsNoTracking()
+            .Where(h => h.UrlId == urlId)
+            .Select(h => new HeaderSnapshot(h.Name, h.Value))
+            .ToListAsync()
+            .ConfigureAwait(false);
     }
 
     public async Task<Url> CreateAsync(Url url)

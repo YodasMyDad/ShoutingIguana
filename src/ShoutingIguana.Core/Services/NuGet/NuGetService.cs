@@ -269,7 +269,7 @@ public class NuGetService : INuGetService
 
                 // Resolve dependencies
                 _logger.LogDebug("Resolving dependencies for {PackageId} v{Version}", packageId, packageVersion);
-                var targetFramework = NuGetFramework.Parse("net9.0");
+                var targetFramework = NuGetFramework.Parse("net10.0");
                 var dependencyResolution = await _dependencyResolver.ResolveDependenciesAsync(
                     packageId,
                     packageVersion,
@@ -498,8 +498,8 @@ public class NuGetService : INuGetService
             
             progress?.Report(new InstallProgress { Status = "Resolving dependencies...", PercentComplete = 5 });
 
-            // Determine target framework - prefer net9.0, fall back to netstandard2.1
-            var targetFramework = NuGetFramework.Parse("net9.0");
+            // Determine target framework - prefer net10.0, fall back to netstandard2.1
+            var targetFramework = NuGetFramework.Parse("net10.0");
             
             // Resolve all dependencies
             var resolutionResult = await _dependencyResolver.ResolveDependenciesAsync(

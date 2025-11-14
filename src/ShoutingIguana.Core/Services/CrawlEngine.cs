@@ -701,16 +701,25 @@ public class CrawlEngine(
                 _logger.LogDebug("Analyzing URL: {Url}", urlData.Address);
                 
                 // Load HTML separately (only when needed, and keeps memory footprint smaller)
+                var headerSnapshots = urlData.Headers;
                 using (var scope = _serviceProvider.CreateScope())
                 {
                     var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
                     renderedHtml = await urlRepository.GetRenderedHtmlAsync(urlId).ConfigureAwait(false);
+                    
+                    if (headerSnapshots.Count == 0)
+                    {
+                        headerSnapshots = await urlRepository.GetHeadersAsync(urlId).ConfigureAwait(false);
+                    }
                 }
                 
                 // Extract headers from loaded entity
-                var headers = urlData.Headers
-                    .GroupBy(h => h.Name.ToLowerInvariant())
-                    .ToDictionary(g => g.Key, g => g.First().Value);
+                var headers = headerSnapshots
+                    .GroupBy(h => h.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(
+                        g => g.Key.ToLowerInvariant(),
+                        g => g.First().Value,
+                        StringComparer.OrdinalIgnoreCase);
                 
                 // Execute plugin tasks with saved HTML (no live browser page needed)
                 using (var pluginScope = _serviceProvider.CreateScope())
@@ -1242,7 +1251,7 @@ public class CrawlEngine(
             existing.LinkHeader = meta.LinkHeader;
             existing.HasHsts = meta.HasHsts;
             
-            var updated = await urlRepository.UpdateAsync(existing).ConfigureAwait(false);
+            var updated = await urlRepository.UpdateAsync(existing, fetchResult.Headers).ConfigureAwait(false);
             
             // Delete and recreate hreflangs and structured data
             await hreflangRepository.DeleteByUrlIdAsync(updated.Id).ConfigureAwait(false);

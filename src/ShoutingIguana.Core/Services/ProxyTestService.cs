@@ -2,12 +2,14 @@ using System.Diagnostics;
 using System.Net;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Core.Configuration;
+using System.Runtime.Versioning;
 
 namespace ShoutingIguana.Core.Services;
 
 /// <summary>
 /// Implementation of IProxyTestService for testing proxy connections.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public class ProxyTestService(ILogger<ProxyTestService> logger) : IProxyTestService
 {
     private readonly ILogger<ProxyTestService> _logger = logger;

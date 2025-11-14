@@ -12,7 +12,7 @@ public interface IDependencyResolver
     /// </summary>
     /// <param name="packageId">The package ID to resolve dependencies for.</param>
     /// <param name="version">The package version.</param>
-    /// <param name="targetFramework">The target framework (e.g., net9.0, netstandard2.1).</param>
+    /// <param name="targetFramework">The target framework (e.g., net10.0, netstandard2.1).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A flattened list of all dependencies.</returns>
     Task<DependencyResolutionResult> ResolveDependenciesAsync(

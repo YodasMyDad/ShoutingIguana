@@ -13,6 +13,7 @@ public interface IUrlRepository
     Task<List<Url>> GetCompletedUrlsAsync(int projectId);
     Task<List<int>> GetCompletedUrlIdsAsync(int projectId);
     Task<UrlAnalysisDto?> GetForAnalysisAsync(int id);
+    Task<List<HeaderSnapshot>> GetHeadersAsync(int urlId);
     Task<string?> GetRenderedHtmlAsync(int id);
     Task<Url> CreateAsync(Url url);
     Task<Url> UpdateAsync(Url url, IEnumerable<KeyValuePair<string, string>>? headers = null);

@@ -83,6 +83,11 @@ public class UrlAnalysisDto
     // It's loaded separately only when needed
     
     // Navigation properties
-    public List<Header> Headers { get; set; } = [];
+    public List<HeaderSnapshot> Headers { get; set; } = [];
 }
+
+/// <summary>
+/// Lightweight projection of HTTP headers for plugin analysis.
+/// </summary>
+public sealed record HeaderSnapshot(string Name, string Value);
 

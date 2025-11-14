@@ -1,8 +1,11 @@
+using System.Runtime.Versioning;
+
 namespace ShoutingIguana.Core.Configuration;
 
 /// <summary>
 /// Default crawl settings.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public class CrawlSettings
 {
     public int ConcurrentRequests { get; set; } = 5;

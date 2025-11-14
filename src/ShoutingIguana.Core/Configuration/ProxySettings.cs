@@ -1,3 +1,5 @@
+using System.Runtime.Versioning;
+
 namespace ShoutingIguana.Core.Configuration;
 
 /// <summary>
@@ -14,6 +16,7 @@ public enum ProxyType
 /// <summary>
 /// Proxy configuration settings.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public class ProxySettings
 {
     public bool Enabled { get; set; }

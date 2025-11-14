@@ -2,9 +2,9 @@
 
 <img src="Assets/logo.png" alt="Shouting Iguana" width="100">
 
-**Enterprise-grade web crawler and SEO analysis platform built on .NET 9**
+**Enterprise-grade web crawler and SEO analysis platform built on .NET 10**
 
-Shouting Iguana is a powerful desktop application for comprehensive website auditing and SEO analysis. Whether you're analyzing a small blog or crawling enterprise sites with millions of pages, Shouting Iguana delivers professional-grade insights through an intuitive interface.
+Shouting Iguana is a powerful desktop application for comprehensive website auditing and SEO analysis. Whether you're analyzing a small blog or crawling enterprise sites with a 100K of pages, Shouting Iguana delivers professional-grade insights through an intuitive interface.
 
 ## Why Shouting Iguana?
 
@@ -12,7 +12,7 @@ Shouting Iguana is a powerful desktop application for comprehensive website audi
 - **Extensible Plugin System** - Install SEO analysis plugins directly from NuGet or build your own with minimal code
 - **Comprehensive Analysis** - Detect broken links, duplicate content, missing meta tags, redirect chains, structured data issues, and more
 - **Professional Exports** - Export findings to CSV and Excel for client reports and team collaboration
-- **Modern Technology** - Built with .NET 9, WPF, Entity Framework Core, and Playwright for JavaScript rendering
+- **Modern Technology** - Built with .NET 10, WPF, Entity Framework Core, and Playwright for JavaScript rendering
 
 ## Built-in Plugins
 
@@ -42,8 +42,7 @@ Shouting Iguana ships with these production-ready plugins out of the box:
 
 ### Prerequisites
 
-- .NET 9.0 SDK
-- Visual Studio 2022 or JetBrains Rider
+- .NET 10.0 SDK
 
 ### Quick Start
 

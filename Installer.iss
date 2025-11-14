@@ -58,26 +58,3 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-
-[Code]
-function IsDotNetInstalled(): Boolean;
-var
-  ResultCode: Integer;
-begin
-  // Check if .NET 9 runtime is installed (basic check)
-  Result := Exec('dotnet', '--list-runtimes', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
-end;
-
-function InitializeSetup(): Boolean;
-begin
-  Result := True;
-  if not IsDotNetInstalled() then
-  begin
-    if MsgBox('.NET 9 Runtime does not appear to be installed. The application may not run without it. Continue anyway?', 
-              mbConfirmation, MB_YESNO) = IDNO then
-    begin
-      Result := False;
-    end;
-  end;
-end;
-
