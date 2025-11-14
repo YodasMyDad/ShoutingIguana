@@ -38,16 +38,7 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     private FindingDetails? _selectedFindingDetails;
     
     [ObservableProperty]
-    private bool _hasTechnicalMetadata;
-    
-    [ObservableProperty]
-    private string _technicalMetadataJson = string.Empty;
-
-    [ObservableProperty]
     private bool _hasStructuredDetails;
-
-    [ObservableProperty]
-    private bool _isTechnicalModeEnabled;
 
     public bool IsFindingTabSelected => SelectedTab is FindingTabViewModel;
     
@@ -55,7 +46,7 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
     
     /// <summary>
     /// Show details panel for overview and finding tabs.
-    /// Overview shows URL properties, finding tabs show structured details/technical metadata.
+    /// Overview shows URL properties, finding tabs show structured details.
     /// </summary>
     public bool ShowDetailsPanel => SelectedTab is OverviewTabViewModel or FindingTabViewModel;
 
@@ -122,8 +113,6 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         // Update when the selected finding changes
         // The FindingTabViewModel will have already updated its detail properties in its partial method
         if (e.PropertyName == nameof(FindingTabViewModel.SelectedFindingDetails)
-            || e.PropertyName == nameof(FindingTabViewModel.HasTechnicalMetadata)
-            || e.PropertyName == nameof(FindingTabViewModel.TechnicalMetadataJson)
             || e.PropertyName == nameof(FindingTabViewModel.SelectedReportRow))
         {
             _logger.LogDebug("Selected finding data changed, updating details panel");
@@ -167,32 +156,23 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
         // This bypasses the equality check in the generated property setters to force UI updates
 #pragma warning disable MVVMTK0034 // Direct field reference instead of property
         _selectedFindingDetails = findingTab.SelectedFindingDetails;
-        _hasTechnicalMetadata = findingTab.HasTechnicalMetadata;
-        _technicalMetadataJson = findingTab.TechnicalMetadataJson;
         _hasStructuredDetails = _selectedFindingDetails?.Items.Count > 0;
 #pragma warning restore MVVMTK0034
         
         // Manually raise property changed events
         OnPropertyChanged(nameof(SelectedFindingDetails));
-        OnPropertyChanged(nameof(HasTechnicalMetadata));
-        OnPropertyChanged(nameof(TechnicalMetadataJson));
         OnPropertyChanged(nameof(HasStructuredDetails));
         
-        _logger.LogDebug("Details updated - HasDetails: {HasDetails}, HasTechMetadata: {HasTechMetadata}", 
-            SelectedFindingDetails != null, HasTechnicalMetadata);
+        _logger.LogDebug("Details updated - HasDetails: {HasDetails}", SelectedFindingDetails != null);
     }
 
     private void ClearDetailsPanel()
     {
 #pragma warning disable MVVMTK0034 // Direct field reference instead of property
         _selectedFindingDetails = null;
-        _hasTechnicalMetadata = false;
-        _technicalMetadataJson = string.Empty;
         _hasStructuredDetails = false;
 #pragma warning restore MVVMTK0034
         OnPropertyChanged(nameof(SelectedFindingDetails));
-        OnPropertyChanged(nameof(HasTechnicalMetadata));
-        OnPropertyChanged(nameof(TechnicalMetadataJson));
         OnPropertyChanged(nameof(HasStructuredDetails));
     }
 
@@ -544,15 +524,6 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
                 }
             }
             // Handle Finding tab
-            else if (IsTechnicalModeEnabled)
-            {
-                // Copy technical metadata JSON
-                if (!string.IsNullOrEmpty(TechnicalMetadataJson))
-                {
-                    Clipboard.SetText(TechnicalMetadataJson);
-                    _logger.LogDebug("Copied technical metadata JSON to clipboard");
-                }
-            }
             else
             {
                 // Copy formatted text from FindingDetails

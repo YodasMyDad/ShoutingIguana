@@ -10,7 +10,7 @@ public interface IExcelExportService
     /// Export all findings for a project to an Excel workbook with multiple sheets.
     /// </summary>
     /// <param name="progressCallback">Optional callback to report progress (current plugin, current index, total count)</param>
-    Task<bool> ExportFindingsAsync(int projectId, string filePath, List<string>? selectedTaskKeys = null, bool includeTechnicalMetadata = false, bool includeErrors = true, bool includeWarnings = true, bool includeInfo = true, Action<string, int, int>? progressCallback = null);
+    Task<bool> ExportFindingsAsync(int projectId, string filePath, List<string>? selectedTaskKeys = null, bool includeErrors = true, bool includeWarnings = true, bool includeInfo = true, Action<string, int, int>? progressCallback = null);
     
     /// <summary>
     /// Export all URLs for a project to an Excel workbook with comprehensive SEO data.

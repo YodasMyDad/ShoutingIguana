@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace ShoutingIguana.PluginSdk;
 
 /// <summary>
@@ -10,9 +12,5 @@ public class FindingDetails
     /// </summary>
     public List<string> Items { get; set; } = new();
 
-    /// <summary>
-    /// Technical metadata for debugging.
-    /// </summary>
-    public Dictionary<string, object?>? TechnicalMetadata { get; set; }
 }
 

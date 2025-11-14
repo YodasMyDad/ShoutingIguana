@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json;
 using ShoutingIguana.PluginSdk;
 
@@ -40,15 +41,22 @@ public class Finding
         }
         catch
         {
-            // If it's old format JSON (raw dictionary), wrap it in TechnicalMetadata for backward compatibility
+            // If it's old format JSON (raw dictionary), convert entries to flat detail strings for backward compatibility
             try
             {
                 var rawData = JsonSerializer.Deserialize<Dictionary<string, object?>>(DataJson);
                 if (rawData != null)
                 {
+                    var items = new List<string>();
+                    foreach (var kvp in rawData)
+                    {
+                        var valueText = kvp.Value?.ToString() ?? "(none)";
+                        items.Add($"{kvp.Key}: {valueText}");
+                    }
+
                     return new FindingDetails
                     {
-                        TechnicalMetadata = rawData
+                        Items = items
                     };
                 }
             }

@@ -27,9 +27,6 @@ public partial class ExportOptionsViewModel : ObservableObject
     private readonly ILogger<ExportOptionsViewModel> _logger;
     
     [ObservableProperty]
-    private bool _includeTechnicalMetadata;
-    
-    [ObservableProperty]
     private bool _includeErrors = true;
     
     [ObservableProperty]
@@ -204,7 +201,6 @@ public partial class ExportOptionsViewModel : ObservableObject
                     projectId, 
                     filePath, 
                     selectedTaskKeys,
-                    IncludeTechnicalMetadata, 
                     IncludeErrors, 
                     IncludeWarnings, 
                     IncludeInfo,

@@ -4,7 +4,6 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -53,12 +52,6 @@ public partial class FindingTabViewModel : ObservableObject
     
     [ObservableProperty]
     private FindingDetails? _selectedFindingDetails;
-    
-    [ObservableProperty]
-    private bool _hasTechnicalMetadata;
-    
-    [ObservableProperty]
-    private string _technicalMetadataJson = string.Empty;
 
     [ObservableProperty]
     private Severity? _selectedSeverity;
@@ -205,14 +198,11 @@ public partial class FindingTabViewModel : ObservableObject
         if (value == null)
         {
             SelectedFindingDetails = null;
-            HasTechnicalMetadata = false;
-            TechnicalMetadataJson = string.Empty;
             return;
         }
 
         var columns = GetActiveReportColumns().ToList();
         var detailItems = new List<string>();
-        var technicalMetadata = new Dictionary<string, object?>();
 
         // Add plugin description at the beginning of the details panel
         if (!string.IsNullOrWhiteSpace(Description))
@@ -226,7 +216,6 @@ public partial class FindingTabViewModel : ObservableObject
             foreach (var columnName in columnNames)
             {
                 var rawValue = value.GetValue(columnName);
-                technicalMetadata[columnName] = rawValue;
                 var formatted = rawValue?.ToString() ?? "(none)";
                 detailItems.Add($"{columnName}: {formatted}");
             }
@@ -236,7 +225,6 @@ public partial class FindingTabViewModel : ObservableObject
             foreach (var column in columns)
             {
                 var rawValue = value.GetValue(column.Name);
-                technicalMetadata[column.Name] = rawValue;
                 var formatted = FormatColumnValue(rawValue, column.ColumnType);
                 detailItems.Add($"{column.DisplayName}: {formatted}");
             }
@@ -245,7 +233,6 @@ public partial class FindingTabViewModel : ObservableObject
             var explanationValue = value.GetValue("Explanation");
             if (explanationValue != null && !string.IsNullOrWhiteSpace(explanationValue.ToString()))
             {
-                technicalMetadata["Explanation"] = explanationValue;
                 var formatted = explanationValue.ToString() ?? "(none)";
                 detailItems.Add($"Description: {formatted}");
             }
@@ -253,14 +240,8 @@ public partial class FindingTabViewModel : ObservableObject
 
         SelectedFindingDetails = new FindingDetails
         {
-            Items = detailItems,
-            TechnicalMetadata = technicalMetadata.Count > 0 ? technicalMetadata : null
+            Items = detailItems
         };
-
-        HasTechnicalMetadata = technicalMetadata.Count > 0;
-        TechnicalMetadataJson = technicalMetadata.Count > 0
-            ? SerializeTechnicalMetadata(technicalMetadata)
-            : string.Empty;
     }
 
     [RelayCommand]
@@ -630,18 +611,6 @@ public partial class FindingTabViewModel : ObservableObject
         }
 
         return value.ToString() ?? "(none)";
-    }
-
-    private static string SerializeTechnicalMetadata(Dictionary<string, object?> metadata)
-    {
-        try
-        {
-            return JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
-        }
-        catch
-        {
-            return string.Empty;
-        }
     }
 
     [RelayCommand]

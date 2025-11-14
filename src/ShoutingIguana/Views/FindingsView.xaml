@@ -938,14 +938,6 @@
                         <StackPanel Orientation="Horizontal" 
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center">
-                            <CheckBox IsChecked="{Binding IsTechnicalModeEnabled}"
-                                      Content="Technical"
-                                      Margin="0,0,12,0"
-                                      VerticalAlignment="Center"
-                                      Visibility="{Binding IsFindingTabSelected, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                      AutomationProperties.Name="Technical Mode"
-                                      AutomationProperties.HelpText="Toggle to view technical metadata JSON"
-                                      ToolTip="Show technical metadata JSON"/>
                             <Button Command="{Binding CopyDetailsCommand}"
                                     Style="{StaticResource SecondaryButton}"
                                     Height="32"
@@ -1145,11 +1137,10 @@
                                 <!-- DataTemplate for FindingTabViewModel - Show Finding Details -->
                                 <DataTemplate DataType="{x:Type vm:FindingTabViewModel}">
                                     <Grid>
-                                        <!-- Normal View: Formatted Text from Plugin -->
+                                        <!-- Formatted Text from Plugin -->
                                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                                       HorizontalScrollBarVisibility="Disabled"
-                                                      Padding="16"
-                                                      Visibility="{Binding DataContext.IsTechnicalModeEnabled, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                                                      Padding="16">
                                             <StackPanel>
                                                 <!-- Show structured details if available -->
                                                 <controls:FindingDetailsViewer 
@@ -1161,32 +1152,6 @@
                                                            Style="{StaticResource BodyTextStyle}"
                                                            Foreground="{StaticResource TextSecondaryBrush}"
                                                            Visibility="{Binding SelectedFindingDetails, Converter={StaticResource InverseNullToVisibilityConverter}}"
-                                                           Margin="0,8"/>
-                                            </StackPanel>
-                                        </ScrollViewer>
-                                        
-                                        <!-- Technical View: JSON Technical Metadata -->
-                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                                      HorizontalScrollBarVisibility="Auto"
-                                                      Padding="16"
-                                                      Visibility="{Binding DataContext.IsTechnicalModeEnabled, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <StackPanel>
-                                                <!-- Show technical metadata if available -->
-                                                <TextBox Text="{Binding TechnicalMetadataJson, Mode=OneWay}"
-                                                         IsReadOnly="True"
-                                                         TextWrapping="Wrap"
-                                                         FontFamily="Consolas"
-                                                         FontSize="12"
-                                                         Background="Transparent"
-                                                         BorderThickness="0"
-                                                         Foreground="{StaticResource TextPrimaryBrush}"
-                                                         Visibility="{Binding HasTechnicalMetadata, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                                
-                                                <!-- Show message if no technical metadata -->
-                                                <TextBlock Text="No technical metadata available."
-                                                           Style="{StaticResource BodyTextStyle}"
-                                                           Foreground="{StaticResource TextSecondaryBrush}"
-                                                           Visibility="{Binding HasTechnicalMetadata, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                                                            Margin="0,8"/>
                                             </StackPanel>
                                         </ScrollViewer>

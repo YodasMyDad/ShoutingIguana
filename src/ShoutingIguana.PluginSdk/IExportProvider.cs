@@ -30,7 +30,7 @@ namespace ShoutingIguana.PluginSdk;
 /// <para>
 /// <b>For standard tabular data, just use findings:</b>
 /// The built-in CSV/Excel/PDF exports automatically include all plugin findings
-/// with proper formatting, filtering, and technical metadata options.
+/// with proper formatting and filtering options.
 /// </para>
 /// </remarks>
 /// <example>

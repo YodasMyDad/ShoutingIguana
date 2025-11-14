@@ -18,14 +18,13 @@ public class ExcelExportService(
     IServiceProvider serviceProvider) : IExcelExportService
 {
     private const string CustomExtractionTaskKey = "CustomExtraction";
-    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    public async Task<bool> ExportFindingsAsync(int projectId, string filePath, List<string>? selectedTaskKeys = null, bool includeTechnicalMetadata = false, bool includeErrors = true, bool includeWarnings = true, bool includeInfo = true, Action<string, int, int>? progressCallback = null)
+    public async Task<bool> ExportFindingsAsync(int projectId, string filePath, List<string>? selectedTaskKeys = null, bool includeErrors = true, bool includeWarnings = true, bool includeInfo = true, Action<string, int, int>? progressCallback = null)
     {
         try
         {
-            logger.LogInformation("Exporting findings to Excel: {FilePath} (Include Technical Metadata: {IncludeTechnical}, Errors: {Errors}, Warnings: {Warnings}, Info: {Info})", 
-                filePath, includeTechnicalMetadata, includeErrors, includeWarnings, includeInfo);
+            logger.LogInformation("Exporting findings to Excel: {FilePath} (Errors: {Errors}, Warnings: {Warnings}, Info: {Info})", 
+                filePath, includeErrors, includeWarnings, includeInfo);
 
             // Create scope for repositories
             using var scope = serviceProvider.CreateScope();
@@ -152,7 +151,7 @@ public class ExcelExportService(
                     var taskFindings = filteredFindings.Where(f => f.TaskKey == taskKey).ToList();
                     if (taskFindings.Count > 0)
                     {
-                        CreateTaskSheet(workbook, taskKey, taskFindings, includeTechnicalMetadata);
+                        CreateTaskSheet(workbook, taskKey, taskFindings);
                     }
                 }
             }
@@ -492,7 +491,7 @@ public class ExcelExportService(
         await Task.CompletedTask;
     }
 
-    private void CreateTaskSheet(XLWorkbook workbook, string taskKey, List<Core.Models.Finding> findings, bool includeTechnicalMetadata)
+    private void CreateTaskSheet(XLWorkbook workbook, string taskKey, List<Core.Models.Finding> findings)
     {
         // Sanitize sheet name (Excel has restrictions)
         var sheetName = SanitizeSheetName(taskKey);
@@ -505,13 +504,6 @@ public class ExcelExportService(
         ws.Cell(1, colIndex++).Value = "Code";
         ws.Cell(1, colIndex++).Value = "Message";
         ws.Cell(1, colIndex++).Value = "Details";
-        
-        var technicalColIndex = 0;
-        if (includeTechnicalMetadata)
-        {
-            technicalColIndex = colIndex;
-            ws.Cell(1, colIndex++).Value = "Technical Data";
-        }
         
         ws.Cell(1, colIndex++).Value = "Date";
         
@@ -553,17 +545,6 @@ public class ExcelExportService(
             if (!string.IsNullOrEmpty(detailsText))
             {
                 ws.Row(row).AdjustToContents();
-            }
-            
-            // Add technical metadata if requested
-            if (includeTechnicalMetadata && technicalColIndex > 0)
-            {
-                var technicalData = FormatTechnicalMetadataForExcel(details);
-                ws.Cell(row, technicalColIndex).Value = technicalData;
-                ws.Cell(row, technicalColIndex).Style.Alignment.WrapText = true;
-                ws.Cell(row, technicalColIndex).Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
-                ws.Cell(row, technicalColIndex).Style.Font.FontName = "Consolas";
-                ws.Cell(row, technicalColIndex).Style.Font.FontSize = 9;
             }
             
             ws.Cell(row, colIndex++).Value = finding.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss");
@@ -637,29 +618,6 @@ public class ExcelExportService(
         }
     }
     
-    /// <summary>
-    /// Formats technical metadata as JSON for Excel.
-    /// </summary>
-    private string FormatTechnicalMetadataForExcel(FindingDetails? details)
-    {
-        if (details?.TechnicalMetadata == null || details.TechnicalMetadata.Count == 0)
-        {
-            return "";
-        }
-        
-        try
-        {
-            return System.Text.Json.JsonSerializer.Serialize(
-                details.TechnicalMetadata,
-                JsonOptions);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Error formatting technical metadata for export");
-            return "[Error formatting technical metadata]";
-        }
-    }
-
     private string SanitizeSheetName(string name)
     {
         // Excel sheet names can't be longer than 31 chars and can't contain: \ / ? * [ ]
