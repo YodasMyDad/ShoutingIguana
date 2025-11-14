@@ -8,6 +8,7 @@ using HtmlAgilityPack;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Core.Repositories;
+using ShoutingIguana.Core.Services;
 using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Services;
@@ -16,6 +17,7 @@ public class ExcelExportService(
     ILogger<ExcelExportService> logger,
     IServiceProvider serviceProvider) : IExcelExportService
 {
+    private const string CustomExtractionTaskKey = "CustomExtraction";
     private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public async Task<bool> ExportFindingsAsync(int projectId, string filePath, List<string>? selectedTaskKeys = null, bool includeTechnicalMetadata = false, bool includeErrors = true, bool includeWarnings = true, bool includeInfo = true, Action<string, int, int>? progressCallback = null)
@@ -41,6 +43,7 @@ public class ExcelExportService(
             // Get repositories
             var schemaRepository = scope.ServiceProvider.GetRequiredService<IReportSchemaRepository>();
             var reportDataRepository = scope.ServiceProvider.GetRequiredService<IReportDataRepository>();
+            var customExtractionRuleRepository = scope.ServiceProvider.GetRequiredService<ICustomExtractionRuleRepository>();
             
             // Get all schemas to determine which plugins use custom reports
             var schemas = await schemaRepository.GetAllAsync();
@@ -128,8 +131,20 @@ public class ExcelExportService(
                 
                 if (schemasDict.TryGetValue(taskKey, out var schema))
                 {
-                    // Create sheet with custom columns
-                    await CreateDynamicReportSheetAsync(workbook, taskKey, schema, projectId, reportDataRepository);
+                    if (string.Equals(taskKey, CustomExtractionTaskKey, StringComparison.OrdinalIgnoreCase))
+                    {
+                        await CreateCustomExtractionSheetAsync(
+                            workbook,
+                            taskKey,
+                            projectId,
+                            reportDataRepository,
+                            customExtractionRuleRepository);
+                    }
+                    else
+                    {
+                        // Create sheet with custom columns
+                        await CreateDynamicReportSheetAsync(workbook, taskKey, schema, projectId, reportDataRepository);
+                    }
                 }
                 else
                 {
@@ -328,6 +343,81 @@ public class ExcelExportService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error creating dynamic report sheet for {TaskKey}", taskKey);
+        }
+    }
+
+    private async Task CreateCustomExtractionSheetAsync(
+        XLWorkbook workbook,
+        string taskKey,
+        int projectId,
+        IReportDataRepository reportRepository,
+        ICustomExtractionRuleRepository ruleRepository)
+    {
+        try
+        {
+            var pivot = await CustomExtractionPivotBuilder
+                .BuildAsync(projectId, taskKey, reportRepository, ruleRepository)
+                .ConfigureAwait(false);
+
+            var sheetName = SanitizeSheetName(taskKey);
+            var ws = workbook.Worksheets.Add(sheetName);
+
+            ws.Cell(1, 1).Value = "Page";
+            for (int columnIndex = 0; columnIndex < pivot.Columns.Count; columnIndex++)
+            {
+                ws.Cell(1, columnIndex + 2).Value = pivot.Columns[columnIndex].DisplayName;
+            }
+
+            var headerEndCol = Math.Max(1, pivot.Columns.Count + 1);
+            ws.Range(1, 1, 1, headerEndCol).Style.Font.Bold = true;
+            ws.Range(1, 1, 1, headerEndCol).Style.Fill.BackgroundColor = XLColor.LightBlue;
+            ws.Row(1).Height = 20;
+
+            var rowIndex = 2;
+            foreach (var row in pivot.Rows)
+            {
+                var pageCell = ws.Cell(rowIndex, 1);
+                pageCell.Value = row.Page;
+
+                if (!string.IsNullOrWhiteSpace(row.Page) &&
+                    Uri.IsWellFormedUriString(row.Page, UriKind.Absolute))
+                {
+                    pageCell.SetHyperlink(new XLHyperlink(row.Page));
+                    pageCell.Style.Font.FontColor = XLColor.Blue;
+                    pageCell.Style.Font.Underline = XLFontUnderlineValues.Single;
+                }
+
+                for (int columnIndex = 0; columnIndex < pivot.Columns.Count; columnIndex++)
+                {
+                    var column = pivot.Columns[columnIndex];
+                    row.Values.TryGetValue(column.Key, out var value);
+                    ws.Cell(rowIndex, columnIndex + 2).Value = value ?? string.Empty;
+                }
+
+                rowIndex++;
+            }
+
+            if (rowIndex > 2)
+            {
+                ws.Range(1, 1, rowIndex - 1, headerEndCol).SetAutoFilter();
+            }
+
+            ws.Columns().AdjustToContents();
+            foreach (var column in ws.ColumnsUsed())
+            {
+                if (column.Width > 80)
+                {
+                    column.Width = 80;
+                }
+            }
+
+            ws.SheetView.FreezeRows(1);
+            logger.LogInformation("Created custom extraction worksheet '{SheetName}' with {Count} rows", sheetName, pivot.Rows.Count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error creating custom extraction sheet for {TaskKey}", taskKey);
+            throw;
         }
     }
     

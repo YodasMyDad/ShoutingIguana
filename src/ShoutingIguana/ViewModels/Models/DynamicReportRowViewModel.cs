@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Dynamic;
+using System.Net;
 using System.Runtime.CompilerServices;
 
 namespace ShoutingIguana.ViewModels.Models;
@@ -44,7 +45,7 @@ public class DynamicReportRowViewModel : DynamicObject, INotifyPropertyChanged
     /// </summary>
     public void SetValue(string columnName, object? value)
     {
-        _data[columnName] = value;
+        _data[columnName] = NormalizeValue(value);
         OnPropertyChanged(columnName);
     }
 
@@ -108,6 +109,16 @@ public class DynamicReportRowViewModel : DynamicObject, INotifyPropertyChanged
         }
 
         return vm;
+    }
+
+    private static object? NormalizeValue(object? value)
+    {
+        if (value is string text)
+        {
+            return WebUtility.HtmlDecode(text);
+        }
+
+        return value;
     }
 }
 

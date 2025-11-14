@@ -182,7 +182,7 @@
                         IsCancel="True"
                         AutomationProperties.Name="Cancel Export"
                         AutomationProperties.HelpText="Closes the export dialog without exporting"/>
-                <Button Command="{Binding OkAsyncCommand}"
+                <Button Command="{Binding OkCommand}"
                         Style="{StaticResource PrimaryButton}"
                         MinWidth="140"
                         Height="48"

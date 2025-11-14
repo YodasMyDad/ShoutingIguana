@@ -163,7 +163,10 @@ public partial class FindingsView
     private void ApplyDynamicColumnsToDataGrid(DataGrid dataGrid, FindingTabViewModel tab)
     {
         System.Diagnostics.Debug.WriteLine($"[FindingsView] Applying dynamic columns for {tab.DisplayName}: {tab.ReportColumns.Count} columns, {tab.ReportRows.Count} rows");
-        
+
+        var isCustomExtraction = string.Equals(tab.TaskKey, "CustomExtraction", StringComparison.OrdinalIgnoreCase);
+        ConfigureRowHeightForCustomExtraction(dataGrid, isCustomExtraction);
+
         // Clear existing columns
         dataGrid.Columns.Clear();
         
@@ -174,14 +177,28 @@ public partial class FindingsView
         // Generate columns from schema
         foreach (var column in tab.ReportColumns)
         {
-            var dataGridColumn = CreateColumnFromDefinition(column);
+            var dataGridColumn = CreateColumnFromDefinition(column, isCustomExtraction);
             dataGrid.Columns.Add(dataGridColumn);
         }
         
         System.Diagnostics.Debug.WriteLine($"[FindingsView] Applied {dataGrid.Columns.Count} columns to DataGrid");
     }
     
-    private DataGridColumn CreateColumnFromDefinition(ReportColumnViewModel column)
+    private void ConfigureRowHeightForCustomExtraction(DataGrid dataGrid, bool isCustomExtraction)
+    {
+        if (isCustomExtraction)
+        {
+            dataGrid.RowHeight = double.NaN; // Auto
+            dataGrid.MinRowHeight = 40;
+        }
+        else
+        {
+            dataGrid.ClearValue(DataGrid.RowHeightProperty);
+            dataGrid.ClearValue(DataGrid.MinRowHeightProperty);
+        }
+    }
+    
+    private DataGridColumn CreateColumnFromDefinition(ReportColumnViewModel column, bool isCustomExtraction)
     {
         if (string.Equals(column.Name, "Severity", StringComparison.OrdinalIgnoreCase))
         {
@@ -205,7 +222,7 @@ public partial class FindingsView
             
             case ReportColumnType.String:
             default:
-                return CreateTextColumn(column);
+                return CreateTextColumn(column, isCustomExtraction);
         }
     }
     
@@ -308,9 +325,9 @@ public partial class FindingsView
         };
     }
     
-    private DataGridTextColumn CreateTextColumn(ReportColumnViewModel column)
+    private DataGridTextColumn CreateTextColumn(ReportColumnViewModel column, bool wrapForCustomExtraction)
     {
-        return new DataGridTextColumn
+        var dataGridColumn = new DataGridTextColumn
         {
             Header = column.DisplayName,
             Binding = new Binding($"[{column.Name}]"),
@@ -318,6 +335,17 @@ public partial class FindingsView
             MinWidth = 100,
             CanUserSort = column.IsSortable
         };
+
+        if (wrapForCustomExtraction)
+        {
+            var textStyle = new Style(typeof(TextBlock));
+            textStyle.Setters.Add(new Setter(TextBlock.TextWrappingProperty, TextWrapping.Wrap));
+            textStyle.Setters.Add(new Setter(TextBlock.TextTrimmingProperty, TextTrimming.None));
+            textStyle.Setters.Add(new Setter(TextBlock.PaddingProperty, new Thickness(0, 2, 0, 2)));
+            dataGridColumn.ElementStyle = textStyle;
+        }
+
+        return dataGridColumn;
     }
     
     private DataGridHyperlinkColumn CreateUrlColumn(ReportColumnViewModel column)

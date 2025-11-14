@@ -628,20 +628,31 @@
                                                   AutomationProperties.HelpText="List of custom extraction rules. Select a rule to edit it."
                                                   AutomationProperties.LiveSetting="Polite"
                                                   CellEditEnding="DataGrid_CellEditEnding">
-                                            <DataGrid.Columns>
-                                                <DataGridTextColumn Header="Name" 
-                                                                    Binding="{Binding Name}" 
-                                                                    Width="*"
-                                                                    IsReadOnly="True"/>
-                                                <DataGridTextColumn Header="Type" 
-                                                                    Binding="{Binding SelectorType, Converter={StaticResource SelectorTypeConverter}}" 
-                                                                    Width="Auto"
-                                                                    IsReadOnly="True"/>
-                                                <DataGridCheckBoxColumn Header="Enabled"
-                                                                        Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" 
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Header="Name" 
+                                                                        Binding="{Binding Name}" 
+                                                                        Width="*"
+                                                                        IsReadOnly="True"/>
+                                                    <DataGridTextColumn Header="Type" 
+                                                                        Binding="{Binding SelectorType, Converter={StaticResource SelectorTypeConverter}}" 
                                                                         Width="Auto"
-                                                                        IsReadOnly="False"/>
-                                            </DataGrid.Columns>
+                                                                        IsReadOnly="True"/>
+                                                    <DataGridTemplateColumn Header="Selector"
+                                                                            Width="2*"
+                                                                            IsReadOnly="True">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate>
+                                                                <TextBlock Text="{Binding Selector}"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           ToolTip="{Binding Selector}"/>
+                                                            </DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                    <DataGridCheckBoxColumn Header="Enabled"
+                                                                            Binding="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" 
+                                                                            Width="Auto"
+                                                                            IsReadOnly="False"/>
+                                                </DataGrid.Columns>
                                         </DataGrid>
 
                                         <!-- List Actions -->

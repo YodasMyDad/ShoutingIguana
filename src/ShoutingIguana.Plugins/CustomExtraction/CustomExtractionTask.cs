@@ -89,13 +89,13 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
 
             if (extractedValues.Any())
             {
-                var valueSummary = extractedValues.Count > 0 ? extractedValues.First() : "(no values)";
-                if (valueSummary.Length > 100) valueSummary = valueSummary[..100] + "...";
+                var formattedValues = FormatExtractedValues(extractedValues);
                 
                 var row = ReportRow.Create()
                     .SetPage(ctx.Url)
                     .Set("RuleName", rule.Name)
-                    .Set("ExtractedValue", valueSummary)
+                    .Set("ExtractedValue", formattedValues)
+                    .Set("ExtractedValuesRaw", extractedValues.ToArray())
                     .Set("Selector", rule.Selector)
                     .Set("Count", extractedValues.Count)
                     .SetSeverity(Severity.Info);
@@ -117,6 +117,22 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
             
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
+    }
+
+    private static string FormatExtractedValues(List<string> values)
+    {
+        if (values.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        // Trim whitespace and collapse newline characters so the summary fits nicely in the grid/export
+        var cleaned = values
+            .Select(v => v?.Trim())
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v!.Trim());
+
+        return string.Join(Environment.NewLine, cleaned);
     }
 
     private List<string> ExtractByCssSelector(HtmlDocument doc, string cssSelector)

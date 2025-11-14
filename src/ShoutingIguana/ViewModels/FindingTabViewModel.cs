@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
 using ShoutingIguana.Core.Models;
+using ShoutingIguana.Core.Services;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.ViewModels.Models;
 
@@ -22,6 +23,8 @@ namespace ShoutingIguana.ViewModels;
 /// </summary>
 public partial class FindingTabViewModel : ObservableObject
 {
+    private const string CustomExtractionTaskKey = "CustomExtraction";
+
     [ObservableProperty]
     private string _taskKey = string.Empty;
 
@@ -77,6 +80,9 @@ public partial class FindingTabViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isDataLoaded;
+
+    private bool _isCustomExtractionReport;
+    private List<DynamicReportRowViewModel> _customExtractionAllRows = [];
 
     private int _projectId;
     private int _currentPage = 0;
@@ -277,7 +283,7 @@ public partial class FindingTabViewModel : ObservableObject
     
     private async Task LoadNextDynamicPageAsync()
     {
-        if (_schema == null) return;
+        if (_schema == null || _isCustomExtractionReport) return;
         
         try
         {
@@ -318,6 +324,30 @@ public partial class FindingTabViewModel : ObservableObject
     private async Task ApplyDynamicFiltersAsync()
     {
         if (_schema == null) return;
+        
+        if (_isCustomExtractionReport)
+        {
+            await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = true);
+            
+            try
+            {
+                var filtered = FilterCustomExtractionRows();
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    ReportRows = new ObservableCollection<DynamicReportRowViewModel>(filtered);
+                    TotalCount = filtered.Count;
+                    HasMoreItems = false;
+                    _currentPage = 0;
+                    OnPropertyChanged(nameof(VisibleItemCount));
+                });
+            }
+            finally
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = false);
+            }
+            
+            return;
+        }
         
         await Application.Current.Dispatcher.InvokeAsync(() => IsLoading = true);
         
@@ -372,6 +402,9 @@ public partial class FindingTabViewModel : ObservableObject
         try
         {
             _schema = schema;
+            _projectId = projectId;
+            _isCustomExtractionReport = false;
+            _customExtractionAllRows = [];
             
             // Load columns from schema
             var columnDefs = schema.GetColumns();
@@ -406,6 +439,47 @@ public partial class FindingTabViewModel : ObservableObject
             throw;
         }
     }
+
+    /// <summary>
+    /// Loads custom extraction data and pivots it into a per-page dataset.
+    /// </summary>
+    public async Task LoadCustomExtractionReportAsync(
+        Core.Models.ReportSchema schema,
+        Core.Repositories.IReportDataRepository reportRepository,
+        Core.Repositories.ICustomExtractionRuleRepository ruleRepository,
+        int projectId)
+    {
+        try
+        {
+            _schema = schema;
+            _projectId = projectId;
+            _isCustomExtractionReport = true;
+
+            var pivot = await CustomExtractionPivotBuilder
+                .BuildAsync(projectId, schema.TaskKey, reportRepository, ruleRepository)
+                .ConfigureAwait(false);
+
+            var columnVms = BuildCustomExtractionColumns(pivot.Columns);
+            var rowVms = BuildCustomExtractionRows(pivot);
+
+            _customExtractionAllRows = rowVms;
+
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                ReportColumns = new ObservableCollection<ReportColumnViewModel>(columnVms);
+                ReportRows = new ObservableCollection<DynamicReportRowViewModel>(rowVms);
+                TotalCount = rowVms.Count;
+                HasMoreItems = false;
+                _currentPage = 0;
+                OnPropertyChanged(nameof(VisibleItemCount));
+            });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error loading custom extraction report for {DisplayName}: {ex.Message}");
+            throw;
+        }
+    }
     
     private IEnumerable<ReportColumnViewModel> GetActiveReportColumns()
     {
@@ -421,6 +495,107 @@ public partial class FindingTabViewModel : ObservableObject
         }
 
         return schemaColumns.Select(ReportColumnViewModel.FromModel);
+    }
+
+    private static List<ReportColumnViewModel> BuildCustomExtractionColumns(
+        IReadOnlyList<CustomExtractionPivotBuilder.PivotColumn> columns)
+    {
+        var result = new List<ReportColumnViewModel>
+        {
+            new()
+            {
+                Name = "Page",
+                DisplayName = "Page",
+                ColumnType = ReportColumnType.Url,
+                Width = 400,
+                IsSortable = true,
+                IsFilterable = true,
+                IsPrimaryKey = true
+            }
+        };
+
+        foreach (var column in columns)
+        {
+            result.Add(new ReportColumnViewModel
+            {
+                Name = column.Key,
+                DisplayName = column.DisplayName,
+                ColumnType = ReportColumnType.String,
+                Width = 250,
+                IsSortable = true,
+                IsFilterable = true
+            });
+        }
+
+        return result;
+    }
+
+    private static List<DynamicReportRowViewModel> BuildCustomExtractionRows(
+        CustomExtractionPivotBuilder.PivotResult pivot)
+    {
+        var rows = new List<DynamicReportRowViewModel>();
+        var taskKey = CustomExtractionTaskKey;
+
+        foreach (var row in pivot.Rows)
+        {
+            var vm = new DynamicReportRowViewModel
+            {
+                Id = rows.Count + 1,
+                TaskKey = taskKey
+            };
+
+            vm.SetValue("Page", row.Page);
+            vm.SetValue("Severity", row.Severity);
+
+            foreach (var column in pivot.Columns)
+            {
+                row.Values.TryGetValue(column.Key, out var value);
+                vm.SetValue(column.Key, value ?? string.Empty);
+            }
+
+            rows.Add(vm);
+        }
+
+        return rows;
+    }
+
+    private List<DynamicReportRowViewModel> FilterCustomExtractionRows()
+    {
+        IEnumerable<DynamicReportRowViewModel> query = _customExtractionAllRows;
+
+        if (!string.IsNullOrWhiteSpace(SearchText))
+        {
+            query = query.Where(row => RowContainsSearch(row, SearchText));
+        }
+
+        if (SelectedSeverity.HasValue)
+        {
+            var severityText = SelectedSeverity.Value.ToString();
+            query = query.Where(row =>
+                string.Equals(row.GetValue("Severity")?.ToString(), severityText, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return query.ToList();
+    }
+
+    private static bool RowContainsSearch(DynamicReportRowViewModel row, string searchText)
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            return true;
+        }
+
+        foreach (var columnName in row.GetColumnNames())
+        {
+            var value = row.GetValue(columnName)?.ToString();
+            if (!string.IsNullOrWhiteSpace(value) &&
+                value.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string FormatColumnValue(object? value, ReportColumnType columnType)

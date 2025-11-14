@@ -18,6 +18,8 @@ namespace ShoutingIguana.ViewModels;
 
 public partial class FindingsViewModel : ObservableObject, IDisposable
 {
+    private const string CustomExtractionTaskKey = "CustomExtraction";
+
     private readonly ILogger<FindingsViewModel> _logger;
     private readonly IExcelExportService _excelExportService;
     private readonly IProjectContext _projectContext;
@@ -299,7 +301,15 @@ public partial class FindingsViewModel : ObservableObject, IDisposable
                         var taskSchema = await schemaRepo.GetByTaskKeyAsync(taskKey);
                         if (taskSchema != null)
                         {
-                            await tab.LoadDynamicReportAsync(taskSchema, reportDataRepo, projectId);
+                            if (string.Equals(taskKey, CustomExtractionTaskKey, StringComparison.OrdinalIgnoreCase))
+                            {
+                                var ruleRepo = lazyScope.ServiceProvider.GetRequiredService<Core.Repositories.ICustomExtractionRuleRepository>();
+                                await tab.LoadCustomExtractionReportAsync(taskSchema, reportDataRepo, ruleRepo, projectId);
+                            }
+                            else
+                            {
+                                await tab.LoadDynamicReportAsync(taskSchema, reportDataRepo, projectId);
+                            }
                         }
                     });
                 }
