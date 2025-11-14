@@ -278,7 +278,13 @@ public partial class FindingTabViewModel : ObservableObject
             var repository = scope.ServiceProvider.GetRequiredService<Core.Repositories.IReportDataRepository>();
             
             // Load next page from database
-            var nextRows = await repository.GetByTaskKeyAsync(_projectId, _schema.TaskKey, page: _currentPage, pageSize: PageSize);
+            var nextRows = await repository.GetByTaskKeyAsync(
+                _projectId,
+                _schema.TaskKey,
+                page: _currentPage,
+                pageSize: PageSize,
+                searchText: SearchText,
+                severityFilter: SelectedSeverity);
             var rowVms = nextRows.Select(DynamicReportRowViewModel.FromModel).ToList();
             
             await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -344,19 +350,21 @@ public partial class FindingTabViewModel : ObservableObject
             using var scope = host.Services.CreateScope();
             var repository = scope.ServiceProvider.GetRequiredService<Core.Repositories.IReportDataRepository>();
             
-            // For now, reload first page with filters (can be optimized later with in-memory filtering)
-            var reportRows = await repository.GetByTaskKeyAsync(_projectId, _schema.TaskKey, page: 0, pageSize: PageSize, searchText: SearchText);
+            var reportRows = await repository.GetByTaskKeyAsync(
+                _projectId,
+                _schema.TaskKey,
+                page: 0,
+                pageSize: PageSize,
+                searchText: SearchText,
+                severityFilter: SelectedSeverity);
             
-            // Client-side severity filtering (since it's stored as string in JSON)
             var rowVms = reportRows.Select(DynamicReportRowViewModel.FromModel).ToList();
             
-            if (SelectedSeverity.HasValue)
-            {
-                var severityFilter = SelectedSeverity.Value.ToString();
-                rowVms = rowVms.Where(r => r.GetValue("Severity")?.ToString() == severityFilter).ToList();
-            }
-            
-            var totalCount = await repository.GetCountByTaskKeyAsync(_projectId, _schema.TaskKey, SearchText);
+            var totalCount = await repository.GetCountByTaskKeyAsync(
+                _projectId,
+                _schema.TaskKey,
+                SearchText,
+                SelectedSeverity);
             
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
@@ -397,11 +405,21 @@ public partial class FindingTabViewModel : ObservableObject
             }
             
             // Load first page of data from database
-            var reportRows = await repository.GetByTaskKeyAsync(projectId, schema.TaskKey, page: 0, pageSize: PageSize);
+            var reportRows = await repository.GetByTaskKeyAsync(
+                projectId,
+                schema.TaskKey,
+                page: 0,
+                pageSize: PageSize,
+                searchText: SearchText,
+                severityFilter: SelectedSeverity);
             var rowVms = reportRows.Select(DynamicReportRowViewModel.FromModel).ToList();
             
             // Get total count
-            var totalCount = await repository.GetCountByTaskKeyAsync(projectId, schema.TaskKey);
+            var totalCount = await repository.GetCountByTaskKeyAsync(
+                projectId,
+                schema.TaskKey,
+                SearchText,
+                SelectedSeverity);
             
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {

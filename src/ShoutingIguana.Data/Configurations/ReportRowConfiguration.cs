@@ -27,6 +27,14 @@ public class ReportRowConfiguration : IEntityTypeConfiguration<ReportRow>
         
         builder.Property(rr => rr.CreatedUtc)
             .IsRequired();
+
+        builder.Property(rr => rr.Severity)
+            .HasConversion<int?>()
+            .IsRequired(false);
+
+        builder.Property(rr => rr.IssueText)
+            .HasMaxLength(512)
+            .IsRequired(false);
         
         // Relationships
         builder.HasOne(rr => rr.Project)
@@ -54,6 +62,7 @@ public class ReportRowConfiguration : IEntityTypeConfiguration<ReportRow>
         
         // Composite index for common query pattern
         builder.HasIndex(rr => new { rr.ProjectId, rr.TaskKey });
+        builder.HasIndex(rr => new { rr.ProjectId, rr.TaskKey, rr.Severity, rr.Id });
+        builder.HasIndex(rr => new { rr.ProjectId, rr.TaskKey, rr.IssueText });
     }
 }
-

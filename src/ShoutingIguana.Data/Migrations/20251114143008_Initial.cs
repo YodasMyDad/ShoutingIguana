@@ -383,7 +383,9 @@ namespace ShoutingIguana.Data.Migrations
                     TaskKey = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
                     UrlId = table.Column<int>(type: "INTEGER", nullable: true),
                     RowDataJson = table.Column<string>(type: "TEXT", nullable: false),
-                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    CreatedUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    Severity = table.Column<int>(type: "INTEGER", nullable: true),
+                    IssueText = table.Column<string>(type: "TEXT", maxLength: 512, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -562,6 +564,16 @@ namespace ShoutingIguana.Data.Migrations
                 name: "IX_ReportRows_ProjectId_TaskKey",
                 table: "ReportRows",
                 columns: new[] { "ProjectId", "TaskKey" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ReportRows_ProjectId_TaskKey_IssueText",
+                table: "ReportRows",
+                columns: new[] { "ProjectId", "TaskKey", "IssueText" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ReportRows_ProjectId_TaskKey_Severity_Id",
+                table: "ReportRows",
+                columns: new[] { "ProjectId", "TaskKey", "Severity", "Id" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_ReportRows_TaskKey",

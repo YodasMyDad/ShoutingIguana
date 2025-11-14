@@ -23,7 +23,9 @@ public class LinkRepository(IShoutingIguanaDbContext context) : ILinkRepository
     public async Task<IEnumerable<Link>> GetByFromUrlIdAsync(int fromUrlId)
     {
         return await context.Links
+            .AsNoTracking()
             .Where(l => l.FromUrlId == fromUrlId)
+            .Include(l => l.ToUrl)
             .ToListAsync().ConfigureAwait(false);
     }
 

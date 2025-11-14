@@ -15,7 +15,7 @@ namespace ShoutingIguana.Data.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "9.0.10");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
 
             modelBuilder.Entity("ShoutingIguana.Core.Models.CrawlCheckpoint", b =>
                 {
@@ -461,12 +461,19 @@ namespace ShoutingIguana.Data.Migrations
                     b.Property<DateTime>("CreatedUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("IssueText")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("ProjectId")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("RowDataJson")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("Severity")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("TaskKey")
                         .IsRequired()
@@ -487,6 +494,10 @@ namespace ShoutingIguana.Data.Migrations
                     b.HasIndex("UrlId");
 
                     b.HasIndex("ProjectId", "TaskKey");
+
+                    b.HasIndex("ProjectId", "TaskKey", "IssueText");
+
+                    b.HasIndex("ProjectId", "TaskKey", "Severity", "Id");
 
                     b.ToTable("ReportRows", (string)null);
                 });

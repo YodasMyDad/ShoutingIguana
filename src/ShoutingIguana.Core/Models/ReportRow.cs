@@ -14,6 +14,8 @@ public class ReportRow
     public int? UrlId { get; set; } // Nullable for aggregate reports
     public string RowDataJson { get; set; } = string.Empty;
     public DateTime CreatedUtc { get; set; }
+    public PluginSdk.Severity? Severity { get; set; }
+    public string? IssueText { get; set; }
     
     // Navigation properties
     public Project Project { get; set; } = null!;

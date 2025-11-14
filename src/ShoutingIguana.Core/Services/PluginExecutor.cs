@@ -123,6 +123,7 @@ internal class ReportSink(int? urlId, int projectId, IServiceProvider servicePro
     private readonly IServiceProvider _serviceProvider = serviceProvider;
     private readonly ILogger _logger = logger;
     private readonly List<ShoutingIguana.Core.Models.ReportRow> _pendingRows = [];
+    private const int IssueTextMaxLength = 512;
 
     public async Task ReportAsync(string taskKey, PluginSdk.ReportRow row, int? urlId = null, CancellationToken ct = default)
     {
@@ -138,6 +139,8 @@ internal class ReportSink(int? urlId, int projectId, IServiceProvider servicePro
             
             // Set row data using the helper method
             reportRow.SetData(row);
+            reportRow.Severity = ExtractSeverity(row);
+            reportRow.IssueText = ExtractIssueText(row);
 
             // Batch rows - don't save immediately
             _pendingRows.Add(reportRow);
@@ -176,6 +179,78 @@ internal class ReportSink(int? urlId, int projectId, IServiceProvider servicePro
             _logger.LogError(ex, "Error flushing report rows to database");
             // Rows remain in _pendingRows for potential retry or investigation
         }
+    }
+
+    private static PluginSdk.Severity? ExtractSeverity(PluginSdk.ReportRow row)
+    {
+        var severityValue = row.Get("Severity");
+        if (severityValue == null)
+        {
+            return null;
+        }
+
+        if (severityValue is PluginSdk.Severity severityEnum)
+        {
+            return severityEnum;
+        }
+
+        if (severityValue is string severityText &&
+            Enum.TryParse<PluginSdk.Severity>(severityText, true, out var parsedSeverity))
+        {
+            return parsedSeverity;
+        }
+
+        if (severityValue is int severityInt &&
+            Enum.IsDefined(typeof(PluginSdk.Severity), severityInt))
+        {
+            return (PluginSdk.Severity)severityInt;
+        }
+
+        if (severityValue is IConvertible convertible)
+        {
+            var converted = convertible.ToInt32(null);
+            if (Enum.IsDefined(typeof(PluginSdk.Severity), converted))
+            {
+                return (PluginSdk.Severity)converted;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ExtractIssueText(PluginSdk.ReportRow row)
+    {
+        var candidates = new[] { "Issue", "Message", "Description", "Explanation" };
+
+        foreach (var candidate in candidates)
+        {
+            var value = row.Get(candidate);
+            var normalized = NormalizeIssueText(value);
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                return normalized.Length <= IssueTextMaxLength
+                    ? normalized
+                    : normalized[..IssueTextMaxLength];
+            }
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeIssueText(object? value)
+    {
+        if (value == null)
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            string text => text.Trim(),
+            Uri uri => uri.ToString(),
+            IFormattable formattable => formattable.ToString(null, null)?.Trim(),
+            _ => value.ToString()?.Trim()
+        };
     }
 }
 

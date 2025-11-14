@@ -181,9 +181,7 @@ public class RepositoryAccessor(
         {
             using var scope = _serviceProvider.CreateScope();
             var linkRepository = scope.ServiceProvider.GetRequiredService<ILinkRepository>();
-            var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
             
-            // OPTIMIZED: Use specific query instead of loading all links for the project
             var outgoingLinks = (await linkRepository.GetByFromUrlIdAsync(fromUrlId)).ToList();
             
             if (outgoingLinks.Count == 0)
@@ -191,18 +189,11 @@ public class RepositoryAccessor(
                 return new List<PluginSdk.LinkInfo>();
             }
             
-            // OPTIMIZED: Only fetch the specific target URLs we need, not all URLs in the project
-            var targetUrlIds = outgoingLinks.Select(l => l.ToUrlId).Distinct().ToList();
-            var allUrls = await urlRepository.GetByProjectIdAsync(projectId);
-            var urlLookup = allUrls
-                .Where(u => targetUrlIds.Contains(u.Id))
-                .ToDictionary(u => u.Id, u => u.Address);
-            
             // Map to LinkInfo DTOs with diagnostic metadata
             return outgoingLinks.Select(link => new PluginSdk.LinkInfo(
                 link.FromUrlId,
                 link.ToUrlId,
-                urlLookup.GetValueOrDefault(link.ToUrlId) ?? "Unknown",
+                link.ToUrl?.Address ?? "Unknown",
                 link.AnchorText,
                 link.LinkType.ToString(),
                 link.DomPath,

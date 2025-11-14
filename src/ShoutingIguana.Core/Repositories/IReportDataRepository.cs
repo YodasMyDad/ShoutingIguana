@@ -1,4 +1,5 @@
-using ShoutingIguana.Core.Models;
+using ShoutingIguana.PluginSdk;
+using ReportRowModel = ShoutingIguana.Core.Models.ReportRow;
 
 namespace ShoutingIguana.Core.Repositories;
 
@@ -18,34 +19,35 @@ public interface IReportDataRepository
     /// <param name="sortColumn">Optional column name to sort by</param>
     /// <param name="sortDescending">Sort direction</param>
     /// <returns>List of report rows for the requested page</returns>
-    Task<List<ReportRow>> GetByTaskKeyAsync(
+    Task<List<ReportRowModel>> GetByTaskKeyAsync(
         int projectId, 
         string taskKey, 
         int page = 0, 
         int pageSize = 100,
         string? searchText = null,
         string? sortColumn = null,
-        bool sortDescending = false);
+        bool sortDescending = false,
+        Severity? severityFilter = null);
     
     /// <summary>
     /// Gets the total count of report rows for a task (used for paging).
     /// </summary>
-    Task<int> GetCountByTaskKeyAsync(int projectId, string taskKey, string? searchText = null);
+    Task<int> GetCountByTaskKeyAsync(int projectId, string taskKey, string? searchText = null, Severity? severityFilter = null);
     
     /// <summary>
     /// Gets report rows by URL ID.
     /// </summary>
-    Task<List<ReportRow>> GetByUrlIdAsync(int urlId);
+    Task<List<ReportRowModel>> GetByUrlIdAsync(int urlId);
     
     /// <summary>
     /// Creates a single report row.
     /// </summary>
-    Task<ReportRow> CreateAsync(ReportRow row);
+    Task<ReportRowModel> CreateAsync(ReportRowModel row);
     
     /// <summary>
     /// Creates multiple report rows in a batch (more efficient).
     /// </summary>
-    Task CreateBatchAsync(IEnumerable<ReportRow> rows);
+    Task CreateBatchAsync(IEnumerable<ReportRowModel> rows);
     
     /// <summary>
     /// Deletes all report rows for a project.
