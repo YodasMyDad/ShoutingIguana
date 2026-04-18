@@ -78,7 +78,7 @@ dotnet ef migrations add <Name> `
 .\cleanplaywright.ps1
 ```
 
-There is **no test project** in this repo. If you add tests, create `ShoutingIguana.Tests` (**NUnit + Moq + Shouldly**) and mirror the `src/` layout.
+Tests live in `src/ShoutingIguana.Tests` (**xUnit + Moq**, `net10.0-windows`). Mirror the `src/` layout when adding new suites.
 
 ## Entry point and bootstrapping
 

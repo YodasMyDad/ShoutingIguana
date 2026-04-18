@@ -46,6 +46,12 @@ public class CrawlEngine(
     // SSRF policy for the current crawl (set in RunCrawlAsync from ProjectSettings)
     private bool _allowPrivateNetworkTargets;
 
+    // Cache of HttpClients keyed by proxy config, used by FetchStaticResourceAsync when a proxy
+    // is active. HttpClientFactory cannot express per-request proxy config without a named client
+    // per proxy, so one client is built on first use and reused for the rest of the crawl. Cleared
+    // and disposed on StopCrawlAsync / StartCrawlAsync.
+    private readonly ConcurrentDictionary<string, HttpClient> _proxiedStaticClients = new();
+
     public bool IsCrawling => Interlocked.CompareExchange(ref _isCrawling, 0, 0) == 1;
     public bool IsPaused => !_pauseEvent.IsSet;
     public event EventHandler<CrawlProgressEventArgs>? ProgressUpdated;
@@ -57,6 +63,8 @@ public class CrawlEngine(
             logger.LogWarning("Crawl is already running");
             return Task.CompletedTask;
         }
+
+        DisposeProxiedStaticClients();
 
         Interlocked.Exchange(ref _isCrawling, 1);
         _pauseEvent.Set();
@@ -137,6 +145,7 @@ public class CrawlEngine(
                 _cts?.Dispose();
                 _cts = null;
                 _crawlTask = null;
+                DisposeProxiedStaticClients();
             }
         }
     }
@@ -882,12 +891,14 @@ public class CrawlEngine(
 
     /// <summary>
     /// Returns an HttpClient for static-resource fetches. Uses the shared "crawl-static" named
-    /// factory client when no proxy is configured (socket-pool reuse); when a proxy is required
-    /// a transient client with its own handler is returned and the caller must dispose it.
+    /// factory client when no proxy is configured (socket-pool reuse). When a proxy is active,
+    /// returns a cached client keyed by proxy config — one per distinct proxy for the lifetime of
+    /// the crawl — so the socket pool is reused across fetches instead of being rebuilt per URL.
+    /// The cache is cleared + disposed on StopCrawlAsync / StartCrawlAsync; callers never own the client.
     /// Per-request headers (User-Agent, Accept, ...) must be applied via <see cref="ApplyStaticResourceHeaders"/>
     /// on the HttpRequestMessage so the shared client stays thread-safe.
     /// </summary>
-    private (HttpClient client, bool ownsClient) GetStaticResourceHttpClient(ProxySettings? proxySettings)
+    private HttpClient GetStaticResourceHttpClient(ProxySettings? proxySettings)
     {
         bool proxyActive = proxySettings?.Enabled == true
             && !string.IsNullOrWhiteSpace(proxySettings.Server)
@@ -900,9 +911,24 @@ public class CrawlEngine(
 
         if (!proxyActive)
         {
-            return (httpClientFactory.CreateClient("crawl-static"), false);
+            return httpClientFactory.CreateClient("crawl-static");
         }
 
+        var key = BuildProxyClientKey(proxySettings!);
+        return _proxiedStaticClients.GetOrAdd(key, _ => BuildProxiedStaticClient(proxySettings!));
+    }
+
+    private static string BuildProxyClientKey(ProxySettings proxySettings)
+        => string.Join('|',
+            proxySettings.Type,
+            proxySettings.Server,
+            proxySettings.Port,
+            proxySettings.Username,
+            proxySettings.EncryptedPassword,
+            string.Join(',', proxySettings.BypassList));
+
+    private HttpClient BuildProxiedStaticClient(ProxySettings proxySettings)
+    {
         var handler = new HttpClientHandler
         {
             AllowAutoRedirect = false,
@@ -910,7 +936,7 @@ public class CrawlEngine(
             UseCookies = false
         };
 
-        var proxyUri = new Uri(proxySettings!.GetProxyUrl());
+        var proxyUri = new Uri(proxySettings.GetProxyUrl());
         handler.Proxy = new System.Net.WebProxy(proxyUri)
         {
             BypassProxyOnLocal = true,
@@ -925,13 +951,28 @@ public class CrawlEngine(
         }
 
         handler.UseProxy = true;
-        logger.LogDebug("Using proxy {ProxyUrl} for static resource requests", proxySettings.GetRedactedProxyUrl());
+        logger.LogDebug("Caching HttpClient for proxy {ProxyUrl} (reused for remainder of crawl)", proxySettings.GetRedactedProxyUrl());
 
-        var client = new HttpClient(handler, disposeHandler: true)
+        return new HttpClient(handler, disposeHandler: true)
         {
             Timeout = TimeSpan.FromSeconds(30)
         };
-        return (client, true);
+    }
+
+    private void DisposeProxiedStaticClients()
+    {
+        foreach (var client in _proxiedStaticClients.Values)
+        {
+            try
+            {
+                client.Dispose();
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Error disposing cached proxied HttpClient");
+            }
+        }
+        _proxiedStaticClients.Clear();
     }
 
     private static void ApplyStaticResourceHeaders(HttpRequestMessage request, string userAgent)
@@ -976,7 +1017,7 @@ public class CrawlEngine(
             };
         }
 
-        var (httpClient, ownsClient) = GetStaticResourceHttpClient(proxySettings);
+        var httpClient = GetStaticResourceHttpClient(proxySettings);
 
         try
         {
@@ -1032,13 +1073,6 @@ public class CrawlEngine(
                 ErrorMessage = ex.Message,
                 IsHtml = false
             };
-        }
-        finally
-        {
-            if (ownsClient)
-            {
-                httpClient.Dispose();
-            }
         }
     }
 

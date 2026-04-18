@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(dotnet build *)",
-      "Bash(git --no-pager diff CLAUDE.md)"
+      "Bash(git --no-pager diff CLAUDE.md)",
+      "Bash(dotnet test *)"
     ]
   }
 }
