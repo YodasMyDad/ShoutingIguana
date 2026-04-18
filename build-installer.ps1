@@ -15,6 +15,20 @@ $ErrorActionPreference = "Stop"
 $ProjectPath = "src\ShoutingIguana\ShoutingIguana.csproj"
 $InnoSetupCompiler = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 
+# Read version from Directory.Build.props (single source of truth)
+$PropsPath = Join-Path $PSScriptRoot "Directory.Build.props"
+if (-not (Test-Path $PropsPath)) {
+    Write-Error "Directory.Build.props not found at: $PropsPath"
+    exit 1
+}
+$Version = ([xml](Get-Content $PropsPath)).Project.PropertyGroup.Version |
+    Where-Object { $_ } | Select-Object -First 1
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    Write-Error "Could not read <Version> from $PropsPath"
+    exit 1
+}
+Write-Host "Version from Directory.Build.props: $Version" -ForegroundColor Cyan
+
 # Check if Inno Setup is installed
 if (-not (Test-Path $InnoSetupCompiler)) {
     Write-Error "Inno Setup compiler not found at: $InnoSetupCompiler"
@@ -62,7 +76,7 @@ function Build-Platform {
     # Create installer
     Write-Host "`nCreating installer for $Arch..." -ForegroundColor Yellow
     
-    $installerArgs = "/DPlatform=$Arch", "Installer.iss"
+    $installerArgs = "/DPlatform=$Arch", "/DMyAppVersion=$Version", "Installer.iss"
     & $InnoSetupCompiler $installerArgs
     
     if ($LASTEXITCODE -ne 0) {
@@ -125,10 +139,10 @@ Write-Host "========================================" -ForegroundColor Green
 Write-Host "`nInstallers are located in: publish\installer\" -ForegroundColor Cyan
 
 if ($Platform -eq "Both") {
-    Write-Host "  - ShoutingIguana-x64.exe" -ForegroundColor White
-    Write-Host "  - ShoutingIguana-x86.exe" -ForegroundColor White
+    Write-Host "  - ShoutingIguana-Setup-$Version-x64.exe" -ForegroundColor White
+    Write-Host "  - ShoutingIguana-Setup-$Version-x86.exe" -ForegroundColor White
 } else {
-    Write-Host "  - ShoutingIguana-$Platform.exe" -ForegroundColor White
+    Write-Host "  - ShoutingIguana-Setup-$Version-$Platform.exe" -ForegroundColor White
 }
 
 Write-Host ""

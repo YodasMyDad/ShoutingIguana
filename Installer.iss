@@ -2,7 +2,9 @@
 ; Supports both x86 and x64 builds
 
 #define MyAppName "Shouting Iguana"
-#define MyAppVersion "0.1.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0"
+#endif
 #define MyAppPublisher "Lee Messenger"
 #define MyAppExeName "ShoutingIguana.exe"
 
@@ -26,7 +28,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 OutputDir=publish\installer
-OutputBaseFilename=ShoutingIguana-{#PlatformName}
+OutputBaseFilename=ShoutingIguana-Setup-{#MyAppVersion}-{#PlatformName}
 SetupIconFile=Assets\logo.ico
 WizardImageFile=Assets\logo.png
 UninstallDisplayIcon={app}\Assets\logo.ico

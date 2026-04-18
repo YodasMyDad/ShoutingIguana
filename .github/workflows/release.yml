@@ -1,0 +1,115 @@
+name: release
+
+# Fires on every push to master/main.
+# Each run:
+#   - Bumps the patch version in Directory.Build.props (e.g. 1.0.0 -> 1.0.1)
+#   - Restores + builds the solution, runs xunit tests
+#   - Builds x86 and x64 installers via Inno Setup (build-installer.ps1)
+#   - Commits the bumped Directory.Build.props back with [skip ci]
+#   - Creates a v{version} tag + GitHub Release with both installer .exes attached
+#
+# Minor/major bumps are manual: edit <Version> in Directory.Build.props.
+#
+# Prerequisites (one-time, in GitHub UI):
+#   1. Settings -> Actions -> General -> Workflow permissions
+#      "Read and write permissions" must be enabled.
+#   2. master/main must NOT have a branch-protection rule blocking
+#      direct pushes from GITHUB_TOKEN.
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build + test but skip commit-back, tag, and GitHub Release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, test, package, release
+    runs-on: windows-latest
+    # Skip when the head commit is the workflow's own version-bump commit.
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') && github.actor != 'github-actions[bot]' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Bump patch version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROPS=Directory.Build.props
+          CURRENT=$(sed -n 's|.*<Version>\([^<]*\)</Version>.*|\1|p' "$PROPS" | head -1)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          NEW_ASSEMBLY="${NEW_VERSION}.0"
+          echo "Current version: $CURRENT"
+          echo "New version:     $NEW_VERSION"
+          sed -i "s|<Version>${CURRENT}</Version>|<Version>${NEW_VERSION}</Version>|" "$PROPS"
+          sed -i "s|<AssemblyVersion>${CURRENT}.0</AssemblyVersion>|<AssemblyVersion>${NEW_ASSEMBLY}</AssemblyVersion>|" "$PROPS"
+          sed -i "s|<FileVersion>${CURRENT}.0</FileVersion>|<FileVersion>${NEW_ASSEMBLY}</FileVersion>|" "$PROPS"
+          sed -i "s|<InformationalVersion>${CURRENT}</InformationalVersion>|<InformationalVersion>${NEW_VERSION}</InformationalVersion>|" "$PROPS"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "--- Directory.Build.props after bump ---"
+          cat "$PROPS"
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Restore
+        run: dotnet restore ShoutingIguana.sln
+
+      - name: Build (Release)
+        run: dotnet build ShoutingIguana.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test src/ShoutingIguana.Tests/ShoutingIguana.Tests.csproj -c Release --no-build --verbosity normal
+
+      - name: Build installers (x86 + x64)
+        shell: pwsh
+        run: ./build-installer.ps1 -Platform Both -Configuration Release
+
+      - name: List installer output
+        shell: pwsh
+        run: Get-ChildItem publish/installer
+
+      - name: Commit + tag + push
+        if: ${{ inputs.dry_run != true }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BRANCH: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Directory.Build.props
+          git commit -m "Release v${VERSION} [skip ci]"
+          git tag "v${VERSION}"
+          git push origin "HEAD:${BRANCH}" --follow-tags
+
+      - name: Create GitHub Release
+        if: ${{ inputs.dry_run != true }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          files: |
+            publish/installer/ShoutingIguana-Setup-*-x64.exe
+            publish/installer/ShoutingIguana-Setup-*-x86.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
