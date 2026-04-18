@@ -9,11 +9,12 @@ public class SitemapService(
     IHttpClientFactory httpClientFactory,
     IRobotsService robotsService) : ISitemapService
 {
-    private readonly ILogger<SitemapService> _logger = logger;
-    private readonly HttpClient _httpClient = CreateHttpClient(httpClientFactory);
-    private readonly IRobotsService _robotsService = robotsService;
-
+    private const string HttpClientName = "sitemap";
     private const int MaxSitemapUrls = 50000;
+    private const int MaxSitemapsPerRobotsListing = 50;
+    private const int MaxSitemapBytes = 50 * 1024 * 1024;
+    private const int MaxConcurrentSitemapFetches = 5;
+    private static readonly TimeSpan PerFetchTimeout = TimeSpan.FromSeconds(30);
 
     private static readonly string[] CommonSitemapLocations =
     [
@@ -27,38 +28,35 @@ public class SitemapService(
         "/sitemap-posts.xml"
     ];
 
-    private static HttpClient CreateHttpClient(IHttpClientFactory factory)
-    {
-        var client = factory.CreateClient();
-        client.Timeout = TimeSpan.FromSeconds(10);
-        return client;
-    }
-
     public async Task<List<string>> DiscoverSitemapUrlsAsync(string baseUrl)
     {
         try
         {
             if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri))
             {
-                _logger.LogWarning("Invalid base URL for sitemap discovery: {BaseUrl}", baseUrl);
+                logger.LogWarning("Invalid base URL for sitemap discovery: {BaseUrl}", baseUrl);
                 return [];
             }
 
             var discoveredUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var sitemapLocations = new List<string>();
             var visitedSitemaps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using var fetchGate = new SemaphoreSlim(MaxConcurrentSitemapFetches, MaxConcurrentSitemapFetches);
 
-            // First, check robots.txt for sitemap directives
-            _logger.LogInformation("Checking robots.txt for sitemap URLs at {BaseUrl}", baseUrl);
-            var robotsSitemaps = await _robotsService.GetSitemapUrlsFromRobotsTxtAsync(baseUrl).ConfigureAwait(false);
-            if (robotsSitemaps.Any())
+            logger.LogInformation("Checking robots.txt for sitemap URLs at {BaseUrl}", baseUrl);
+            var robotsSitemaps = await robotsService.GetSitemapUrlsFromRobotsTxtAsync(baseUrl).ConfigureAwait(false);
+            if (robotsSitemaps.Count > MaxSitemapsPerRobotsListing)
             {
-                _logger.LogInformation("Found {Count} sitemap(s) in robots.txt", robotsSitemaps.Count);
+                logger.LogWarning("robots.txt for {BaseUrl} lists {Count} sitemaps which exceeds the safety cap of {Cap}; truncating", baseUrl, robotsSitemaps.Count, MaxSitemapsPerRobotsListing);
+                robotsSitemaps = robotsSitemaps.Take(MaxSitemapsPerRobotsListing).ToList();
+            }
+            if (robotsSitemaps.Count > 0)
+            {
+                logger.LogInformation("Found {Count} sitemap(s) in robots.txt", robotsSitemaps.Count);
                 sitemapLocations.AddRange(robotsSitemaps);
             }
 
-            // Then check common locations
-            _logger.LogDebug("Checking common sitemap locations");
+            logger.LogDebug("Checking common sitemap locations");
             foreach (var location in CommonSitemapLocations)
             {
                 var sitemapUrl = $"{baseUri.Scheme}://{baseUri.Host}{location}";
@@ -68,83 +66,109 @@ public class SitemapService(
                 }
             }
 
-            // Process all sitemap locations
             foreach (var sitemapUrl in sitemapLocations)
             {
                 if (discoveredUrls.Count >= MaxSitemapUrls)
                 {
-                    _logger.LogWarning("Reached maximum sitemap URL limit of {Max}, stopping discovery", MaxSitemapUrls);
+                    logger.LogWarning("Reached maximum sitemap URL limit of {Max}, stopping discovery", MaxSitemapUrls);
                     break;
                 }
 
-                await ProcessSitemapAsync(sitemapUrl, discoveredUrls, visitedSitemaps).ConfigureAwait(false);
+                await ProcessSitemapAsync(sitemapUrl, discoveredUrls, visitedSitemaps, fetchGate).ConfigureAwait(false);
             }
 
-            _logger.LogInformation("Sitemap discovery completed. Found {Count} URLs", discoveredUrls.Count);
+            logger.LogInformation("Sitemap discovery completed. Found {Count} URLs", discoveredUrls.Count);
             return discoveredUrls.ToList();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during sitemap discovery for {BaseUrl}", baseUrl);
+            logger.LogError(ex, "Error during sitemap discovery for {BaseUrl}", baseUrl);
             return [];
         }
     }
 
-    private async Task ProcessSitemapAsync(string sitemapUrl, HashSet<string> discoveredUrls, HashSet<string> visitedSitemaps)
+    private async Task ProcessSitemapAsync(string sitemapUrl, HashSet<string> discoveredUrls, HashSet<string> visitedSitemaps, SemaphoreSlim fetchGate)
     {
-        // Prevent infinite recursion by tracking visited sitemaps
         if (!visitedSitemaps.Add(sitemapUrl))
         {
-            _logger.LogDebug("Skipping already visited sitemap: {Url}", sitemapUrl);
+            logger.LogDebug("Skipping already visited sitemap: {Url}", sitemapUrl);
+            return;
+        }
+
+        byte[]? body;
+        try
+        {
+            await fetchGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                body = await FetchSitemapAsync(sitemapUrl).ConfigureAwait(false);
+            }
+            finally
+            {
+                fetchGate.Release();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogDebug("HTTP error fetching sitemap {Url}: {Message}", sitemapUrl, ex.Message);
+            return;
+        }
+        catch (TaskCanceledException)
+        {
+            logger.LogWarning("Timeout fetching sitemap {Url}", sitemapUrl);
+            return;
+        }
+
+        if (body is null || body.Length == 0)
+        {
+            logger.LogDebug("Empty sitemap content at {Url}", sitemapUrl);
             return;
         }
 
         try
         {
-            _logger.LogDebug("Fetching sitemap: {Url}", sitemapUrl);
-            var response = await _httpClient.GetAsync(sitemapUrl).ConfigureAwait(false);
-
-            if (!response.IsSuccessStatusCode)
+            using var ms = new MemoryStream(body);
+            var settings = new XmlReaderSettings
             {
-                _logger.LogDebug("Sitemap not found at {Url}: {Status}", sitemapUrl, response.StatusCode);
-                return;
-            }
-
-            var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(content))
-            {
-                _logger.LogDebug("Empty sitemap content at {Url}", sitemapUrl);
-                return;
-            }
-
-            // Parse XML
-            var doc = XDocument.Parse(content);
+                DtdProcessing = DtdProcessing.Prohibit,
+                MaxCharactersFromEntities = 1024,
+                MaxCharactersInDocument = 10_000_000,
+                XmlResolver = null,
+                CloseInput = true,
+            };
+            using var reader = XmlReader.Create(ms, settings);
+            var doc = XDocument.Load(reader);
             var ns = doc.Root?.Name.Namespace ?? XNamespace.None;
 
-            // Check if this is a sitemap index
             var sitemapElements = doc.Descendants(ns + "sitemap").ToList();
-            if (sitemapElements.Any())
+            if (sitemapElements.Count > 0)
             {
-                _logger.LogDebug("Found sitemap index at {Url} with {Count} sitemaps", sitemapUrl, sitemapElements.Count);
-                
-                // Process each sitemap in the index
+                logger.LogDebug("Found sitemap index at {Url} with {Count} sitemaps", sitemapUrl, sitemapElements.Count);
+
+                int processed = 0;
                 foreach (var sitemapElement in sitemapElements)
                 {
                     if (discoveredUrls.Count >= MaxSitemapUrls)
                         break;
 
+                    if (processed >= MaxSitemapsPerRobotsListing)
+                    {
+                        logger.LogWarning("Sitemap index at {Url} lists more than {Cap} child sitemaps; truncating", sitemapUrl, MaxSitemapsPerRobotsListing);
+                        break;
+                    }
+
                     var locElement = sitemapElement.Element(ns + "loc");
                     if (locElement != null && !string.IsNullOrWhiteSpace(locElement.Value))
                     {
-                        await ProcessSitemapAsync(locElement.Value, discoveredUrls, visitedSitemaps).ConfigureAwait(false);
+                        await ProcessSitemapAsync(locElement.Value, discoveredUrls, visitedSitemaps, fetchGate).ConfigureAwait(false);
                     }
+                    processed++;
                 }
             }
             else
             {
-                // This is a regular sitemap with URLs
                 var urlElements = doc.Descendants(ns + "url").ToList();
-                _logger.LogInformation("Found sitemap at {Url} with {Count} URLs", sitemapUrl, urlElements.Count);
+                logger.LogInformation("Found sitemap at {Url} with {Count} URLs", sitemapUrl, urlElements.Count);
 
                 foreach (var urlElement in urlElements)
                 {
@@ -161,24 +185,70 @@ public class SitemapService(
                         }
                         else
                         {
-                            _logger.LogDebug("Invalid URL in sitemap: {Url}", url);
+                            logger.LogDebug("Invalid URL in sitemap: {Url}", url);
                         }
                     }
                 }
             }
         }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogDebug("HTTP error fetching sitemap {Url}: {Message}", sitemapUrl, ex.Message);
-        }
         catch (XmlException ex)
         {
-            _logger.LogWarning("Failed to parse sitemap XML at {Url}: {Message}", sitemapUrl, ex.Message);
+            logger.LogWarning("Failed to parse sitemap XML at {Url}: {Message}", sitemapUrl, ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Unexpected error processing sitemap {Url}", sitemapUrl);
+            logger.LogWarning(ex, "Unexpected error processing sitemap {Url}", sitemapUrl);
         }
     }
-}
 
+    private async Task<byte[]?> FetchSitemapAsync(string sitemapUrl)
+    {
+        logger.LogDebug("Fetching sitemap: {Url}", sitemapUrl);
+        var httpClient = httpClientFactory.CreateClient(HttpClientName);
+
+        using var timeoutCts = new CancellationTokenSource(PerFetchTimeout);
+        using var response = await httpClient.GetAsync(sitemapUrl, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogDebug("Sitemap not found at {Url}: {Status}", sitemapUrl, response.StatusCode);
+            return null;
+        }
+
+        await using var netStream = await response.Content.ReadAsStreamAsync(timeoutCts.Token).ConfigureAwait(false);
+        using var buffer = new MemoryStream();
+        var pool = new byte[8192];
+        long total = 0;
+        bool truncated = false;
+
+        while (true)
+        {
+            int read = await netStream.ReadAsync(pool.AsMemory(0, pool.Length), timeoutCts.Token).ConfigureAwait(false);
+            if (read <= 0)
+            {
+                break;
+            }
+
+            total += read;
+            if (total > MaxSitemapBytes)
+            {
+                var allowed = (int)(MaxSitemapBytes - (total - read));
+                if (allowed > 0)
+                {
+                    buffer.Write(pool, 0, allowed);
+                }
+                truncated = true;
+                break;
+            }
+
+            buffer.Write(pool, 0, read);
+        }
+
+        if (truncated)
+        {
+            logger.LogWarning("Sitemap {Url} exceeded {Max} bytes; truncated", sitemapUrl, MaxSitemapBytes);
+        }
+
+        return buffer.ToArray();
+    }
+}

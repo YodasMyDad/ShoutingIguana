@@ -13,8 +13,6 @@ namespace ShoutingIguana.Plugins.Hreflang;
 /// </summary>
 public class HreflangTask(ILogger logger) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    
     // Track hreflang relationships per project for bidirectional validation
     // ProjectId -> (PageUrl -> List of hreflang targets)
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, List<HreflangLink>>> HreflangsByProject = new();
@@ -83,7 +81,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing hreflang for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing hreflang for {Url}", ctx.Url);
         }
     }
 
@@ -447,7 +445,7 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
     public override void CleanupProject(int projectId)
     {
         HreflangsByProject.TryRemove(projectId, out _);
-        _logger.LogDebug("Cleaned up hreflang data for project {ProjectId}", projectId);
+        logger.LogDebug("Cleaned up hreflang data for project {ProjectId}", projectId);
     }
 
     private class HreflangLink

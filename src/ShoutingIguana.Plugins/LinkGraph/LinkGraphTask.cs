@@ -11,9 +11,6 @@ namespace ShoutingIguana.Plugins.LinkGraph;
 /// </summary>
 public class LinkGraphTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
-
     public override string Key => "LinkGraph";
     public override string DisplayName => "Link Graph";
     public override string Description => "Internal linking structure visualization";
@@ -34,7 +31,7 @@ public class LinkGraphTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         var fromUrlAddress = ctx.Url.ToString();
         
         // Get outgoing links from this URL using the efficient SDK API
-        var outgoingLinks = await _repositoryAccessor.GetLinksByFromUrlAsync(
+        var outgoingLinks = await repositoryAccessor.GetLinksByFromUrlAsync(
             ctx.Project.ProjectId, 
             fromUrlId);
         
@@ -73,7 +70,7 @@ public class LinkGraphTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             await ctx.Reports.ReportAsync(Key, row, fromUrlId, default);
         }
         
-        _logger.LogDebug("Generated {Count} link graph findings for {Url}", 
+        logger.LogDebug("Generated {Count} link graph findings for {Url}", 
             outgoingLinks.Count, fromUrlAddress);
     }
 

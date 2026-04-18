@@ -11,9 +11,6 @@ namespace ShoutingIguana.Plugins.Canonical;
 /// </summary>
 public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
-    
     // Track canonical chains across URLs per project
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, string>> CanonicalsByProject = new();
     
@@ -97,7 +94,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing canonical for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing canonical for {Url}", ctx.Url);
         }
     }
 
@@ -180,7 +177,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         if (normalizedCurrent == normalizedCanonical)
         {
             // Self-referencing canonical is good practice
-            _logger.LogDebug("URL {Url} has self-referencing canonical (best practice)", ctx.Url);
+            logger.LogDebug("URL {Url} has self-referencing canonical (best practice)", ctx.Url);
         }
         else if (!ctx.Metadata.HasCrossDomainCanonical)
         {
@@ -267,10 +264,10 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             }
             
             // Load all URLs and build status cache
-            _logger.LogInformation("Loading URL status cache for project {ProjectId} (CanonicalTask)", projectId);
+            logger.LogInformation("Loading URL status cache for project {ProjectId} (CanonicalTask)", projectId);
             var statusCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             
-            await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId, ct))
+            await foreach (var url in repositoryAccessor.GetUrlsAsync(projectId, ct))
             {
                 if (!string.IsNullOrEmpty(url.NormalizedUrl))
                 {
@@ -281,7 +278,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             
             // Cache for future use
             UrlStatusCacheByProject[projectId] = statusCache;
-            _logger.LogInformation("Cached {Count} URL statuses for project {ProjectId} (CanonicalTask)", statusCache.Count, projectId);
+            logger.LogInformation("Cached {Count} URL statuses for project {ProjectId} (CanonicalTask)", statusCache.Count, projectId);
         }
         finally
         {
@@ -316,23 +313,23 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                     row.SetExplanation( $"The canonical target returns HTTP {status.Value}; fix that endpoint or update the canonical so crawlers point to a healthy 200 OK URL.");
                     await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                     
-                    _logger.LogWarning("Canonical target error: {Url} → {Canonical} (HTTP {Status})",
+                    logger.LogWarning("Canonical target error: {Url} → {Canonical} (HTTP {Status})",
                         ctx.Url, canonicalUrl, status.Value);
                 }
                 else
                 {
-                    _logger.LogDebug("Canonical target validated: {Canonical} returns 200 OK", canonicalUrl);
+                    logger.LogDebug("Canonical target validated: {Canonical} returns 200 OK", canonicalUrl);
                 }
             }
             else
             {
                 // Canonical URL not found in database (external or out of scope)
-                _logger.LogDebug("Canonical URL not found in crawled URLs: {Canonical} (likely external or out of scope)", canonicalUrl);
+                logger.LogDebug("Canonical URL not found in crawled URLs: {Canonical} (likely external or out of scope)", canonicalUrl);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Error validating canonical target status");
+            logger.LogDebug(ex, "Error validating canonical target status");
             // Don't fail the whole task if validation fails
         }
     }
@@ -470,7 +467,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             // This is proper termination, not a loop
             if (normalizedNext == normalizedCurrent)
             {
-                _logger.LogDebug("Canonical chain for {Url} ends with self-referencing canonical at {Current} (proper termination)", 
+                logger.LogDebug("Canonical chain for {Url} ends with self-referencing canonical at {Current} (proper termination)", 
                     ctx.Url, current);
                 return; // Proper end of chain
             }
@@ -590,7 +587,7 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             semaphore.Dispose();
         }
         
-        _logger.LogDebug("Cleaned up canonical data for project {ProjectId}", projectId);
+        logger.LogDebug("Cleaned up canonical data for project {ProjectId}", projectId);
     }
 }
 

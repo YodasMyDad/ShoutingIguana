@@ -14,19 +14,16 @@ public class RepositoryAccessor(
     IServiceProvider serviceProvider,
     ILogger<RepositoryAccessor> logger) : IRepositoryAccessor
 {
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
-    private readonly ILogger<RepositoryAccessor> _logger = logger;
-
     public async Task<UrlInfo?> GetUrlByAddressAsync(int projectId, string address)
     {
         try
         {
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = serviceProvider.CreateScope();
             var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
             
             // Repository handles normalization internally (lowercases and uses GetLeftPart)
             // So we can pass the URL directly without pre-normalizing
-            var url = await urlRepository.GetByAddressAsync(projectId, address);
+            var url = await urlRepository.GetByAddressAsync(projectId, address).ConfigureAwait(false);
             
             if (url == null)
             {
@@ -38,7 +35,7 @@ public class RepositoryAccessor(
             // These should be treated as "not found" for link checking purposes
             if (!url.HttpStatus.HasValue)
             {
-                _logger.LogDebug("URL {Address} exists but hasn't been crawled yet (Status: {Status})", 
+                logger.LogDebug("URL {Address} exists but hasn't been crawled yet (Status: {Status})", 
                     address, url.Status);
                 return null; // Not crawled yet, treat as not found
             }
@@ -53,7 +50,7 @@ public class RepositoryAccessor(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting URL by address: {Address} for project {ProjectId}", 
+            logger.LogError(ex, "Error getting URL by address: {Address} for project {ProjectId}", 
                 address, projectId);
             return null;
         }
@@ -67,10 +64,10 @@ public class RepositoryAccessor(
         // We create a scope, fetch all data, then dispose the scope before yielding
         List<UrlInfo> urlInfos;
         
-        using (var scope = _serviceProvider.CreateScope())
+        using (var scope = serviceProvider.CreateScope())
         {
             var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
-            var urls = await urlRepository.GetByProjectIdAsync(projectId);
+            var urls = await urlRepository.GetByProjectIdAsync(projectId).ConfigureAwait(false);
             
             // Materialize to DTOs while scope is active
             // Only include URLs that have been actually crawled (have HttpStatus)
@@ -101,16 +98,16 @@ public class RepositoryAccessor(
         // IMPORTANT: Materialize the data before yielding to avoid scope disposal issues
         List<RedirectInfo> redirectInfos;
         
-        using (var scope = _serviceProvider.CreateScope())
+        using (var scope = serviceProvider.CreateScope())
         {
             var redirectRepository = scope.ServiceProvider.GetRequiredService<IRedirectRepository>();
             var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
             
             // Get all redirects for the project
-            var redirects = await redirectRepository.GetByProjectIdAsync(projectId);
+            var redirects = await redirectRepository.GetByProjectIdAsync(projectId).ConfigureAwait(false);
             
             // Build a lookup of UrlId to Address for efficient mapping
-            var urls = await urlRepository.GetByProjectIdAsync(projectId);
+            var urls = await urlRepository.GetByProjectIdAsync(projectId).ConfigureAwait(false);
             var urlLookup = urls.ToDictionary(u => u.Id, u => u.Address);
             
             // Materialize to DTOs while scope is active
@@ -138,7 +135,7 @@ public class RepositoryAccessor(
     {
         try
         {
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = serviceProvider.CreateScope();
             var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
             var redirectRepository = scope.ServiceProvider.GetRequiredService<IRedirectRepository>();
             
@@ -151,7 +148,7 @@ public class RepositoryAccessor(
             }
             
             // Get redirects for this specific URL (much more efficient than GetByProjectIdAsync)
-            var urlRedirects = await redirectRepository.GetByUrlIdAsync(url.Id);
+            var urlRedirects = await redirectRepository.GetByUrlIdAsync(url.Id).ConfigureAwait(false);
             
             if (urlRedirects.Count == 0)
             {
@@ -169,7 +166,7 @@ public class RepositoryAccessor(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting redirect for URL: {SourceUrl} in project {ProjectId}", 
+            logger.LogError(ex, "Error getting redirect for URL: {SourceUrl} in project {ProjectId}", 
                 sourceUrl, projectId);
             return null;
         }
@@ -179,10 +176,10 @@ public class RepositoryAccessor(
     {
         try
         {
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = serviceProvider.CreateScope();
             var linkRepository = scope.ServiceProvider.GetRequiredService<ILinkRepository>();
             
-            var outgoingLinks = (await linkRepository.GetByFromUrlIdAsync(fromUrlId)).ToList();
+            var outgoingLinks = (await linkRepository.GetByFromUrlIdAsync(fromUrlId).ConfigureAwait(false)).ToList();
             
             if (outgoingLinks.Count == 0)
             {
@@ -209,7 +206,7 @@ public class RepositoryAccessor(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting links from URL ID: {FromUrlId} for project {ProjectId}", 
+            logger.LogError(ex, "Error getting links from URL ID: {FromUrlId} for project {ProjectId}", 
                 fromUrlId, projectId);
             return new List<PluginSdk.LinkInfo>();
         }
@@ -219,10 +216,10 @@ public class RepositoryAccessor(
     {
         try
         {
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = serviceProvider.CreateScope();
             var customExtractionService = scope.ServiceProvider.GetRequiredService<ICustomExtractionService>();
             
-            var rules = await customExtractionService.GetRulesByProjectIdAsync(projectId);
+            var rules = await customExtractionService.GetRulesByProjectIdAsync(projectId).ConfigureAwait(false);
             
             return rules.Select(r => new CustomExtractionRuleInfo(
                 r.Id,
@@ -236,7 +233,7 @@ public class RepositoryAccessor(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting custom extraction rules for project {ProjectId}", projectId);
+            logger.LogError(ex, "Error getting custom extraction rules for project {ProjectId}", projectId);
             return new List<CustomExtractionRuleInfo>();
         }
     }

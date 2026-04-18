@@ -16,8 +16,6 @@ namespace ShoutingIguana.Plugins.DuplicateContent;
 /// </summary>
 public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
     private static readonly HttpClient HttpClient = new(new HttpClientHandler 
     { 
         AllowAutoRedirect = false,
@@ -60,7 +58,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking domain variants for project {ProjectId}", ctx.Project.ProjectId);
+            logger.LogError(ex, "Error checking domain variants for project {ProjectId}", ctx.Project.ProjectId);
         }
         
         // Only analyze HTML pages
@@ -93,7 +91,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
 
             if (string.IsNullOrWhiteSpace(cleanedContent))
             {
-                _logger.LogDebug("No meaningful content to analyze for {Url}", ctx.Url);
+                logger.LogDebug("No meaningful content to analyze for {Url}", ctx.Url);
                 return;
             }
 
@@ -119,7 +117,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing duplicate content for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing duplicate content for {Url}", ctx.Url);
         }
     }
 
@@ -151,7 +149,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error cleaning HTML content");
+            logger.LogWarning(ex, "Error cleaning HTML content");
             return string.Empty;
         }
     }
@@ -410,12 +408,12 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
                 
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
                     
-                _logger.LogDebug("High boilerplate ratio on {Url}: {Ratio:P0} main content", ctx.Url, contentRatio);
+                logger.LogDebug("High boilerplate ratio on {Url}: {Ratio:P0} main content", ctx.Url, contentRatio);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Error checking boilerplate ratio for {Url}", ctx.Url);
+            logger.LogDebug(ex, "Error checking boilerplate ratio for {Url}", ctx.Url);
         }
     }
     
@@ -432,7 +430,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             // happened to be processed first during the crawl
             var canonicalUrl = new Uri(ctx.Project.BaseUrl);
             
-            _logger.LogInformation("Checking domain variants for canonical URL: {CanonicalUrl}", canonicalUrl);
+            logger.LogInformation("Checking domain variants for canonical URL: {CanonicalUrl}", canonicalUrl);
             
             // Generate variants to test
             var variants = GenerateDomainVariants(canonicalUrl);
@@ -450,7 +448,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in CheckDomainVariantsAsync for {Url}", ctx.Url);
+            logger.LogError(ex, "Error in CheckDomainVariantsAsync for {Url}", ctx.Url);
         }
     }
     
@@ -505,7 +503,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
         try
         {
             var canonicalPage = canonicalUrl;
-            _logger.LogDebug("Testing domain variant: {VariantUrl}", variantUrl);
+            logger.LogDebug("Testing domain variant: {VariantUrl}", variantUrl);
             
             using var request = new HttpRequestMessage(HttpMethod.Get, variantUrl);
             // Use the project's configured User-Agent (respects Chrome/Firefox/Edge/Safari/Random setting)
@@ -627,7 +625,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error testing domain variant {VariantUrl}", variantUrl);
+            logger.LogWarning(ex, "Error testing domain variant {VariantUrl}", variantUrl);
         }
     }
 
@@ -769,10 +767,10 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             }
             
             // Load and cache redirects (only one thread gets here)
-            _logger.LogDebug("Loading redirects for project {ProjectId} (first time)", projectId);
+            logger.LogDebug("Loading redirects for project {ProjectId} (first time)", projectId);
             var redirectLookup = new Dictionary<string, List<RedirectInfo>>(StringComparer.OrdinalIgnoreCase);
             
-            await foreach (var redirect in _repositoryAccessor.GetRedirectsAsync(projectId))
+            await foreach (var redirect in repositoryAccessor.GetRedirectsAsync(projectId))
             {
                 if (!redirectLookup.ContainsKey(redirect.SourceUrl))
                 {
@@ -783,7 +781,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             
             // Cache for future use
             RedirectCacheByProject[projectId] = redirectLookup;
-            _logger.LogInformation("Cached {Count} redirect entries for project {ProjectId}", redirectLookup.Count, projectId);
+            logger.LogInformation("Cached {Count} redirect entries for project {ProjectId}", redirectLookup.Count, projectId);
             
             return redirectLookup;
         }
@@ -860,7 +858,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error checking redirect relationships for duplicate content detection");
+            logger.LogWarning(ex, "Error checking redirect relationships for duplicate content detection");
         }
         
         return info;
@@ -892,7 +890,7 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             semaphore.Dispose();
         }
         
-        _logger.LogDebug("Cleaned up duplicate content data for project {ProjectId}", projectId);
+        logger.LogDebug("Cleaned up duplicate content data for project {ProjectId}", projectId);
     }
 }
 

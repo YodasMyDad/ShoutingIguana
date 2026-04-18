@@ -9,7 +9,8 @@ public interface IAppSettingsService
 {
     BrowserSettings BrowserSettings { get; }
     CrawlSettings CrawlSettings { get; set; }
-    
+    PluginTrustSettings PluginTrust { get; set; }
+
     Task LoadAsync();
     Task SaveAsync();
     

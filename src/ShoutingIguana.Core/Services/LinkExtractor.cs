@@ -1,9 +1,10 @@
 using HtmlAgilityPack;
+using Microsoft.Extensions.Logging;
 using ShoutingIguana.Core.Models;
 
 namespace ShoutingIguana.Core.Services;
 
-public class LinkExtractor : ILinkExtractor
+public class LinkExtractor(ILogger<LinkExtractor> logger) : ILinkExtractor
 {
     public Task<IEnumerable<ExtractedLink>> ExtractLinksAsync(string htmlContent, string baseUrl)
     {
@@ -129,9 +130,9 @@ public class LinkExtractor : ILinkExtractor
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Log error but don't fail - return empty list
+            logger.LogWarning(ex, "Failed to extract links from HTML for {BaseUrl}", baseUrl);
         }
 
         return Task.FromResult<IEnumerable<ExtractedLink>>(links);
@@ -180,7 +181,11 @@ public class LinkExtractor : ILinkExtractor
             var builder = new UriBuilder(absoluteUri) { Fragment = string.Empty };
             return builder.Uri.ToString();
         }
-        catch
+        catch (UriFormatException)
+        {
+            return null;
+        }
+        catch (ArgumentException)
         {
             return null;
         }

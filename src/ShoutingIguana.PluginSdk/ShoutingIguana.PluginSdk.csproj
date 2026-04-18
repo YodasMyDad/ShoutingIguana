@@ -8,7 +8,7 @@
     <!-- NuGet Package Configuration -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>ShoutingIguana.PluginSdk</PackageId>
-    <Version>0.1.0</Version>
+    <Version>1.0.0</Version>
     <Authors>Shouting Iguana</Authors>
     <Company>Shouting Iguana</Company>
     <Product>Shouting Iguana SEO Crawler</Product>
@@ -20,7 +20,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Plugin SDK with custom report schemas for datagrids, core plugin interfaces, IRepositoryAccessor, and UrlHelper utilities.</PackageReleaseNotes>
+    <PackageReleaseNotes>1.0.0: Breaking change — UrlContext.HttpResponse is now a UrlResponseInfo DTO (was HttpResponseMessage). See README for migration guidance.</PackageReleaseNotes>
     
     <!-- Documentation -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

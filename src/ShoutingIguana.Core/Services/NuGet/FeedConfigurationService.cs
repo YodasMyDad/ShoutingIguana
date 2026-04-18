@@ -12,7 +12,6 @@ namespace ShoutingIguana.Core.Services.NuGet;
 [SupportedOSPlatform("windows")]
 public class FeedConfigurationService(ILogger<FeedConfigurationService> logger) : IFeedConfigurationService
 {
-    private readonly ILogger<FeedConfigurationService> _logger = logger;
     private readonly SemaphoreSlim _lock = new(1, 1);
     private List<NuGetFeed>? _cachedFeeds;
 
@@ -26,7 +25,7 @@ public class FeedConfigurationService(ILogger<FeedConfigurationService> logger) 
 
     public async Task<IReadOnlyList<NuGetFeed>> GetFeedsAsync()
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             if (_cachedFeeds != null)
@@ -50,12 +49,12 @@ public class FeedConfigurationService(ILogger<FeedConfigurationService> logger) 
                 ];
                 
                 // Save defaults
-                await SaveFeedsAsync(_cachedFeeds);
-                
+                await SaveFeedsAsync(_cachedFeeds).ConfigureAwait(false);
+
                 return _cachedFeeds.AsReadOnly();
             }
 
-            var json = await File.ReadAllTextAsync(filePath);
+            var json = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
             var feeds = JsonSerializer.Deserialize<List<FeedData>>(json) ?? [];
 
             _cachedFeeds = feeds.Select(f => new NuGetFeed
@@ -71,7 +70,7 @@ public class FeedConfigurationService(ILogger<FeedConfigurationService> logger) 
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load feeds configuration");
+            logger.LogError(ex, "Failed to load feeds configuration");
             
             // Return default on error
             _cachedFeeds =
@@ -94,15 +93,15 @@ public class FeedConfigurationService(ILogger<FeedConfigurationService> logger) 
 
     public async Task AddFeedAsync(NuGetFeed feed)
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             // Ensure cached feeds are loaded
             if (_cachedFeeds == null)
             {
                 _lock.Release();
-                await GetFeedsAsync(); // This will acquire and release the lock
-                await _lock.WaitAsync();
+                await GetFeedsAsync().ConfigureAwait(false); // This will acquire and release the lock
+                await _lock.WaitAsync().ConfigureAwait(false);
             }
             
             var feeds = _cachedFeeds!.ToList();
@@ -113,10 +112,10 @@ public class FeedConfigurationService(ILogger<FeedConfigurationService> logger) 
             }
 
             feeds.Add(feed);
-            await SaveFeedsAsync(feeds);
+            await SaveFeedsAsync(feeds).ConfigureAwait(false);
             
             _cachedFeeds = feeds;
-            _logger.LogInformation("Added feed: {FeedName}", feed.Name);
+            logger.LogInformation("Added feed: {FeedName}", feed.Name);
         }
         finally
         {
@@ -126,15 +125,15 @@ public class FeedConfigurationService(ILogger<FeedConfigurationService> logger) 
 
     public async Task RemoveFeedAsync(string name)
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             // Ensure cached feeds are loaded
             if (_cachedFeeds == null)
             {
                 _lock.Release();
-                await GetFeedsAsync(); // This will acquire and release the lock
-                await _lock.WaitAsync();
+                await GetFeedsAsync().ConfigureAwait(false); // This will acquire and release the lock
+                await _lock.WaitAsync().ConfigureAwait(false);
             }
             
             var feeds = _cachedFeeds!.ToList();
@@ -142,15 +141,15 @@ public class FeedConfigurationService(ILogger<FeedConfigurationService> logger) 
             
             if (feed == null)
             {
-                _logger.LogWarning("Feed not found: {FeedName}", name);
+                logger.LogWarning("Feed not found: {FeedName}", name);
                 return;
             }
 
             feeds.Remove(feed);
-            await SaveFeedsAsync(feeds);
+            await SaveFeedsAsync(feeds).ConfigureAwait(false);
             
             _cachedFeeds = feeds;
-            _logger.LogInformation("Removed feed: {FeedName}", name);
+            logger.LogInformation("Removed feed: {FeedName}", name);
         }
         finally
         {
@@ -160,15 +159,15 @@ public class FeedConfigurationService(ILogger<FeedConfigurationService> logger) 
 
     public async Task UpdateFeedAsync(NuGetFeed feed)
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             // Ensure cached feeds are loaded
             if (_cachedFeeds == null)
             {
                 _lock.Release();
-                await GetFeedsAsync(); // This will acquire and release the lock
-                await _lock.WaitAsync();
+                await GetFeedsAsync().ConfigureAwait(false); // This will acquire and release the lock
+                await _lock.WaitAsync().ConfigureAwait(false);
             }
             
             var feeds = _cachedFeeds!.ToList();
@@ -180,10 +179,10 @@ public class FeedConfigurationService(ILogger<FeedConfigurationService> logger) 
             }
 
             feeds[index] = feed;
-            await SaveFeedsAsync(feeds);
+            await SaveFeedsAsync(feeds).ConfigureAwait(false);
             
             _cachedFeeds = feeds;
-            _logger.LogInformation("Updated feed: {FeedName}", feed.Name);
+            logger.LogInformation("Updated feed: {FeedName}", feed.Name);
         }
         finally
         {
@@ -205,7 +204,7 @@ public class FeedConfigurationService(ILogger<FeedConfigurationService> logger) 
         var json = JsonSerializer.Serialize(feedData, new JsonSerializerOptions { WriteIndented = true });
         var filePath = GetFeedsFilePath();
         
-        await File.WriteAllTextAsync(filePath, json);
+        await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
     }
 
     private static string Encrypt(string plainText)

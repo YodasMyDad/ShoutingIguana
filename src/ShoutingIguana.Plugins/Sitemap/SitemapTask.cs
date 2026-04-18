@@ -13,9 +13,6 @@ namespace ShoutingIguana.Plugins.Sitemap;
 /// </summary>
 public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
-    
     // Track discovered sitemap URLs per project
     private static readonly ConcurrentDictionary<int, HashSet<string>> SitemapUrlsByProject = new();
     
@@ -117,7 +114,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing sitemap for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing sitemap for {Url}", ctx.Url);
         }
     }
 
@@ -140,7 +137,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
         var baseUri = new Uri(ctx.Project.BaseUrl);
         var sitemapUrl = new Uri(baseUri, "/sitemap.xml").ToString();
 
-        _logger.LogInformation("Attempting to discover sitemap at {SitemapUrl}", sitemapUrl);
+        logger.LogInformation("Attempting to discover sitemap at {SitemapUrl}", sitemapUrl);
 
         // NOTE: In Phase 2 (Analysis), ctx.Enqueue is a stub - sitemaps are already discovered in Phase 1
         // This is fine because sitemap discovery happens via CrawlEngine's sitemap service in Phase 1
@@ -155,7 +152,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
     {
         if (string.IsNullOrEmpty(ctx.RenderedHtml))
         {
-            _logger.LogWarning("Sitemap URL {Url} returned no content", ctx.Url);
+            logger.LogWarning("Sitemap URL {Url} returned no content", ctx.Url);
             var rowNoContent = ReportRow.Create()
                 .Set("URL", ctx.Url.ToString())
                 .Set("Issue", "Sitemap Returned No Content")
@@ -190,12 +187,12 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                     using var reader = new StreamReader(gzipStream, System.Text.Encoding.UTF8);
                     xmlContent = await reader.ReadToEndAsync();
                     
-                    _logger.LogInformation("Successfully decompressed gzipped sitemap: {Url}", ctx.Url);
+                    logger.LogInformation("Successfully decompressed gzipped sitemap: {Url}", ctx.Url);
                 }
                 catch (Exception ex)
                 {
                     // If decompression fails, it might already be decompressed or have other issues
-                    _logger.LogWarning(ex, "Could not decompress gzipped sitemap (might already be decompressed): {Url}", ctx.Url);
+                    logger.LogWarning(ex, "Could not decompress gzipped sitemap (might already be decompressed): {Url}", ctx.Url);
                     
                     // Only report error if content really doesn't look like XML
                     if (!xmlContent.TrimStart().StartsWith("<?xml", StringComparison.OrdinalIgnoreCase) &&
@@ -279,7 +276,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error parsing sitemap XML for {Url}", ctx.Url);
+            logger.LogError(ex, "Error parsing sitemap XML for {Url}", ctx.Url);
             var rowParse = ReportRow.Create()
                 .Set("URL", ctx.Url.ToString())
                 .Set("Issue", $"Sitemap Parse Error: {ex.Message}")
@@ -313,7 +310,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             if (locElement != null)
             {
                 var sitemapUrl = locElement.Value;
-                _logger.LogInformation("Found child sitemap: {SitemapUrl}", sitemapUrl);
+                logger.LogInformation("Found child sitemap: {SitemapUrl}", sitemapUrl);
                 
                 // NOTE: In Phase 2, ctx.Enqueue is a stub (sitemaps already discovered in Phase 1)
                 // Child sitemaps are automatically discovered by CrawlEngine's sitemap service
@@ -573,10 +570,10 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             }
             
             // Load all URLs and build status cache
-            _logger.LogInformation("Loading URL status cache for project {ProjectId} (SitemapTask)", projectId);
+            logger.LogInformation("Loading URL status cache for project {ProjectId} (SitemapTask)", projectId);
             var statusCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             
-            await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId, ct))
+            await foreach (var url in repositoryAccessor.GetUrlsAsync(projectId, ct))
             {
                 if (!string.IsNullOrEmpty(url.NormalizedUrl))
                 {
@@ -586,7 +583,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             
             // Cache for future use
             UrlStatusCacheByProject[projectId] = statusCache;
-            _logger.LogInformation("Cached {Count} URL statuses for project {ProjectId} (SitemapTask)", statusCache.Count, projectId);
+            logger.LogInformation("Cached {Count} URL statuses for project {ProjectId} (SitemapTask)", statusCache.Count, projectId);
         }
         finally
         {
@@ -646,7 +643,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogDebug(ex, "Error checking status for sitemap URL {Url}", sitemapUrl);
+                    logger.LogDebug(ex, "Error checking status for sitemap URL {Url}", sitemapUrl);
                 }
             }
 
@@ -692,12 +689,12 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 await ctx.Reports.ReportAsync(Key, rowRedir, ctx.Metadata.UrlId, default);
             }
 
-            _logger.LogDebug("Validated {Total} sitemap URLs: {Errors404} 404s, {Errors5xx} 5xxs, {Redirects} redirects, {NotCrawled} not crawled",
+            logger.LogDebug("Validated {Total} sitemap URLs: {Errors404} 404s, {Errors5xx} 5xxs, {Redirects} redirects, {NotCrawled} not crawled",
                 sitemapUrls.Count, errors404.Count, errors5xx.Count, redirects.Count, notCrawled.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error validating sitemap URL status");
+            logger.LogError(ex, "Error validating sitemap URL status");
         }
     }
 
@@ -713,7 +710,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             {
                 if (!SitemapUrlsByProject.TryGetValue(projectId, out var urls) || urls.Count == 0)
                 {
-                    _logger.LogDebug("No sitemap URLs to compare");
+                    logger.LogDebug("No sitemap URLs to compare");
                     return;
                 }
                 
@@ -725,7 +722,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             var crawledAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var crawledUrlsWithNoInlinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId))
+            await foreach (var url in repositoryAccessor.GetUrlsAsync(projectId))
             {
                 if (!string.IsNullOrEmpty(url.Address))
                 {
@@ -752,7 +749,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             // Report orphan URLs as findings
             if (orphanUrls.Count > 0)
             {
-                _logger.LogInformation("Found {Count} potential orphan URLs in sitemap", orphanUrls.Count);
+                logger.LogInformation("Found {Count} potential orphan URLs in sitemap", orphanUrls.Count);
 
                 var rowOrphan = ReportRow.Create()
                     .Set("URL", ctx.Url.ToString())
@@ -772,7 +769,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
 
             if (missingFromSitemap.Count > 0)
             {
-                _logger.LogInformation("Found {Count} crawled URLs missing from sitemap", missingFromSitemap.Count);
+                logger.LogInformation("Found {Count} crawled URLs missing from sitemap", missingFromSitemap.Count);
 
                 var rowMissing = ReportRow.Create()
                     .Set("URL", ctx.Url.ToString())
@@ -785,12 +782,12 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 await ctx.Reports.ReportAsync(Key, rowMissing, ctx.Metadata.UrlId, default);
             }
 
-            _logger.LogDebug("Sitemap comparison complete: {OrphanCount} orphans, {MissingCount} missing",
+            logger.LogDebug("Sitemap comparison complete: {OrphanCount} orphans, {MissingCount} missing",
                 orphanUrls.Count, missingFromSitemap.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error comparing sitemap with crawled URLs");
+            logger.LogError(ex, "Error comparing sitemap with crawled URLs");
             // Don't fail the whole task if comparison fails
         }
     }
@@ -828,7 +825,7 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             semaphore.Dispose();
         }
         
-        _logger.LogDebug("Cleaned up sitemap data for project {ProjectId}", projectId);
+        logger.LogDebug("Cleaned up sitemap data for project {ProjectId}", projectId);
     }
 }
 

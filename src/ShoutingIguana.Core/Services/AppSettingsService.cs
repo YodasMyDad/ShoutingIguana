@@ -9,12 +9,12 @@ namespace ShoutingIguana.Core.Services;
 /// </summary>
 public class AppSettingsService(ILogger<AppSettingsService> logger) : IAppSettingsService
 {
-    private readonly ILogger<AppSettingsService> _logger = logger;
     private readonly string _settingsPath = GetSettingsPath();
     private readonly object _lock = new();
 
     public BrowserSettings BrowserSettings { get; private set; } = new();
     public CrawlSettings CrawlSettings { get; set; } = new();
+    public PluginTrustSettings PluginTrust { get; set; } = new();
     private List<RecentProject> _recentProjects = new();
 
     public async Task LoadAsync()
@@ -29,21 +29,22 @@ public class AppSettingsService(ILogger<AppSettingsService> logger) : IAppSettin
                 {
                     BrowserSettings = settings.Browser ?? new BrowserSettings();
                     CrawlSettings = settings.Crawl ?? new CrawlSettings();
+                    PluginTrust = settings.PluginTrust ?? new PluginTrustSettings();
                     lock (_lock)
                     {
                         _recentProjects = settings.RecentProjects ?? new List<RecentProject>();
                     }
                 }
-                _logger.LogInformation("Settings loaded from: {Path}", _settingsPath);
+                logger.LogInformation("Settings loaded from: {Path}", _settingsPath);
             }
             else
             {
-                _logger.LogInformation("Settings file not found, using defaults");
+                logger.LogInformation("Settings file not found, using defaults");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading settings");
+            logger.LogError(ex, "Error loading settings");
         }
     }
 
@@ -61,6 +62,7 @@ public class AppSettingsService(ILogger<AppSettingsService> logger) : IAppSettin
             {
                 Browser = BrowserSettings,
                 Crawl = CrawlSettings,
+                PluginTrust = PluginTrust,
                 RecentProjects = recentProjectsCopy
             };
 
@@ -76,11 +78,11 @@ public class AppSettingsService(ILogger<AppSettingsService> logger) : IAppSettin
             }
 
             await File.WriteAllTextAsync(_settingsPath, json).ConfigureAwait(false);
-            _logger.LogInformation("Settings saved to: {Path}", _settingsPath);
+            logger.LogInformation("Settings saved to: {Path}", _settingsPath);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error saving settings");
+            logger.LogError(ex, "Error saving settings");
         }
     }
 
@@ -111,7 +113,7 @@ public class AppSettingsService(ILogger<AppSettingsService> logger) : IAppSettin
                 _recentProjects = _recentProjects.Take(5).ToList();
             }
 
-            _logger.LogDebug("Added recent project: {Name} at {FilePath}", name, filePath);
+            logger.LogDebug("Added recent project: {Name} at {FilePath}", name, filePath);
         }
     }
 
@@ -131,7 +133,7 @@ public class AppSettingsService(ILogger<AppSettingsService> logger) : IAppSettin
             var removed = _recentProjects.RemoveAll(p => string.Equals(p.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
             if (removed > 0)
             {
-                _logger.LogDebug("Removed recent project: {FilePath}", filePath);
+                logger.LogDebug("Removed recent project: {FilePath}", filePath);
             }
         }
     }
@@ -146,6 +148,7 @@ public class AppSettingsService(ILogger<AppSettingsService> logger) : IAppSettin
     {
         public BrowserSettings? Browser { get; set; }
         public CrawlSettings? Crawl { get; set; }
+        public PluginTrustSettings? PluginTrust { get; set; }
         public List<RecentProject>? RecentProjects { get; set; }
     }
 }

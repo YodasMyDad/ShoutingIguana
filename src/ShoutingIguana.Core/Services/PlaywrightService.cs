@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
 using ShoutingIguana.Core.Configuration;
@@ -7,18 +7,28 @@ namespace ShoutingIguana.Core.Services;
 
 /// <summary>
 /// Implementation of IPlaywrightService for managing Playwright browsers.
+/// Hosts a bounded BrowserContext pool so concurrent workers reuse contexts
+/// rather than creating a fresh one per page.
 /// </summary>
 public class PlaywrightService(
     ILogger<PlaywrightService> logger,
     IAppSettingsService appSettings) : IPlaywrightService, IDisposable
 {
-    private readonly ILogger<PlaywrightService> _logger = logger;
-    private readonly IAppSettingsService _appSettings = appSettings;
+    private const int DefaultPoolSize = 4;
+
     private IPlaywright? _playwright;
     private IBrowser? _browser;
     private BrowserStatus _status = BrowserStatus.NotInitialized;
     private readonly SemaphoreSlim _initLock = new(1, 1);
-    private int _disposeState = 0; // 0 = not disposed, 1 = disposed
+    private int _disposeState;
+
+    private SemaphoreSlim _poolSlots = new(DefaultPoolSize, DefaultPoolSize);
+    private int _poolCapacity = DefaultPoolSize;
+    private readonly ConcurrentDictionary<string, ConcurrentBag<IBrowserContext>> _idleContexts = new();
+    private readonly ConcurrentDictionary<IPage, PageLease> _leases = new();
+    private readonly ConcurrentBag<IBrowserContext> _liveContexts = new();
+
+    private sealed record PageLease(string Key, IBrowserContext Context);
 
     public bool IsBrowserInstalled { get; private set; }
     public BrowserStatus Status
@@ -38,59 +48,54 @@ public class PlaywrightService(
 
     public async Task InitializeAsync()
     {
-        await _initLock.WaitAsync();
+        await _initLock.WaitAsync().ConfigureAwait(false);
         try
         {
             if (_playwright != null) return;
 
             Status = BrowserStatus.Initializing;
-            _logger.LogInformation("Initializing Playwright...");
+            logger.LogInformation("Initializing Playwright...");
 
-            _playwright = await Playwright.CreateAsync();
-            
-            // Check settings first to avoid unnecessary browser launch test
-            if (_appSettings.BrowserSettings.IsBrowserInstalled)
+            _playwright = await Playwright.CreateAsync().ConfigureAwait(false);
+
+            if (appSettings.BrowserSettings.IsBrowserInstalled)
             {
-                // Trust the settings, but verify once
-                IsBrowserInstalled = await CheckBrowserInstalledAsync();
-                
+                IsBrowserInstalled = await CheckBrowserInstalledAsync().ConfigureAwait(false);
+
                 if (!IsBrowserInstalled)
                 {
-                    // Settings were wrong, update them
-                    _logger.LogWarning("Browser marked as installed in settings but not found. Resetting flag.");
-                    _appSettings.BrowserSettings.IsBrowserInstalled = false;
-                    await _appSettings.SaveAsync();
+                    logger.LogWarning("Browser marked as installed in settings but not found. Resetting flag.");
+                    appSettings.BrowserSettings.IsBrowserInstalled = false;
+                    await appSettings.SaveAsync().ConfigureAwait(false);
                 }
             }
             else
             {
-                // Not installed according to settings, do a quick check
-                IsBrowserInstalled = await CheckBrowserInstalledAsync();
-                
+                IsBrowserInstalled = await CheckBrowserInstalledAsync().ConfigureAwait(false);
+
                 if (IsBrowserInstalled)
                 {
-                    // Browser was installed externally, update settings
-                    _logger.LogInformation("Browser found (installed externally). Updating settings.");
-                    _appSettings.MarkBrowserInstalled();
-                    await _appSettings.SaveAsync();
+                    logger.LogInformation("Browser found (installed externally). Updating settings.");
+                    appSettings.MarkBrowserInstalled();
+                    await appSettings.SaveAsync().ConfigureAwait(false);
                 }
             }
-            
+
             if (IsBrowserInstalled)
             {
                 Status = BrowserStatus.Ready;
-                _logger.LogInformation("Playwright initialized successfully. Browser is ready.");
+                logger.LogInformation("Playwright initialized successfully. Browser is ready.");
             }
             else
             {
                 Status = BrowserStatus.NotInitialized;
-                _logger.LogWarning("Playwright initialized but browser not installed.");
+                logger.LogWarning("Playwright initialized but browser not installed.");
             }
         }
         catch (Exception ex)
         {
             Status = BrowserStatus.Error;
-            _logger.LogError(ex, "Failed to initialize Playwright");
+            logger.LogError(ex, "Failed to initialize Playwright");
             throw;
         }
         finally
@@ -101,38 +106,36 @@ public class PlaywrightService(
 
     public async Task InstallBrowsersAsync(IProgress<string>? progress = null)
     {
-        await _initLock.WaitAsync();
+        await _initLock.WaitAsync().ConfigureAwait(false);
         try
         {
             Status = BrowserStatus.Installing;
-            _logger.LogInformation("Installing Playwright browsers...");
+            logger.LogInformation("Installing Playwright browsers...");
             progress?.Report("Installing Chromium browser...");
 
-            // Run playwright install chromium
-            var exitCode = await RunPlaywrightInstallAsync(progress);
+            var exitCode = await RunPlaywrightInstallAsync(progress).ConfigureAwait(false);
 
             if (exitCode == 0)
             {
                 IsBrowserInstalled = true;
                 Status = BrowserStatus.Ready;
-                _logger.LogInformation("Browser installation completed successfully");
+                logger.LogInformation("Browser installation completed successfully");
                 progress?.Report("Installation complete");
-                
-                // Persist installation state
-                _appSettings.MarkBrowserInstalled();
-                await _appSettings.SaveAsync();
+
+                appSettings.MarkBrowserInstalled();
+                await appSettings.SaveAsync().ConfigureAwait(false);
             }
             else
             {
                 Status = BrowserStatus.Error;
-                _logger.LogError("Browser installation failed with exit code {ExitCode}", exitCode);
+                logger.LogError("Browser installation failed with exit code {ExitCode}", exitCode);
                 throw new Exception($"Browser installation failed with exit code {exitCode}");
             }
         }
         catch (Exception ex)
         {
             Status = BrowserStatus.Error;
-            _logger.LogError(ex, "Error during browser installation");
+            logger.LogError(ex, "Error during browser installation");
             throw;
         }
         finally
@@ -145,7 +148,7 @@ public class PlaywrightService(
     {
         if (_playwright == null)
         {
-            await InitializeAsync();
+            await InitializeAsync().ConfigureAwait(false);
         }
 
         if (!IsBrowserInstalled)
@@ -153,8 +156,7 @@ public class PlaywrightService(
             throw new InvalidOperationException("Browser not installed. Call InstallBrowsersAsync first.");
         }
 
-        // Thread-safe browser creation
-        await _initLock.WaitAsync();
+        await _initLock.WaitAsync().ConfigureAwait(false);
         try
         {
             if (_browser != null && _browser.IsConnected)
@@ -162,8 +164,7 @@ public class PlaywrightService(
                 return _browser;
             }
 
-            // Launch new browser with comprehensive stealth arguments
-            _logger.LogInformation("Launching Chromium browser...");
+            logger.LogInformation("Launching Chromium browser...");
             _browser = await _playwright!.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
             {
                 Headless = true,
@@ -179,9 +180,9 @@ public class PlaywrightService(
                     "--ignore-certificate-errors",
                     "--ignore-certificate-errors-spki-list"
                 ]
-            });
+            }).ConfigureAwait(false);
 
-            _logger.LogInformation("Browser launched successfully");
+            logger.LogInformation("Browser launched successfully");
             return _browser;
         }
         finally
@@ -190,27 +191,65 @@ public class PlaywrightService(
         }
     }
 
+    public void ConfigurePoolSize(int size)
+    {
+        if (size < 1) size = 1;
+        if (Interlocked.CompareExchange(ref _disposeState, 0, 0) == 1) return;
+
+        lock (_initLock)
+        {
+            if (_poolCapacity == size) return;
+
+            var oldSemaphore = _poolSlots;
+            _poolSlots = new SemaphoreSlim(size, size);
+            _poolCapacity = size;
+            oldSemaphore.Dispose();
+            logger.LogInformation("Playwright context pool sized to {Size}", size);
+        }
+    }
+
     public async Task<IPage> CreatePageAsync(string userAgent, ProxySettings? proxySettings = null)
     {
-        var browser = await GetBrowserAsync();
-        
-        // IMPORTANT: We create a new context for each page
-        // The context must be disposed when the page is closed
-        // This is handled by disposing the page's context in the page cleanup
-        var contextOptions = new BrowserNewContextOptions
+        var browser = await GetBrowserAsync().ConfigureAwait(false);
+
+        SemaphoreSlim slots;
+        lock (_initLock)
         {
-            ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
-            UserAgent = userAgent,
-            Locale = "en-US",
-            TimezoneId = "America/New_York",
-            Permissions = new[] { "geolocation", "notifications" },
-            ColorScheme = ColorScheme.Light,
-            DeviceScaleFactor = 1,
-            HasTouch = false,
-            IsMobile = false,
-            JavaScriptEnabled = true,
-            ExtraHTTPHeaders = new Dictionary<string, string>
+            slots = _poolSlots;
+        }
+
+        await slots.WaitAsync().ConfigureAwait(false);
+
+        string key = BuildProxyKey(proxySettings);
+        IBrowserContext? context = null;
+
+        try
+        {
+            var bag = _idleContexts.GetOrAdd(key, _ => new ConcurrentBag<IBrowserContext>());
+            while (bag.TryTake(out var candidate))
             {
+                if (!IsContextHealthy(candidate))
+                {
+                    await SafeDisposeContextAsync(candidate).ConfigureAwait(false);
+                    continue;
+                }
+                context = candidate;
+                break;
+            }
+
+            if (context == null)
+            {
+                context = await CreateContextAsync(browser, proxySettings).ConfigureAwait(false);
+                _liveContexts.Add(context);
+            }
+
+            var page = await context.NewPageAsync().ConfigureAwait(false);
+            page.SetDefaultTimeout(30000);
+            page.SetDefaultNavigationTimeout(30000);
+
+            await page.SetExtraHTTPHeadersAsync(new Dictionary<string, string>
+            {
+                ["User-Agent"] = userAgent,
                 ["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                 ["Accept-Language"] = "en-US,en;q=0.9",
                 ["Accept-Encoding"] = "gzip, deflate, br",
@@ -219,133 +258,161 @@ public class PlaywrightService(
                 ["Sec-Fetch-Site"] = "none",
                 ["Sec-Fetch-User"] = "?1",
                 ["Upgrade-Insecure-Requests"] = "1"
-            }
-        };
+            }).ConfigureAwait(false);
 
-        // Configure proxy if provided and enabled
-        if (proxySettings is { Enabled: true } && !string.IsNullOrWhiteSpace(proxySettings.Server))
-        {
-            _logger.LogInformation("Creating page with proxy: {ProxyUrl}", proxySettings.GetProxyUrl());
-            
-            contextOptions.Proxy = new Proxy
-            {
-                Server = proxySettings.GetProxyUrl()
-            };
-
-            // Add authentication if required
-            if (proxySettings.RequiresAuthentication && !string.IsNullOrWhiteSpace(proxySettings.Username))
-            {
-                contextOptions.Proxy.Username = proxySettings.Username;
-                contextOptions.Proxy.Password = proxySettings.GetPassword();
-            }
-
-            // Add bypass list
-            if (proxySettings.BypassList.Count > 0)
-            {
-                contextOptions.Proxy.Bypass = string.Join(",", proxySettings.BypassList);
-            }
+            _leases[page] = new PageLease(key, context);
+            return page;
         }
-
-        var context = await browser.NewContextAsync(contextOptions);
-        
-        // Inject JavaScript to hide automation signals
-        await context.AddInitScriptAsync(@"
-            // Override navigator.webdriver
-            Object.defineProperty(navigator, 'webdriver', { get: () => false });
-            
-            // Override plugins and mimeTypes to appear more like a real browser
-            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-            Object.defineProperty(navigator, 'mimeTypes', { get: () => [1, 2, 3, 4] });
-            
-            // Override chrome property
-            window.chrome = { runtime: {} };
-            
-            // Override permissions query
-            const originalQuery = window.navigator.permissions.query;
-            window.navigator.permissions.query = (parameters) => (
-                parameters.name === 'notifications' ?
-                    Promise.resolve({ state: Notification.permission }) :
-                    originalQuery(parameters)
-            );
-        ");
-        
-        var page = await context.NewPageAsync();
-        
-        // Set default timeout
-        page.SetDefaultTimeout(30000); // 30 seconds
-        page.SetDefaultNavigationTimeout(30000);
-
-        return page;
+        catch
+        {
+            if (context != null)
+            {
+                await SafeDisposeContextAsync(context).ConfigureAwait(false);
+            }
+            slots.Release();
+            throw;
+        }
     }
-    
+
     /// <summary>
-    /// Properly dispose a page and its context to prevent memory leaks.
+    /// Closes the page and returns its context to the pool. If the context or browser is
+    /// no longer healthy, the context is disposed instead of being reused.
     /// </summary>
     public async Task ClosePageAsync(IPage page)
     {
+        if (!_leases.TryRemove(page, out var lease))
+        {
+            // Unknown page — close it and its context, matching pre-pool behaviour.
+            try
+            {
+                var ctx = page.Context;
+                await page.CloseAsync().ConfigureAwait(false);
+                await ctx.CloseAsync().ConfigureAwait(false);
+                await ctx.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error closing unmanaged page");
+            }
+            return;
+        }
+
+        bool contextHealthy;
         try
         {
-            var context = page.Context;
-            await page.CloseAsync();
-            await context.CloseAsync();
-            await context.DisposeAsync();
+            await page.CloseAsync().ConfigureAwait(false);
+            contextHealthy = IsContextHealthy(lease.Context);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error closing page");
+            logger.LogWarning(ex, "Error closing pooled page; discarding context");
+            contextHealthy = false;
+        }
+
+        if (contextHealthy)
+        {
+            var bag = _idleContexts.GetOrAdd(lease.Key, _ => new ConcurrentBag<IBrowserContext>());
+            bag.Add(lease.Context);
+        }
+        else
+        {
+            await SafeDisposeContextAsync(lease.Context).ConfigureAwait(false);
+        }
+
+        SemaphoreSlim slots;
+        lock (_initLock)
+        {
+            slots = _poolSlots;
+        }
+        try
+        {
+            slots.Release();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Pool resized or service disposed; nothing to release.
+        }
+        catch (SemaphoreFullException)
+        {
+            // Defensive: more returns than borrows (e.g. after resize) — ignore.
         }
     }
 
     public async Task DisposeAsync()
     {
-        // Use lock-free check-and-set pattern to prevent double disposal
         if (Interlocked.CompareExchange(ref _disposeState, 1, 0) == 1)
-            return; // Already disposed
+            return;
 
         try
         {
+            foreach (var kvp in _idleContexts)
+            {
+                while (kvp.Value.TryTake(out var ctx))
+                {
+                    await SafeDisposeContextAsync(ctx).ConfigureAwait(false);
+                }
+            }
+            _idleContexts.Clear();
+
+            while (_liveContexts.TryTake(out var live))
+            {
+                await SafeDisposeContextAsync(live).ConfigureAwait(false);
+            }
+
             if (_browser != null)
             {
-                await _browser.CloseAsync();
-                await _browser.DisposeAsync();
+                await _browser.CloseAsync().ConfigureAwait(false);
+                await _browser.DisposeAsync().ConfigureAwait(false);
                 _browser = null;
             }
 
             _playwright?.Dispose();
             _playwright = null;
-            
-            // Dispose semaphore last
-            _initLock?.Dispose();
-            
-            _logger.LogInformation("Playwright resources disposed");
+
+            _poolSlots.Dispose();
+            _initLock.Dispose();
+
+            logger.LogInformation("Playwright resources disposed");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error disposing Playwright resources");
+            logger.LogError(ex, "Error disposing Playwright resources");
         }
     }
 
     public void Dispose()
     {
-        // Use lock-free check-and-set pattern to prevent double disposal
         if (Interlocked.CompareExchange(ref _disposeState, 1, 0) == 1)
-            return; // Already disposed
-        
-        _logger.LogWarning("Synchronous Dispose() called - prefer DisposeAsync() for proper cleanup");
-        
-        // Perform synchronous disposal with timeout
+            return;
+
+        logger.LogWarning("Synchronous Dispose() called - prefer DisposeAsync() for proper cleanup");
+
         try
         {
-            if (_browser != null || _playwright != null)
+            if (_browser != null || _playwright != null || !_idleContexts.IsEmpty || !_liveContexts.IsEmpty)
             {
                 var disposeTask = Task.Run(async () =>
                 {
                     try
                     {
+                        foreach (var kvp in _idleContexts)
+                        {
+                            while (kvp.Value.TryTake(out var ctx))
+                            {
+                                await SafeDisposeContextAsync(ctx).ConfigureAwait(false);
+                            }
+                        }
+                        _idleContexts.Clear();
+
+                        while (_liveContexts.TryTake(out var live))
+                        {
+                            await SafeDisposeContextAsync(live).ConfigureAwait(false);
+                        }
+
                         if (_browser != null)
                         {
-                            await _browser.CloseAsync();
-                            await _browser.DisposeAsync();
+                            await _browser.CloseAsync().ConfigureAwait(false);
+                            await _browser.DisposeAsync().ConfigureAwait(false);
                             _browser = null;
                         }
 
@@ -354,41 +421,140 @@ public class PlaywrightService(
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error disposing Playwright resources in synchronous Dispose");
+                        logger.LogError(ex, "Error disposing Playwright resources in synchronous Dispose");
                     }
                 });
-                
+
                 if (!disposeTask.Wait(TimeSpan.FromSeconds(5)))
                 {
-                    _logger.LogWarning("Playwright synchronous disposal timed out after 5 seconds");
+                    logger.LogWarning("Playwright synchronous disposal timed out after 5 seconds");
                 }
             }
-            
-            // Dispose semaphore
-            _initLock?.Dispose();
-            
-            _logger.LogInformation("Playwright resources disposed (synchronous path)");
+
+            _poolSlots.Dispose();
+            _initLock.Dispose();
+
+            logger.LogInformation("Playwright resources disposed (synchronous path)");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in synchronous Dispose");
+            logger.LogError(ex, "Error in synchronous Dispose");
         }
+    }
+
+    private async Task<IBrowserContext> CreateContextAsync(IBrowser browser, ProxySettings? proxySettings)
+    {
+        var contextOptions = new BrowserNewContextOptions
+        {
+            ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
+            Locale = "en-US",
+            TimezoneId = "America/New_York",
+            Permissions = new[] { "geolocation", "notifications" },
+            ColorScheme = ColorScheme.Light,
+            DeviceScaleFactor = 1,
+            HasTouch = false,
+            IsMobile = false,
+            JavaScriptEnabled = true
+        };
+
+        if (proxySettings is { Enabled: true } && !string.IsNullOrWhiteSpace(proxySettings.Server))
+        {
+            logger.LogInformation("Creating browser context with proxy: {ProxyUrl}", proxySettings.GetRedactedProxyUrl());
+
+            contextOptions.Proxy = new Proxy
+            {
+                Server = proxySettings.GetProxyUrl()
+            };
+
+            if (proxySettings.RequiresAuthentication && !string.IsNullOrWhiteSpace(proxySettings.Username))
+            {
+                contextOptions.Proxy.Username = proxySettings.Username;
+                contextOptions.Proxy.Password = proxySettings.GetPassword();
+            }
+
+            if (proxySettings.BypassList.Count > 0)
+            {
+                contextOptions.Proxy.Bypass = string.Join(",", proxySettings.BypassList);
+            }
+        }
+
+        var context = await browser.NewContextAsync(contextOptions).ConfigureAwait(false);
+
+        await context.AddInitScriptAsync(@"
+            Object.defineProperty(navigator, 'webdriver', { get: () => false });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+            Object.defineProperty(navigator, 'mimeTypes', { get: () => [1, 2, 3, 4] });
+            window.chrome = { runtime: {} };
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
+        ").ConfigureAwait(false);
+
+        return context;
+    }
+
+    private async Task SafeDisposeContextAsync(IBrowserContext context)
+    {
+        try
+        {
+            await context.CloseAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Error closing browser context");
+        }
+
+        try
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Error disposing browser context");
+        }
+    }
+
+    private bool IsContextHealthy(IBrowserContext context)
+    {
+        if (_browser == null || !_browser.IsConnected) return false;
+        try
+        {
+            return context.Browser is { IsConnected: true };
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string BuildProxyKey(ProxySettings? proxySettings)
+    {
+        if (proxySettings is not { Enabled: true } || string.IsNullOrWhiteSpace(proxySettings.Server))
+        {
+            return "::direct::";
+        }
+        var bypass = proxySettings.BypassList.Count > 0
+            ? string.Join(",", proxySettings.BypassList)
+            : "";
+        return $"{proxySettings.Type}|{proxySettings.GetProxyUrl()}|{proxySettings.Username}|{bypass}";
     }
 
     private async Task<bool> CheckBrowserInstalledAsync()
     {
         try
         {
-            // Try to launch browser briefly to check if it's installed
             var testBrowser = await _playwright!.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
             {
                 Headless = true,
                 Timeout = 5000
-            });
-            
-            await testBrowser.CloseAsync();
-            await testBrowser.DisposeAsync();
-            
+            }).ConfigureAwait(false);
+
+            await testBrowser.CloseAsync().ConfigureAwait(false);
+            await testBrowser.DisposeAsync().ConfigureAwait(false);
+
             return true;
         }
         catch
@@ -399,19 +565,14 @@ public class PlaywrightService(
 
     private async Task<int> RunPlaywrightInstallAsync(IProgress<string>? progress)
     {
-        // For .NET Playwright, use the built-in Program.Main method
-        // This is the official way to install browsers for Microsoft.Playwright NuGet package
-        
         return await Task.Run(() =>
         {
             try
             {
                 progress?.Report("Installing Chromium browser...");
-                
-                // Use the built-in Playwright installation
-                // This calls the playwright.ps1 script bundled with the NuGet package
+
                 var exitCode = Microsoft.Playwright.Program.Main(new[] { "install", "chromium" });
-                
+
                 if (exitCode == 0)
                 {
                     progress?.Report("Chromium installation completed successfully");
@@ -420,16 +581,15 @@ public class PlaywrightService(
                 {
                     progress?.Report($"Installation failed with exit code {exitCode}");
                 }
-                
+
                 return exitCode;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during Playwright installation");
+                logger.LogError(ex, "Error during Playwright installation");
                 progress?.Report($"Error: {ex.Message}");
                 return -1;
             }
-        });
+        }).ConfigureAwait(false);
     }
 }
-

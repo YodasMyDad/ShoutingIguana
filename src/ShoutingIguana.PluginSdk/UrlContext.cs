@@ -8,7 +8,7 @@ namespace ShoutingIguana.PluginSdk;
 /// </summary>
 /// <param name="Url">The URL being analyzed.</param>
 /// <param name="Page">Abstraction over browser page (if JavaScript rendering was used). Null if fetched via HttpClient only.</param>
-/// <param name="HttpResponse">Raw HTTP response (if fetched via HttpClient). May be null if fetched via Playwright.</param>
+/// <param name="HttpResponse">Immutable snapshot of the HTTP response (scheme, host, status, headers, content-type, bytes read). May be null if not captured.</param>
 /// <param name="RenderedHtml">Rendered HTML content (after JavaScript execution if applicable).</param>
 /// <param name="Headers">HTTP response headers.</param>
 /// <param name="Project">Project-wide crawl settings.</param>
@@ -54,7 +54,7 @@ namespace ShoutingIguana.PluginSdk;
 public sealed record UrlContext(
     Uri Url,
     IBrowserPage? Page,
-    HttpResponseMessage? HttpResponse,
+    UrlResponseInfo? HttpResponse,
     string? RenderedHtml,
     IReadOnlyDictionary<string, string> Headers,
     ProjectSettings Project,
@@ -62,6 +62,24 @@ public sealed record UrlContext(
     IReportSink Reports,
     IUrlEnqueue Enqueue,
     ILogger Logger);
+
+/// <summary>
+/// Immutable snapshot of HTTP response data for a crawled URL.
+/// Replaces the previous <c>HttpResponseMessage</c> to keep the SDK surface free of framework disposables.
+/// </summary>
+/// <param name="Scheme">URI scheme (e.g., "http", "https").</param>
+/// <param name="Host">URI host component.</param>
+/// <param name="StatusCode">HTTP status code.</param>
+/// <param name="Headers">Response headers — keys lowercased, values preserved as multi-value lists.</param>
+/// <param name="ContentType">Raw Content-Type header value, if present.</param>
+/// <param name="BytesRead">Number of response bytes read from the network.</param>
+public sealed record UrlResponseInfo(
+    string Scheme,
+    string Host,
+    int StatusCode,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> Headers,
+    string? ContentType,
+    long BytesRead);
 
 /// <summary>
 /// Metadata about the crawled URL, including HTTP status and SEO-specific data.

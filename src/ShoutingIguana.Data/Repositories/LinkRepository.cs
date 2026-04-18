@@ -16,6 +16,7 @@ public class LinkRepository(IShoutingIguanaDbContext context) : ILinkRepository
     public async Task<IEnumerable<Link>> GetByProjectIdAsync(int projectId)
     {
         return await context.Links
+            .AsNoTracking()
             .Where(l => l.ProjectId == projectId)
             .ToListAsync().ConfigureAwait(false);
     }
@@ -32,6 +33,7 @@ public class LinkRepository(IShoutingIguanaDbContext context) : ILinkRepository
     public async Task<IEnumerable<Link>> GetByToUrlIdAsync(int toUrlId)
     {
         return await context.Links
+            .AsNoTracking()
             .Where(l => l.ToUrlId == toUrlId)
             .ToListAsync().ConfigureAwait(false);
     }

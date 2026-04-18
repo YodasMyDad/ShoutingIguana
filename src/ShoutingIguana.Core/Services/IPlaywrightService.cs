@@ -40,16 +40,23 @@ public interface IPlaywrightService
     Task<IBrowser> GetBrowserAsync();
     
     /// <summary>
-    /// Create a new browser page with configured settings.
+    /// Borrow a page from the pool. The underlying <see cref="IBrowserContext"/> is reused
+    /// across borrows; UA is applied per-page via extra HTTP headers.
     /// </summary>
     /// <param name="userAgent">User agent string to use for this page</param>
     /// <param name="proxySettings">Optional proxy settings to use for this page</param>
     Task<IPage> CreatePageAsync(string userAgent, ProxySettings? proxySettings = null);
-    
+
     /// <summary>
-    /// Properly close a page and dispose its context to prevent memory leaks.
+    /// Returns the page's context to the pool, or disposes it if the context has faulted.
     /// </summary>
     Task ClosePageAsync(IPage page);
+
+    /// <summary>
+    /// Configure the maximum number of concurrently borrowed contexts. Should be called
+    /// before a crawl starts with the active project's ConcurrentRequests.
+    /// </summary>
+    void ConfigurePoolSize(int size);
     
     /// <summary>
     /// Dispose resources.

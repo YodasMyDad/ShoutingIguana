@@ -14,9 +14,6 @@ namespace ShoutingIguana.Core.Services;
 /// </summary>
 public class ListModeService(ILogger<ListModeService> logger, IServiceProvider serviceProvider) : IListModeService
 {
-    private readonly ILogger<ListModeService> _logger = logger;
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
-
     public async Task<ListModeImportResult> ImportUrlListAsync(
         int projectId,
         string csvFilePath,
@@ -34,7 +31,7 @@ public class ListModeService(ILogger<ListModeService> logger, IServiceProvider s
                 return result;
             }
 
-            _logger.LogInformation("Importing URL list from: {CsvFilePath}", csvFilePath);
+            logger.LogInformation("Importing URL list from: {CsvFilePath}", csvFilePath);
             progress?.Report("Reading CSV file...");
 
             var urls = new List<UrlImportRecord>();
@@ -47,7 +44,7 @@ public class ListModeService(ILogger<ListModeService> logger, IServiceProvider s
                 BadDataFound = null
             }))
             {
-                await foreach (var record in csv.GetRecordsAsync<UrlImportRecord>())
+                await foreach (var record in csv.GetRecordsAsync<UrlImportRecord>().ConfigureAwait(false))
                 {
                     if (!string.IsNullOrWhiteSpace(record.Url))
                     {
@@ -56,11 +53,11 @@ public class ListModeService(ILogger<ListModeService> logger, IServiceProvider s
                 }
             }
 
-            _logger.LogInformation("Read {Count} URLs from CSV", urls.Count);
+            logger.LogInformation("Read {Count} URLs from CSV", urls.Count);
             progress?.Report($"Validating {urls.Count} URLs...");
 
             // Validate and import URLs
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = serviceProvider.CreateScope();
             var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
 
             foreach (var record in urls)
@@ -70,7 +67,7 @@ public class ListModeService(ILogger<ListModeService> logger, IServiceProvider s
                     // Validate URL
                     if (!Uri.TryCreate(record.Url, UriKind.Absolute, out var uri))
                     {
-                        _logger.LogWarning("Invalid URL skipped: {Url}", record.Url);
+                        logger.LogWarning("Invalid URL skipped: {Url}", record.Url);
                         result.InvalidCount++;
                         result.Errors.Add($"Invalid URL: {record.Url}");
                         continue;
@@ -80,10 +77,10 @@ public class ListModeService(ILogger<ListModeService> logger, IServiceProvider s
                     var normalizedUrl = uri.ToString();
 
                     // Check if already in queue
-                    var existing = await queueRepository.GetByAddressAsync(projectId, normalizedUrl);
+                    var existing = await queueRepository.GetByAddressAsync(projectId, normalizedUrl).ConfigureAwait(false);
                     if (existing != null)
                     {
-                        _logger.LogDebug("URL already in queue, skipping: {Url}", normalizedUrl);
+                        logger.LogDebug("URL already in queue, skipping: {Url}", normalizedUrl);
                         result.SkippedCount++;
                         continue;
                     }
@@ -100,7 +97,7 @@ public class ListModeService(ILogger<ListModeService> logger, IServiceProvider s
                         EnqueuedUtc = DateTime.UtcNow
                     };
 
-                    await queueRepository.CreateAsync(queueItem);
+                    await queueRepository.CreateAsync(queueItem).ConfigureAwait(false);
                     result.ImportedCount++;
 
                     if (result.ImportedCount % 10 == 0)
@@ -110,21 +107,21 @@ public class ListModeService(ILogger<ListModeService> logger, IServiceProvider s
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error importing URL: {Url}", record.Url);
+                    logger.LogError(ex, "Error importing URL: {Url}", record.Url);
                     result.InvalidCount++;
                     result.Errors.Add($"Error importing {record.Url}: {ex.Message}");
                 }
             }
 
             result.Success = true;
-            _logger.LogInformation("Import complete: {Imported} imported, {Skipped} skipped, {Invalid} invalid",
+            logger.LogInformation("Import complete: {Imported} imported, {Skipped} skipped, {Invalid} invalid",
                 result.ImportedCount, result.SkippedCount, result.InvalidCount);
             
             progress?.Report($"✓ Imported {result.ImportedCount} URLs");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to import URL list");
+            logger.LogError(ex, "Failed to import URL list");
             result.Success = false;
             result.ErrorMessage = ex.Message;
         }

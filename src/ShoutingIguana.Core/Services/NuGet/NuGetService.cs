@@ -17,24 +17,12 @@ namespace ShoutingIguana.Core.Services.NuGet;
 /// <summary>
 /// Implementation of INuGetService using NuGet.Protocol.
 /// </summary>
-public class NuGetService : INuGetService
+public class NuGetService(
+    ILogger<NuGetService> logger,
+    IFeedConfigurationService feedService,
+    IDependencyResolver dependencyResolver,
+    IPackageSecurityService securityService) : INuGetService
 {
-    private readonly ILogger<NuGetService> _logger;
-    private readonly IFeedConfigurationService _feedService;
-    private readonly IDependencyResolver _dependencyResolver;
-    private readonly IPackageSecurityService _securityService;
-
-    public NuGetService(
-        ILogger<NuGetService> logger,
-        IFeedConfigurationService feedService,
-        IDependencyResolver dependencyResolver,
-        IPackageSecurityService securityService)
-    {
-        _logger = logger;
-        _feedService = feedService;
-        _dependencyResolver = dependencyResolver;
-        _securityService = securityService;
-    }
 
     public async Task<IReadOnlyList<PackageSearchResult>> SearchPackagesAsync(
         string searchTerm,
@@ -48,14 +36,14 @@ public class NuGetService : INuGetService
 
         try
         {
-            var feeds = await _feedService.GetFeedsAsync();
+            var feeds = await feedService.GetFeedsAsync().ConfigureAwait(false);
             
             foreach (var feed in feeds)
             {
                 try
                 {
                     var repository = Repository.Factory.GetCoreV3(feed.Url);
-                    var searchResource = await repository.GetResourceAsync<PackageSearchResource>(cancellationToken);
+                    var searchResource = await repository.GetResourceAsync<PackageSearchResource>(cancellationToken).ConfigureAwait(false);
 
                     var searchFilter = new SearchFilter(includePrerelease: includePrerelease);
                     var searchResults = await searchResource.SearchAsync(
@@ -63,8 +51,8 @@ public class NuGetService : INuGetService
                         searchFilter,
                         skip,
                         take,
-                        new NuGetLogger(_logger),
-                        cancellationToken);
+                        new NuGetLogger(logger),
+                        cancellationToken).ConfigureAwait(false);
 
                     foreach (var result in searchResults)
                     {
@@ -93,13 +81,13 @@ public class NuGetService : INuGetService
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to search feed: {FeedUrl}", feed.Url);
+                    logger.LogWarning(ex, "Failed to search feed: {FeedUrl}", feed.Url);
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error searching packages");
+            logger.LogError(ex, "Error searching packages");
         }
 
         return results;
@@ -112,14 +100,14 @@ public class NuGetService : INuGetService
     {
         try
         {
-            var feeds = await _feedService.GetFeedsAsync();
+            var feeds = await feedService.GetFeedsAsync().ConfigureAwait(false);
 
             foreach (var feed in feeds)
             {
                 try
                 {
                     var repository = Repository.Factory.GetCoreV3(feed.Url);
-                    var metadataResource = await repository.GetResourceAsync<PackageMetadataResource>(cancellationToken);
+                    var metadataResource = await repository.GetResourceAsync<PackageMetadataResource>(cancellationToken).ConfigureAwait(false);
 
                     using var sourceCacheContext = new SourceCacheContext();
                     var metadata = await metadataResource.GetMetadataAsync(
@@ -127,8 +115,8 @@ public class NuGetService : INuGetService
                         includePrerelease: false,
                         includeUnlisted: false,
                         sourceCacheContext,
-                        new NuGetLogger(_logger),
-                        cancellationToken);
+                        new NuGetLogger(logger),
+                        cancellationToken).ConfigureAwait(false);
 
                     var package = version == null
                         ? metadata.OrderByDescending(m => m.Identity.Version).FirstOrDefault()
@@ -151,13 +139,13 @@ public class NuGetService : INuGetService
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to get metadata from feed: {FeedUrl}", feed.Url);
+                    logger.LogWarning(ex, "Failed to get metadata from feed: {FeedUrl}", feed.Url);
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting package metadata");
+            logger.LogError(ex, "Error getting package metadata");
         }
 
         return null;
@@ -172,7 +160,7 @@ public class NuGetService : INuGetService
     {
         try
         {
-            var feeds = await _feedService.GetFeedsAsync();
+            var feeds = await feedService.GetFeedsAsync().ConfigureAwait(false);
             Directory.CreateDirectory(targetDirectory);
 
             foreach (var feed in feeds)
@@ -180,7 +168,7 @@ public class NuGetService : INuGetService
                 try
                 {
                     var repository = Repository.Factory.GetCoreV3(feed.Url);
-                    var downloadResource = await repository.GetResourceAsync<DownloadResource>(cancellationToken);
+                    var downloadResource = await repository.GetResourceAsync<DownloadResource>(cancellationToken).ConfigureAwait(false);
 
                     var packageIdentity = new global::NuGet.Packaging.Core.PackageIdentity(
                         packageId,
@@ -191,8 +179,8 @@ public class NuGetService : INuGetService
                         packageIdentity,
                         new PackageDownloadContext(sourceCacheContext),
                         Path.GetTempPath(),
-                        new NuGetLogger(_logger),
-                        cancellationToken);
+                        new NuGetLogger(logger),
+                        cancellationToken).ConfigureAwait(false);
 
                     if (downloadResult.Status == DownloadResourceResultStatus.Available)
                     {
@@ -201,18 +189,18 @@ public class NuGetService : INuGetService
                         using (var packageStream = downloadResult.PackageStream)
                         using (var fileStream = File.Create(packageFile))
                         {
-                            await packageStream.CopyToAsync(fileStream, cancellationToken);
+                            await packageStream.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
                         }
 
                         progress?.Report(100);
 
-                        _logger.LogInformation("Downloaded package: {PackageId} v{Version}", packageId, version);
+                        logger.LogInformation("Downloaded package: {PackageId} v{Version}", packageId, version);
                         return packageFile;
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to download from feed: {FeedUrl}", feed.Url);
+                    logger.LogWarning(ex, "Failed to download from feed: {FeedUrl}", feed.Url);
                 }
             }
 
@@ -220,7 +208,7 @@ public class NuGetService : INuGetService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error downloading package");
+            logger.LogError(ex, "Error downloading package");
             throw;
         }
     }
@@ -231,10 +219,10 @@ public class NuGetService : INuGetService
     {
         try
         {
-            _logger.LogInformation("Validating package: {PackagePath}", packagePath);
+            logger.LogInformation("Validating package: {PackagePath}", packagePath);
 
             // Validate package size first
-            if (!await _securityService.ValidatePackageSizeAsync(packagePath, cancellationToken))
+            if (!await securityService.ValidatePackageSizeAsync(packagePath, cancellationToken).ConfigureAwait(false))
             {
                 return new ValidationResult
                 {
@@ -252,7 +240,7 @@ public class NuGetService : INuGetService
             {
                 // Open the package
                 using var packageReader = new PackageArchiveReader(packagePath);
-                var packageIdentity = await packageReader.GetIdentityAsync(cancellationToken);
+                var packageIdentity = await packageReader.GetIdentityAsync(cancellationToken).ConfigureAwait(false);
                 var packageId = packageIdentity.Id;
                 var packageVersion = packageIdentity.Version.ToString();
 
@@ -268,28 +256,28 @@ public class NuGetService : INuGetService
                 }
 
                 // Resolve dependencies
-                _logger.LogDebug("Resolving dependencies for {PackageId} v{Version}", packageId, packageVersion);
+                logger.LogDebug("Resolving dependencies for {PackageId} v{Version}", packageId, packageVersion);
                 var targetFramework = NuGetFramework.Parse("net10.0");
-                var dependencyResolution = await _dependencyResolver.ResolveDependenciesAsync(
+                var dependencyResolution = await dependencyResolver.ResolveDependenciesAsync(
                     packageId,
                     packageVersion,
                     targetFramework,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
 
                 var dependencies = dependencyResolution.Dependencies.ToList();
                 var warnings = new List<string>(dependencyResolution.Warnings);
 
                 // Get feed URL from first feed (for security validation)
-                var feeds = await _feedService.GetFeedsAsync();
+                var feeds = await feedService.GetFeedsAsync().ConfigureAwait(false);
                 var feedUrl = feeds.FirstOrDefault(f => f.Enabled)?.Url ?? "https://api.nuget.org/v3/index.json";
 
                 // Perform security validation
-                var securityResult = await _securityService.ValidatePackageSecurityAsync(
+                var securityResult = await securityService.ValidatePackageSecurityAsync(
                     packageId,
                     packageVersion,
                     dependencies,
                     feedUrl,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
 
                 if (!securityResult.IsValid)
                 {
@@ -306,7 +294,7 @@ public class NuGetService : INuGetService
                 warnings.AddRange(securityResult.Warnings);
 
                 // Extract files
-                var files = await packageReader.GetFilesAsync(cancellationToken);
+                var files = await packageReader.GetFilesAsync(cancellationToken).ConfigureAwait(false);
                 foreach (var file in files)
                 {
                     if (file.StartsWith("lib/"))
@@ -317,7 +305,7 @@ public class NuGetService : INuGetService
                         // Extract file using stream
                         using var sourceStream = packageReader.GetStream(file);
                         using var targetStream = File.Create(targetPath);
-                        await sourceStream.CopyToAsync(targetStream, cancellationToken);
+                        await sourceStream.CopyToAsync(targetStream, cancellationToken).ConfigureAwait(false);
                     }
                 }
 
@@ -329,7 +317,7 @@ public class NuGetService : INuGetService
                     ValidationResult? result = null;
                     
                     // Use a collectible ALC for inspection to avoid memory leaks
-                    var inspectionContext = new PluginLoadContext(dllFile, _logger);
+                    var inspectionContext = new PluginLoadContext(dllFile, logger);
                     WeakReference weakRef = new(inspectionContext, trackResurrection: true);
                     
                     try
@@ -410,7 +398,7 @@ public class NuGetService : INuGetService
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogDebug(ex, "Failed to inspect assembly: {DllFile}", dllFile);
+                        logger.LogDebug(ex, "Failed to inspect assembly: {DllFile}", dllFile);
                     }
                     finally
                     {
@@ -447,15 +435,15 @@ public class NuGetService : INuGetService
                 {
                     Directory.Delete(tempDir, true);
                 }
-                catch
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    // Ignore cleanup errors
+                    logger.LogDebug(ex, "Failed to clean up temp validation directory {TempDir}", tempDir);
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error validating package");
+            logger.LogError(ex, "Error validating package");
             return new ValidationResult
             {
                 Result = PackageValidationResult.InvalidPackage,
@@ -476,9 +464,9 @@ public class NuGetService : INuGetService
                 totalSize += mainFileInfo.Length;
             }
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Ignore errors
+            logger.LogDebug(ex, "Failed to read size of package {Path}", mainPackagePath);
         }
 
         totalSize += dependencies.Sum(d => d.PackageSize);
@@ -494,7 +482,7 @@ public class NuGetService : INuGetService
     {
         try
         {
-            _logger.LogInformation("Downloading {PackageId} v{Version} with dependencies", packageId, version);
+            logger.LogInformation("Downloading {PackageId} v{Version} with dependencies", packageId, version);
             
             progress?.Report(new InstallProgress { Status = "Resolving dependencies...", PercentComplete = 5 });
 
@@ -502,11 +490,11 @@ public class NuGetService : INuGetService
             var targetFramework = NuGetFramework.Parse("net10.0");
             
             // Resolve all dependencies
-            var resolutionResult = await _dependencyResolver.ResolveDependenciesAsync(
+            var resolutionResult = await dependencyResolver.ResolveDependenciesAsync(
                 packageId,
                 version,
                 targetFramework,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             if (!resolutionResult.Success)
             {
@@ -518,7 +506,7 @@ public class NuGetService : INuGetService
             }
 
             var dependencies = resolutionResult.Dependencies.ToList();
-            _logger.LogInformation("Resolved {Count} dependencies for {PackageId}", dependencies.Count, packageId);
+            logger.LogInformation("Resolved {Count} dependencies for {PackageId}", dependencies.Count, packageId);
 
             progress?.Report(new InstallProgress { Status = "Downloading packages...", PercentComplete = 20 });
 
@@ -528,7 +516,7 @@ public class NuGetService : INuGetService
                 version,
                 targetDirectory,
                 null,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             var dependencyPaths = new List<string> { mainPackagePath };
             var totalPackages = dependencies.Count + 1;
@@ -551,7 +539,7 @@ public class NuGetService : INuGetService
                         dep.Version,
                         targetDirectory,
                         null,
-                        cancellationToken);
+                        cancellationToken).ConfigureAwait(false);
 
                     dependencyPaths.Add(depPath);
                     downloadedCount++;
@@ -579,7 +567,7 @@ public class NuGetService : INuGetService
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to download dependency {PackageId} v{Version}", 
+                    logger.LogWarning(ex, "Failed to download dependency {PackageId} v{Version}", 
                         dep.PackageId, dep.Version);
                     // Continue with other dependencies rather than failing completely
                 }
@@ -597,7 +585,7 @@ public class NuGetService : INuGetService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error downloading package with dependencies: {PackageId}", packageId);
+            logger.LogError(ex, "Error downloading package with dependencies: {PackageId}", packageId);
             return new DownloadWithDependenciesResult
             {
                 Success = false,
@@ -612,15 +600,13 @@ public class NuGetService : INuGetService
 /// </summary>
 internal class NuGetLogger(ILogger logger) : NuGetILogger
 {
-    private readonly ILogger _logger = logger;
-
-    public void LogDebug(string data) => _logger.LogDebug("{Message}", data);
-    public void LogVerbose(string data) => _logger.LogTrace("{Message}", data);
-    public void LogInformation(string data) => _logger.LogInformation("{Message}", data);
-    public void LogMinimal(string data) => _logger.LogInformation("{Message}", data);
-    public void LogWarning(string data) => _logger.LogWarning("{Message}", data);
-    public void LogError(string data) => _logger.LogError("{Message}", data);
-    public void LogInformationSummary(string data) => _logger.LogInformation("{Message}", data);
+    public void LogDebug(string data) => logger.LogDebug("{Message}", data);
+    public void LogVerbose(string data) => logger.LogTrace("{Message}", data);
+    public void LogInformation(string data) => logger.LogInformation("{Message}", data);
+    public void LogMinimal(string data) => logger.LogInformation("{Message}", data);
+    public void LogWarning(string data) => logger.LogWarning("{Message}", data);
+    public void LogError(string data) => logger.LogError("{Message}", data);
+    public void LogInformationSummary(string data) => logger.LogInformation("{Message}", data);
 
     public void Log(NuGetLogLevel level, string data)
     {

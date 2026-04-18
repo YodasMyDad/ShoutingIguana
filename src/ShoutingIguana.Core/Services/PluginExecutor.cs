@@ -16,10 +16,6 @@ public class PluginExecutor(
     IPluginRegistry pluginRegistry,
     IServiceProvider serviceProvider)
 {
-    private readonly ILogger<PluginExecutor> _logger = logger;
-    private readonly IPluginRegistry _pluginRegistry = pluginRegistry;
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
-
     public async Task ExecuteTasksAsync(
         UrlAnalysisDto urlData,
         IPage? page,
@@ -30,24 +26,24 @@ public class PluginExecutor(
         int projectId,
         CancellationToken cancellationToken)
     {
-        var tasks = _pluginRegistry.GetTasksByPriority();
+        var tasks = pluginRegistry.GetTasksByPriority();
         if (tasks.Count == 0)
         {
-            _logger.LogWarning("No plugin tasks registered");
+            logger.LogWarning("No plugin tasks registered");
             return;
         }
 
-        _logger.LogDebug("Executing {Count} plugin tasks for {Url}", tasks.Count, urlData.Address);
+        logger.LogDebug("Executing {Count} plugin tasks for {Url}", tasks.Count, urlData.Address);
 
         // Create context
         IBrowserPage? browserPage = page != null ? new BrowserPage(page) : null;
         
-        var reportSink = new ReportSink(urlData.Id, projectId, _serviceProvider, _logger);
+        var reportSink = new ReportSink(urlData.Id, projectId, serviceProvider, logger);
         
         var urlContext = new UrlContext(
             Url: new Uri(urlData.Address),
             Page: browserPage,
-            HttpResponse: null, // We don't pass HttpResponse in Stage 2
+            HttpResponse: BuildResponseInfo(urlData, headers),
             RenderedHtml: renderedHtml,
             Headers: headers,
             Project: new ProjectSettings(
@@ -79,7 +75,7 @@ public class PluginExecutor(
                 IsRedirectLoop: urlData.IsRedirectLoop),
             Reports: reportSink,
             Enqueue: new UrlEnqueueStub(), // Not implemented in Stage 2
-            Logger: _logger);
+            Logger: logger);
 
         // Execute each task with proper cleanup
         try
@@ -91,25 +87,47 @@ public class PluginExecutor(
                     // Check for cancellation before executing each task
                     cancellationToken.ThrowIfCancellationRequested();
                     
-                    _logger.LogDebug("Executing task: {TaskName}", task.DisplayName);
-                    await task.ExecuteAsync(urlContext, cancellationToken);
+                    logger.LogDebug("Executing task: {TaskName}", task.DisplayName);
+                    await task.ExecuteAsync(urlContext, cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.LogInformation("Task execution cancelled for {Url}", urlData.Address);
+                    logger.LogInformation("Task execution cancelled for {Url}", urlData.Address);
                     throw;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error executing task {TaskName} for {Url}", task.DisplayName, urlData.Address);
+                    logger.LogError(ex, "Error executing task {TaskName} for {Url}", task.DisplayName, urlData.Address);
                 }
             }
         }
         finally
         {
             // Always flush findings and reports, even if an error occurred
-            await reportSink.FlushAsync();
+            await reportSink.FlushAsync().ConfigureAwait(false);
         }
+    }
+
+    private static UrlResponseInfo? BuildResponseInfo(UrlAnalysisDto urlData, Dictionary<string, string> headers)
+    {
+        if (urlData.HttpStatus is null || !Uri.TryCreate(urlData.Address, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        var responseHeaders = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in headers)
+        {
+            responseHeaders[key] = new[] { value };
+        }
+
+        return new UrlResponseInfo(
+            Scheme: uri.Scheme,
+            Host: uri.Host,
+            StatusCode: urlData.HttpStatus.Value,
+            Headers: responseHeaders,
+            ContentType: urlData.ContentType,
+            BytesRead: urlData.ContentLength ?? 0);
     }
 }
 
@@ -118,22 +136,18 @@ public class PluginExecutor(
 /// </summary>
 internal class ReportSink(int? urlId, int projectId, IServiceProvider serviceProvider, ILogger logger) : IReportSink
 {
-    private readonly int? _urlId = urlId;
-    private readonly int _projectId = projectId;
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
-    private readonly ILogger _logger = logger;
     private readonly List<ShoutingIguana.Core.Models.ReportRow> _pendingRows = [];
     private const int IssueTextMaxLength = 512;
 
-    public async Task ReportAsync(string taskKey, PluginSdk.ReportRow row, int? urlId = null, CancellationToken ct = default)
+    public async Task ReportAsync(string taskKey, PluginSdk.ReportRow row, int? overrideUrlId = null, CancellationToken ct = default)
     {
         try
         {
             var reportRow = new ShoutingIguana.Core.Models.ReportRow
             {
-                ProjectId = _projectId,
+                ProjectId = projectId,
                 TaskKey = taskKey,
-                UrlId = urlId ?? _urlId,
+                UrlId = overrideUrlId ?? urlId,
                 CreatedUtc = DateTime.UtcNow
             };
             
@@ -144,14 +158,14 @@ internal class ReportSink(int? urlId, int projectId, IServiceProvider servicePro
 
             // Batch rows - don't save immediately
             _pendingRows.Add(reportRow);
-            _logger.LogDebug("Report row queued for task: {TaskKey}", taskKey);
+            logger.LogDebug("Report row queued for task: {TaskKey}", taskKey);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error queueing report row for task: {TaskKey}", taskKey);
+            logger.LogError(ex, "Error queueing report row for task: {TaskKey}", taskKey);
         }
         
-        await Task.CompletedTask;
+        await Task.CompletedTask.ConfigureAwait(false);
     }
     
     /// <summary>
@@ -165,18 +179,18 @@ internal class ReportSink(int? urlId, int projectId, IServiceProvider servicePro
         try
         {
             // Create a new scope to get a fresh DbContext
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = serviceProvider.CreateScope();
             var reportRepository = scope.ServiceProvider.GetRequiredService<IReportDataRepository>();
             
             // Use the batch insert method which handles transactions internally
-            await reportRepository.CreateBatchAsync(_pendingRows);
+            await reportRepository.CreateBatchAsync(_pendingRows).ConfigureAwait(false);
             
-            _logger.LogDebug("Flushed {Count} report rows to database", _pendingRows.Count);
+            logger.LogDebug("Flushed {Count} report rows to database", _pendingRows.Count);
             _pendingRows.Clear();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error flushing report rows to database");
+            logger.LogError(ex, "Error flushing report rows to database");
             // Rows remain in _pendingRows for potential retry or investigation
         }
     }

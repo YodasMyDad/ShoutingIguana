@@ -16,10 +16,6 @@ public class DependencyResolver(
     IFeedConfigurationService feedService,
     IDependencyCache dependencyCache) : IDependencyResolver
 {
-    private readonly ILogger<DependencyResolver> _logger = logger;
-    private readonly IFeedConfigurationService _feedService = feedService;
-    private readonly IDependencyCache _dependencyCache = dependencyCache;
-
     public async Task<DependencyResolutionResult> ResolveDependenciesAsync(
         string packageId,
         string version,
@@ -32,7 +28,7 @@ public class DependencyResolver(
 
         try
         {
-            _logger.LogInformation("Resolving dependencies for {PackageId} v{Version} (target: {Framework})",
+            logger.LogInformation("Resolving dependencies for {PackageId} v{Version} (target: {Framework})",
                 packageId, version, targetFramework.GetShortFolderName());
 
             var success = await ResolveDependenciesRecursiveAsync(
@@ -44,7 +40,7 @@ public class DependencyResolver(
                 resolvedDependencies,
                 visitedPackages,
                 warnings,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             if (!success)
             {
@@ -56,7 +52,7 @@ public class DependencyResolver(
                 };
             }
 
-            _logger.LogInformation("Resolved {Count} dependencies for {PackageId}",
+            logger.LogInformation("Resolved {Count} dependencies for {PackageId}",
                 resolvedDependencies.Count, packageId);
 
             return new DependencyResolutionResult
@@ -68,7 +64,7 @@ public class DependencyResolver(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error resolving dependencies for {PackageId}", packageId);
+            logger.LogError(ex, "Error resolving dependencies for {PackageId}", packageId);
             return new DependencyResolutionResult
             {
                 Success = false,
@@ -108,25 +104,25 @@ public class DependencyResolver(
 
         try
         {
-            var feeds = await _feedService.GetFeedsAsync();
+            var feeds = await feedService.GetFeedsAsync().ConfigureAwait(false);
             
             foreach (var feed in feeds.Where(f => f.Enabled))
             {
                 try
                 {
                     var repository = Repository.Factory.GetCoreV3(feed.Url);
-                    var metadataResource = await repository.GetResourceAsync<PackageMetadataResource>(cancellationToken);
+                    var metadataResource = await repository.GetResourceAsync<PackageMetadataResource>(cancellationToken).ConfigureAwait(false);
 
                     var packageIdentity = new PackageIdentity(packageId, NuGetVersion.Parse(version));
-                    
+
                     using var sourceCacheContext = new SourceCacheContext();
                     var metadata = await metadataResource.GetMetadataAsync(
                         packageId,
                         includePrerelease: true,
                         includeUnlisted: false,
                         sourceCacheContext,
-                        new NuGetLogger(_logger),
-                        cancellationToken);
+                        new NuGetLogger(logger),
+                        cancellationToken).ConfigureAwait(false);
 
                     var packageMetadata = metadata.FirstOrDefault(m => m.Identity.Version.ToString() == version);
                     if (packageMetadata == null)
@@ -164,7 +160,7 @@ public class DependencyResolver(
                             // Skip framework assemblies
                             if (IsFrameworkAssembly(dependency.Id))
                             {
-                                _logger.LogDebug("Skipping framework assembly: {PackageId}", dependency.Id);
+                                logger.LogDebug("Skipping framework assembly: {PackageId}", dependency.Id);
                                 continue;
                             }
 
@@ -173,7 +169,7 @@ public class DependencyResolver(
                                 dependency.Id,
                                 dependency.VersionRange,
                                 feed.Url,
-                                cancellationToken);
+                                cancellationToken).ConfigureAwait(false);
 
                             if (resolvedVersion == null)
                             {
@@ -183,9 +179,9 @@ public class DependencyResolver(
 
                             // Check if the host application already has this assembly loaded
                             var systemVersion = new Version(resolvedVersion.Major, resolvedVersion.Minor, resolvedVersion.Patch);
-                            if (_dependencyCache.IsAssemblyLoadedInHost(dependency.Id, systemVersion))
+                            if (dependencyCache.IsAssemblyLoadedInHost(dependency.Id, systemVersion))
                             {
-                                _logger.LogInformation("Skipping {PackageId} v{Version} - already loaded in host application", 
+                                logger.LogInformation("Skipping {PackageId} v{Version} - already loaded in host application", 
                                     dependency.Id, resolvedVersion);
                                 continue;
                             }
@@ -200,7 +196,7 @@ public class DependencyResolver(
                                 
                                 if (resolvedVersion > existingVersion)
                                 {
-                                    _logger.LogDebug("Upgrading {PackageId} from {OldVersion} to {NewVersion}",
+                                    logger.LogDebug("Upgrading {PackageId} from {OldVersion} to {NewVersion}",
                                         dependency.Id, existingVersion.ToString(), resolvedVersion.ToString());
                                     
                                     // Update to newer version
@@ -240,7 +236,7 @@ public class DependencyResolver(
                                 resolvedDependencies,
                                 visitedPackages,
                                 warnings,
-                                cancellationToken);
+                                cancellationToken).ConfigureAwait(false);
                         }
                     }
 
@@ -248,7 +244,7 @@ public class DependencyResolver(
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to resolve dependencies from feed {FeedUrl}", feed.Url);
+                    logger.LogWarning(ex, "Failed to resolve dependencies from feed {FeedUrl}", feed.Url);
                 }
             }
 
@@ -257,7 +253,7 @@ public class DependencyResolver(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error resolving dependencies for {PackageId} v{Version}", packageId, version);
+            logger.LogError(ex, "Error resolving dependencies for {PackageId} v{Version}", packageId, version);
             return false;
         }
     }
@@ -271,7 +267,7 @@ public class DependencyResolver(
         try
         {
             var repository = Repository.Factory.GetCoreV3(feedUrl);
-            var metadataResource = await repository.GetResourceAsync<PackageMetadataResource>(cancellationToken);
+            var metadataResource = await repository.GetResourceAsync<PackageMetadataResource>(cancellationToken).ConfigureAwait(false);
 
             using var sourceCacheContext = new SourceCacheContext();
             var allVersions = await metadataResource.GetMetadataAsync(
@@ -279,8 +275,8 @@ public class DependencyResolver(
                 includePrerelease: versionRange.IsMinInclusive && versionRange.MinVersion?.IsPrerelease == true,
                 includeUnlisted: false,
                 sourceCacheContext,
-                new NuGetLogger(_logger),
-                cancellationToken);
+                new NuGetLogger(logger),
+                cancellationToken).ConfigureAwait(false);
 
             var compatibleVersions = allVersions
                 .Select(m => m.Identity.Version)
@@ -292,7 +288,7 @@ public class DependencyResolver(
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to resolve version for {PackageId} with range {VersionRange}",
+            logger.LogWarning(ex, "Failed to resolve version for {PackageId} with range {VersionRange}",
                 packageId, versionRange);
             return null;
         }

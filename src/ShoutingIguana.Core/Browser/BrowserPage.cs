@@ -8,35 +8,33 @@ namespace ShoutingIguana.Core.Browser;
 /// </summary>
 public class BrowserPage(IPage page) : ShoutingIguana.PluginSdk.IBrowserPage
 {
-    private readonly IPage _page = page;
-
     public async Task<string> ContentAsync()
     {
-        return await _page.ContentAsync();
+        return await page.ContentAsync().ConfigureAwait(false);
     }
 
     public async Task<ShoutingIguana.PluginSdk.IElementHandle?> QuerySelectorAsync(string selector)
     {
-        var element = await _page.QuerySelectorAsync(selector);
+        var element = await page.QuerySelectorAsync(selector).ConfigureAwait(false);
         return element != null ? new ElementHandleWrapper(element) : null;
     }
 
     public async Task<ShoutingIguana.PluginSdk.IElementHandle[]> QuerySelectorAllAsync(string selector)
     {
-        var elements = await _page.QuerySelectorAllAsync(selector);
+        var elements = await page.QuerySelectorAllAsync(selector).ConfigureAwait(false);
         return elements.Select(e => new ElementHandleWrapper(e)).ToArray<ShoutingIguana.PluginSdk.IElementHandle>();
     }
 
     public async Task<T> EvaluateAsync<T>(string expression)
     {
-        return await _page.EvaluateAsync<T>(expression);
+        return await page.EvaluateAsync<T>(expression).ConfigureAwait(false);
     }
 
     public async Task<T> EvaluateAsync<T>(string pageFunction, ShoutingIguana.PluginSdk.IElementHandle element)
     {
         if (element is ElementHandleWrapper wrapper)
         {
-            return await _page.EvaluateAsync<T>(pageFunction, wrapper._handle);
+            return await page.EvaluateAsync<T>(pageFunction, wrapper.Handle).ConfigureAwait(false);
         }
         throw new ArgumentException("Element must be an ElementHandleWrapper", nameof(element));
     }
@@ -45,7 +43,7 @@ public class BrowserPage(IPage page) : ShoutingIguana.PluginSdk.IBrowserPage
     {
         if (element is ElementHandleWrapper wrapper)
         {
-            return await wrapper.GetAttributeAsync(name);
+            return await wrapper.GetAttributeAsync(name).ConfigureAwait(false);
         }
         return null;
     }
@@ -54,7 +52,7 @@ public class BrowserPage(IPage page) : ShoutingIguana.PluginSdk.IBrowserPage
     {
         if (element is ElementHandleWrapper wrapper)
         {
-            return await wrapper.TextContentAsync();
+            return await wrapper.TextContentAsync().ConfigureAwait(false);
         }
         return null;
     }
@@ -65,21 +63,21 @@ public class BrowserPage(IPage page) : ShoutingIguana.PluginSdk.IBrowserPage
 /// </summary>
 public class ElementHandleWrapper(Microsoft.Playwright.IElementHandle handle) : ShoutingIguana.PluginSdk.IElementHandle
 {
-    internal readonly Microsoft.Playwright.IElementHandle _handle = handle;
+    internal Microsoft.Playwright.IElementHandle Handle => handle;
 
     public async Task<string?> GetAttributeAsync(string name)
     {
-        return await _handle.GetAttributeAsync(name);
+        return await handle.GetAttributeAsync(name).ConfigureAwait(false);
     }
 
     public async Task<string?> TextContentAsync()
     {
-        return await _handle.TextContentAsync();
+        return await handle.TextContentAsync().ConfigureAwait(false);
     }
 
     public async Task<string?> InnerHtmlAsync()
     {
-        return await _handle.InnerHTMLAsync();
+        return await handle.InnerHTMLAsync().ConfigureAwait(false);
     }
 }
 

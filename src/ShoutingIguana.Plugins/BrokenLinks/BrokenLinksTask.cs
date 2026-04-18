@@ -13,12 +13,7 @@ namespace ShoutingIguana.Plugins.BrokenLinks;
 /// </summary>
 public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepositoryAccessor repositoryAccessor, bool checkExternalLinks = false, bool checkAnchorLinks = true) : UrlTaskBase, IDisposable
 {
-    private readonly ILogger _logger = logger;
-    private readonly IBrokenLinksChecker _checker = checker;
-    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
     private readonly ExternalLinkChecker _externalChecker = new ExternalLinkChecker(logger, TimeSpan.FromSeconds(5));
-    private readonly bool _checkExternalLinks = checkExternalLinks;
-    private readonly bool _checkAnchorLinks = checkAnchorLinks;
     private bool _disposed;
     
     // Cache URL statuses per project to avoid database queries for every link (critical for performance)
@@ -60,7 +55,7 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
             // FIRST: Load all links from the Links table (Phase 1 captured data) - ONCE
             // This includes ALL resources that were discovered during crawling, including
             // stylesheets, scripts, images, etc. that may have returned 404
-            var storedLinks = await _repositoryAccessor.GetLinksByFromUrlAsync(ctx.Project.ProjectId, ctx.Metadata.UrlId);
+            var storedLinks = await repositoryAccessor.GetLinksByFromUrlAsync(ctx.Project.ProjectId, ctx.Metadata.UrlId);
             
             // Check all links from the Links table
             // This ensures we catch resources like stylesheets that may have been requested
@@ -102,7 +97,7 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing broken links for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing broken links for {Url}", ctx.Url);
         }
     }
 
@@ -128,7 +123,7 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
                     // Handle anchor links
                     if (href.StartsWith("#"))
                     {
-                        if (_checkAnchorLinks && href.Length > 1)
+                        if (checkAnchorLinks && href.Length > 1)
                         {
                     links.Add(new LinkInfo
                     {
@@ -239,10 +234,10 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
             }
             
             // Load all URLs and build status cache
-            _logger.LogInformation("Loading URL status cache for project {ProjectId} (first time)", projectId);
+            logger.LogInformation("Loading URL status cache for project {ProjectId} (first time)", projectId);
             var statusCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             
-            await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId, ct))
+            await foreach (var url in repositoryAccessor.GetUrlsAsync(projectId, ct))
             {
                 if (!string.IsNullOrEmpty(url.NormalizedUrl))
                 {
@@ -252,7 +247,7 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
             
             // Cache for future use
             UrlStatusCacheByProject[projectId] = statusCache;
-            _logger.LogInformation("Cached {Count} URL statuses for project {ProjectId}", statusCache.Count, projectId);
+            logger.LogInformation("Cached {Count} URL statuses for project {ProjectId}", statusCache.Count, projectId);
         }
         finally
         {
@@ -343,7 +338,7 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
             var redirectStatus = GetUrlStatusFromCache(ctx.Project.ProjectId, urlWithAnchor);
             hasRedirect = redirectStatus.HasValue && redirectStatus.Value >= 300 && redirectStatus.Value < 400;
         }
-        else if (_checkExternalLinks)
+        else if (checkExternalLinks)
         {
             // External link - check via HTTP using project's User-Agent setting
             var result = await _externalChecker.CheckUrlAsync(link.Url, ctx.Project.UserAgent, ct);
@@ -507,7 +502,7 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Error checking anchor link: {AnchorId}", link.AnchorId);
+            logger.LogDebug(ex, "Error checking anchor link: {AnchorId}", link.AnchorId);
         }
     }
 
@@ -629,7 +624,7 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
             semaphore.Dispose();
         }
         
-        _logger.LogDebug("Cleaned up broken links cache for project {ProjectId}", projectId);
+        logger.LogDebug("Cleaned up broken links cache for project {ProjectId}", projectId);
     }
     
     /// <summary>

@@ -13,8 +13,6 @@ namespace ShoutingIguana.Plugins.TitlesMeta;
 /// </summary>
 public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
     private const int MIN_TITLE_LENGTH = 30;
     private const int MAX_TITLE_LENGTH = 60;
     private const int MAX_TITLE_WARNING_LENGTH = 70;
@@ -116,7 +114,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing titles/meta for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing titles/meta for {Url}", ctx.Url);
         }
     }
 
@@ -1013,10 +1011,10 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             }
             
             // Load and cache redirects (only one thread gets here)
-            _logger.LogDebug("Loading redirects for project {ProjectId} (first time)", projectId);
+            logger.LogDebug("Loading redirects for project {ProjectId} (first time)", projectId);
             var redirectLookup = new Dictionary<string, List<RedirectInfo>>(StringComparer.OrdinalIgnoreCase);
             
-            await foreach (var redirect in _repositoryAccessor.GetRedirectsAsync(projectId))
+            await foreach (var redirect in repositoryAccessor.GetRedirectsAsync(projectId))
             {
                 if (!redirectLookup.ContainsKey(redirect.SourceUrl))
                 {
@@ -1027,7 +1025,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             
             // Cache for future use
             RedirectCacheByProject[projectId] = redirectLookup;
-            _logger.LogInformation("Cached {Count} redirect entries for project {ProjectId}", redirectLookup.Count, projectId);
+            logger.LogInformation("Cached {Count} redirect entries for project {ProjectId}", redirectLookup.Count, projectId);
             
             return redirectLookup;
         }
@@ -1104,7 +1102,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error checking redirect relationships for duplicate title detection");
+            logger.LogWarning(ex, "Error checking redirect relationships for duplicate title detection");
         }
         
         return info;
@@ -1217,7 +1215,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             semaphore.Dispose();
         }
         
-        _logger.LogDebug("Cleaned up titles/meta data for project {ProjectId}", projectId);
+        logger.LogDebug("Cleaned up titles/meta data for project {ProjectId}", projectId);
     }
 }
 

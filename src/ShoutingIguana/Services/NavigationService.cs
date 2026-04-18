@@ -7,15 +7,13 @@ namespace ShoutingIguana.Services;
 
 public class NavigationService(IServiceProvider serviceProvider, ILogger<NavigationService> logger) : INavigationService
 {
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
-    private readonly ILogger<NavigationService> _logger = logger;
     private UserControl? _currentView;
 
     public event EventHandler<UserControl>? NavigationRequested;
 
     public void NavigateTo<T>() where T : UserControl
     {
-        var view = ActivatorUtilities.CreateInstance<T>(_serviceProvider);
+        var view = ActivatorUtilities.CreateInstance<T>(serviceProvider);
         NavigateTo(view);
     }
 
@@ -28,11 +26,11 @@ public class NavigationService(IServiceProvider serviceProvider, ILogger<Navigat
             {
                 var typeName = disposable.GetType().FullName;
                 disposable.Dispose();
-                _logger.LogDebug("Disposed previous view's DataContext of type {Type}", typeName);
+                logger.LogDebug("Disposed previous view's DataContext of type {Type}", typeName);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error disposing previous view's DataContext");
+                logger.LogWarning(ex, "Error disposing previous view's DataContext");
             }
         }
         

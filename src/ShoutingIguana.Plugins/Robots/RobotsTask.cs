@@ -11,8 +11,6 @@ namespace ShoutingIguana.Plugins.Robots;
 /// </summary>
 public class RobotsTask(ILogger logger) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    
     private static readonly HttpClient HttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(10)
@@ -65,7 +63,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing robots/indexability for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing robots/indexability for {Url}", ctx.Url);
         }
     }
 
@@ -118,7 +116,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Error checking for robots.txt");
+            logger.LogDebug(ex, "Error checking for robots.txt");
         }
     }
     
@@ -131,7 +129,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         // it means it was allowed by robots.txt
         if (ctx.Project.RespectRobotsTxt)
         {
-            _logger.LogDebug("URL {Url} complies with robots.txt (RespectRobotsTxt=true)", ctx.Url);
+            logger.LogDebug("URL {Url} complies with robots.txt (RespectRobotsTxt=true)", ctx.Url);
         }
         
         return Task.CompletedTask;
@@ -211,7 +209,7 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Error fetching robots.txt at {Url}", robotsTxtUrl);
+                logger.LogDebug(ex, "Error fetching robots.txt at {Url}", robotsTxtUrl);
             }
 
             var status = new RobotsTxtStatus

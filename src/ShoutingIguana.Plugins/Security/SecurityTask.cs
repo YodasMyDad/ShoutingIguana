@@ -12,8 +12,6 @@ namespace ShoutingIguana.Plugins.Security;
 /// </summary>
 public class SecurityTask(ILogger logger) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    
     // Constants
     private const int MIN_HSTS_MAX_AGE_SECONDS = 31536000; // 1 year in seconds
 
@@ -68,7 +66,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing security for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing security for {Url}", ctx.Url);
         }
     }
 

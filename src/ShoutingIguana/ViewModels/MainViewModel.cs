@@ -17,19 +17,20 @@ using ShoutingIguana.Views;
 
 namespace ShoutingIguana.ViewModels;
 
-public partial class MainViewModel : ObservableObject, IDisposable
+public partial class MainViewModel(
+    ILogger<MainViewModel> logger,
+    INavigationService navigationService,
+    IProjectContext projectContext,
+    IServiceProvider serviceProvider,
+    IPlaywrightService playwrightService,
+    IToastService toastService,
+    ICrawlEngine crawlEngine,
+    IPluginRegistry pluginRegistry,
+    IStatusService statusService,
+    IAppSettingsService appSettingsService) : ObservableObject, IDisposable
 {
-    private readonly ILogger<MainViewModel> _logger;
-    private readonly INavigationService _navigationService;
-    private readonly IProjectContext _projectContext;
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IPlaywrightService _playwrightService;
-    private readonly IToastService _toastService;
-    private readonly ICrawlEngine _crawlEngine;
-    private readonly IPluginRegistry _pluginRegistry;
-    private readonly IStatusService _statusService;
-    private readonly IAppSettingsService _appSettingsService;
     private bool _disposed;
+    private bool _initialized;
 
     [ObservableProperty]
     private UserControl? _currentView;
@@ -67,67 +68,37 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Gets the collection of active toast notifications.
     /// </summary>
-    public ObservableCollection<ToastViewModel> Toasts => _toastService.Toasts;
+    public ObservableCollection<ToastViewModel> Toasts => toastService.Toasts;
 
-    public MainViewModel(
-        ILogger<MainViewModel> logger, 
-        INavigationService navigationService,
-        IProjectContext projectContext,
-        IServiceProvider serviceProvider,
-        IPlaywrightService playwrightService,
-        IToastService toastService,
-        ICrawlEngine crawlEngine,
-        IPluginRegistry pluginRegistry,
-        IStatusService statusService,
-        IAppSettingsService appSettingsService)
+    public void Initialize()
     {
-        _logger = logger;
-        _navigationService = navigationService;
-        _projectContext = projectContext;
-        _serviceProvider = serviceProvider;
-        _playwrightService = playwrightService;
-        _toastService = toastService;
-        _crawlEngine = crawlEngine;
-        _pluginRegistry = pluginRegistry;
-        _statusService = statusService;
-        _appSettingsService = appSettingsService;
-        
-        _navigationService.NavigationRequested += OnNavigationRequested;
-        _projectContext.ProjectChanged += OnProjectChanged;
-        _playwrightService.StatusChanged += OnBrowserStatusChanged;
-        _crawlEngine.ProgressUpdated += OnCrawlProgressUpdated;
-        _pluginRegistry.PluginLoaded += OnPluginChanged;
-        _pluginRegistry.PluginUnloaded += OnPluginChanged;
-        _statusService.StatusChanged += OnStatusChanged;
-        
-        // Set initial browser status
-        UpdateBrowserStatus(_playwrightService.Status);
-        
-        // Initialize project state
-        HasOpenProject = _projectContext.HasOpenProject;
-        
-        // Update pause/resume state
+        if (_initialized) return;
+        _initialized = true;
+
+        navigationService.NavigationRequested += OnNavigationRequested;
+        projectContext.ProjectChanged += OnProjectChanged;
+        playwrightService.StatusChanged += OnBrowserStatusChanged;
+        crawlEngine.ProgressUpdated += OnCrawlProgressUpdated;
+        pluginRegistry.PluginLoaded += OnPluginChanged;
+        pluginRegistry.PluginUnloaded += OnPluginChanged;
+        statusService.StatusChanged += OnStatusChanged;
+
+        UpdateBrowserStatus(playwrightService.Status);
+        HasOpenProject = projectContext.HasOpenProject;
         UpdatePauseResumeState();
-        
-        // Update crawl state
         UpdateCrawlState();
-        
-        // Update plugin count
         UpdatePluginCount();
-        
-        // Load recent projects
         LoadRecentProjects();
-        
-        // Start with project home view
-        _navigationService.NavigateTo<ProjectHomeView>();
+
+        navigationService.NavigateTo<ProjectHomeView>();
         StatusMessage = "Ready";
     }
 
     private void OnProjectChanged(object? sender, EventArgs e)
     {
-        HasOpenProject = _projectContext.HasOpenProject;
-        ProjectName = _projectContext.HasOpenProject 
-            ? _projectContext.CurrentProjectName ?? "Unknown Project"
+        HasOpenProject = projectContext.HasOpenProject;
+        ProjectName = projectContext.HasOpenProject 
+            ? projectContext.CurrentProjectName ?? "Unknown Project"
             : "No project loaded";
         
         // Refresh recent projects list when a project changes
@@ -141,7 +112,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             try
             {
-                var recentProjects = _appSettingsService.GetRecentProjects();
+                var recentProjects = appSettingsService.GetRecentProjects();
                 
                 // Validate that files still exist and remove invalid ones
                 var validProjects = new System.Collections.Generic.List<Core.Configuration.RecentProject>();
@@ -155,9 +126,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     }
                     else
                     {
-                        _appSettingsService.RemoveRecentProject(project.FilePath);
+                        appSettingsService.RemoveRecentProject(project.FilePath);
                         removedAny = true;
-                        _logger.LogDebug("Removed non-existent project from recent list: {FilePath}", project.FilePath);
+                        logger.LogDebug("Removed non-existent project from recent list: {FilePath}", project.FilePath);
                     }
                 }
 
@@ -174,12 +145,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 // Save if we removed any invalid projects
                 if (removedAny)
                 {
-                    await _appSettingsService.SaveAsync();
+                    await appSettingsService.SaveAsync();
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error loading recent projects");
+                logger.LogError(ex, "Error loading recent projects");
             }
         });
     }
@@ -193,11 +164,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
             {
                 var typeName = disposable.GetType().FullName;
                 disposable.Dispose();
-                _logger.LogDebug("Disposed previous view's DataContext of type {Type}", typeName);
+                logger.LogDebug("Disposed previous view's DataContext of type {Type}", typeName);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error disposing previous view's DataContext");
+                logger.LogWarning(ex, "Error disposing previous view's DataContext");
             }
         }
         
@@ -234,7 +205,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void UpdatePauseResumeState()
     {
-        if (_crawlEngine.IsPaused)
+        if (crawlEngine.IsPaused)
         {
             PauseResumeMenuText = "Resume Crawl";
             PauseResumeIcon = "\uE768"; // Play icon
@@ -248,7 +219,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void UpdateCrawlState()
     {
-        IsCrawling = _crawlEngine.IsCrawling;
+        IsCrawling = crawlEngine.IsCrawling;
     }
 
     private void OnPluginChanged(object? sender, EventArgs e)
@@ -261,7 +232,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void UpdatePluginCount()
     {
-        PluginCount = _pluginRegistry.LoadedPlugins.Count();
+        PluginCount = pluginRegistry.LoadedPlugins.Count();
     }
 
     private void OnStatusChanged(object? sender, string message)
@@ -273,7 +244,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private async Task NewProjectAsync()
     {
         // Check if a project is currently open
-        if (_projectContext.HasOpenProject)
+        if (projectContext.HasOpenProject)
         {
             var result = await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show(
@@ -336,25 +307,25 @@ public partial class MainViewModel : ObservableObject, IDisposable
                         MessageBoxImage.Warning));
 
                 // Remove from recent list
-                _appSettingsService.RemoveRecentProject(recentProject.FilePath);
-                await _appSettingsService.SaveAsync();
+                appSettingsService.RemoveRecentProject(recentProject.FilePath);
+                await appSettingsService.SaveAsync();
                 LoadRecentProjects();
                 return;
             }
 
             // Check if a project is currently open and close it
-            if (_projectContext.HasOpenProject)
+            if (projectContext.HasOpenProject)
             {
-                _logger.LogInformation("Closing current project to open recent project");
+                logger.LogInformation("Closing current project to open recent project");
                 await CloseProjectAsync();
             }
 
             // Switch to the selected database
-            var dbProvider = _serviceProvider.GetRequiredService<ProjectDbContextProvider>();
+            var dbProvider = serviceProvider.GetRequiredService<ProjectDbContextProvider>();
             await dbProvider.SetProjectPathAsync(recentProject.FilePath);
 
             // Load project from database
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = serviceProvider.CreateScope();
             var projectRepo = scope.ServiceProvider.GetRequiredService<IProjectRepository>();
             var projects = await projectRepo.GetRecentProjectsAsync(1);
             var project = projects.FirstOrDefault();
@@ -368,24 +339,24 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
 
             // Update project context
-            _projectContext.OpenProject(recentProject.FilePath, project.Id, project.Name);
+            projectContext.OpenProject(recentProject.FilePath, project.Id, project.Name);
 
             // Update last opened time
             project.LastOpenedUtc = DateTime.UtcNow;
             await projectRepo.UpdateAsync(project);
 
             // Update recent projects list (this will move it to the top)
-            _appSettingsService.AddRecentProject(project.Name, recentProject.FilePath);
-            await _appSettingsService.SaveAsync();
+            appSettingsService.AddRecentProject(project.Name, recentProject.FilePath);
+            await appSettingsService.SaveAsync();
 
             // Navigate to project home
             await NavigateToProjectHomeAsync();
 
-            _logger.LogInformation("Opened recent project: {ProjectName} from {FilePath}", project.Name, recentProject.FilePath);
+            logger.LogInformation("Opened recent project: {ProjectName} from {FilePath}", project.Name, recentProject.FilePath);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to open recent project from {FilePath}", recentProject.FilePath);
+            logger.LogError(ex, "Failed to open recent project from {FilePath}", recentProject.FilePath);
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show($"Failed to open project: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
         }
@@ -394,7 +365,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task NavigateToProjectHomeAsync()
     {
-        _navigationService.NavigateTo<ProjectHomeView>();
+        navigationService.NavigateTo<ProjectHomeView>();
         StatusMessage = "Project Home";
         await Task.CompletedTask;
     }
@@ -402,7 +373,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task NavigateToCrawlDashboardAsync()
     {
-        _navigationService.NavigateTo<CrawlDashboardView>();
+        navigationService.NavigateTo<CrawlDashboardView>();
         StatusMessage = "Crawl Dashboard";
         await Task.CompletedTask;
     }
@@ -410,7 +381,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task NavigateToFindingsAsync()
     {
-        _navigationService.NavigateTo<FindingsView>();
+        navigationService.NavigateTo<FindingsView>();
         StatusMessage = "Findings";
         await Task.CompletedTask;
     }
@@ -418,27 +389,27 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task CloseProjectAsync()
     {
-        if (!_projectContext.HasOpenProject)
+        if (!projectContext.HasOpenProject)
             return;
 
         try
         {
             // Stop crawl if running before closing project
-            if (_crawlEngine.IsCrawling)
+            if (crawlEngine.IsCrawling)
             {
-                _logger.LogInformation("Stopping active crawl before closing project");
-                await _crawlEngine.StopCrawlAsync();
+                logger.LogInformation("Stopping active crawl before closing project");
+                await crawlEngine.StopCrawlAsync();
                 
                 // Give crawl time to stop gracefully
                 await Task.Delay(500);
             }
             
-            var projectId = _projectContext.CurrentProjectId;
+            var projectId = projectContext.CurrentProjectId;
             
             // Cleanup plugin data for this project
             if (projectId.HasValue)
             {
-                var tasks = _pluginRegistry.RegisteredTasks;
+                var tasks = pluginRegistry.RegisteredTasks;
                 foreach (var task in tasks)
                 {
                     try
@@ -447,22 +418,22 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Error cleaning up plugin task {TaskKey}", task.Key);
+                        logger.LogWarning(ex, "Error cleaning up plugin task {TaskKey}", task.Key);
                     }
                 }
-                _logger.LogDebug("Cleaned up plugin data for project {ProjectId}", projectId.Value);
+                logger.LogDebug("Cleaned up plugin data for project {ProjectId}", projectId.Value);
             }
             
-            var dbProvider = _serviceProvider.GetRequiredService<ProjectDbContextProvider>();
+            var dbProvider = serviceProvider.GetRequiredService<ProjectDbContextProvider>();
             dbProvider.CloseProject();
-            _projectContext.CloseProject();
+            projectContext.CloseProject();
             
             await NavigateToProjectHomeAsync();
-            _logger.LogInformation("Closed project");
+            logger.LogInformation("Closed project");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to close project");
+            logger.LogError(ex, "Failed to close project");
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show($"Failed to close project: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
         }
@@ -471,7 +442,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Exit()
     {
-        _logger.LogInformation("Exiting application");
+        logger.LogInformation("Exiting application");
         Application.Current.Shutdown();
     }
 
@@ -494,7 +465,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         try
         {
-            var aboutDialog = new AboutDialog(_serviceProvider)
+            var aboutDialog = new AboutDialog(serviceProvider)
             {
                 Owner = Application.Current.MainWindow
             };
@@ -502,7 +473,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to show About dialog");
+            logger.LogError(ex, "Failed to show About dialog");
             MessageBox.Show(
                 "Shouting Iguana\nVersion 0.1.0 (Stage 3 MVP)\n\nA professional web crawler and SEO analysis tool.",
                 "About Shouting Iguana",
@@ -514,7 +485,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task StartCrawlAsync()
     {
-        if (!_projectContext.HasOpenProject)
+        if (!projectContext.HasOpenProject)
         {
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show("Please open or create a project first", "No Project", MessageBoxButton.OK, MessageBoxImage.Information));
@@ -555,7 +526,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task ClearQueueAsync()
     {
-        if (!_projectContext.HasOpenProject)
+        if (!projectContext.HasOpenProject)
         {
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show("No project is open", "No Project", MessageBoxButton.OK, MessageBoxImage.Information));
@@ -573,16 +544,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             try
             {
-                using var scope = _serviceProvider.CreateScope();
+                using var scope = serviceProvider.CreateScope();
                 var queueRepo = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
-                await queueRepo.ClearQueueAsync(_projectContext.CurrentProjectId!.Value);
+                await queueRepo.ClearQueueAsync(projectContext.CurrentProjectId!.Value);
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                     MessageBox.Show("Queue cleared successfully", "Success", MessageBoxButton.OK, MessageBoxImage.Information));
-                _logger.LogInformation("Cleared crawl queue for project {ProjectId}", _projectContext.CurrentProjectId);
+                logger.LogInformation("Cleared crawl queue for project {ProjectId}", projectContext.CurrentProjectId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to clear queue");
+                logger.LogError(ex, "Failed to clear queue");
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                     MessageBox.Show($"Failed to clear queue: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
             }
@@ -592,7 +563,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task NavigateToPluginManagementAsync()
     {
-        _navigationService.NavigateTo<PluginManagementView>();
+        navigationService.NavigateTo<PluginManagementView>();
         StatusMessage = "Plugin Management";
         await Task.CompletedTask;
     }
@@ -612,15 +583,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
             try
             {
                 StatusMessage = "Installing browsers...";
-                await _playwrightService.InstallBrowsersAsync();
+                await playwrightService.InstallBrowsersAsync();
                 StatusMessage = "Browser installation complete";
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                     MessageBox.Show("Browsers installed successfully", "Success", MessageBoxButton.OK, MessageBoxImage.Information));
-                _logger.LogInformation("Browsers reinstalled successfully");
+                logger.LogInformation("Browsers reinstalled successfully");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to reinstall browsers");
+                logger.LogError(ex, "Failed to reinstall browsers");
                 StatusMessage = "Browser installation failed";
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                     MessageBox.Show($"Failed to install browsers: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
@@ -633,8 +604,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         try
         {
-            _logger.LogInformation("Opening settings dialog");
-            var settingsDialog = new SettingsDialog(_serviceProvider)
+            logger.LogInformation("Opening settings dialog");
+            var settingsDialog = new SettingsDialog(serviceProvider)
             {
                 Owner = Application.Current.MainWindow
             };
@@ -642,12 +613,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
             var result = settingsDialog.ShowDialog();
             if (result == true)
             {
-                _logger.LogInformation("Settings saved successfully");
+                logger.LogInformation("Settings saved successfully");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error opening settings dialog");
+            logger.LogError(ex, "Error opening settings dialog");
             MessageBox.Show($"Failed to open settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -666,12 +637,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
             else
             {
-                _logger.LogDebug("Copy not supported in current view");
+                logger.LogDebug("Copy not supported in current view");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing copy command");
+            logger.LogError(ex, "Error executing copy command");
         }
     }
 
@@ -687,12 +658,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
             else
             {
-                _logger.LogDebug("Select All not supported in current view");
+                logger.LogDebug("Select All not supported in current view");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing select all command");
+            logger.LogError(ex, "Error executing select all command");
         }
     }
 
@@ -705,7 +676,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             await NavigateToFindingsAsync();
         }
 
-        _logger.LogInformation("Find command executed - Findings view active");
+        logger.LogInformation("Find command executed - Findings view active");
     }
 
     [RelayCommand]
@@ -724,16 +695,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
             {
                 findingTab.SelectedSeverity = null;
                 findingTab.SearchText = string.Empty;
-                _logger.LogInformation("Cleared filters on tab: {TabName}", findingTab.DisplayName);
+                logger.LogInformation("Cleared filters on tab: {TabName}", findingTab.DisplayName);
             }
             else if (findingsVm.SelectedTab is OverviewTabViewModel overviewTab)
             {
                 overviewTab.SearchText = string.Empty;
-                _logger.LogInformation("Cleared filters on tab: {TabName}", overviewTab.DisplayName);
+                logger.LogInformation("Cleared filters on tab: {TabName}", overviewTab.DisplayName);
             }
             else
             {
-                _logger.LogWarning("No tab selected to clear filters");
+                logger.LogWarning("No tab selected to clear filters");
             }
         }
     }
@@ -743,7 +714,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task SaveProjectAsync()
     {
-        if (!_projectContext.HasOpenProject)
+        if (!projectContext.HasOpenProject)
         {
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show("No project is open", "No Project", MessageBoxButton.OK, MessageBoxImage.Information));
@@ -756,7 +727,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             if (CurrentView is ProjectHomeView projectHomeView && projectHomeView.DataContext is ProjectHomeViewModel projectHomeVm)
             {
                 await projectHomeVm.SaveSettingsCommand.ExecuteAsync(null);
-                _logger.LogInformation("Project settings saved");
+                logger.LogInformation("Project settings saved");
             }
             else
             {
@@ -766,13 +737,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 if (CurrentView is ProjectHomeView phView && phView.DataContext is ProjectHomeViewModel phVm)
                 {
                     await phVm.SaveSettingsCommand.ExecuteAsync(null);
-                    _logger.LogInformation("Project settings saved");
+                    logger.LogInformation("Project settings saved");
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error saving project");
+            logger.LogError(ex, "Error saving project");
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show($"Failed to save project: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
         }
@@ -783,24 +754,24 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task PauseResumeAsync()
     {
-        if (!_crawlEngine.IsCrawling)
+        if (!crawlEngine.IsCrawling)
         {
-            _logger.LogWarning("Cannot pause/resume: crawl is not running");
+            logger.LogWarning("Cannot pause/resume: crawl is not running");
             return;
         }
 
         try
         {
-            if (_crawlEngine.IsPaused)
+            if (crawlEngine.IsPaused)
             {
-                _logger.LogInformation("Resuming crawl");
-                await _crawlEngine.ResumeCrawlAsync();
+                logger.LogInformation("Resuming crawl");
+                await crawlEngine.ResumeCrawlAsync();
                 StatusMessage = "Crawl resumed";
             }
             else
             {
-                _logger.LogInformation("Pausing crawl");
-                await _crawlEngine.PauseCrawlAsync();
+                logger.LogInformation("Pausing crawl");
+                await crawlEngine.PauseCrawlAsync();
                 StatusMessage = "Crawl paused";
             }
 
@@ -808,7 +779,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to pause/resume crawl");
+            logger.LogError(ex, "Failed to pause/resume crawl");
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show($"Failed to pause/resume crawl: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
         }
@@ -819,7 +790,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task ResetProjectDataAsync()
     {
-        if (!_projectContext.HasOpenProject)
+        if (!projectContext.HasOpenProject)
         {
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show("No project is open", "No Project", MessageBoxButton.OK, MessageBoxImage.Information));
@@ -837,13 +808,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             try
             {
-                using var scope = _serviceProvider.CreateScope();
+                using var scope = serviceProvider.CreateScope();
                 var findingRepo = scope.ServiceProvider.GetRequiredService<IFindingRepository>();
                 var imageRepo = scope.ServiceProvider.GetRequiredService<IImageRepository>();
                 var redirectRepo = scope.ServiceProvider.GetRequiredService<IRedirectRepository>();
                 var queueRepo = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
 
-                var projectId = _projectContext.CurrentProjectId!.Value;
+                var projectId = projectContext.CurrentProjectId!.Value;
 
                 // Clear all data that has DeleteByProjectIdAsync
                 await queueRepo.ClearQueueAsync(projectId);
@@ -851,7 +822,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 await imageRepo.DeleteByProjectIdAsync(projectId);
                 await redirectRepo.DeleteByProjectIdAsync(projectId);
 
-                _logger.LogInformation("Reset project data for project {ProjectId}", projectId);
+                logger.LogInformation("Reset project data for project {ProjectId}", projectId);
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                     MessageBox.Show("Project data has been reset (partial - URLs and Links retained)", "Success", MessageBoxButton.OK, MessageBoxImage.Information));
 
@@ -860,7 +831,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to reset project data");
+                logger.LogError(ex, "Failed to reset project data");
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                     MessageBox.Show($"Failed to reset project data: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
             }
@@ -872,36 +843,36 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ImportUrlList()
     {
-        if (!HasOpenProject || _projectContext.CurrentProjectId == null)
+        if (!HasOpenProject || projectContext.CurrentProjectId == null)
         {
-            _toastService.ShowWarning("No Project", "Please open a project first");
+            toastService.ShowWarning("No Project", "Please open a project first");
             return;
         }
 
         try
         {
-            var dialog = new ListModeImportDialog(_serviceProvider, _projectContext.CurrentProjectId.Value);
+            var dialog = new ListModeImportDialog(serviceProvider, projectContext.CurrentProjectId.Value);
             dialog.Owner = Application.Current.MainWindow;
             var result = dialog.ShowDialog();
 
             if (result == true)
             {
-                _logger.LogInformation("URL list imported successfully");
+                logger.LogInformation("URL list imported successfully");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error opening list import dialog");
-            _toastService.ShowError("Error", "Failed to open import dialog");
+            logger.LogError(ex, "Error opening list import dialog");
+            toastService.ShowError("Error", "Failed to open import dialog");
         }
     }
 
     [RelayCommand]
     private async Task CustomExtractionAsync()
     {
-        if (!HasOpenProject || _projectContext.CurrentProjectId == null)
+        if (!HasOpenProject || projectContext.CurrentProjectId == null)
         {
-            _toastService.ShowWarning("No Project", "Please open a project first");
+            toastService.ShowWarning("No Project", "Please open a project first");
             return;
         }
 
@@ -914,13 +885,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
             if (CurrentView is ProjectHomeView projectHomeView && projectHomeView.DataContext is ProjectHomeViewModel vm)
             {
                 vm.SelectedTabIndex = 1; // Custom Extraction tab
-                _logger.LogInformation("Navigated to Custom Extraction tab");
+                logger.LogInformation("Navigated to Custom Extraction tab");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error navigating to custom extraction");
-            _toastService.ShowError("Error", "Failed to navigate to custom extraction");
+            logger.LogError(ex, "Error navigating to custom extraction");
+            toastService.ShowError("Error", "Failed to navigate to custom extraction");
         }
     }
 
@@ -930,14 +901,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Open settings dialog on Network tab
         try
         {
-            var settingsDialog = new SettingsDialog(_serviceProvider);
+            var settingsDialog = new SettingsDialog(serviceProvider);
             settingsDialog.Owner = Application.Current.MainWindow;
             settingsDialog.ShowDialog();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error opening settings dialog");
-            _toastService.ShowError("Error", "Failed to open settings");
+            logger.LogError(ex, "Error opening settings dialog");
+            toastService.ShowError("Error", "Failed to open settings");
         }
     }
 
@@ -952,12 +923,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
             if (window.WindowState == WindowState.Maximized)
             {
                 window.WindowState = WindowState.Normal;
-                _logger.LogInformation("Exited full screen");
+                logger.LogInformation("Exited full screen");
             }
             else
             {
                 window.WindowState = WindowState.Maximized;
-                _logger.LogInformation("Entered full screen");
+                logger.LogInformation("Entered full screen");
             }
         }
     }
@@ -967,13 +938,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (_disposed)
             return;
 
-        _navigationService.NavigationRequested -= OnNavigationRequested;
-        _projectContext.ProjectChanged -= OnProjectChanged;
-        _playwrightService.StatusChanged -= OnBrowserStatusChanged;
-        _crawlEngine.ProgressUpdated -= OnCrawlProgressUpdated;
-        _pluginRegistry.PluginLoaded -= OnPluginChanged;
-        _pluginRegistry.PluginUnloaded -= OnPluginChanged;
-        _statusService.StatusChanged -= OnStatusChanged;
+        navigationService.NavigationRequested -= OnNavigationRequested;
+        projectContext.ProjectChanged -= OnProjectChanged;
+        playwrightService.StatusChanged -= OnBrowserStatusChanged;
+        crawlEngine.ProgressUpdated -= OnCrawlProgressUpdated;
+        pluginRegistry.PluginLoaded -= OnPluginChanged;
+        pluginRegistry.PluginUnloaded -= OnPluginChanged;
+        statusService.StatusChanged -= OnStatusChanged;
         _disposed = true;
     }
 }

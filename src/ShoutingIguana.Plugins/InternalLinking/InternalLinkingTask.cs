@@ -12,8 +12,6 @@ namespace ShoutingIguana.Plugins.InternalLinking;
 /// </summary>
 public class InternalLinkingTask(ILogger logger) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    
     // Track outbound links per URL
     private static readonly ConcurrentDictionary<int, ConcurrentDictionary<string, int>> OutlinkCountsByProject = new();
     
@@ -87,7 +85,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing internal linking for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing internal linking for {Url}", ctx.Url);
         }
     }
 
@@ -222,7 +220,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
             if (projectInlinks.TryGetValue(ctx.Url.ToString(), out var inlinkCount))
             {
                 // Has inlinks, good!
-                _logger.LogDebug("URL {Url} has {InlinkCount} inlinks", ctx.Url, inlinkCount);
+                logger.LogDebug("URL {Url} has {InlinkCount} inlinks", ctx.Url, inlinkCount);
                 return;
             }
         }
@@ -325,7 +323,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         OutlinkCountsByProject.TryRemove(projectId, out _);
         InlinkCountsByProject.TryRemove(projectId, out _);
         AnchorTextsByProject.TryRemove(projectId, out _);
-        _logger.LogDebug("Cleaned up internal linking data for project {ProjectId}", projectId);
+        logger.LogDebug("Cleaned up internal linking data for project {ProjectId}", projectId);
     }
 
     private static string DescribeIssue(string issueType, UrlContext ctx, int outlinkCount, int inlinkCount, string anchorText = "")

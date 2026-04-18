@@ -2,6 +2,40 @@
 
 **Build powerful SEO analysis plugins with minimal code.** Write your logic, publish to NuGet, and instantly make it available to every Shouting Iguana user. No complex integrations, no steep learning curves—just clean, intuitive APIs that get out of your way.
 
+## Breaking changes in 1.0.0
+
+`UrlContext.HttpResponse` is now an immutable `UrlResponseInfo` DTO. The previous `HttpResponseMessage` exposed a framework-owned disposable to plugin code; the DTO gives you a read-only snapshot of scheme, host, status, headers (multi-value), content-type, and bytes read.
+
+**Before (0.x):**
+
+```csharp
+public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
+{
+    if (ctx.HttpResponse?.StatusCode == System.Net.HttpStatusCode.OK)
+    {
+        var server = ctx.HttpResponse.Headers.GetValues("Server").FirstOrDefault();
+        // ...
+    }
+}
+```
+
+**After (1.0.0):**
+
+```csharp
+public override async Task ExecuteAsync(UrlContext ctx, CancellationToken ct)
+{
+    if (ctx.HttpResponse?.StatusCode == 200)
+    {
+        var server = ctx.HttpResponse.Headers.TryGetValue("Server", out var values)
+            ? values.FirstOrDefault()
+            : null;
+        // ...
+    }
+}
+```
+
+`ctx.Headers` (flat `IReadOnlyDictionary<string, string>`) is unchanged and continues to be the simpler option for header lookups.
+
 ## Quick Start
 
 ### Installation

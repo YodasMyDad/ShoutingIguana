@@ -101,7 +101,7 @@ public class ProjectDbContextProvider(
 
     public async Task SetProjectPathAsync(string projectPath)
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             if (_currentProjectPath == projectPath)
@@ -118,7 +118,7 @@ public class ProjectDbContextProvider(
             {
                 using var tempContext = dbContextFactory.CreateDbContext(projectPath);
                 tempContext.Database.Migrate();
-            });
+            }).ConfigureAwait(false);
 
             logger.LogInformation("Switched to project database: {ProjectPath}", projectPath);
         }
@@ -128,13 +128,6 @@ public class ProjectDbContextProvider(
         }
     }
     
-    [Obsolete("Use SetProjectPathAsync instead to avoid UI freezes")]
-    public void SetProjectPath(string projectPath)
-    {
-        // Synchronous wrapper for backward compatibility - but prefer async version
-        SetProjectPathAsync(projectPath).GetAwaiter().GetResult();
-    }
-
     public void CloseProject()
     {
         _lock.Wait();

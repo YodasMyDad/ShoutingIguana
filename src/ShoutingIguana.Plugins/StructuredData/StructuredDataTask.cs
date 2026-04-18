@@ -14,8 +14,6 @@ namespace ShoutingIguana.Plugins.StructuredData;
 /// </summary>
 public class StructuredDataTask(ILogger logger) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    
     // Track LocalBusiness NAP (Name, Address, Phone) across pages for consistency checking
     private static readonly ConcurrentDictionary<int, ConcurrentBag<NAPInfo>> NAPByProject = new();
     
@@ -74,7 +72,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing structured data for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing structured data for {Url}", ctx.Url);
         }
     }
 
@@ -210,7 +208,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 break;
 
             default:
-                _logger.LogDebug("Schema type {SchemaType} found but no specific validation implemented", schemaType);
+                logger.LogDebug("Schema type {SchemaType} found but no specific validation implemented", schemaType);
                 break;
         }
     }
@@ -1305,7 +1303,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
     {
         NAPByProject.TryRemove(projectId, out _);
         NAPInconsistencyReportedByProject.TryRemove(projectId, out _);
-        _logger.LogDebug("Cleaned up structured data tracking for project {ProjectId}", projectId);
+        logger.LogDebug("Cleaned up structured data tracking for project {ProjectId}", projectId);
     }
     
     /// <summary>

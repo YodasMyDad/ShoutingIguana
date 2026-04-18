@@ -6,11 +6,9 @@ namespace ShoutingIguana.Data.Repositories;
 
 public class CrawlQueueRepository(IShoutingIguanaDbContext context) : ICrawlQueueRepository
 {
-    private readonly IShoutingIguanaDbContext _context = context;
-
     public async Task<CrawlQueueItem?> GetNextItemAsync(int projectId)
     {
-        return await _context.CrawlQueue
+        return await context.CrawlQueue
             .Where(q => q.ProjectId == projectId && q.State == QueueState.Queued)
             .OrderByDescending(q => q.Priority)
             .ThenBy(q => q.EnqueuedUtc)
@@ -19,7 +17,7 @@ public class CrawlQueueRepository(IShoutingIguanaDbContext context) : ICrawlQueu
 
     public async Task<IEnumerable<CrawlQueueItem>> GetQueuedItemsAsync(int projectId, int count = 10)
     {
-        return await _context.CrawlQueue
+        return await context.CrawlQueue
             .Where(q => q.ProjectId == projectId && q.State == QueueState.Queued)
             .OrderByDescending(q => q.Priority)
             .ThenBy(q => q.EnqueuedUtc)
@@ -29,57 +27,57 @@ public class CrawlQueueRepository(IShoutingIguanaDbContext context) : ICrawlQueu
 
     public async Task<CrawlQueueItem?> GetByAddressAsync(int projectId, string address)
     {
-        return await _context.CrawlQueue
+        return await context.CrawlQueue
             .FirstOrDefaultAsync(q => q.ProjectId == projectId && q.Address == address)
             .ConfigureAwait(false);
     }
 
     public async Task<CrawlQueueItem> EnqueueAsync(CrawlQueueItem item)
     {
-        _context.CrawlQueue.Add(item);
-        await _context.SaveChangesAsync().ConfigureAwait(false);
+        context.CrawlQueue.Add(item);
+        await context.SaveChangesAsync().ConfigureAwait(false);
         return item;
     }
 
     public async Task<CrawlQueueItem> CreateAsync(CrawlQueueItem item)
     {
-        _context.CrawlQueue.Add(item);
-        await _context.SaveChangesAsync().ConfigureAwait(false);
+        context.CrawlQueue.Add(item);
+        await context.SaveChangesAsync().ConfigureAwait(false);
         return item;
     }
 
     public async Task<CrawlQueueItem> UpdateAsync(CrawlQueueItem item)
     {
-        _context.Entry(item).State = EntityState.Modified;
-        await _context.SaveChangesAsync().ConfigureAwait(false);
+        context.Entry(item).State = EntityState.Modified;
+        await context.SaveChangesAsync().ConfigureAwait(false);
         return item;
     }
 
     public async Task<int> CountQueuedAsync(int projectId)
     {
-        return await _context.CrawlQueue
+        return await context.CrawlQueue
             .CountAsync(q => q.ProjectId == projectId && q.State == QueueState.Queued).ConfigureAwait(false);
     }
 
     public async Task ClearQueueAsync(int projectId)
     {
-        var items = await _context.CrawlQueue
+        var items = await context.CrawlQueue
             .Where(q => q.ProjectId == projectId && q.State == QueueState.Queued)
             .ToListAsync().ConfigureAwait(false);
         
-        _context.CrawlQueue.RemoveRange(items);
-        await _context.SaveChangesAsync().ConfigureAwait(false);
+        context.CrawlQueue.RemoveRange(items);
+        await context.SaveChangesAsync().ConfigureAwait(false);
     }
 
     public async Task<int> CountByStateAsync(int projectId, QueueState state)
     {
-        return await _context.CrawlQueue
+        return await context.CrawlQueue
             .CountAsync(q => q.ProjectId == projectId && q.State == state).ConfigureAwait(false);
     }
 
     public async Task ResetInProgressItemsAsync(int projectId)
     {
-        var items = await _context.CrawlQueue
+        var items = await context.CrawlQueue
             .Where(q => q.ProjectId == projectId && q.State == QueueState.InProgress)
             .ToListAsync().ConfigureAwait(false);
         
@@ -88,17 +86,17 @@ public class CrawlQueueRepository(IShoutingIguanaDbContext context) : ICrawlQueu
             item.State = QueueState.Queued;
         }
         
-        await _context.SaveChangesAsync().ConfigureAwait(false);
+        await context.SaveChangesAsync().ConfigureAwait(false);
     }
 
     public async Task DeleteAllByProjectIdAsync(int projectId)
     {
-        var items = await _context.CrawlQueue
+        var items = await context.CrawlQueue
             .Where(q => q.ProjectId == projectId)
             .ToListAsync().ConfigureAwait(false);
         
-        _context.CrawlQueue.RemoveRange(items);
-        await _context.SaveChangesAsync().ConfigureAwait(false);
+        context.CrawlQueue.RemoveRange(items);
+        await context.SaveChangesAsync().ConfigureAwait(false);
     }
 }
 

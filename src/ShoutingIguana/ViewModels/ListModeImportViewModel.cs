@@ -18,12 +18,6 @@ public partial class ListModeImportViewModel(
     int projectId,
     Window dialog) : ObservableObject
 {
-    private readonly ILogger<ListModeImportViewModel> _logger = logger;
-    private readonly IListModeService _listModeService = listModeService;
-    private readonly IToastService _toastService = toastService;
-    private readonly int _projectId = projectId;
-    private readonly Window _dialog = dialog;
-
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanImport))]
     [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
@@ -52,7 +46,7 @@ public partial class ListModeImportViewModel(
     [RelayCommand]
     private void BrowseFile()
     {
-        var dialog = new OpenFileDialog
+        var openFileDialog = new OpenFileDialog
         {
             Title = "Select CSV File",
             Filter = "CSV Files (*.csv)|*.csv|Text Files (*.txt)|*.txt|All Files (*.*)|*.*",
@@ -60,10 +54,10 @@ public partial class ListModeImportViewModel(
             CheckFileExists = true
         };
 
-        if (dialog.ShowDialog() == true)
+        if (openFileDialog.ShowDialog() == true)
         {
-            CsvFilePath = dialog.FileName;
-            _logger.LogInformation("Selected file: {FilePath}", CsvFilePath);
+            CsvFilePath = openFileDialog.FileName;
+            logger.LogInformation("Selected file: {FilePath}", CsvFilePath);
         }
     }
 
@@ -78,8 +72,8 @@ public partial class ListModeImportViewModel(
         {
             var progress = new Progress<string>(status => ImportStatus = status);
 
-            var result = await _listModeService.ImportUrlListAsync(
-                _projectId,
+            var result = await listModeService.ImportUrlListAsync(
+                projectId,
                 CsvFilePath,
                 FollowDiscoveredLinks,
                 Priority,
@@ -90,29 +84,29 @@ public partial class ListModeImportViewModel(
                 ResultMessage = $"✓ Imported {result.ImportedCount} URLs ({result.SkippedCount} skipped, {result.InvalidCount} invalid)";
                 ImportComplete = true;
                 
-                _toastService.ShowSuccess("Import Complete", ResultMessage);
-                _logger.LogInformation("List-mode import successful: {Result}", ResultMessage);
+                toastService.ShowSuccess("Import Complete", ResultMessage);
+                logger.LogInformation("List-mode import successful: {Result}", ResultMessage);
 
                 // Close dialog after short delay
                 await Task.Delay(1500);
-                _dialog.DialogResult = true;
-                _dialog.Close();
+                dialog.DialogResult = true;
+                dialog.Close();
             }
             else
             {
-                _toastService.ShowError("Import Failed", result.ErrorMessage ?? "Unknown error");
+                toastService.ShowError("Import Failed", result.ErrorMessage ?? "Unknown error");
                 ResultMessage = $"✗ Import failed: {result.ErrorMessage}";
                 
                 if (result.Errors.Count > 0)
                 {
-                    _logger.LogWarning("Import errors: {Errors}", string.Join("; ", result.Errors.Take(5)));
+                    logger.LogWarning("Import errors: {Errors}", string.Join("; ", result.Errors.Take(5)));
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during import");
-            _toastService.ShowError("Import Failed", ex.Message);
+            logger.LogError(ex, "Error during import");
+            toastService.ShowError("Import Failed", ex.Message);
             ResultMessage = $"✗ Error: {ex.Message}";
         }
         finally
@@ -125,8 +119,8 @@ public partial class ListModeImportViewModel(
     [RelayCommand]
     private void Cancel()
     {
-        _dialog.DialogResult = false;
-        _dialog.Close();
+        dialog.DialogResult = false;
+        dialog.Close();
     }
 }
 

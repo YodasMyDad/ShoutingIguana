@@ -13,9 +13,6 @@ namespace ShoutingIguana.Plugins.CustomExtraction;
 /// </summary>
 public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
-    
     // Cache rules per project to avoid database query on every URL
     private readonly System.Collections.Concurrent.ConcurrentDictionary<int, List<CustomExtractionRuleInfo>> _rulesCache = new();
 
@@ -71,7 +68,7 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing custom extraction for {Url}", ctx.Url);
+            logger.LogError(ex, "Error executing custom extraction for {Url}", ctx.Url);
         }
     }
 
@@ -106,7 +103,7 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to apply extraction rule '{RuleName}' for {Url}", rule.Name, ctx.Url);
+            logger.LogWarning(ex, "Failed to apply extraction rule '{RuleName}' for {Url}", rule.Name, ctx.Url);
             
             var row = ReportRow.Create()
                 .SetPage(ctx.Url)
@@ -157,7 +154,7 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to execute CSS selector: {Selector}. Error: {Message}", cssSelector, ex.Message);
+            logger.LogWarning(ex, "Failed to execute CSS selector: {Selector}. Error: {Message}", cssSelector, ex.Message);
         }
 
         return results;
@@ -184,7 +181,7 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to execute XPath: {XPath}", xpath);
+            logger.LogWarning(ex, "Failed to execute XPath: {XPath}", xpath);
         }
 
         return results;
@@ -214,7 +211,7 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to execute regex: {Pattern}", pattern);
+            logger.LogWarning(ex, "Failed to execute regex: {Pattern}", pattern);
         }
 
         return results;
@@ -244,14 +241,14 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
     {
         try
         {
-            var rules = await _repositoryAccessor.GetCustomExtractionRulesAsync(projectId);
+            var rules = await repositoryAccessor.GetCustomExtractionRulesAsync(projectId);
             var enabledRules = rules.Where(r => r.IsEnabled).ToList();
-            _logger.LogDebug("Loaded {Count} enabled extraction rules for project {ProjectId}", enabledRules.Count, projectId);
+            logger.LogDebug("Loaded {Count} enabled extraction rules for project {ProjectId}", enabledRules.Count, projectId);
             return enabledRules;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading extraction rules for project {ProjectId}", projectId);
+            logger.LogError(ex, "Error loading extraction rules for project {ProjectId}", projectId);
             return new List<CustomExtractionRuleInfo>();
         }
     }
@@ -262,7 +259,7 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
     public override void CleanupProject(int projectId)
     {
         _rulesCache.TryRemove(projectId, out _);
-        _logger.LogDebug("Cleaned up custom extraction rules cache for project {ProjectId}", projectId);
+        logger.LogDebug("Cleaned up custom extraction rules cache for project {ProjectId}", projectId);
     }
 
 }

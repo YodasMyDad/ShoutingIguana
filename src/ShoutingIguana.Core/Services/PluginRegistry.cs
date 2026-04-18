@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using ShoutingIguana.Core.Configuration;
 using ShoutingIguana.PluginSdk;
 
 namespace ShoutingIguana.Core.Services;
@@ -23,19 +24,20 @@ internal class PluginMetadata
 /// <summary>
 /// Implementation of IPluginRegistry for discovering and managing plugins with hot-loading support.
 /// </summary>
-public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory loggerFactory, IServiceProvider serviceProvider, IPluginConfigurationService pluginConfig) : IPluginRegistry
+public class PluginRegistry(
+    ILogger<PluginRegistry> logger,
+    ILoggerFactory loggerFactory,
+    IServiceProvider serviceProvider,
+    IPluginConfigurationService pluginConfig,
+    IAppSettingsService appSettings) : IPluginRegistry
 {
-    private readonly ILogger<PluginRegistry> _logger = logger;
-    private readonly ILoggerFactory _loggerFactory = loggerFactory;
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
-    private readonly IPluginConfigurationService _pluginConfig = pluginConfig;
     private readonly Dictionary<string, PluginMetadata> _pluginMetadata = [];
     private readonly List<IUrlTask> _registeredTasks = [];
     private readonly List<IExportProvider> _registeredExporters = [];
     private readonly Dictionary<string, IReportSchema> _registeredSchemas = [];
     private readonly SemaphoreSlim _lock = new(1, 1);
     private bool _isLoaded;
-    private static readonly Lazy<Version> _sdkVersion = new(GetSdkVersion);
+    private readonly Lazy<Version> _sdkVersion = new(() => GetSdkVersion(logger));
 
     public event EventHandler<PluginEventArgs>? PluginLoaded;
     public event EventHandler<PluginEventArgs>? PluginUnloaded;
@@ -64,7 +66,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
             try
             {
                 // Batch fetch all plugin states to avoid multiple async calls
-                var allStates = _pluginConfig.GetAllPluginStatesAsync().GetAwaiter().GetResult();
+                var allStates = pluginConfig.GetAllPluginStatesAsync().GetAwaiter().GetResult();
                 
                 var enabledPlugins = new List<IPlugin>();
                 foreach (var metadata in _pluginMetadata.Values)
@@ -109,7 +111,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
             try
             {
                 // Batch fetch all plugin states to avoid multiple async calls
-                var allStates = _pluginConfig.GetAllPluginStatesAsync().GetAwaiter().GetResult();
+                var allStates = pluginConfig.GetAllPluginStatesAsync().GetAwaiter().GetResult();
                 
                 var enabledTasks = new List<IUrlTask>();
                 foreach (var metadata in _pluginMetadata.Values)
@@ -154,7 +156,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
             try
             {
                 // Batch fetch all plugin states to avoid multiple async calls
-                var allStates = _pluginConfig.GetAllPluginStatesAsync().GetAwaiter().GetResult();
+                var allStates = pluginConfig.GetAllPluginStatesAsync().GetAwaiter().GetResult();
                 
                 var enabledExporters = new List<IExportProvider>();
                 foreach (var metadata in _pluginMetadata.Values)
@@ -194,43 +196,43 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
 
     public async Task LoadPluginsAsync()
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         bool alreadyLoaded = _isLoaded;
         _lock.Release();
         
         if (alreadyLoaded)
         {
-            _logger.LogInformation("Plugins already loaded, skipping initial discovery");
+            logger.LogInformation("Plugins already loaded, skipping initial discovery");
             return;
         }
 
-        _logger.LogInformation("Starting plugin discovery...");
+        logger.LogInformation("Starting plugin discovery...");
 
         var pluginsPath = GetPluginsPath();
         if (!Directory.Exists(pluginsPath))
         {
-            _logger.LogWarning("Plugins directory not found: {Path}", pluginsPath);
+            logger.LogWarning("Plugins directory not found: {Path}", pluginsPath);
             Directory.CreateDirectory(pluginsPath);
-            await _lock.WaitAsync();
+            await _lock.WaitAsync().ConfigureAwait(false);
             _isLoaded = true;
             _lock.Release();
             return;
         }
 
         var pluginDirs = Directory.GetDirectories(pluginsPath);
-        _logger.LogInformation("Found {Count} plugin directories", pluginDirs.Length);
+        logger.LogInformation("Found {Count} plugin directories", pluginDirs.Length);
 
         foreach (var pluginDir in pluginDirs)
         {
             // Load each plugin directory using hot-loading
-            await LoadPluginFromDirectoryAsync(pluginDir);
+            await LoadPluginFromDirectoryAsync(pluginDir).ConfigureAwait(false);
         }
 
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             _isLoaded = true;
-            _logger.LogInformation("Plugin discovery complete. Loaded {Count} plugins, {TaskCount} tasks, {ExportCount} exporters",
+            logger.LogInformation("Plugin discovery complete. Loaded {Count} plugins, {TaskCount} tasks, {ExportCount} exporters",
                 _pluginMetadata.Count, _registeredTasks.Count, _registeredExporters.Count);
         }
         finally
@@ -241,7 +243,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
 
     public async Task LoadPluginAsync(string packagePath)
     {
-        await LoadPluginFromDirectoryAsync(packagePath);
+        await LoadPluginFromDirectoryAsync(packagePath).ConfigureAwait(false);
     }
 
     public async Task UnloadPluginAsync(string pluginId)
@@ -250,16 +252,16 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
         IPlugin? unloadedPlugin = null;
         WeakReference? weakRef = null;
 
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             if (!_pluginMetadata.TryGetValue(pluginId, out var metadata))
             {
-                _logger.LogWarning("Cannot unload plugin {PluginId}: not found", pluginId);
+                logger.LogWarning("Cannot unload plugin {PluginId}: not found", pluginId);
                 return;
             }
 
-            _logger.LogInformation("Unloading plugin: {PluginName}", metadata.Plugin.Name);
+            logger.LogInformation("Unloading plugin: {PluginName}", metadata.Plugin.Name);
 
             // Capture plugin reference for event notification (used after lock release)
             unloadedPlugin = metadata.Plugin;
@@ -292,7 +294,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
             // Unload the AssemblyLoadContext
             metadata.LoadContext.Unload();
 
-            _logger.LogInformation("✓ Unloaded plugin: {PluginName}", metadata.Plugin.Name);
+            logger.LogInformation("✓ Unloaded plugin: {PluginName}", metadata.Plugin.Name);
         }
         finally
         {
@@ -309,7 +311,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error notifying plugin unloaded listeners");
+                logger.LogWarning(ex, "Error notifying plugin unloaded listeners");
             }
         }
 
@@ -321,7 +323,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
             }
-        });
+        }).ConfigureAwait(false);
         
         // Verify that the AssemblyLoadContext was collected
         // This helps detect memory leaks from plugin unloading
@@ -329,14 +331,14 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
         {
             if (weakRef.IsAlive)
             {
-                _logger.LogWarning(
+                logger.LogWarning(
                     "Plugin AssemblyLoadContext for {PluginId} is still alive after GC. " +
                     "This may indicate a memory leak. Check for plugin references being held.",
                     pluginId);
             }
             else
             {
-                _logger.LogDebug("✓ Plugin AssemblyLoadContext for {PluginId} was successfully garbage collected", pluginId);
+                logger.LogDebug("✓ Plugin AssemblyLoadContext for {PluginId} was successfully garbage collected", pluginId);
             }
         }
     }
@@ -345,7 +347,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
     {
         string? sourcePath = null;
 
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             if (_pluginMetadata.TryGetValue(pluginId, out var metadata))
@@ -360,23 +362,23 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
 
         if (sourcePath == null)
         {
-            _logger.LogWarning("Cannot reload plugin {PluginId}: not found", pluginId);
+            logger.LogWarning("Cannot reload plugin {PluginId}: not found", pluginId);
             return;
         }
 
         // Unload first
-        await UnloadPluginAsync(pluginId);
+        await UnloadPluginAsync(pluginId).ConfigureAwait(false);
 
         // Wait a moment for GC
-        await Task.Delay(100);
+        await Task.Delay(100).ConfigureAwait(false);
 
         // Reload
-        await LoadPluginFromDirectoryAsync(sourcePath);
+        await LoadPluginFromDirectoryAsync(sourcePath).ConfigureAwait(false);
     }
 
     public async Task<bool> IsPluginActiveAsync(string pluginId)
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             return _pluginMetadata.ContainsKey(pluginId);
@@ -393,7 +395,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
         try
         {
             // Batch fetch all plugin states to avoid multiple async calls
-            var allStates = _pluginConfig.GetAllPluginStatesAsync().GetAwaiter().GetResult();
+            var allStates = pluginConfig.GetAllPluginStatesAsync().GetAwaiter().GetResult();
             
             // Only return tasks from enabled plugins
             var enabledTasks = new List<IUrlTask>();
@@ -432,11 +434,17 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
         try
         {
             var pluginName = Path.GetFileName(pluginDir);
-            _logger.LogInformation("Loading plugin from: {PluginDir}", pluginName);
+            logger.LogInformation("Loading plugin from: {PluginDir}", pluginName);
 
             // Find all DLL files in the plugin directory
             var dllFiles = Directory.GetFiles(pluginDir, "*.dll");
             
+            var trust = appSettings.PluginTrust ?? new PluginTrustSettings();
+            if (!trust.Enabled)
+            {
+                logger.LogWarning("Plugin trust allowlist is DISABLED — every DLL in {PluginDir} will be loaded. This is not recommended for production use.", pluginName);
+            }
+
             foreach (var dllFile in dllFiles)
             {
                 // Skip known framework assemblies
@@ -446,25 +454,31 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                     continue;
                 }
 
+                if (trust.Enabled && !IsOnAllowlist(fileName, trust.Allowlist))
+                {
+                    logger.LogWarning("Refusing to load plugin assembly '{Assembly}' from {PluginDir}: not on configured Plugins.Allowlist.", fileName, pluginName);
+                    continue;
+                }
+
                 try
                 {
                     // Create a new AssemblyLoadContext for this plugin
-                    var loadContext = new PluginLoadContext(dllFile, _logger);
-                    
+                    var loadContext = new PluginLoadContext(dllFile, logger);
+
                     // Load the assembly into the context
                     var assembly = loadContext.LoadFromAssemblyPath(dllFile);
-                    
-                    await LoadPluginsFromAssemblyAsync(assembly, pluginName, loadContext, pluginDir);
+
+                    await LoadPluginsFromAssemblyAsync(assembly, pluginName, loadContext, pluginDir).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to load assembly: {DllFile}", dllFile);
+                    logger.LogWarning(ex, "Failed to load assembly: {DllFile}", dllFile);
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading plugin from directory: {PluginDir}", pluginDir);
+            logger.LogError(ex, "Error loading plugin from directory: {PluginDir}", pluginDir);
         }
     }
 
@@ -483,14 +497,14 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                     var pluginAttr = type.GetCustomAttribute<PluginAttribute>();
                     if (pluginAttr == null)
                     {
-                    _logger.LogWarning("Plugin class {TypeName} missing [Plugin] attribute", type.Name);
+                    logger.LogWarning("Plugin class {TypeName} missing [Plugin] attribute", type.Name);
                         continue;
                     }
 
                     // Validate SDK version compatibility
                     if (!ValidateSdkVersion(pluginAttr.MinSdkVersion))
                     {
-                        _logger.LogWarning("Plugin {PluginName} requires SDK version {Version}, skipping",
+                        logger.LogWarning("Plugin {PluginName} requires SDK version {Version}, skipping",
                             pluginAttr.Name, pluginAttr.MinSdkVersion);
                         continue;
                     }
@@ -499,17 +513,17 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                     var plugin = Activator.CreateInstance(type) as IPlugin;
                     if (plugin == null)
                     {
-                        _logger.LogWarning("Failed to create instance of plugin: {TypeName}", type.Name);
+                        logger.LogWarning("Failed to create instance of plugin: {TypeName}", type.Name);
                         continue;
                     }
 
                     // Check if plugin already loaded
-                    await _lock.WaitAsync();
+                    await _lock.WaitAsync().ConfigureAwait(false);
                     try
                     {
                         if (_pluginMetadata.ContainsKey(plugin.Id))
                         {
-                            _logger.LogWarning("Plugin {PluginId} already loaded, skipping", plugin.Id);
+                            logger.LogWarning("Plugin {PluginId} already loaded, skipping", plugin.Id);
                             continue;
                         }
 
@@ -524,8 +538,8 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
 
                         // Create a host context that tracks registrations
                         var hostContext = new HostContext(
-                            _loggerFactory, 
-                            _serviceProvider, 
+                            loggerFactory, 
+                            serviceProvider, 
                             _registeredTasks, 
                             _registeredExporters,
                             _registeredSchemas,
@@ -539,7 +553,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                         // Track the plugin
                         _pluginMetadata.Add(plugin.Id, metadata);
                         
-                        _logger.LogInformation("✓ Loaded plugin: {PluginName} v{Version} from {Source}",
+                        logger.LogInformation("✓ Loaded plugin: {PluginName} v{Version} from {Source}",
                             plugin.Name, plugin.Version, source);
 
                         // Notify listeners (after releasing lock to avoid deadlock)
@@ -553,16 +567,16 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error loading plugin type: {TypeName}", type.Name);
+                    logger.LogError(ex, "Error loading plugin type: {TypeName}", type.Name);
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading plugins from assembly: {AssemblyName}", assembly.FullName);
+            logger.LogError(ex, "Error loading plugins from assembly: {AssemblyName}", assembly.FullName);
         }
 
-        await Task.CompletedTask;
+        await Task.CompletedTask.ConfigureAwait(false);
     }
 
     private bool IsFrameworkAssembly(string fileName)
@@ -584,13 +598,14 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
             var currentVersion = _sdkVersion.Value;
             return currentVersion >= minVersion;
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "Failed to validate plugin SDK version {MinVersion}", minVersionString);
             return false;
         }
     }
 
-    private static Version GetSdkVersion()
+    private static Version GetSdkVersion(ILogger<PluginRegistry> logger)
     {
         try
         {
@@ -619,9 +634,9 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fall through to default version
+            logger.LogWarning(ex, "Failed to resolve PluginSdk assembly version; falling back to default");
         }
 
         // Fallback to hardcoded version if assembly version cannot be determined
@@ -634,13 +649,30 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
         return Path.Combine(baseDir, "plugins");
     }
 
+    private static bool IsOnAllowlist(string assemblyName, IReadOnlyList<string> allowlist)
+    {
+        if (allowlist == null || allowlist.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var entry in allowlist)
+        {
+            if (string.Equals(entry, assemblyName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public async Task SyncSchemasToDatabase()
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             // Create a scope to get the schema repository
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = serviceProvider.CreateScope();
             var schemaRepository = scope.ServiceProvider.GetRequiredService<Repositories.IReportSchemaRepository>();
             
             foreach (var kvp in _registeredSchemas)
@@ -675,7 +707,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                     newSchema.SetColumns(columns);
                     
                     await schemaRepository.CreateAsync(newSchema).ConfigureAwait(false);
-                    _logger.LogInformation("Created schema for task: {TaskKey}", taskKey);
+                    logger.LogInformation("Created schema for task: {TaskKey}", taskKey);
                 }
                 else
                 {
@@ -692,7 +724,7 @@ public class PluginRegistry(ILogger<PluginRegistry> logger, ILoggerFactory logge
                         existingSchema.SetColumns(columns);
                         
                         await schemaRepository.UpdateAsync(existingSchema).ConfigureAwait(false);
-                        _logger.LogInformation("Updated schema for task: {TaskKey}", taskKey);
+                        logger.LogInformation("Updated schema for task: {TaskKey}", taskKey);
                     }
                 }
             }
@@ -752,50 +784,41 @@ internal class HostContext(
     List<IExportProvider> pluginExporters,
     List<string> pluginSchemaKeys) : IHostContext
 {
-    private readonly ILoggerFactory _loggerFactory = loggerFactory;
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
-    private readonly List<IUrlTask> _globalTasks = globalTasks;
-    private readonly List<IExportProvider> _globalExporters = globalExporters;
-    private readonly Dictionary<string, IReportSchema> _globalSchemas = globalSchemas;
-    private readonly List<IUrlTask> _pluginTasks = pluginTasks;
-    private readonly List<IExportProvider> _pluginExporters = pluginExporters;
-    private readonly List<string> _pluginSchemaKeys = pluginSchemaKeys;
-
     public void RegisterTask(IUrlTask task)
     {
-        _globalTasks.Add(task);
-        _pluginTasks.Add(task);
+        globalTasks.Add(task);
+        pluginTasks.Add(task);
     }
 
     public void RegisterExport(IExportProvider export)
     {
-        _globalExporters.Add(export);
-        _pluginExporters.Add(export);
+        globalExporters.Add(export);
+        pluginExporters.Add(export);
     }
 
     public void RegisterReportSchema(IReportSchema schema)
     {
-        _globalSchemas[schema.TaskKey] = schema;
-        _pluginSchemaKeys.Add(schema.TaskKey);
+        globalSchemas[schema.TaskKey] = schema;
+        pluginSchemaKeys.Add(schema.TaskKey);
     }
 
     public ILogger CreateLogger(string categoryName)
     {
-        return _loggerFactory.CreateLogger(categoryName);
+        return loggerFactory.CreateLogger(categoryName);
     }
 
     public ILogger<T> CreateLogger<T>()
     {
-        return _loggerFactory.CreateLogger<T>();
+        return loggerFactory.CreateLogger<T>();
     }
 
     public IServiceProvider GetServiceProvider()
     {
-        return _serviceProvider;
+        return serviceProvider;
     }
     
     public IRepositoryAccessor GetRepositoryAccessor()
     {
-        return _serviceProvider.GetRequiredService<IRepositoryAccessor>();
+        return serviceProvider.GetRequiredService<IRepositoryAccessor>();
     }
 }

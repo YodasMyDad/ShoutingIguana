@@ -1,19 +1,23 @@
-using System.Linq;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace ShoutingIguana.Core.Services;
 
-public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory httpClientFactory) : IRobotsService
+public class RobotsService : IRobotsService, IDisposable
 {
-    private readonly ILogger<RobotsService> _logger = logger;
-    private readonly HttpClient _httpClient = CreateHttpClient(httpClientFactory);
-    private readonly Dictionary<string, RobotsTxtFile> _cache = [];
+    private const string HttpClientName = "robots";
+    private const int CacheSizeLimit = 10_000;
+    private static readonly TimeSpan CacheLifetime = TimeSpan.FromHours(24);
 
-    private static HttpClient CreateHttpClient(IHttpClientFactory factory)
+    private readonly ILogger<RobotsService> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly MemoryCache _cache;
+
+    public RobotsService(ILogger<RobotsService> logger, IHttpClientFactory httpClientFactory)
     {
-        var client = factory.CreateClient();
-        client.Timeout = TimeSpan.FromSeconds(10);
-        return client;
+        _logger = logger;
+        _httpClientFactory = httpClientFactory;
+        _cache = new MemoryCache(new MemoryCacheOptions { SizeLimit = CacheSizeLimit });
     }
 
     public async Task<bool> IsAllowedAsync(string url, string userAgent)
@@ -22,11 +26,10 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
         {
             var uri = new Uri(url);
             var host = $"{uri.Scheme}://{uri.Host}";
-            
+
             var robotsTxt = await GetRobotsTxtAsync(host).ConfigureAwait(false);
             if (robotsTxt == null)
             {
-                // If no robots.txt, allow all
                 return true;
             }
 
@@ -69,60 +72,60 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
 
     private async Task<RobotsTxtFile?> GetRobotsTxtAsync(string host)
     {
-        if (_cache.TryGetValue(host, out var cached))
+        if (_cache.TryGetValue<RobotsTxtFile?>(host, out var cached))
         {
             return cached;
         }
 
+        RobotsTxtFile? robotsTxt = null;
         try
         {
             var robotsUrl = $"{host}/robots.txt";
-            var response = await _httpClient.GetAsync(robotsUrl).ConfigureAwait(false);
-            
+            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+            var response = await httpClient.GetAsync(robotsUrl).ConfigureAwait(false);
+
             if (!response.IsSuccessStatusCode)
             {
-                // No robots.txt found, cache null result
-                _cache[host] = null!;
+                CacheEntry(host, null);
                 return null;
             }
 
             var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            var robotsTxt = new RobotsTxtFile(content);
-            _cache[host] = robotsTxt;
-            
-            // Limit cache size to prevent unbounded growth
-            if (_cache.Count > 10000)
-            {
-                // Remove half of the oldest entries (simple LRU-like behavior)
-                var toRemove = _cache.Keys.Take(_cache.Count / 2).ToList();
-                foreach (var key in toRemove)
-                {
-                    _cache.Remove(key);
-                }
-            }
-            
+            robotsTxt = new RobotsTxtFile(content);
+            CacheEntry(host, robotsTxt);
             _logger.LogInformation("Fetched robots.txt for {Host}", host);
             return robotsTxt;
         }
         catch (HttpRequestException ex)
         {
             _logger.LogDebug("Cannot fetch robots.txt for {Host}: {Message}", host, ex.Message);
-            _cache[host] = null!;
+            CacheEntry(host, null);
             return null;
         }
         catch (TaskCanceledException)
         {
             _logger.LogDebug("Timeout fetching robots.txt for {Host}", host);
-            _cache[host] = null!;
+            CacheEntry(host, null);
             return null;
         }
         catch (Exception ex)
         {
             _logger.LogWarning("Unexpected error fetching robots.txt for {Host}: {Message}", host, ex.Message);
-            _cache[host] = null!;
+            CacheEntry(host, null);
             return null;
         }
     }
+
+    private void CacheEntry(string host, RobotsTxtFile? value)
+    {
+        _cache.Set(host, value, new MemoryCacheEntryOptions
+        {
+            Size = 1,
+            AbsoluteExpirationRelativeToNow = CacheLifetime,
+        });
+    }
+
+    public void Dispose() => _cache.Dispose();
 
     private class RobotsTxtFile
     {
@@ -214,7 +217,7 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
         {
             if (_crawlDelays.TryGetValue(userAgent, out var delay))
                 return delay;
-            
+
             if (_crawlDelays.TryGetValue("*", out var wildcardDelay))
                 return wildcardDelay;
 
@@ -223,7 +226,6 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
 
         public List<string> GetSitemapUrls()
         {
-            // Return a copy to prevent external modification
             return new List<string>(_sitemapUrls);
         }
 
@@ -240,4 +242,3 @@ public class RobotsService(ILogger<RobotsService> logger, IHttpClientFactory htt
         }
     }
 }
-

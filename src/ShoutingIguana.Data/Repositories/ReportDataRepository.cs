@@ -8,8 +8,6 @@ namespace ShoutingIguana.Data.Repositories;
 
 public class ReportDataRepository(IShoutingIguanaDbContext context) : IReportDataRepository
 {
-    private readonly IShoutingIguanaDbContext _context = context;
-
     public async Task<List<CoreReportRow>> GetByTaskKeyAsync(
         int projectId,
         string taskKey,
@@ -23,7 +21,7 @@ public class ReportDataRepository(IShoutingIguanaDbContext context) : IReportDat
         if (page < 0) page = 0;
         if (pageSize <= 0) pageSize = 100;
 
-        var query = _context.ReportRows
+        var query = context.ReportRows
             .AsNoTracking()
             .Where(rr => rr.ProjectId == projectId && rr.TaskKey == taskKey);
 
@@ -57,7 +55,8 @@ public class ReportDataRepository(IShoutingIguanaDbContext context) : IReportDat
         string? searchText = null,
         PluginSdk.Severity? severityFilter = null)
     {
-        var query = _context.ReportRows
+        var query = context.ReportRows
+            .AsNoTracking()
             .Where(rr => rr.ProjectId == projectId && rr.TaskKey == taskKey);
 
         if (!string.IsNullOrWhiteSpace(searchText))
@@ -79,7 +78,8 @@ public class ReportDataRepository(IShoutingIguanaDbContext context) : IReportDat
 
     public async Task<List<CoreReportRow>> GetByUrlIdAsync(int urlId)
     {
-        return await _context.ReportRows
+        return await context.ReportRows
+            .AsNoTracking()
             .Where(rr => rr.UrlId == urlId)
             .OrderBy(rr => rr.TaskKey)
             .ToListAsync()
@@ -88,20 +88,20 @@ public class ReportDataRepository(IShoutingIguanaDbContext context) : IReportDat
 
     public async Task<CoreReportRow> CreateAsync(CoreReportRow row)
     {
-        _context.ReportRows.Add(row);
-        await _context.SaveChangesAsync().ConfigureAwait(false);
+        context.ReportRows.Add(row);
+        await context.SaveChangesAsync().ConfigureAwait(false);
         return row;
     }
 
     public async Task CreateBatchAsync(IEnumerable<CoreReportRow> rows)
     {
         // Use a transaction to ensure all rows are saved together
-        using var transaction = await _context.Database.BeginTransactionAsync().ConfigureAwait(false);
+        using var transaction = await context.Database.BeginTransactionAsync().ConfigureAwait(false);
 
         try
         {
-            _context.ReportRows.AddRange(rows);
-            await _context.SaveChangesAsync().ConfigureAwait(false);
+            context.ReportRows.AddRange(rows);
+            await context.SaveChangesAsync().ConfigureAwait(false);
             await transaction.CommitAsync().ConfigureAwait(false);
         }
         catch
@@ -113,24 +113,24 @@ public class ReportDataRepository(IShoutingIguanaDbContext context) : IReportDat
 
     public async Task DeleteByProjectIdAsync(int projectId)
     {
-        var rows = await _context.ReportRows
+        var rows = await context.ReportRows
             .Where(rr => rr.ProjectId == projectId)
             .ToListAsync()
             .ConfigureAwait(false);
 
-        _context.ReportRows.RemoveRange(rows);
-        await _context.SaveChangesAsync().ConfigureAwait(false);
+        context.ReportRows.RemoveRange(rows);
+        await context.SaveChangesAsync().ConfigureAwait(false);
     }
 
     public async Task DeleteByTaskKeyAsync(int projectId, string taskKey)
     {
-        var rows = await _context.ReportRows
+        var rows = await context.ReportRows
             .Where(rr => rr.ProjectId == projectId && rr.TaskKey == taskKey)
             .ToListAsync()
             .ConfigureAwait(false);
 
-        _context.ReportRows.RemoveRange(rows);
-        await _context.SaveChangesAsync().ConfigureAwait(false);
+        context.ReportRows.RemoveRange(rows);
+        await context.SaveChangesAsync().ConfigureAwait(false);
     }
 
     private static IQueryable<CoreReportRow> ApplySorting(

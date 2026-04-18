@@ -21,36 +21,36 @@ public class CustomExtractionRuleRepository : ICustomExtractionRuleRepository
         return await _context.CustomExtractionRules
             .Where(r => r.ProjectId == projectId)
             .OrderBy(r => r.Name)
-            .ToListAsync();
+            .ToListAsync().ConfigureAwait(false);
     }
 
     public async Task<CustomExtractionRule?> GetByIdAsync(int id)
     {
         return await _context.CustomExtractionRules
-            .FirstOrDefaultAsync(r => r.Id == id);
+            .FirstOrDefaultAsync(r => r.Id == id).ConfigureAwait(false);
     }
 
     public async Task<CustomExtractionRule> CreateAsync(CustomExtractionRule rule)
     {
         rule.CreatedUtc = DateTime.UtcNow;
         _context.CustomExtractionRules.Add(rule);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync().ConfigureAwait(false);
         return rule;
     }
 
     public async Task UpdateAsync(CustomExtractionRule rule)
     {
         _context.CustomExtractionRules.Update(rule);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync().ConfigureAwait(false);
     }
 
     public async Task DeleteAsync(int id)
     {
-        var rule = await GetByIdAsync(id);
+        var rule = await GetByIdAsync(id).ConfigureAwait(false);
         if (rule != null)
         {
             _context.CustomExtractionRules.Remove(rule);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync().ConfigureAwait(false);
         }
     }
 }

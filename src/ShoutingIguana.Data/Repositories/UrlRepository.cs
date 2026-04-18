@@ -8,11 +8,9 @@ namespace ShoutingIguana.Data.Repositories;
 
 public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
 {
-    private readonly IShoutingIguanaDbContext _context = context;
-
     public async Task<Url?> GetByIdAsync(int id)
     {
-        return await _context.Urls
+        return await context.Urls
             .AsNoTracking()
             .Include(u => u.Headers)
             .FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false);
@@ -20,7 +18,7 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
 
     public async Task<Url?> GetByIdWithHeadersAsync(int id)
     {
-        return await _context.Urls
+        return await context.Urls
             .Include(u => u.Headers)
             .FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false);
     }
@@ -28,13 +26,14 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
     public async Task<Url?> GetByAddressAsync(int projectId, string address)
     {
         var normalized = NormalizeUrl(address);
-        return await _context.Urls
+        return await context.Urls
             .FirstOrDefaultAsync(u => u.ProjectId == projectId && u.NormalizedUrl == normalized).ConfigureAwait(false);
     }
 
     public async Task<IEnumerable<Url>> GetByProjectIdAsync(int projectId)
     {
-        return await _context.Urls
+        return await context.Urls
+            .AsNoTracking()
             .Where(u => u.ProjectId == projectId)
             .OrderBy(u => u.Depth)
             .ThenBy(u => u.FirstSeenUtc)
@@ -43,14 +42,16 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
 
     public async Task<IEnumerable<Url>> GetByStatusAsync(int projectId, UrlStatus status)
     {
-        return await _context.Urls
+        return await context.Urls
+            .AsNoTracking()
             .Where(u => u.ProjectId == projectId && u.Status == status)
             .ToListAsync().ConfigureAwait(false);
     }
 
     public async Task<List<Url>> GetCompletedUrlsAsync(int projectId)
     {
-        return await _context.Urls
+        return await context.Urls
+            .AsNoTracking()
             .Where(u => u.ProjectId == projectId && u.Status == UrlStatus.Completed)
             .OrderBy(u => u.Id)
             .ToListAsync().ConfigureAwait(false);
@@ -58,7 +59,7 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
 
     public async Task<List<int>> GetCompletedUrlIdsAsync(int projectId)
     {
-        return await _context.Urls
+        return await context.Urls
             .AsNoTracking()
             .Where(u => u.ProjectId == projectId && u.Status == UrlStatus.Completed)
             .Select(u => u.Id)
@@ -67,7 +68,7 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
 
     public async Task<UrlAnalysisDto?> GetForAnalysisAsync(int id)
     {
-        var entity = await _context.Urls
+        var entity = await context.Urls
             .AsNoTracking()
             .Include(u => u.Headers)
             .FirstOrDefaultAsync(u => u.Id == id)
@@ -140,7 +141,7 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
 
     public async Task<string?> GetRenderedHtmlAsync(int id)
     {
-        return await _context.Urls
+        return await context.Urls
             .AsNoTracking()
             .Where(u => u.Id == id)
             .Select(u => u.RenderedHtml)
@@ -149,7 +150,7 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
 
     public async Task<List<HeaderSnapshot>> GetHeadersAsync(int urlId)
     {
-        return await _context.Headers
+        return await context.Headers
             .AsNoTracking()
             .Where(h => h.UrlId == urlId)
             .Select(h => new HeaderSnapshot(h.Name, h.Value))
@@ -159,8 +160,8 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
 
     public async Task<Url> CreateAsync(Url url)
     {
-        _context.Urls.Add(url);
-        await _context.SaveChangesAsync().ConfigureAwait(false);
+        context.Urls.Add(url);
+        await context.SaveChangesAsync().ConfigureAwait(false);
         return url;
     }
 
@@ -168,8 +169,8 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
     {
         if (headers != null)
         {
-            var existingHeaders = _context.Headers.Where(h => h.UrlId == url.Id);
-            _context.Headers.RemoveRange(existingHeaders);
+            var existingHeaders = context.Headers.Where(h => h.UrlId == url.Id);
+            context.Headers.RemoveRange(existingHeaders);
 
             var newHeaders = headers.Select(h => new Header
             {
@@ -178,32 +179,32 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
                 Value = h.Value
             });
 
-            await _context.Headers.AddRangeAsync(newHeaders).ConfigureAwait(false);
+            await context.Headers.AddRangeAsync(newHeaders).ConfigureAwait(false);
         }
 
-        _context.Entry(url).State = EntityState.Modified;
-        await _context.SaveChangesAsync().ConfigureAwait(false);
+        context.Entry(url).State = EntityState.Modified;
+        await context.SaveChangesAsync().ConfigureAwait(false);
         return url;
     }
 
     public async Task<int> CountByProjectIdAsync(int projectId)
     {
-        return await _context.Urls.CountAsync(u => u.ProjectId == projectId).ConfigureAwait(false);
+        return await context.Urls.CountAsync(u => u.ProjectId == projectId).ConfigureAwait(false);
     }
 
     public async Task<int> CountByStatusAsync(int projectId, UrlStatus status)
     {
-        return await _context.Urls.CountAsync(u => u.ProjectId == projectId && u.Status == status).ConfigureAwait(false);
+        return await context.Urls.CountAsync(u => u.ProjectId == projectId && u.Status == status).ConfigureAwait(false);
     }
 
     public async Task DeleteByProjectIdAsync(int projectId)
     {
-        var urls = await _context.Urls
+        var urls = await context.Urls
             .Where(u => u.ProjectId == projectId)
             .ToListAsync().ConfigureAwait(false);
         
-        _context.Urls.RemoveRange(urls);
-        await _context.SaveChangesAsync().ConfigureAwait(false);
+        context.Urls.RemoveRange(urls);
+        await context.SaveChangesAsync().ConfigureAwait(false);
     }
 
     private static string NormalizeUrl(string url)

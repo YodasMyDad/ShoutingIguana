@@ -12,7 +12,6 @@ namespace ShoutingIguana.Plugins.ImageAudit;
 /// </summary>
 public class ImageAuditTask(ILogger logger) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
     private const int MAX_IMAGE_SIZE_KB = 500;
     private const int LARGE_IMAGE_THRESHOLD_KB = 200;
     private const int MAX_ALT_TEXT_LENGTH = 125;
@@ -59,7 +58,7 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
                 return;
             }
 
-            _logger.LogDebug("Found {Count} images on {Url}", imgNodes.Count, ctx.Url);
+            logger.LogDebug("Found {Count} images on {Url}", imgNodes.Count, ctx.Url);
 
             // Track findings to deduplicate them
             var findingsMap = new Dictionary<string, FindingTracker>();
@@ -72,12 +71,12 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
             // Report all unique findings with occurrence counts
             await ReportUniqueFindings(ctx, findingsMap);
 
-            _logger.LogDebug("Completed image audit for {Url}: {Count} images analyzed, {UniqueFindings} unique findings", 
+            logger.LogDebug("Completed image audit for {Url}: {Count} images analyzed, {UniqueFindings} unique findings", 
                 ctx.Url, imgNodes.Count, findingsMap.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing images for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing images for {Url}", ctx.Url);
         }
     }
 

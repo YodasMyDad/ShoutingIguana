@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -46,9 +47,15 @@ public partial class App : Application
 
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information()
-            .WriteTo.File(logPath, rollingInterval: RollingInterval.Day)
-            .WriteTo.Debug() // Write to Debug output window in Visual Studio/Rider
-            .WriteTo.Console() // Write to console if running from terminal
+            .MinimumLevel.Override("ShoutingIguana.Plugins", Serilog.Events.LogEventLevel.Warning)
+            .WriteTo.File(
+                logPath,
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 14,
+                fileSizeLimitBytes: 50_000_000,
+                rollOnFileSizeLimit: true)
+            .WriteTo.Debug()
+            .WriteTo.Console()
             .CreateLogger();
 
         Log.Information("Shouting Iguana application starting...");
@@ -71,8 +78,20 @@ public partial class App : Application
                         builder.AddSerilog(Log.Logger, dispose: true);
                     });
 
-                    // HttpClient
+                    // HttpClient — named clients with sensible timeouts for socket-pool reuse
                     services.AddHttpClient();
+                    services.AddHttpClient("crawl-static", c =>
+                    {
+                        c.Timeout = TimeSpan.FromSeconds(30);
+                    });
+                    services.AddHttpClient("robots", c =>
+                    {
+                        c.Timeout = TimeSpan.FromSeconds(10);
+                    });
+                    services.AddHttpClient("sitemap", c =>
+                    {
+                        c.Timeout = TimeSpan.FromSeconds(10);
+                    });
 
                     // Database
                     services.AddSingleton<ISqliteDbContextFactory, SqliteDbContextFactory>();
@@ -85,6 +104,7 @@ public partial class App : Application
                         var provider = sp.GetRequiredService<IProjectDbContextProvider>();
                         return provider.GetDbContext();
                     });
+                    services.AddScoped<ShoutingIguana.Core.Services.IUnitOfWork, ShoutingIguana.Data.UnitOfWork>();
 
                     // Repositories
                     services.AddScoped<IProjectRepository, ProjectRepository>();
@@ -106,6 +126,7 @@ public partial class App : Application
                     services.AddSingleton<IRobotsService, RobotsService>();
                     services.AddSingleton<ISitemapService, SitemapService>();
                     services.AddSingleton<ILinkExtractor, LinkExtractor>();
+                    services.AddSingleton<HostThrottle>();
                     services.AddSingleton<IPlaywrightService, PlaywrightService>();
                     services.AddSingleton<IPluginConfigurationService, PluginConfigurationService>();
                     services.AddSingleton<PluginSdk.IRepositoryAccessor, RepositoryAccessor>();
@@ -153,6 +174,7 @@ public partial class App : Application
             // Create main window and view model first
             var mainWindow = _host.Services.GetRequiredService<MainWindow>();
             var mainViewModel = _host.Services.GetRequiredService<MainViewModel>();
+            mainViewModel.Initialize();
             mainWindow.DataContext = mainViewModel;
             
             // Initialize Playwright and plugins in background (non-blocking)
@@ -298,11 +320,25 @@ public partial class App : Application
 
     private void SetupExceptionHandlers()
     {
-        // Catch unhandled WPF UI thread exceptions
+        // Catch unhandled WPF UI thread exceptions.
+        // Recoverable families (transient I/O, cancellation, file perms) get swallowed so the app stays up.
+        // State-corruption exceptions (InvalidOperationException, NullReferenceException, stack/heap failures)
+        // are allowed to propagate so the crash is visible and diagnosable.
         DispatcherUnhandledException += (sender, e) =>
         {
-            LogAndShowError(e.Exception, "An unexpected error occurred in the application");
-            e.Handled = true; // Prevent app crash
+            Log.Error(e.Exception, "Unhandled UI-thread exception: {Message}", e.Exception.Message);
+
+            if (IsRecoverableUiException(e.Exception))
+            {
+                LogAndShowError(e.Exception, "An unexpected error occurred in the application");
+                e.Handled = true;
+            }
+            else
+            {
+                Log.Fatal(e.Exception, "Unrecoverable UI-thread exception — terminating: {Message}", e.Exception.Message);
+                Log.CloseAndFlush();
+                // Leave e.Handled = false so WPF tears the process down with a visible crash.
+            }
         };
 
         // Catch unhandled exceptions from background threads
@@ -310,7 +346,7 @@ public partial class App : Application
         {
             var exception = e.ExceptionObject as Exception;
             LogAndShowError(exception, "A critical error occurred");
-            
+
             // If this is terminating, flush logs immediately
             if (e.IsTerminating)
             {
@@ -324,6 +360,20 @@ public partial class App : Application
             LogAndShowError(e.Exception, "An error occurred in a background operation");
             e.SetObserved(); // Prevent process termination
         };
+    }
+
+    private static bool IsRecoverableUiException(Exception exception)
+    {
+        // Unwrap AggregateException (common for awaited tasks that surface on the dispatcher)
+        var inner = exception is AggregateException agg && agg.InnerException != null
+            ? agg.InnerException
+            : exception;
+
+        return inner is IOException
+            or HttpRequestException
+            or OperationCanceledException
+            or TaskCanceledException
+            or UnauthorizedAccessException;
     }
 
     private void LogAndShowError(Exception? exception, string userMessage)

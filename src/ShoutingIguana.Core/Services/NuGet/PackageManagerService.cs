@@ -13,10 +13,6 @@ public class PackageManagerService(
     IPluginRegistry pluginRegistry,
     IDependencyCache dependencyCache) : IPackageManagerService
 {
-    private readonly ILogger<PackageManagerService> _logger = logger;
-    private readonly INuGetService _nuGetService = nuGetService;
-    private readonly IPluginRegistry _pluginRegistry = pluginRegistry;
-    private readonly IDependencyCache _dependencyCache = dependencyCache;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     private static string GetExtensionsPath()
@@ -49,7 +45,7 @@ public class PackageManagerService(
         IProgress<InstallProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        await _lock.WaitAsync(cancellationToken);
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             progress?.Report(new InstallProgress { Status = "Downloading...", PercentComplete = 0 });
@@ -61,12 +57,12 @@ public class PackageManagerService(
             try
             {
                 // Download package with all dependencies
-                var downloadResult = await _nuGetService.DownloadPackageWithDependenciesAsync(
+                var downloadResult = await nuGetService.DownloadPackageWithDependenciesAsync(
                     packageId,
                     version,
                     tempDir,
                     progress,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
 
                 if (!downloadResult.Success || downloadResult.MainPackagePath == null)
                 {
@@ -80,7 +76,7 @@ public class PackageManagerService(
                 progress?.Report(new InstallProgress { Status = "Validating...", PercentComplete = 30 });
 
                 // Validate package
-                var validation = await _nuGetService.ValidatePackageAsync(downloadResult.MainPackagePath, cancellationToken);
+                var validation = await nuGetService.ValidatePackageAsync(downloadResult.MainPackagePath, cancellationToken).ConfigureAwait(false);
 
                 if (validation.Result != PackageValidationResult.Valid)
                 {
@@ -108,7 +104,7 @@ public class PackageManagerService(
                 ZipFile.ExtractToDirectory(downloadResult.MainPackagePath, pluginDir);
 
                 // Extract all dependencies to the same lib directory
-                _logger.LogInformation("Extracting {Count} dependencies", downloadResult.DependencyPackagePaths.Count);
+                logger.LogInformation("Extracting {Count} dependencies", downloadResult.DependencyPackagePaths.Count);
                 
                 var targetLibDir = Path.Combine(pluginDir, "lib");
                 
@@ -120,11 +116,11 @@ public class PackageManagerService(
                     try
                     {
                         // Check if we already have this dependency extracted somewhere
-                        var existingDepPath = _dependencyCache.GetExistingDependencyPath(depInfo.PackageId, depInfo.Version);
+                        var existingDepPath = dependencyCache.GetExistingDependencyPath(depInfo.PackageId, depInfo.Version);
                         
                         if (existingDepPath != null)
                         {
-                            _logger.LogInformation("Reusing existing dependency: {PackageId} v{Version} from {Path}", 
+                            logger.LogInformation("Reusing existing dependency: {PackageId} v{Version} from {Path}", 
                                 depInfo.PackageId, depInfo.Version, existingDepPath);
                             
                             // Copy from existing location instead of extracting again
@@ -155,13 +151,13 @@ public class PackageManagerService(
                             try
                             {
                                 ZipFile.ExtractToDirectory(depPackagePath, depCacheDir);
-                                _logger.LogDebug("Extracted {PackageId} v{Version} to cache", depInfo.PackageId, depInfo.Version);
+                                logger.LogDebug("Extracted {PackageId} v{Version} to cache", depInfo.PackageId, depInfo.Version);
                             }
                             catch (Exception ex)
                             {
-                                _logger.LogWarning(ex, "Failed to extract {PackageId} to cache", depInfo.PackageId);
+                                logger.LogWarning(ex, "Failed to extract {PackageId} to cache", depInfo.PackageId);
                                 // Clean up partial extraction
-                                try { Directory.Delete(depCacheDir, true); } catch { }
+                                try { Directory.Delete(depCacheDir, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
                                 throw;
                             }
                         }
@@ -182,17 +178,17 @@ public class PackageManagerService(
                                 if (!File.Exists(targetPath))
                                 {
                                     File.Copy(depFile, targetPath, false);
-                                    _logger.LogDebug("Copied dependency file: {File}", relativePath);
+                                    logger.LogDebug("Copied dependency file: {File}", relativePath);
                                 }
                             }
                             
                             // Register this dependency location for future reuse
-                            _dependencyCache.RegisterDependency(depInfo.PackageId, depInfo.Version, depLibDir);
+                            dependencyCache.RegisterDependency(depInfo.PackageId, depInfo.Version, depLibDir);
                         }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Failed to extract dependency: {Path}", depPackagePath);
+                        logger.LogWarning(ex, "Failed to extract dependency: {Path}", depPackagePath);
                         // Continue with other dependencies
                     }
                 }
@@ -220,12 +216,12 @@ public class PackageManagerService(
                     if (targetDir != null)
                     {
                         // Load plugin from the target framework directory
-                        await _pluginRegistry.LoadPluginAsync(targetDir);
+                        await pluginRegistry.LoadPluginAsync(targetDir).ConfigureAwait(false);
                     }
                     else
                     {
                         // Try loading from lib directory directly
-                        await _pluginRegistry.LoadPluginAsync(libDir);
+                        await pluginRegistry.LoadPluginAsync(libDir).ConfigureAwait(false);
                     }
                 }
                 else
@@ -247,11 +243,11 @@ public class PackageManagerService(
                     InstallPath = pluginDir,
                     Dependencies = downloadResult.ResolvedDependencies,
                     InstallDate = DateTime.UtcNow
-                });
+                }).ConfigureAwait(false);
 
                 progress?.Report(new InstallProgress { Status = "Complete", PercentComplete = 100 });
 
-                _logger.LogInformation("Successfully installed plugin: {PackageId} v{Version}", packageId, version);
+                logger.LogInformation("Successfully installed plugin: {PackageId} v{Version}", packageId, version);
 
                 return new InstallResult
                 {
@@ -270,15 +266,15 @@ public class PackageManagerService(
                         Directory.Delete(tempDir, true);
                     }
                 }
-                catch
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    // Ignore cleanup errors
+                    logger.LogDebug(ex, "Failed to clean up temp install directory {TempDir}", tempDir);
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to install plugin: {PackageId}", packageId);
+            logger.LogError(ex, "Failed to install plugin: {PackageId}", packageId);
             return new InstallResult
             {
                 Success = false,
@@ -293,21 +289,21 @@ public class PackageManagerService(
 
     public async Task UninstallPluginAsync(string pluginId)
     {
-        await _lock.WaitAsync();
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             // Get metadata
-            var metadata = await GetInstalledPluginsAsync();
+            var metadata = await GetInstalledPluginsAsync().ConfigureAwait(false);
             var pluginInfo = metadata.FirstOrDefault(p => p.PluginId.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
 
             if (pluginInfo == null)
             {
-                _logger.LogWarning("Plugin not found for uninstall: {PluginId}", pluginId);
+                logger.LogWarning("Plugin not found for uninstall: {PluginId}", pluginId);
                 return;
             }
 
             // Unload plugin
-            await _pluginRegistry.UnloadPluginAsync(pluginId);
+            await pluginRegistry.UnloadPluginAsync(pluginId).ConfigureAwait(false);
 
             // Delete installation directory
             if (Directory.Exists(pluginInfo.InstallPath))
@@ -329,14 +325,14 @@ public class PackageManagerService(
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to delete plugin directory: {Path}", pluginInfo.InstallPath);
+                    logger.LogWarning(ex, "Failed to delete plugin directory: {Path}", pluginInfo.InstallPath);
                 }
             }
 
             // Remove from metadata
-            await RemoveInstalledPluginMetadataAsync(pluginId);
+            await RemoveInstalledPluginMetadataAsync(pluginId).ConfigureAwait(false);
 
-            _logger.LogInformation("Uninstalled plugin: {PluginId}", pluginId);
+            logger.LogInformation("Uninstalled plugin: {PluginId}", pluginId);
         }
         finally
         {
@@ -349,7 +345,7 @@ public class PackageManagerService(
         IProgress<InstallProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        var metadata = await GetInstalledPluginsAsync();
+        var metadata = await GetInstalledPluginsAsync().ConfigureAwait(false);
         var pluginInfo = metadata.FirstOrDefault(p => p.PluginId.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
 
         if (pluginInfo == null)
@@ -362,7 +358,7 @@ public class PackageManagerService(
         }
 
         // Get latest version
-        var packageMetadata = await _nuGetService.GetPackageMetadataAsync(pluginInfo.PackageId, null, cancellationToken);
+        var packageMetadata = await nuGetService.GetPackageMetadataAsync(pluginInfo.PackageId, null, cancellationToken).ConfigureAwait(false);
         if (packageMetadata == null)
         {
             return new InstallResult
@@ -374,10 +370,10 @@ public class PackageManagerService(
 
         // Uninstall old version
         progress?.Report(new InstallProgress { Status = "Uninstalling old version...", PercentComplete = 10 });
-        await UninstallPluginAsync(pluginId);
+        await UninstallPluginAsync(pluginId).ConfigureAwait(false);
 
         // Install new version
-        return await InstallPluginAsync(pluginInfo.PackageId, packageMetadata.Version, progress, cancellationToken);
+        return await InstallPluginAsync(pluginInfo.PackageId, packageMetadata.Version, progress, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<InstalledPluginInfo>> GetInstalledPluginsAsync()
@@ -391,13 +387,13 @@ public class PackageManagerService(
 
         try
         {
-            var json = await File.ReadAllTextAsync(metadataPath);
+            var json = await File.ReadAllTextAsync(metadataPath).ConfigureAwait(false);
             var plugins = JsonSerializer.Deserialize<List<InstalledPluginInfo>>(json) ?? [];
             return plugins.AsReadOnly();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load installed plugins metadata");
+            logger.LogError(ex, "Failed to load installed plugins metadata");
             return [];
         }
     }
@@ -405,13 +401,13 @@ public class PackageManagerService(
     public async Task<IReadOnlyList<PluginUpdateInfo>> CheckForUpdatesAsync(CancellationToken cancellationToken = default)
     {
         var updates = new List<PluginUpdateInfo>();
-        var installed = await GetInstalledPluginsAsync();
+        var installed = await GetInstalledPluginsAsync().ConfigureAwait(false);
 
         foreach (var plugin in installed)
         {
             try
             {
-                var metadata = await _nuGetService.GetPackageMetadataAsync(plugin.PackageId, null, cancellationToken);
+                var metadata = await nuGetService.GetPackageMetadataAsync(plugin.PackageId, null, cancellationToken).ConfigureAwait(false);
                 if (metadata != null && metadata.Version != plugin.Version)
                 {
                     // Compare versions
@@ -432,7 +428,7 @@ public class PackageManagerService(
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to check for updates for {PackageId}", plugin.PackageId);
+                logger.LogWarning(ex, "Failed to check for updates for {PackageId}", plugin.PackageId);
             }
         }
 
@@ -441,7 +437,7 @@ public class PackageManagerService(
 
     private async Task SaveInstalledPluginMetadataAsync(InstalledPluginInfo plugin)
     {
-        var metadata = (await GetInstalledPluginsAsync()).ToList();
+        var metadata = (await GetInstalledPluginsAsync().ConfigureAwait(false)).ToList();
         
         // Remove existing entry if present
         metadata.RemoveAll(p => p.PluginId.Equals(plugin.PluginId, StringComparison.OrdinalIgnoreCase));
@@ -449,16 +445,16 @@ public class PackageManagerService(
         metadata.Add(plugin);
 
         var json = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(GetMetadataPath(), json);
+        await File.WriteAllTextAsync(GetMetadataPath(), json).ConfigureAwait(false);
     }
 
     private async Task RemoveInstalledPluginMetadataAsync(string pluginId)
     {
-        var metadata = (await GetInstalledPluginsAsync()).ToList();
+        var metadata = (await GetInstalledPluginsAsync().ConfigureAwait(false)).ToList();
         metadata.RemoveAll(p => p.PluginId.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
 
         var json = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(GetMetadataPath(), json);
+        await File.WriteAllTextAsync(GetMetadataPath(), json).ConfigureAwait(false);
     }
 
     public void Dispose()

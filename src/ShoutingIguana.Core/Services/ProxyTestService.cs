@@ -12,7 +12,6 @@ namespace ShoutingIguana.Core.Services;
 [SupportedOSPlatform("windows")]
 public class ProxyTestService(ILogger<ProxyTestService> logger) : IProxyTestService
 {
-    private readonly ILogger<ProxyTestService> _logger = logger;
     private const string TestUrl = "http://www.example.com";
 
     public async Task<ProxyTestResult> TestConnectionAsync(ProxySettings proxySettings, CancellationToken cancellationToken = default)
@@ -28,7 +27,7 @@ public class ProxyTestService(ILogger<ProxyTestService> logger) : IProxyTestServ
 
         try
         {
-            _logger.LogInformation("Testing proxy connection: {ProxyUrl}", proxySettings.GetProxyUrl());
+            logger.LogInformation("Testing proxy connection: {ProxyUrl}", proxySettings.GetRedactedProxyUrl());
             var stopwatch = Stopwatch.StartNew();
 
             using var handler = new HttpClientHandler
@@ -56,14 +55,14 @@ public class ProxyTestService(ILogger<ProxyTestService> logger) : IProxyTestServ
                     : $"✗ Connection failed with HTTP {response.StatusCode}"
             };
 
-            _logger.LogInformation("Proxy test result: {Success}, Status: {StatusCode}, Time: {Time}ms",
+            logger.LogInformation("Proxy test result: {Success}, Status: {StatusCode}, Time: {Time}ms",
                 result.Success, result.StatusCode, stopwatch.ElapsedMilliseconds);
 
             return result;
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Proxy test failed with HTTP request exception");
+            logger.LogWarning(ex, "Proxy test failed with HTTP request exception");
             return new ProxyTestResult
             {
                 Success = false,
@@ -73,7 +72,7 @@ public class ProxyTestService(ILogger<ProxyTestService> logger) : IProxyTestServ
         }
         catch (TaskCanceledException ex)
         {
-            _logger.LogWarning(ex, "Proxy test timed out");
+            logger.LogWarning(ex, "Proxy test timed out");
             return new ProxyTestResult
             {
                 Success = false,
@@ -83,7 +82,7 @@ public class ProxyTestService(ILogger<ProxyTestService> logger) : IProxyTestServ
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Proxy test failed with unexpected error");
+            logger.LogError(ex, "Proxy test failed with unexpected error");
             return new ProxyTestResult
             {
                 Success = false,

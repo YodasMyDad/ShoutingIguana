@@ -56,6 +56,26 @@ public class ProxySettings
     }
 
     /// <summary>
+    /// Gets the proxy URL with any embedded credentials (userinfo component)
+    /// replaced by "***". Use this variant for logging.
+    /// </summary>
+    public string GetRedactedProxyUrl()
+    {
+        var raw = GetProxyUrl();
+        if (string.IsNullOrEmpty(raw))
+        {
+            return raw;
+        }
+
+        if (Uri.TryCreate(raw, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.UserInfo))
+        {
+            return $"{uri.Scheme}://***@{uri.Host}:{uri.Port}";
+        }
+
+        return raw;
+    }
+
+    /// <summary>
     /// Sets the password and encrypts it using DPAPI.
     /// </summary>
     public void SetPassword(string plainPassword)

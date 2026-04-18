@@ -13,8 +13,6 @@ namespace ShoutingIguana.Plugins.Redirects;
 /// </summary>
 public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
-    private readonly ILogger _logger = logger;
-    private readonly IRepositoryAccessor _repositoryAccessor = repositoryAccessor;
     private const int MAX_REDIRECT_CHAIN_LENGTH = 3;
     private const int WARNING_REDIRECT_CHAIN_LENGTH = 2;
     private const int MAX_CHAIN_HOPS = 5;
@@ -94,7 +92,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing redirects for {Url}", ctx.Url);
+            logger.LogError(ex, "Error analyzing redirects for {Url}", ctx.Url);
         }
     }
     
@@ -315,7 +313,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Error checking for JavaScript redirects on {Url}", ctx.Url);
+            logger.LogDebug(ex, "Error checking for JavaScript redirects on {Url}", ctx.Url);
         }
     }
     
@@ -531,7 +529,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         
         if (!statusCache.TryGetValue(normalizedTarget, out var status))
         {
-            _logger.LogDebug("Redirect target {Target} not found in status cache", targetUrl);
+            logger.LogDebug("Redirect target {Target} not found in status cache", targetUrl);
             return;
         }
         
@@ -579,7 +577,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             
             var cache = new ConcurrentDictionary<string, RedirectHop>(StringComparer.OrdinalIgnoreCase);
             
-            await foreach (var redirect in _repositoryAccessor.GetRedirectsAsync(projectId, ct))
+            await foreach (var redirect in repositoryAccessor.GetRedirectsAsync(projectId, ct))
             {
                 if (string.IsNullOrWhiteSpace(redirect.SourceUrl) || string.IsNullOrWhiteSpace(redirect.ToUrl))
                 {
@@ -591,7 +589,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             }
             
             RedirectCacheByProject[projectId] = cache;
-            _logger.LogInformation("Cached {Count} redirect entries for project {ProjectId}", cache.Count, projectId);
+            logger.LogInformation("Cached {Count} redirect entries for project {ProjectId}", cache.Count, projectId);
         }
         finally
         {
@@ -617,7 +615,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             
             var statusCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             
-            await foreach (var url in _repositoryAccessor.GetUrlsAsync(projectId, ct))
+            await foreach (var url in repositoryAccessor.GetUrlsAsync(projectId, ct))
             {
                 if (!string.IsNullOrEmpty(url.NormalizedUrl))
                 {
@@ -627,7 +625,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             }
             
             UrlStatusCacheByProject[projectId] = statusCache;
-            _logger.LogInformation("Cached {Count} URL statuses for project {ProjectId}", statusCache.Count, projectId);
+            logger.LogInformation("Cached {Count} URL statuses for project {ProjectId}", statusCache.Count, projectId);
         }
         finally
         {
@@ -720,7 +718,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             statusSemaphore.Dispose();
         }
         
-        _logger.LogDebug("Cleaned up redirect data for project {ProjectId}", projectId);
+        logger.LogDebug("Cleaned up redirect data for project {ProjectId}", projectId);
     }
     
     private sealed record RedirectHop(string FromUrl, string ToUrl, int StatusCode);
