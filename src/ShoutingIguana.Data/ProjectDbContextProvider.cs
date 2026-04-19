@@ -76,22 +76,16 @@ public class ProjectDbContextProvider(
     /// </summary>
     public IShoutingIguanaDbContext GetDbContext()
     {
-        _lock.Wait();
-        try
+        // Snapshot the project path under a short lock, then construct the DbContext
+        // outside. The factory call is pure construction (no I/O); holding the lock
+        // across it only serialises workers without adding safety.
+        var path = Volatile.Read(ref _currentProjectPath);
+        if (path == null)
         {
-            if (_currentProjectPath == null)
-            {
-                throw new InvalidOperationException("No project is currently open. Call SetProjectPathAsync first.");
-            }
+            throw new InvalidOperationException("No project is currently open. Call SetProjectPathAsync first.");
+        }
 
-            // Create a NEW DbContext for each scope - DbContext should be short-lived
-            // This ensures thread safety: each caller gets an independent instance
-            return dbContextFactory.CreateDbContext(_currentProjectPath);
-        }
-        finally
-        {
-            _lock.Release();
-        }
+        return dbContextFactory.CreateDbContext(path);
     }
 
     public Task<IShoutingIguanaDbContext> GetDbContextAsync()
@@ -104,21 +98,20 @@ public class ProjectDbContextProvider(
         await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (_currentProjectPath == projectPath)
+            if (Volatile.Read(ref _currentProjectPath) == projectPath)
             {
                 return; // Already using this database path
             }
 
-            // Update the current project path
-            _currentProjectPath = projectPath;
-
-            // Create a temporary context to ensure database is created and migrations applied
-            // Run on background thread to avoid UI freeze
+            // Apply migrations BEFORE publishing the path — otherwise a concurrent
+            // GetDbContext() could resolve a context pointing at an un-migrated DB.
             await Task.Run(() =>
             {
                 using var tempContext = dbContextFactory.CreateDbContext(projectPath);
                 tempContext.Database.Migrate();
             }).ConfigureAwait(false);
+
+            Volatile.Write(ref _currentProjectPath, projectPath);
 
             logger.LogInformation("Switched to project database: {ProjectPath}", projectPath);
         }
@@ -127,19 +120,11 @@ public class ProjectDbContextProvider(
             _lock.Release();
         }
     }
-    
+
     public void CloseProject()
     {
-        _lock.Wait();
-        try
-        {
-            _currentProjectPath = null;
-            logger.LogInformation("Closed project database");
-        }
-        finally
-        {
-            _lock.Release();
-        }
+        Volatile.Write(ref _currentProjectPath, null);
+        logger.LogInformation("Closed project database");
     }
 }
 
