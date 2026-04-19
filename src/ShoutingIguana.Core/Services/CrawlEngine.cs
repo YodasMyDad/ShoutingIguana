@@ -828,11 +828,70 @@ public class CrawlEngine(
     }
 
     /// <summary>
-    /// Fetches a URL using Playwright. 
-    /// OWNERSHIP: The caller is ALWAYS responsible for disposing the returned page via ClosePageAsync(),
-    /// even if an error occurs. The page is returned in both success and error cases.
+    /// Fetches a URL using Playwright with retry on transient HTTP failures
+    /// (429, 503, 408, 502) and network errors.
+    ///
+    /// OWNERSHIP: The caller is ALWAYS responsible for disposing the returned page via
+    /// ClosePageAsync(), even if an error occurs. Pages created during retried attempts
+    /// are closed internally so only the final page is handed back.
     /// </summary>
     private async Task<(UrlFetchResult result, Microsoft.Playwright.IPage? page, string? html, List<RedirectHop> redirectChain)> FetchUrlWithPlaywrightAsync(string url, string userAgent, ProxySettings? proxySettings, bool blockNonEssentialResources, CancellationToken cancellationToken)
+    {
+        const int MaxAttempts = 4;
+
+        (UrlFetchResult result, Microsoft.Playwright.IPage? page, string? html, List<RedirectHop> redirectChain) lastResult = default;
+        bool hasLastResult = false;
+
+        for (int attempt = 1; attempt <= MaxAttempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var outcome = await AttemptFetchWithPlaywrightAsync(url, userAgent, proxySettings, blockNonEssentialResources, cancellationToken).ConfigureAwait(false);
+
+            if (!IsRetryableOutcome(outcome.result) || attempt == MaxAttempts)
+            {
+                return outcome;
+            }
+
+            // Close the failed page before we sleep; we'll borrow a fresh one next attempt.
+            if (outcome.page != null)
+            {
+                try
+                {
+                    await playwrightService.ClosePageAsync(outcome.page).ConfigureAwait(false);
+                }
+                catch (Exception closeEx)
+                {
+                    logger.LogWarning(closeEx, "Error closing page during retry for {Url}", url);
+                }
+            }
+
+            lastResult = outcome;
+            hasLastResult = true;
+
+            var delay = ComputeRetryDelay(attempt, outcome.result.Headers);
+            logger.LogWarning("Transient failure fetching {Url} (status {Status}, attempt {Attempt}/{Max}) — retrying in {Delay}ms",
+                url, outcome.result.StatusCode, attempt, MaxAttempts, delay.TotalMilliseconds);
+
+            try
+            {
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+        }
+
+        return hasLastResult ? lastResult : default;
+    }
+
+    private async Task<(UrlFetchResult result, Microsoft.Playwright.IPage? page, string? html, List<RedirectHop> redirectChain)> AttemptFetchWithPlaywrightAsync(
+        string url,
+        string userAgent,
+        ProxySettings? proxySettings,
+        bool blockNonEssentialResources,
+        CancellationToken cancellationToken)
     {
         Microsoft.Playwright.IPage? page = null;
         string? renderedHtml = null;
@@ -840,12 +899,10 @@ public class CrawlEngine(
 
         try
         {
-            // Check cancellation before creating page
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Create a new page with the specified user agent and proxy (caller becomes responsible for disposal from this point)
             page = await playwrightService.CreatePageAsync(userAgent, proxySettings, blockNonEssentialResources).ConfigureAwait(false);
-            
+
             // Smart adaptive page loading — tracked per host so one bad host
             // does not degrade loader strategy for the rest of the crawl.
             Microsoft.Playwright.IResponse? response = null;
@@ -854,8 +911,6 @@ public class CrawlEngine(
 
             if (!stats.UseFastMode)
             {
-                // Try NetworkIdle with a short timeout. If the host fails it enough
-                // times the sliding window flips it to fast mode automatically.
                 try
                 {
                     response = await page.GotoAsync(url, new Microsoft.Playwright.PageGotoOptions
@@ -885,7 +940,6 @@ public class CrawlEngine(
             }
             else
             {
-                // Host is in fast mode — skip straight to DOMContentLoaded.
                 response = await LoadWithDOMContentLoadedAsync(page, url, cancellationToken).ConfigureAwait(false);
             }
 
@@ -899,13 +953,10 @@ public class CrawlEngine(
                 }, page, null, redirectChain);
             }
 
-            // Capture redirect chain
             redirectChain = ExtractRedirectChain(response);
 
-            // Get rendered HTML
             renderedHtml = await page.ContentAsync().ConfigureAwait(false);
 
-            // Get headers
             var headers = await response.AllHeadersAsync().ConfigureAwait(false);
             var headerList = headers.Select(h => new KeyValuePair<string, string>(h.Key, h.Value)).ToList();
 
@@ -925,12 +976,9 @@ public class CrawlEngine(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error fetching URL with Playwright: {Url}", url);
-            
-            // Check if this is a redirect loop error
+
             bool isRedirectLoop = ex.Message.Contains("ERR_TOO_MANY_REDIRECTS", StringComparison.OrdinalIgnoreCase);
-            
-            // Return error result WITH the page - caller owns disposal in all cases
-            // This ensures single ownership and prevents double-disposal attempts
+
             return (new UrlFetchResult
             {
                 StatusCode = 0,
@@ -939,6 +987,63 @@ public class CrawlEngine(
                 IsRedirectLoop = isRedirectLoop
             }, page, null, redirectChain);
         }
+    }
+
+    private static bool IsRetryableOutcome(UrlFetchResult result)
+    {
+        if (result.StatusCode is 429 or 503 or 502 or 408)
+        {
+            return true;
+        }
+
+        // Network-layer failures surface as StatusCode 0 + a non-null error message.
+        // Do not retry redirect loops — they will not converge.
+        if (result.StatusCode == 0 && !string.IsNullOrEmpty(result.ErrorMessage) && !result.IsRedirectLoop)
+        {
+            var msg = result.ErrorMessage;
+            if (msg.Contains("ERR_", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("NS_ERROR_", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("timeout", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("net::", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static TimeSpan ComputeRetryDelay(int attempt, IReadOnlyList<KeyValuePair<string, string>>? headers)
+    {
+        // Honour Retry-After when the server sets it (seconds or HTTP-date).
+        if (headers != null)
+        {
+            foreach (var kv in headers)
+            {
+                if (!string.Equals(kv.Key, "retry-after", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (int.TryParse(kv.Value, out var seconds) && seconds >= 0)
+                {
+                    return TimeSpan.FromSeconds(Math.Min(seconds, 60));
+                }
+
+                if (DateTimeOffset.TryParse(kv.Value, out var when))
+                {
+                    var wait = when - DateTimeOffset.UtcNow;
+                    if (wait > TimeSpan.Zero)
+                    {
+                        return wait > TimeSpan.FromSeconds(60) ? TimeSpan.FromSeconds(60) : wait;
+                    }
+                }
+            }
+        }
+
+        // Exponential backoff: 1s, 2s, 4s, 8s (capped).
+        var seconds2 = Math.Min(Math.Pow(2, attempt - 1), 8);
+        return TimeSpan.FromSeconds(seconds2);
     }
 
     /// <summary>
