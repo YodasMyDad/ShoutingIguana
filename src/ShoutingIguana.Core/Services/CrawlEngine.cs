@@ -313,7 +313,17 @@ public class CrawlEngine(
 
             var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
             var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
-            
+
+            // Reset orphaned InProgress rows from a previous run that terminated abruptly
+            // (process kill, power loss). Without this they stay stuck forever. Runs on
+            // every crawl start — fresh or resume — since either path tolerates a reset.
+            var orphanedBefore = await queueRepository.CountByStateAsync(projectId, QueueState.InProgress).ConfigureAwait(false);
+            if (orphanedBefore > 0)
+            {
+                await queueRepository.ResetInProgressItemsAsync(projectId).ConfigureAwait(false);
+                logger.LogInformation("Recovered {Count} orphaned InProgress queue items from a prior crawl", orphanedBefore);
+            }
+
             if (resumeFromCheckpoint)
             {
                 // Resuming from checkpoint - preserve existing data
