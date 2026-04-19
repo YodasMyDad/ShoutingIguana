@@ -496,6 +496,24 @@
          ======================================== -->
     
     <!-- Text Box with Placeholder Support -->
+    <!-- Shared ErrorTemplate: red outline on the adorned control plus an
+         inline error message below. Applied via the TextBox/ComboBox styles
+         so any bound field with Validation.Errors renders consistently. -->
+    <ControlTemplate x:Key="InlineValidationErrorTemplate">
+        <StackPanel>
+            <Border BorderBrush="{StaticResource ErrorBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4">
+                <AdornedElementPlaceholder x:Name="adornedElement"/>
+            </Border>
+            <TextBlock Text="{Binding [0].ErrorContent}"
+                       Foreground="{StaticResource ErrorBrush}"
+                       FontSize="12"
+                       Margin="0,4,0,0"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+    </ControlTemplate>
+
     <Style x:Key="StandardTextBox" TargetType="TextBox">
         <Setter Property="Padding" Value="12,10"/>
         <Setter Property="FontSize" Value="14"/>
@@ -504,6 +522,7 @@
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Validation.ErrorTemplate" Value="{StaticResource InlineValidationErrorTemplate}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
@@ -575,6 +594,7 @@
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Validation.ErrorTemplate" Value="{StaticResource InlineValidationErrorTemplate}"/>
     </Style>
     
     <!-- ========================================
