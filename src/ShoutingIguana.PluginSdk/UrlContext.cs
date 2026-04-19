@@ -10,7 +10,7 @@ namespace ShoutingIguana.PluginSdk;
 /// <param name="Page">Abstraction over browser page (if JavaScript rendering was used). Null if fetched via HttpClient only.</param>
 /// <param name="HttpResponse">Immutable snapshot of the HTTP response (scheme, host, status, headers, content-type, bytes read). May be null if not captured.</param>
 /// <param name="RenderedHtml">Rendered HTML content (after JavaScript execution if applicable).</param>
-/// <param name="Headers">HTTP response headers.</param>
+/// <param name="Headers">HTTP response headers. Keys are lowercased; values are preserved as multi-value lists so multi-valued headers like Set-Cookie are not collapsed.</param>
 /// <param name="Project">Project-wide crawl settings.</param>
 /// <param name="Metadata">URL metadata (status code, content type, depth, etc.).</param>
 /// <param name="Reports">Sink for reporting custom data rows with plugin-defined columns.</param>
@@ -56,7 +56,7 @@ public sealed record UrlContext(
     IBrowserPage? Page,
     UrlResponseInfo? HttpResponse,
     string? RenderedHtml,
-    IReadOnlyDictionary<string, string> Headers,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> Headers,
     ProjectSettings Project,
     UrlMetadata Metadata,
     IReportSink Reports,

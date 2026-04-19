@@ -119,9 +119,11 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
     {
         var hreflangs = new List<HreflangLink>();
         
-        // Check Link header for hreflang
-        if (ctx.Headers.TryGetValue("link", out var linkHeader))
+        // Check Link header for hreflang. Multiple Link headers are allowed; concatenate
+        // them with commas so the RFC 8288 parser below handles the combined list uniformly.
+        if (ctx.Headers.TryGetValue("link", out var linkValues) && linkValues.Count > 0)
         {
+            var linkHeader = string.Join(", ", linkValues);
             // RFC 8288 Link-header: <url>; param=value; param="value", <url>; ...
             // Parameter order is unspecified, so match the URL and then scan params independently.
             var linkValuePattern = @"<([^>]+)>([^,]*)";

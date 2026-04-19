@@ -185,7 +185,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
         var weakHeaders = new List<(string Header, string Issue)>();
 
         // Check HSTS (Strict-Transport-Security)
-        if (ctx.Headers.TryGetValue("strict-transport-security", out var hsts))
+        if (FirstHeader(ctx, "strict-transport-security") is { } hsts)
         {
             // Validate HSTS header
             var maxAgeMatch = Regex.Match(hsts, @"max-age=(\d+)", RegexOptions.IgnoreCase);
@@ -208,29 +208,29 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
         }
 
         // Check Content-Security-Policy
-        if (!ctx.Headers.ContainsKey("content-security-policy") && !ctx.Headers.ContainsKey("content-security-policy-report-only"))
+        if (!HasHeader(ctx, "content-security-policy") && !HasHeader(ctx, "content-security-policy-report-only"))
         {
             missingHeaders.Add("Content-Security-Policy (CSP)");
         }
 
         // Check X-Content-Type-Options
-        if (!ctx.Headers.ContainsKey("x-content-type-options"))
+        if (FirstHeader(ctx, "x-content-type-options") is not { } xcto)
         {
             missingHeaders.Add("X-Content-Type-Options");
         }
-        else if (ctx.Headers.TryGetValue("x-content-type-options", out var xcto) && !xcto.Equals("nosniff", StringComparison.OrdinalIgnoreCase))
+        else if (!xcto.Equals("nosniff", StringComparison.OrdinalIgnoreCase))
         {
             weakHeaders.Add(("X-Content-Type-Options", $"Value is '{xcto}' (should be 'nosniff')"));
         }
 
         // Check X-Frame-Options
-        if (!ctx.Headers.ContainsKey("x-frame-options"))
+        if (!HasHeader(ctx, "x-frame-options"))
         {
             missingHeaders.Add("X-Frame-Options");
         }
 
         // Check Referrer-Policy
-        if (!ctx.Headers.ContainsKey("referrer-policy"))
+        if (!HasHeader(ctx, "referrer-policy"))
         {
             missingHeaders.Add("Referrer-Policy");
         }
@@ -238,7 +238,7 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
         // Check Permissions-Policy (replaces the legacy Feature-Policy header).
         // Modern browsers honour Permissions-Policy; a missing value means every
         // feature (geolocation, camera, autoplay, etc.) is implicitly allowed.
-        if (!ctx.Headers.ContainsKey("permissions-policy") && !ctx.Headers.ContainsKey("feature-policy"))
+        if (!HasHeader(ctx, "permissions-policy") && !HasHeader(ctx, "feature-policy"))
         {
             missingHeaders.Add("Permissions-Policy");
         }
@@ -264,67 +264,82 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
 
     private async Task CheckSecureCookiesAsync(UrlContext ctx)
     {
-        // Check Set-Cookie headers
-        if (ctx.Headers.TryGetValue("set-cookie", out var setCookie))
+        if (!ctx.Headers.TryGetValue("set-cookie", out var cookies) || cookies.Count == 0)
         {
-            // Note: Set-Cookie can be a single cookie or multiple separated by commas
-            // However, cookie values themselves can contain commas (in Expires dates)
-            // More robust parsing would split on "; " boundaries but for basic check this works
-            var cookies = new List<string>();
-            
-            // Simple split - may not be perfect but catches most cases
-            if (setCookie.Contains("; "))
-            {
-                // Likely a single cookie with attributes
-                cookies.Add(setCookie);
-            }
-            else
-            {
-                // Multiple cookies or simple cookie
-                cookies = setCookie.Split(',').Select(c => c.Trim()).ToList();
-            }
-            
-            var insecureCookies = new List<string>();
-            var missingHttpOnly = new List<string>();
+            return;
+        }
 
-            foreach (var cookie in cookies)
+        var insecureCookies = new List<string>();
+        var missingHttpOnly = new List<string>();
+
+        foreach (var cookie in cookies)
+        {
+            if (string.IsNullOrWhiteSpace(cookie))
+                continue;
+
+            // Each Set-Cookie value is one cookie. Name is everything up to the first '='.
+            var eq = cookie.IndexOf('=');
+            if (eq <= 0)
+                continue;
+
+            var cookieName = cookie[..eq].Trim();
+
+            // Attributes live after the first ';'. Split so "Secure" inside a cookie value
+            // can't produce a false negative.
+            var attributeSegment = cookie.IndexOf(';') is var semi and > 0
+                ? cookie[semi..]
+                : string.Empty;
+
+            if (!HasCookieAttribute(attributeSegment, "Secure"))
             {
-                if (string.IsNullOrWhiteSpace(cookie))
-                    continue;
-                
-                var cookieParts = cookie.Split('=');
-                if (cookieParts.Length < 2)
-                    continue;
-                
-                var cookieName = cookieParts[0].Trim();
-                
-                // Check for Secure flag
-                if (!cookie.Contains("Secure", StringComparison.OrdinalIgnoreCase))
-                {
-                    insecureCookies.Add(cookieName);
-                }
-                
-                // Check for HttpOnly flag (prevents JavaScript access)
-                if (!cookie.Contains("HttpOnly", StringComparison.OrdinalIgnoreCase))
-                {
-                    missingHttpOnly.Add(cookieName);
-                }
+                insecureCookies.Add(cookieName);
             }
 
-            if (insecureCookies.Any() || missingHttpOnly.Any())
+            if (!HasCookieAttribute(attributeSegment, "HttpOnly"))
             {
-                var cookieDetails = $"{insecureCookies.Count} without Secure, {missingHttpOnly.Count} without HttpOnly";
-                var row = ReportRow.Create()
-                    .Set("Page", ctx.Url.ToString())
-                    .Set("Issue", "Insecure Cookies")
-                    .Set("Protocol", "HTTPS")
-                    .Set("Details", cookieDetails)
-                    .SetExplanation( BuildCookieDescription(insecureCookies, missingHttpOnly))
-                    .SetSeverity(Severity.Warning);
-                
-                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+                missingHttpOnly.Add(cookieName);
             }
         }
+
+        if (insecureCookies.Count > 0 || missingHttpOnly.Count > 0)
+        {
+            var cookieDetails = $"{insecureCookies.Count} without Secure, {missingHttpOnly.Count} without HttpOnly";
+            var row = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("Issue", "Insecure Cookies")
+                .Set("Protocol", "HTTPS")
+                .Set("Details", cookieDetails)
+                .SetExplanation(BuildCookieDescription(insecureCookies, missingHttpOnly))
+                .SetSeverity(Severity.Warning);
+
+            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+        }
+    }
+
+    private static bool HasHeader(UrlContext ctx, string name)
+        => ctx.Headers.TryGetValue(name, out var values) && values.Count > 0;
+
+    private static string? FirstHeader(UrlContext ctx, string name)
+        => ctx.Headers.TryGetValue(name, out var values) ? values.FirstOrDefault() : null;
+
+    private static bool HasCookieAttribute(string attributeSegment, string attributeName)
+    {
+        if (string.IsNullOrEmpty(attributeSegment))
+            return false;
+
+        foreach (var part in attributeSegment.Split(';'))
+        {
+            var trimmed = part.Trim();
+            if (trimmed.Equals(attributeName, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // Handle attributes like "SameSite=Strict" — take the left side.
+            var eq = trimmed.IndexOf('=');
+            if (eq > 0 && trimmed[..eq].Trim().Equals(attributeName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     private async Task RecommendHttpsAsync(UrlContext ctx)

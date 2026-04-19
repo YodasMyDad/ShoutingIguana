@@ -790,12 +790,13 @@ public class CrawlEngine(
                     }
                 }
                 
-                // Extract headers from loaded entity
+                // Extract headers from loaded entity. Preserve multi-value headers
+                // (e.g. Set-Cookie) as lists so plugins see every value.
                 var headers = headerSnapshots
                     .GroupBy(h => h.Name, StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(
                         g => g.Key.ToLowerInvariant(),
-                        g => g.First().Value,
+                        g => (IReadOnlyList<string>)g.Select(h => h.Value).ToList(),
                         StringComparer.OrdinalIgnoreCase);
                 
                 // Execute plugin tasks with saved HTML (no live browser page needed)
@@ -958,14 +959,22 @@ public class CrawlEngine(
 
             renderedHtml = await page.ContentAsync().ConfigureAwait(false);
 
-            var headers = await response.AllHeadersAsync().ConfigureAwait(false);
-            var headerList = headers.Select(h => new KeyValuePair<string, string>(h.Key, h.Value)).ToList();
+            // HeadersArrayAsync preserves every raw header row (including multiple Set-Cookie)
+            // instead of AllHeadersAsync which joins duplicates.
+            var headerArray = await response.HeadersArrayAsync().ConfigureAwait(false);
+            var headerList = headerArray
+                .Select(h => new KeyValuePair<string, string>(h.Name, h.Value))
+                .ToList();
+
+            var contentTypeHeader = headerArray
+                .FirstOrDefault(h => string.Equals(h.Name, "content-type", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
 
             var result = new UrlFetchResult
             {
                 StatusCode = response.Status,
                 IsSuccess = response.Ok,
-                ContentType = headers.ContainsKey("content-type") ? headers["content-type"] : null,
+                ContentType = contentTypeHeader,
                 Headers = headerList,
                 IsHtml = true,
                 Content = renderedHtml,
@@ -1186,7 +1195,7 @@ public class CrawlEngine(
             {
                 var headers = response.Headers
                     .Concat(response.Content.Headers)
-                    .Select(h => new KeyValuePair<string, string>(h.Key, string.Join(", ", h.Value)))
+                    .SelectMany(h => h.Value.Select(v => new KeyValuePair<string, string>(h.Key, v)))
                     .ToList();
 
                 var contentType = response.Content.Headers.ContentType?.ToString();

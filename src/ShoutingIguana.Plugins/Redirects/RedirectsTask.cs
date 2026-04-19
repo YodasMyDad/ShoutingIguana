@@ -55,7 +55,7 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
             // Check if this URL is a redirect
             if (statusCode >= 300 && statusCode < 400)
             {
-                var location = ctx.Headers.TryGetValue("location", out var loc) ? loc : null;
+                var location = ctx.Headers.TryGetValue("location", out var loc) ? loc.FirstOrDefault() : null;
                 var resolvedTarget = string.IsNullOrEmpty(location)
                     ? null
                     : ResolveRedirectTarget(ctx.Url, location);
@@ -652,7 +652,8 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
     private async Task CheckRedirectCachingAsync(UrlContext ctx, int statusCode, string? targetUrl)
     {
         // Check Cache-Control header
-        if (ctx.Headers.TryGetValue("cache-control", out var cacheControl))
+        if (ctx.Headers.TryGetValue("cache-control", out var cacheControlValues)
+            && cacheControlValues.FirstOrDefault() is { } cacheControl)
         {
             var maxAgeMatch = Regex.Match(cacheControl, @"max-age=(\d+)", RegexOptions.IgnoreCase);
             

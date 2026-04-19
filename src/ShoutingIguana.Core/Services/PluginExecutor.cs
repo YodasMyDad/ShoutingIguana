@@ -20,7 +20,7 @@ public class PluginExecutor(
         UrlAnalysisDto urlData,
         IPage? page,
         string? renderedHtml,
-        Dictionary<string, string> headers,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> headers,
         Configuration.ProjectSettings projectSettings,
         string userAgent,
         int projectId,
@@ -108,24 +108,18 @@ public class PluginExecutor(
         }
     }
 
-    private static UrlResponseInfo? BuildResponseInfo(UrlAnalysisDto urlData, Dictionary<string, string> headers)
+    private static UrlResponseInfo? BuildResponseInfo(UrlAnalysisDto urlData, IReadOnlyDictionary<string, IReadOnlyList<string>> headers)
     {
         if (urlData.HttpStatus is null || !Uri.TryCreate(urlData.Address, UriKind.Absolute, out var uri))
         {
             return null;
         }
 
-        var responseHeaders = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (key, value) in headers)
-        {
-            responseHeaders[key] = new[] { value };
-        }
-
         return new UrlResponseInfo(
             Scheme: uri.Scheme,
             Host: uri.Host,
             StatusCode: urlData.HttpStatus.Value,
-            Headers: responseHeaders,
+            Headers: headers,
             ContentType: urlData.ContentType,
             BytesRead: urlData.ContentLength ?? 0);
     }
