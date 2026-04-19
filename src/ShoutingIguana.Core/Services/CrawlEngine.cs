@@ -33,6 +33,7 @@ public class CrawlEngine(
     private Stopwatch? _stopwatch;
     private TimeSpan _pausedTime = TimeSpan.Zero;
     private DateTime? _pauseStartTime;
+    private readonly object _pauseLock = new();
     private string? _lastCrawledUrl;
     private int _lastCrawledStatus;
     private int _currentProjectId;
@@ -205,47 +206,47 @@ public class CrawlEngine(
 
     public Task PauseCrawlAsync()
     {
-        if (!IsCrawling || IsPaused)
+        lock (_pauseLock)
         {
-            logger.LogWarning("Cannot pause: crawl is not running or already paused");
-            return Task.CompletedTask;
+            if (!IsCrawling || IsPaused)
+            {
+                logger.LogWarning("Cannot pause: crawl is not running or already paused");
+                return Task.CompletedTask;
+            }
+
+            logger.LogInformation("Pausing crawl...");
+            _pauseStartTime = DateTime.UtcNow;
+            _pauseEvent.Reset();
+            _stopwatch?.Stop();
         }
 
-        logger.LogInformation("Pausing crawl...");
-        _pauseStartTime = DateTime.UtcNow;
-        _pauseEvent.Reset();
-        
-        // Pause stopwatch
-        _stopwatch?.Stop();
-        
         SendProgressUpdate(_currentProjectId);
-        
         return Task.CompletedTask;
     }
 
     public Task ResumeCrawlAsync()
     {
-        if (!IsCrawling || !IsPaused)
+        lock (_pauseLock)
         {
-            logger.LogWarning("Cannot resume: crawl is not paused");
-            return Task.CompletedTask;
+            if (!IsCrawling || !IsPaused)
+            {
+                logger.LogWarning("Cannot resume: crawl is not paused");
+                return Task.CompletedTask;
+            }
+
+            logger.LogInformation("Resuming crawl...");
+
+            if (_pauseStartTime.HasValue)
+            {
+                _pausedTime += DateTime.UtcNow - _pauseStartTime.Value;
+                _pauseStartTime = null;
+            }
+
+            _pauseEvent.Set();
+            _stopwatch?.Start();
         }
 
-        logger.LogInformation("Resuming crawl...");
-        
-        // Calculate paused time
-        if (_pauseStartTime.HasValue)
-        {
-            _pausedTime += DateTime.UtcNow - _pauseStartTime.Value;
-            _pauseStartTime = null;
-        }
-        
-        _pauseEvent.Set();
-
-        _stopwatch?.Start();
-        
         SendProgressUpdate(_currentProjectId);
-        
         return Task.CompletedTask;
     }
 
