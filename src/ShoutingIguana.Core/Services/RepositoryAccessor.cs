@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Core.Repositories;
 using ShoutingIguana.PluginSdk;
+using ShoutingIguana.PluginSdk.Helpers;
 
 namespace ShoutingIguana.Core.Services;
 
@@ -46,11 +47,12 @@ public class RepositoryAccessor(
                 url.HttpStatus.Value,
                 url.ContentType,
                 url.Depth,
-                url.IsIndexable ?? false);
+                url.IsIndexable ?? false,
+                NormalizeCanonical(url.CanonicalHtml, url.CanonicalHttp));
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting URL by address: {Address} for project {ProjectId}", 
+            logger.LogError(ex, "Error getting URL by address: {Address} for project {ProjectId}",
                 address, projectId);
             return null;
         }
@@ -79,7 +81,8 @@ public class RepositoryAccessor(
                     url.HttpStatus!.Value,
                     url.ContentType,
                     url.Depth,
-                    url.IsIndexable ?? false
+                    url.IsIndexable ?? false,
+                    NormalizeCanonical(url.CanonicalHtml, url.CanonicalHttp)
                 )).ToList();
         } // Scope disposed here
         
@@ -215,6 +218,21 @@ public class RepositoryAccessor(
         }
     }
     
+    private static string? NormalizeCanonical(string? canonicalHtml, string? canonicalHttp)
+    {
+        // Prefer the HTML <link rel=canonical> over the HTTP Link header; mirrors
+        // the preference in UrlMetadata. Normalize with the same rules used for
+        // NormalizedUrl so "same canonical" comparisons line up.
+        var raw = !string.IsNullOrWhiteSpace(canonicalHtml) ? canonicalHtml : canonicalHttp;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var normalized = UrlHelper.Normalize(raw);
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
     public async Task<List<PluginSdk.ImageInfo>> GetImagesByFromUrlAsync(int projectId, int fromUrlId)
     {
         try

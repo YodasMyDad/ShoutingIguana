@@ -822,8 +822,8 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
     
     /// <summary>
     /// Whether a crawled URL is a legitimate candidate for inclusion in a sitemap.
-    /// Mirrors the filter used by SitemapExporter. Excludes non-200, noindex, and redirect sources.
-    /// Cross-URL canonical filtering is not performed here because UrlInfo does not expose canonical data.
+    /// Mirrors the filter used by SitemapExporter. Excludes non-200, noindex, redirect
+    /// sources, and pages whose canonical points at a different URL.
     /// </summary>
     private static bool IsSitemapEligible(UrlInfo url, HashSet<string> redirectSources)
     {
@@ -839,6 +839,15 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
         }
 
         if (redirectSources.Contains(url.Address))
+        {
+            return false;
+        }
+
+        // Pages that canonical to a different URL should not appear in the sitemap —
+        // the canonical target is the one search engines should index. Self-canonicals
+        // (or no canonical at all) are fine.
+        if (!string.IsNullOrEmpty(url.Canonical)
+            && !string.Equals(url.Canonical, url.NormalizedUrl, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }

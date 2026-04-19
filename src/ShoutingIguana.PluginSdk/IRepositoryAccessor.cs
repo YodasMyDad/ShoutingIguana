@@ -325,6 +325,11 @@ public interface IRepositoryAccessor
 /// Whether the URL is indexable by search engines.
 /// False if blocked by robots, has noindex, or is an error page.
 /// </param>
+/// <param name="Canonical">
+/// Normalized canonical URL (HTML <c>&lt;link rel="canonical"&gt;</c> preferred, else
+/// <c>Link</c> HTTP header), or <c>null</c> if the page declares no canonical. Normalized
+/// with the same rules as <see cref="NormalizedUrl"/> so self-canonicals compare equal.
+/// </param>
 /// <remarks>
 /// Use this to:
 /// - Check URL status codes
@@ -353,10 +358,11 @@ public interface IRepositoryAccessor
 public record UrlInfo(
     string Address,
     string NormalizedUrl,
-    int Status, 
-    string? ContentType, 
-    int Depth, 
-    bool IsIndexable);
+    int Status,
+    string? ContentType,
+    int Depth,
+    bool IsIndexable,
+    string? Canonical = null);
 
 /// <summary>
 /// Simplified redirect information for plugin access.

@@ -40,8 +40,7 @@ public class SitemapExporter : IExportProvider
             }
 
             // Filter for sitemap-eligible URLs: 200 only, indexable (rolls up noindex + robots),
-            // and not the source of a redirect. Cross-URL canonical filtering is not applied here
-            // because UrlInfo does not expose canonical data without adding a new repository dependency.
+            // not the source of a redirect, and not canonicalized to a different URL.
             var indexableUrls = new List<SitemapUrl>();
 
             await foreach (var url in _repositoryAccessor.GetUrlsAsync(ctx.ProjectId, ct))
@@ -62,6 +61,14 @@ public class SitemapExporter : IExportProvider
                 }
 
                 if (redirectSources.Contains(url.Address))
+                {
+                    continue;
+                }
+
+                // Cross-URL canonical: search engines should index the canonical target,
+                // so omit pages that point elsewhere. Self-canonical (or none) stays.
+                if (!string.IsNullOrEmpty(url.Canonical)
+                    && !string.Equals(url.Canonical, url.NormalizedUrl, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
