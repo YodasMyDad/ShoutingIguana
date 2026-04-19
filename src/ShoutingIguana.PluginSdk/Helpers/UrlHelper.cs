@@ -74,24 +74,84 @@ public static class UrlHelper
         try
         {
             var uri = new Uri(url, UriKind.Absolute);
-            
-            // Build normalized URL
-            var normalized = uri.GetLeftPart(UriPartial.Path);
-            
-            // IMPORTANT: Keep trailing slash for consistency with database normalization
-            // This ensures URL comparisons work correctly across the entire application
-            // The CrawlEngine and UrlRepository both keep trailing slashes, so we must do the same
-            // DO NOT remove trailing slash - this matches how URLs are stored in the database
-            
-            // Convert to lowercase (scheme and host are case-insensitive, path is case-sensitive in some servers)
-            // For SEO purposes, we normalize the whole URL to lowercase
-            return normalized.ToLowerInvariant();
+
+            // Preserve query string (distinct query values are distinct URLs for SEO),
+            // but drop known tracking parameters and sort the rest alphabetically so
+            // logically-equivalent variants (?a=1&b=2 vs ?b=2&a=1 or ?utm_source=x
+            // vs no utm) collapse to the same normalized form.
+            var scheme = uri.Scheme.ToLowerInvariant();
+            var host = uri.Host.ToLowerInvariant();
+            var port = uri.IsDefaultPort ? "" : $":{uri.Port}";
+            var path = uri.AbsolutePath.ToLowerInvariant();
+            var query = NormalizeQuery(uri.Query);
+
+            return $"{scheme}://{host}{port}{path}{query}";
         }
         catch (UriFormatException)
         {
-            // If it's not a valid URI, return as-is
             return url;
         }
+    }
+
+    /// <summary>
+    /// Parameter names stripped from query strings before comparison. Match
+    /// is case-insensitive. Covers the common ad / analytics trackers —
+    /// these appear in inbound links but don't change page content.
+    /// </summary>
+    private static readonly HashSet<string> TrackingParams = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
+        "gclid", "gclsrc", "dclid", "wbraid", "gbraid",
+        "fbclid", "msclkid", "yclid", "mc_cid", "mc_eid",
+        "_ga", "_gl", "_hsenc", "_hsmi", "hsa_acc", "hsa_cam", "hsa_grp",
+        "hsa_ad", "hsa_src", "hsa_tgt", "hsa_kw", "hsa_mt", "hsa_net", "hsa_ver",
+        "vero_conv", "vero_id", "pk_campaign", "pk_kwd", "pk_keyword", "pk_source",
+        "ref", "ref_src", "ref_url", "spm"
+    };
+
+    private static string NormalizeQuery(string rawQuery)
+    {
+        if (string.IsNullOrEmpty(rawQuery) || rawQuery == "?")
+        {
+            return string.Empty;
+        }
+
+        // Strip leading '?'
+        var body = rawQuery.StartsWith("?") ? rawQuery[1..] : rawQuery;
+
+        var kept = new List<(string Key, string Value)>();
+        foreach (var part in body.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var eq = part.IndexOf('=');
+            var key = eq < 0 ? part : part[..eq];
+            var value = eq < 0 ? string.Empty : part[(eq + 1)..];
+
+            if (string.IsNullOrEmpty(key) || TrackingParams.Contains(key))
+            {
+                continue;
+            }
+
+            kept.Add((key, value));
+        }
+
+        if (kept.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        kept.Sort(static (a, b) => string.CompareOrdinal(a.Key, b.Key));
+
+        var sb = new System.Text.StringBuilder("?");
+        for (int i = 0; i < kept.Count; i++)
+        {
+            if (i > 0) sb.Append('&');
+            sb.Append(kept[i].Key);
+            if (!string.IsNullOrEmpty(kept[i].Value))
+            {
+                sb.Append('=').Append(kept[i].Value);
+            }
+        }
+        return sb.ToString();
     }
 
     /// <summary>

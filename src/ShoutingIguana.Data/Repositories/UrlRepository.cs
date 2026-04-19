@@ -249,15 +249,9 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
 
     private static string NormalizeUrl(string url)
     {
-        try
-        {
-            var uri = new Uri(url);
-            return uri.GetLeftPart(UriPartial.Path).ToLowerInvariant();
-        }
-        catch
-        {
-            return url.ToLowerInvariant();
-        }
+        // Single source of truth for normalization — same as the SDK helper so
+        // GetByAddress and CrawlEngine produce matching lookup keys.
+        return ShoutingIguana.PluginSdk.Helpers.UrlHelper.Normalize(url);
     }
 }
 

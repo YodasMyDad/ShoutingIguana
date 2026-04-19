@@ -2693,15 +2693,10 @@ public class CrawlEngine(
 
     private static string NormalizeUrl(string url)
     {
-        try
-        {
-            var uri = new Uri(url);
-            return uri.GetLeftPart(UriPartial.Path).ToLowerInvariant();
-        }
-        catch
-        {
-            return url.ToLowerInvariant();
-        }
+        // Delegate to the shared implementation so repository, plugin SDK, and
+        // crawl engine all produce the same normalized key — otherwise dedup
+        // lookups miss.
+        return ShoutingIguana.PluginSdk.Helpers.UrlHelper.Normalize(url);
     }
 
     private static string GetStatusDescription(int statusCode)
