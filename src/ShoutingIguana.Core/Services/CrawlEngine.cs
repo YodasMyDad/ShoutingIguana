@@ -850,21 +850,20 @@ public class CrawlEngine(
     {
         const int MaxAttempts = 4;
 
-        (UrlFetchResult result, Microsoft.Playwright.IPage? page, string? html, List<RedirectHop> redirectChain) lastResult = default;
-        bool hasLastResult = false;
-
         for (int attempt = 1; attempt <= MaxAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var outcome = await AttemptFetchWithPlaywrightAsync(url, userAgent, proxySettings, blockNonEssentialResources, cancellationToken).ConfigureAwait(false);
 
+            // Return on success, non-retryable failure, or the final attempt even if
+            // retryable — the caller owns the page returned here.
             if (!IsRetryableOutcome(outcome.result) || attempt == MaxAttempts)
             {
                 return outcome;
             }
 
-            // Close the failed page before we sleep; we'll borrow a fresh one next attempt.
+            // Retryable and retries remain: close the failed page, sleep, then loop.
             if (outcome.page != null)
             {
                 try
@@ -877,24 +876,15 @@ public class CrawlEngine(
                 }
             }
 
-            lastResult = outcome;
-            hasLastResult = true;
-
             var delay = ComputeRetryDelay(attempt, outcome.result.Headers);
             logger.LogWarning("Transient failure fetching {Url} (status {Status}, attempt {Attempt}/{Max}) — retrying in {Delay}ms",
                 url, outcome.result.StatusCode, attempt, MaxAttempts, delay.TotalMilliseconds);
 
-            try
-            {
-                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
         }
 
-        return hasLastResult ? lastResult : default;
+        // Unreachable: the loop always returns on attempt == MaxAttempts.
+        throw new InvalidOperationException("Retry loop exited without returning a result");
     }
 
     private async Task<(UrlFetchResult result, Microsoft.Playwright.IPage? page, string? html, List<RedirectHop> redirectChain)> AttemptFetchWithPlaywrightAsync(
@@ -2064,7 +2054,10 @@ public class CrawlEngine(
         var existing = await urlRepository.GetByAddressesAsync(projectId, addresses).ConfigureAwait(false);
 
         // Stage any missing URLs so they can be inserted in a single SaveChanges.
-        var toCreate = new List<Url>();
+        // Keyed by NormalizedUrl so two raw addresses that normalize to the same
+        // form (e.g. "/Foo?a=1" vs "/foo?a=1") share one Url entity — otherwise
+        // the batch insert would create duplicate rows with the same NormalizedUrl.
+        var toCreate = new Dictionary<string, Url>(StringComparer.Ordinal);
         var resolved = new Dictionary<string, Url>(StringComparer.Ordinal);
 
         foreach (var address in addresses)
@@ -2073,6 +2066,12 @@ public class CrawlEngine(
             if (existing.TryGetValue(normalized, out var found))
             {
                 resolved[address] = found;
+                continue;
+            }
+
+            if (toCreate.TryGetValue(normalized, out var pending))
+            {
+                resolved[address] = pending;
                 continue;
             }
 
@@ -2094,14 +2093,14 @@ public class CrawlEngine(
                 Status = UrlStatus.Pending,
                 DiscoveredFromUrlId = fromUrl.Id
             };
-            toCreate.Add(newUrl);
+            toCreate[normalized] = newUrl;
             resolved[address] = newUrl;
         }
 
         // Round-trip 2: insert all new URLs in one batch; IDs populate on resolved entries.
         if (toCreate.Count > 0)
         {
-            await urlRepository.CreateBatchAsync(toCreate).ConfigureAwait(false);
+            await urlRepository.CreateBatchAsync(toCreate.Values).ConfigureAwait(false);
         }
 
         // Build link entities against the resolved URL IDs.
