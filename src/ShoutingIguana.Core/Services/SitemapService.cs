@@ -28,7 +28,7 @@ public class SitemapService(
         "/sitemap-posts.xml"
     ];
 
-    public async Task<List<string>> DiscoverSitemapUrlsAsync(string baseUrl)
+    public async Task<List<string>> DiscoverSitemapUrlsAsync(string baseUrl, HttpClient? httpClient = null)
     {
         try
         {
@@ -44,7 +44,7 @@ public class SitemapService(
             using var fetchGate = new SemaphoreSlim(MaxConcurrentSitemapFetches, MaxConcurrentSitemapFetches);
 
             logger.LogInformation("Checking robots.txt for sitemap URLs at {BaseUrl}", baseUrl);
-            var robotsSitemaps = await robotsService.GetSitemapUrlsFromRobotsTxtAsync(baseUrl).ConfigureAwait(false);
+            var robotsSitemaps = await robotsService.GetSitemapUrlsFromRobotsTxtAsync(baseUrl, httpClient).ConfigureAwait(false);
             if (robotsSitemaps.Count > MaxSitemapsPerRobotsListing)
             {
                 logger.LogWarning("robots.txt for {BaseUrl} lists {Count} sitemaps which exceeds the safety cap of {Cap}; truncating", baseUrl, robotsSitemaps.Count, MaxSitemapsPerRobotsListing);
@@ -74,7 +74,7 @@ public class SitemapService(
                     break;
                 }
 
-                await ProcessSitemapAsync(sitemapUrl, discoveredUrls, visitedSitemaps, fetchGate).ConfigureAwait(false);
+                await ProcessSitemapAsync(sitemapUrl, discoveredUrls, visitedSitemaps, fetchGate, httpClient).ConfigureAwait(false);
             }
 
             logger.LogInformation("Sitemap discovery completed. Found {Count} URLs", discoveredUrls.Count);
@@ -87,7 +87,7 @@ public class SitemapService(
         }
     }
 
-    private async Task ProcessSitemapAsync(string sitemapUrl, HashSet<string> discoveredUrls, HashSet<string> visitedSitemaps, SemaphoreSlim fetchGate)
+    private async Task ProcessSitemapAsync(string sitemapUrl, HashSet<string> discoveredUrls, HashSet<string> visitedSitemaps, SemaphoreSlim fetchGate, HttpClient? httpClient)
     {
         if (!visitedSitemaps.Add(sitemapUrl))
         {
@@ -101,7 +101,7 @@ public class SitemapService(
             await fetchGate.WaitAsync().ConfigureAwait(false);
             try
             {
-                body = await FetchSitemapAsync(sitemapUrl).ConfigureAwait(false);
+                body = await FetchSitemapAsync(sitemapUrl, httpClient).ConfigureAwait(false);
             }
             finally
             {
@@ -160,7 +160,7 @@ public class SitemapService(
                     var locElement = sitemapElement.Element(ns + "loc");
                     if (locElement != null && !string.IsNullOrWhiteSpace(locElement.Value))
                     {
-                        await ProcessSitemapAsync(locElement.Value, discoveredUrls, visitedSitemaps, fetchGate).ConfigureAwait(false);
+                        await ProcessSitemapAsync(locElement.Value, discoveredUrls, visitedSitemaps, fetchGate, httpClient).ConfigureAwait(false);
                     }
                     processed++;
                 }
@@ -201,13 +201,13 @@ public class SitemapService(
         }
     }
 
-    private async Task<byte[]?> FetchSitemapAsync(string sitemapUrl)
+    private async Task<byte[]?> FetchSitemapAsync(string sitemapUrl, HttpClient? httpClient)
     {
         logger.LogDebug("Fetching sitemap: {Url}", sitemapUrl);
-        var httpClient = httpClientFactory.CreateClient(HttpClientName);
+        var client = httpClient ?? httpClientFactory.CreateClient(HttpClientName);
 
         using var timeoutCts = new CancellationTokenSource(PerFetchTimeout);
-        using var response = await httpClient.GetAsync(sitemapUrl, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token).ConfigureAwait(false);
+        using var response = await client.GetAsync(sitemapUrl, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {

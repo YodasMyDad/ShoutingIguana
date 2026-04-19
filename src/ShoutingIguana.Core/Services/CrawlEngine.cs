@@ -298,7 +298,9 @@ public class CrawlEngine(
                         // Create a new scope for this background task
                         using var sitemapScope = serviceProvider.CreateScope();
                         var sitemapService = sitemapScope.ServiceProvider.GetRequiredService<ISitemapService>();
-                        var sitemapUrls = await sitemapService.DiscoverSitemapUrlsAsync(settings.BaseUrl).ConfigureAwait(false);
+                        var sitemapProxy = settings.ProxyOverride ?? globalProxySettings;
+                        var sitemapHttpClient = GetStaticResourceHttpClient(sitemapProxy);
+                        var sitemapUrls = await sitemapService.DiscoverSitemapUrlsAsync(settings.BaseUrl, sitemapHttpClient).ConfigureAwait(false);
                         
                         // Check cancellation before processing results
                         if (cancellationToken.IsCancellationRequested)
@@ -478,7 +480,7 @@ public class CrawlEngine(
             bool? robotsAllowed = null;
             if (settings.RespectRobotsTxt && !isExternalUrl)
             {
-                var allowed = await robotsService.IsAllowedAsync(queueItem.Address, userAgent).ConfigureAwait(false);
+                var allowed = await robotsService.IsAllowedAsync(queueItem.Address, userAgent, GetStaticResourceHttpClient(proxySettings)).ConfigureAwait(false);
                 robotsAllowed = allowed;
                 if (!allowed)
                 {
@@ -505,7 +507,7 @@ public class CrawlEngine(
             // so subsequent work (DB persistence, plugin analysis) does not hold the host slot.
             await using (isExternalUrl
                 ? await AcquireHostSlotForExternalAsync(queueItem.HostKey, cancellationToken).ConfigureAwait(false)
-                : await AcquireHostSlotForCrawlAsync(queueItem.HostKey, queueItem.Address, settings.CrawlDelaySeconds, userAgent, cancellationToken).ConfigureAwait(false))
+                : await AcquireHostSlotForCrawlAsync(queueItem.HostKey, queueItem.Address, settings.CrawlDelaySeconds, userAgent, GetStaticResourceHttpClient(proxySettings), cancellationToken).ConfigureAwait(false))
             {
                 if (isStaticResource || isExternalUrl)
                 {
@@ -901,13 +903,7 @@ public class CrawlEngine(
     private HttpClient GetStaticResourceHttpClient(ProxySettings? proxySettings)
     {
         bool proxyActive = proxySettings?.Enabled == true
-            && !string.IsNullOrWhiteSpace(proxySettings.Server)
-            && proxySettings.Type != ProxyType.Socks5;
-
-        if (proxySettings?.Type == ProxyType.Socks5)
-        {
-            logger.LogWarning("SOCKS5 proxy requested but not supported by HttpClient. Static resources will use direct connection. Use Playwright for SOCKS5 support.");
-        }
+            && !string.IsNullOrWhiteSpace(proxySettings.Server);
 
         if (!proxyActive)
         {
@@ -2269,7 +2265,7 @@ public class CrawlEngine(
         return response;
     }
 
-    private async Task<IAsyncDisposable> AcquireHostSlotForCrawlAsync(string hostKey, string url, double configuredDelaySeconds, string userAgent, CancellationToken cancellationToken)
+    private async Task<IAsyncDisposable> AcquireHostSlotForCrawlAsync(string hostKey, string url, double configuredDelaySeconds, string userAgent, HttpClient? httpClient, CancellationToken cancellationToken)
     {
         const double MaxAllowedDelaySeconds = 10.0;
 
@@ -2278,7 +2274,7 @@ public class CrawlEngine(
         {
             var uri = new Uri(url);
             var host = $"{uri.Scheme}://{uri.Host}";
-            var robotsCrawlDelay = await robotsService.GetCrawlDelayAsync(host, userAgent).ConfigureAwait(false);
+            var robotsCrawlDelay = await robotsService.GetCrawlDelayAsync(host, userAgent, httpClient).ConfigureAwait(false);
 
             if (robotsCrawlDelay.HasValue && robotsCrawlDelay.Value > effectiveDelay)
             {

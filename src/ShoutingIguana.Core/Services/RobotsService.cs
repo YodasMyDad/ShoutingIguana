@@ -20,14 +20,14 @@ public class RobotsService : IRobotsService, IDisposable
         _cache = new MemoryCache(new MemoryCacheOptions { SizeLimit = CacheSizeLimit });
     }
 
-    public async Task<bool> IsAllowedAsync(string url, string userAgent)
+    public async Task<bool> IsAllowedAsync(string url, string userAgent, HttpClient? httpClient = null)
     {
         try
         {
             var uri = new Uri(url);
             var host = $"{uri.Scheme}://{uri.Host}";
 
-            var robotsTxt = await GetRobotsTxtAsync(host).ConfigureAwait(false);
+            var robotsTxt = await GetRobotsTxtAsync(host, httpClient).ConfigureAwait(false);
             if (robotsTxt == null)
             {
                 return true;
@@ -42,11 +42,11 @@ public class RobotsService : IRobotsService, IDisposable
         }
     }
 
-    public async Task<double?> GetCrawlDelayAsync(string host, string userAgent)
+    public async Task<double?> GetCrawlDelayAsync(string host, string userAgent, HttpClient? httpClient = null)
     {
         try
         {
-            var robotsTxt = await GetRobotsTxtAsync(host).ConfigureAwait(false);
+            var robotsTxt = await GetRobotsTxtAsync(host, httpClient).ConfigureAwait(false);
             return robotsTxt?.GetCrawlDelay(userAgent);
         }
         catch (Exception ex)
@@ -56,11 +56,11 @@ public class RobotsService : IRobotsService, IDisposable
         }
     }
 
-    public async Task<List<string>> GetSitemapUrlsFromRobotsTxtAsync(string host)
+    public async Task<List<string>> GetSitemapUrlsFromRobotsTxtAsync(string host, HttpClient? httpClient = null)
     {
         try
         {
-            var robotsTxt = await GetRobotsTxtAsync(host).ConfigureAwait(false);
+            var robotsTxt = await GetRobotsTxtAsync(host, httpClient).ConfigureAwait(false);
             return robotsTxt?.GetSitemapUrls() ?? [];
         }
         catch (Exception ex)
@@ -70,7 +70,7 @@ public class RobotsService : IRobotsService, IDisposable
         }
     }
 
-    private async Task<RobotsTxtFile?> GetRobotsTxtAsync(string host)
+    private async Task<RobotsTxtFile?> GetRobotsTxtAsync(string host, HttpClient? httpClient = null)
     {
         if (_cache.TryGetValue<RobotsTxtFile?>(host, out var cached))
         {
@@ -81,8 +81,8 @@ public class RobotsService : IRobotsService, IDisposable
         try
         {
             var robotsUrl = $"{host}/robots.txt";
-            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
-            var response = await httpClient.GetAsync(robotsUrl).ConfigureAwait(false);
+            var client = httpClient ?? _httpClientFactory.CreateClient(HttpClientName);
+            var response = await client.GetAsync(robotsUrl).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {

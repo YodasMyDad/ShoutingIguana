@@ -45,13 +45,14 @@ public class ProxyTestService(ILogger<ProxyTestService> logger) : IProxyTestServ
             var response = await client.GetAsync(TestUrl, cancellationToken).ConfigureAwait(false);
             stopwatch.Stop();
 
+            var schemeLabel = proxySettings.Type.ToString().ToUpperInvariant();
             var result = new ProxyTestResult
             {
                 Success = response.IsSuccessStatusCode,
                 StatusCode = (int)response.StatusCode,
                 ResponseTime = stopwatch.Elapsed,
                 Message = response.IsSuccessStatusCode
-                    ? $"✓ Connection successful (HTTP {response.StatusCode}) in {stopwatch.ElapsedMilliseconds}ms"
+                    ? $"✓ Connected via {schemeLabel} (HTTP {response.StatusCode}) in {stopwatch.ElapsedMilliseconds}ms"
                     : $"✗ Connection failed with HTTP {response.StatusCode}"
             };
 
@@ -94,7 +95,7 @@ public class ProxyTestService(ILogger<ProxyTestService> logger) : IProxyTestServ
 
     private static WebProxy CreateWebProxy(ProxySettings settings)
     {
-        var proxy = new WebProxy(settings.GetProxyUrl());
+        var proxy = new WebProxy(new Uri(settings.GetProxyUrl()));
 
         if (settings.RequiresAuthentication && !string.IsNullOrWhiteSpace(settings.Username))
         {

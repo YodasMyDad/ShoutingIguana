@@ -9,7 +9,8 @@ public interface ISitemapService
     /// Discovers sitemap URLs by checking robots.txt and common sitemap locations.
     /// </summary>
     /// <param name="baseUrl">The base URL of the site to check for sitemaps.</param>
+    /// <param name="httpClient">Optional HttpClient to use for fetches (e.g. one configured with the crawl's proxy). When null, the default "sitemap" named client is used.</param>
     /// <returns>A list of URLs found in the sitemap(s).</returns>
-    Task<List<string>> DiscoverSitemapUrlsAsync(string baseUrl);
+    Task<List<string>> DiscoverSitemapUrlsAsync(string baseUrl, HttpClient? httpClient = null);
 }
 
