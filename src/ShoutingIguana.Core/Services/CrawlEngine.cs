@@ -38,10 +38,65 @@ public class CrawlEngine(
     private int _currentProjectId;
     private int _isCrawling; // Use int for thread-safe access (0 = false, 1 = true)
     
-    // Adaptive page loading strategy
-    private int _networkIdleSuccessCount;
-    private int _networkIdleFailureCount;
-    private int _useFastLoadingMode; // 0 = false, 1 = true (thread-safe)
+    // Adaptive page loading strategy, tracked per host. A global toggle was
+    // previously brittle: one slow host early in a crawl would flip the whole
+    // run to fast mode and stay there. Per-host stats let a bad host go fast
+    // while well-behaved hosts keep NetworkIdle waits.
+    private readonly ConcurrentDictionary<string, HostLoadStats> _hostLoadStats = new(StringComparer.OrdinalIgnoreCase);
+
+    private sealed class HostLoadStats
+    {
+        private int _successes;
+        private int _failures;
+        private int _useFastMode;
+
+        public bool UseFastMode => Volatile.Read(ref _useFastMode) == 1;
+
+        public void RecordSuccess()
+        {
+            Interlocked.Increment(ref _successes);
+            Rebalance();
+        }
+
+        public void RecordFailure()
+        {
+            Interlocked.Increment(ref _failures);
+            Rebalance();
+        }
+
+        private void Rebalance()
+        {
+            var s = Volatile.Read(ref _successes);
+            var f = Volatile.Read(ref _failures);
+            var total = s + f;
+
+            // Need at least 4 samples before committing to a strategy.
+            if (total < 4)
+            {
+                return;
+            }
+
+            double successRate = (double)s / total;
+            int current = Volatile.Read(ref _useFastMode);
+
+            if (current == 0 && successRate < 0.5)
+            {
+                Interlocked.CompareExchange(ref _useFastMode, 1, 0);
+            }
+            else if (current == 1 && total >= 10 && successRate >= 0.8)
+            {
+                // Promote back to NetworkIdle once the host looks responsive again.
+                Interlocked.CompareExchange(ref _useFastMode, 0, 1);
+            }
+
+            // Decay so recent behaviour dominates the decision.
+            if (total >= 40)
+            {
+                Interlocked.Exchange(ref _successes, s / 2);
+                Interlocked.Exchange(ref _failures, f / 2);
+            }
+        }
+    }
 
     // SSRF policy for the current crawl (set in RunCrawlAsync from ProjectSettings)
     private bool _allowPrivateNetworkTargets;
@@ -80,9 +135,7 @@ public class CrawlEngine(
         _pausedTime = TimeSpan.Zero;
         
         // Reset adaptive loading strategy for new crawl
-        _networkIdleSuccessCount = 0;
-        _networkIdleFailureCount = 0;
-        Interlocked.Exchange(ref _useFastLoadingMode, 0);
+        _hostLoadStats.Clear();
         _pauseStartTime = null;
         _pauseEvent.Set(); // Ensure not paused
         _stopwatch = Stopwatch.StartNew();
@@ -793,49 +846,46 @@ public class CrawlEngine(
             // Create a new page with the specified user agent and proxy (caller becomes responsible for disposal from this point)
             page = await playwrightService.CreatePageAsync(userAgent, proxySettings, blockNonEssentialResources).ConfigureAwait(false);
             
-            // Smart adaptive page loading
+            // Smart adaptive page loading — tracked per host so one bad host
+            // does not degrade loader strategy for the rest of the crawl.
             Microsoft.Playwright.IResponse? response = null;
-            bool useFastMode = Interlocked.CompareExchange(ref _useFastLoadingMode, 0, 0) == 1;
-            
-            if (!useFastMode)
+            var host = Uri.TryCreate(url, UriKind.Absolute, out var parsed) ? parsed.Host : "";
+            var stats = _hostLoadStats.GetOrAdd(host, _ => new HostLoadStats());
+
+            if (!stats.UseFastMode)
             {
-                // Try NetworkIdle with SHORT timeout (5s instead of 30s)
+                // Try NetworkIdle with a short timeout. If the host fails it enough
+                // times the sliding window flips it to fast mode automatically.
                 try
                 {
                     response = await page.GotoAsync(url, new Microsoft.Playwright.PageGotoOptions
                     {
                         WaitUntil = Microsoft.Playwright.WaitUntilState.NetworkIdle,
-                        Timeout = 5000 // 5 seconds
+                        Timeout = 5000
                     }).ConfigureAwait(false);
-                    
-                    Interlocked.Increment(ref _networkIdleSuccessCount);
+
+                    stats.RecordSuccess();
                     logger.LogDebug("Page loaded with NetworkIdle for {Url}", url);
                 }
                 catch (Exception ex) when (ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
                 {
-                    Interlocked.Increment(ref _networkIdleFailureCount);
-                    
-                    // Check if we should switch to fast mode (3+ failures, no successes)
-                    // Use volatile reads for thread-safe access
-                    int failureCount = Interlocked.CompareExchange(ref _networkIdleFailureCount, 0, 0);
-                    int successCount = Interlocked.CompareExchange(ref _networkIdleSuccessCount, 0, 0);
-                    
-                    if (failureCount >= 3 && successCount == 0)
+                    stats.RecordFailure();
+
+                    if (stats.UseFastMode)
                     {
-                        Interlocked.Exchange(ref _useFastLoadingMode, 1);
-                        logger.LogInformation("Detected site with continuous background activity. Switching to fast loading mode for better performance.");
+                        logger.LogInformation("Host {Host} switched to fast loading mode after sustained NetworkIdle failures", host);
                     }
                     else
                     {
-                        logger.LogDebug("NetworkIdle timeout for {Url}, using DOMContentLoaded", url);
+                        logger.LogDebug("NetworkIdle timeout for {Url}, falling back to DOMContentLoaded", url);
                     }
-                    
+
                     response = await LoadWithDOMContentLoadedAsync(page, url, cancellationToken).ConfigureAwait(false);
                 }
             }
             else
             {
-                // Fast loading mode (DOMContentLoaded + grace period)
+                // Host is in fast mode — skip straight to DOMContentLoaded.
                 response = await LoadWithDOMContentLoadedAsync(page, url, cancellationToken).ConfigureAwait(false);
             }
 
