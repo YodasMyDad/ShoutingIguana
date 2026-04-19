@@ -13,6 +13,8 @@ public class SqliteShoutingIguanaDbContext : ShoutingIguanaDbContextBase, IShout
         _connectionString = connectionString;
     }
 
+    private static readonly SqlitePragmaInterceptor PragmaInterceptor = new();
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -23,7 +25,9 @@ public class SqliteShoutingIguanaDbContext : ShoutingIguanaDbContextBase, IShout
                 builder.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
                 builder.CommandTimeout(30);
             });
-            
+
+            optionsBuilder.AddInterceptors(PragmaInterceptor);
+
 #if DEBUG
             optionsBuilder.EnableSensitiveDataLogging();
 #endif
