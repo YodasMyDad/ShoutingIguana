@@ -1,3 +1,7 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using System.IO.Compression;
+using System.Text;
+
 namespace ShoutingIguana.Core.Models;
 
 public class Url
@@ -75,8 +79,46 @@ public class Url
     // Stage 3: Indexability Computation
     public bool? IsIndexable { get; set; } // Computed: false if noindex or blocked or 4xx/5xx
     
-    // Two-Phase Crawl: Store rendered HTML for Phase 2 analysis
-    public string? RenderedHtml { get; set; } // Stored for Phase 2 plugin analysis
+    // Two-Phase Crawl: rendered HTML is stored gzip-compressed to keep project
+    // DB size sane (5–10× shrink on typical HTML). The string-form property is
+    // the public surface everything reads/writes — compression lives here.
+    public byte[]? RenderedHtmlGzip { get; set; }
+
+    [NotMapped]
+    public string? RenderedHtml
+    {
+        get => DecompressHtml(RenderedHtmlGzip);
+        set => RenderedHtmlGzip = CompressHtml(value);
+    }
+
+    public static byte[]? CompressHtml(string? html)
+    {
+        if (string.IsNullOrEmpty(html))
+        {
+            return null;
+        }
+
+        var bytes = Encoding.UTF8.GetBytes(html);
+        using var output = new MemoryStream();
+        using (var gzip = new GZipStream(output, CompressionLevel.Fastest))
+        {
+            gzip.Write(bytes, 0, bytes.Length);
+        }
+        return output.ToArray();
+    }
+
+    public static string? DecompressHtml(byte[]? compressed)
+    {
+        if (compressed == null || compressed.Length == 0)
+        {
+            return null;
+        }
+
+        using var input = new MemoryStream(compressed);
+        using var gzip = new GZipStream(input, CompressionMode.Decompress);
+        using var reader = new StreamReader(gzip, Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
     
     // Navigation properties
     public Project Project { get; set; } = null!;

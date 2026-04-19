@@ -167,11 +167,13 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
 
     public async Task<string?> GetRenderedHtmlAsync(int id)
     {
-        return await context.Urls
+        var compressed = await context.Urls
             .AsNoTracking()
             .Where(u => u.Id == id)
-            .Select(u => u.RenderedHtml)
+            .Select(u => u.RenderedHtmlGzip)
             .FirstOrDefaultAsync().ConfigureAwait(false);
+
+        return Url.DecompressHtml(compressed);
     }
 
     public async Task<List<HeaderSnapshot>> GetHeadersAsync(int urlId)
