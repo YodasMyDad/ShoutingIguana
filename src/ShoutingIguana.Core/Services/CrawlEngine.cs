@@ -419,6 +419,11 @@ public class CrawlEngine(
 
         playwrightService.ConfigurePoolSize(settings.ConcurrentRequests);
 
+        // Drop host-throttle entries from any prior crawl so new entries are sized from
+        // this run's ConcurrentRequests. HostThrottle is a DI singleton, so without this
+        // a second crawl with a different concurrency setting would reuse the old gate.
+        hostThrottle.ResetForNewCrawl();
+
         // Create worker tasks (without progress reporter)
         var workers = new List<Task>();
         for (int i = 0; i < settings.ConcurrentRequests; i++)
@@ -525,13 +530,8 @@ public class CrawlEngine(
             {
                 Interlocked.Increment(ref _activeWorkers);
 
-                // Update queue item state
-                using (var scope = serviceProvider.CreateScope())
-                {
-                    var queueRepository = scope.ServiceProvider.GetRequiredService<ICrawlQueueRepository>();
-                    queueItem.State = QueueState.InProgress;
-                    await queueRepository.UpdateAsync(queueItem).ConfigureAwait(false);
-                }
+                // State is already InProgress — GetNextItemAsync now claims atomically,
+                // so no second write is needed here.
 
             // Get user agent for this request (needed for robots.txt check)
             var userAgent = settings.GetUserAgentString();
@@ -570,8 +570,8 @@ public class CrawlEngine(
             // applies per host rather than per worker. Released after the HTTP/Playwright fetch completes
             // so subsequent work (DB persistence, plugin analysis) does not hold the host slot.
             await using (isExternalUrl
-                ? await AcquireHostSlotForExternalAsync(queueItem.HostKey, cancellationToken).ConfigureAwait(false)
-                : await AcquireHostSlotForCrawlAsync(queueItem.HostKey, queueItem.Address, settings.CrawlDelaySeconds, userAgent, GetStaticResourceHttpClient(proxySettings), cancellationToken).ConfigureAwait(false))
+                ? await AcquireHostSlotForExternalAsync(queueItem.HostKey, settings.ConcurrentRequests, cancellationToken).ConfigureAwait(false)
+                : await AcquireHostSlotForCrawlAsync(queueItem.HostKey, queueItem.Address, settings.CrawlDelaySeconds, settings.ConcurrentRequests, userAgent, GetStaticResourceHttpClient(proxySettings), cancellationToken).ConfigureAwait(false))
             {
                 if (isStaticResource || isExternalUrl)
                 {
@@ -2519,7 +2519,7 @@ public class CrawlEngine(
         return response;
     }
 
-    private async Task<IAsyncDisposable> AcquireHostSlotForCrawlAsync(string hostKey, string url, double configuredDelaySeconds, string userAgent, HttpClient? httpClient, CancellationToken cancellationToken)
+    private async Task<IAsyncDisposable> AcquireHostSlotForCrawlAsync(string hostKey, string url, double configuredDelaySeconds, int maxConcurrency, string userAgent, HttpClient? httpClient, CancellationToken cancellationToken)
     {
         const double MaxAllowedDelaySeconds = 10.0;
 
@@ -2555,12 +2555,12 @@ public class CrawlEngine(
         var jitter = (Random.Shared.NextDouble() * jitterRange * 2) - jitterRange;
         var delayWithJitter = Math.Max(0.1, effectiveDelay + jitter);
 
-        return await hostThrottle.AcquireAsync(hostKey, TimeSpan.FromSeconds(delayWithJitter), cancellationToken).ConfigureAwait(false);
+        return await hostThrottle.AcquireAsync(hostKey, TimeSpan.FromSeconds(delayWithJitter), maxConcurrency, cancellationToken).ConfigureAwait(false);
     }
 
-    private Task<IAsyncDisposable> AcquireHostSlotForExternalAsync(string hostKey, CancellationToken cancellationToken)
+    private Task<IAsyncDisposable> AcquireHostSlotForExternalAsync(string hostKey, int maxConcurrency, CancellationToken cancellationToken)
     {
-        return hostThrottle.AcquireAsync(hostKey, TimeSpan.FromMilliseconds(500), cancellationToken);
+        return hostThrottle.AcquireAsync(hostKey, TimeSpan.FromMilliseconds(500), maxConcurrency, cancellationToken);
     }
 
     private async Task ReportProgressAsync(int projectId, CancellationToken cancellationToken)

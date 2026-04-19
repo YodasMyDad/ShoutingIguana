@@ -8,11 +8,41 @@ public class CrawlQueueRepository(IShoutingIguanaDbContext context) : ICrawlQueu
 {
     public async Task<CrawlQueueItem?> GetNextItemAsync(int projectId)
     {
-        return await context.CrawlQueue
-            .Where(q => q.ProjectId == projectId && q.State == QueueState.Queued)
-            .OrderByDescending(q => q.Priority)
-            .ThenBy(q => q.EnqueuedUtc)
-            .FirstOrDefaultAsync().ConfigureAwait(false);
+        // Two-step atomic claim: pick the next Queued row, then UPDATE it to InProgress
+        // with a `State = Queued` predicate so only one worker wins per row. SQLite
+        // serialises writes, so the losing worker's UPDATE reports zero rows affected
+        // and retries. Without this, concurrent workers would dequeue the same row.
+        const int maxAttempts = 3;
+        for (int attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            var candidateId = await context.CrawlQueue
+                .AsNoTracking()
+                .Where(q => q.ProjectId == projectId && q.State == QueueState.Queued)
+                .OrderByDescending(q => q.Priority)
+                .ThenBy(q => q.EnqueuedUtc)
+                .Select(q => (int?)q.Id)
+                .FirstOrDefaultAsync().ConfigureAwait(false);
+
+            if (candidateId == null)
+            {
+                return null;
+            }
+
+            var claimed = await context.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE CrawlQueue
+                   SET State = {(int)QueueState.InProgress}
+                   WHERE Id = {candidateId} AND State = {(int)QueueState.Queued}"
+            ).ConfigureAwait(false);
+
+            if (claimed == 0)
+            {
+                continue;
+            }
+
+            return await context.CrawlQueue
+                .FirstOrDefaultAsync(q => q.Id == candidateId).ConfigureAwait(false);
+        }
+        return null;
     }
 
     public async Task<IEnumerable<CrawlQueueItem>> GetQueuedItemsAsync(int projectId, int count = 10)
