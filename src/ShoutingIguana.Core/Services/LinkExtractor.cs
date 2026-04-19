@@ -129,6 +129,80 @@ public class LinkExtractor(ILogger<LinkExtractor> logger) : ILinkExtractor
                     }
                 }
             }
+
+            // Extract iframes (same-origin frames contribute to the crawl graph).
+            var iframeNodes = doc.DocumentNode.SelectNodes("//iframe[@src]");
+            if (iframeNodes != null)
+            {
+                foreach (var node in iframeNodes)
+                {
+                    var src = node.GetAttributeValue("src", string.Empty);
+                    if (string.IsNullOrWhiteSpace(src))
+                        continue;
+
+                    var resolvedUrl = ResolveUrl(src, baseUri, baseTagUri);
+                    if (resolvedUrl != null)
+                    {
+                        links.Add(new ExtractedLink
+                        {
+                            Url = resolvedUrl,
+                            LinkType = LinkType.Other
+                        });
+                    }
+                }
+            }
+
+            // Extract srcset candidates from <img srcset>, <source srcset> (picture),
+            // and <source srcset> (video/audio). Each comma-separated entry is a
+            // candidate URL; the descriptor (e.g. " 2x" or " 640w") is ignored.
+            var srcsetNodes = doc.DocumentNode.SelectNodes("//*[@srcset]");
+            if (srcsetNodes != null)
+            {
+                foreach (var node in srcsetNodes)
+                {
+                    var srcset = node.GetAttributeValue("srcset", string.Empty);
+                    if (string.IsNullOrWhiteSpace(srcset))
+                        continue;
+
+                    foreach (var candidate in ParseSrcset(srcset))
+                    {
+                        var resolvedUrl = ResolveUrl(candidate, baseUri, baseTagUri);
+                        if (resolvedUrl != null)
+                        {
+                            links.Add(new ExtractedLink
+                            {
+                                Url = resolvedUrl,
+                                LinkType = LinkType.Image,
+                                AnchorText = node.GetAttributeValue("alt", null)
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Extract media sources: <video src>, <audio src>, and <source src>
+            // nested under video/audio/picture.
+            var mediaSourceNodes = doc.DocumentNode.SelectNodes(
+                "//video[@src] | //audio[@src] | //video/source[@src] | //audio/source[@src] | //picture/source[@src]");
+            if (mediaSourceNodes != null)
+            {
+                foreach (var node in mediaSourceNodes)
+                {
+                    var src = node.GetAttributeValue("src", string.Empty);
+                    if (string.IsNullOrWhiteSpace(src))
+                        continue;
+
+                    var resolvedUrl = ResolveUrl(src, baseUri, baseTagUri);
+                    if (resolvedUrl != null)
+                    {
+                        links.Add(new ExtractedLink
+                        {
+                            Url = resolvedUrl,
+                            LinkType = LinkType.Other
+                        });
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -136,6 +210,29 @@ public class LinkExtractor(ILogger<LinkExtractor> logger) : ILinkExtractor
         }
 
         return Task.FromResult<IEnumerable<ExtractedLink>>(links);
+    }
+
+    private static IEnumerable<string> ParseSrcset(string srcset)
+    {
+        // srcset = image-candidate ("," image-candidate)*
+        // image-candidate = url [whitespace descriptor]?
+        foreach (var entry in srcset.Split(','))
+        {
+            var trimmed = entry.Trim();
+            if (trimmed.Length == 0)
+            {
+                continue;
+            }
+
+            // First whitespace-separated token is the URL; the rest is the width
+            // or pixel-density descriptor which we do not care about for link discovery.
+            var space = trimmed.IndexOfAny(new[] { ' ', '\t' });
+            var candidate = space < 0 ? trimmed : trimmed[..space];
+            if (candidate.Length > 0)
+            {
+                yield return candidate;
+            }
+        }
     }
 
     private static string? ResolveUrl(string url, Uri baseUri, Uri? baseTagUri)
