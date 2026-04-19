@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Xml;
 using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
@@ -125,6 +126,18 @@ public class SitemapService(
             return;
         }
 
+        // Decompress gzip-encoded sitemaps (.xml.gz or Content-Encoding: gzip when
+        // the HttpClient did not auto-decompress). Detected by the magic bytes so
+        // the URL extension is not load-bearing.
+        if (body.Length >= 2 && body[0] == 0x1f && body[1] == 0x8b)
+        {
+            body = DecompressGzip(body, sitemapUrl);
+            if (body is null || body.Length == 0)
+            {
+                return;
+            }
+        }
+
         try
         {
             using var ms = new MemoryStream(body);
@@ -250,5 +263,42 @@ public class SitemapService(
         }
 
         return buffer.ToArray();
+    }
+
+    private byte[]? DecompressGzip(byte[] compressed, string sitemapUrl)
+    {
+        try
+        {
+            using var input = new MemoryStream(compressed);
+            using var gzip = new GZipStream(input, CompressionMode.Decompress);
+            using var output = new MemoryStream();
+
+            var buffer = new byte[8192];
+            long total = 0;
+            int read;
+            while ((read = gzip.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                total += read;
+                if (total > MaxSitemapBytes)
+                {
+                    logger.LogWarning("Decompressed sitemap {Url} exceeded {Max} bytes; truncated", sitemapUrl, MaxSitemapBytes);
+                    output.Write(buffer, 0, (int)(MaxSitemapBytes - (total - read)));
+                    break;
+                }
+                output.Write(buffer, 0, read);
+            }
+
+            return output.ToArray();
+        }
+        catch (InvalidDataException ex)
+        {
+            logger.LogWarning("Gzipped sitemap at {Url} is not valid gzip: {Message}", sitemapUrl, ex.Message);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Error decompressing gzip sitemap at {Url}", sitemapUrl);
+            return null;
+        }
     }
 }
