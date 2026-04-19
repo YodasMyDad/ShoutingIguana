@@ -129,8 +129,11 @@ public class RobotsService : IRobotsService, IDisposable
 
     private class RobotsTxtFile
     {
-        private readonly List<RobotRule> _rules = new();
-        private readonly Dictionary<string, double> _crawlDelays = new();
+        // Rules grouped by user-agent (case-insensitive). RFC 9309 says a specific
+        // UA group supersedes the '*' group entirely — we never mix rules across
+        // groups, so the grouping happens at parse time.
+        private readonly Dictionary<string, List<RobotRule>> _rulesByUserAgent = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, double> _crawlDelays = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> _sitemapUrls = new();
 
         public RobotsTxtFile(string content)
@@ -141,52 +144,66 @@ public class RobotsService : IRobotsService, IDisposable
         private void ParseRobotsTxt(string content)
         {
             var lines = content.Split('\n');
-            string? currentUserAgent = null;
+            var pendingAgents = new List<string>();
+            var expectingRules = false;
 
             foreach (var line in lines)
             {
-                var trimmed = line.Trim();
-                if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith('#'))
+                var trimmed = StripComment(line).Trim();
+                if (string.IsNullOrEmpty(trimmed))
+                {
                     continue;
+                }
 
-                var parts = trimmed.Split(':', 2);
-                if (parts.Length != 2)
+                var colon = trimmed.IndexOf(':');
+                if (colon < 0)
+                {
                     continue;
+                }
 
-                var field = parts[0].Trim().ToLowerInvariant();
-                var value = parts[1].Trim();
+                var field = trimmed[..colon].Trim().ToLowerInvariant();
+                var value = trimmed[(colon + 1)..].Trim();
 
                 switch (field)
                 {
                     case "user-agent":
-                        currentUserAgent = value;
-                        break;
-                    case "disallow":
-                        if (!string.IsNullOrEmpty(currentUserAgent) && !string.IsNullOrEmpty(value))
+                        if (expectingRules)
                         {
-                            _rules.Add(new RobotRule
+                            // A new User-agent after any rule starts a fresh group.
+                            pendingAgents.Clear();
+                            expectingRules = false;
+                        }
+                        if (!string.IsNullOrEmpty(value))
+                        {
+                            pendingAgents.Add(value);
+                            if (!_rulesByUserAgent.ContainsKey(value))
                             {
-                                UserAgent = currentUserAgent,
-                                Path = value,
-                                Allow = false
-                            });
+                                _rulesByUserAgent[value] = new List<RobotRule>();
+                            }
                         }
                         break;
+                    case "disallow":
                     case "allow":
-                        if (!string.IsNullOrEmpty(currentUserAgent) && !string.IsNullOrEmpty(value))
+                        if (pendingAgents.Count == 0)
                         {
-                            _rules.Add(new RobotRule
-                            {
-                                UserAgent = currentUserAgent,
-                                Path = value,
-                                Allow = true
-                            });
+                            // Rule before any User-agent — ignore per RFC.
+                            break;
+                        }
+                        expectingRules = true;
+                        var allow = field == "allow";
+                        foreach (var agent in pendingAgents)
+                        {
+                            _rulesByUserAgent[agent].Add(new RobotRule(value, allow));
                         }
                         break;
                     case "crawl-delay":
-                        if (!string.IsNullOrEmpty(currentUserAgent) && double.TryParse(value, out var delay))
+                        if (pendingAgents.Count > 0 && double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var delay))
                         {
-                            _crawlDelays[currentUserAgent] = delay;
+                            expectingRules = true;
+                            foreach (var agent in pendingAgents)
+                            {
+                                _crawlDelays[agent] = delay;
+                            }
                         }
                         break;
                     case "sitemap":
@@ -201,27 +218,48 @@ public class RobotsService : IRobotsService, IDisposable
 
         public bool IsAllowed(string path, string userAgent)
         {
-            var applicableRules = _rules
-                .Where(r => MatchesUserAgent(r.UserAgent, userAgent) && path.StartsWith(r.Path))
-                .OrderByDescending(r => r.Path.Length)
-                .ToList();
-
-            if (!applicableRules.Any())
+            var rules = ResolveRules(userAgent);
+            if (rules == null || rules.Count == 0)
+            {
                 return true;
+            }
 
-            var mostSpecificRule = applicableRules.First();
-            return mostSpecificRule.Allow;
+            // RFC 9309 match precedence: longest matching pattern wins; if two
+            // rules tie on match length, Allow beats Disallow.
+            RobotRule? winner = null;
+            int winnerMatchLength = -1;
+
+            foreach (var rule in rules)
+            {
+                var matchLength = PatternMatchLength(rule.Path, path);
+                if (matchLength < 0)
+                {
+                    continue;
+                }
+
+                if (matchLength > winnerMatchLength
+                    || (matchLength == winnerMatchLength && rule.Allow && winner is { Allow: false }))
+                {
+                    winner = rule;
+                    winnerMatchLength = matchLength;
+                }
+            }
+
+            return winner == null || winner.Allow;
         }
 
         public double? GetCrawlDelay(string userAgent)
         {
-            if (_crawlDelays.TryGetValue(userAgent, out var delay))
-                return delay;
+            foreach (var (pattern, delay) in _crawlDelays)
+            {
+                if (!string.Equals(pattern, "*", StringComparison.Ordinal)
+                    && UserAgentMatches(pattern, userAgent))
+                {
+                    return delay;
+                }
+            }
 
-            if (_crawlDelays.TryGetValue("*", out var wildcardDelay))
-                return wildcardDelay;
-
-            return null;
+            return _crawlDelays.TryGetValue("*", out var wildcardDelay) ? wildcardDelay : null;
         }
 
         public List<string> GetSitemapUrls()
@@ -229,16 +267,103 @@ public class RobotsService : IRobotsService, IDisposable
             return new List<string>(_sitemapUrls);
         }
 
-        private static bool MatchesUserAgent(string pattern, string userAgent)
+        private List<RobotRule>? ResolveRules(string userAgent)
         {
-            return pattern == "*" || userAgent.Contains(pattern, StringComparison.OrdinalIgnoreCase);
+            // Prefer the most-specific matching agent group. Fall back to '*' only
+            // when no specific group matches (RFC 9309 §2.2.1).
+            List<RobotRule>? bestMatch = null;
+            int bestTokenLength = -1;
+
+            foreach (var (pattern, rules) in _rulesByUserAgent)
+            {
+                if (string.Equals(pattern, "*", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (UserAgentMatches(pattern, userAgent) && pattern.Length > bestTokenLength)
+                {
+                    bestMatch = rules;
+                    bestTokenLength = pattern.Length;
+                }
+            }
+
+            if (bestMatch != null)
+            {
+                return bestMatch;
+            }
+
+            return _rulesByUserAgent.TryGetValue("*", out var wildcard) ? wildcard : null;
         }
 
-        private class RobotRule
+        private static bool UserAgentMatches(string pattern, string userAgent)
         {
-            public string UserAgent { get; set; } = string.Empty;
-            public string Path { get; set; } = string.Empty;
-            public bool Allow { get; set; }
+            // robots.txt user-agent tokens are matched case-insensitively on
+            // substring (a pattern "Googlebot" matches "Googlebot-Image/1.0").
+            return !string.IsNullOrEmpty(pattern)
+                && userAgent.Contains(pattern, StringComparison.OrdinalIgnoreCase);
         }
+
+        private static int PatternMatchLength(string pattern, string path)
+        {
+            // Empty pattern matches nothing (per spec an empty Disallow allows all).
+            if (string.IsNullOrEmpty(pattern))
+            {
+                return -1;
+            }
+
+            // Anchor at end-of-URL when the pattern ends in '$'.
+            var endAnchor = pattern.EndsWith('$');
+            var trimmed = endAnchor ? pattern[..^1] : pattern;
+
+            // Split into literal segments separated by '*' wildcards. Every segment
+            // must match in order; the first segment is anchored to the start of
+            // the path.
+            var segments = trimmed.Split('*');
+            int cursor = 0;
+
+            for (int i = 0; i < segments.Length; i++)
+            {
+                var segment = segments[i];
+                if (segment.Length == 0)
+                {
+                    continue;
+                }
+
+                if (i == 0)
+                {
+                    if (!path.AsSpan(cursor).StartsWith(segment))
+                    {
+                        return -1;
+                    }
+                    cursor += segment.Length;
+                }
+                else
+                {
+                    var found = path.IndexOf(segment, cursor, StringComparison.Ordinal);
+                    if (found < 0)
+                    {
+                        return -1;
+                    }
+                    cursor = found + segment.Length;
+                }
+            }
+
+            if (endAnchor && cursor != path.Length)
+            {
+                return -1;
+            }
+
+            // Match length is the pattern length (minus the trailing '$' if present).
+            return trimmed.Length;
+        }
+
+        private static string StripComment(string line)
+        {
+            var hash = line.IndexOf('#');
+            return hash < 0 ? line : line[..hash];
+        }
+
+        private sealed record RobotRule(string Path, bool Allow);
     }
 }
