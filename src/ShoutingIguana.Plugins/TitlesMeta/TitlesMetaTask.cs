@@ -584,13 +584,52 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
                 .SetSeverity(Severity.Warning);
-            
+
             await ReportWithExplanationAsync(
                 ctx,
                 row,
                 title,
                 description,
                 "No viewport meta tag found; add <meta name='viewport' content='width=device-width, initial-scale=1'> to ensure the page scales correctly on mobile.");
+            return;
+        }
+
+        // Validate viewport content — a viewport without width=device-width triggers
+        // the mobile zoom-out heuristic and breaks responsive layouts.
+        var viewportLower = viewport.ToLowerInvariant();
+        if (!viewportLower.Contains("width=device-width") && !viewportLower.Contains("width=") )
+        {
+            var row = ReportRow.Create()
+                .SetPage(ctx.Url)
+                .Set("Issue", "Viewport Missing Width Directive")
+                .Set("Title", "")
+                .Set("MetaDescription", viewport)
+                .Set("Length", viewport.Length)
+                .SetSeverity(Severity.Warning);
+
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Viewport meta tag has no width directive; add width=device-width so mobile browsers render at the correct scale.");
+        }
+        else if (viewportLower.Contains("user-scalable=no") || viewportLower.Contains("maximum-scale=1"))
+        {
+            var row = ReportRow.Create()
+                .SetPage(ctx.Url)
+                .Set("Issue", "Viewport Disables Zoom")
+                .Set("Title", "")
+                .Set("MetaDescription", viewport)
+                .Set("Length", viewport.Length)
+                .SetSeverity(Severity.Warning);
+
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                "Viewport prevents pinch-zoom; remove user-scalable=no / maximum-scale=1 so visitors with low vision can still zoom the page.");
         }
     }
 
@@ -669,13 +708,35 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("MetaDescription", "")
                 .Set("Length", 0)
                 .SetSeverity(Severity.Warning);
-            
+
             await ReportWithExplanationAsync(
                 ctx,
                 row,
                 title,
                 description,
                 "Document lacks <html lang='...'>; add the correct language code for accessibility and search engines.");
+            return;
+        }
+
+        // BCP 47 primary tag is 2-3 ASCII letters, optionally followed by "-SUBTAG".
+        // This catches common mistakes like lang="english" or lang="en_US".
+        var isValid = Regex.IsMatch(language, @"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$");
+        if (!isValid)
+        {
+            var row = ReportRow.Create()
+                .SetPage(ctx.Url)
+                .Set("Issue", $"Invalid Lang Attribute ({language})")
+                .Set("Title", "")
+                .Set("MetaDescription", language)
+                .Set("Length", language.Length)
+                .SetSeverity(Severity.Warning);
+
+            await ReportWithExplanationAsync(
+                ctx,
+                row,
+                title,
+                description,
+                $"<html lang='{language}'> is not a valid BCP 47 tag; use codes like 'en', 'en-US', or 'pt-BR'.");
         }
     }
 
