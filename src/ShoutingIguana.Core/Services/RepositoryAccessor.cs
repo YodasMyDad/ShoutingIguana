@@ -215,6 +215,35 @@ public class RepositoryAccessor(
         }
     }
     
+    public async Task<List<PluginSdk.ImageInfo>> GetImagesByFromUrlAsync(int projectId, int fromUrlId)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var linkRepository = scope.ServiceProvider.GetRequiredService<ILinkRepository>();
+
+            // Images are persisted as Link rows with LinkType.Image. GetByFromUrlIdAsync
+            // eager-loads ToUrl so we can read the image's captured ContentLength without
+            // a second round-trip.
+            var outgoingLinks = await linkRepository.GetByFromUrlIdAsync(fromUrlId).ConfigureAwait(false);
+
+            return outgoingLinks
+                .Where(l => l.LinkType == ShoutingIguana.Core.Models.LinkType.Image && l.ToUrl != null)
+                .Select(l => new PluginSdk.ImageInfo(
+                    l.ToUrl.Address,
+                    l.AnchorText,
+                    l.ToUrl.ContentLength
+                ))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting images from URL ID: {FromUrlId} for project {ProjectId}",
+                fromUrlId, projectId);
+            return new List<PluginSdk.ImageInfo>();
+        }
+    }
+
     public async Task<List<CustomExtractionRuleInfo>> GetCustomExtractionRulesAsync(int projectId)
     {
         try

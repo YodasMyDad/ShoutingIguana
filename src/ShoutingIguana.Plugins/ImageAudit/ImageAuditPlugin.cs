@@ -27,7 +27,7 @@ public class ImageAuditPlugin : IPlugin
         context.RegisterReportSchema(schema);
         
         var logger = context.CreateLogger<ImageAuditTask>();
-        context.RegisterTask(new ImageAuditTask(logger));
+        context.RegisterTask(new ImageAuditTask(logger, context.GetRepositoryAccessor()));
     }
 }
 

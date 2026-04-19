@@ -290,6 +290,23 @@ public interface IRepositoryAccessor
     /// </code>
     /// </example>
     Task<List<CustomExtractionRuleInfo>> GetCustomExtractionRulesAsync(int projectId);
+
+    /// <summary>
+    /// Gets all images referenced from a specific page, joined to the crawled image
+    /// URL so the response <see cref="ImageInfo.ContentLength"/> is available.
+    /// </summary>
+    /// <param name="projectId">The project ID to search within.</param>
+    /// <param name="fromUrlId">The ID of the page the images are embedded on.</param>
+    /// <returns>
+    /// A list of images referenced from the page. <see cref="ImageInfo.ContentLength"/>
+    /// is populated for images the crawler has already fetched as static resources;
+    /// it may be <c>null</c> for images that were discovered but not (yet) crawled.
+    /// </returns>
+    /// <remarks>
+    /// Intended for plugins that need per-image metadata not derivable from the
+    /// page's HTML alone — for example, byte-size checks in image-optimization audits.
+    /// </remarks>
+    Task<List<ImageInfo>> GetImagesByFromUrlAsync(int projectId, int fromUrlId);
 }
 
 /// <summary>
@@ -429,6 +446,19 @@ public record LinkInfo(
     bool IsNofollow = false,
     bool IsUgc = false,
     bool IsSponsored = false);
+
+/// <summary>
+/// Image referenced from a page, exposing the resolved URL, its alt text, and
+/// the on-the-wire content length captured when the image was crawled as a
+/// static resource.
+/// </summary>
+/// <param name="Src">The image's resolved absolute URL.</param>
+/// <param name="AltText">The image's <c>alt</c> text, if any.</param>
+/// <param name="ContentLength">Bytes received for the image response, if captured.</param>
+public record ImageInfo(
+    string Src,
+    string? AltText,
+    long? ContentLength);
 
 /// <summary>
 /// Represents a custom data extraction rule.

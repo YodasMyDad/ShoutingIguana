@@ -10,7 +10,7 @@ namespace ShoutingIguana.Plugins.ImageAudit;
 /// <summary>
 /// Comprehensive image optimization, accessibility, and performance analysis.
 /// </summary>
-public class ImageAuditTask(ILogger logger) : UrlTaskBase
+public class ImageAuditTask(ILogger logger, IRepositoryAccessor repositoryAccessor) : UrlTaskBase
 {
     private const int MAX_IMAGE_SIZE_KB = 500;
     private const int LARGE_IMAGE_THRESHOLD_KB = 200;
@@ -60,12 +60,17 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
 
             logger.LogDebug("Found {Count} images on {Url}", imgNodes.Count, ctx.Url);
 
+            // Pre-fetch per-image content lengths captured during crawl (one query
+            // per page instead of one per image). Keyed by the resolved absolute URL
+            // as stored on the ToUrl row so HTML-resolved URLs match.
+            var sizeBySrc = await BuildImageSizeLookupAsync(ctx);
+
             // Track findings to deduplicate them
             var findingsMap = new Dictionary<string, FindingTracker>();
 
             foreach (var imgNode in imgNodes)
             {
-                await AnalyzeImageAsync(ctx, imgNode, findingsMap, baseTagUri);
+                await AnalyzeImageAsync(ctx, imgNode, findingsMap, baseTagUri, sizeBySrc);
             }
 
             // Report all unique findings with occurrence counts
@@ -80,7 +85,29 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         }
     }
 
-    private async Task AnalyzeImageAsync(UrlContext ctx, HtmlNode imgNode, Dictionary<string, FindingTracker> findingsMap, Uri? baseTagUri)
+    private async Task<Dictionary<string, long>> BuildImageSizeLookupAsync(UrlContext ctx)
+    {
+        var lookup = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var images = await repositoryAccessor.GetImagesByFromUrlAsync(ctx.Project.ProjectId, ctx.Metadata.UrlId);
+            foreach (var img in images)
+            {
+                if (img.ContentLength is long size && !string.IsNullOrEmpty(img.Src))
+                {
+                    lookup[img.Src] = size;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Size-aware findings are a bonus; don't fail the whole audit if lookup errors.
+            logger.LogWarning(ex, "Could not load image sizes for {Url}", ctx.Url);
+        }
+        return lookup;
+    }
+
+    private async Task AnalyzeImageAsync(UrlContext ctx, HtmlNode imgNode, Dictionary<string, FindingTracker> findingsMap, Uri? baseTagUri, Dictionary<string, long> sizeBySrc)
     {
         var src = imgNode.GetAttributeValue("src", "");
         var srcset = imgNode.GetAttributeValue("srcset", "");
@@ -197,6 +224,32 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
                     absoluteSrc,
                     alt,
                     null);
+            }
+        }
+
+        // File size check — ContentLength comes from the static-resource fetch that
+        // ran when the image URL was crawled. Absent from the lookup means the crawler
+        // hasn't seen the image yet; skip quietly rather than pretending it's 0 bytes.
+        if (sizeBySrc.TryGetValue(absoluteSrc, out var sizeBytes) && sizeBytes > 0)
+        {
+            var sizeKb = sizeBytes / 1024;
+            if (sizeKb > MAX_IMAGE_SIZE_KB)
+            {
+                var key = $"{absoluteSrc}|IMAGE_FILE_TOO_LARGE";
+                TrackFinding(findingsMap, key, Severity.Error, "IMAGE_FILE_TOO_LARGE",
+                    $"Image is {sizeKb}KB — over the {MAX_IMAGE_SIZE_KB}KB budget. Compress or serve a lower-resolution variant.",
+                    absoluteSrc,
+                    alt,
+                    (int)sizeBytes);
+            }
+            else if (sizeKb > LARGE_IMAGE_THRESHOLD_KB)
+            {
+                var key = $"{absoluteSrc}|IMAGE_LARGE_FILE";
+                TrackFinding(findingsMap, key, Severity.Warning, "IMAGE_LARGE_FILE",
+                    $"Image is {sizeKb}KB. Above {LARGE_IMAGE_THRESHOLD_KB}KB starts to hurt page-load performance; consider further compression.",
+                    absoluteSrc,
+                    alt,
+                    (int)sizeBytes);
             }
         }
     }
@@ -396,6 +449,8 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
             "REDUNDANT_TITLE_ATTRIBUTE" => "Redundant Title Attribute",
             "ALT_TEXT_BAD_PATTERN" => "Alt Text Bad Pattern",
             "LARGE_DATA_URI" => "Large Data URI",
+            "IMAGE_FILE_TOO_LARGE" => "Image File Too Large",
+            "IMAGE_LARGE_FILE" => "Large Image File",
             _ => code // Fallback to code if no match
         };
     }
