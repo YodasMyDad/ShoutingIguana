@@ -523,42 +523,6 @@ public partial class FindingsView
         }, System.Windows.Threading.DispatcherPriority.Background);
     }
     
-    private void DataGrid_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
-    {
-        // Pass the mouse wheel event to the parent ScrollViewer
-        // This allows scrolling the page even when the mouse is over the DataGrid
-        if (sender is not DataGrid dataGrid || e.Handled)
-            return;
-            
-        e.Handled = true;
-        
-        // Find the parent ScrollViewer by walking up the visual tree
-        var scrollViewer = FindVisualParent<ScrollViewer>(dataGrid);
-        if (scrollViewer != null)
-        {
-            // Create a new mouse wheel event and raise it on the ScrollViewer
-            var eventArg = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
-            {
-                RoutedEvent = UIElement.MouseWheelEvent,
-                Source = e.Source
-            };
-            scrollViewer.RaiseEvent(eventArg);
-        }
-    }
-    
-    private static T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject
-    {
-        if (child == null) return null;
-
-        var parent = VisualTreeHelper.GetParent(child);
-        if (parent == null) return null;
-
-        if (parent is T result)
-            return result;
-
-        return FindVisualParent<T>(parent);
-    }
-
     /// <summary>
     /// Opens the DataGrid's ContextMenu when the user presses Apps or Shift+F10
     /// while a row has keyboard focus. WPF's default handling does not cover

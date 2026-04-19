@@ -334,25 +334,9 @@ public class CanonicalTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         }
     }
 
-    private string NormalizeUrl(string url)
-    {
-        try
-        {
-            var normalized = UrlHelper.Normalize(url);
-            
-            // Also normalize query string if present
-            if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.Query))
-            {
-                normalized += uri.Query.ToLowerInvariant();
-            }
-            
-            return normalized;
-        }
-        catch
-        {
-            return url.TrimEnd('/').ToLowerInvariant();
-        }
-    }
+    // Previously appended uri.Query after UrlHelper.Normalize, which already handles the query —
+    // that produced doubled query strings and broke self-canonical comparisons.
+    private string NormalizeUrl(string url) => UrlHelper.Normalize(url);
     
     /// <summary>
     /// Check for canonical/robots conflicts (noindex + canonical is problematic)

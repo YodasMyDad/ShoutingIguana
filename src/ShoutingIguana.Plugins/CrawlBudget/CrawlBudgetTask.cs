@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
@@ -11,13 +12,45 @@ namespace ShoutingIguana.Plugins.CrawlBudget;
 /// </summary>
 public class CrawlBudgetTask(ILogger logger) : UrlTaskBase
 {
-    
+
     // Track server error counts per project
     private static readonly ConcurrentDictionary<int, ConcurrentBag<int>> ServerErrorsByProject = new();
     private static readonly ConcurrentDictionary<int, int> TotalPagesByProject = new();
-    
+
     // Flag to ensure we only report error rate once per project
     private static readonly ConcurrentDictionary<int, bool> ErrorRateReportedByProject = new();
+
+    private static readonly string[] _softNotFoundPatterns =
+    [
+        "404",
+        "not found",
+        "page not found",
+        "page could not be found",
+        "page does not exist",
+        "page doesn't exist",
+        "no longer exists",
+        "has been removed",
+        "has been deleted",
+        "coming soon",
+        "under construction",
+        "no results found",
+        "no items found",
+        "nothing found",
+        "sorry, but nothing matched",
+        "oops! that page can",
+        "the page you requested",
+        "the page you are looking for"
+    ];
+
+    private static readonly Regex[] _softNotFoundRegexes =
+        [.. _softNotFoundPatterns.Select(p =>
+            new Regex($@"\b{Regex.Escape(p)}\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))];
+
+    private static readonly Regex _titleErrorRegex =
+        new(@"\berror\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex _titleNotFoundRegex =
+        new(@"\bnot found\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public override string Key => "CrawlBudget";
     public override string DisplayName => "Crawl Budget";
@@ -59,11 +92,18 @@ public class CrawlBudgetTask(ILogger logger) : UrlTaskBase
             }
             
             // Check for soft 404s on successful pages
+            var reportedSoft404 = false;
             if (ctx.Metadata.StatusCode is >= 200 and < 300)
             {
-                await CheckSoft404Async(ctx);
+                reportedSoft404 = await CheckSoft404Async(ctx).ConfigureAwait(false);
             }
-            
+
+            // Flag noindex pages that still consumed crawl budget
+            if (!reportedSoft404 && ctx.Metadata.RobotsNoindex == true)
+            {
+                await ReportNoindexWasteAsync(ctx).ConfigureAwait(false);
+            }
+
             // Periodically check if we should report error rate (every 100 pages)
             var totalPages = TotalPagesByProject.GetValueOrDefault(ctx.Project.ProjectId, 0);
             if (totalPages % 100 == 0 && !ErrorRateReportedByProject.ContainsKey(ctx.Project.ProjectId))
@@ -77,91 +117,88 @@ public class CrawlBudgetTask(ILogger logger) : UrlTaskBase
         }
     }
 
-    private async Task CheckSoft404Async(UrlContext ctx)
+    private async Task<bool> CheckSoft404Async(UrlContext ctx)
     {
         var doc = new HtmlDocument();
         doc.LoadHtml(ctx.RenderedHtml);
 
-        // Extract title and main content
         var titleNode = doc.DocumentNode.SelectSingleNode("//title");
-        var title = titleNode?.InnerText?.Trim().ToLowerInvariant() ?? "";
-        
-        var h1Node = doc.DocumentNode.SelectSingleNode("//h1");
-        var h1 = h1Node?.InnerText?.Trim().ToLowerInvariant() ?? "";
-        
-        var bodyNode = doc.DocumentNode.SelectSingleNode("//body");
-        var bodyText = bodyNode?.InnerText?.Trim().ToLowerInvariant() ?? "";
-        
-        // Pattern matching for soft 404 indicators
-        var soft404Patterns = new[]
-        {
-            "404",
-            "not found",
-            "page not found",
-            "page could not be found",
-            "page does not exist",
-            "page doesn't exist",
-            "no longer exists",
-            "has been removed",
-            "has been deleted",
-            "coming soon",
-            "under construction",
-            "no results found",
-            "no items found",
-            "nothing found",
-            "sorry, but nothing matched",
-            "oops! that page can",
-            "the page you requested",
-            "the page you are looking for"
-        };
+        var title = titleNode?.InnerText?.Trim() ?? "";
 
-        var matchedPatterns = new List<string>();
+        var h1Node = doc.DocumentNode.SelectSingleNode("//h1");
+        var h1 = h1Node?.InnerText?.Trim() ?? "";
+
+        var bodyNode = doc.DocumentNode.SelectSingleNode("//body");
+        var bodyText = bodyNode?.InnerText?.Trim() ?? "";
+
+        var matchedPatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var matchLocations = new List<string>();
 
-        foreach (var pattern in soft404Patterns)
+        var titleMatched = false;
+        var h1Matched = false;
+        var bodyMatched = false;
+
+        // Scan first 2000 chars of body to balance recall vs cost on large pages.
+        var bodyStart = bodyText.Length > 2000 ? bodyText[..2000] : bodyText;
+
+        for (var i = 0; i < _softNotFoundRegexes.Length; i++)
         {
-            if (title.Contains(pattern))
+            var rx = _softNotFoundRegexes[i];
+            var pattern = _softNotFoundPatterns[i];
+
+            if (rx.IsMatch(title))
             {
                 matchedPatterns.Add(pattern);
-                if (!matchLocations.Contains("title"))
-                    matchLocations.Add("title");
+                titleMatched = true;
             }
-            
-            if (h1.Contains(pattern))
+
+            if (rx.IsMatch(h1))
             {
                 matchedPatterns.Add(pattern);
-                if (!matchLocations.Contains("H1"))
-                    matchLocations.Add("H1");
+                h1Matched = true;
             }
-            
-            // For body text, only check first 500 chars to avoid false positives
-            var bodyStart = bodyText.Length > 500 ? bodyText.Substring(0, 500) : bodyText;
-            if (bodyStart.Contains(pattern))
+
+            if (rx.IsMatch(bodyStart))
             {
                 matchedPatterns.Add(pattern);
-                if (!matchLocations.Contains("body content"))
-                    matchLocations.Add("body content");
+                bodyMatched = true;
             }
         }
 
-        // Also check for very low content length with error-like messaging
+        if (titleMatched) matchLocations.Add("title");
+        if (h1Matched) matchLocations.Add("H1");
+        if (bodyMatched) matchLocations.Add("body content");
+
         var contentLength = bodyText.Length;
-        var hasErrorWords = matchedPatterns.Any();
-        
-        if (hasErrorWords || (contentLength < 200 && (title.Contains("error") || title.Contains("not found"))))
+        var titleErrorSignal = _titleErrorRegex.IsMatch(title) || _titleNotFoundRegex.IsMatch(title);
+
+        // Require two distinct signals from different sources.
+        var signals = 0;
+        if (titleMatched || titleErrorSignal) signals++;
+        if (h1Matched) signals++;
+        if (bodyMatched) signals++;
+        if (contentLength < 200) signals++;
+
+        if (signals < 2)
         {
-            var confidence = "high";
-            if (matchedPatterns.Count == 1 && contentLength > 500)
-            {
-                confidence = "medium";
-            }
-
-            var issueText = $"Soft 404 ({confidence} confidence)";
-            var detail = $"Identified as a soft 404 ({confidence} confidence). Return a proper 4xx status or redirect/remove the URL so crawl budget isn't wasted on a missing page.";
-
-            var row = CreateReportRow(ctx, issueText, Severity.Warning, detail);
-            await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, CancellationToken.None);
+            return false;
         }
+
+        var issueText = "Suspected soft 404";
+        var detail = $"Suspected soft 404 based on {signals} signals ({string.Join(", ", matchedPatterns)}). Return a proper 4xx status or redirect/remove the URL so crawl budget isn't wasted on a missing page.";
+
+        var row = CreateReportRow(ctx, issueText, Severity.Info, detail);
+        await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, CancellationToken.None).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task ReportNoindexWasteAsync(UrlContext ctx)
+    {
+        const string issueText = "CRAWLED_NOINDEX_PAGE";
+        const string detail = "Page has noindex but was crawled — consumes crawl budget without indexation benefit.";
+
+        var row = CreateReportRow(ctx, issueText, Severity.Info, detail);
+        await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, CancellationToken.None).ConfigureAwait(false);
     }
     
     private async Task ReportServerErrorAsync(UrlContext ctx)

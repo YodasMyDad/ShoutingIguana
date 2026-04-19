@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
+using System.Net;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
@@ -120,20 +122,27 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
 
     private string ExtractTitle(HtmlDocument doc)
     {
-        var titleNode = doc.DocumentNode.SelectSingleNode("//title");
-        return titleNode?.InnerText?.Trim() ?? "";
+        // Scope to <head> so <title> inside inline <svg> isn't picked up as the page title.
+        var titleNode = doc.DocumentNode.SelectSingleNode("//html/head/title")
+            ?? doc.DocumentNode.SelectNodes("//title")?.FirstOrDefault(n => !n.Ancestors("svg").Any());
+        var raw = titleNode?.InnerText?.Trim() ?? "";
+        // Decode before any length check — &amp; should count as 1 visually, not 5.
+        return WebUtility.HtmlDecode(raw);
     }
 
     private string ExtractMetaDescription(HtmlDocument doc)
     {
-        var descNode = doc.DocumentNode.SelectSingleNode("//meta[@name='description']");
+        // Case-insensitive match — HTML meta names are case-insensitive (e.g. name="Description").
+        var descNode = doc.DocumentNode.SelectNodes("//meta")?
+            .FirstOrDefault(n => n.GetAttributeValue("name", "").Equals("description", StringComparison.OrdinalIgnoreCase));
         return descNode?.GetAttributeValue("content", "")?.Trim() ?? "";
     }
 
 
     private string ExtractViewport(HtmlDocument doc)
     {
-        var viewportNode = doc.DocumentNode.SelectSingleNode("//meta[@name='viewport']");
+        var viewportNode = doc.DocumentNode.SelectNodes("//meta")?
+            .FirstOrDefault(n => n.GetAttributeValue("name", "").Equals("viewport", StringComparison.OrdinalIgnoreCase));
         return viewportNode?.GetAttributeValue("content", "")?.Trim() ?? "";
     }
 
@@ -145,7 +154,8 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             return charsetNode.GetAttributeValue("charset", "");
         }
         
-        var httpEquivNode = doc.DocumentNode.SelectSingleNode("//meta[@http-equiv='Content-Type']");
+        var httpEquivNode = doc.DocumentNode.SelectNodes("//meta")?
+            .FirstOrDefault(n => n.GetAttributeValue("http-equiv", "").Equals("Content-Type", StringComparison.OrdinalIgnoreCase));
         if (httpEquivNode != null)
         {
             var content = httpEquivNode.GetAttributeValue("content", "");
@@ -207,16 +217,18 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             return;
         }
 
-        if (title.Length < MIN_TITLE_LENGTH)
+        // Count graphemes, not UTF-16 code units — emoji/combining marks count as 1 visually.
+        var titleLength = new StringInfo(title).LengthInTextElements;
+        if (titleLength < MIN_TITLE_LENGTH)
         {
             var row = ReportRow.Create()
                 .SetPage(ctx.Url)
                 .Set("Issue", "Title Too Short")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
-                .Set("Length", title.Length)
+                .Set("Length", titleLength)
                 .SetSeverity(Severity.Warning);
-            
+
             await ReportWithExplanationAsync(
                 ctx,
                 row,
@@ -224,16 +236,16 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 description,
                 "Title is shorter than the recommended 30-60 characters; expand it so it clearly describes the page and includes key terms.");
         }
-        else if (title.Length > MAX_TITLE_WARNING_LENGTH)
+        else if (titleLength > MAX_TITLE_WARNING_LENGTH)
         {
             var row = ReportRow.Create()
                 .SetPage(ctx.Url)
                 .Set("Issue", "Title Too Long (Will Truncate)")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
-                .Set("Length", title.Length)
+                .Set("Length", titleLength)
                 .SetSeverity(Severity.Warning);
-            
+
             await ReportWithExplanationAsync(
                 ctx,
                 row,
@@ -241,14 +253,14 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 description,
                 "Title is too long for search results and will be truncated; trim it so the most important words stay visible.");
         }
-        else if (title.Length > MAX_TITLE_LENGTH)
+        else if (titleLength > MAX_TITLE_LENGTH)
         {
             var row = ReportRow.Create()
                 .SetPage(ctx.Url)
                 .Set("Issue", "Title Long (May Truncate)")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
-                .Set("Length", title.Length)
+                .Set("Length", titleLength)
                 .SetSeverity(Severity.Warning);
             
             await ReportWithExplanationAsync(
@@ -298,7 +310,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                                 .Set("Issue", "Duplicate Title (Temporary Redirects)")
                                 .Set("Title", title)
                                 .Set("MetaDescription", "")
-                                .Set("Length", title.Length)
+                                .Set("Length", titleLength)
                                 .SetSeverity(Severity.Warning);
                             
                             await ReportWithExplanationAsync(
@@ -317,7 +329,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                                 .Set("Issue", $"Duplicate Title ({nonRedirectDuplicates.Length + 1} pages)")
                                 .Set("Title", title)
                                 .Set("MetaDescription", "")
-                                .Set("Length", title.Length)
+                                .Set("Length", titleLength)
                                 .SetSeverity(Severity.Error);
                             
                             await ReportWithExplanationAsync(
@@ -336,7 +348,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                             .Set("Issue", $"Duplicate Title ({duplicateCount} pages)")
                             .Set("Title", title)
                             .Set("MetaDescription", "")
-                            .Set("Length", title.Length)
+                            .Set("Length", titleLength)
                             .SetSeverity(Severity.Error);
                         
                         await ReportWithExplanationAsync(
@@ -387,6 +399,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         const int SAFE_PIXEL_WIDTH = 580;
         const int MAX_PIXEL_WIDTH = 600;
         
+        var titleLength = new StringInfo(title).LengthInTextElements;
         if (pixelWidth > MAX_PIXEL_WIDTH)
         {
             var row1 = ReportRow.Create()
@@ -394,7 +407,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Issue", $"Title Pixel Width Exceeded (~{(int)pixelWidth}px)")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
-                .Set("Length", title.Length)
+                .Set("Length", titleLength)
                 .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
@@ -411,7 +424,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Issue", $"Title May Truncate on Mobile (~{(int)pixelWidth}px)")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
-                .Set("Length", title.Length)
+                .Set("Length", titleLength)
                 .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
@@ -444,16 +457,17 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
             return;
         }
 
-        if (description.Length < MIN_DESCRIPTION_LENGTH)
+        var descriptionLength = new StringInfo(description).LengthInTextElements;
+        if (descriptionLength < MIN_DESCRIPTION_LENGTH)
         {
             var row = ReportRow.Create()
                 .SetPage(ctx.Url)
                 .Set("Issue", "Meta Description Too Short")
                 .Set("Title", "")
                 .Set("MetaDescription", description)
-                .Set("Length", description.Length)
+                .Set("Length", descriptionLength)
                 .SetSeverity(Severity.Warning);
-            
+
             await ReportWithExplanationAsync(
                 ctx,
                 row,
@@ -461,16 +475,16 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 description,
                 "Meta description is shorter than 50 characters; expand it so searchers get meaningful context about this page.");
         }
-        else if (description.Length > MAX_DESCRIPTION_WARNING_LENGTH)
+        else if (descriptionLength > MAX_DESCRIPTION_WARNING_LENGTH)
         {
             var row = ReportRow.Create()
                 .SetPage(ctx.Url)
                 .Set("Issue", "Meta Description Too Long (Will Truncate)")
                 .Set("Title", "")
                 .Set("MetaDescription", description)
-                .Set("Length", description.Length)
+                .Set("Length", descriptionLength)
                 .SetSeverity(Severity.Warning);
-            
+
             await ReportWithExplanationAsync(
                 ctx,
                 row,
@@ -478,14 +492,14 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 description,
                 "Meta description exceeds the safe limit and will be truncated; trim it to around 110-160 characters so the full message shows.");
         }
-        else if (description.Length > MAX_DESCRIPTION_LENGTH)
+        else if (descriptionLength > MAX_DESCRIPTION_LENGTH)
         {
             var row = ReportRow.Create()
                 .SetPage(ctx.Url)
                 .Set("Issue", "Meta Description Long (May Truncate)")
                 .Set("Title", "")
                 .Set("MetaDescription", description)
-                .Set("Length", description.Length)
+                .Set("Length", descriptionLength)
                 .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
@@ -518,7 +532,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                         .Set("Issue", $"Duplicate Meta Description ({duplicateCount} pages)")
                         .Set("Title", "")
                         .Set("MetaDescription", preview)
-                        .Set("Length", description.Length)
+                        .Set("Length", descriptionLength)
                         .SetSeverity(Severity.Warning);
                     
                     await ReportWithExplanationAsync(
@@ -554,7 +568,9 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
     private async Task AnalyzeViewportAsync(UrlContext ctx, string viewport, HtmlDocument doc, string title, string description)
     {
         // Check for multiple viewport declarations
-        var viewportNodes = doc.DocumentNode.SelectNodes("//meta[@name='viewport']");
+        var viewportNodes = doc.DocumentNode.SelectNodes("//meta")?
+            .Where(n => n.GetAttributeValue("name", "").Equals("viewport", StringComparison.OrdinalIgnoreCase))
+            .ToList();
         var viewportCount = viewportNodes?.Count ?? 0;
 
         if (viewportCount > 1)
@@ -675,7 +691,9 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
 
         // Check for multiple charset declarations
         var charsetNodes = doc.DocumentNode.SelectNodes("//meta[@charset]");
-        var httpEquivCharsetNodes = doc.DocumentNode.SelectNodes("//meta[@http-equiv='Content-Type']");
+        var httpEquivCharsetNodes = doc.DocumentNode.SelectNodes("//meta")?
+            .Where(n => n.GetAttributeValue("http-equiv", "").Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+            .ToList();
         var totalCharsetDeclarations = (charsetNodes?.Count ?? 0) + (httpEquivCharsetNodes?.Count ?? 0);
 
         if (totalCharsetDeclarations > 1)
@@ -742,11 +760,16 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
 
     private async Task AnalyzeOpenGraphAsync(UrlContext ctx, HtmlDocument doc, string title, string description)
     {
-        var ogTitle = doc.DocumentNode.SelectSingleNode("//meta[@property='og:title']")?.GetAttributeValue("content", "");
-        var ogDescription = doc.DocumentNode.SelectSingleNode("//meta[@property='og:description']")?.GetAttributeValue("content", "");
-        var ogImage = doc.DocumentNode.SelectSingleNode("//meta[@property='og:image']")?.GetAttributeValue("content", "");
-        var ogUrl = doc.DocumentNode.SelectSingleNode("//meta[@property='og:url']")?.GetAttributeValue("content", "");
-        var ogType = doc.DocumentNode.SelectSingleNode("//meta[@property='og:type']")?.GetAttributeValue("content", "");
+        var metaNodes = doc.DocumentNode.SelectNodes("//meta");
+        string? GetMetaByProperty(string property) => metaNodes?
+            .FirstOrDefault(n => n.GetAttributeValue("property", "").Equals(property, StringComparison.OrdinalIgnoreCase))?
+            .GetAttributeValue("content", "");
+
+        var ogTitle = GetMetaByProperty("og:title");
+        var ogDescription = GetMetaByProperty("og:description");
+        var ogImage = GetMetaByProperty("og:image");
+        var ogUrl = GetMetaByProperty("og:url");
+        var ogType = GetMetaByProperty("og:type");
 
         var ogTagCount = new[] { ogTitle, ogDescription, ogImage, ogUrl, ogType }.Count(s => !string.IsNullOrEmpty(s));
 
@@ -794,10 +817,15 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
 
     private async Task AnalyzeTwitterCardsAsync(UrlContext ctx, HtmlDocument doc, string title, string description)
     {
-        var twitterCard = doc.DocumentNode.SelectSingleNode("//meta[@name='twitter:card']")?.GetAttributeValue("content", "");
-        var twitterTitle = doc.DocumentNode.SelectSingleNode("//meta[@name='twitter:title']")?.GetAttributeValue("content", "");
-        var twitterDescription = doc.DocumentNode.SelectSingleNode("//meta[@name='twitter:description']")?.GetAttributeValue("content", "");
-        var twitterImage = doc.DocumentNode.SelectSingleNode("//meta[@name='twitter:image']")?.GetAttributeValue("content", "");
+        var metaNodes = doc.DocumentNode.SelectNodes("//meta");
+        string? GetMetaByName(string name) => metaNodes?
+            .FirstOrDefault(n => n.GetAttributeValue("name", "").Equals(name, StringComparison.OrdinalIgnoreCase))?
+            .GetAttributeValue("content", "");
+
+        var twitterCard = GetMetaByName("twitter:card");
+        var twitterTitle = GetMetaByName("twitter:title");
+        var twitterDescription = GetMetaByName("twitter:description");
+        var twitterImage = GetMetaByName("twitter:image");
 
         var twitterTagCount = new[] { twitterCard, twitterTitle, twitterDescription, twitterImage }.Count(s => !string.IsNullOrEmpty(s));
 
@@ -850,7 +878,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         }
         else if (h1Count > 1)
         {
-            var h1Texts = h1Nodes!.Take(5).Select(n => n.InnerText?.Trim()).ToArray();
+            var h1Texts = h1Nodes!.Take(5).Select(n => WebUtility.HtmlDecode(n.InnerText?.Trim() ?? "")).ToArray();
             var row = ReportRow.Create()
                 .SetPage(ctx.Url)
                 .Set("Issue", $"Multiple H1 Tags ({h1Count})")
@@ -868,8 +896,8 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
         }
         else
         {
-            // Analyze H1 content
-            var h1Text = h1Nodes![0].InnerText?.Trim() ?? "";
+            // Analyze H1 content — decode entities so &amp; counts as 1 char, not 5.
+            var h1Text = WebUtility.HtmlDecode(h1Nodes![0].InnerText?.Trim() ?? "");
 
             if (string.IsNullOrEmpty(h1Text))
             {
@@ -901,7 +929,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                         .Set("Issue", "Identical H1 and Title")
                         .Set("Title", title)
                         .Set("MetaDescription", h1Text)
-                        .Set("Length", title.Length)
+                        .Set("Length", new StringInfo(title).LengthInTextElements)
                         .SetSeverity(Severity.Info);
                     
                     await ReportWithExplanationAsync(
@@ -979,7 +1007,8 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
 
     private async Task CheckMetaKeywordsAsync(UrlContext ctx, HtmlDocument doc, string title, string description)
     {
-        var keywordsNode = doc.DocumentNode.SelectSingleNode("//meta[@name='keywords']");
+        var keywordsNode = doc.DocumentNode.SelectNodes("//meta")?
+            .FirstOrDefault(n => n.GetAttributeValue("name", "").Equals("keywords", StringComparison.OrdinalIgnoreCase));
         if (keywordsNode != null)
         {
             var row = ReportRow.Create()
@@ -1198,7 +1227,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Issue", "Description Lacks Action Words")
                 .Set("Title", "")
                 .Set("MetaDescription", description)
-                .Set("Length", description.Length)
+                .Set("Length", new StringInfo(description).LengthInTextElements)
                 .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(
@@ -1239,7 +1268,7 @@ public class TitlesMetaTask(ILogger logger, IRepositoryAccessor repositoryAccess
                 .Set("Issue", "Title Lacks Visual Separators")
                 .Set("Title", title)
                 .Set("MetaDescription", "")
-                .Set("Length", title.Length)
+                .Set("Length", new StringInfo(title).LengthInTextElements)
                 .SetSeverity(Severity.Info);
             
             await ReportWithExplanationAsync(

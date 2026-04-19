@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
@@ -87,6 +88,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         }
 
         List<string> validSchemas = [];
+        var validBlockCount = 0;
 
         foreach (var node in jsonLdNodes)
         {
@@ -102,36 +104,24 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 var jsonDoc = JsonDocument.Parse(jsonContent);
                 var root = jsonDoc.RootElement;
 
-                // Extract @type - JSON-LD can be either a single object or an array of objects
-                // Check ValueKind FIRST to avoid InvalidOperationException
-                if (root.ValueKind == JsonValueKind.Array)
+                validBlockCount++;
+
+                // Validate @context on the root block (skip for root arrays — validate per-entity below)
+                if (root.ValueKind == JsonValueKind.Object)
                 {
-                    // Handle array of schema objects
-                    foreach (var item in root.EnumerateArray())
-                    {
-                        if (item.TryGetProperty("@type", out var itemType))
-                        {
-                            var schemaType = itemType.GetString();
-                            if (!string.IsNullOrEmpty(schemaType))
-                            {
-                                validSchemas.Add(schemaType);
-                                // Validate based on schema type
-                                await ValidateSchemaTypeAsync(ctx, item, schemaType);
-                            }
-                        }
-                    }
+                    await ValidateJsonLdContextAsync(ctx, root);
                 }
-                else if (root.ValueKind == JsonValueKind.Object)
+
+                // Enumerate entities — support root arrays, @graph containers, and single objects.
+                foreach (var item in EnumerateJsonLdEntities(root))
                 {
-                    // Handle single object
-                    if (root.TryGetProperty("@type", out var typeElement))
+                    if (item.TryGetProperty("@type", out var itemType))
                     {
-                        var schemaType = typeElement.GetString();
+                        var schemaType = itemType.GetString();
                         if (!string.IsNullOrEmpty(schemaType))
                         {
                             validSchemas.Add(schemaType);
-                            // Validate based on schema type
-                            await ValidateSchemaTypeAsync(ctx, root, schemaType);
+                            await ValidateSchemaTypeAsync(ctx, item, schemaType);
                         }
                     }
                 }
@@ -147,7 +137,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                     .SetExplanation( errorDescription)
                     .Set("Property", jsonPath)
                     .SetSeverity(Severity.Error);
-                
+
                 await ctx.Reports.ReportAsync(Key, rowError, ctx.Metadata.UrlId, default);
             }
         }
@@ -156,7 +146,7 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         {
             var distinctSchemas = validSchemas.Distinct().ToList();
             var schemaList = string.Join(", ", distinctSchemas);
-            
+
             var foundDescription = $"Detected {validSchemas.Count} JSON-LD schema definition(s) ({schemaList}); these help search engines understand the page.";
             var rowFound = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
@@ -165,8 +155,92 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .SetExplanation( foundDescription)
                 .Set("Property", schemaList)
                 .SetSeverity(Severity.Info);
-            
+
             await ctx.Reports.ReportAsync(Key, rowFound, ctx.Metadata.UrlId, default);
+        }
+
+        // Rich-results on noindex warning — only when at least one valid JSON-LD block was parsed.
+        if (validBlockCount > 0 && ctx.Metadata.RobotsNoindex == true)
+        {
+            var noindexDescription = "Structured data present but page is noindex — rich results will not appear in search.";
+            var rowNoindex = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "JSON-LD")
+                .Set("Issue", "RICH_RESULTS_ON_NOINDEX")
+                .SetExplanation(noindexDescription)
+                .Set("Property", "robots")
+                .SetSeverity(Severity.Warning);
+
+            await ctx.Reports.ReportAsync(Key, rowNoindex, ctx.Metadata.UrlId, default);
+        }
+    }
+
+    private static IEnumerable<JsonElement> EnumerateJsonLdEntities(JsonElement root)
+    {
+        if (root.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in root.EnumerateArray())
+            {
+                yield return item;
+            }
+            yield break;
+        }
+
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            if (root.TryGetProperty("@graph", out var graph) && graph.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in graph.EnumerateArray())
+                {
+                    yield return item;
+                }
+                yield break;
+            }
+
+            yield return root;
+        }
+    }
+
+    private async Task ValidateJsonLdContextAsync(UrlContext ctx, JsonElement root)
+    {
+        if (!root.TryGetProperty("@context", out var contextElement))
+        {
+            var missingDescription = "JSON-LD block missing `@context`. Must be `https://schema.org`.";
+            var rowMissing = ReportRow.Create()
+                .Set("Page", ctx.Url.ToString())
+                .Set("SchemaType", "JSON-LD")
+                .Set("Issue", "MISSING_JSONLD_CONTEXT")
+                .SetExplanation(missingDescription)
+                .Set("Property", "@context")
+                .SetSeverity(Severity.Warning);
+
+            await ctx.Reports.ReportAsync(Key, rowMissing, ctx.Metadata.UrlId, default);
+            return;
+        }
+
+        // Object or array @context is valid per JSON-LD 1.1 (nested / scoped contexts).
+        if (contextElement.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+        {
+            return;
+        }
+
+        if (contextElement.ValueKind == JsonValueKind.String)
+        {
+            var contextValue = contextElement.GetString();
+            if (!string.Equals(contextValue, "https://schema.org", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(contextValue, "http://schema.org", StringComparison.OrdinalIgnoreCase))
+            {
+                var invalidDescription = $"JSON-LD `@context` is '{contextValue}' — must be `https://schema.org`.";
+                var rowInvalid = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", "JSON-LD")
+                    .Set("Issue", "INVALID_JSONLD_CONTEXT")
+                    .SetExplanation(invalidDescription)
+                    .Set("Property", "@context")
+                    .SetSeverity(Severity.Warning);
+
+                await ctx.Reports.ReportAsync(Key, rowInvalid, ctx.Metadata.UrlId, default);
+            }
         }
     }
 
@@ -228,9 +302,26 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             missingProps.Add("author");
         }
 
-        if (!root.TryGetProperty("datePublished", out _))
+        if (!root.TryGetProperty("datePublished", out var datePublishedElement))
         {
             missingProps.Add("datePublished");
+        }
+        else
+        {
+            var datePublished = datePublishedElement.GetString();
+            if (!string.IsNullOrEmpty(datePublished) && !IsValidIso8601Date(datePublished))
+            {
+                var invalidDateDescription = $"Article datePublished '{datePublished}' is not a valid ISO 8601 date/time.";
+                var rowBadDate = ReportRow.Create()
+                    .Set("Page", ctx.Url.ToString())
+                    .Set("SchemaType", schemaType)
+                    .Set("Issue", "INVALID_DATE_PUBLISHED")
+                    .SetExplanation(invalidDateDescription)
+                    .Set("Property", "datePublished")
+                    .SetSeverity(Severity.Warning);
+
+                await ctx.Reports.ReportAsync(Key, rowBadDate, ctx.Metadata.UrlId, default);
+            }
         }
 
         if (!root.TryGetProperty("image", out _))
@@ -249,9 +340,36 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
                 .SetExplanation( articleDescription)
                 .Set("Property", missingList)
                 .SetSeverity(Severity.Warning);
-            
+
             await ctx.Reports.ReportAsync(Key, rowArticle, ctx.Metadata.UrlId, default);
         }
+    }
+
+    private static bool IsValidIso8601Date(string value)
+    {
+        string[] formats =
+        [
+            "yyyy-MM-dd",
+            "yyyy-MM-ddTHH:mm",
+            "yyyy-MM-ddTHH:mmK",
+            "yyyy-MM-ddTHH:mm:ss",
+            "yyyy-MM-ddTHH:mm:ssK",
+            "yyyy-MM-ddTHH:mm:ss.f",
+            "yyyy-MM-ddTHH:mm:ss.fK",
+            "yyyy-MM-ddTHH:mm:ss.ff",
+            "yyyy-MM-ddTHH:mm:ss.ffK",
+            "yyyy-MM-ddTHH:mm:ss.fff",
+            "yyyy-MM-ddTHH:mm:ss.fffK",
+            "yyyy-MM-ddTHH:mm:ss.ffffff",
+            "yyyy-MM-ddTHH:mm:ss.ffffffK"
+        ];
+
+        return DateTimeOffset.TryParseExact(
+            value,
+            formats,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.RoundtripKind,
+            out _);
     }
 
     private async Task ValidateProductSchemaAsync(UrlContext ctx, JsonElement root)
@@ -382,9 +500,26 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
         {
             var currency = currencyElement.GetString();
             var validCurrencies = new[] { "USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CNY", "INR", "BRL", "MXN" };
-            if (!string.IsNullOrEmpty(currency) && currency.Length != 3)
+            if (!string.IsNullOrEmpty(currency))
             {
-                warnings.Add($"priceCurrency '{currency}' should be ISO 4217 3-letter code");
+                var normalized = currency.ToUpperInvariant();
+                var isThreeLetters = currency.Length == 3;
+                var isAllUpperAscii = currency.All(c => c is >= 'A' and <= 'Z');
+                var isInWhitelist = validCurrencies.Contains(normalized, StringComparer.OrdinalIgnoreCase);
+
+                if (!isThreeLetters || !isAllUpperAscii || !isInWhitelist)
+                {
+                    var invalidCurrencyDescription = $"priceCurrency '{currency}' is not a valid ISO 4217 3-letter uppercase code.";
+                    var rowBadCurrency = ReportRow.Create()
+                        .Set("Page", ctx.Url.ToString())
+                        .Set("SchemaType", "Offer")
+                        .Set("Issue", "INVALID_PRICE_CURRENCY")
+                        .SetExplanation(invalidCurrencyDescription)
+                        .Set("Property", "priceCurrency")
+                        .SetSeverity(Severity.Warning);
+
+                    await ctx.Reports.ReportAsync(Key, rowBadCurrency, ctx.Metadata.UrlId, default);
+                }
             }
         }
         else
@@ -392,27 +527,25 @@ public class StructuredDataTask(ILogger logger) : UrlTaskBase
             warnings.Add("Missing 'priceCurrency' in offers (required for rich results)");
         }
 
-        // Validate availability
+        // Validate availability — must exactly match one of the recognized schema.org enumerations.
         if (offer.TryGetProperty("availability", out var availElement))
         {
             var availability = availElement.GetString();
-            var validValues = new[] {
-                "https://schema.org/InStock",
-                "https://schema.org/OutOfStock",
-                "https://schema.org/PreOrder",
-                "https://schema.org/PreSale",
-                "https://schema.org/SoldOut",
-                "https://schema.org/Discontinued",
-                "https://schema.org/LimitedAvailability"
-            };
+            string[] bareNames =
+            [
+                "InStock", "OutOfStock", "OnlineOnly", "InStoreOnly", "SoldOut",
+                "PreOrder", "PreSale", "Discontinued", "LimitedAvailability", "BackOrder"
+            ];
+            var validAvailabilityValues = bareNames
+                .SelectMany(n => new[] { $"https://schema.org/{n}", $"http://schema.org/{n}", n })
+                .ToArray();
 
-            if (!string.IsNullOrEmpty(availability) && !validValues.Any(v => availability.Contains(v)))
+            if (!string.IsNullOrEmpty(availability) &&
+                !validAvailabilityValues.Contains(availability, StringComparer.OrdinalIgnoreCase))
             {
-                warnings.Add($"Availability '{availability}' should use schema.org URL format");
+                warnings.Add($"availability '{availability}' is not a recognized schema.org enumeration value");
             }
         }
-        
-        await Task.CompletedTask;
     }
 
     private async Task ValidateAggregateRatingAsync(UrlContext ctx, JsonElement rating, List<string> warnings)

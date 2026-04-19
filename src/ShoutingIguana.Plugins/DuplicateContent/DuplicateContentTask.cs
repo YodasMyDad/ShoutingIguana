@@ -84,6 +84,25 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             return;
         }
 
+        // Canonical-to-other declares an intentional duplicate; Google treats it as such, and noindex pages don't compete in search.
+        var normalizedSelf = UrlHelper.Normalize(ctx.Url.ToString());
+        if (!string.IsNullOrEmpty(ctx.Metadata.CanonicalHtml)
+            && UrlHelper.Normalize(ctx.Metadata.CanonicalHtml) != normalizedSelf)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(ctx.Metadata.CanonicalHttp)
+            && UrlHelper.Normalize(ctx.Metadata.CanonicalHttp) != normalizedSelf)
+        {
+            return;
+        }
+
+        if (ctx.Metadata.RobotsNoindex == true)
+        {
+            return;
+        }
+
         try
         {
             // Extract and clean content
@@ -128,8 +147,8 @@ public class DuplicateContentTask(ILogger logger, IRepositoryAccessor repository
             var doc = new HtmlDocument();
             doc.LoadHtml(html);
 
-            // Remove script, style, and other non-content elements
-            var nodesToRemove = doc.DocumentNode.SelectNodes("//script | //style | //noscript | //svg | //iframe");
+            // Remove script, style, and other non-content elements, plus shared chrome (header/nav/footer/aside) so SimHash reflects unique content.
+            var nodesToRemove = doc.DocumentNode.SelectNodes("//script | //style | //noscript | //svg | //iframe | //header | //nav | //footer | //aside");
             if (nodesToRemove != null)
             {
                 foreach (var node in nodesToRemove)

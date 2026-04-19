@@ -201,7 +201,10 @@ public class RepositoryAccessor(
                 link.ElementWidth,
                 link.ElementHeight,
                 link.HtmlSnippet,
-                link.ParentTag
+                link.ParentTag,
+                link.IsNofollow,
+                link.IsUgc,
+                link.IsSponsored
             )).ToList();
         }
         catch (Exception ex)

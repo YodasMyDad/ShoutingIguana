@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
@@ -28,20 +29,49 @@ public class SitemapExporter : IExportProvider
         {
             _logger.LogInformation("Generating sitemap XML for project {ProjectId}", ctx.ProjectId);
 
-            // Filter for indexable URLs using repository accessor
+            // Build redirect-source set so 3xx originators are excluded from the sitemap.
+            var redirectSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            await foreach (var redirect in _repositoryAccessor.GetRedirectsAsync(ctx.ProjectId, ct))
+            {
+                if (!string.IsNullOrEmpty(redirect.SourceUrl))
+                {
+                    redirectSources.Add(redirect.SourceUrl);
+                }
+            }
+
+            // Filter for sitemap-eligible URLs: 200 only, indexable (rolls up noindex + robots),
+            // and not the source of a redirect. Cross-URL canonical filtering is not applied here
+            // because UrlInfo does not expose canonical data without adding a new repository dependency.
             var indexableUrls = new List<SitemapUrl>();
-            
+
             await foreach (var url in _repositoryAccessor.GetUrlsAsync(ctx.ProjectId, ct))
             {
-                if (url.IsIndexable && url.Status == 200 && !string.IsNullOrEmpty(url.Address))
+                if (string.IsNullOrEmpty(url.Address))
                 {
-                    indexableUrls.Add(new SitemapUrl
-                    {
-                        Address = url.Address,
-                        LastCrawled = null, // Not available in UrlInfo - can be added if needed
-                        Depth = url.Depth
-                    });
+                    continue;
                 }
+
+                if (url.Status != 200)
+                {
+                    continue;
+                }
+
+                if (!url.IsIndexable)
+                {
+                    continue;
+                }
+
+                if (redirectSources.Contains(url.Address))
+                {
+                    continue;
+                }
+
+                indexableUrls.Add(new SitemapUrl
+                {
+                    Address = url.Address,
+                    LastCrawled = null, // Not available in UrlInfo - can be added if needed
+                    Depth = url.Depth
+                });
             }
 
             indexableUrls = indexableUrls.OrderBy(u => u.Address).ToList();
@@ -61,11 +91,15 @@ public class SitemapExporter : IExportProvider
                 var urlElement = new XElement(ns + "url",
                     new XElement(ns + "loc", url.Address));
 
-                // Add lastmod if available
+                // Add lastmod if available. Emit with numeric offset (zzz) so the format is an unambiguous
+                // W3C Datetime; the prior literal "Z" format is not spec-compliant as a format specifier.
                 if (url.LastCrawled.HasValue)
                 {
-                    urlElement.Add(new XElement(ns + "lastmod", 
-                        url.LastCrawled.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")));
+                    var lastmod = url.LastCrawled.Value.Kind == DateTimeKind.Utc
+                        ? url.LastCrawled.Value
+                        : url.LastCrawled.Value.ToUniversalTime();
+                    urlElement.Add(new XElement(ns + "lastmod",
+                        lastmod.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture)));
                 }
 
                 // Add priority based on depth (shallower = higher priority)

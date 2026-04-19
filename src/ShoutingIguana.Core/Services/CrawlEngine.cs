@@ -1718,30 +1718,52 @@ public class CrawlEngine(
     
     private void ParseRobotsDirectives(HtmlAgilityPack.HtmlDocument doc, Dictionary<string, string> headers, EnhancedMetaData result)
     {
-        var metaRobots = doc.DocumentNode.SelectSingleNode("//meta[@name='robots']")?.GetAttributeValue("content", "")?.Trim();
+        // Attribute values aren't case-sensitive in the wild — filter in C# with OrdinalIgnoreCase.
+        // Google also honours <meta name="googlebot"> as a crawler-specific override, so treat it as meta too.
+        var metaNodes = doc.DocumentNode.SelectNodes("//meta") ?? Enumerable.Empty<HtmlAgilityPack.HtmlNode>();
+        var metaRobotsNodes = metaNodes
+            .Where(n =>
+            {
+                var name = n.GetAttributeValue("name", "");
+                return name.Equals("robots", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("googlebot", StringComparison.OrdinalIgnoreCase);
+            })
+            .ToList();
+
         var xRobotsTag = headers.TryGetValue("x-robots-tag", out var xrt) ? xrt : null;
-        
-        result.MetaRobots = metaRobots; // Keep for backward compatibility
+
+        // Combine all meta-robots-style tags — most-restrictive-wins so any single tag declaring
+        // noindex/nofollow is honoured even if another tag is more permissive.
+        var metaDirectives = new RobotsDirectives();
+        string? firstMetaContent = null;
+        foreach (var node in metaRobotsNodes)
+        {
+            var content = node.GetAttributeValue("content", "")?.Trim();
+            if (string.IsNullOrEmpty(content)) continue;
+            firstMetaContent ??= content;
+            metaDirectives = MergeRobotsDirectives(metaDirectives, ParseRobotsString(content));
+        }
+
+        var hasMeta = metaRobotsNodes.Count > 0 && firstMetaContent is not null;
+        result.MetaRobots = firstMetaContent; // Keep for backward compatibility
         result.XRobotsTag = xRobotsTag;
-        
-        // Parse directives from both sources
-        var metaDirectives = ParseRobotsString(metaRobots);
+
         var httpDirectives = ParseRobotsString(xRobotsTag);
-        
-        // Apply conflict resolution: most restrictive wins
+
+        // Most-restrictive-wins across meta + HTTP. null means "not specified".
         result.RobotsNoindex = CombineRobotsFlags(metaDirectives.Noindex, httpDirectives.Noindex);
         result.RobotsNofollow = CombineRobotsFlags(metaDirectives.Nofollow, httpDirectives.Nofollow);
         result.RobotsNoarchive = CombineRobotsFlags(metaDirectives.Noarchive, httpDirectives.Noarchive);
         result.RobotsNosnippet = CombineRobotsFlags(metaDirectives.Nosnippet, httpDirectives.Nosnippet);
         result.RobotsNoimageindex = CombineRobotsFlags(metaDirectives.Noimageindex, httpDirectives.Noimageindex);
-        
+
         // Determine source
-        if (!string.IsNullOrEmpty(metaRobots) && !string.IsNullOrEmpty(xRobotsTag))
+        if (hasMeta && !string.IsNullOrEmpty(xRobotsTag))
         {
             result.RobotsSource = "both";
             result.HasRobotsConflict = HasRobotsConflict(metaDirectives, httpDirectives);
         }
-        else if (!string.IsNullOrEmpty(metaRobots))
+        else if (hasMeta)
         {
             result.RobotsSource = "meta";
         }
@@ -1750,49 +1772,67 @@ public class CrawlEngine(
             result.RobotsSource = "http";
         }
     }
-    
+
+    private RobotsDirectives MergeRobotsDirectives(RobotsDirectives a, RobotsDirectives b)
+    {
+        // Most-restrictive-wins: presence of a directive in either source carries over.
+        return new RobotsDirectives
+        {
+            Noindex = CombineRobotsFlags(a.Noindex, b.Noindex),
+            Nofollow = CombineRobotsFlags(a.Nofollow, b.Nofollow),
+            Noarchive = CombineRobotsFlags(a.Noarchive, b.Noarchive),
+            Nosnippet = CombineRobotsFlags(a.Nosnippet, b.Nosnippet),
+            Noimageindex = CombineRobotsFlags(a.Noimageindex, b.Noimageindex),
+        };
+    }
+
     private RobotsDirectives ParseRobotsString(string? robotsString)
     {
         var directives = new RobotsDirectives();
         if (string.IsNullOrEmpty(robotsString)) return directives;
-        
+
         var lower = robotsString.ToLowerInvariant();
-        
+
         // Handle special "none" directive (equivalent to "noindex, nofollow")
         // Use word boundary check to avoid false positives
         if (System.Text.RegularExpressions.Regex.IsMatch(lower, @"\bnone\b"))
         {
             directives.Noindex = true;
             directives.Nofollow = true;
+            // Remaining directives stay null — "none" doesn't imply noarchive/nosnippet/noimageindex.
             return directives;
         }
-        
-        // Handle individual directives (use word boundaries for precision)
+
+        // Explicit true/false for each known directive when the robots string is present.
         directives.Noindex = System.Text.RegularExpressions.Regex.IsMatch(lower, @"\bnoindex\b");
         directives.Nofollow = System.Text.RegularExpressions.Regex.IsMatch(lower, @"\bnofollow\b");
         directives.Noarchive = System.Text.RegularExpressions.Regex.IsMatch(lower, @"\bnoarchive\b");
         directives.Nosnippet = System.Text.RegularExpressions.Regex.IsMatch(lower, @"\bnosnippet\b");
         directives.Noimageindex = System.Text.RegularExpressions.Regex.IsMatch(lower, @"\bnoimageindex\b");
-        
+
         return directives;
     }
-    
-    private bool? CombineRobotsFlags(bool metaValue, bool httpValue)
+
+    private bool? CombineRobotsFlags(bool? metaValue, bool? httpValue)
     {
-        // Most restrictive wins: if either says no, it's no
-        if (metaValue || httpValue) return true;
-        if (!metaValue && !httpValue) return false;
-        return null;
+        // null means "not specified". Most-restrictive-wins when either side defines it.
+        if (metaValue is null && httpValue is null) return null;
+        if (metaValue == true || httpValue == true) return true;
+        return (metaValue ?? httpValue) ?? false;
     }
-    
+
     private bool HasRobotsConflict(RobotsDirectives meta, RobotsDirectives http)
     {
-        return meta.Noindex != http.Noindex ||
-               meta.Nofollow != http.Nofollow ||
-               meta.Noarchive != http.Noarchive ||
-               meta.Nosnippet != http.Nosnippet ||
-               meta.Noimageindex != http.Noimageindex;
+        // Only flag a conflict when both sides actually declare the directive and disagree.
+        return DirectiveConflicts(meta.Noindex, http.Noindex)
+            || DirectiveConflicts(meta.Nofollow, http.Nofollow)
+            || DirectiveConflicts(meta.Noarchive, http.Noarchive)
+            || DirectiveConflicts(meta.Nosnippet, http.Nosnippet)
+            || DirectiveConflicts(meta.Noimageindex, http.Noimageindex);
     }
+
+    private static bool DirectiveConflicts(bool? a, bool? b)
+        => a.HasValue && b.HasValue && a.Value != b.Value;
     
     private void ParseMetaRefresh(HtmlAgilityPack.HtmlDocument doc, EnhancedMetaData result)
     {
@@ -2827,11 +2867,12 @@ public class CrawlEngine(
     
     private class RobotsDirectives
     {
-        public bool Noindex { get; set; }
-        public bool Nofollow { get; set; }
-        public bool Noarchive { get; set; }
-        public bool Nosnippet { get; set; }
-        public bool Noimageindex { get; set; }
+        // null = directive not specified by this source; true/false = explicitly declared.
+        public bool? Noindex { get; set; }
+        public bool? Nofollow { get; set; }
+        public bool? Noarchive { get; set; }
+        public bool? Nosnippet { get; set; }
+        public bool? Noimageindex { get; set; }
     }
     
     private class HreflangData

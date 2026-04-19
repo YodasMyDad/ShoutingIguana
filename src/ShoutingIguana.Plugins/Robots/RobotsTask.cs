@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.PluginSdk.Helpers;
@@ -146,34 +147,36 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
         // Check for noindex
         if (ctx.Metadata.RobotsNoindex == true)
         {
-            var isHeaderSource = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag);
+            var metaHas = MetaRobotsContainsDirective(ctx.RenderedHtml, "noindex");
+            var headerHas = XRobotsTagContainsDirective(ctx.Metadata.XRobotsTag, "noindex");
             var severity = ctx.Metadata.Depth <= 2 ? Severity.Warning : Severity.Info;
-            
+
             var row = ReportRow.Create()
                 .SetPage(ctx.Url)
                 .Set("Issue", "Noindex Detected")
                 .SetExplanation( "The page explicitly forbids indexing (meta or header), so it will not appear in search results.")
-                .Set("RobotsMeta", isHeaderSource ? "" : "noindex")
-                .Set("XRobotsTag", isHeaderSource ? "noindex" : "")
+                .Set("RobotsMeta", metaHas ? "noindex" : "")
+                .Set("XRobotsTag", headerHas ? "noindex" : "")
                 .Set("Indexable", "No")
                 .SetSeverity(severity);
-            
+
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
 
         // Check for nofollow
         if (ctx.Metadata.RobotsNofollow == true)
         {
-            var isHeaderSource = !string.IsNullOrEmpty(ctx.Metadata.XRobotsTag);
+            var metaHas = MetaRobotsContainsDirective(ctx.RenderedHtml, "nofollow");
+            var headerHas = XRobotsTagContainsDirective(ctx.Metadata.XRobotsTag, "nofollow");
             var row = ReportRow.Create()
                 .Set("Page", ctx.Url.ToString())
                 .Set("Issue", "Nofollow Detected")
                 .SetExplanation( "This page tells search engines not to follow its links, preventing link equity from flowing to the pages it links to.")
-                .Set("RobotsMeta", isHeaderSource ? "" : "nofollow")
-                .Set("XRobotsTag", isHeaderSource ? "nofollow" : "")
+                .Set("RobotsMeta", metaHas ? "nofollow" : "")
+                .Set("XRobotsTag", headerHas ? "nofollow" : "")
                 .Set("Indexable", "Yes")
                 .SetSeverity(Severity.Info);
-            
+
             await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
         }
 
@@ -484,6 +487,38 @@ public class RobotsTask(ILogger logger) : UrlTaskBase
             
             await ctx.Reports.ReportAsync(Key, row5, ctx.Metadata.UrlId, default);
         }
+    }
+
+    private static bool MetaRobotsContainsDirective(string? html, string directive)
+    {
+        // Check the raw HTML for any <meta name="robots|googlebot" content="..."> whose content
+        // mentions the directive (or "none", which implies noindex+nofollow). Case-insensitive,
+        // word-boundary — avoids matching attribute names like "noindex-foo" or substrings.
+        if (string.IsNullOrEmpty(html)) return false;
+
+        var pattern = @"<meta\b[^>]*\bname\s*=\s*[""'](?:robots|googlebot)[""'][^>]*\bcontent\s*=\s*[""']([^""']*)[""'][^>]*>";
+        foreach (Match match in Regex.Matches(html, pattern, RegexOptions.IgnoreCase))
+        {
+            var content = match.Groups[1].Value;
+            if (DirectiveMatches(content, directive)) return true;
+        }
+        return false;
+    }
+
+    private static bool XRobotsTagContainsDirective(string? xRobotsTag, string directive)
+        => DirectiveMatches(xRobotsTag, directive);
+
+    private static bool DirectiveMatches(string? value, string directive)
+    {
+        if (string.IsNullOrEmpty(value)) return false;
+        // "none" is equivalent to noindex + nofollow per the robots-meta spec.
+        if ((directive.Equals("noindex", StringComparison.OrdinalIgnoreCase) ||
+             directive.Equals("nofollow", StringComparison.OrdinalIgnoreCase))
+            && Regex.IsMatch(value, @"\bnone\b", RegexOptions.IgnoreCase))
+        {
+            return true;
+        }
+        return Regex.IsMatch(value, $@"\b{Regex.Escape(directive)}\b", RegexOptions.IgnoreCase);
     }
 
     public override void CleanupProject(int projectId)

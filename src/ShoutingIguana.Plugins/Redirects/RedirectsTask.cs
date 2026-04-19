@@ -246,14 +246,27 @@ public class RedirectsTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         var delay = ctx.Metadata.MetaRefreshDelay ?? 0;
         var targetUrl = ctx.Metadata.MetaRefreshTarget ?? "unknown";
 
+        var isInstant = delay == 0;
+        var issue = isInstant
+            ? "Instant meta refresh (delay=0) - replace with a 301 redirect for SEO and accessibility."
+            : $"Meta refresh redirect ({delay}s delay) waits before navigating, which hurts UX and SEO; use an HTTP redirect instead.";
+        var severity = isInstant ? Severity.Error : Severity.Warning;
+
         var row = ReportRow.Create()
             .Set("Source", ctx.Url.ToString())
             .Set("Target", targetUrl)
             .Set("StatusCode", 0)
-            .Set("Issue", $"Meta refresh redirect ({delay}s delay) waits before navigating, which hurts UX and SEO; use an HTTP redirect instead.")
-                            .SetSeverity(Severity.Warning);
-        
+            .Set("Issue", issue)
+            .SetSeverity(severity);
+
         await ReportRowAsync(ctx, row);
+
+        // Validate meta refresh target against stored URL statuses
+        if (!string.IsNullOrEmpty(ctx.Metadata.MetaRefreshTarget))
+        {
+            var resolvedTarget = ResolveRedirectTarget(ctx.Url, ctx.Metadata.MetaRefreshTarget);
+            await ValidateRedirectTargetAsync(ctx, resolvedTarget, default);
+        }
     }
 
     private async Task CheckJavaScriptRedirectAsync(UrlContext ctx)

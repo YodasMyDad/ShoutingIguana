@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.PluginSdk;
 using ShoutingIguana.PluginSdk.Helpers;
@@ -43,10 +44,10 @@ public class LinkGraphTask(ILogger logger, IRepositoryAccessor repositoryAccesso
         // Create a finding for each outgoing link
         foreach (var link in outgoingLinks)
         {
-            var anchorText = string.IsNullOrWhiteSpace(link.AnchorText) 
-                ? "(no text)" 
+            var anchorText = string.IsNullOrWhiteSpace(link.AnchorText)
+                ? "(no text)"
                 : link.AnchorText.Trim();
-            var anchorDisplay = anchorText.Replace("\r", " ").Replace("\n", " ").Replace("\t", " ");
+            var anchorDisplay = Regex.Replace(anchorText, @"\s+", " ").Trim();
             var friendlyLinkType = GetFriendlyLinkType(link.LinkType);
             var issueSummary = anchorText == "(no text)"
                 ? $"Internal {friendlyLinkType} without anchor text"
@@ -65,6 +66,9 @@ public class LinkGraphTask(ILogger logger, IRepositoryAccessor repositoryAccesso
                 .Set("ToURL", link.ToUrl)
                 .Set("AnchorText", anchorText)
                 .Set("LinkType", link.LinkType)
+                .Set("IsNofollow", link.IsNofollow)
+                .Set("IsUgc", link.IsUgc)
+                .Set("IsSponsored", link.IsSponsored)
                 .SetSeverity(Severity.Info);
             
             await ctx.Reports.ReportAsync(Key, row, fromUrlId, default);

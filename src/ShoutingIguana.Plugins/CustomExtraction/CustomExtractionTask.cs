@@ -63,8 +63,13 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
             // Apply each extraction rule
             foreach (var rule in rules)
             {
-                await ApplyExtractionRuleAsync(ctx, doc, rule);
+                ct.ThrowIfCancellationRequested();
+                await ApplyExtractionRuleAsync(ctx, doc, rule, ct);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -72,7 +77,7 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
         }
     }
 
-    private async Task ApplyExtractionRuleAsync(UrlContext ctx, HtmlDocument doc, CustomExtractionRuleInfo rule)
+    private async Task ApplyExtractionRuleAsync(UrlContext ctx, HtmlDocument doc, CustomExtractionRuleInfo rule, CancellationToken ct)
     {
         try
         {
@@ -80,14 +85,14 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
             {
                 SelectorType.Css => ExtractByCssSelector(doc, rule.Selector),
                 SelectorType.XPath => ExtractByXPath(doc, rule.Selector),
-                SelectorType.Regex => ExtractByRegex(ctx.RenderedHtml!, rule.Selector),
+                SelectorType.Regex => ExtractByRegex(ctx.RenderedHtml!, rule.Selector, ct),
                 _ => new List<string>()
             };
 
             if (extractedValues.Any())
             {
                 var formattedValues = FormatExtractedValues(extractedValues);
-                
+
                 var row = ReportRow.Create()
                     .SetPage(ctx.Url)
                     .Set("RuleName", rule.Name)
@@ -97,7 +102,22 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
                     .Set("Count", extractedValues.Count)
                     .SetSeverity(Severity.Info)
                     .SetExplanation($"Extraction rule '{rule.Name}' matched {extractedValues.Count} value(s); verify the selector returns the content you expect.");
-                
+
+                await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
+            }
+            else
+            {
+                // Emit an Info row so users can distinguish "rule ran, zero matches" from "rule broken"
+                var row = ReportRow.Create()
+                    .SetPage(ctx.Url)
+                    .Set("RuleName", rule.Name)
+                    .Set("ExtractedValue", "(no matches)")
+                    .Set("ExtractedValuesRaw", Array.Empty<string>())
+                    .Set("Selector", rule.Selector)
+                    .Set("Count", 0)
+                    .SetSeverity(Severity.Info)
+                    .SetExplanation($"Extraction rule '{rule.Name}' ran but matched 0 elements; the selector is valid but returned nothing on this page.");
+
                 await ctx.Reports.ReportAsync(Key, row, ctx.Metadata.UrlId, default);
             }
         }
@@ -187,17 +207,38 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
         return results;
     }
 
-    private List<string> ExtractByRegex(string html, string pattern)
+    private List<string> ExtractByRegex(string html, string pattern, CancellationToken ct)
     {
         List<string> results = [];
 
+        Regex? regex = null;
         try
         {
-            var regex = new Regex(pattern, RegexOptions.IgnoreCase);
+            // Prefer non-backtracking (hard ReDoS immunity); fall back to timeout-only if the pattern
+            // uses features NonBacktracking doesn't support (backreferences, lookarounds, etc.).
+            try
+            {
+                regex = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.NonBacktracking, TimeSpan.FromSeconds(2));
+            }
+            catch (NotSupportedException)
+            {
+                regex = new Regex(pattern, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(2));
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            logger.LogWarning(ex, "Invalid regex pattern, skipping: {Pattern}", pattern);
+            return results;
+        }
+
+        try
+        {
             var matches = regex.Matches(html);
 
             foreach (Match match in matches)
             {
+                ct.ThrowIfCancellationRequested();
+
                 if (match.Groups.Count > 1)
                 {
                     // Use first capture group
@@ -205,9 +246,14 @@ public class CustomExtractionTask(ILogger logger, IRepositoryAccessor repository
                 }
                 else
                 {
+                    // No capture groups (e.g. `foo` or `(?:foo)`) — use the full match
                     results.Add(match.Value.Trim());
                 }
             }
+        }
+        catch (RegexMatchTimeoutException ex)
+        {
+            logger.LogWarning(ex, "Regex timed out after 2s (possible ReDoS), skipping: {Pattern}", pattern);
         }
         catch (Exception ex)
         {

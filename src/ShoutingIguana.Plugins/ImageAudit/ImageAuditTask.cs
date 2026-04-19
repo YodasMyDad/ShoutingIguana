@@ -84,11 +84,14 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
     {
         var src = imgNode.GetAttributeValue("src", "");
         var srcset = imgNode.GetAttributeValue("srcset", "");
-        var loading = imgNode.GetAttributeValue("loading", "");
-        var alt = imgNode.GetAttributeValue("alt", "");
+        var altAttr = imgNode.Attributes["alt"];
+        var altMissing = altAttr == null;
+        var alt = altAttr?.Value ?? "";
         var title = imgNode.GetAttributeValue("title", "");
         var widthStr = imgNode.GetAttributeValue("width", "");
         var heightStr = imgNode.GetAttributeValue("height", "");
+        var isAriaDecorative = IsAriaDecorative(imgNode);
+        var isInsideLink = HasAnchorAncestor(imgNode);
 
         // Handle data URIs
         if (src.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
@@ -129,33 +132,18 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
                              extension.Equals(".png", StringComparison.OrdinalIgnoreCase);
 
         // Alt text analysis
-        AnalyzeAltText(ctx, absoluteSrc, alt, title, width, height, findingsMap);
+        AnalyzeAltText(ctx, absoluteSrc, alt, altMissing, isAriaDecorative, isInsideLink, title, width, height, findingsMap);
 
         // Dimensions analysis (CLS prevention)
         if (!width.HasValue || !height.HasValue)
         {
             // Only warn for images likely to be above the fold or large
-            if (height.GetValueOrDefault(0) == 0 || width.GetValueOrDefault(0) == 0 || 
+            if (height.GetValueOrDefault(0) == 0 || width.GetValueOrDefault(0) == 0 ||
                 (width.GetValueOrDefault(100) * height.GetValueOrDefault(100)) > 10000)
             {
                 var key = $"{absoluteSrc}|IMAGE_NO_DIMENSIONS|{width.HasValue}|{height.HasValue}";
                 TrackFinding(findingsMap, key, Severity.Warning, "IMAGE_NO_DIMENSIONS",
                     "Add width and height attributes to reserve layout space and prevent Cumulative Layout Shift.",
-                    absoluteSrc,
-                    alt,
-                    null);
-            }
-        }
-
-        // Lazy loading check
-        if (!loading.Equals("lazy", StringComparison.OrdinalIgnoreCase))
-        {
-            if ((width.GetValueOrDefault(0) * height.GetValueOrDefault(0)) > 50000 || 
-                (!width.HasValue && !height.HasValue))
-            {
-                var key = $"{absoluteSrc}|IMAGE_NO_LAZY_LOADING";
-                TrackFinding(findingsMap, key, Severity.Info, "IMAGE_NO_LAZY_LOADING",
-                    "Lazy-load large or off-screen images so the initial viewport renders faster.",
                     absoluteSrc,
                     alt,
                     null);
@@ -213,17 +201,41 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         }
     }
 
-    private void AnalyzeAltText(UrlContext ctx, string imageUrl, string alt, string title, int? width, int? height, Dictionary<string, FindingTracker> findingsMap)
+    private void AnalyzeAltText(UrlContext ctx, string imageUrl, string alt, bool altMissing, bool isAriaDecorative, bool isInsideLink, string title, int? width, int? height, Dictionary<string, FindingTracker> findingsMap)
     {
-        // Check for missing alt attribute
-        if (string.IsNullOrWhiteSpace(alt))
+        // ARIA-decorative images are exempt from alt requirements per WCAG
+        if (isAriaDecorative)
+        {
+            return;
+        }
+
+        // Truly missing alt attribute is an accessibility failure
+        if (altMissing)
         {
             var key = $"{imageUrl}|MISSING_ALT_TEXT";
-            TrackFinding(findingsMap, key, Severity.Warning, "MISSING_ALT_TEXT",
-                "Add descriptive alt text so assistive technologies can explain this image.",
+            var description = isInsideLink
+                ? "Linked image without alternative text leaves screen reader users with no link text; add a descriptive alt attribute."
+                : "Add descriptive alt text so assistive technologies can explain this image.";
+            TrackFinding(findingsMap, key, Severity.Error, "MISSING_ALT_TEXT",
+                description,
                 imageUrl,
                 alt,
                 null);
+            return;
+        }
+
+        // alt="" is valid for decorative images — but if it's wrapped in a link, screen readers lose link text
+        if (string.IsNullOrEmpty(alt))
+        {
+            if (isInsideLink)
+            {
+                var key = $"{imageUrl}|MISSING_ALT_TEXT";
+                TrackFinding(findingsMap, key, Severity.Error, "MISSING_ALT_TEXT",
+                    "Linked image without alternative text leaves screen reader users with no link text; add a descriptive alt attribute.",
+                    imageUrl,
+                    alt,
+                    null);
+            }
             return;
         }
 
@@ -249,8 +261,8 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
                 null);
         }
 
-        // Check for decorative images that should have empty alt
-        if (IsLikelyDecorative(imageUrl, alt))
+        // Only suggest empty alt for decorative images that actually have non-empty alt and aren't inside a link
+        if (!isInsideLink && !string.IsNullOrEmpty(alt) && IsLikelyDecorative(imageUrl, alt))
         {
             var key = $"{imageUrl}|POTENTIALLY_DECORATIVE|{alt}";
             TrackFinding(findingsMap, key, Severity.Info, "POTENTIALLY_DECORATIVE",
@@ -281,6 +293,32 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
                 alt,
                 null);
         }
+    }
+
+    private static bool IsAriaDecorative(HtmlNode imgNode)
+    {
+        var role = imgNode.GetAttributeValue("role", "");
+        if (role.Equals("presentation", StringComparison.OrdinalIgnoreCase) ||
+            role.Equals("none", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var ariaHidden = imgNode.GetAttributeValue("aria-hidden", "");
+        return ariaHidden.Equals("true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasAnchorAncestor(HtmlNode imgNode)
+    {
+        for (var node = imgNode.ParentNode; node != null; node = node.ParentNode)
+        {
+            if (node.NodeType == HtmlNodeType.Element &&
+                node.Name.Equals("a", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private async Task AnalyzeDataUriAsync(UrlContext ctx, string dataUri, string altText, Dictionary<string, FindingTracker> findingsMap)
@@ -347,7 +385,6 @@ public class ImageAuditTask(ILogger logger) : UrlTaskBase
         {
             "IMAGE_MISSING_SRC" => "Missing Image Source",
             "IMAGE_NO_DIMENSIONS" => "Missing Image Dimensions",
-            "IMAGE_NO_LAZY_LOADING" => "Missing Lazy Loading",
             "IMAGE_MISSING_SRCSET" => "Missing Responsive Images",
             "IMAGE_LEGACY_FORMAT" => "Legacy Image Format",
             "IMAGE_EXTERNAL_HOTLINK" => "External Image Hotlink",

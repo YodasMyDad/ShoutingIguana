@@ -43,8 +43,8 @@ public class ExternalLinkChecker : IDisposable
         }
 
         // Rate limit concurrent requests
-        await _rateLimiter.WaitAsync(cancellationToken);
-        
+        await _rateLimiter.WaitAsync(cancellationToken).ConfigureAwait(false);
+
         try
         {
             // Double-check cache after acquiring semaphore
@@ -53,7 +53,7 @@ public class ExternalLinkChecker : IDisposable
                 return cachedResult2;
             }
 
-            var result = await CheckUrlInternalAsync(url, userAgent, cancellationToken);
+            var result = await CheckUrlInternalAsync(url, userAgent, cancellationToken).ConfigureAwait(false);
             
             // Cache the result
             _cache.TryAdd(cacheKey, result);
@@ -103,23 +103,36 @@ public class ExternalLinkChecker : IDisposable
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(_timeout);
 
-            // Use HEAD request to avoid downloading content
-            using var request = new HttpRequestMessage(HttpMethod.Head, url);
-            
-            // Use the project's configured User-Agent (respects Chrome/Firefox/Edge/Safari/Random setting)
-            request.Headers.Add("User-Agent", userAgent);
-            request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
-            request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
-            request.Headers.Add("Accept-Encoding", "gzip, deflate, br");
-            request.Headers.Add("DNT", "1");
-            request.Headers.Add("Connection", "keep-alive");
-            request.Headers.Add("Upgrade-Insecure-Requests", "1");
+            // First attempt: HEAD to avoid downloading content
+            using var headRequest = new HttpRequestMessage(HttpMethod.Head, url);
+            AddBrowserHeaders(headRequest, userAgent);
 
-            using var response = await _httpClient.SendAsync(request, cts.Token);
-            
-            result.StatusCode = (int)response.StatusCode;
-            result.IsSuccess = response.IsSuccessStatusCode;
-            result.ResponseTime = DateTime.UtcNow - startTime;
+            var response = await _httpClient.SendAsync(headRequest, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
+            try
+            {
+                var status = (int)response.StatusCode;
+
+                // Many hosts reject HEAD (405) or return 403/401 to HEAD but allow GET.
+                // Retry once with GET to avoid false positives.
+                if (status == 405 || status == 403 || status == 401)
+                {
+                    response.Dispose();
+
+                    using var getRequest = new HttpRequestMessage(HttpMethod.Get, url);
+                    AddBrowserHeaders(getRequest, userAgent);
+
+                    response = await _httpClient.SendAsync(getRequest, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
+                    status = (int)response.StatusCode;
+                }
+
+                result.StatusCode = status;
+                result.IsSuccess = response.IsSuccessStatusCode;
+                result.ResponseTime = DateTime.UtcNow - startTime;
+            }
+            finally
+            {
+                response.Dispose();
+            }
         }
         catch (TaskCanceledException)
         {
@@ -146,6 +159,17 @@ public class ExternalLinkChecker : IDisposable
         }
 
         return result;
+    }
+
+    private static void AddBrowserHeaders(HttpRequestMessage request, string userAgent)
+    {
+        request.Headers.Add("User-Agent", userAgent);
+        request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+        request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
+        request.Headers.Add("Accept-Encoding", "gzip, deflate, br");
+        request.Headers.Add("DNT", "1");
+        request.Headers.Add("Connection", "keep-alive");
+        request.Headers.Add("Upgrade-Insecure-Requests", "1");
     }
 
     /// <summary>

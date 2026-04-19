@@ -122,24 +122,32 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
         // Check Link header for hreflang
         if (ctx.Headers.TryGetValue("link", out var linkHeader))
         {
-            // Parse Link header format: <url>; rel="alternate"; hreflang="en-US"
-            var linkPattern = @"<([^>]+)>;\s*rel=""alternate"";\s*hreflang=""([^""]+)""";
-            var matches = Regex.Matches(linkHeader, linkPattern, RegexOptions.IgnoreCase);
-            
-            foreach (Match match in matches)
+            // RFC 8288 Link-header: <url>; param=value; param="value", <url>; ...
+            // Parameter order is unspecified, so match the URL and then scan params independently.
+            var linkValuePattern = @"<([^>]+)>([^,]*)";
+            foreach (Match match in Regex.Matches(linkHeader, linkValuePattern))
             {
-                if (match.Success)
+                var url = match.Groups[1].Value.Trim();
+                var paramsPart = match.Groups[2].Value;
+
+                var relMatch = Regex.Match(paramsPart, @"rel\s*=\s*""?([^"";,]+)""?", RegexOptions.IgnoreCase);
+                if (!relMatch.Success || !relMatch.Groups[1].Value.Contains("alternate", StringComparison.OrdinalIgnoreCase))
                 {
-                    var url = match.Groups[1].Value;
-                    var hreflang = match.Groups[2].Value;
-                    
-                    hreflangs.Add(new HreflangLink
-                    {
-                        Language = hreflang.ToLowerInvariant(),
-                        Url = url,
-                        Source = "HTTP Header"
-                    });
+                    continue;
                 }
+
+                var hreflangMatch = Regex.Match(paramsPart, @"hreflang\s*=\s*""?([^"";,]+)""?", RegexOptions.IgnoreCase);
+                if (!hreflangMatch.Success)
+                {
+                    continue;
+                }
+
+                hreflangs.Add(new HreflangLink
+                {
+                    Language = hreflangMatch.Groups[1].Value.Trim().ToLowerInvariant(),
+                    Url = url,
+                    Source = "HTTP Header"
+                });
             }
         }
         
@@ -149,7 +157,8 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
     private void TrackHreflangs(int projectId, string pageUrl, List<HreflangLink> hreflangs)
     {
         var projectHreflangs = HreflangsByProject.GetOrAdd(projectId, _ => new ConcurrentDictionary<string, List<HreflangLink>>());
-        projectHreflangs[pageUrl] = hreflangs;
+        // Key by normalized URL so bidirectional lookups in ValidateBidirectionalLinksAsync line up.
+        projectHreflangs[UrlHelper.Normalize(pageUrl)] = hreflangs;
     }
 
     private async Task ValidateHreflangSyntaxAsync(UrlContext ctx, List<HreflangLink> hreflangs)
@@ -168,49 +177,46 @@ public class HreflangTask(ILogger logger) : UrlTaskBase
             "US", "GB", "CA", "AU", "NZ", "IE", "ZA", "IN", "SG", "PH", "MY", "HK", "AE", "SA", "QA", "KW", "BH", "OM", "JO", "LB", "EG", "MA", "DZ", "TN", "LY", "SD", "MX", "AR", "CL", "CO", "PE", "VE", "EC", "BO", "PY", "UY", "CR", "PA", "GT", "HN", "SV", "NI", "CU", "DO", "PR", "JM", "TT", "BS", "BB", "GY", "SR", "BZ", "FR", "DE", "IT", "ES", "PT", "NL", "BE", "CH", "AT", "SE", "NO", "DK", "FI", "PL", "CZ", "HU", "RO", "BG", "GR", "HR", "SI", "SK", "LT", "LV", "EE", "IS", "IE", "MT", "CY", "LU", "AD", "MC", "SM", "VA", "LI", "RU", "UA", "BY", "MD", "GE", "AM", "AZ", "KZ", "UZ", "TM", "KG", "TJ", "CN", "JP", "KR", "TW", "HK", "MO", "MN", "TH", "VN", "ID", "MY", "SG", "PH", "BN", "KH", "LA", "MM", "BD", "PK", "LK", "NP", "BT", "MV", "AF", "IR", "IQ", "TR", "IL", "PS", "SY", "JO", "LB", "YE", "KW", "BH", "QA", "AE", "OM", "SA"
         };
 
+        // BCP 47 subset accepted by Google for hreflang:
+        //   language (2-3 letters) [-Script (4 letters)] [-Region (2 letters)]
+        // Google tolerates any case, so we validate case-insensitively on the already-lowercased value.
+        var shapePattern = new Regex(@"^[a-z]{2,3}(-[a-z]{4})?(-[a-z]{2})?$", RegexOptions.Compiled);
+
         foreach (var link in hreflangs)
         {
             var lang = link.Language;
-            
-            // Skip x-default
-            if (lang == "x-default")
+
+            // Special cases: x-default, und (undetermined)
+            if (lang is "x-default" or "und")
             {
                 continue;
             }
 
-            // Parse language and region
+            if (!shapePattern.IsMatch(lang))
+            {
+                invalidSyntax.Add((link, $"Invalid format '{lang}' - expected 'language', 'language-Script', 'language-REGION', or 'language-Script-REGION'"));
+                continue;
+            }
+
             var parts = lang.Split('-');
             var languageCode = parts[0];
-            string? regionCode = parts.Length > 1 ? parts[1] : null;
+            // A 4-letter segment is a script tag; a 2-letter segment is a region.
+            string? regionCode = parts.Length switch
+            {
+                2 when parts[1].Length == 2 => parts[1],
+                3 => parts[2],
+                _ => null
+            };
 
-            // Validate language code
             if (!validLanguageCodes.Contains(languageCode))
             {
                 invalidSyntax.Add((link, $"Invalid language code '{languageCode}' (not ISO 639-1)"));
                 continue;
             }
 
-            // Validate region code if present
-            if (regionCode != null)
+            if (regionCode != null && !validRegionCodes.Contains(regionCode))
             {
-                if (regionCode.Length != 2)
-                {
-                invalidSyntax.Add((link, $"Region code '{regionCode}' should be 2 letters (ISO 3166-1 Alpha-2)"));
-                }
-                else if (!validRegionCodes.Contains(regionCode))
-                {
-                    invalidSyntax.Add((link, $"Invalid region code '{regionCode}' (not ISO 3166-1 Alpha-2)"));
-                }
-                else if (regionCode != regionCode.ToUpperInvariant())
-                {
-                    invalidSyntax.Add((link, $"Region code should be uppercase ('{regionCode}' should be '{regionCode.ToUpperInvariant()}')"));
-                }
-            }
-
-            // Check for invalid format (more than 2 parts)
-            if (parts.Length > 2)
-            {
-                invalidSyntax.Add((link, $"Invalid format - should be 'language' or 'language-REGION'"));
+                invalidSyntax.Add((link, $"Invalid region code '{regionCode}' (not ISO 3166-1 Alpha-2)"));
             }
         }
 

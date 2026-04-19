@@ -115,26 +115,6 @@
                                    Style="{StaticResource HelperText}"/>
                     </StackPanel>
 
-                    <!-- Follow Links Option -->
-                    <Border Background="{StaticResource BackgroundBrush}"
-                            BorderBrush="{StaticResource BorderLightBrush}"
-                            BorderThickness="1"
-                            CornerRadius="6"
-                            Padding="12">
-                        <StackPanel>
-                            <CheckBox IsChecked="{Binding FollowDiscoveredLinks}"
-                                      FontSize="14"
-                                      Margin="0"
-                                      TabIndex="3"
-                                      AutomationProperties.Name="Follow Discovered Links"
-                                      AutomationProperties.HelpText="Enable to also crawl links discovered on imported pages. Disable for list-mode only crawling.">
-                                <TextBlock Text="Follow discovered links" TextWrapping="Wrap" FontWeight="SemiBold"/>
-                            </CheckBox>
-                            <TextBlock Text="If unchecked, only URLs in the list will be crawled (list-mode only). If checked, links discovered on these pages will also be crawled."
-                                       Style="{StaticResource HelperText}"
-                                       Margin="32,6,0,0"/>
-                        </StackPanel>
-                    </Border>
                 </StackPanel>
             </Border>
         </ScrollViewer>

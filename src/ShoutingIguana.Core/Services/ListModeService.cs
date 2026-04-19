@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using ShoutingIguana.Core.Models;
 using ShoutingIguana.Core.Repositories;
 using ShoutingIguana.Core.Services.Models;
+using ShoutingIguana.PluginSdk.Helpers;
 
 namespace ShoutingIguana.Core.Services;
 
@@ -17,7 +18,6 @@ public class ListModeService(ILogger<ListModeService> logger, IServiceProvider s
     public async Task<ListModeImportResult> ImportUrlListAsync(
         int projectId,
         string csvFilePath,
-        bool followDiscoveredLinks = false,
         int priority = 1000,
         IProgress<string>? progress = null)
     {
@@ -73,8 +73,10 @@ public class ListModeService(ILogger<ListModeService> logger, IServiceProvider s
                         continue;
                     }
 
-                    // Normalize URL
-                    var normalizedUrl = uri.ToString();
+                    // Normalize URL — must match CrawlEngine's normalization so dedup
+                    // checks against the queue / Url table line up (case, trailing
+                    // slash, tracking params all collapse).
+                    var normalizedUrl = UrlHelper.Normalize(uri.ToString());
 
                     // Check if already in queue
                     var existing = await queueRepository.GetByAddressAsync(projectId, normalizedUrl).ConfigureAwait(false);

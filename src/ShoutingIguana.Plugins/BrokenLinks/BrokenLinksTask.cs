@@ -219,6 +219,24 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
             }
         }
 
+        // Iframes (iframe tags with src) - broken iframe content hides silently otherwise
+        var iframeNodes = doc.DocumentNode.SelectNodes("//iframe[@src]");
+        if (iframeNodes != null)
+        {
+            foreach (var node in iframeNodes)
+            {
+                var src = node.GetAttributeValue("src", "");
+                if (!string.IsNullOrEmpty(src) && !src.StartsWith("data:") && !src.StartsWith("javascript:") && !src.StartsWith("about:"))
+                {
+                    links.Add(new LinkInfo
+                    {
+                        Url = ResolveUrl(ctx.Url, src, baseTagUri),
+                        LinkType = "iframe"
+                    });
+                }
+            }
+        }
+
         return Task.FromResult(links);
     }
 
@@ -289,14 +307,14 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
     
     /// <summary>
     /// Normalizes a URL for cache lookups (matching database normalization).
-    /// This ensures consistent lookups regardless of trailing slash variations.
+    /// Preserves the query string so product-ID URLs don't collapse; strips only the fragment.
     /// </summary>
     private static string NormalizeUrlForCache(string url)
     {
         try
         {
             var uri = new Uri(url);
-            return uri.GetLeftPart(UriPartial.Path).ToLowerInvariant();
+            return uri.AbsoluteUri.ToLowerInvariant();
         }
         catch
         {
@@ -381,19 +399,35 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
             // Categorize status codes
             var isRestricted = status.Value == 401 || status.Value == 403 || status.Value == 405 || status.Value == 451;
             var isConnectionFailed = status.Value == 0;
-            
-            // Connection failures are warnings (could be transient), restricted access is info, true errors are errors
-            var severity = isConnectionFailed ? Severity.Warning : (isRestricted ? Severity.Info : Severity.Error);
+            var isRateLimited = status.Value == 429;
+            var isBotBlocked = status.Value == 999;
+
+            // Connection failures are warnings (could be transient); rate-limits and bot-blocks and restricted are info; true errors are errors
+            var severity = isConnectionFailed
+                ? Severity.Warning
+                : (isRestricted || isRateLimited || isBotBlocked ? Severity.Info : Severity.Error);
             var statusText = status.Value == 0 ? "Connection Failed" : status.Value.ToString();
-            
+
             string code;
             string message;
-            
+
             if (isConnectionFailed)
             {
                 // Connection failures - warnings (transient issues)
                 code = $"CONNECTION_FAILED_{link.LinkType.ToUpperInvariant()}";
                 message = $"Cannot reach {link.Url}; the {displayLinkType} failed to connect, so visitors will hit a missing resource. Confirm the host is online or update the link.";
+            }
+            else if (isRateLimited)
+            {
+                // 429 - crawler was rate-limited; users typically see 200 OK
+                code = "RATE_LIMITED_LINK";
+                message = $"External {displayLinkType} returned 429 (the crawler was rate-limited; this is typically not user-facing). Consider slowing the crawl or whitelisting your IP: {link.Url}";
+            }
+            else if (isBotBlocked)
+            {
+                // 999 - LinkedIn / similar bot-block; not broken for real users
+                code = "BOT_BLOCKED_LINK";
+                message = $"LinkedIn (or similar service) blocks automated crawlers with HTTP 999. This is expected and not a user-facing issue: {link.Url}";
             }
             else if (isRestricted)
             {
@@ -406,7 +440,7 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
                     451 => "UNAVAILABLE_LEGAL",
                     _ => "RESTRICTED_LINK"
                 };
-                
+
                 var restrictionType = status.Value switch
                 {
                     401 => "requires authentication",
@@ -415,8 +449,8 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
                     451 => "is unavailable for legal reasons",
                     _ => "is restricted"
                 };
-                
-                message = $"Restricted {displayLinkType} ({restrictionType}): {link.Url} returns HTTP {status.Value}. Public visitors cannot access it, so remove or replace the link or provide credentials.";
+
+                message = $"Restricted {displayLinkType} ({restrictionType}): {link.Url} returns HTTP {status.Value}. Review the link and replace or provide credentials if needed.";
             }
             else
             {
@@ -424,10 +458,10 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
                 code = $"BROKEN_{link.LinkType.ToUpperInvariant()}";
                 message = $"Broken {displayLinkType}: {link.Url} returns HTTP {statusText}, so visitors land on an error page. Update or remove the link to keep navigation working.";
             }
-            
+
             // Dedupe by link URL, code, and status code
             var key = $"{link.Url}|{code}|{status.Value}";
-            
+
             TrackFinding(findingsMap,
                 key,
                 severity,
@@ -569,6 +603,8 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
             "BROKEN_ANCHOR_LINK" => "Broken Anchor Link",
             "LINK_TO_REDIRECT" => "Link Points to Redirect",
             "RESTRICTED_LINK" => "Restricted Link",
+            "RATE_LIMITED_LINK" => "Rate Limited (429)",
+            "BOT_BLOCKED_LINK" => "Bot Blocked (999)",
             _ when code.StartsWith("CONNECTION_FAILED_", StringComparison.OrdinalIgnoreCase) =>
                 $"Connection Failed ({CapitalizeLinkType(linkType)})",
             _ when code.StartsWith("BROKEN_", StringComparison.OrdinalIgnoreCase) =>
@@ -591,6 +627,7 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
             "image" => "Image",
             "stylesheet" => "Stylesheet",
             "script" => "Script",
+            "iframe" => "Iframe",
             "anchor" => "Anchor",
             _ => char.ToUpperInvariant(linkType[0]) + (linkType.Length > 1 ? linkType.Substring(1) : "")
         };

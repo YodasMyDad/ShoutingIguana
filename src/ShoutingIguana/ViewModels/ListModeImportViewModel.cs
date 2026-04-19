@@ -27,9 +27,6 @@ public partial class ListModeImportViewModel(
     private int _priority = 1000;
 
     [ObservableProperty]
-    private bool _followDiscoveredLinks;
-
-    [ObservableProperty]
     private bool _isImporting;
 
     [ObservableProperty]
@@ -75,7 +72,6 @@ public partial class ListModeImportViewModel(
             var result = await listModeService.ImportUrlListAsync(
                 projectId,
                 CsvFilePath,
-                FollowDiscoveredLinks,
                 Priority,
                 progress);
 

@@ -113,31 +113,29 @@
         </Style>
     </UserControl.Resources>
     
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled">
-        <Grid Margin="{StaticResource SpacingL}" KeyboardNavigation.TabNavigation="Local">
-            <Grid.RenderTransform>
-                <TranslateTransform/>
-            </Grid.RenderTransform>
-            <Grid.Triggers>
-                <EventTrigger RoutedEvent="Loaded">
-                    <BeginStoryboard>
-                        <Storyboard>
-                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                             From="20" To="0" Duration="0:0:0.4"
-                                             DecelerationRatio="0.7"/>
-                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                             From="0" To="1" Duration="0:0:0.4"
-                                             DecelerationRatio="0.7"/>
-                        </Storyboard>
-                    </BeginStoryboard>
-                </EventTrigger>
-            </Grid.Triggers>
+    <Grid Margin="{StaticResource SpacingL}" KeyboardNavigation.TabNavigation="Local">
+        <Grid.RenderTransform>
+            <TranslateTransform/>
+        </Grid.RenderTransform>
+        <Grid.Triggers>
+            <EventTrigger RoutedEvent="Loaded">
+                <BeginStoryboard>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                         From="20" To="0" Duration="0:0:0.4"
+                                         DecelerationRatio="0.7"/>
+                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                         From="0" To="1" Duration="0:0:0.4"
+                                         DecelerationRatio="0.7"/>
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+        </Grid.Triggers>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="2*" MinHeight="200"/>
+            <RowDefinition Height="2*" MinHeight="420"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="1*" MinHeight="160"/>
+            <RowDefinition Height="1*" MinHeight="180"/>
         </Grid.RowDefinitions>
 
         <!-- Header -->
@@ -265,11 +263,11 @@
                 <TabControl.Resources>
                     <!-- DataTemplate for OverviewTabViewModel -->
                     <DataTemplate DataType="{x:Type vm:OverviewTabViewModel}">
-                        <Grid Margin="16" MaxHeight="450" MinHeight="250">
+                        <Grid Margin="16">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*" />
+                                <RowDefinition Height="*" MinHeight="240"/>
                             </Grid.RowDefinitions>
 
                             <!-- Description -->
@@ -554,11 +552,11 @@
                     
                     <!-- DataTemplate for FindingTabViewModel -->
                     <DataTemplate DataType="{x:Type vm:FindingTabViewModel}">
-                        <Grid Margin="16" MaxHeight="450" MinHeight="250">
+                        <Grid Margin="16">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*" />
+                                <RowDefinition Height="*" MinHeight="240"/>
                             </Grid.RowDefinitions>
 
                             <!-- Description -->
@@ -985,11 +983,10 @@
                                               Background="{StaticResource SurfaceBrush}"
                                               BorderThickness="0"
                                               FontSize="14"
-                                              ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                               Margin="{StaticResource SpacingM}"
                                               Loaded="UrlPropertiesDataGrid_Loaded"
-                                              PreviewMouseWheel="DataGrid_PreviewMouseWheel"
                                               IsHitTestVisible="True"
                                               Focusable="False">
                                         <DataGrid.Resources>
@@ -1166,5 +1163,4 @@
             </Grid>
         </Border>
     </Grid>
-    </ScrollViewer>
 </UserControl>

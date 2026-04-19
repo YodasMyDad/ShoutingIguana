@@ -405,6 +405,9 @@ public record RedirectInfo(
 /// <param name="ElementHeight">The height of the link element in pixels.</param>
 /// <param name="HtmlSnippet">A snippet of HTML surrounding the link element.</param>
 /// <param name="ParentTag">The HTML tag name of the parent element.</param>
+/// <param name="IsNofollow">Whether the link has rel="nofollow" (does not pass link equity).</param>
+/// <param name="IsUgc">Whether the link has rel="ugc" (user-generated content).</param>
+/// <param name="IsSponsored">Whether the link has rel="sponsored" (paid/sponsored link).</param>
 /// <remarks>
 /// Use this to analyze linking patterns, build link graphs, or check anchor text optimization.
 /// </remarks>
@@ -422,7 +425,10 @@ public record LinkInfo(
     int? ElementWidth = null,
     int? ElementHeight = null,
     string? HtmlSnippet = null,
-    string? ParentTag = null);
+    string? ParentTag = null,
+    bool IsNofollow = false,
+    bool IsUgc = false,
+    bool IsSponsored = false);
 
 /// <summary>
 /// Represents a custom data extraction rule.

@@ -72,8 +72,15 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
             TrackOutlinks(ctx.Project.ProjectId, ctx.Url.ToString(), internalLinks.Count);
 
             // Track inlinks for discovered URLs
+            var normalizedSource = UrlHelper.Normalize(ctx.Url.ToString());
             foreach (var link in internalLinks)
             {
+                // Skip self-links: a page linking to itself should not inflate its own inbound count.
+                if (string.Equals(link.TargetUrl, normalizedSource, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 TrackInlink(ctx.Project.ProjectId, link.TargetUrl);
                 TrackAnchorText(ctx.Project.ProjectId, link.TargetUrl, ctx.Url.ToString(), link.AnchorText);
             }
@@ -122,11 +129,31 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
                 continue;
             }
 
+            // Skip fragment-only links (e.g. href="#section"): they don't represent navigation
+            // to another page and would inflate outlink totals for the current URL.
+            var trimmedHref = href.TrimStart();
+            if (trimmedHref.StartsWith('#'))
+            {
+                continue;
+            }
+            var targetWithoutFragment = UrlHelper.Normalize(targetUri.GetLeftPart(UriPartial.Query));
+            var currentWithoutFragment = UrlHelper.Normalize(currentUrl.GetLeftPart(UriPartial.Query));
+            if (string.Equals(targetWithoutFragment, currentWithoutFragment, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(targetUri.Fragment))
+            {
+                continue;
+            }
+
             var anchorText = linkNode.InnerText?.Trim() ?? "";
+            var isNofollow = linkNode.GetAttributeValue("rel", "")
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Any(r => r.Equals("nofollow", StringComparison.OrdinalIgnoreCase));
+
             links.Add(new InternalLink
             {
-                TargetUrl = targetUri.ToString(),
-                AnchorText = anchorText
+                TargetUrl = UrlHelper.Normalize(targetUri.ToString()),
+                AnchorText = anchorText,
+                IsNofollow = isNofollow
             });
         }
 
@@ -289,11 +316,11 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
         var totalLinks = textsCopy.Count;
 
         // Check for generic anchor text
-        var genericTerms = new[] { "click here", "read more", "learn more", "more", "here", "link" };
+        var genericTerms = new[] { "click here", "read more", "learn more", "more", "here", "link", "click", "view", "see", "check", "find out", "get", "visit" };
         var genericLinks = textsCopy.Where(t => genericTerms.Contains(t.AnchorText.ToLowerInvariant())).ToList();
         var genericCount = genericLinks.Count;
 
-        if (genericCount > totalLinks * 0.5)
+        if (genericCount >= totalLinks * 0.5)
         {
             // Report each generic anchor link as a row for easy scanning
             foreach (var genericLink in genericLinks.Take(10)) // Limit to first 10 to avoid spam
@@ -355,6 +382,7 @@ public class InternalLinkingTask(ILogger logger) : UrlTaskBase
     {
         public string TargetUrl { get; set; } = string.Empty;
         public string AnchorText { get; set; } = string.Empty;
+        public bool IsNofollow { get; set; }
     }
 }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.IO.Compression;
 using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
@@ -441,7 +442,14 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
             var lastmodElement = urlElement.Element(ns + "lastmod");
             if (lastmodElement != null)
             {
-                if (DateTime.TryParse(lastmodElement.Value, out var lastmod))
+                // Strict ISO 8601 parsing so locale-specific date orders (e.g. dd/MM/yyyy) can't slip through.
+                string[] lastmodFormats =
+                [
+                    "yyyy-MM-dd",
+                    "yyyy-MM-ddTHH:mm:ssK",
+                    "yyyy-MM-ddTHH:mm:ss.fffK"
+                ];
+                if (DateTime.TryParseExact(lastmodElement.Value, lastmodFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var lastmod))
                 {
                     // Check if date is in the future
                     if (lastmod > DateTime.UtcNow)
@@ -718,21 +726,40 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 sitemapUrls = new HashSet<string>(urls, StringComparer.OrdinalIgnoreCase);
             }
 
-            // Get all crawled URLs using repository accessor
+            // Build a set of redirect source URLs so they can be excluded from sitemap-eligibility.
+            var redirectSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            await foreach (var redirect in repositoryAccessor.GetRedirectsAsync(projectId))
+            {
+                if (!string.IsNullOrEmpty(redirect.SourceUrl))
+                {
+                    redirectSources.Add(redirect.SourceUrl);
+                }
+            }
+
+            // Get all crawled URLs using repository accessor. Only URLs eligible to live in a sitemap
+            // (200, indexable, not a redirect source) are considered for the "missing from sitemap" signal.
             var crawledAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var sitemapEligibleAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var crawledUrlsWithNoInlinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             await foreach (var url in repositoryAccessor.GetUrlsAsync(projectId))
             {
-                if (!string.IsNullOrEmpty(url.Address))
+                if (string.IsNullOrEmpty(url.Address))
                 {
-                    crawledAddresses.Add(url.Address);
-                    
-                    // URLs at depth > 0 with no inlinks might be orphans
-                    if (url.Depth > 0)
-                    {
-                        crawledUrlsWithNoInlinks.Add(url.Address);
-                    }
+                    continue;
+                }
+
+                crawledAddresses.Add(url.Address);
+
+                if (IsSitemapEligible(url, redirectSources))
+                {
+                    sitemapEligibleAddresses.Add(url.Address);
+                }
+
+                // URLs at depth > 0 with no inlinks might be orphans
+                if (url.Depth > 0)
+                {
+                    crawledUrlsWithNoInlinks.Add(url.Address);
                 }
             }
 
@@ -762,8 +789,9 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
                 await ctx.Reports.ReportAsync(Key, rowOrphan, ctx.Metadata.UrlId, default);
             }
 
-            // Find missing URLs (crawled but not in sitemap)
-            var missingFromSitemap = crawledAddresses
+            // Find missing URLs (crawled AND sitemap-eligible but not in sitemap).
+            // Filters out non-200, noindex, and redirect sources that should never appear in a sitemap.
+            var missingFromSitemap = sitemapEligibleAddresses
                 .Where(crawledUrl => !sitemapUrls.Contains(crawledUrl))
                 .ToList();
 
@@ -792,6 +820,32 @@ public class SitemapTask(ILogger logger, IRepositoryAccessor repositoryAccessor)
         }
     }
     
+    /// <summary>
+    /// Whether a crawled URL is a legitimate candidate for inclusion in a sitemap.
+    /// Mirrors the filter used by SitemapExporter. Excludes non-200, noindex, and redirect sources.
+    /// Cross-URL canonical filtering is not performed here because UrlInfo does not expose canonical data.
+    /// </summary>
+    private static bool IsSitemapEligible(UrlInfo url, HashSet<string> redirectSources)
+    {
+        if (url.Status != 200)
+        {
+            return false;
+        }
+
+        // IsIndexable already rolls up noindex/robots/error-page status in the repository layer.
+        if (!url.IsIndexable)
+        {
+            return false;
+        }
+
+        if (redirectSources.Contains(url.Address))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// Normalizes a URL for cache lookups (matching database normalization).
     /// This ensures consistent lookups regardless of trailing slash variations.

@@ -19,6 +19,9 @@ public class LinkGraphPlugin : IPlugin
             .AddColumn("ToURL", ReportColumnType.Url, "To URL")
             .AddColumn("AnchorText", ReportColumnType.String, "Anchor Text")
             .AddColumn("LinkType", ReportColumnType.String, "Link Type")
+            .AddColumn("IsNofollow", ReportColumnType.Boolean, "Nofollow")
+            .AddColumn("IsUgc", ReportColumnType.Boolean, "UGC")
+            .AddColumn("IsSponsored", ReportColumnType.Boolean, "Sponsored")
             .Build();
         
         context.RegisterReportSchema(schema);
