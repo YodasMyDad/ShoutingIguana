@@ -7,26 +7,29 @@ public class InventoryPlugin : IPlugin
 {
     public string Id => "com.shoutingiguana.inventory";
     public string Name => "Inventory";
-    public Version Version => new(1, 0, 0);
-    public string Description => "Tracks indexability, URL structure, and orphaned pages";
+    public Version Version => new(2, 0, 0);
+    public string Description => "Per-URL inventory: title, description, H1, canonical, robots, language, size, and computed indexability.";
 
     public void Initialize(IHostContext context)
     {
-        // Register custom report schema for inventory
         var schema = ReportSchema.Create("Inventory")
-            
             .AddPrimaryColumn("URL", ReportColumnType.Url, "URL")
-            .AddColumn("Issue", ReportColumnType.String, "Issue")
+            .AddColumn("Title", ReportColumnType.String, "Title")
+            .AddColumn("Description", ReportColumnType.String, "Meta Description")
+            .AddColumn("H1", ReportColumnType.String, "H1")
+            .AddColumn("Canonical", ReportColumnType.String, "Canonical")
+            .AddColumn("Noindex", ReportColumnType.String, "Noindex")
+            .AddColumn("Nofollow", ReportColumnType.String, "Nofollow")
             .AddColumn("ContentType", ReportColumnType.String, "Content Type")
             .AddColumn("Status", ReportColumnType.Integer, "Status")
+            .AddColumn("ContentLength", ReportColumnType.Integer, "Content Length")
             .AddColumn("Depth", ReportColumnType.Integer, "Depth")
+            .AddColumn("Language", ReportColumnType.String, "Language")
+            .AddColumn("CrawledUtc", ReportColumnType.DateTime, "Crawled (UTC)")
             .AddColumn("Indexable", ReportColumnType.String, "Indexable")
-            .AddColumn("Severity", ReportColumnType.String, "Severity")
             .Build();
-        
+
         context.RegisterReportSchema(schema);
-        
         context.RegisterTask(new InventoryTask());
     }
 }
-
