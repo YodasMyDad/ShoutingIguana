@@ -237,6 +237,52 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
         return await context.Urls.CountAsync(u => u.ProjectId == projectId && u.Status == status).ConfigureAwait(false);
     }
 
+    public async Task<List<Url>> GetPagedByProjectIdAsync(int projectId, int skip, int take)
+    {
+        return await context.Urls
+            .AsNoTracking()
+            .Where(u => u.ProjectId == projectId)
+            .OrderBy(u => u.Id)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync().ConfigureAwait(false);
+    }
+
+    public async Task<List<Url>> GetPagedByStatusesAsync(int projectId, IReadOnlyCollection<UrlStatus> statuses, int skip, int take)
+    {
+        return await context.Urls
+            .AsNoTracking()
+            .Where(u => u.ProjectId == projectId && statuses.Contains(u.Status))
+            .OrderBy(u => u.Id)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync().ConfigureAwait(false);
+    }
+
+    public async Task<int> CountByStatusesAsync(int projectId, IReadOnlyCollection<UrlStatus> statuses)
+    {
+        return await context.Urls
+            .CountAsync(u => u.ProjectId == projectId && statuses.Contains(u.Status)).ConfigureAwait(false);
+    }
+
+    public async Task<List<Url>> GetPagedErrorsAsync(int projectId, int skip, int take)
+    {
+        return await context.Urls
+            .AsNoTracking()
+            .Where(u => u.ProjectId == projectId && (u.Status == UrlStatus.Failed || (u.HttpStatus != null && u.HttpStatus >= 400)))
+            .OrderBy(u => u.Id)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync().ConfigureAwait(false);
+    }
+
+    public async Task<int> CountErrorsAsync(int projectId)
+    {
+        return await context.Urls
+            .CountAsync(u => u.ProjectId == projectId && (u.Status == UrlStatus.Failed || (u.HttpStatus != null && u.HttpStatus >= 400)))
+            .ConfigureAwait(false);
+    }
+
     public async Task DeleteByProjectIdAsync(int projectId)
     {
         var urls = await context.Urls

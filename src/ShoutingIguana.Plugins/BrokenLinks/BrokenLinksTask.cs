@@ -125,14 +125,28 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
                     {
                         if (checkAnchorLinks && href.Length > 1)
                         {
-                    links.Add(new LinkInfo
-                    {
-                        Url = ctx.Url + href,
-                        AnchorText = anchorText,
-                        LinkType = "anchor",
-                        HasNofollow = rel.Contains("nofollow", StringComparison.OrdinalIgnoreCase),
-                        AnchorId = href.Substring(1)
-                    });
+                            var rawFragment = href.Substring(1);
+                            string decodedFragment;
+                            try
+                            {
+                                decodedFragment = Uri.UnescapeDataString(rawFragment);
+                            }
+                            catch
+                            {
+                                decodedFragment = rawFragment;
+                            }
+
+                            if (!IsNonNavigationFragment(decodedFragment))
+                            {
+                                links.Add(new LinkInfo
+                                {
+                                    Url = ctx.Url + href,
+                                    AnchorText = anchorText,
+                                    LinkType = "anchor",
+                                    HasNofollow = rel.Contains("nofollow", StringComparison.OrdinalIgnoreCase),
+                                    AnchorId = decodedFragment
+                                });
+                            }
                         }
                         continue;
                     }
@@ -459,41 +473,45 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
 
     private async Task CheckAnchorLinkAsync(UrlContext ctx, LinkInfo link, Dictionary<string, FindingTracker> findingsMap, CancellationToken _)
     {
-        if (string.IsNullOrEmpty(link.AnchorId))
+        var anchorId = link.AnchorId;
+        if (string.IsNullOrEmpty(anchorId))
             return;
 
         try
         {
             bool anchorExists = false;
-            
-            // Check if the target anchor exists - works in both Phase 1 and Phase 2
+
             if (ctx.Page != null)
             {
-                // Phase 1: Use live browser page for accurate detection
-                var targetElement = await ctx.Page.QuerySelectorAsync($"#{link.AnchorId}, [name='{link.AnchorId}']");
-                anchorExists = targetElement != null;
+                // Phase 1: hand the id to the browser's getElementById to avoid CSS selector escaping pitfalls
+                // (ids can contain ':', '%', quotes, etc. that break a string-built selector).
+                // JSON-encode the id so the embedded value is a valid, safely-quoted JS string literal.
+                var jsId = System.Text.Json.JsonSerializer.Serialize(anchorId);
+                var expression = $"() => document.getElementById({jsId}) !== null || document.getElementsByName({jsId}).length > 0";
+                anchorExists = await ctx.Page.EvaluateAsync<bool>(expression);
             }
             else if (!string.IsNullOrEmpty(ctx.RenderedHtml))
             {
-                // Phase 2: Check saved HTML using HtmlAgilityPack
+                // Phase 2: DOM iteration — no XPath string interpolation, so arbitrary id chars are safe.
                 var doc = new HtmlDocument();
                 doc.LoadHtml(ctx.RenderedHtml);
-                
-                // Check for id attribute or name attribute matching the anchor
-                var targetElement = doc.DocumentNode.SelectSingleNode($"//*[@id='{link.AnchorId}'] | //*[@name='{link.AnchorId}']");
-                anchorExists = targetElement != null;
+
+                anchorExists = doc.DocumentNode.Descendants().Any(n =>
+                    n.GetAttributeValue("id", "") == anchorId
+                    || n.GetAttributeValue("name", "") == anchorId);
             }
-            
+
             if (!anchorExists)
             {
-                // Dedupe by anchor ID only
-                var key = $"#{link.AnchorId}|BROKEN_ANCHOR_LINK";
+                var severity = SkipLinkFragments.Contains(anchorId) ? Severity.Info : Severity.Warning;
+
+                var key = $"#{anchorId}|BROKEN_ANCHOR_LINK";
                 TrackFinding(findingsMap,
-                key,
-                Severity.Warning,
-                "BROKEN_ANCHOR_LINK",
-                $"Anchor link #{link.AnchorId} does not exist on this page, so clicking it will not move the user. Add a matching id or name attribute or remove the reference.",
-                    ctx.Url.ToString() + "#" + link.AnchorId,
+                    key,
+                    severity,
+                    "BROKEN_ANCHOR_LINK",
+                    $"Anchor link #{anchorId} does not exist on this page, so clicking it will not move the user. Add a matching id or name attribute or remove the reference.",
+                    ctx.Url.ToString() + "#" + anchorId,
                     link.AnchorText,
                     "anchor",
                     "Anchor Not Found",
@@ -502,7 +520,7 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "Error checking anchor link: {AnchorId}", link.AnchorId);
+            logger.LogDebug(ex, "Error checking anchor link: {AnchorId}", anchorId);
         }
     }
 
@@ -647,6 +665,40 @@ public class BrokenLinksTask(ILogger logger, IBrokenLinksChecker checker, IRepos
     private bool IsExternalLink(string baseUrl, string targetUrl)
     {
         return UrlHelper.IsExternal(baseUrl, targetUrl);
+    }
+
+    // Well-known skip-link target ids used by WordPress / common themes. Missing targets for these
+    // are an a11y nit, not a broken link, so we demote the severity.
+    private static readonly HashSet<string> SkipLinkFragments = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "content", "main", "primary", "main-content", "site-content",
+        "skip-link", "skip", "site-main", "site", "wpadminbar"
+    };
+
+    // Fragments that are not DOM navigation targets and should never be checked against ids.
+    // Includes browser-defined scrolls (#top), JS-framework router hashes (#!/, #/), and
+    // JS-consumed payloads like Elementor popup actions (#elementor-action:...).
+    private static bool IsNonNavigationFragment(string fragment)
+    {
+        if (string.IsNullOrEmpty(fragment))
+            return true;
+
+        if (string.Equals(fragment, "top", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (fragment.StartsWith("elementor-action:", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // SPA router hashes: #!/path, #/path
+        if (fragment[0] == '!' || fragment[0] == '/')
+            return true;
+
+        // A valid HTML id cannot contain whitespace. Presence of ':' or '=' is a strong signal
+        // that the fragment is a JS-consumed payload (name-value pairs), not a DOM id.
+        if (fragment.Contains(':') || fragment.Contains('=') || fragment.Contains(' '))
+            return true;
+
+        return false;
     }
     
     // Private classes at end

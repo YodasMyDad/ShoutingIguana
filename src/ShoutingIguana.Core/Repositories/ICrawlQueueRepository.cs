@@ -6,6 +6,7 @@ public interface ICrawlQueueRepository
 {
     Task<CrawlQueueItem?> GetNextItemAsync(int projectId);
     Task<IEnumerable<CrawlQueueItem>> GetQueuedItemsAsync(int projectId, int count = 10);
+    Task<List<CrawlQueueItem>> GetPagedQueuedItemsAsync(int projectId, int skip, int take);
     Task<CrawlQueueItem?> GetByAddressAsync(int projectId, string address);
     Task<CrawlQueueItem> EnqueueAsync(CrawlQueueItem item);
     Task<CrawlQueueItem> CreateAsync(CrawlQueueItem item);

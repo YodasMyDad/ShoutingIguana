@@ -318,7 +318,7 @@
                 </Border>
 
                 <!-- URLs Crawled Card -->
-                <Border Grid.Row="0" Grid.Column="0" 
+                <Border Grid.Row="0" Grid.Column="0"
                         Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                         Background="{StaticResource SurfaceBrush}"
                         CornerRadius="8"
@@ -326,18 +326,25 @@
                         BorderBrush="{StaticResource SuccessBrush}"
                         BorderThickness="0,0,0,4"
                         SnapsToDevicePixels="True"
+                        Cursor="Hand"
+                        ToolTip="Click to view the URLs that have been crawled"
                         AutomationProperties.Name="URLs Crawled Metric"
                         AutomationProperties.LiveSetting="Polite"
-                        AutomationProperties.HelpText="Number of URLs successfully crawled">
-                    <Border.Effect>
-                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
-                    </Border.Effect>
+                        AutomationProperties.HelpText="Click to view the URLs that have been crawled">
+                    <Border.InputBindings>
+                        <MouseBinding Gesture="LeftClick"
+                                      Command="{Binding OpenStatsDetailCommand}"
+                                      CommandParameter="UrlsCrawled"/>
+                    </Border.InputBindings>
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource ClickableStatCard}"/>
+                    </Border.Style>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        
+
                         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
                             <Border Background="{StaticResource SuccessBrush}"
                                     Width="32" Height="32"
@@ -366,7 +373,7 @@
                 </Border>
 
                 <!-- Total Discovered Card -->
-                <Border Grid.Row="0" Grid.Column="2" 
+                <Border Grid.Row="0" Grid.Column="2"
                         Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                         Background="{StaticResource SurfaceBrush}"
                         CornerRadius="8"
@@ -374,12 +381,19 @@
                         BorderBrush="{StaticResource InfoBrush}"
                         BorderThickness="0,0,0,4"
                         SnapsToDevicePixels="True"
+                        Cursor="Hand"
+                        ToolTip="Click to view every URL discovered by the crawl"
                         AutomationProperties.Name="Total Discovered URLs Metric"
                         AutomationProperties.LiveSetting="Polite"
-                        AutomationProperties.HelpText="Total number of unique URLs discovered">
-                    <Border.Effect>
-                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
-                    </Border.Effect>
+                        AutomationProperties.HelpText="Click to view every URL discovered by the crawl">
+                    <Border.InputBindings>
+                        <MouseBinding Gesture="LeftClick"
+                                      Command="{Binding OpenStatsDetailCommand}"
+                                      CommandParameter="TotalDiscovered"/>
+                    </Border.InputBindings>
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource ClickableStatCard}"/>
+                    </Border.Style>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -413,7 +427,7 @@
                 </Border>
 
                 <!-- Queue Size Card -->
-                <Border Grid.Row="0" Grid.Column="4" 
+                <Border Grid.Row="0" Grid.Column="4"
                         Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                         Background="{StaticResource SurfaceBrush}"
                         CornerRadius="8"
@@ -421,12 +435,19 @@
                         BorderBrush="{StaticResource PrimaryBrush}"
                         BorderThickness="0,0,0,4"
                         SnapsToDevicePixels="True"
+                        Cursor="Hand"
+                        ToolTip="Click to view URLs waiting to be crawled"
                         AutomationProperties.Name="Crawl Queue Size Metric"
                         AutomationProperties.LiveSetting="Polite"
-                        AutomationProperties.HelpText="Number of URLs waiting to be crawled">
-                    <Border.Effect>
-                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
-                    </Border.Effect>
+                        AutomationProperties.HelpText="Click to view URLs waiting to be crawled">
+                    <Border.InputBindings>
+                        <MouseBinding Gesture="LeftClick"
+                                      Command="{Binding OpenStatsDetailCommand}"
+                                      CommandParameter="Queue"/>
+                    </Border.InputBindings>
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource ClickableStatCard}"/>
+                    </Border.Style>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -499,7 +520,7 @@
                 </Border>
 
                 <!-- Errors Card -->
-                <Border Grid.Row="2" Grid.Column="2" 
+                <Border Grid.Row="2" Grid.Column="2"
                         Visibility="{Binding IsLoading, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
                         Background="{StaticResource SurfaceBrush}"
                         CornerRadius="8"
@@ -507,12 +528,19 @@
                         BorderBrush="{StaticResource ErrorBrush}"
                         BorderThickness="0,0,0,4"
                         SnapsToDevicePixels="True"
+                        Cursor="Hand"
+                        ToolTip="Click to view URLs that failed to crawl"
                         AutomationProperties.Name="Error Count Metric"
                         AutomationProperties.LiveSetting="Assertive"
-                        AutomationProperties.HelpText="Number of errors encountered during crawl">
-                    <Border.Effect>
-                        <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
-                    </Border.Effect>
+                        AutomationProperties.HelpText="Click to view URLs that failed to crawl">
+                    <Border.InputBindings>
+                        <MouseBinding Gesture="LeftClick"
+                                      Command="{Binding OpenStatsDetailCommand}"
+                                      CommandParameter="Errors"/>
+                    </Border.InputBindings>
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource ClickableStatCard}"/>
+                    </Border.Style>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>

@@ -3,9 +3,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Core.Services;
 using ShoutingIguana.Services;
+using ShoutingIguana.ViewModels.Models;
+using ShoutingIguana.Views;
 
 namespace ShoutingIguana.ViewModels;
 
@@ -16,6 +19,7 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
     private readonly IProjectContext _projectContext;
     private readonly INavigationService _navigationService;
     private readonly IPluginRegistry _pluginRegistry;
+    private readonly IServiceProvider _serviceProvider;
     private bool _disposed;
     private CancellationTokenSource? _navigationCts;
     private Task? _navigationTask;
@@ -73,18 +77,20 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
     public bool ShowEmptyState => TotalDiscovered == 0 && !IsCrawling;
 
     public CrawlDashboardViewModel(
-        ILogger<CrawlDashboardViewModel> logger, 
+        ILogger<CrawlDashboardViewModel> logger,
         ICrawlEngine crawlEngine,
         IProjectContext projectContext,
         INavigationService navigationService,
-        IPluginRegistry pluginRegistry)
+        IPluginRegistry pluginRegistry,
+        IServiceProvider serviceProvider)
     {
         _logger = logger;
         _crawlEngine = crawlEngine;
         _projectContext = projectContext;
         _navigationService = navigationService;
         _pluginRegistry = pluginRegistry;
-        
+        _serviceProvider = serviceProvider;
+
         _crawlEngine.ProgressUpdated += OnProgressUpdated;
     }
 
@@ -363,6 +369,32 @@ public partial class CrawlDashboardViewModel : ObservableObject, IDisposable
                 }
             }
         });
+    }
+
+    [RelayCommand]
+    private async Task OpenStatsDetailAsync(string? kindString)
+    {
+        if (!_projectContext.HasOpenProject || !Enum.TryParse<CrawlStatsKind>(kindString, out var kind))
+        {
+            return;
+        }
+
+        try
+        {
+            var dialog = _serviceProvider.GetRequiredService<CrawlStatsDetailDialog>();
+            var vm = (CrawlStatsDetailViewModel)dialog.DataContext;
+
+            dialog.Owner = System.Windows.Application.Current.MainWindow;
+            dialog.Show();
+
+            // Populate after Show() so the spinner renders while the first
+            // page query runs — for large projects that query isn't instant.
+            await vm.InitializeAsync(kind, _projectContext.CurrentProjectId!.Value);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open stats detail dialog for {Kind}", kindString);
+        }
     }
 
     public void Dispose()

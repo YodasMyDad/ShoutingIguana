@@ -25,6 +25,19 @@ public class CrawlQueueRepository(IShoutingIguanaDbContext context) : ICrawlQueu
             .ToListAsync().ConfigureAwait(false);
     }
 
+    public async Task<List<CrawlQueueItem>> GetPagedQueuedItemsAsync(int projectId, int skip, int take)
+    {
+        return await context.CrawlQueue
+            .AsNoTracking()
+            .Where(q => q.ProjectId == projectId && q.State == QueueState.Queued)
+            .OrderByDescending(q => q.Priority)
+            .ThenBy(q => q.EnqueuedUtc)
+            .ThenBy(q => q.Id)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync().ConfigureAwait(false);
+    }
+
     public async Task<CrawlQueueItem?> GetByAddressAsync(int projectId, string address)
     {
         return await context.CrawlQueue

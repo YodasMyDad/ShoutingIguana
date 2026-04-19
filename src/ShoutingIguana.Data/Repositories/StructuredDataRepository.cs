@@ -15,20 +15,9 @@ public class StructuredDataRepository(IShoutingIguanaDbContext context) : IStruc
 
     public async Task<List<StructuredData>> CreateBatchAsync(List<StructuredData> structuredDataList)
     {
-        using var transaction = await context.Database.BeginTransactionAsync().ConfigureAwait(false);
-        
-        try
-        {
-            context.StructuredData.AddRange(structuredDataList);
-            await context.SaveChangesAsync().ConfigureAwait(false);
-            await transaction.CommitAsync().ConfigureAwait(false);
-            return structuredDataList;
-        }
-        catch
-        {
-            await transaction.RollbackAsync().ConfigureAwait(false);
-            throw;
-        }
+        context.StructuredData.AddRange(structuredDataList);
+        await context.SaveChangesAsync().ConfigureAwait(false);
+        return structuredDataList;
     }
 
     public async Task<List<StructuredData>> GetByUrlIdAsync(int urlId)

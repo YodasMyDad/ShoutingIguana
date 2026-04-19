@@ -95,20 +95,8 @@ public class ReportDataRepository(IShoutingIguanaDbContext context) : IReportDat
 
     public async Task CreateBatchAsync(IEnumerable<CoreReportRow> rows)
     {
-        // Use a transaction to ensure all rows are saved together
-        using var transaction = await context.Database.BeginTransactionAsync().ConfigureAwait(false);
-
-        try
-        {
-            context.ReportRows.AddRange(rows);
-            await context.SaveChangesAsync().ConfigureAwait(false);
-            await transaction.CommitAsync().ConfigureAwait(false);
-        }
-        catch
-        {
-            await transaction.RollbackAsync().ConfigureAwait(false);
-            throw;
-        }
+        context.ReportRows.AddRange(rows);
+        await context.SaveChangesAsync().ConfigureAwait(false);
     }
 
     public async Task DeleteByProjectIdAsync(int projectId)

@@ -490,6 +490,29 @@
         <Setter Property="Background" Value="{StaticResource InfoBackgroundBrush}"/>
         <Setter Property="Effect" Value="{x:Null}"/>
     </Style>
+
+    <!-- Clickable Stat Card hover feedback. Applied on top of the inline
+         tile styling in CrawlDashboardView so the per-tile BorderBrush colour
+         stays intact. Also supplies the default drop shadow so the hover
+         trigger can cleanly replace it (local Effect values would beat a
+         style setter, so the base shadow lives in the style too). -->
+    <Style x:Key="ClickableStatCard" TargetType="Border">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="#000000" BlurRadius="4" ShadowDepth="1" Opacity="0.06"/>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Effect">
+                    <Setter.Value>
+                        <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="3" Opacity="0.18"/>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
     
     <!-- ========================================
          INPUT STYLES

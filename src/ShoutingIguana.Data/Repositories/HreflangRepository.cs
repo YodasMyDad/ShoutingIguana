@@ -15,20 +15,9 @@ public class HreflangRepository(IShoutingIguanaDbContext context) : IHreflangRep
 
     public async Task<List<Hreflang>> CreateBatchAsync(List<Hreflang> hreflangs)
     {
-        using var transaction = await context.Database.BeginTransactionAsync().ConfigureAwait(false);
-        
-        try
-        {
-            context.Hreflangs.AddRange(hreflangs);
-            await context.SaveChangesAsync().ConfigureAwait(false);
-            await transaction.CommitAsync().ConfigureAwait(false);
-            return hreflangs;
-        }
-        catch
-        {
-            await transaction.RollbackAsync().ConfigureAwait(false);
-            throw;
-        }
+        context.Hreflangs.AddRange(hreflangs);
+        await context.SaveChangesAsync().ConfigureAwait(false);
+        return hreflangs;
     }
 
     public async Task<List<Hreflang>> GetByUrlIdAsync(int urlId)

@@ -21,6 +21,11 @@ public interface IUrlRepository
     Task<Url> UpdateAsync(Url url, IEnumerable<KeyValuePair<string, string>>? headers = null);
     Task<int> CountByProjectIdAsync(int projectId);
     Task<int> CountByStatusAsync(int projectId, UrlStatus status);
+    Task<List<Url>> GetPagedByProjectIdAsync(int projectId, int skip, int take);
+    Task<List<Url>> GetPagedByStatusesAsync(int projectId, IReadOnlyCollection<UrlStatus> statuses, int skip, int take);
+    Task<int> CountByStatusesAsync(int projectId, IReadOnlyCollection<UrlStatus> statuses);
+    Task<List<Url>> GetPagedErrorsAsync(int projectId, int skip, int take);
+    Task<int> CountErrorsAsync(int projectId);
     Task DeleteByProjectIdAsync(int projectId);
 }
 

@@ -1,0 +1,231 @@
+<Window x:Class="ShoutingIguana.Views.CrawlStatsDetailDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{Binding Title, StringFormat='{}{0} — Details'}"
+        Height="720"
+        Width="980"
+        MinHeight="480"
+        MinWidth="640"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BackgroundBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        ResizeMode="CanResize"
+        ShowInTaskbar="False">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderLightBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="{StaticResource SpacingL}">
+            <StackPanel Orientation="Horizontal">
+                <Border Background="{Binding AccentBrush}"
+                        Width="44" Height="44"
+                        CornerRadius="8"
+                        Margin="0,0,16,0">
+                    <TextBlock Text="{Binding IconGlyph}"
+                               Style="{StaticResource Icon}"
+                               FontSize="22"
+                               Foreground="White"/>
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Title}"
+                               Style="{StaticResource TitleTextStyle}"
+                               Margin="0"
+                               AutomationProperties.HeadingLevel="Level1"/>
+                    <TextBlock Style="{StaticResource BodyTextStyle}"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Margin="0,4,0,0">
+                        <Run Text="{Binding TotalCount, Mode=OneWay}"/>
+                        <Run Text=" total"/>
+                    </TextBlock>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Body -->
+        <Grid Grid.Row="1" Margin="0">
+            <!-- Loading spinner -->
+            <Border Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"
+                    Background="Transparent">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Viewbox Width="40" Height="40" Margin="0,0,0,12">
+                        <Grid>
+                            <Ellipse Width="40" Height="40"
+                                     Stroke="{StaticResource BorderLightBrush}"
+                                     StrokeThickness="3"/>
+                            <Ellipse Width="40" Height="40"
+                                     Stroke="{Binding AccentBrush}"
+                                     StrokeThickness="3"
+                                     StrokeDashArray="24 100"
+                                     RenderTransformOrigin="0.5,0.5">
+                                <Ellipse.RenderTransform>
+                                    <RotateTransform x:Name="SpinnerRotation"/>
+                                </Ellipse.RenderTransform>
+                                <Ellipse.Triggers>
+                                    <EventTrigger RoutedEvent="Loaded">
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="SpinnerRotation"
+                                                                 Storyboard.TargetProperty="Angle"
+                                                                 From="0" To="360"
+                                                                 Duration="0:0:1"
+                                                                 RepeatBehavior="Forever"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                </Ellipse.Triggers>
+                            </Ellipse>
+                        </Grid>
+                    </Viewbox>
+                    <TextBlock Text="Loading..."
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- URL DataGrid -->
+            <DataGrid x:Name="UrlDataGrid"
+                      Visibility="{Binding IsUrlView, Converter={StaticResource BooleanToVisibilityConverter}}"
+                      ItemsSource="{Binding Urls}"
+                      Style="{StaticResource ModernDataGrid}"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Auto"
+                      ScrollViewer.ScrollChanged="DataGrid_ScrollChanged"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      AutomationProperties.Name="Stats detail list">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Address"
+                                        Binding="{Binding Address}"
+                                        Width="*"
+                                        MinWidth="260">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontFamily" Value="Consolas"/>
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="ToolTip" Value="{Binding Address}"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Status"
+                                        Binding="{Binding Status}"
+                                        Width="100"/>
+                    <DataGridTextColumn Header="HTTP"
+                                        Binding="{Binding HttpStatus}"
+                                        Width="70"/>
+                    <DataGridTextColumn Header="Content Type"
+                                        Binding="{Binding ContentType}"
+                                        Width="160"/>
+                    <DataGridTextColumn Header="Depth"
+                                        Binding="{Binding Depth}"
+                                        Width="60"/>
+                    <DataGridTextColumn Header="First Seen"
+                                        Binding="{Binding FirstSeenUtc, StringFormat='yyyy-MM-dd HH:mm:ss'}"
+                                        Width="150"/>
+                    <DataGridTextColumn Header="Last Crawled"
+                                        Binding="{Binding LastCrawledUtc, StringFormat='yyyy-MM-dd HH:mm:ss'}"
+                                        Width="150"/>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <!-- Queue DataGrid -->
+            <DataGrid x:Name="QueueDataGrid"
+                      Visibility="{Binding IsQueueView, Converter={StaticResource BooleanToVisibilityConverter}}"
+                      ItemsSource="{Binding QueueItems}"
+                      Style="{StaticResource ModernDataGrid}"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Auto"
+                      ScrollViewer.ScrollChanged="DataGrid_ScrollChanged"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      AutomationProperties.Name="Queue list">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Address"
+                                        Binding="{Binding Address}"
+                                        Width="*"
+                                        MinWidth="260">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontFamily" Value="Consolas"/>
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="ToolTip" Value="{Binding Address}"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="State"
+                                        Binding="{Binding State}"
+                                        Width="100"/>
+                    <DataGridTextColumn Header="Priority"
+                                        Binding="{Binding Priority}"
+                                        Width="80"/>
+                    <DataGridTextColumn Header="Depth"
+                                        Binding="{Binding Depth}"
+                                        Width="60"/>
+                    <DataGridTextColumn Header="Enqueued"
+                                        Binding="{Binding EnqueuedUtc, StringFormat='yyyy-MM-dd HH:mm:ss'}"
+                                        Width="150"/>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <!-- Loading-more indicator overlay (bottom) -->
+            <Border VerticalAlignment="Bottom"
+                    HorizontalAlignment="Center"
+                    Margin="0,0,0,16"
+                    Padding="12,6"
+                    CornerRadius="12"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderLightBrush}"
+                    BorderThickness="1"
+                    Visibility="{Binding IsLoadingMore, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TextBlock Text="Loading more..."
+                           FontSize="12"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+            </Border>
+        </Grid>
+
+        <!-- Footer -->
+        <Border Grid.Row="2"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderLightBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="{StaticResource SpacingL}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Showing "
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBlock Text="{Binding Urls.Count, Mode=OneWay}"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Visibility="{Binding IsUrlView, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    <TextBlock Text="{Binding QueueItems.Count, Mode=OneWay}"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Visibility="{Binding IsQueueView, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    <TextBlock Text=" of "
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBlock Text="{Binding TotalCount, Mode=OneWay}"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="Close"
+                        Click="CloseButton_Click"
+                        Style="{StaticResource SecondaryButton}"
+                        MinWidth="100"
+                        Height="40"
+                        IsCancel="True"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

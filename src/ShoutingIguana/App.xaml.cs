@@ -158,9 +158,11 @@ public partial class App : Application
                     services.AddTransient<CrawlDashboardViewModel>();
                     services.AddTransient<FindingsViewModel>();
                     services.AddTransient<PluginManagementViewModel>();
+                    services.AddTransient<CrawlStatsDetailViewModel>();
 
                     // Views
                     services.AddTransient<PluginManagementView>();
+                    services.AddTransient<CrawlStatsDetailDialog>();
 
                     // Main Window
                     services.AddTransient<MainWindow>();

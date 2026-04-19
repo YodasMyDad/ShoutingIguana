@@ -16,20 +16,8 @@ public class FindingRepository(IShoutingIguanaDbContext context) : IFindingRepos
 
     public async Task CreateBatchAsync(IEnumerable<Finding> findings)
     {
-        // Use a transaction to ensure all findings are saved together
-        using var transaction = await context.Database.BeginTransactionAsync().ConfigureAwait(false);
-        
-        try
-        {
-            context.Findings.AddRange(findings);
-            await context.SaveChangesAsync().ConfigureAwait(false);
-            await transaction.CommitAsync().ConfigureAwait(false);
-        }
-        catch
-        {
-            await transaction.RollbackAsync().ConfigureAwait(false);
-            throw;
-        }
+        context.Findings.AddRange(findings);
+        await context.SaveChangesAsync().ConfigureAwait(false);
     }
 
     public async Task<List<Finding>> GetByProjectIdAsync(int projectId)
