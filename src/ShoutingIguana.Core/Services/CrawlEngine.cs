@@ -1885,29 +1885,66 @@ public class CrawlEngine(
         int currentDepth,
         Dictionary<string, ElementDiagnosticInfo>? diagnosticsMap)
     {
+        if (extractedLinks.Count == 0)
+        {
+            return;
+        }
+
         var urlRepository = scope.ServiceProvider.GetRequiredService<IUrlRepository>();
         var linkRepository = scope.ServiceProvider.GetRequiredService<ILinkRepository>();
 
+        // Round-trip 1: batch-lookup all target URLs keyed by NormalizedUrl.
+        var addresses = extractedLinks.Select(l => l.Url).Distinct(StringComparer.Ordinal).ToList();
+        var existing = await urlRepository.GetByAddressesAsync(projectId, addresses).ConfigureAwait(false);
+
+        // Stage any missing URLs so they can be inserted in a single SaveChanges.
+        var toCreate = new List<Url>();
+        var resolved = new Dictionary<string, Url>(StringComparer.Ordinal);
+
+        foreach (var address in addresses)
+        {
+            var normalized = NormalizeUrl(address);
+            if (existing.TryGetValue(normalized, out var found))
+            {
+                resolved[address] = found;
+                continue;
+            }
+
+            if (!Uri.TryCreate(address, UriKind.Absolute, out var uri))
+            {
+                continue;
+            }
+
+            var newUrl = new Url
+            {
+                ProjectId = projectId,
+                Address = address,
+                NormalizedUrl = normalized,
+                Scheme = uri.Scheme,
+                Host = uri.Host,
+                Path = uri.PathAndQuery,
+                Depth = currentDepth + 1,
+                FirstSeenUtc = DateTime.UtcNow,
+                Status = UrlStatus.Pending,
+                DiscoveredFromUrlId = fromUrl.Id
+            };
+            toCreate.Add(newUrl);
+            resolved[address] = newUrl;
+        }
+
+        // Round-trip 2: insert all new URLs in one batch; IDs populate on resolved entries.
+        if (toCreate.Count > 0)
+        {
+            await urlRepository.CreateBatchAsync(toCreate).ConfigureAwait(false);
+        }
+
+        // Build link entities against the resolved URL IDs.
+        var linkEntities = new List<Link>(extractedLinks.Count);
         foreach (var link in extractedLinks)
         {
-            var toUrl = await urlRepository.GetByAddressAsync(projectId, link.Url).ConfigureAwait(false);
-            if (toUrl == null)
+            if (!resolved.TryGetValue(link.Url, out var toUrl))
             {
-                var uri = new Uri(link.Url);
-                toUrl = new Url
-                {
-                    ProjectId = projectId,
-                    Address = link.Url,
-                    NormalizedUrl = NormalizeUrl(link.Url),
-                    Scheme = uri.Scheme,
-                    Host = uri.Host,
-                    Path = uri.PathAndQuery,
-                    Depth = currentDepth + 1,
-                    FirstSeenUtc = DateTime.UtcNow,
-                    Status = UrlStatus.Pending,
-                    DiscoveredFromUrlId = fromUrl.Id
-                };
-                toUrl = await urlRepository.CreateAsync(toUrl).ConfigureAwait(false);
+                continue;
             }
 
             var rel = link.RelAttribute ?? string.Empty;
@@ -1948,8 +1985,11 @@ public class CrawlEngine(
                 linkEntity.ParentTag = diagnosticInfo.ParentElement;
             }
 
-            await linkRepository.CreateAsync(linkEntity).ConfigureAwait(false);
+            linkEntities.Add(linkEntity);
         }
+
+        // Round-trip 3: insert all links in one batch.
+        await linkRepository.CreateBatchAsync(linkEntities).ConfigureAwait(false);
     }
     
     /// <summary>

@@ -13,6 +13,18 @@ public class LinkRepository(IShoutingIguanaDbContext context) : ILinkRepository
         return link;
     }
 
+    public async Task CreateBatchAsync(IEnumerable<Link> links)
+    {
+        var materialized = links as IList<Link> ?? links.ToList();
+        if (materialized.Count == 0)
+        {
+            return;
+        }
+
+        await context.Links.AddRangeAsync(materialized).ConfigureAwait(false);
+        await context.SaveChangesAsync().ConfigureAwait(false);
+    }
+
     public async Task<IEnumerable<Link>> GetByProjectIdAsync(int projectId)
     {
         return await context.Links

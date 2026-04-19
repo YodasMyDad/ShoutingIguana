@@ -1,15 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(dotnet build *)",
-      "Bash(git --no-pager diff CLAUDE.md)",
-      "Bash(dotnet test *)",
-      "Bash(powershell -NoProfile -Command \"\\(Get-Item 'c:/Projects/ShoutingIguana/src/ShoutingIguana/bin/Release/net10.0-windows/ShoutingIguana.dll'\\).VersionInfo | Select-Object FileVersion, ProductVersion, CompanyName, LegalCopyright | Format-List\")",
-      "Bash(cp Directory.Build.props /tmp/dbp.bak)",
-      "Bash(bash -c *)",
-      "Bash(cp /tmp/dbp.bak Directory.Build.props)",
-      "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(*)"
     ]
   }
 }

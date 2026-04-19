@@ -30,6 +30,32 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
             .FirstOrDefaultAsync(u => u.ProjectId == projectId && u.NormalizedUrl == normalized).ConfigureAwait(false);
     }
 
+    public async Task<Dictionary<string, Url>> GetByAddressesAsync(int projectId, IEnumerable<string> addresses)
+    {
+        var normalizedKeys = addresses
+            .Select(NormalizeUrl)
+            .Where(s => !string.IsNullOrEmpty(s))
+            .Distinct()
+            .ToList();
+
+        if (normalizedKeys.Count == 0)
+        {
+            return new Dictionary<string, Url>(StringComparer.Ordinal);
+        }
+
+        var found = await context.Urls
+            .Where(u => u.ProjectId == projectId && normalizedKeys.Contains(u.NormalizedUrl))
+            .ToListAsync()
+            .ConfigureAwait(false);
+
+        var result = new Dictionary<string, Url>(StringComparer.Ordinal);
+        foreach (var url in found)
+        {
+            result[url.NormalizedUrl] = url;
+        }
+        return result;
+    }
+
     public async Task<IEnumerable<Url>> GetByProjectIdAsync(int projectId)
     {
         return await context.Urls
@@ -163,6 +189,18 @@ public class UrlRepository(IShoutingIguanaDbContext context) : IUrlRepository
         context.Urls.Add(url);
         await context.SaveChangesAsync().ConfigureAwait(false);
         return url;
+    }
+
+    public async Task CreateBatchAsync(IEnumerable<Url> urls)
+    {
+        var materialized = urls as IList<Url> ?? urls.ToList();
+        if (materialized.Count == 0)
+        {
+            return;
+        }
+
+        await context.Urls.AddRangeAsync(materialized).ConfigureAwait(false);
+        await context.SaveChangesAsync().ConfigureAwait(false);
     }
 
     public async Task<Url> UpdateAsync(Url url, IEnumerable<KeyValuePair<string, string>>? headers = null)
