@@ -461,6 +461,7 @@
                                           HorizontalScrollBarVisibility="Auto"
                                           Tag="OverviewTab"
                                           ScrollViewer.ScrollChanged="DataGrid_ScrollChanged"
+                                          PreviewKeyDown="DataGrid_ContextMenuKeyDown"
                                           AutomationProperties.Name="URLs List"
                                           AutomationProperties.HelpText="List of all URLs discovered during the crawl. Select a row to view details below.">
                                 <DataGrid.ContextMenu>
@@ -828,6 +829,7 @@
                                           HorizontalScrollBarVisibility="Auto"
                                           Tag="FindingsTab"
                                           ScrollViewer.ScrollChanged="DataGrid_ScrollChanged"
+                                          PreviewKeyDown="DataGrid_ContextMenuKeyDown"
                                           AutomationProperties.Name="Findings List"
                                           Loaded="DynamicFindingsDataGrid_Loaded">
                                     <DataGrid.Resources>

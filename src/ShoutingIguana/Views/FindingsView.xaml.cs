@@ -549,14 +549,41 @@ public partial class FindingsView
     private static T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject
     {
         if (child == null) return null;
-        
+
         var parent = VisualTreeHelper.GetParent(child);
         if (parent == null) return null;
-        
+
         if (parent is T result)
             return result;
-            
+
         return FindVisualParent<T>(parent);
+    }
+
+    /// <summary>
+    /// Opens the DataGrid's ContextMenu when the user presses Apps or Shift+F10
+    /// while a row has keyboard focus. WPF's default handling does not cover
+    /// all DataGrid focus cases, so we surface the menu explicitly for
+    /// keyboard-only and screen-reader users (WCAG 2.1.1).
+    /// </summary>
+    private void DataGrid_ContextMenuKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not DataGrid dataGrid || dataGrid.ContextMenu is null)
+        {
+            return;
+        }
+
+        var isAppsKey = e.Key == Key.Apps;
+        var isShiftF10 = e.Key == Key.F10 && (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+
+        if (!isAppsKey && !isShiftF10)
+        {
+            return;
+        }
+
+        dataGrid.ContextMenu.PlacementTarget = dataGrid;
+        dataGrid.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Center;
+        dataGrid.ContextMenu.IsOpen = true;
+        e.Handled = true;
     }
     
     private void DataGrid_ScrollChanged(object sender, ScrollChangedEventArgs e)
