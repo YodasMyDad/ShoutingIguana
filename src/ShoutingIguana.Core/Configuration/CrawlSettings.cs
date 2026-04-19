@@ -13,7 +13,7 @@ namespace ShoutingIguana.Core.Configuration;
 [SupportedOSPlatform("windows")]
 public class CrawlSettings
 {
-    public int ConcurrentRequests { get; set; } = 5;
+    public int ConcurrentRequests { get; set; } = Math.Min(8, Math.Max(2, Environment.ProcessorCount));
     public int TimeoutSeconds { get; set; } = 30;
     public int MaxCrawlDepth { get; set; } = 5;
     public int MaxUrlsToCrawl { get; set; } = 10000;

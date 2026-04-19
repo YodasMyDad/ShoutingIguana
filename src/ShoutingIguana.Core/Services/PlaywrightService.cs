@@ -14,7 +14,9 @@ public class PlaywrightService(
     ILogger<PlaywrightService> logger,
     IAppSettingsService appSettings) : IPlaywrightService, IDisposable
 {
-    private const int DefaultPoolSize = 4;
+    // Scale the pool with the host CPU but cap at 8: Chromium contexts are
+    // memory-heavy (~150MB each) and above 8 we saturate typical desktop RAM.
+    private static readonly int DefaultPoolSize = Math.Min(8, Math.Max(2, Environment.ProcessorCount));
 
     private IPlaywright? _playwright;
     private IBrowser? _browser;

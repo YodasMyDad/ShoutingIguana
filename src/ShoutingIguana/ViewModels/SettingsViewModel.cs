@@ -680,9 +680,9 @@ public partial class SettingsViewModel : ObservableObject
 
     private bool ValidateSettings(out string error)
     {
-        if (ConcurrentRequests < 1 || ConcurrentRequests > 10)
+        if (ConcurrentRequests < 1 || ConcurrentRequests > 16)
         {
-            error = "Concurrent requests must be between 1 and 10.";
+            error = "Concurrent requests must be between 1 and 16.";
             return false;
         }
 

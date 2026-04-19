@@ -68,8 +68,12 @@ public class ProjectSettings
     /// </summary>
     public double CrawlDelaySeconds { get; set; } = 1.5;
 
-    /// <summary>Overrides <see cref="CrawlSettings.ConcurrentRequests"/> for this project.</summary>
-    public int ConcurrentRequests { get; set; } = 4;
+    /// <summary>
+    /// Overrides <see cref="CrawlSettings.ConcurrentRequests"/> for this project.
+    /// Defaults to min(8, CPU count) so the pool uses the host without oversubscribing
+    /// Chromium contexts on low-RAM machines.
+    /// </summary>
+    public int ConcurrentRequests { get; set; } = Math.Min(8, Math.Max(2, Environment.ProcessorCount));
 
     /// <summary>Overrides <see cref="CrawlSettings.TimeoutSeconds"/> for this project.</summary>
     public int TimeoutSeconds { get; set; } = 10;
