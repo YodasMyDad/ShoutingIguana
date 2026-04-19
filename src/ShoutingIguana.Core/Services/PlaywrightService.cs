@@ -208,7 +208,7 @@ public class PlaywrightService(
         }
     }
 
-    public async Task<IPage> CreatePageAsync(string userAgent, ProxySettings? proxySettings = null)
+    public async Task<IPage> CreatePageAsync(string userAgent, ProxySettings? proxySettings = null, bool blockNonEssentialResources = true)
     {
         var browser = await GetBrowserAsync().ConfigureAwait(false);
 
@@ -246,6 +246,22 @@ public class PlaywrightService(
             var page = await context.NewPageAsync().ConfigureAwait(false);
             page.SetDefaultTimeout(30000);
             page.SetDefaultNavigationTimeout(30000);
+
+            if (blockNonEssentialResources)
+            {
+                await page.RouteAsync("**/*", async route =>
+                {
+                    var type = route.Request.ResourceType;
+                    if (type is "image" or "media" or "font")
+                    {
+                        await route.AbortAsync().ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await route.ContinueAsync().ConfigureAwait(false);
+                    }
+                }).ConfigureAwait(false);
+            }
 
             await page.SetExtraHTTPHeadersAsync(new Dictionary<string, string>
             {

@@ -515,7 +515,7 @@ public class CrawlEngine(
                 }
                 else
                 {
-                    (urlData, page, renderedHtml, redirectChain) = await FetchUrlWithPlaywrightAsync(queueItem.Address, userAgent, proxySettings, cancellationToken).ConfigureAwait(false);
+                    (urlData, page, renderedHtml, redirectChain) = await FetchUrlWithPlaywrightAsync(queueItem.Address, userAgent, proxySettings, settings.BlockNonEssentialResources, cancellationToken).ConfigureAwait(false);
                 }
             }
 
@@ -779,7 +779,7 @@ public class CrawlEngine(
     /// OWNERSHIP: The caller is ALWAYS responsible for disposing the returned page via ClosePageAsync(),
     /// even if an error occurs. The page is returned in both success and error cases.
     /// </summary>
-    private async Task<(UrlFetchResult result, Microsoft.Playwright.IPage? page, string? html, List<RedirectHop> redirectChain)> FetchUrlWithPlaywrightAsync(string url, string userAgent, ProxySettings? proxySettings, CancellationToken cancellationToken)
+    private async Task<(UrlFetchResult result, Microsoft.Playwright.IPage? page, string? html, List<RedirectHop> redirectChain)> FetchUrlWithPlaywrightAsync(string url, string userAgent, ProxySettings? proxySettings, bool blockNonEssentialResources, CancellationToken cancellationToken)
     {
         Microsoft.Playwright.IPage? page = null;
         string? renderedHtml = null;
@@ -789,9 +789,9 @@ public class CrawlEngine(
         {
             // Check cancellation before creating page
             cancellationToken.ThrowIfCancellationRequested();
-            
+
             // Create a new page with the specified user agent and proxy (caller becomes responsible for disposal from this point)
-            page = await playwrightService.CreatePageAsync(userAgent, proxySettings).ConfigureAwait(false);
+            page = await playwrightService.CreatePageAsync(userAgent, proxySettings, blockNonEssentialResources).ConfigureAwait(false);
             
             // Smart adaptive page loading
             Microsoft.Playwright.IResponse? response = null;

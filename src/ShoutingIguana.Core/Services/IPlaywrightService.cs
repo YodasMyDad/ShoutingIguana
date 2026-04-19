@@ -45,7 +45,11 @@ public interface IPlaywrightService
     /// </summary>
     /// <param name="userAgent">User agent string to use for this page</param>
     /// <param name="proxySettings">Optional proxy settings to use for this page</param>
-    Task<IPage> CreatePageAsync(string userAgent, ProxySettings? proxySettings = null);
+    /// <param name="blockNonEssentialResources">
+    /// When true, aborts requests for images, media, and fonts so pages load only the
+    /// HTML, CSS, and JS needed for link and metadata extraction.
+    /// </param>
+    Task<IPage> CreatePageAsync(string userAgent, ProxySettings? proxySettings = null, bool blockNonEssentialResources = true);
 
     /// <summary>
     /// Returns the page's context to the pool, or disposes it if the context has faulted.

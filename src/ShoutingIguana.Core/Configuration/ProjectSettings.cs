@@ -89,6 +89,13 @@ public class ProjectSettings
     public bool AllowPrivateNetworkTargets { get; set; }
 
     /// <summary>
+    /// When true (the default, matching Screaming Frog), the crawler aborts requests
+    /// for images, media, and fonts so pages fetch only the resources needed for link
+    /// and metadata extraction. Cuts page weight by 60–80% on typical sites.
+    /// </summary>
+    public bool BlockNonEssentialResources { get; set; } = true;
+
+    /// <summary>
     /// Gets the actual user agent string based on the selected type.
     /// If Random is selected, returns a random user agent each time.
     /// </summary>
