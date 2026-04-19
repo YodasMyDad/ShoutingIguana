@@ -230,8 +230,6 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="{StaticResource Icon.Folder}"
                                    Style="{StaticResource Icon}"
-                                   Width="14" 
-                                   Height="14"
                                    FontSize="14"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    Margin="0,0,6,0"
@@ -260,8 +258,6 @@
                                 ToolTip="Playwright browser engine status">
                         <TextBlock Text="{StaticResource Icon.Web}"
                                    Style="{StaticResource Icon}"
-                                   Width="14" 
-                                   Height="14"
                                    FontSize="14"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    Margin="0,0,6,0"
@@ -286,8 +282,6 @@
                                 ToolTip="Number of loaded plugins">
                         <TextBlock Text="{StaticResource Icon.Puzzle}"
                                    Style="{StaticResource Icon}"
-                                   Width="14" 
-                                   Height="14"
                                    FontSize="14"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    Margin="0,0,6,0"

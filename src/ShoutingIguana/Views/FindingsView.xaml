@@ -135,9 +135,9 @@
             </Grid.Triggers>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="2*" MinHeight="300" MaxHeight="600"/>
+            <RowDefinition Height="2*" MinHeight="200"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="1*" MinHeight="200"/>
+            <RowDefinition Height="1*" MinHeight="160"/>
         </Grid.RowDefinitions>
 
         <!-- Header -->
