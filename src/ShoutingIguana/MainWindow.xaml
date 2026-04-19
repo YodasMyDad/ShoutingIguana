@@ -135,18 +135,21 @@
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_Crawl"
-                      Visibility="{Binding IsCrawling, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <MenuItem Header="_Start Crawl" Command="{Binding StartCrawlCommand}" InputGestureText="F6">
+                      Visibility="{Binding HasOpenProject, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <MenuItem Header="_Start Crawl" Command="{Binding StartCrawlCommand}" InputGestureText="F6"
+                          Visibility="{Binding IsCrawling, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
                     <MenuItem.Icon>
                         <TextBlock Text="{StaticResource Icon.Play}" Style="{StaticResource Icon}"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="{Binding PauseResumeMenuText}" Command="{Binding PauseResumeCommand}" InputGestureText="F7">
+                <MenuItem Header="{Binding PauseResumeMenuText}" Command="{Binding PauseResumeCommand}" InputGestureText="F7"
+                          Visibility="{Binding IsCrawling, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <MenuItem.Icon>
                         <TextBlock Text="{Binding PauseResumeIcon}" Style="{StaticResource Icon}"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="Sto_p Crawl" Command="{Binding StopCrawlCommand}" InputGestureText="F8">
+                <MenuItem Header="Sto_p Crawl" Command="{Binding StopCrawlCommand}" InputGestureText="F8"
+                          Visibility="{Binding IsCrawling, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <MenuItem.Icon>
                         <TextBlock Text="{StaticResource Icon.Stop}" Style="{StaticResource Icon}"/>
                     </MenuItem.Icon>
