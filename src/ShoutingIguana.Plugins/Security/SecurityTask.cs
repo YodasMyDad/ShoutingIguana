@@ -235,6 +235,14 @@ public class SecurityTask(ILogger logger) : UrlTaskBase
             missingHeaders.Add("Referrer-Policy");
         }
 
+        // Check Permissions-Policy (replaces the legacy Feature-Policy header).
+        // Modern browsers honour Permissions-Policy; a missing value means every
+        // feature (geolocation, camera, autoplay, etc.) is implicitly allowed.
+        if (!ctx.Headers.ContainsKey("permissions-policy") && !ctx.Headers.ContainsKey("feature-policy"))
+        {
+            missingHeaders.Add("Permissions-Policy");
+        }
+
         // Report missing security headers
         if (missingHeaders.Any() || weakHeaders.Any())
         {
