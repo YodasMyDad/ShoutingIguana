@@ -141,7 +141,7 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         requests.Started(context.Request);
         try
         {
-            await ServeAsync(context, site.Handle(path, external: false)).ConfigureAwait(false);
+            await ServeAsync(context, site.Handle(path, external: false, plainHttp: !context.Request.IsHttps)).ConfigureAwait(false);
         }
         finally
         {

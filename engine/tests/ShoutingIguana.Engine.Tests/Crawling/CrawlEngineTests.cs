@@ -90,8 +90,11 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(0, Count(path, "SELECT COUNT(*) FROM urls WHERE state = 1"));
 
         // Response times are the server's: the planted slow page takes 1.2 s, a typical page far less than the 1 s
-        // threshold. The slow-response comparison below allows for a busy machine, so it can't prove this itself.
-        Assert.True(Count(path, $"SELECT r.response_ms FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url = '{server.BaseUri}plants/slow'") >= 1_200);
+        // threshold. The slow-response comparison below allows for a busy machine, so it can't prove this itself. The
+        // server's delay can end a timer tick early (15.6 ms on Windows), hence the margin.
+        var slowPage = $"FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url = '{server.BaseUri}plants/slow'";
+        Assert.True(Count(path, $"SELECT r.response_ms {slowPage}") >= 1_150, string.Join(", ", Strings(path,
+            $"SELECT 'outcome ' || r.outcome || ', HTTP ' || COALESCE(r.status_code, '-') || ', ' || COALESCE(r.response_ms, '-') || ' ms, ' || COALESCE(r.error, 'no error') {slowPage}")));
         Assert.True(Count(path, """
             SELECT response_ms FROM responses WHERE is_html = 1 AND outcome = 0 ORDER BY response_ms
             LIMIT 1 OFFSET (SELECT COUNT(*) / 2 FROM responses WHERE is_html = 1 AND outcome = 0)

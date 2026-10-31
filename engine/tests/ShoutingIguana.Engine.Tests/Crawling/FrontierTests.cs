@@ -26,7 +26,7 @@ public sealed class FrontierTests : IAsyncLifetime
         _synthetic = await TestWebHost.StartAsync((baseUri, externalBaseUri) =>
         {
             _site = new SyntheticSite(new SyntheticSiteOptions { PageCount = PAGES }, baseUri, externalBaseUri);
-            return _site.Handle;
+            return (path, external) => _site.Handle(path, external);
         });
 
     public async Task DisposeAsync()

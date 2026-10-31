@@ -83,7 +83,8 @@ public sealed partial class SyntheticSite
 
     private int ChunkCount => (PageCount + SITEMAP_CHUNK_SIZE - 1) / SITEMAP_CHUNK_SIZE;
 
-    public SyntheticResponse Handle(string path, bool external)
+    /// <param name="plainHttp">The request came over plain HTTP, which the HTTPS site answers on its own port too.</param>
+    public SyntheticResponse Handle(string path, bool external, bool plainHttp = false)
     {
         if (external)
         {
@@ -107,7 +108,13 @@ public sealed partial class SyntheticSite
             return Html(RenderHome());
         }
 
-        // robots.txt names /sitemap.xml, which redirects to the index, as Yoast sites do.
+        // robots.txt names /sitemap.xml, which redirects to the index, as Yoast sites do. The HTTPS site's plain-HTTP side
+        // drops the connection for it, though it still serves its page.
+        if (path == "/robots.txt" && IsHttps && plainHttp)
+        {
+            return new SyntheticResponse(0, HTML, null, null, null, Abort: true);
+        }
+
         if (path == "/robots.txt")
         {
             var sitemap = _options.Sitemaps ? $"\nSitemap: {_base}/sitemap.xml\n" : string.Empty;
@@ -319,8 +326,13 @@ public sealed partial class SyntheticSite
             }
         }
 
-        // Site-wide findings go on the home page: plain HTTP, or over HTTPS the missing Strict-Transport-Security header.
+        // Site-wide findings go on the home page: plain HTTP, or over HTTPS the missing Strict-Transport-Security header
+        // and the plain-HTTP robots.txt that doesn't answer.
         Flag(IsHttps ? "security-headers-missing" : "no-https", "/");
+        if (IsHttps)
+        {
+            Flag("robots-txt-unreachable-other-origin", "/");
+        }
 
         if (_options.Sitemaps)
         {
