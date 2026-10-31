@@ -109,6 +109,7 @@ public sealed class SiteRuleTests
         var site = new RuleHarness();
         site.Ok($"{site.Site}/");
         var scope = new CrawlScope(new Uri($"{site.Site}/"), includeSubdomains: false, stayInStartFolder: false);
+        HashSet<string> main = ["https://example.com"];
         RobotsRecord[] robots =
         [
             new("https://example.com", 503, null, null, 0),
@@ -116,17 +117,41 @@ public sealed class SiteRuleTests
             new("https://cdn.example", null, null, "Timed out", 0)
         ];
 
-        var hits = new RobotsTxtRules(site.Table(), robots, scope).Finish().ToList();
+        var hits = new RobotsTxtRules(site.Table(), robots, scope, main).Finish().ToList();
 
         var unreachable = Assert.Single(hits);
         Assert.Equal(IssueCatalog.ROBOTS_TXT_UNREACHABLE, unreachable.Issue);
         Assert.Equal("https://example.com/robots.txt (HTTP 503)", unreachable.Detail);
 
         // Google treats 429 like a server error; a redirect loop is handled as "no rules", as the crawler does.
-        var limited = new RobotsTxtRules(site.Table(), [new("https://example.com", 429, null, null, 0)], scope).Finish().Single();
-        var looping = new RobotsTxtRules(site.Table(), [new("https://example.com", null, null, "More than 5 redirects", 0)], scope).Finish().Single();
+        var limited = new RobotsTxtRules(site.Table(), [new("https://example.com", 429, null, null, 0)], scope, main).Finish().Single();
+        var looping = new RobotsTxtRules(site.Table(), [new("https://example.com", null, null, "More than 5 redirects", 0)], scope, main).Finish().Single();
         Assert.Equal(IssueCatalog.ROBOTS_TXT_UNREACHABLE, limited.Issue);
         Assert.Equal(IssueCatalog.ROBOTS_TXT_MISSING, looping.Issue);
+    }
+
+    [Fact]
+    public void RobotsTxtFailingOnAnotherOfTheSitesOriginsOnlyAffectsThatOrigin()
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/");
+        var scope = new CrawlScope(new Uri($"{site.Site}/"), includeSubdomains: true, stayInStartFolder: false);
+        RobotsRecord[] robots =
+        [
+            new("https://example.com", 200, "User-agent: *", null, 0),
+            new("https://blog.example.com", 503, null, null, 0),
+            new("http://example.com", null, null, "Timed out", 0)
+        ];
+
+        var hit = new RobotsTxtRules(site.Table(), robots, scope, new HashSet<string> { "https://example.com" }).Finish().Single();
+
+        Assert.Equal(new IssueHit(IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, site.Id($"{site.Site}/"),
+            "https://blog.example.com/robots.txt (HTTP 503), http://example.com/robots.txt (Timed out)"), hit);
+        Assert.Equal(IssueSeverity.Warning, hit.Issue.Severity);
+
+        // The home page's origin counts as the site's own once the start URL redirects there.
+        var moved = new RobotsTxtRules(site.Table(), robots, scope, new HashSet<string> { "https://example.com", "https://blog.example.com" }).Finish().ToList();
+        Assert.Equal([IssueCatalog.ROBOTS_TXT_UNREACHABLE, IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN], moved.Select(found => found.Issue));
     }
 
     [Fact]

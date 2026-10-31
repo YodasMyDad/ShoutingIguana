@@ -132,6 +132,9 @@ internal sealed class AnalysisReader : IDisposable
         }
     }
 
+    /// <summary>The stored URL with this id, or null when there's none (0 means no URL).</summary>
+    public string? ReadUrl(int urlId) => CrawlDatabase.Scalar(_connection, $"SELECT url FROM urls WHERE id = {urlId}") as string;
+
     /// <summary>The stored facts of one URL, or null when it has none (not HTML, not internal, or not fetched).</summary>
     public PageFacts? ReadFacts(int urlId)
     {

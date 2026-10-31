@@ -127,6 +127,11 @@ public static class IssueCatalog
         "robots.txt returns a server error or doesn't respond. Google treats that as \"disallow everything\" and stops crawling the site.",
         "Make robots.txt return 200 (or 404 if you don't need one).");
 
+    public static readonly IssueDefinition ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN = new("robots-txt-unreachable-other-origin", IssueCategory.Indexability, IssueSeverity.Warning,
+        "robots.txt unavailable on another of the site's origins",
+        "robots.txt on one of the site's other origins (a subdomain, or the http:// version) returns a server error or doesn't respond, so Google stops crawling that origin. The main site isn't affected.",
+        "Make robots.txt on that origin return 200 (or 404 if you don't need one), or stop linking to the origin.");
+
     public static readonly IssueDefinition ROBOTS_TXT_MISSING = new("robots-txt-missing", IssueCategory.Indexability, IssueSeverity.Notice,
         "No robots.txt",
         "The site has no robots.txt. Everything may be crawled, which is fine, but there's nowhere to point crawlers at your sitemap.",
@@ -446,7 +451,7 @@ public static class IssueCatalog
         REDIRECT_CHAIN, REDIRECT_LOOP, REDIRECT_BROKEN, REDIRECT_TEMPORARY, REDIRECT_DOWNGRADE, META_REFRESH,
         BROKEN_INTERNAL_LINKS, BROKEN_EXTERNAL_LINKS, LINKS_TO_REDIRECTS, INTERNAL_NOFOLLOW_LINKS, EMPTY_ANCHOR_TEXT,
         BROKEN_FRAGMENT_LINKS, ORPHAN_PAGE,
-        NOINDEX_PAGE, NOFOLLOW_PAGE, BLOCKED_BY_ROBOTS, SNIPPET_BLOCKED, ROBOTS_TXT_UNREACHABLE, ROBOTS_TXT_MISSING,
+        NOINDEX_PAGE, NOFOLLOW_PAGE, BLOCKED_BY_ROBOTS, SNIPPET_BLOCKED, ROBOTS_TXT_UNREACHABLE, ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, ROBOTS_TXT_MISSING,
         CANONICALISED_PAGE, CANONICAL_MISSING, CANONICAL_MULTIPLE, CANONICAL_BROKEN, CANONICAL_TO_REDIRECT,
         CANONICAL_TO_NON_INDEXABLE, CANONICAL_OUTSIDE_HEAD, CANONICAL_RELATIVE, CANONICAL_INVALID, NOINDEX_WITH_CANONICAL,
         SITEMAP_NON_INDEXABLE, NOT_IN_SITEMAP, SITEMAP_ERROR, SITEMAP_MISSING, SITEMAP_URL_OTHER_HOST,
