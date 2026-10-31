@@ -18,6 +18,8 @@ public sealed partial class SyntheticSite
     private const string LONG_SLUG =
         "a-deliberately-long-address-that-keeps-on-going-so-the-full-url-ends-up-past-the-recommended-length";
 
+    private static readonly string[] HINDI_WORDS = ["नमस्ते", "दुनिया", "किताब", "पानी", "घर", "बच्चे"];
+
     /// <summary>Files only nofollow links point to, so never fetched: the full-size photo behind a gallery lightbox.</summary>
     private static readonly string[] NOFOLLOW_ONLY_FILES = ["/img/5.jpg?width=1400"];
 
@@ -90,6 +92,12 @@ public sealed partial class SyntheticSite
             H1 = "Nearly copied content", Content = $"<p>{string.Join(' ', nearCopy)}</p>"
         });
         Page("thin", "Thin page", ["low-word-count"], page => page with { Content = $"<p>{Text("plant-thin", 60)}</p>" });
+
+        // 150 Hindi words: vowel signs and the virama are part of each word, so it's thin, not 300-odd words.
+        Page("thin-hindi", "Thin Hindi page", ["low-word-count"], page => page with
+        {
+            Content = $"<p lang=\"hi\">{string.Join(' ', Enumerable.Range(0, 150).Select(word => HINDI_WORDS[word % HINDI_WORDS.Length]))}</p>"
+        });
         Page("soft-404", "Soft 404", ["soft-404"], page => page with { Title = "Sorry, this page was not found | Synthetic Store", H1 = "Page not found" });
 
         Page("image-alt-long", "Long alt text", ["image-alt-too-long"], page => page with

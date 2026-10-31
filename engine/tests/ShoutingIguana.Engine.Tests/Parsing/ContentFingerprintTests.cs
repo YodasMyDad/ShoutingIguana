@@ -1,4 +1,5 @@
 using ShoutingIguana.Engine.Parsing;
+using ShoutingIguana.Engine.Parsing.Models;
 
 namespace ShoutingIguana.Engine.Tests.Parsing;
 
@@ -14,10 +15,41 @@ public sealed class ContentFingerprintTests
     public void CountsWords() => Assert.Equal(4, ContentFingerprint.Compute("Hello, World! hello world").WordCount);
 
     [Fact]
-    public void ExactHashIgnoresCaseAndPunctuation() =>
+    public void ExactHashIgnoresCaseAndPunctuation()
+    {
         Assert.Equal(
             ContentFingerprint.Compute("The quick brown fox").ContentHash,
             ContentFingerprint.Compute("the QUICK, brown... fox!").ContentHash);
+        Assert.NotEqual(
+            ContentFingerprint.Compute("The quick brown fox").ContentHash,
+            ContentFingerprint.Compute("The quick brown dog").ContentHash);
+    }
+
+    [Fact]
+    public void FingerprintsOfPlainTextDontChange()
+    {
+        // Values from before word joining was added: stored crawls compare against them.
+        var result = ContentFingerprint.Compute("Garden kettles, copper lanterns and 12 velvet pillows for every season.");
+
+        Assert.Equal(new ContentFingerprintResult(11, 18091267895285211189UL, 8841941512683386144UL), result);
+    }
+
+    [Theory]
+    [InlineData("नमस्ते दुनिया", 2)] // Hindi vowel signs and the virama are combining marks inside the words
+    [InlineData("cafés crème", 2)] // decomposed accents
+    [InlineData("don't stop, O’Brien’s 90's", 4)]
+    [InlineData("rock 'n' roll, the students' books", 6)]
+    [InlineData("co­operate", 1)] // soft hyphen
+    [InlineData("می‌خواهم", 1)] // Persian with a zero-width non-joiner
+    public void MarksJoinersAndApostrophesStayInsideWords(string text, int words) =>
+        Assert.Equal(words, ContentFingerprint.Compute(text).WordCount);
+
+    [Fact]
+    public void InvisibleJoinersAndApostropheStylesDontChangeTheHash()
+    {
+        Assert.Equal(ContentFingerprint.Compute("don't cooperate").ContentHash, ContentFingerprint.Compute("don’t co­operate").ContentHash);
+        Assert.NotEqual(ContentFingerprint.Compute("don't").ContentHash, ContentFingerprint.Compute("don t").ContentHash);
+    }
 
     [Fact]
     public void NearDuplicatesHaveCloseSimHashes()
