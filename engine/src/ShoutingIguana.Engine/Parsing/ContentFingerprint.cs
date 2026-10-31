@@ -14,9 +14,9 @@ namespace ShoutingIguana.Engine.Parsing;
 /// </summary>
 public static class ContentFingerprint
 {
-    private const char SOFT_HYPHEN = '­';
-    private const char ZERO_WIDTH_NON_JOINER = '‌';
-    private const char ZERO_WIDTH_JOINER = '‍';
+    private const char SOFT_HYPHEN = '\u00AD';
+    private const char ZERO_WIDTH_NON_JOINER = '\u200C';
+    private const char ZERO_WIDTH_JOINER = '\u200D';
     private const char RIGHT_SINGLE_QUOTATION_MARK = '’';
 
     private const int MAX_TOKEN_CHARS = 64;

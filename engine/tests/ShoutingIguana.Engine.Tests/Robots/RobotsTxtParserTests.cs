@@ -145,7 +145,7 @@ public sealed class RobotsTxtParserTests
     [Fact]
     public void ReadsCrawlDelaySitemapsCommentsAndBom()
     {
-        var robots = RobotsTxtParser.Parse("﻿User-agent: * # everyone\nCrawl-delay: 2.5\nDisallow: /tmp # temp\nSitemap: https://example.com/sitemap.xml", TOKEN);
+        var robots = RobotsTxtParser.Parse("\uFEFFUser-agent: * # everyone\nCrawl-delay: 2.5\nDisallow: /tmp # temp\nSitemap: https://example.com/sitemap.xml", TOKEN);
 
         Assert.Equal(2.5, robots.CrawlDelaySeconds);
         Assert.Equal(["https://example.com/sitemap.xml"], robots.Sitemaps);

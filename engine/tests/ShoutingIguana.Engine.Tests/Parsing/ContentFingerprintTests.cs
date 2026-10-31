@@ -39,15 +39,15 @@ public sealed class ContentFingerprintTests
     [InlineData("cafés crème", 2)] // decomposed accents
     [InlineData("don't stop, O’Brien’s 90's", 4)]
     [InlineData("rock 'n' roll, the students' books", 6)]
-    [InlineData("co­operate", 1)] // soft hyphen
-    [InlineData("می‌خواهم", 1)] // Persian with a zero-width non-joiner
+    [InlineData("co\u00ADoperate", 1)] // soft hyphen
+    [InlineData("می\u200Cخواهم", 1)] // Persian with a zero-width non-joiner
     public void MarksJoinersAndApostrophesStayInsideWords(string text, int words) =>
         Assert.Equal(words, ContentFingerprint.Compute(text).WordCount);
 
     [Fact]
     public void InvisibleJoinersAndApostropheStylesDontChangeTheHash()
     {
-        Assert.Equal(ContentFingerprint.Compute("don't cooperate").ContentHash, ContentFingerprint.Compute("don’t co­operate").ContentHash);
+        Assert.Equal(ContentFingerprint.Compute("don't cooperate").ContentHash, ContentFingerprint.Compute("don’t co\u00ADoperate").ContentHash);
         Assert.NotEqual(ContentFingerprint.Compute("don't").ContentHash, ContentFingerprint.Compute("don t").ContentHash);
     }
 

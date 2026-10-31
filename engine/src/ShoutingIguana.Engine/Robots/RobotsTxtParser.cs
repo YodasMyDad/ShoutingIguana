@@ -25,7 +25,7 @@ internal static class RobotsTxtParser
         List<string> sitemaps = [];
         RobotsGroupBuilder? current = null;
 
-        foreach (var rawLine in content.TrimStart('﻿').Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        foreach (var rawLine in content.TrimStart('\uFEFF').Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
         {
             var line = StripComment(rawLine).Trim();
             var colon = line.IndexOf(':');
