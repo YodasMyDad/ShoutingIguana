@@ -37,23 +37,14 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     private AnalysisSummary Analyze(string databasePath, AnalysisSettings settings, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
-        CrawlStatus status;
-        using (var probe = AnalysisReader.Open(databasePath))
-        {
-            status = probe.ReadStatus();
-            if (status is CrawlStatus.Running or CrawlStatus.Paused)
-            {
-                throw new InvalidOperationException(
-                    "This crawl is still running, or was interrupted. Finish it with --resume (or stop it) before analysing.");
-            }
-        }
 
-        var crawlComplete = false;
-
+        // Opening the writer locks the file against crawls first, then refuses a crawl that is running or was interrupted.
         using var writer = IssueWriter.Open(databasePath, _logger);
+        var crawlComplete = false;
         long pages = 0;
         using (var reader = AnalysisReader.Open(databasePath))
         {
+            var status = reader.ReadStatus();
             var urls = reader.ReadUrls();
             var options = reader.ReadOptions();
             UrlNormalizer.TryNormalize(options.StartUrl, out var startUrl);

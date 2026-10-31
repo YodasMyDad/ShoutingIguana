@@ -1,5 +1,4 @@
 using Microsoft.Data.Sqlite;
-using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
@@ -63,9 +62,12 @@ public static class CrawlStatsReader
             SitemapCount = Count(connection, "SELECT COUNT(*) FROM sitemaps WHERE error IS NULL"),
             SitemapErrorCount = Count(connection, "SELECT COUNT(*) FROM sitemaps WHERE error IS NOT NULL AND is_probe = 0"),
             SitemapUrlCount = Count(connection, "SELECT COUNT(DISTINCT url_id) FROM sitemap_urls"),
+            // From the links themselves rather than depth: a sitemap page that no other URL links to.
             UnlinkedPageCount = Count(connection, $"""
                 SELECT COUNT(*) FROM urls u JOIN responses r ON r.url_id = u.id
-                WHERE u.is_internal = 1 AND u.depth >= {CrawlDepth.UNLINKED} AND r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL
+                WHERE u.is_internal = 1 AND u.source = {(int)DiscoverySource.Sitemap}
+                  AND r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM links l WHERE l.to_id = u.id AND l.from_id <> u.id)
                 """),
             HtmlPageCount = htmlPages,
             IndexablePageCount = indexable,

@@ -40,10 +40,7 @@ internal sealed class AnalysisReader : IDisposable
 
     public static AnalysisReader Open(string databasePath) => new(CrawlDatabase.OpenReader(databasePath));
 
-    public CrawlStatus ReadStatus() =>
-        CrawlDatabase.Scalar(_connection, "SELECT status FROM crawl WHERE id = 1") is long status
-            ? (CrawlStatus)status
-            : throw new InvalidOperationException("This file is not a crawl database.");
+    public CrawlStatus ReadStatus() => CrawlDatabase.ReadStatus(_connection);
 
     public UrlTable ReadUrls()
     {
