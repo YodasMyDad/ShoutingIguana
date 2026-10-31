@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
+using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.TestSite;
@@ -40,6 +41,7 @@ public sealed class CliTests : IAsyncLifetime
         var oneIssue = await RunAsync("issues", crawl, "title-too-long");
         Assert.Equal(0, oneIssue.ExitCode);
         Assert.Contains($"{_server.BaseUri}plants/title-long", oneIssue.Output);
+        Assert.Contains("Error: Site not on HTTPS (1 URL)", (await RunAsync("issues", crawl, "no-https")).Output);
 
         // The synthetic site's sitemap index lists one sitemap that doesn't exist.
         var stats = await RunAsync("stats", crawl);
@@ -93,6 +95,12 @@ public sealed class CliTests : IAsyncLifetime
         Assert.Equal(0, orphans.ExitCode);
         Assert.Contains(NOTE, orphans.Output);
         Assert.Contains("not checked in this analysis", orphans.Output);
+
+        // The summary counts only the checks that ran, as the crawl's own analysis did, never a skipped one as clean.
+        var ran = IssueReader.ReadCounts(crawl).Count;
+        Assert.True(ran < IssueCatalog.All.Count);
+        Assert.Contains($"of {ran} checks found something", result.Output);
+        Assert.Contains($"of {ran} checks found something", (await RunAsync("issues", crawl)).Output);
     }
 
     [Fact]

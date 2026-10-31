@@ -8,10 +8,11 @@ internal sealed class PerformanceRules(AnalysisSettings settings) : IPageRule
 {
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
+        // The first byte tells a server that took long to answer from a page that took long to download.
         if (page.ResponseMs > settings.SlowResponseMs)
         {
             yield return new IssueHit(IssueCatalog.SLOW_RESPONSE, page.UrlId,
-                string.Create(CultureInfo.InvariantCulture, $"{page.ResponseMs:N0} ms"));
+                string.Create(CultureInfo.InvariantCulture, $"{page.ResponseMs:N0} ms (first byte after {page.TimeToFirstByteMs:N0} ms)"));
         }
 
         if (page.BodyBytes > settings.LargePageBytes)

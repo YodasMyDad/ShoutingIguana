@@ -26,9 +26,19 @@ internal sealed class HtmlRules : IPageRule
             yield return new IssueHit(IssueCatalog.CHARSET_MISSING, page.UrlId);
         }
 
-        if (page.IsIndexable && OPEN_GRAPH.Where(name => !HasMeta(facts.MetaTags, name)).ToList() is { Count: > 0 } missing)
+        if (page.IsIndexable && OPEN_GRAPH.Where(name => !HasMeta(facts.MetaTags, name)).ToList() is { Count: > 0 } lacking)
         {
-            yield return new IssueHit(IssueCatalog.OPEN_GRAPH_MISSING, page.UrlId, $"Missing {string.Join(", ", missing)}");
+            // A tag that's there but empty does no more than a missing one, but the fix is different, so say which.
+            var empty = lacking.Where(name => facts.MetaTags.Any(tag => tag.Name == name)).ToList();
+            var missing = lacking.Except(empty).ToList();
+            var detail = (missing.Count > 0, empty.Count > 0) switch
+            {
+                (true, true) => $"Missing {string.Join(", ", missing)}; empty {string.Join(", ", empty)}",
+                (true, false) => $"Missing {string.Join(", ", missing)}",
+                _ => $"Empty {string.Join(", ", empty)}"
+            };
+
+            yield return new IssueHit(IssueCatalog.OPEN_GRAPH_MISSING, page.UrlId, detail);
         }
     }
 

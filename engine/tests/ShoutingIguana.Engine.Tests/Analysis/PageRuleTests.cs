@@ -127,7 +127,7 @@ public sealed class PageRuleTests
         Assert.Equal("1 broken URL", hits.Single(hit => hit.Issue == IssueCatalog.BROKEN_EXTERNAL_LINKS).Detail);
         Assert.Contains(hits, hit => hit.Issue == IssueCatalog.LINKS_TO_REDIRECTS);
         Assert.Contains(hits, hit => hit.Issue == IssueCatalog.INTERNAL_NOFOLLOW_LINKS);
-        Assert.Contains(hits, hit => hit.Issue == IssueCatalog.EMPTY_ANCHOR_TEXT);
+        Assert.Equal("Links to 1 URL", hits.Single(hit => hit.Issue == IssueCatalog.EMPTY_ANCHOR_TEXT).Detail);
         Assert.DoesNotContain(hits, hit => hit.Issue == IssueCatalog.BROKEN_INTERNAL_LINKS);
     }
 
@@ -186,7 +186,7 @@ public sealed class PageRuleTests
         var hit = new LinkRules(site.Table()).Check(page).Single(found => found.Issue == IssueCatalog.INTERNAL_NOFOLLOW_LINKS);
 
         // PDFs can be indexed, a query isn't a path, and a fetched URL is judged by what it returned.
-        Assert.Equal(new IssueHit(IssueCatalog.INTERNAL_NOFOLLOW_LINKS, page.UrlId, "4 URLs", site.Id($"{site.Site}/guide.pdf")), hit);
+        Assert.Equal(new IssueHit(IssueCatalog.INTERNAL_NOFOLLOW_LINKS, page.UrlId, "Links to 4 URLs", site.Id($"{site.Site}/guide.pdf")), hit);
     }
 
     [Fact]

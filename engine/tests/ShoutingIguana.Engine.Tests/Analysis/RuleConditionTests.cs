@@ -61,8 +61,25 @@ public sealed class RuleConditionTests
         Assert.Equal("Missing og:description, og:image",
             rules.Check(site.Page($"{site.Site}/d", RuleHarness.Html(VIEWPORT + "<meta property=\"og:title\" content=\"T\">"))).Single().Detail);
 
+        // A tag that's there with nothing in it is told apart from one that's missing.
+        Assert.Equal("Missing og:image; empty og:title", rules.Check(site.Page($"{site.Site}/f", RuleHarness.Html(
+            VIEWPORT + "<meta property=\"og:title\" content=\" \"><meta property=\"og:description\" content=\"D\">"))).Single().Detail);
+        Assert.Equal("Empty og:description", rules.Check(site.Page($"{site.Site}/g", RuleHarness.Html(
+            VIEWPORT + "<meta property=\"og:title\" content=\"T\"><meta property=\"og:description\" content=\"\"><meta property=\"og:image\" content=\"/i.jpg\">"))).Single().Detail);
+
         // Open Graph only matters for pages that can be shared from search; the document basics apply everywhere.
         Assert.Equal([IssueCatalog.VIEWPORT_MISSING], Issues(rules, site.Page($"{site.Site}/e", RuleHarness.Html(), IndexabilityReason.Noindex)));
+    }
+
+    [Fact]
+    public void ASlowPageSaysHowLongItWaitedForTheFirstByte()
+    {
+        var site = new RuleHarness();
+        var rules = new PerformanceRules(SETTINGS);
+        var slow = site.Page($"{site.Site}/slow", RuleHarness.Html(), responseMs: 5_512) with { TimeToFirstByteMs = 5_505 };
+
+        Assert.Equal([new IssueHit(IssueCatalog.SLOW_RESPONSE, slow.UrlId, "5,512 ms (first byte after 5,505 ms)")], rules.Check(slow));
+        Assert.Empty(rules.Check(site.Page($"{site.Site}/fast", RuleHarness.Html(), responseMs: SETTINGS.SlowResponseMs)));
     }
 
     [Fact]

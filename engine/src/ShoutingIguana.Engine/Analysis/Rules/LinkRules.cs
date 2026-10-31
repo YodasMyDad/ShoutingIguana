@@ -75,13 +75,13 @@ internal sealed class LinkRules(UrlTable urls) : IPageRule
         if (nofollow.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.INTERNAL_NOFOLLOW_LINKS, page.UrlId,
-                RuleText.Count(nofollow.Count, "URL", "URLs"), nofollow.First);
+                $"Links to {RuleText.Count(nofollow.Count, "URL", "URLs")}", nofollow.First);
         }
 
         if (withoutText.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.EMPTY_ANCHOR_TEXT, page.UrlId,
-                RuleText.Count(withoutText.Count, "URL", "URLs"), withoutText.First);
+                $"Links to {RuleText.Count(withoutText.Count, "URL", "URLs")}", withoutText.First);
         }
     }
 }

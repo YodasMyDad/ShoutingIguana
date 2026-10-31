@@ -73,8 +73,9 @@ internal static class IssuesCommand
 
             if (id is null)
             {
+                // Only the checks that ran, as the analysis reported them: a skipped check isn't a clean one.
                 var counts = IssueReader.ReadCounts(path);
-                IssueSummaryPrinter.Print(IssueCatalog.All.Select(issue => new IssueCount(issue, counts.GetValueOrDefault(issue.Id))).ToList());
+                IssueSummaryPrinter.Print(IssueCatalog.All.Where(issue => counts.ContainsKey(issue.Id)).Select(issue => new IssueCount(issue, counts[issue.Id])).ToList());
                 return 0;
             }
 
@@ -96,7 +97,7 @@ internal static class IssuesCommand
         }
 
         Console.WriteLine();
-        Console.WriteLine($"  {issue.Severity}: {issue.Title} ({total:N0} URLs)");
+        Console.WriteLine($"  {issue.Severity}: {issue.Title} ({total:N0} {(total == 1 ? "URL" : "URLs")})");
         Console.WriteLine($"  {issue.Description}");
         Console.WriteLine($"  Fix: {issue.Fix}");
         Console.WriteLine();
