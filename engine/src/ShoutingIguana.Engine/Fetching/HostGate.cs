@@ -5,12 +5,12 @@ namespace ShoutingIguana.Engine.Fetching;
 /// <summary>
 /// Politeness for one host. Caps parallel requests and spaces request starts by the configured interval.
 /// Backs off automatically when the host signals overload (429, 503, block pages; Retry-After is
-/// honoured), then decays back to full speed as successful responses return. It also counts URLs in a row
-/// that got no answer at all, so a host that has stopped answering can be recognised as unreachable.
+/// honoured), then decays back to full speed as successful responses return. It also knows whether the site has
+/// stopped answering altogether, and since when, so the crawl can wait it out and, after a while, give up on it.
 /// </summary>
 internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, TimeProvider timeProvider)
 {
-    /// <summary>URLs in a row, each after its retries, that got no response before a host counts as unreachable.</summary>
+    /// <summary>URLs in a row, each after its retries, that got no response before an origin counts as unreachable.</summary>
     public const int UNREACHABLE_AFTER_URLS = 3;
 
     private static readonly TimeSpan MIN_BACKOFF = TimeSpan.FromMilliseconds(250);
@@ -24,7 +24,6 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
     private TimeSpan _backoff = TimeSpan.Zero;
     private DateTimeOffset _nextStart = DateTimeOffset.MinValue;
     private DateTimeOffset _pausedUntil = DateTimeOffset.MinValue;
-    private int _unansweredUrls;
     private DateTimeOffset? _unreachableSince;
 
     public TimeSpan CurrentBackoff
@@ -38,19 +37,23 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
         }
     }
 
-    /// <summary>The last <see cref="UNREACHABLE_AFTER_URLS"/> URLs got no response at all: timeouts, refused or reset connections.</summary>
+    /// <summary>
+    /// The site has stopped answering: <see cref="UNREACHABLE_AFTER_URLS"/> URLs in a row on one of its origins got no
+    /// response at all (timeouts, refused or reset connections), and neither did robots.txt there or at the start URL's
+    /// origin. It lasts until any of the origins behind this gate answers.
+    /// </summary>
     public bool IsUnreachable
     {
         get
         {
             lock (_sync)
             {
-                return _unansweredUrls >= UNREACHABLE_AFTER_URLS;
+                return _unreachableSince is not null;
             }
         }
     }
 
-    /// <summary>How long the host has been <see cref="IsUnreachable"/>; zero while it answers.</summary>
+    /// <summary>How long the site has been <see cref="IsUnreachable"/>; zero while it answers.</summary>
     public TimeSpan UnreachableFor
     {
         get
@@ -62,28 +65,27 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
         }
     }
 
-    /// <summary>
-    /// Records how a URL ended once its retries were spent. Any response, even an error status, resets the count.
-    /// Returns true for the URL that makes the host unreachable.
-    /// </summary>
-    public bool ReportUrl(bool answered)
+    /// <summary>Records that the site stopped answering. Returns true when it was answering until now.</summary>
+    public bool ReportUnreachable()
     {
         lock (_sync)
         {
-            if (answered)
-            {
-                _unansweredUrls = 0;
-                _unreachableSince = null;
-                return false;
-            }
-
-            if (++_unansweredUrls != UNREACHABLE_AFTER_URLS)
+            if (_unreachableSince is not null)
             {
                 return false;
             }
 
             _unreachableSince = timeProvider.GetUtcNow();
             return true;
+        }
+    }
+
+    /// <summary>A response, even an error status, from any origin behind the gate: the site answers again.</summary>
+    public void ReportAnswered()
+    {
+        lock (_sync)
+        {
+            _unreachableSince = null;
         }
     }
 

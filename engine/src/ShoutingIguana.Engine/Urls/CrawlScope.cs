@@ -26,7 +26,11 @@ internal sealed class CrawlScope
         _isDefaultPort = startUri.IsDefaultPort;
         _port = startUri.Port;
         _startFolder = stayInStartFolder ? GetFolder(startUri.AbsolutePath) : "/";
+        StartOrigin = new Uri(startUri.GetLeftPart(UriPartial.Authority));
     }
+
+    /// <summary>The start URL's scheme, host and port: the origin that stands for the site when another of its origins goes quiet.</summary>
+    public Uri StartOrigin { get; }
 
     public bool IsInternal(Uri uri) => IsOwn(uri, withSubdomains: true);
 

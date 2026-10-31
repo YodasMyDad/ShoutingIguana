@@ -12,13 +12,20 @@ using ShoutingIguana.Engine.Robots;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Tests.Fetching;
 using ShoutingIguana.Engine.Tests.Robots;
+using ShoutingIguana.Engine.Tests.Support;
 
 namespace ShoutingIguana.Engine.Tests.Crawling;
 
-/// <summary>Whole crawls and analyses of small loopback sites whose robots.txt or links fail.</summary>
+/// <summary>
+/// Whole crawls and analyses of small loopback sites whose robots.txt or links fail. Crawls that wait (pauses, cool-downs,
+/// giving up) run on the fake clock.
+/// </summary>
 public sealed class NetworkFailureCrawlTests : IAsyncLifetime
 {
     private static readonly TimeSpan CRAWL_TIMEOUT = TimeSpan.FromMinutes(1);
+
+    /// <summary>Fake time per pump step for the crawls that wait out a site for ten minutes.</summary>
+    private static readonly TimeSpan LONG_STEP = TimeSpan.FromSeconds(5);
 
     private readonly List<string> _databases = [];
     private LoopbackServer? _server;
@@ -252,44 +259,47 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// The home page answers, then the site goes down for good. On the fake clock, so the 1-minute pauses between
-    /// tries and the 10 minutes before giving up pass in a couple of seconds.
+    /// The home page answers, then the site goes down: nothing answers, robots.txt included. On the fake clock, so the
+    /// 1-minute pauses between tries and the 10 minutes before giving up pass in moments. Once the site is back, the
+    /// crawl resumes where it stopped.
     /// </summary>
     [Fact]
     public async Task ASiteThatStaysDownStopsTheCrawlAndCanBeResumed()
     {
         var links = string.Concat(Enumerable.Range(0, 60).Select(page => $"<a href=\"/p{page}\">Page {page}</a> "));
+        var isUp = true;
+        var goesDownAfterTheHomePage = true;
         _server = await LoopbackServer.StartAsync(context =>
         {
+            if (!Volatile.Read(ref isUp))
+            {
+                context.Abort();
+                return Task.CompletedTask;
+            }
+
             switch (context.Request.Path.Value)
             {
                 case "/":
+                    Volatile.Write(ref isUp, !Volatile.Read(ref goesDownAfterTheHomePage));
                     return Html(context, links);
                 case "/robots.txt":
                     return Status(context, 404);
                 default:
-                    context.Abort();
-                    return Task.CompletedTask;
+                    return Html(context, "<p>Back again</p>");
             }
         });
         var time = new FakeTimeProvider();
-        var observer = new RecordingObserver();
+        var observer = new RecordingObserver(time);
         var path = NewDatabasePath();
-        var options = new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxRetries = 0, DiscoverSitemaps = false, Concurrency = 2 };
+        var options = Options() with { Concurrency = 2 };
 
-        await using var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(new CrawlRequest(options, path), observer);
-        var started = time.GetUtcNow();
-        var deadline = DateTime.UtcNow + CRAWL_TIMEOUT;
-        while (!job.Completion.IsCompleted && DateTime.UtcNow < deadline)
-        {
-            time.Advance(TimeSpan.FromSeconds(5));
-            await Task.Delay(1);
-        }
+        var summary = await CrawlOnFakeClockAsync(options, path, observer, time, LONG_STEP);
 
-        var summary = await job.Completion.WaitAsync(TimeSpan.FromSeconds(5));
+        // Ten minutes after it stopped answering, give or take a step of the clock.
         Assert.Equal(CrawlStatus.Stopped, summary.Status);
         Assert.Equal(1, observer.Count("site-down"));
-        Assert.InRange(time.GetUtcNow() - started, RetryingFetcher.GIVE_UP_AFTER, RetryingFetcher.GIVE_UP_AFTER + TimeSpan.FromMinutes(2));
+        Assert.InRange(observer.FirstAt("site-down") - observer.FirstAt("site-unreachable"),
+            RetryingFetcher.GIVE_UP_AFTER - LONG_STEP, RetryingFetcher.GIVE_UP_AFTER + TimeSpan.FromMinutes(2));
 
         // Nothing it couldn't reach was written off as broken: it's all still to do, for when the site is back.
         Assert.Equal(0L, Scalar(path, $"""
@@ -297,13 +307,90 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
             WHERE u.is_internal = 1 AND r.outcome IN ({(int)FetchOutcome.Timeout}, {(int)FetchOutcome.NetworkError})
             """));
         Assert.Equal(60L, Scalar(path, "SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state IN (0, 1)"));
+
+        Volatile.Write(ref goesDownAfterTheHomePage, false);
+        Volatile.Write(ref isUp, true);
+        await using var resumed = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path, Resume: true));
+        Assert.Equal(CrawlStatus.Completed, (await resumed.Completion.WaitAsync(CRAWL_TIMEOUT)).Status);
+        Assert.Equal(60L, Scalar(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url LIKE '%/p%' AND r.status_code = 200"));
     }
+
+    /// <summary>
+    /// The site links to a www twin that doesn't exist. Its URLs fail, then fail fast, while the site itself is crawled in
+    /// full, robots.txt respected or not: it isn't paused or stopped as if it were down, and the twin's URLs aren't called
+    /// blocked by a robots.txt nobody could read.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ADeadWwwTwinDoesNotHoldUpTheSite(bool respectRobotsTxt)
+    {
+        _server = await LoopbackServer.StartAsync(context =>
+        {
+            var twin = $"http://www.127.0.0.1:{context.Connection.LocalPort}";
+            return context.Request.Path.Value switch
+            {
+                "/" => Html(context, string.Concat(Enumerable.Range(0, 10).Select(page => $"<a href=\"/p{page}\">Page</a> "))
+                                     + string.Concat(Enumerable.Range(0, 15).Select(page => $"<a href=\"{twin}/w{page}\">Twin</a> "))),
+                "/robots.txt" => Status(context, 404),
+                _ => Html(context, "<p>Page</p>")
+            };
+        });
+        var time = new FakeTimeProvider();
+        var observer = new RecordingObserver(time);
+        var path = NewDatabasePath();
+
+        var summary = await CrawlOnFakeClockAsync(Options() with { RespectRobotsTxt = respectRobotsTxt }, path, observer, time);
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        Assert.Equal(10L, Scalar(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url LIKE 'http://127.0.0.1:%/p%' AND r.status_code = 200"));
+        Assert.Equal(15L, Scalar(path, $"SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url LIKE 'http://www.%' AND r.outcome = {(int)FetchOutcome.NetworkError}"));
+        Assert.NotEqual(0L, Scalar(path, $"SELECT COUNT(*) FROM responses WHERE error LIKE '{RetryingFetcher.NOT_CHECKED_ERROR}%'"));
+        Assert.DoesNotContain(observer.Notices, notice => notice.Code is "site-unreachable" or "site-down" or "robots-unreachable");
+    }
+
+    /// <summary>A section of the site that never answers comes before the pages that do; robots.txt answers throughout.</summary>
+    [Fact]
+    public async Task ASectionThatNeverAnswersDoesNotStopTheCrawl()
+    {
+        var links = string.Concat(Enumerable.Range(0, 30).Select(page => $"<a href=\"/dead/{page}\">Dead</a> ")
+            .Concat(Enumerable.Range(0, 10).Select(page => $"<a href=\"/ok/{page}\">OK</a> ")));
+        _server = await LoopbackServer.StartAsync(context =>
+        {
+            var requestPath = context.Request.Path.Value ?? "/";
+            if (requestPath.StartsWith("/dead/", StringComparison.Ordinal))
+            {
+                context.Abort();
+                return Task.CompletedTask;
+            }
+
+            return requestPath == "/robots.txt" ? Status(context, 404) : Html(context, requestPath == "/" ? links : "<p>OK</p>");
+        });
+        var time = new FakeTimeProvider();
+        var observer = new RecordingObserver(time);
+        var path = NewDatabasePath();
+
+        var summary = await CrawlOnFakeClockAsync(Options() with { Concurrency = 1 }, path, observer, time);
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        Assert.Equal(10L, Scalar(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url LIKE '%/ok/%' AND r.status_code = 200"));
+        Assert.Equal(30L, Scalar(path, $"SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url LIKE '%/dead/%' AND r.outcome = {(int)FetchOutcome.NetworkError}"));
+        Assert.Equal(0, observer.Count("site-unreachable"));
+    }
+
+    private CrawlOptions Options(int maxRetries = 0) =>
+        new() { StartUrl = _server!.BaseUri.AbsoluteUri, MaxRetries = maxRetries, DiscoverSitemaps = false };
 
     private async Task<CrawlSummary> CrawlAsync(string path, ICrawlObserver observer, int maxRetries = 0)
     {
-        var options = new CrawlOptions { StartUrl = _server!.BaseUri.AbsoluteUri, MaxRetries = maxRetries, DiscoverSitemaps = false };
-        await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path), observer);
+        await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(Options(maxRetries), path), observer);
         return await job.Completion.WaitAsync(CRAWL_TIMEOUT);
+    }
+
+    private static async Task<CrawlSummary> CrawlOnFakeClockAsync(CrawlOptions options, string path, ICrawlObserver observer, FakeTimeProvider time, TimeSpan? step = null)
+    {
+        await using var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(new CrawlRequest(options, path), observer);
+        return await FakeClock.PumpAsync(time, job.Completion, step);
     }
 
     private string NewDatabasePath()
