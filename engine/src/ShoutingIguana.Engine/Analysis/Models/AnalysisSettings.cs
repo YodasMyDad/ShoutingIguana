@@ -2,7 +2,8 @@ namespace ShoutingIguana.Engine.Analysis.Models;
 
 /// <summary>
 /// Thresholds the rules use. The defaults follow common SEO tool defaults; each analysis stores the values it ran
-/// with in the crawl file.
+/// with in the crawl file. Title and description lengths count user-perceived characters, with full-width (CJK)
+/// characters and emoji counted as two because they take about twice the room in search results.
 /// </summary>
 public sealed record AnalysisSettings
 {

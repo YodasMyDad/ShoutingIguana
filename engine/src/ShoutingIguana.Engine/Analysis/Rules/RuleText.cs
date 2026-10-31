@@ -16,6 +16,11 @@ internal static class RuleText
 
     public static string Characters(int count) => Count(count, "character", "characters");
 
+    /// <summary>"45 characters", or for text with wide characters "21 characters (42 counting full-width characters as two)".</summary>
+    public static string Width((int Characters, int Width) measured) => measured.Width == measured.Characters
+        ? Characters(measured.Characters)
+        : string.Create(CultureInfo.InvariantCulture, $"{Characters(measured.Characters)} ({measured.Width:N0} counting full-width characters as two)");
+
     /// <summary>What the crawl found at a URL, phrased to follow "the URL": "returns HTTP 404", "is noindex".</summary>
     public static string Status(UrlStatus url) => url.Outcome switch
     {

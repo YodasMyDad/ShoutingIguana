@@ -25,6 +25,43 @@ public sealed class PageRuleTests
         Assert.Equal([IssueCatalog.TITLE_MULTIPLE],
             Issues(rules, site.Page($"{site.Site}/d", RuleHarness.Html("<title>A perfectly sized page title here</title><title>Second one</title>"))));
         Assert.Empty(Issues(rules, site.Page($"{site.Site}/e", RuleHarness.Html(), IndexabilityReason.Noindex)));
+
+        // 55 characters but 65 UTF-16 units: each é is an e and a combining accent.
+        var accented = string.Concat(Enumerable.Repeat("é", 10)) + new string('x', 45);
+        Assert.True(accented.Length > SETTINGS.TitleMaxLength);
+        Assert.Empty(Issues(rules, site.Page($"{site.Site}/f", RuleHarness.Html($"<title>{accented}</title>"))));
+    }
+
+    [Fact]
+    public void FullWidthCharactersAndEmojiTakeTwiceTheRoomInTitles()
+    {
+        var site = new RuleHarness();
+        var rules = new TitleRules(SETTINGS);
+        List<IssueHit> Hits(string path, string title) => rules.Check(site.Page($"{site.Site}/{path}", RuleHarness.Html($"<title>{title}</title>"))).ToList();
+
+        // 21 Japanese characters are a normal title; 48 run past what results show.
+        Assert.Empty(Hits("a", "合成ストアの全角タイトル付き試験ページです"));
+        Assert.Equal([new IssueHit(IssueCatalog.TITLE_TOO_LONG, site.Id($"{site.Site}/b"), "48 characters (96 counting full-width characters as two)")],
+            Hits("b", string.Concat(Enumerable.Repeat("日本語の題名", 8))));
+
+        // An emoji with a skin tone is one character (4 UTF-16 units) taking two widths.
+        Assert.Equal("31 characters (62 counting full-width characters as two)",
+            Hits("c", string.Concat(Enumerable.Repeat("\U0001F44D\U0001F3FD", 31))).Single(hit => hit.Issue == IssueCatalog.TITLE_TOO_LONG).Detail);
+        Assert.Equal("14 characters", Hits("d", "Hello, Mädchen").Single(hit => hit.Issue == IssueCatalog.TITLE_TOO_SHORT).Detail);
+    }
+
+    [Fact]
+    public void DescriptionLengthsCountFullWidthCharactersAsTwo()
+    {
+        var site = new RuleHarness();
+        var rules = new DescriptionRules(SETTINGS);
+        List<IssueDefinition> Issues(string path, string description) =>
+            rules.Check(site.Page($"{site.Site}/{path}", RuleHarness.Html($"<meta name=\"description\" content=\"{description}\">"))).Select(hit => hit.Issue).ToList();
+
+        // 40 full-width characters fill as much of a result as 80 Latin ones.
+        Assert.Empty(Issues("a", string.Concat(Enumerable.Repeat("全角文字の説明", 6))[..40]));
+        Assert.Equal([IssueCatalog.DESCRIPTION_TOO_SHORT], Issues("b", new string('x', 40)));
+        Assert.Equal([IssueCatalog.DESCRIPTION_TOO_LONG], Issues("c", string.Concat(Enumerable.Repeat("説明", 40))));
     }
 
     [Theory]

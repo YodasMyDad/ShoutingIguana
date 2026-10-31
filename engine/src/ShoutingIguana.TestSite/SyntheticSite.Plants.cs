@@ -45,6 +45,10 @@ public sealed partial class SyntheticSite
         });
         Page("title-short", "Short title", ["title-too-short"], page => page with { Title = "Short page" });
 
+        // Full-width characters take twice the room in results: 21 of them make a normal title, 48 a long one.
+        Page("title-wide", "Full-width title", [], page => page with { Title = "合成ストアの全角タイトル付き試験ページです" });
+        Page("title-wide-long", "Long full-width title", ["title-too-long"], page => page with { Title = string.Concat(Enumerable.Repeat("日本語の題名", 8)) });
+
         Page("description-multiple", "Two descriptions", ["description-multiple"], page => page with
         {
             ExtraHead = "<meta name=\"description\" content=\"A second meta description on the same planted page, which search engines may ignore.\">"
