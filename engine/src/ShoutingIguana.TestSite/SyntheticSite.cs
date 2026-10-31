@@ -198,6 +198,7 @@ public sealed partial class SyntheticSite
     {
         HashSet<string> broken = [], errors = [], redirects = [], chains = [], disallowed = [], hidden = [], externalOk = [], externalMissing = [], images = [];
         int noindex = 0, canonicalised = 0, listedNonIndexable = 0, canonicalToNonIndexable = 0, duplicateTitles = 0, missingDescriptions = 0, missingAlt = 0;
+        var noindexWithCanonical = 0;
         int linksToBroken = 0, linksToRedirects = 0, linksNofollow = 0, linksToDeadExternals = 0;
 
         for (var product = 1; product < PageCount; product++)
@@ -260,6 +261,7 @@ public sealed partial class SyntheticSite
             if (IsNoindex(product))
             {
                 noindex++;
+                noindexWithCanonical += IsCanonicalised(product) ? 1 : 0;
             }
             else if (IsCanonicalised(product))
             {
@@ -307,6 +309,7 @@ public sealed partial class SyntheticSite
             ["internal-nofollow-links"] = linksNofollow,
             ["broken-external-links"] = linksToDeadExternals,
             ["noindex-page"] = noindex,
+            ["noindex-with-canonical"] = noindexWithCanonical,
             ["canonicalised-page"] = canonicalised,
             ["canonical-to-non-indexable"] = canonicalToNonIndexable,
             ["sitemap-non-indexable"] = listedNonIndexable,

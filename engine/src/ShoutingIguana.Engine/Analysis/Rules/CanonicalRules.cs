@@ -56,6 +56,12 @@ internal sealed class CanonicalRules(UrlTable urls) : IPageRule
             yield return new IssueHit(IssueCatalog.CANONICALISED_PAGE, page.UrlId, null, targetId > 0 ? targetId : null);
         }
 
+        // The noindex wins, so the page isn't canonicalised, but the two signals contradict each other.
+        if (page.Facts.Robots.NoIndex)
+        {
+            yield return new IssueHit(IssueCatalog.NOINDEX_WITH_CANONICAL, page.UrlId, null, targetId > 0 ? targetId : null);
+        }
+
         if (targetId == 0 || urls[targetId] is not { Fetched: true } target)
         {
             yield break;

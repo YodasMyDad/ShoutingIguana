@@ -127,6 +127,10 @@ public sealed partial class SyntheticSite
             page => page with { Canonical = $"{_base}{PLANTS_PATH}noindex" }, inSitemap: false);
 
         Page("noindex", "Noindex page", ["noindex-page"], page => page with { Robots = "noindex" }, inSitemap: false);
+        Page("noindex-canonical", "Noindex with a canonical elsewhere", ["noindex-page", "noindex-with-canonical"], page => page with
+        {
+            Robots = "noindex", Canonical = $"{_base}{PLANTS_PATH}hreflang-lonely"
+        }, inSitemap: false);
         Page("nofollow", "Nofollow page", ["nofollow-page"], page => page with { Robots = "nofollow" });
         Page("nosnippet", "No snippet", ["snippet-blocked"], page => page with { Robots = "nosnippet" });
         Page("meta-refresh", "Meta refresh", ["meta-refresh"], page => page with

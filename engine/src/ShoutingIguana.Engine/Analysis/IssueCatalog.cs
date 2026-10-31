@@ -178,6 +178,11 @@ public static class IssueCatalog
         "The canonical isn't a valid http(s) URL, so it's ignored.",
         "Fix the canonical URL.");
 
+    public static readonly IssueDefinition NOINDEX_WITH_CANONICAL = new("noindex-with-canonical", IssueCategory.Canonicals, IssueSeverity.Warning,
+        "Noindex page with a canonical to another URL",
+        "The page is noindex and names another URL as its canonical. Google advises against combining them: the noindex drops the page from search, while the canonical says it's a duplicate whose signals belong to the other URL.",
+        "Use the canonical alone to fold the page into the other URL, or the noindex alone, with a self-referencing canonical, to keep it out of search.");
+
     // Sitemaps
     public static readonly IssueDefinition SITEMAP_NON_INDEXABLE = new("sitemap-non-indexable", IssueCategory.Sitemaps, IssueSeverity.Warning,
         "Non-indexable URL in sitemap",
@@ -443,7 +448,7 @@ public static class IssueCatalog
         BROKEN_FRAGMENT_LINKS, ORPHAN_PAGE,
         NOINDEX_PAGE, NOFOLLOW_PAGE, BLOCKED_BY_ROBOTS, SNIPPET_BLOCKED, ROBOTS_TXT_UNREACHABLE, ROBOTS_TXT_MISSING,
         CANONICALISED_PAGE, CANONICAL_MISSING, CANONICAL_MULTIPLE, CANONICAL_BROKEN, CANONICAL_TO_REDIRECT,
-        CANONICAL_TO_NON_INDEXABLE, CANONICAL_OUTSIDE_HEAD, CANONICAL_RELATIVE, CANONICAL_INVALID,
+        CANONICAL_TO_NON_INDEXABLE, CANONICAL_OUTSIDE_HEAD, CANONICAL_RELATIVE, CANONICAL_INVALID, NOINDEX_WITH_CANONICAL,
         SITEMAP_NON_INDEXABLE, NOT_IN_SITEMAP, SITEMAP_ERROR, SITEMAP_MISSING, SITEMAP_URL_OTHER_HOST,
         TITLE_MISSING, TITLE_MULTIPLE, TITLE_TOO_LONG, TITLE_TOO_SHORT, TITLE_DUPLICATE,
         DESCRIPTION_MISSING, DESCRIPTION_MULTIPLE, DESCRIPTION_TOO_LONG, DESCRIPTION_TOO_SHORT, DESCRIPTION_DUPLICATE,

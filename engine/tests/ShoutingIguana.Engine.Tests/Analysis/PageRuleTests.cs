@@ -235,6 +235,26 @@ public sealed class PageRuleTests
         Assert.Empty(Issues(rules, noneButNoindex));
     }
 
+    [Fact]
+    public void NoindexWithACanonicalElsewhereIsAConflict()
+    {
+        var site = new RuleHarness();
+        var other = $"<link rel=\"canonical\" href=\"{site.Site}/other\">";
+
+        var conflict = site.Page($"{site.Site}/a", RuleHarness.Html(other + "<meta name=\"robots\" content=\"noindex\">"), IndexabilityReason.Noindex);
+        var fromHeaders = site.Page($"{site.Site}/b", RuleHarness.Html(), IndexabilityReason.Noindex,
+            [new ResponseHeader("x-robots-tag", "noindex"), new ResponseHeader("link", $"<{site.Site}/other>; rel=\"canonical\"")]);
+        var selfCanonical = site.Page($"{site.Site}/c", RuleHarness.Html($"<link rel=\"canonical\" href=\"{site.Site}/c\"><meta name=\"robots\" content=\"noindex\">"),
+            IndexabilityReason.Noindex);
+        var canonicalOnly = site.Page($"{site.Site}/d", RuleHarness.Html(other), IndexabilityReason.Canonicalised);
+        var rules = new CanonicalRules(site.Table());
+
+        Assert.Equal(new IssueHit(IssueCatalog.NOINDEX_WITH_CANONICAL, conflict.UrlId, null, site.Id($"{site.Site}/other")), rules.Check(conflict).Single());
+        Assert.Equal([IssueCatalog.NOINDEX_WITH_CANONICAL], Issues(rules, fromHeaders));
+        Assert.Empty(Issues(rules, selfCanonical));
+        Assert.Equal([IssueCatalog.CANONICALISED_PAGE], Issues(rules, canonicalOnly));
+    }
+
     [Theory]
     [InlineData("nosnippet", true)]
     [InlineData("max-snippet:0", true)]
