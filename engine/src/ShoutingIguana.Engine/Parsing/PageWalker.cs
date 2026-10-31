@@ -10,7 +10,9 @@ namespace ShoutingIguana.Engine.Parsing;
 /// in the head, which page region a link sits in, and which text counts as main content. Nav, footer and
 /// head text are left out of the content, matching how duplicate content is usually judged.
 /// </summary>
-internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulator text)
+/// <param name="pageUri">The page's own URL, for telling links to the same page from links to the base URL.</param>
+/// <param name="baseUri">What relative URLs resolve against: the first base href, or the page URL.</param>
+internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, TextAccumulator text)
 {
     private const int MAX_DEPTH = 512;
     private const int MAX_LABEL_CHARS = 200;
@@ -23,6 +25,9 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
     private const int MAX_META_TAGS = 200;
     internal const int MAX_IDS = 5_000;
     private const int MAX_JSON_LD_BLOCKS = 50;
+
+    /// <summary>Raw text read for a heading or link label, before whitespace is collapsed and the result capped.</summary>
+    private const int MAX_RAW_LABEL_CHARS = 16 * MAX_HEADING_CHARS;
     /// <summary>Longer blocks are cut to this length, which leaves them unparseable; rules skip blocks this long.</summary>
     internal const int MAX_JSON_LD_CHARS = 200_000;
     private const string WHITESPACE = " \t\n\r\f";
@@ -43,6 +48,11 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
         ("footer", LinkPosition.Footer), ("site-footer", LinkPosition.Footer),
         ("sidebar", LinkPosition.Sidebar)
     ];
+
+    /// <summary>Attributes lazy-loading scripts keep the real image URL in, in the order they're tried.</summary>
+    private static readonly string[] LAZY_SOURCES = ["data-src", "data-lazy-src", "data-original", "data-lazy"];
+
+    private readonly string _pageUrl = UrlNormalizer.Normalize(pageUri);
 
     public List<string> Titles { get; } = [];
     public List<string> MetaDescriptions { get; } = [];
@@ -117,10 +127,18 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
 
     private void VisitElement(IElement element, WalkContext context, int depth)
     {
-        // SVG and MathML carry no signals we use, and their <title>/<a> elements are not page titles or links.
+        // SVG and MathML carry no signals we use, and their <title>/<a> elements are not page titles or links, but
+        // their ids are places a #fragment can point to.
         if (element.NamespaceUri != NamespaceNames.HtmlUri)
         {
+            AddForeignIds(element, depth);
             return;
+        }
+
+        // Before any early return: #photo can point at an <img id="photo"> or #map at an <iframe id="map">.
+        if (element.Id is { Length: > 0 } id)
+        {
+            AddAnchorId(id);
         }
 
         var name = element.LocalName;
@@ -199,11 +217,6 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
                 break;
         }
 
-        if (element.Id is { Length: > 0 } id)
-        {
-            AddAnchorId(id);
-        }
-
         var isBlock = BLOCK_ELEMENTS.Contains(name);
         if (isBlock)
         {
@@ -218,13 +231,62 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
         }
     }
 
+    private void AddForeignIds(IElement element, int depth)
+    {
+        if (element.Id is { Length: > 0 } id)
+        {
+            AddAnchorId(id);
+        }
+
+        for (var child = element.FirstElementChild; child is not null && depth < MAX_DEPTH; child = child.NextElementSibling)
+        {
+            AddForeignIds(child, depth + 1);
+        }
+    }
+
     /// <summary>A heading's text, or for a logo heading (an image and no text) the image's alt, as screen readers announce it.</summary>
     private static string HeadingText(IElement heading)
     {
-        var text = Clean(heading.TextContent, MAX_HEADING_CHARS);
+        var text = ReadableText(heading, MAX_HEADING_CHARS);
         return text.Length == 0 && heading.QuerySelector("img[alt]")?.GetAttribute("alt") is { } alt
             ? Clean(alt, MAX_HEADING_CHARS)
             : text;
+    }
+
+    /// <summary>
+    /// An element's text as it reads on screen: a &lt;br&gt; or block element between words separates them, as in
+    /// the main-content text, instead of gluing "Welcome to&lt;br&gt;Our Store" into "Welcome toOur Store".
+    /// </summary>
+    private static string ReadableText(IElement element, int maxChars)
+    {
+        var builder = new System.Text.StringBuilder();
+        AppendReadableText(element, builder, 0);
+        return Clean(builder.ToString(), maxChars);
+    }
+
+    private static void AppendReadableText(INode node, System.Text.StringBuilder builder, int depth)
+    {
+        for (var child = node.FirstChild; child is not null && builder.Length < MAX_RAW_LABEL_CHARS; child = child.NextSibling)
+        {
+            if (child is IText textNode)
+            {
+                builder.Append(textNode.Data);
+            }
+            else if (child is IElement element && element.LocalName is not ("script" or "style" or "template") && depth < MAX_DEPTH)
+            {
+                var isBlock = element.NamespaceUri == NamespaceNames.HtmlUri && BLOCK_ELEMENTS.Contains(element.LocalName);
+                if (isBlock)
+                {
+                    builder.Append(' ');
+                }
+
+                AppendReadableText(element, builder, depth + 1);
+                if (isBlock)
+                {
+                    builder.Append(' ');
+                }
+            }
+        }
     }
 
     private static WalkContext ApplyRegionHints(IElement element, WalkContext context)
@@ -419,7 +481,9 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
         }
 
         var flags = RelFlags(element.GetAttribute("rel"));
-        var label = Clean(element.TextContent, MAX_LABEL_CHARS);
+
+        // An image map's <area> has no content; its alt text is its label.
+        var label = element.LocalName == "area" ? Clean(element.GetAttribute("alt"), MAX_LABEL_CHARS) : ReadableText(element, MAX_LABEL_CHARS);
         if (label.Length == 0)
         {
             if (FindFirstImage(element, 0) is { } image)
@@ -434,30 +498,42 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
             }
         }
 
-        if (href.TrimStart().StartsWith('#'))
+        if (!UrlNormalizer.TryResolve(baseUri, href, out var target))
+        {
+            return;
+        }
+
+        // Same page by where it leads, not how it's written: under a <base> on another URL, #reviews is a link to the
+        // base URL (HTML spec), while href="page#reviews" on /dir/page stays on the page.
+        if (UrlNormalizer.Normalize(target) == _pageUrl)
         {
             flags |= LinkFlags.SamePage;
         }
 
-        AddLink(href, LinkKind.Hyperlink, flags, context.Position, label.Length == 0 ? null : label);
+        AddLink(target, LinkKind.Hyperlink, flags, context.Position, label.Length == 0 ? null : label);
     }
 
     private void AddImage(IElement element, WalkContext context)
     {
-        var source = element.GetAttribute("src");
-        var lazySource = element.GetAttribute("data-src") ?? element.GetAttribute("data-lazy-src");
-        if (lazySource is not null &&
-            (string.IsNullOrWhiteSpace(source) || source.TrimStart().StartsWith("data:", StringComparison.OrdinalIgnoreCase)))
+        // Lazy loaders keep a placeholder (or nothing) in src and the real image elsewhere; srcset alone is valid too.
+        var source = ImageSource(element.GetAttribute("src"));
+        foreach (var attribute in LAZY_SOURCES)
         {
-            source = lazySource;
+            source ??= ImageSource(element.GetAttribute(attribute));
         }
 
+        source ??= FirstCandidate(element.GetAttribute("srcset")) ?? FirstCandidate(element.GetAttribute("data-srcset"));
+
+        // The URL is resolved past the link cap too, so alt text and dimensions are still checked.
         var alt = element.GetAttribute("alt");
         string? url = null;
-        if (source is not null && Links.Count < MAX_LINKS && UrlNormalizer.TryResolve(baseUri, source, out var target))
+        if (source is not null && UrlNormalizer.TryResolve(baseUri, source, out var target))
         {
             url = UrlNormalizer.Normalize(target);
-            Links.Add(new ExtractedLink(target, LinkKind.Image, LinkFlags.None, context.Position, NullIfBlank(Clean(alt, MAX_LABEL_CHARS))));
+            if (Links.Count < MAX_LINKS)
+            {
+                Links.Add(new ExtractedLink(target, LinkKind.Image, LinkFlags.None, context.Position, NullIfBlank(Clean(alt, MAX_LABEL_CHARS))));
+            }
         }
 
         if (Images.Count < MAX_IMAGES)
@@ -475,10 +551,33 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
 
     private void AddLink(string? href, LinkKind kind, LinkFlags flags, LinkPosition position, string? label)
     {
-        if (href is not null && Links.Count < MAX_LINKS && UrlNormalizer.TryResolve(baseUri, href, out var target))
+        if (href is not null && UrlNormalizer.TryResolve(baseUri, href, out var target))
+        {
+            AddLink(target, kind, flags, position, label);
+        }
+    }
+
+    private void AddLink(Uri target, LinkKind kind, LinkFlags flags, LinkPosition position, string? label)
+    {
+        if (Links.Count < MAX_LINKS)
         {
             Links.Add(new ExtractedLink(target, kind, flags, position, label));
         }
+    }
+
+    /// <summary>An image URL as written, or null for none and for an inline data: placeholder.</summary>
+    private static string? ImageSource(string? value) =>
+        string.IsNullOrWhiteSpace(value) || value.TrimStart().StartsWith("data:", StringComparison.OrdinalIgnoreCase) ? null : value;
+
+    /// <summary>
+    /// The URL of the first srcset candidate: the first run of non-space characters, less trailing commas, as the HTML
+    /// spec parses it (a URL may contain commas, as image CDNs' w_100,h_100 do).
+    /// </summary>
+    private static string? FirstCandidate(string? srcset)
+    {
+        var rest = srcset.AsSpan().TrimStart(" \t\n\r\f,");
+        var end = rest.IndexOfAny(WHITESPACE);
+        return ImageSource((end < 0 ? rest : rest[..end]).TrimEnd(',').ToString());
     }
 
     private void AddAnchorId(string id)

@@ -225,7 +225,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
             CrawlDatabase.Execute(connection, $"""
                 UPDATE links SET to_id = 2147483647 WHERE rowid = (
                     SELECT MIN(l.rowid) FROM links l JOIN urls u ON u.id = l.from_id
-                    WHERE u.url = '{_server.BaseUri.AbsoluteUri}' AND l.kind = {(int)LinkKind.Hyperlink})
+                    WHERE u.url = '{_server.BaseUri.AbsoluteUri}' AND l.kind = {(int)LinkKind.Hyperlink} AND (l.flags & {(int)LinkFlags.SamePage}) = 0)
                 """);
         }
 

@@ -14,7 +14,7 @@ public enum LinkFlags : byte
     /// <summary>A head-only element (canonical, hreflang) that was found in the body, where Google ignores it.</summary>
     OutsideHead = 16,
 
-    /// <summary>A fragment-only href (<c>#section</c>) pointing at the same page.</summary>
+    /// <summary>An href that resolves to the page itself, usually a <c>#section</c>.</summary>
     SamePage = 32,
 
     /// <summary>Came from an HTTP Link header rather than the HTML.</summary>

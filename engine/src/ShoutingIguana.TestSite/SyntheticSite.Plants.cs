@@ -70,6 +70,10 @@ public sealed partial class SyntheticSite
         Page("h1-copy-a", "Shared heading A", ["h1-duplicate"], page => page with { H1 = "Shared heading" });
         Page("h1-copy-b", "Shared heading B", ["h1-duplicate"], page => page with { H1 = "Shared heading" });
 
+        // A line break separates words, so these two headings read the same.
+        Page("h1-break-a", "Heading with a line break", ["h1-duplicate"], page => page with { H1 = "Welcome to<br>our planted store" });
+        Page("h1-break-b", "Heading without a line break", ["h1-duplicate"], page => page with { H1 = "Welcome to our planted store" });
+
         // Identical main content means an identical H1 too, so the copies are also duplicate H1s.
         var copied = $"<p>{Text("plant-content-copy", 300)}</p>";
         Page("content-copy-a", "Copied content A", ["duplicate-content", "h1-duplicate"], page => page with { H1 = "Copied content", Content = copied });
@@ -103,6 +107,13 @@ public sealed partial class SyntheticSite
         Page("image-large", "Large image", ["image-too-large"], page => page with
         {
             Content = page.Content + "<img src=\"/img/large.jpg\" alt=\"A very large photo\" width=\"400\" height=\"300\">"
+        });
+
+        // Images without a src are still images: one with only srcset lacks alt text, a lazy one lacks a size.
+        Page("image-srcset", "Images without src", ["image-missing-alt", "image-missing-dimensions"], page => page with
+        {
+            Content = page.Content + "<img srcset=\"/img/9.jpg 1x, /img/10.jpg 2x\" width=\"400\" height=\"300\">" +
+                      "<img src=\"data:image/gif;base64,R0lGODlhAQABAAAAACw=\" data-original=\"/img/11.jpg\" alt=\"A lazily loaded photo\">"
         });
 
         Page("canonical-missing", "Missing canonical", ["canonical-missing"], page => page with { Canonical = null });
@@ -187,6 +198,24 @@ public sealed partial class SyntheticSite
                       $"<a href=\"{PLANTS_PATH}fragment-target#missing\">Missing section</a> " +
                       "<a href=\"#nowhere\">Nowhere on this page</a> <a href=\"#top\">Back to top</a></p>"
         });
+        // Fragments can point at images, frames and SVG shapes, and an image map's area is labelled by its alt text.
+        Page("fragment-elements", "Fragments to images and maps", [], page => page with
+        {
+            Content = page.Content +
+                      "<img id=\"photo\" src=\"/img/7.jpg\" alt=\"A photo\" width=\"400\" height=\"300\">" +
+                      $"<iframe id=\"map\" src=\"{PLANTS_PATH}embedded\" title=\"A map\"></iframe><svg width=\"10\" height=\"10\"><g id=\"chart\"></g></svg>" +
+                      "<p><a href=\"#photo\">The photo</a> <a href=\"#map\">The map</a> <a href=\"#chart\">The chart</a></p>" +
+                      "<img src=\"/img/8.jpg\" usemap=\"#areas\" alt=\"A clickable plan\" width=\"400\" height=\"300\">" +
+                      $"<map name=\"areas\"><area href=\"{PLANTS_PATH}thin\" alt=\"The thin page\" shape=\"rect\" coords=\"0,0,10,10\"></map>"
+        });
+
+        // A base pushed into the body by a stray element in the head still applies, so "0" is /c/0, not /plants/0.
+        Page("base-in-body", "Base in the body", [], page => page with
+        {
+            ExtraHead = "<img src=\"/img/12.jpg\" alt=\"\" width=\"1\" height=\"1\"><base href=\"/c/\">",
+            Content = page.Content + "<p><a href=\"0\">Category zero</a></p>"
+        });
+
         // Links that look like fragments but name no element: Cloudflare's email obfuscation and an Elementor popup.
         Page("fragment-target", "Fragment target", [], page => page with
         {
