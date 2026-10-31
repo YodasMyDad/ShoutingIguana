@@ -136,16 +136,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         finally
         {
             _statements.Dispose();
-            try
-            {
-                CrawlDatabase.Execute(_connection, "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode = DELETE;");
-            }
-            catch (SqliteException exception)
-            {
-                _logger.LogWarning(exception, "Could not fold the write-ahead log back into the crawl database");
-            }
-
-            _connection.Dispose();
+            CrawlDatabase.CloseWriter(_connection, _logger);
         }
     }
 

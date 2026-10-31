@@ -90,7 +90,7 @@ public static class ContentFingerprint
         return new ContentFingerprintResult(words, exactHash.GetCurrentHashAsUInt64(), simHash);
     }
 
-    /// <summary>Number of differing bits; 3 or fewer usually means near-duplicate content.</summary>
+    /// <summary>Number of differing bits: unrelated text is about 32 apart, near-identical text 6 or fewer.</summary>
     public static int Distance(ulong left, ulong right) => BitOperations.PopCount(left ^ right);
 
     private static ulong Mix(ulong first, ulong second, ulong third)

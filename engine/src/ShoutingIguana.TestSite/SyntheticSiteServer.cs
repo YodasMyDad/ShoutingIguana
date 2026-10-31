@@ -81,9 +81,20 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         await _app.DisposeAsync().ConfigureAwait(false);
     }
 
-    private static Task RespondAsync(HttpContext context, SyntheticSite site, int externalPort)
+    private static async Task RespondAsync(HttpContext context, SyntheticSite site, int externalPort)
     {
         var response = site.Handle(context.Request.Path.Value ?? "/", context.Connection.LocalPort == externalPort);
+        if (response.Abort)
+        {
+            context.Abort();
+            return;
+        }
+
+        if (response.DelayMs > 0)
+        {
+            await Task.Delay(response.DelayMs, context.RequestAborted).ConfigureAwait(false);
+        }
+
         context.Response.StatusCode = response.StatusCode;
         context.Response.ContentType = response.ContentType;
         if (response.Location is not null)
@@ -91,13 +102,20 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
             context.Response.Headers.Location = response.Location;
         }
 
+        foreach (var (name, value) in response.Headers ?? new Dictionary<string, string>())
+        {
+            context.Response.Headers[name] = value;
+        }
+
         if (response.Bytes is not null)
         {
             context.Response.ContentLength = response.Bytes.Length;
-            return context.Response.Body.WriteAsync(response.Bytes).AsTask();
+            await context.Response.Body.WriteAsync(response.Bytes, context.RequestAborted).ConfigureAwait(false);
         }
-
-        return response.Text is null ? Task.CompletedTask : context.Response.WriteAsync(response.Text);
+        else if (response.Text is not null)
+        {
+            await context.Response.WriteAsync(response.Text, context.RequestAborted).ConfigureAwait(false);
+        }
     }
 
     private static int FindFreePort()

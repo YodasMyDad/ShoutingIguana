@@ -1,0 +1,171 @@
+using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Analysis.Rules;
+using ShoutingIguana.Engine.Configuration.Models;
+using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Parsing.Models;
+using ShoutingIguana.Engine.Storage.Models;
+using ShoutingIguana.Engine.Urls;
+
+namespace ShoutingIguana.Engine.Tests.Analysis;
+
+/// <summary>Cross-page rules over hand-built URL statuses, including cases the HTTP-only synthetic site can't plant.</summary>
+public sealed class SiteRuleTests
+{
+    [Fact]
+    public void RedirectTracesFollowChainsAndStopAtLoopsAndMissingTargets()
+    {
+        var site = new RuleHarness();
+        var start = site.Fetched($"{site.Site}/a", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/b");
+        site.Fetched($"{site.Site}/b", FetchOutcome.Redirect, 302, redirectTo: $"{site.Site}/c");
+        var end = site.Ok($"{site.Site}/c");
+        var loop = site.Fetched($"{site.Site}/x", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/y");
+        site.Fetched($"{site.Site}/y", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/x");
+        var dangling = site.Fetched($"{site.Site}/no-location", FetchOutcome.Redirect, 301);
+        var urls = site.Table();
+
+        Assert.Equal(new RedirectTrace(end, 2, IsLoop: false), urls.TraceRedirects(start));
+        Assert.True(urls.TraceRedirects(loop).IsLoop);
+        Assert.Equal(new RedirectTrace(dangling, 0, IsLoop: false), urls.TraceRedirects(dangling));
+    }
+
+    [Fact]
+    public void RedirectRulesReportDowngradesTemporaryRedirectsAndBrokenEnds()
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/");
+        var downgrade = site.Fetched($"{site.Site}/secure", FetchOutcome.Redirect, 301, redirectTo: "http://example.com/insecure");
+        site.Ok("http://example.com/insecure");
+        var temporary = site.Fetched($"{site.Site}/promo", FetchOutcome.Redirect, 302, redirectTo: $"{site.Site}/");
+        var broken = site.Fetched($"{site.Site}/moved", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/gone");
+        site.Fetched($"{site.Site}/gone", FetchOutcome.ClientError, 404);
+        var dangling = site.Fetched($"{site.Site}/no-location", FetchOutcome.Redirect, 301);
+
+        var hits = new RedirectRules(site.Table()).Finish().ToList();
+
+        Assert.Contains(new IssueHit(IssueCatalog.REDIRECT_DOWNGRADE, downgrade, null, site.Id("http://example.com/insecure")), hits);
+        Assert.Contains(hits, hit => hit.Issue == IssueCatalog.REDIRECT_TEMPORARY && hit.UrlId == temporary);
+        Assert.Contains(hits, hit => hit.Issue == IssueCatalog.REDIRECT_BROKEN && hit.UrlId == broken);
+        Assert.Equal("HTTP 301 without a Location header", hits.Single(hit => hit.UrlId == dangling).Detail);
+        Assert.Equal(4, hits.Count);
+    }
+
+    [Fact]
+    public void RobotsTxtProblemsCountOnlyForTheSitesOwnOrigins()
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/");
+        var scope = new CrawlScope(new Uri($"{site.Site}/"), includeSubdomains: false, stayInStartFolder: false);
+        RobotsRecord[] robots =
+        [
+            new("https://example.com", 503, null, null, 0),
+            new("https://partner.example", 404, null, null, 0),
+            new("https://cdn.example", null, null, "Timed out", 0)
+        ];
+
+        var hits = new RobotsTxtRules(site.Table(), robots, scope).Finish().ToList();
+
+        var unreachable = Assert.Single(hits);
+        Assert.Equal(IssueCatalog.ROBOTS_TXT_UNREACHABLE, unreachable.Issue);
+        Assert.Equal("https://example.com/robots.txt (HTTP 503)", unreachable.Detail);
+    }
+
+    [Fact]
+    public void SitemapRulesCompareTheSitemapsWithWhatWasCrawled()
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/", inSitemap: true);
+        var unlisted = site.Ok($"{site.Site}/unlisted");
+        var listedNoindex = site.Ok($"{site.Site}/hidden", IndexabilityReason.Noindex, inSitemap: true);
+        site.Fetched($"{site.Site}/guide.pdf", FetchOutcome.Success, 200, inSitemap: true);
+        var urls = site.Table();
+        StoredSitemap[] sitemaps =
+        [
+            new($"{site.Site}/sitemap.xml", 200, false, 3, null),
+            new($"{site.Site}/sitemap-old.xml", 404, false, 0, "HTTP 404")
+        ];
+
+        var hits = new SitemapRules(urls, sitemaps, new CrawlOptions { StartUrl = site.Site }).Finish().ToList();
+
+        Assert.Contains(hits, hit => hit.Issue == IssueCatalog.NOT_IN_SITEMAP && hit.UrlId == unlisted);
+        Assert.Equal("The URL is noindex", hits.Single(hit => hit.Issue == IssueCatalog.SITEMAP_NON_INDEXABLE).Detail);
+        Assert.Equal(listedNoindex, hits.Single(hit => hit.Issue == IssueCatalog.SITEMAP_NON_INDEXABLE).UrlId);
+        Assert.Contains("sitemap-old.xml (HTTP 404)", hits.Single(hit => hit.Issue == IssueCatalog.SITEMAP_ERROR).Detail);
+        Assert.Equal(3, hits.Count);
+
+    }
+
+    [Fact]
+    public void NoSitemapIsOneNoticeAndNothingCountsAsMissingFromIt()
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/");
+        site.Ok($"{site.Site}/page");
+        var urls = site.Table();
+
+        Assert.Equal([IssueCatalog.SITEMAP_MISSING], new SitemapRules(urls, [], new CrawlOptions { StartUrl = site.Site }).Finish().Select(hit => hit.Issue));
+        Assert.Empty(new SitemapRules(urls, [], new CrawlOptions { StartUrl = site.Site, DiscoverSitemaps = false }).Finish());
+    }
+
+    [Fact]
+    public void DuplicatesIgnoreCaseAndSpacingAndSkipNonIndexablePages()
+    {
+        var site = new RuleHarness();
+        var first = site.Page($"{site.Site}/a", RuleHarness.Html("<title>Blue Widgets</title>"));
+        var second = site.Page($"{site.Site}/b", RuleHarness.Html("<title> blue  WIDGETS </title>"));
+        var noindex = site.Page($"{site.Site}/c", RuleHarness.Html("<title>Blue Widgets</title>"), IndexabilityReason.Noindex);
+        var rules = new DuplicateRules(new AnalysisSettings());
+
+        foreach (var page in new[] { first, second, noindex })
+        {
+            rules.Observe(page);
+        }
+
+        var titles = rules.Finish().Where(hit => hit.Issue == IssueCatalog.TITLE_DUPLICATE).ToList();
+        Assert.Equal([first.UrlId, second.UrlId], titles.Select(hit => hit.UrlId).Order());
+        Assert.All(titles, hit => Assert.Equal("1 other page", hit.Detail));
+    }
+
+    [Fact]
+    public void NearDuplicatesAreGroupedAndExactCopiesReportedSeparately()
+    {
+        var site = new RuleHarness();
+        var words = Enumerable.Range(0, 1_000).Select(index => $"term{(index * 7919) % 997}").ToArray();
+        var edited = (string[])words.Clone();
+        edited[500] = "different";
+        var unrelated = Enumerable.Range(0, 1_000).Select(index => $"other{(index * 104729) % 991}").ToArray();
+        AnalyzedPage Page(string path, string[] text) => site.Page($"{site.Site}/{path}", RuleHarness.Html("<title>t</title>", $"<p>{string.Join(' ', text)}</p>"));
+
+        var original = Page("original", words);
+        var copy = Page("copy", words);
+        var near = Page("near", edited);
+        var other = Page("other", unrelated);
+        var rules = new DuplicateRules(new AnalysisSettings());
+        foreach (var page in new[] { original, copy, near, other })
+        {
+            rules.Observe(page);
+        }
+
+        var hits = rules.Finish().ToList();
+        Assert.Equal([original.UrlId, copy.UrlId], hits.Where(hit => hit.Issue == IssueCatalog.DUPLICATE_CONTENT).Select(hit => hit.UrlId).Order());
+        var nearHits = hits.Where(hit => hit.Issue == IssueCatalog.NEAR_DUPLICATE_CONTENT).ToList();
+        Assert.Contains(nearHits, hit => hit.UrlId == near.UrlId);
+        Assert.DoesNotContain(nearHits, hit => hit.UrlId == other.UrlId);
+    }
+
+    [Fact]
+    public void OrphansAreSitemapPagesNoCrawledPageLinksTo()
+    {
+        var site = new RuleHarness();
+        var home = site.Page($"{site.Site}/", RuleHarness.Html(body: "<a href=\"/linked\">Linked</a><a href=\"/only-nofollow\" rel=\"nofollow\">Hidden</a>"));
+        site.Ok($"{site.Site}/linked", inSitemap: true);
+        site.Ok($"{site.Site}/only-nofollow", inSitemap: true);
+        var orphan = site.Ok($"{site.Site}/orphan", inSitemap: true);
+        site.Ok($"{site.Site}/", inSitemap: true);
+        var rules = new InlinkRules(site.Table());
+
+        rules.Observe(home);
+
+        Assert.Equal([orphan], rules.Finish().Select(hit => hit.UrlId));
+    }
+}

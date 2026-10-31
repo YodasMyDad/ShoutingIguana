@@ -8,10 +8,10 @@ Analytics / Ads integrations later.
 
 | Project | What it is |
 | --- | --- |
-| `src/ShoutingIguana.Engine` | Crawler library: fetching, robots.txt, sitemaps, parsing, storage |
-| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `stats`, `testsite`, `bench` |
+| `src/ShoutingIguana.Engine` | Crawler library: fetching, robots.txt, sitemaps, parsing, storage, SEO analysis |
+| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `stats`, `testsite`, `bench` |
 | `src/ShoutingIguana.TestSite` | Deterministic synthetic shop with planted SEO issues, for tests and benchmarks |
-| `tests/ShoutingIguana.Engine.Tests` | xUnit: unit tests plus end-to-end crawls of the synthetic site |
+| `tests/ShoutingIguana.Engine.Tests` | xUnit: unit tests plus end-to-end crawls and analyses of the synthetic site |
 
 ## Build, test, run
 
@@ -19,14 +19,19 @@ Analytics / Ads integrations later.
 cd engine
 dotnet test ShoutingIguana.Engine.slnx
 
-dotnet run --project src/ShoutingIguana.Cli -- crawl https://example.com --db example.sicrawl
+dotnet run --project src/ShoutingIguana.Cli -- crawl https://example.com --db example.sicrawl   # crawls, then analyses
+dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl                           # what was found
+dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl title-too-long            # the URLs for one issue
+dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl --csv issues.csv          # everything, for Excel
+dotnet run --project src/ShoutingIguana.Cli -- analyze example.sicrawl                          # re-run the checks
 dotnet run --project src/ShoutingIguana.Cli -- stats example.sicrawl
-dotnet run --project src/ShoutingIguana.Cli -- crawl --resume --db example.sicrawl     # after Ctrl+C
+dotnet run --project src/ShoutingIguana.Cli -- crawl --resume --db example.sicrawl              # after Ctrl+C
 dotnet run --project src/ShoutingIguana.Cli -c Release -- bench --pages 100000
 ```
 
 `si crawl --help` lists every option: concurrency and rate cap, user agent presets, extra headers (for firewall
-allowlisting), proxy, depth and URL limits, robots.txt, subdomains, start-folder scope, nofollow, stored HTML.
+allowlisting), proxy, depth and URL limits, robots.txt, subdomains, start-folder scope, nofollow, stored HTML, and
+`--no-analyze`.
 
 ## How a crawl works
 
@@ -48,6 +53,31 @@ Memory stays flat because the only thing in memory that grows with the crawl is 
 Sites that block crawlers are reported, not hidden. Cloudflare/Akamai/DataDome/Imperva/Sucuri/CAPTCHA
 responses and rate limits are recorded as `Blocked`, with the reason, and raise a notice.
 
+## SEO analysis
+
+When a crawl completes, `CrawlAnalyzer` runs 81 checks over what was stored and writes the issues into the same
+file. It never refetches or reparses anything, so any crawl can be analysed again with new rules or thresholds
+(`si analyze`). It refuses a crawl that is still running.
+
+- **One pass.** Page rules see each page's stored facts, headers and outgoing links, with the status of every
+  link target looked up from an in-memory table indexed by URL id (a few dozen bytes per URL). Site rules
+  collect what they need during the same pass (hashes, alternates, fragments) and report at the end:
+  duplicates, orphans, redirect chains, hreflang return links, sitemaps, robots.txt.
+- **Catalog.** `Analysis/IssueCatalog.cs` defines every issue: a stable id (`title-too-long`), category,
+  severity (Error, Warning or Notice), title, why it matters, and how to fix it. Ids are stored in crawl files,
+  so never change one.
+- **Scope.** Content checks (titles, descriptions, headings, word count, duplicates, Open Graph, URL style,
+  rich-result requirements) look only at indexable pages. Technical checks look at every crawled page.
+  Site-wide settings (HTTPS, security headers, robots.txt, sitemap files) are reported once, on the home page,
+  rather than on every URL.
+- **Thresholds.** `AnalysisSettings` holds every limit (title 30–60 characters, description 70–155, 200
+  words, images over 200 KB, pages slower than 1 s...). Each analysis stores the values it used.
+- **Atomic.** The issues are replaced in one transaction, so a failed or cancelled analysis keeps the
+  previous results.
+
+Categories: response codes, redirects, links, indexability, canonicals, sitemaps, titles, meta descriptions,
+headings, content, images, hreflang, structured data, security, URLs, performance, HTML.
+
 ## Crawl file (`.sicrawl`)
 
 One SQLite file per crawl. It is a single self-contained file once the crawl closes.
@@ -61,25 +91,41 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `response_html` | Compressed HTML, only with `--store-html` |
 | `links` | Every link: source, target, kind (link/image/script/canonical/hreflang/redirect...), rel flags, page region, anchor text |
 | `robots`, `sitemaps`, `sitemap_urls` | robots.txt per origin, sitemaps read, and which URLs each listed |
+| `issues` | One row per flagged URL and issue: a short detail, and the other URL involved (broken target, duplicate, canonical) |
+| `issue_types` | Every check that ran: its title, category, severity, description, fix, and how many URLs it flagged |
+| `analysis` | When the last analysis ran, with which engine version and settings |
 
 URLs that only appear in sitemaps keep depth `1000000` (`CrawlDepth.UNLINKED`), which is how orphan pages show up.
 
-## Benchmark
+## Synthetic site and benchmark
 
-`si bench` serves the synthetic site from a child process, crawls it, and checks the result against what the site
-says must be found. It can fail on thresholds, and CI runs it on every push (`.github/workflows/engine.yml`).
+The synthetic site is clean by construction: every page passes every check unless an issue is planted on it.
+Products carry issues at fixed intervals (duplicate titles, broken links, redirect chains, noindex,
+canonicalised pages...). `/plants/` holds a test page for each check that a product can't carry (missing title,
+conflicting canonicals, broken hreflang, invalid JSON-LD, a slow page, a firewall block, a redirect loop...).
+`GetExpectations()` reports exactly what a correct crawl and analysis must find, including the count for every
+issue id.
 
-The first run on a 32-core Windows machine, at concurrency 16, against the local synthetic site:
+To add a check: write the rule, add the issue to the catalog, and plant it on the synthetic site with its
+expected count. The end-to-end test and the benchmark compare the whole issues table, so a check that flags
+anything unplanted fails them.
 
-| Pages | URLs | Links | Time | Throughput | Peak memory | Growth over the crawl | File |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 101,023 | 110,126 | 5.05 M | 32 s | 3,114 pages/s | 166 MB | none (−3 MB) | 384 MB |
+`si bench` serves the synthetic site from a child process, crawls it, analyses it, and checks both against the
+expectations. It can fail on thresholds, and CI runs it on every push (`.github/workflows/engine.yml`).
 
-On real sites, speed is set by the network and your rate settings, not by the crawler.
+On a 32-core Windows machine, at concurrency 16, against the local synthetic site:
 
-## Not in this step
+| Pages | URLs | Links | Crawl | Throughput | Peak memory | Growth over the crawl | Analysis | File |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 101,084 | 110,197 | 5.05 M | 46 s | 2,202 pages/s | 173 MB | none (−3 MB) | 6 s, 166 MB peak | 406 MB |
 
-- SEO rules and the issue catalog (step 2). The facts they need are already extracted and stored.
+Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and
+unreachable URL make the crawler back off briefly, as it would on a real site. On real sites, speed is set by the
+network and your rate settings, not by the crawler.
+
+## Not yet
+
 - The desktop UI (step 3).
-- JavaScript rendering (Playwright, with HTTP / Rendered / Auto modes) and browser fallback for blocked sites
-  (step 4). `Blocked` responses are already detected.
+- JavaScript rendering (Playwright, with HTTP / Rendered / Auto modes) and browser fallback for blocked sites,
+  plus custom extraction, list mode and include/exclude rules (step 4). `Blocked` responses are already detected.
+- Search Console, Analytics, Bing and Ads data (step 5).

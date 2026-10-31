@@ -12,12 +12,17 @@ The WPF app in `src/` is being replaced by a cross-platform engine in `engine/` 
 goes there; `src/` is legacy and only gets critical fixes.
 
 - Solution: `engine/ShoutingIguana.Engine.slnx`. Test with `dotnet test engine/ShoutingIguana.Engine.slnx`.
-- CLI: `dotnet run --project engine/src/ShoutingIguana.Cli -- crawl <url>` (also `stats`, `testsite`, `bench`).
-- Gate: `si bench --pages 100000` must find every planted issue with flat memory; CI runs it (`.github/workflows/engine.yml`).
+- CLI: `dotnet run --project engine/src/ShoutingIguana.Cli -- crawl <url>` (also `analyze`, `issues`, `stats`, `testsite`, `bench`).
+- Gate: `si bench --pages 100000` must find every planted page and issue, flag nothing else, and keep memory flat; CI
+  runs it (`.github/workflows/engine.yml`).
 - `engine/Directory.Build.props` targets `net10.0` with warnings as errors. Package versions live only in
   `engine/Directory.Packages.props` (central package management), never in a csproj.
-- Engine rules: one SQLite file per crawl. Only `Storage/CrawlWriter` writes to it, so never open a write path anywhere
-  else. HTML is parsed once (`Parsing/HtmlPageParser`): add new facts to `PageFacts` instead of re-parsing.
+- Engine rules: one SQLite file per crawl. Only `Storage/` writes to it: `CrawlWriter` while a crawl runs, `IssueWriter`
+  for analysis (never both at once). Never open a write path anywhere else. HTML is parsed once
+  (`Parsing/HtmlPageParser`): add new facts to `PageFacts` instead of re-parsing.
+- SEO checks live in `Analysis/Rules`, and every issue is defined in `Analysis/IssueCatalog.cs`. Issue ids are stored
+  in crawl files: never rename one. A new check also needs a planted case on the synthetic site (`TestSite`, products
+  or `SyntheticSite.Plants.cs`) with its expected count, because the tests compare the whole issues table.
 - The conventions below apply to the engine too.
 
 ## Working style with this user

@@ -4,6 +4,8 @@ using ShoutingIguana.Cli.Commands;
 var root = new RootCommand("Shouting Iguana crawler, v2 engine.")
 {
     CrawlCommand.Create(),
+    AnalyzeCommand.Create(),
+    IssuesCommand.Create(),
     StatsCommand.Create(),
     TestSiteCommand.Create(),
     BenchCommand.Create()

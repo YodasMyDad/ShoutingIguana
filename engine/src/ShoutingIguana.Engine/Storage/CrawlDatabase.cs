@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Serialization;
 
@@ -45,6 +46,24 @@ public static class CrawlDatabase
             PRAGMA busy_timeout = 5000;
             """);
         return connection;
+    }
+
+    /// <summary>
+    /// Folds the write-ahead log back so the crawl is a single file again, then closes the connection. Folding
+    /// needs every other connection closed; when a reader is still open the file simply stays in WAL mode.
+    /// </summary>
+    internal static void CloseWriter(SqliteConnection connection, ILogger logger)
+    {
+        try
+        {
+            Execute(connection, "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode = DELETE;");
+        }
+        catch (SqliteException exception)
+        {
+            logger.LogWarning(exception, "Could not fold the write-ahead log back into the crawl database");
+        }
+
+        connection.Dispose();
     }
 
     /// <summary>Creates the schema in an empty database. Returns true when the database was new.</summary>

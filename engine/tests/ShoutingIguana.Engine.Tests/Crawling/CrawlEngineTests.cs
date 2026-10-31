@@ -1,5 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging.Abstractions;
+using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -53,6 +55,12 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(expected.Canonicalised, stats.NonIndexableReasons.GetValueOrDefault(IndexabilityReason.Canonicalised));
         Assert.Equal(0, stats.QueuedCount);
         Assert.Equal(0, Count(path, "SELECT COUNT(*) FROM urls WHERE state = 1"));
+
+        // Every planted issue is reported exactly, and nothing else is.
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        Assert.Equal(expected.HtmlPages, analysis.PagesAnalyzed);
+        var mismatches = expected.CompareIssues(IssueReader.ReadCounts(path), IssueCatalog.All.Select(issue => issue.Id));
+        Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
     }
 
     [Fact]
@@ -136,6 +144,33 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         Assert.Equal(_server.Site.GetExpectations().HtmlPages, CrawlStatsReader.Read(path).HtmlPageCount);
+    }
+
+    [Fact]
+    public async Task ReanalysisReplacesIssuesAndRunningCrawlsAreRefused()
+    {
+        var path = NewDatabasePath();
+        await CrawlAsync(Options() with { MaxUrls = 60 }, path);
+        var analyzer = new CrawlAnalyzer(NullLoggerFactory.Instance);
+
+        var first = await analyzer.AnalyzeAsync(path);
+        var second = await analyzer.AnalyzeAsync(path);
+        Assert.Equal(first.Issues.Sum(issue => issue.Count), second.Issues.Sum(issue => issue.Count));
+        Assert.Equal(second.Issues.Sum(issue => issue.Count), Count(path, "SELECT COUNT(*) FROM issues"));
+        Assert.Equal(IssueCatalog.All.Count, Count(path, "SELECT COUNT(*) FROM issue_types"));
+
+        // Stricter thresholds flag more, from the same stored crawl.
+        var strict = await analyzer.AnalyzeAsync(path, new AnalysisSettings { TitleMinLength = 10, TitleMaxLength = 20 });
+        Assert.True(strict.Issues.Single(issue => issue.Issue == IssueCatalog.TITLE_TOO_LONG).Count >
+                    second.Issues.Single(issue => issue.Issue == IssueCatalog.TITLE_TOO_LONG).Count);
+
+        using (var connection = CrawlDatabase.OpenWriter(path))
+        {
+            CrawlDatabase.Execute(connection, $"UPDATE crawl SET status = {(int)CrawlStatus.Running}");
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => analyzer.AnalyzeAsync(path));
+        Assert.Equal(strict.Issues.Sum(issue => issue.Count), Count(path, "SELECT COUNT(*) FROM issues"));
     }
 
     [Fact]

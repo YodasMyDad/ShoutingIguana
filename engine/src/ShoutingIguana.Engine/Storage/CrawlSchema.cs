@@ -112,4 +112,42 @@ internal static class CrawlSchema
             PRIMARY KEY (sitemap_id, url_id)
         ) WITHOUT ROWID;
         """;
+
+    /// <summary>
+    /// Analysis results, created on first analysis and replaced as a whole by every later one. Severity and
+    /// category are stored as text so the file explains itself in any SQLite browser.
+    /// </summary>
+    public const string ANALYSIS = """
+        CREATE TABLE IF NOT EXISTS analysis (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            analyzed_at INTEGER NOT NULL,
+            engine_version TEXT NOT NULL,
+            settings_json TEXT NOT NULL,
+            pages INTEGER NOT NULL,
+            duration_ms INTEGER NOT NULL
+        );
+
+        -- Every check that ran, with how many URLs it flagged (0 = checked and clean).
+        CREATE TABLE IF NOT EXISTS issue_types (
+            id TEXT PRIMARY KEY,
+            category TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            fix TEXT NOT NULL,
+            url_count INTEGER NOT NULL
+        ) WITHOUT ROWID;
+
+        -- One row per flagged URL and issue. related_url_id is the other URL involved, when there is one:
+        -- the broken link target, the duplicate, the canonical, the redirect target.
+        CREATE TABLE IF NOT EXISTS issues (
+            issue TEXT NOT NULL,
+            url_id INTEGER NOT NULL,
+            detail TEXT,
+            related_url_id INTEGER,
+            PRIMARY KEY (issue, url_id)
+        ) WITHOUT ROWID;
+
+        CREATE INDEX IF NOT EXISTS ix_issues_url ON issues (url_id);
+        """;
 }

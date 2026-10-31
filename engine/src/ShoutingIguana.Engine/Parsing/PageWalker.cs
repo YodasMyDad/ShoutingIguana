@@ -21,7 +21,7 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
     private const int MAX_IMAGES = 2_000;
     private const int MAX_HEADINGS = 500;
     private const int MAX_META_TAGS = 200;
-    private const int MAX_IDS = 5_000;
+    internal const int MAX_IDS = 5_000;
     private const int MAX_JSON_LD_BLOCKS = 50;
     private const int MAX_JSON_LD_CHARS = 200_000;
     private const string WHITESPACE = " \t\n\r\f";

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Storage.Models;
 
@@ -11,6 +12,7 @@ namespace ShoutingIguana.Engine.Serialization;
     UseStringEnumConverter = true)]
 [JsonSerializable(typeof(ResponseDetails))]
 [JsonSerializable(typeof(CrawlOptions))]
+[JsonSerializable(typeof(AnalysisSettings))]
 internal sealed partial class EngineJsonContext : JsonSerializerContext
 {
 }

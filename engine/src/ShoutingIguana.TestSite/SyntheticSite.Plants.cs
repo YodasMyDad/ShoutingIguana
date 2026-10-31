@@ -1,0 +1,240 @@
+using ShoutingIguana.TestSite.Models;
+
+namespace ShoutingIguana.TestSite;
+
+/// <summary>
+/// The planted test pages under /plants/: a clean page per check with one deliberate defect, plus whatever that
+/// defect implies (a canonical to a 404 also makes the page canonicalised). The hub at /plants/ links them.
+/// </summary>
+public sealed partial class SyntheticSite
+{
+    private const int PLANT_WORDS = 250;
+    private const int SLOW_PAGE_DELAY_MS = 1_200;
+
+    private const string SHARED_DESCRIPTION =
+        "Two planted pages share this exact meta description, so the duplicate description check has to flag both of them.";
+
+    private const string LONG_SLUG =
+        "a-deliberately-long-address-that-keeps-on-going-so-the-full-url-ends-up-past-the-recommended-length";
+
+    private static readonly byte[] LARGE_IMAGE_BYTES = BuildImage(300 * 1024);
+    private static readonly string LONG_ALT = string.Join(' ', Enumerable.Repeat("a very long alt text", 8));
+
+    private List<Plant> CreatePlants()
+    {
+        List<Plant> plants = [];
+
+        void Page(string slug, string name, string[] issues, Func<PageSpec, PageSpec>? change = null, bool inSitemap = true, string contentType = HTML)
+        {
+            var page = PlantPage(slug, name);
+            page = change?.Invoke(page) ?? page;
+            plants.Add(new Plant(page.Path, 200, Linked: true, inSitemap, issues,
+                () => new SyntheticResponse(200, contentType, Render(page), null, null, SECURITY_HEADERS)));
+        }
+
+        void Other(string slug, int status, bool linked, string[] issues, Func<SyntheticResponse> respond) =>
+            plants.Add(new Plant(PLANTS_PATH + slug, status, linked, InSitemap: false, issues, respond));
+
+        Page("title-missing", "Missing title", ["title-missing"], page => page with { Title = null });
+        Page("title-multiple", "Two titles", ["title-multiple"], page => page with { ExtraHead = "<title>A second title for the same planted page</title>" });
+        Page("title-long", "Long title", ["title-too-long"], page => page with
+        {
+            Title = "This planted page has a title that runs on far past what search results can show | Synthetic Store"
+        });
+        Page("title-short", "Short title", ["title-too-short"], page => page with { Title = "Short page" });
+
+        Page("description-multiple", "Two descriptions", ["description-multiple"], page => page with
+        {
+            ExtraHead = "<meta name=\"description\" content=\"A second meta description on the same planted page, which search engines may ignore.\">"
+        });
+        Page("description-long", "Long description", ["description-too-long"], page => page with
+        {
+            Description = "This planted meta description keeps going well past the point where search results cut it off, " +
+                          "adding clause after clause about nothing in particular until it is far too long to show."
+        });
+        Page("description-short", "Short description", ["description-too-short"], page => page with { Description = "Too short." });
+        Page("description-copy-a", "Shared description A", ["description-duplicate"], page => page with { Description = SHARED_DESCRIPTION });
+        Page("description-copy-b", "Shared description B", ["description-duplicate"], page => page with { Description = SHARED_DESCRIPTION });
+
+        Page("h1-missing", "Missing H1", ["h1-missing"], page => page with { H1 = null, Content = "<h2>Missing H1</h2>" + page.Content });
+        Page("h1-multiple", "Two H1s", ["h1-multiple"], page => page with { Content = "<h1>A second H1 on the page</h1>" + page.Content });
+        Page("h1-copy-a", "Shared heading A", ["h1-duplicate"], page => page with { H1 = "Shared heading" });
+        Page("h1-copy-b", "Shared heading B", ["h1-duplicate"], page => page with { H1 = "Shared heading" });
+
+        // Identical main content means an identical H1 too, so the copies are also duplicate H1s.
+        var copied = $"<p>{Text("plant-content-copy", 300)}</p>";
+        Page("content-copy-a", "Copied content A", ["duplicate-content", "h1-duplicate"], page => page with { H1 = "Copied content", Content = copied });
+        Page("content-copy-b", "Copied content B", ["duplicate-content", "h1-duplicate"], page => page with { H1 = "Copied content", Content = copied });
+        var near = WordArray(KeySeed("plant-content-near"), 0, 600);
+        var nearCopy = (string[])near.Clone();
+        nearCopy[300] = "ocean";
+        Page("content-near-a", "Near copy A", ["near-duplicate-content", "h1-duplicate"], page => page with
+        {
+            H1 = "Nearly copied content", Content = $"<p>{string.Join(' ', near)}</p>"
+        });
+        Page("content-near-b", "Near copy B", ["near-duplicate-content", "h1-duplicate"], page => page with
+        {
+            H1 = "Nearly copied content", Content = $"<p>{string.Join(' ', nearCopy)}</p>"
+        });
+        Page("thin", "Thin page", ["low-word-count"], page => page with { Content = $"<p>{Text("plant-thin", 60)}</p>" });
+        Page("soft-404", "Soft 404", ["soft-404"], page => page with { Title = "Sorry, this page was not found | Synthetic Store", H1 = "Page not found" });
+
+        Page("image-alt-long", "Long alt text", ["image-alt-too-long"], page => page with
+        {
+            Content = page.Content + $"<img src=\"/img/1.jpg\" alt=\"{LONG_ALT}\" width=\"400\" height=\"300\">"
+        });
+        Page("image-no-size", "Image without size", ["image-missing-dimensions"], page => page with
+        {
+            Content = page.Content + "<img src=\"/img/2.jpg\" alt=\"A product photo without a size\">"
+        });
+        Page("image-broken", "Broken image", ["image-broken"], page => page with
+        {
+            Content = page.Content + "<img src=\"/img/missing.jpg\" alt=\"A photo that is missing\" width=\"400\" height=\"300\">"
+        });
+        Page("image-large", "Large image", ["image-too-large"], page => page with
+        {
+            Content = page.Content + "<img src=\"/img/large.jpg\" alt=\"A very large photo\" width=\"400\" height=\"300\">"
+        });
+
+        Page("canonical-missing", "Missing canonical", ["canonical-missing"], page => page with { Canonical = null });
+        Page("canonical-multiple", "Two canonicals", ["canonical-multiple"], page => page with
+        {
+            ExtraHead = $"<link rel=\"canonical\" href=\"{_base}{PLANTS_PATH}thin\">"
+        });
+        Page("canonical-relative", "Relative canonical", ["canonical-relative"], page => page with { Canonical = page.Path });
+        Page("canonical-body", "Canonical in the body", ["canonical-outside-head"], page => page with
+        {
+            Canonical = null, Content = page.Content + $"<link rel=\"canonical\" href=\"{_base}{page.Path}\">"
+        });
+        Page("canonical-invalid", "Invalid canonical", ["canonical-invalid"], page => page with { Canonical = "http://[not a host]/" });
+        Page("canonical-broken", "Canonical to a 404", ["canonicalised-page", "canonical-broken"],
+            page => page with { Canonical = $"{_base}{PLANTS_PATH}gone" }, inSitemap: false);
+        Page("canonical-redirect", "Canonical to a redirect", ["canonicalised-page", "canonical-to-redirect"],
+            page => page with { Canonical = $"{_base}{PLANTS_PATH}moved" }, inSitemap: false);
+        Page("canonical-noindex", "Canonical to a noindex page", ["canonicalised-page", "canonical-to-non-indexable"],
+            page => page with { Canonical = $"{_base}{PLANTS_PATH}noindex" }, inSitemap: false);
+
+        Page("noindex", "Noindex page", ["noindex-page"], page => page with { Robots = "noindex" }, inSitemap: false);
+        Page("nofollow", "Nofollow page", ["nofollow-page"], page => page with { Robots = "nofollow" });
+        Page("nosnippet", "No snippet", ["snippet-blocked"], page => page with { Robots = "nosnippet" });
+        Page("meta-refresh", "Meta refresh", ["meta-refresh"], page => page with
+        {
+            ExtraHead = $"<meta http-equiv=\"refresh\" content=\"30; url={PLANTS_PATH}thin\">"
+        });
+
+        Page("empty-anchor", "Link without text", ["empty-anchor-text"], page => page with
+        {
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\"></a></p>"
+        });
+        Page("fragments", "Missing fragments", ["broken-fragment-links"], page => page with
+        {
+            Content = page.Content +
+                      $"<p><a href=\"{PLANTS_PATH}fragment-target#present\">Present section</a> " +
+                      $"<a href=\"{PLANTS_PATH}fragment-target#missing\">Missing section</a> " +
+                      "<a href=\"#nowhere\">Nowhere on this page</a> <a href=\"#top\">Back to top</a></p>"
+        });
+        Page("fragment-target", "Fragment target", [], page => page with { Content = "<h2 id=\"present\">Present section</h2>" + page.Content });
+
+        Page("Upper-Case", "Uppercase URL", ["url-uppercase"]);
+        Page("under_score", "Underscore URL", ["url-underscores"]);
+        Page(LONG_SLUG, "Long URL", ["url-too-long"]);
+
+        // A clean English/French pair, then one page per hreflang mistake.
+        var pair = Hreflang(("en", "hreflang-en"), ("fr", "hreflang-fr"), ("x-default", "hreflang-en"));
+        Page("hreflang-en", "Hreflang English", [], page => page with { ExtraHead = pair });
+        Page("hreflang-fr", "Hreflang French", [], page => page with { ExtraHead = pair });
+        Page("hreflang-lonely", "Hreflang alternate", []);
+        Page("hreflang-no-return", "Hreflang without return", ["hreflang-missing-return"], page => page with
+        {
+            ExtraHead = Hreflang(("en", "hreflang-no-return"), ("de", "hreflang-lonely"), ("x-default", "hreflang-no-return"))
+        });
+        Page("hreflang-no-self", "Hreflang without self", ["hreflang-missing-self", "hreflang-missing-return"], page => page with
+        {
+            ExtraHead = Hreflang(("en", "hreflang-en"), ("x-default", "hreflang-en"))
+        });
+        Page("hreflang-bad-code", "Hreflang bad code", ["hreflang-invalid-code"], page => page with
+        {
+            ExtraHead = Hreflang(("en-UK", "hreflang-bad-code"), ("x-default", "hreflang-bad-code"))
+        });
+        Page("hreflang-broken", "Hreflang to a 404", ["hreflang-broken-target"], page => page with
+        {
+            ExtraHead = Hreflang(("en", "hreflang-broken"), ("de", "gone"), ("x-default", "hreflang-broken"))
+        });
+        Page("hreflang-conflict", "Hreflang conflict", ["hreflang-duplicate-code", "hreflang-missing-return"], page => page with
+        {
+            ExtraHead = Hreflang(("en", "hreflang-conflict"), ("en", "hreflang-fr"), ("x-default", "hreflang-conflict"))
+        });
+        Page("hreflang-noindex", "Hreflang to a noindex page", ["hreflang-to-non-indexable"], page => page with
+        {
+            ExtraHead = Hreflang(("en", "hreflang-noindex"), ("fr", "noindex"), ("x-default", "hreflang-noindex"))
+        });
+        Page("hreflang-body", "Hreflang in the body", ["hreflang-outside-head"], page => page with
+        {
+            Content = page.Content + Hreflang(("en", "hreflang-body"), ("x-default", "hreflang-body"))
+        });
+        Page("hreflang-no-x-default", "Hreflang without x-default", ["hreflang-missing-x-default"], page => page with
+        {
+            ExtraHead = Hreflang(("en", "hreflang-no-x-default"))
+        });
+
+        Page("jsonld-invalid", "Broken JSON-LD", ["structured-data-invalid"], page => page with
+        {
+            JsonLd = """{"@context": "https://schema.org", "@type": "Product" "name": "Broken"}"""
+        });
+        Page("jsonld-incomplete", "Incomplete Product markup", ["structured-data-missing-required"], page => page with
+        {
+            JsonLd = """{"@context":"https://schema.org","@type":"Product","name":"Incomplete product"}"""
+        });
+
+        Page("large", "Large HTML", ["large-page"], page => page with { Content = page.Content + $"<!-- {new string('x', 1_100_000)} -->" });
+        Page("no-viewport", "Missing viewport", ["viewport-missing"], page => page with { Viewport = false });
+        Page("no-lang", "Missing lang", ["lang-missing"], page => page with { Lang = false });
+        Page("no-charset", "Missing charset", ["charset-missing"], page => page with { Charset = false }, contentType: "text/html");
+        Page("no-open-graph", "Missing Open Graph", ["open-graph-missing"], page => page with { OpenGraph = false });
+
+        var slow = PlantPage("slow", "Slow page");
+        plants.Add(new Plant(slow.Path, 200, Linked: true, InSitemap: true, ["slow-response"], () => Html(Render(slow)) with { DelayMs = SLOW_PAGE_DELAY_MS }));
+
+        Other("blocked", 403, linked: true, ["internal-blocked"], () => new SyntheticResponse(403, HTML,
+            RenderSimple("Checking your browser", "A bot challenge stands in the way.", PLANTS_PATH + "blocked"), null, null,
+            new Dictionary<string, string> { ["cf-mitigated"] = "challenge" }));
+        Other("unreachable", 0, linked: true, ["internal-unreachable"], () => new SyntheticResponse(0, HTML, null, null, null, Abort: true));
+        Other("loop-a", 301, linked: true, ["redirect-loop"], () => Redirect(301, PLANTS_PATH + "loop-b"));
+        Other("loop-b", 301, linked: false, ["redirect-loop"], () => Redirect(301, PLANTS_PATH + "loop-a"));
+        Other("redirect-broken", 301, linked: true, ["redirect-broken"], () => Redirect(301, PLANTS_PATH + "gone-redirect"));
+        Other("moved", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "thin"));
+        Other("gone", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone"));
+        Other("gone-redirect", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone-redirect"));
+        plants.Add(new Plant("/img/missing.jpg", 404, Linked: false, InSitemap: false, ["internal-client-error"], () => NotFound("/img/missing.jpg")));
+
+        // The hub links to the redirect loop and the unreachable URL, so it carries those link issues itself.
+        plants.Add(new Plant(PLANTS_PATH, 200, Linked: false, InSitemap: true, ["links-to-redirects", "broken-internal-links"], () => Html(RenderPlantsHub())));
+        return plants;
+    }
+
+    private PageSpec PlantPage(string slug, string name) => new()
+    {
+        Path = PLANTS_PATH + slug,
+        Title = $"{name} | Synthetic Store planted page",
+        Description = $"{name}: a planted test page with one deliberate SEO problem, part of the Synthetic Store crawler tests.",
+        H1 = name,
+        Content = $"<p>{Text("plant-" + slug, PLANT_WORDS)}</p>"
+    };
+
+    private string RenderPlantsHub()
+    {
+        var links = string.Concat(_plants.Where(plant => plant.Linked)
+            .Select(plant => $"<li><a href=\"{plant.Path}\">Planted page {plant.Path[PLANTS_PATH.Length..]}</a></li>"));
+        return Render(new PageSpec
+        {
+            Path = PLANTS_PATH,
+            Title = "Planted test pages | Synthetic Store, a shop for tests",
+            Description = "Index of the planted test pages: each one carries a known SEO problem so the crawler's checks can be proven exactly.",
+            H1 = "Planted test pages",
+            Content = $"<p>{Text("plants", INTRO_WORDS)}</p><ul>{links}</ul>"
+        });
+    }
+
+    private string Hreflang(params (string Code, string Slug)[] alternates) => string.Concat(alternates.Select(alternate =>
+        $"<link rel=\"alternate\" hreflang=\"{alternate.Code}\" href=\"{_base}{PLANTS_PATH}{alternate.Slug}\">"));
+}

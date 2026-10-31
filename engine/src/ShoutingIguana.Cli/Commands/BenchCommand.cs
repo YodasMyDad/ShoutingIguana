@@ -4,6 +4,8 @@ using System.Text.Json;
 using ShoutingIguana.Cli.Benchmarking;
 using ShoutingIguana.Cli.Benchmarking.Models;
 using ShoutingIguana.Cli.Output;
+using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -58,8 +60,19 @@ internal static class BenchCommand
             }
 
             observer.EndProgressLine();
+            AnalysisSummary? analysis = null;
+            IReadOnlyList<MemorySample> analysisSamples = [];
+            if (summary.Status == CrawlStatus.Completed)
+            {
+                Console.WriteLine("Analysing...");
+                var sampler = new MemorySampler(TimeSpan.FromMilliseconds(250), () => 0);
+                analysis = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(databasePath, cancellationToken: cancellationToken);
+                await sampler.DisposeAsync();
+                analysisSamples = sampler.Samples;
+            }
+
             var result = Evaluate(parse.GetValue(maxPeak), parse.GetValue(maxGrowth), parse.GetValue(minRate),
-                pageCount, workers, site, summary, samples, databasePath);
+                pageCount, workers, site, summary, samples, analysis, analysisSamples, databasePath);
             Print(result);
 
             if (parse.GetValue(json) is { } jsonPath)
@@ -83,16 +96,22 @@ internal static class BenchCommand
     }
 
     private static BenchResult Evaluate(double maxPeakMb, double maxGrowthMb, double minPagesPerSecond, int pageCount,
-        int concurrency, ChildSiteProcess site, CrawlSummary summary, IReadOnlyList<MemorySample> samples, string databasePath)
+        int concurrency, ChildSiteProcess site, CrawlSummary summary, IReadOnlyList<MemorySample> samples,
+        AnalysisSummary? analysis, IReadOnlyList<MemorySample> analysisSamples, string databasePath)
     {
         var expected = new SyntheticSite(new SyntheticSiteOptions { PageCount = pageCount }, site.BaseUri, site.ExternalBaseUri).GetExpectations();
         var stats = CrawlStatsReader.Read(databasePath);
         var mismatches = ExpectationCheck.Compare(stats, expected);
+        if (analysis is not null)
+        {
+            mismatches.AddRange(expected.CompareIssues(IssueReader.ReadCounts(databasePath), IssueCatalog.All.Select(issue => issue.Id)));
+        }
 
         var total = Math.Max(1, summary.Progress.Fetched);
         var early = PeakWorkingSet(samples.Where(sample => sample.Fetched >= total * 0.1 && sample.Fetched <= total * 0.3));
         var late = PeakWorkingSet(samples.Where(sample => sample.Fetched >= total * 0.7));
         var peak = PeakWorkingSet(samples);
+        var analysisPeak = PeakWorkingSet(analysisSamples);
         var peakManaged = samples.Count == 0 ? 0 : samples.Max(sample => sample.ManagedBytes);
         var seconds = Math.Max(0.001, summary.Progress.Elapsed.TotalSeconds);
         var pagesPerSecond = Math.Round(stats.HtmlPageCount / seconds, 1);
@@ -110,6 +129,11 @@ internal static class BenchCommand
             failures.Add($"Peak working set {Format.Megabytes(peak)} MB is over the {maxPeakMb} MB limit");
         }
 
+        if (maxPeakMb > 0 && Format.Megabytes(analysisPeak) > maxPeakMb)
+        {
+            failures.Add($"Peak working set during analysis {Format.Megabytes(analysisPeak)} MB is over the {maxPeakMb} MB limit");
+        }
+
         if (maxGrowthMb > 0 && growth > maxGrowthMb)
         {
             failures.Add($"Memory grew {growth} MB during the crawl, over the {maxGrowthMb} MB limit");
@@ -124,7 +148,9 @@ internal static class BenchCommand
             pageCount, concurrency, summary.Status.ToString(), mismatches.Count == 0, expected.HtmlPages, stats.HtmlPageCount,
             summary.Progress.Fetched, stats.LinkCount, Math.Round(seconds, 1), pagesPerSecond, Format.Megabytes(peak),
             Format.Megabytes(peakManaged), Format.Megabytes(early), Format.Megabytes(late), growth,
-            Format.Megabytes(new FileInfo(databasePath).Length), $"{Environment.ProcessorCount} cores, {RuntimeInformation.OSDescription}",
+            Format.Megabytes(new FileInfo(databasePath).Length), Math.Round(analysis?.Duration.TotalSeconds ?? 0, 1),
+            analysis?.Issues.Sum(issue => issue.Count) ?? 0, Format.Megabytes(analysisPeak),
+            $"{Environment.ProcessorCount} cores, {RuntimeInformation.OSDescription}",
             RuntimeInformation.FrameworkDescription, mismatches, failures);
     }
 
@@ -141,6 +167,7 @@ internal static class BenchCommand
         Console.WriteLine($"  Memory       peak {result.PeakWorkingSetMb:N0} MB working set (managed heap peak {result.PeakManagedMb:N0} MB)");
         Console.WriteLine($"  Flatness     {result.EarlyWorkingSetMb:N0} MB at 10-30% -> {result.LateWorkingSetMb:N0} MB at 70-100% ({result.GrowthMb:+0;-0} MB)");
         Console.WriteLine($"  Database     {result.DatabaseMb:N0} MB");
+        Console.WriteLine($"  Analysis     {result.AnalysisSeconds:N1} s, {result.IssuesFound:N0} issues found, peak {result.AnalysisPeakWorkingSetMb:N0} MB working set");
 
         foreach (var mismatch in result.Mismatches)
         {

@@ -34,6 +34,7 @@ internal static class CrawlCommand
         var anyFolder = new Option<bool>("--any-folder") { Description = "Crawl outside the start URL's folder." };
         var followNofollow = new Option<bool>("--follow-nofollow") { Description = "Follow nofollow links." };
         var storeHtml = new Option<bool>("--store-html") { Description = "Keep compressed HTML of every page." };
+        var noAnalyze = new Option<bool>("--no-analyze") { Description = "Skip the SEO checks when the crawl completes." };
         var quiet = new Option<bool>("--quiet", "-q") { Description = "No progress line." };
         var verbose = new Option<bool>("--verbose", "-v") { Description = "Detailed engine logging." };
 
@@ -41,7 +42,7 @@ internal static class CrawlCommand
         {
             url, database, resume, maxUrls, maxDepth, concurrency, rate, userAgent, userAgentString, headers, proxy, timeout,
             ignoreRobots, crawlDelay, noResources, noExternal, noSitemaps, subdomains, anyFolder, followNofollow, storeHtml,
-            quiet, verbose
+            noAnalyze, quiet, verbose
         };
 
         command.SetAction(async (parse, cancellationToken) =>
@@ -121,9 +122,15 @@ internal static class CrawlCommand
             Console.WriteLine(summary.Status switch
             {
                 CrawlStatus.Completed => $"Done: {summary.Progress.Fetched:N0} URLs fetched ({summary.Progress.HtmlPages:N0} pages) in {Format.Duration(summary.Progress.Elapsed)}.",
-                CrawlStatus.Stopped => $"Stopped. Continue with: si crawl --resume --db \"{databasePath}\"",
+                CrawlStatus.Stopped => $"Stopped. Continue with: si crawl --resume --db \"{databasePath}\"  (or check what's there: si analyze \"{databasePath}\")",
                 _ => $"Failed: {summary.Error}"
             });
+
+            if (summary.Status == CrawlStatus.Completed && !parse.GetValue(noAnalyze))
+            {
+                Console.WriteLine();
+                await AnalyzeCommand.RunAsync(databasePath, loggerFactory, cancellationToken);
+            }
 
             return summary.Status switch
             {
