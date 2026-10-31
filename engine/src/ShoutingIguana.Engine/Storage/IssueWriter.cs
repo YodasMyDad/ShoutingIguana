@@ -43,7 +43,7 @@ internal sealed class IssueWriter : IDisposable
 
     public static IssueWriter Open(string databasePath, ILogger logger)
     {
-        var connection = CrawlDatabase.OpenWriter(databasePath);
+        var connection = CrawlDatabase.OpenWriter(databasePath, allowNew: false);
         try
         {
             CrawlDatabase.Execute(connection, CrawlSchema.ANALYSIS);
