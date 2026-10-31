@@ -12,23 +12,30 @@ namespace ShoutingIguana.Engine.Fetching;
 /// <summary>
 /// Plain HTTP fetching for every URL. Redirects are not followed (each hop is recorded as its own URL),
 /// compression is decoded here so the transfer size is known, and only bodies that are needed are read:
-/// HTML for pages being crawled, a short sample of error pages for block detection, text for robots.txt.
+/// HTML for pages being crawled, a short sample of error pages for block detection, text for robots.txt,
+/// and a byte count (nothing kept) for images sent without a Content-Length.
 /// </summary>
 internal sealed class HttpFetcher : IDisposable
 {
     private const int INITIAL_BUFFER_BYTES = 64 * 1024;
     private const int BLOCK_SAMPLE_BYTES = 64 * 1024;
+    private const int MEASURE_BUFFER_BYTES = 64 * 1024;
+    private const long MAX_MEASURED_IMAGE_BYTES = 10 * 1024 * 1024;
     private const int MAX_HEADERS = 200;
     private const string ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
 
     private readonly HttpClient _client;
     private readonly CrawlOptions _options;
+    private readonly CrawlScope _scope;
+    private readonly TimeProvider _timeProvider;
     private readonly string _userAgent;
     private readonly TimeSpan _timeout;
 
-    public HttpFetcher(CrawlOptions options, ResolvedUserAgent userAgent)
+    public HttpFetcher(CrawlOptions options, ResolvedUserAgent userAgent, CrawlScope scope, TimeProvider timeProvider)
     {
         _options = options;
+        _scope = scope;
+        _timeProvider = timeProvider;
         _userAgent = userAgent.Header;
         _timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
 
@@ -68,9 +75,11 @@ internal sealed class HttpFetcher : IDisposable
             var timeToFirstByte = (int)stopwatch.ElapsedMilliseconds;
             var statusCode = (int)response.StatusCode;
             var headers = CollectHeaders(response);
-            var contentType = response.Content.Headers.ContentType?.MediaType?.ToLowerInvariant();
+            var rawContentType = ContentTypeHeader.Read(response.Content.Headers);
+            var contentType = ContentTypeHeader.MediaTypeOf(rawContentType);
             var isHtml = contentType is "text/html" or "application/xhtml+xml";
             var isSuccess = statusCode is >= 200 and < 300;
+            var contentLength = response.Content.Headers.ContentLength;
 
             var readLimit = body switch
             {
@@ -87,10 +96,16 @@ internal sealed class HttpFetcher : IDisposable
             if (readLimit > 0)
             {
                 using var buffer = await ReadBodyAsync(response, readLimit, timeout.Token).ConfigureAwait(false);
-                text = CharsetDecoder.Decode(buffer.Span, response.Content.Headers.ContentType?.CharSet);
+                text = CharsetDecoder.Decode(buffer.Span, ContentTypeHeader.CharsetOf(rawContentType));
                 bodyBytes = buffer.Length;
                 transferBytes = buffer.TransferBytes;
                 truncated = buffer.Truncated;
+            }
+            else if (isSuccess && contentLength is null && contentType?.StartsWith("image/", StringComparison.Ordinal) == true)
+            {
+                // Image CDNs often send chunked responses without a length; counting the bytes is the only way to
+                // know the image's size, which the large-image check needs.
+                transferBytes = await MeasureBodyAsync(response, timeout.Token, cancellationToken).ConfigureAwait(false);
             }
 
             var blockReason = BlockDetector.Detect(statusCode, headers, isSuccess ? null : text);
@@ -102,7 +117,7 @@ internal sealed class HttpFetcher : IDisposable
                 Headers = headers,
                 ContentType = contentType,
                 IsHtml = isHtml,
-                ContentLength = response.Content.Headers.ContentLength,
+                ContentLength = contentLength,
                 TransferBytes = transferBytes,
                 BodyBytes = bodyBytes,
                 Body = isSuccess && blockReason is null ? text : null,
@@ -162,10 +177,15 @@ internal sealed class HttpFetcher : IDisposable
         headers.TryAddWithoutValidation("Accept-Encoding", "gzip, deflate, br");
         headers.TryAddWithoutValidation("Upgrade-Insecure-Requests", "1");
 
-        foreach (var (name, value) in _options.ExtraHeaders)
+        // Extra headers often carry a firewall allowlist secret, so they only go to the site being crawled, never to
+        // other sites: not to their links, their robots.txt or a redirect that leads there.
+        if (_scope.IsInternal(uri))
         {
-            headers.Remove(name);
-            headers.TryAddWithoutValidation(name, value);
+            foreach (var (name, value) in _options.ExtraHeaders)
+            {
+                headers.Remove(name);
+                headers.TryAddWithoutValidation(name, value);
+            }
         }
 
         return request;
@@ -210,6 +230,41 @@ internal sealed class HttpFetcher : IDisposable
         }
     }
 
+    /// <summary>
+    /// Counts a body's bytes off the wire without keeping them, up to <see cref="MAX_MEASURED_IMAGE_BYTES"/>. Returns
+    /// null when the transfer fails part-way: a partial count would understate the size, and the response itself is fine.
+    /// </summary>
+    private static async Task<long?> MeasureBodyAsync(HttpResponseMessage response, CancellationToken timeoutToken, CancellationToken cancellationToken)
+    {
+        var buffer = ArrayPool<byte>.Shared.Rent(MEASURE_BUFFER_BYTES);
+        try
+        {
+            await using var raw = await response.Content.ReadAsStreamAsync(timeoutToken).ConfigureAwait(false);
+            long total = 0;
+            while (total < MAX_MEASURED_IMAGE_BYTES)
+            {
+                var read = await raw.ReadAsync(buffer, timeoutToken).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                total += read;
+            }
+
+            return Math.Min(total, MAX_MEASURED_IMAGE_BYTES);
+        }
+        catch (Exception exception) when (exception is IOException or HttpRequestException ||
+                                          (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            return null;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
     private static Stream Decompress(Stream raw, ICollection<string> contentEncoding) =>
         contentEncoding.LastOrDefault()?.Trim().ToLowerInvariant() switch
         {
@@ -251,7 +306,7 @@ internal sealed class HttpFetcher : IDisposable
         return UrlNormalizer.IsHttp(absolute) ? absolute : null;
     }
 
-    private static TimeSpan? GetRetryAfter(HttpResponseMessage response)
+    private TimeSpan? GetRetryAfter(HttpResponseMessage response)
     {
         var retryAfter = response.Headers.RetryAfter;
         if (retryAfter?.Delta is { } delta)
@@ -261,7 +316,7 @@ internal sealed class HttpFetcher : IDisposable
 
         if (retryAfter?.Date is { } date)
         {
-            var wait = date - DateTimeOffset.UtcNow;
+            var wait = date - _timeProvider.GetUtcNow();
             return wait > TimeSpan.Zero ? wait : TimeSpan.Zero;
         }
 

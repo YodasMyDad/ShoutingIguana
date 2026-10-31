@@ -66,7 +66,7 @@ internal sealed class CrawlSession
             : new HostGate(EXTERNAL_CONCURRENCY_PER_HOST, TimeSpan.Zero, timeProvider));
 
         _writer = CrawlWriter.Open(request.DatabasePath, _options, request.Resume, _counters, loggerFactory.CreateLogger<CrawlWriter>());
-        _fetcher = new HttpFetcher(_options, userAgent);
+        _fetcher = new HttpFetcher(_options, userAgent, scope, timeProvider);
         var robots = new RobotsCache(_fetcher, gates, _writer, userAgent.RobotsToken, _options.RespectCrawlDelay, _observer,
             timeProvider, loggerFactory.CreateLogger<RobotsCache>(), _stop.Token);
         _links = new OutLinkFactory(scope);
