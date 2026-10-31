@@ -89,13 +89,15 @@ public sealed class RetryingFetcherTests : IAsyncLifetime
         Assert.Equal(1, _observer.Count("site-unreachable"));
         var tripped = Times(_server.BaseUri)[^1];
 
-        // The next URL waits out the pause, and so does its retry after another unanswered attempt.
+        // The next URL waits out the pause, and so does its retry after another unanswered attempt. Not before the
+        // pause is over; the clock keeps moving while a request is in flight, hence the slack above it.
         var waited = await FetchAsync(_server.Url("/drop?url=3"));
         var times = Times(_server.BaseUri);
+        var slack = TimeSpan.FromSeconds(10);
         Assert.DoesNotContain("Not checked", waited.Error ?? string.Empty, StringComparison.Ordinal);
         Assert.Equal(8, times.Count);
-        Assert.InRange(times[6] - tripped, RetryingFetcher.UNREACHABLE_PAUSE, RetryingFetcher.UNREACHABLE_PAUSE + TimeSpan.FromSeconds(1));
-        Assert.InRange(times[7] - times[6], RetryingFetcher.UNREACHABLE_PAUSE, RetryingFetcher.UNREACHABLE_PAUSE + TimeSpan.FromSeconds(1));
+        Assert.InRange(times[6] - tripped, RetryingFetcher.UNREACHABLE_PAUSE, RetryingFetcher.UNREACHABLE_PAUSE + slack);
+        Assert.InRange(times[7] - times[6], RetryingFetcher.UNREACHABLE_PAUSE, RetryingFetcher.UNREACHABLE_PAUSE + slack);
 
         // An answer ends it.
         Assert.Equal(200, (await FetchAsync(_server.Url("/ok"))).StatusCode);
@@ -106,9 +108,14 @@ public sealed class RetryingFetcherTests : IAsyncLifetime
     private async Task<FetchResponse> FetchAsync(Uri uri)
     {
         var fetch = _fetcher.FetchAsync(uri, FetchBody.None, CancellationToken.None);
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
-        while (!fetch.IsCompleted && DateTime.UtcNow < deadline)
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
+        while (!fetch.IsCompleted)
         {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException($"Fetching {uri} did not finish.");
+            }
+
             _time.Advance(PUMP_STEP);
             await Task.Delay(5);
         }

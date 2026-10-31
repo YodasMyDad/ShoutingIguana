@@ -67,9 +67,10 @@ public sealed class RobotsCacheTests : IAsyncLifetime
 
         var robots = await harness.GetAsync(_server.BaseUri);
 
+        // Not before the 30 s are up. The clock keeps moving while a request is in flight, hence the slack above.
         var times = _requests.ToArray();
         Assert.Equal(2, times.Length);
-        Assert.InRange(times[1] - times[0], TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(31));
+        Assert.InRange(times[1] - times[0], TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(40));
         Assert.False(robots.IsAllowed("/private/page"));
         Assert.True(robots.IsAllowed("/public"));
         Assert.Empty(harness.Observer.Notices);

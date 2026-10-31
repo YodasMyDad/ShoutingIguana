@@ -22,7 +22,7 @@ namespace ShoutingIguana.Engine.Tests.Robots;
 internal sealed class RobotsCacheHarness : IAsyncDisposable
 {
     private static readonly TimeSpan PUMP_STEP = TimeSpan.FromMilliseconds(100);
-    private static readonly TimeSpan PUMP_LIMIT = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan PUMP_LIMIT = TimeSpan.FromSeconds(60);
 
     private readonly HttpFetcher _fetcher;
     private readonly CrawlWriter _writer;
@@ -69,8 +69,13 @@ internal sealed class RobotsCacheHarness : IAsyncDisposable
     {
         var lookup = Robots.GetAsync(uri);
         var deadline = DateTime.UtcNow + PUMP_LIMIT;
-        while (!lookup.IsCompleted && DateTime.UtcNow < deadline)
+        while (!lookup.IsCompleted)
         {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException($"robots.txt lookup for {uri} did not finish.");
+            }
+
             Time.Advance(PUMP_STEP);
             await Task.Delay(5);
         }
