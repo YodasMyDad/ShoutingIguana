@@ -51,7 +51,7 @@ public sealed class CliTests : IAsyncLifetime
         Assert.True(stored is { SitemapCount: > 1, SitemapErrorCount: 1 });
         Assert.Contains($"Sitemaps      {stored.SitemapCount:N0} read, listing {stored.SitemapUrlCount:N0} URLs, 1 couldn't be read", stats.Output);
 
-        // Ctrl+C during an analysis: 130, and the results stay.
+        // Ctrl+C as an analysis starts: 130, and the results stay. CrawlEngineTests cancels one part-way.
         using var cancelled = new CancellationTokenSource();
         await cancelled.CancelAsync();
         Assert.Equal(130, (await RunAsync(cancelled.Token, "analyze", crawl)).ExitCode);

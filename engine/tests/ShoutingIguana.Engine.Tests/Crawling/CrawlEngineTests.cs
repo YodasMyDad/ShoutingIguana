@@ -9,6 +9,7 @@ using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
+using ShoutingIguana.Engine.Tests.Analysis;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
 
@@ -317,6 +318,46 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         }
 
         Assert.True(cancellations > 0);
+    }
+
+    /// <summary>
+    /// A cancel part-way, at an exact point. One link of a page is damaged so a rule fails on it, and the analysis is
+    /// cancelled as the failure is logged. On the first page read, the cancel lands in the page pass; on the last, in
+    /// the cross-page pass. Either way the analysis stops, and none of it is stored.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AnAnalysisCancelledPartWayStoresNothing(bool onTheFirstPage)
+    {
+        var path = NewDatabasePath();
+        await CrawlAsync(Options() with { MaxUrls = 60 }, path);
+        int pageId;
+        using (var reader = AnalysisReader.Open(path))
+        {
+            var pages = reader.ReadPages(reader.ReadUrls()).Select(page => page.UrlId).ToList();
+            pageId = onTheFirstPage ? pages[0] : pages[^1];
+        }
+
+        Assert.True(Count(path, $"SELECT COUNT(*) FROM links WHERE from_id = {pageId} AND kind = {(int)LinkKind.Hyperlink}") > 0);
+        using (var connection = CrawlDatabase.OpenWriter(path))
+        {
+            CrawlDatabase.Execute(connection,
+                $"UPDATE links SET to_id = 2147483647 WHERE rowid = (SELECT MIN(rowid) FROM links WHERE from_id = {pageId} AND kind = {(int)LinkKind.Hyperlink})");
+        }
+
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        var previous = IssueReader.ReadAll(path).ToList();
+        var previousNotes = IssueReader.ReadNotes(path);
+
+        // Stricter titles, so a run that stored anything would show.
+        using var cancel = new CancellationTokenSource();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new CrawlAnalyzer(new CancelOnLoggedFailure(cancel))
+            .AnalyzeAsync(path, new AnalysisSettings { TitleMinLength = 10, TitleMaxLength = 20 }, cancel.Token));
+
+        Assert.True(cancel.IsCancellationRequested);
+        Assert.Equal(previous, IssueReader.ReadAll(path).ToList());
+        Assert.Equal(previousNotes, IssueReader.ReadNotes(path));
     }
 
     [Fact]
