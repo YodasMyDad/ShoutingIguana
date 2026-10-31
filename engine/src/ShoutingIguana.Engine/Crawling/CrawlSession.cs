@@ -67,10 +67,11 @@ internal sealed class CrawlSession
 
         _writer = CrawlWriter.Open(request.DatabasePath, _options, request.Resume, _counters, loggerFactory.CreateLogger<CrawlWriter>());
         _fetcher = new HttpFetcher(_options, userAgent, scope, timeProvider);
-        var robots = new RobotsCache(_fetcher, gates, _writer, userAgent.RobotsToken, _options.RespectCrawlDelay, _observer,
+        var fetcher = new RetryingFetcher(_fetcher, gates, _options.MaxRetries, timeProvider);
+        var robots = new RobotsCache(fetcher, gates, _writer, scope, _options, userAgent.RobotsToken, _observer,
             timeProvider, loggerFactory.CreateLogger<RobotsCache>(), _stop.Token);
         _links = new OutLinkFactory(scope);
-        _processor = new PageProcessor(_options, userAgent, _fetcher, gates, robots, _links, _observer, timeProvider);
+        _processor = new PageProcessor(_options, userAgent, fetcher, robots, _links, _observer, timeProvider);
         _sitemaps = new SitemapDiscoverer(_options, _fetcher, gates, robots, _writer, _links, _observer,
             loggerFactory.CreateLogger<SitemapDiscoverer>());
         _internalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.Concurrency * 2) { SingleWriter = true });

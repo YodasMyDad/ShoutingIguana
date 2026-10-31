@@ -1,25 +1,31 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Robots.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
+using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Robots;
 
 /// <summary>
-/// Fetches each origin's robots.txt once, on first contact, and shares the result with every worker.
-/// Status handling follows RFC 9309: 4xx means no restrictions, while 5xx or an unreachable server means
-/// a full disallow. That second case is reported as a notice so it never looks like a silent empty crawl.
+/// Fetches each origin's robots.txt on first contact and shares the result with every worker. Status handling follows
+/// RFC 9309 and Google: a 4xx means no restrictions; a 5xx, a 429 or no answer means a full disallow. Those failures
+/// are retried like page fetches first, then asked again after a cool-down, and on the site's own origins they raise a
+/// notice so they never look like a silent empty crawl. Another site that doesn't answer at all gets no verdict, so
+/// links to it are fetched and show their real network error.
 /// </summary>
 internal sealed class RobotsCache(
-    HttpFetcher fetcher,
+    RetryingFetcher fetcher,
     HostGateRegistry gates,
     CrawlWriter writer,
+    CrawlScope scope,
+    CrawlOptions options,
     string robotsToken,
-    bool respectCrawlDelay,
     ICrawlObserver observer,
     TimeProvider timeProvider,
     ILogger logger,
@@ -28,37 +34,43 @@ internal sealed class RobotsCache(
     private const int MAX_ROBOTS_BYTES = 512 * 1024;
     private const int MAX_REDIRECTS = 5;
 
-    private readonly ConcurrentDictionary<string, Lazy<Task<RobotsTxt>>> _origins = new(StringComparer.Ordinal);
+    /// <summary>How long a robots.txt that couldn't be read keeps its verdict before the next URL asks again.</summary>
+    internal static readonly TimeSpan RETRY_AFTER = TimeSpan.FromMinutes(2);
 
-    public Task<RobotsTxt> GetAsync(Uri uri) =>
-        _origins.GetOrAdd(uri.GetLeftPart(UriPartial.Authority), origin => new Lazy<Task<RobotsTxt>>(() => LoadAsync(origin))).Value;
+    private readonly ConcurrentDictionary<string, RobotsCacheEntry> _origins = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, bool> _reported = new(StringComparer.Ordinal);
 
-    private async Task<RobotsTxt> LoadAsync(string origin)
+    public Task<RobotsTxt> GetAsync(Uri uri)
+    {
+        var origin = uri.GetLeftPart(UriPartial.Authority);
+        var entry = _origins.GetOrAdd(origin, NewEntry);
+        if (entry.CanRetry(timeProvider.GetUtcNow()))
+        {
+            // The last attempt failed and its cool-down is over. One caller swaps in a fresh attempt; the rest share it.
+            var fresh = NewEntry(origin);
+            entry = _origins.TryUpdate(origin, fresh, entry) ? fresh : _origins[origin];
+        }
+
+        return entry.Load;
+    }
+
+    private RobotsCacheEntry NewEntry(string origin) => new(entry => LoadAsync(origin, entry));
+
+    private async Task<RobotsTxt> LoadAsync(string origin, RobotsCacheEntry entry)
     {
         var location = new Uri(origin + "/robots.txt");
         for (var hop = 0; hop <= MAX_REDIRECTS; hop++)
         {
-            FetchResponse response;
-            using (await gates.For(location).AcquireAsync(stopping).ConfigureAwait(false))
-            {
-                response = await fetcher.FetchAsync(location, FetchBody.Text, stopping, MAX_ROBOTS_BYTES).ConfigureAwait(false);
-            }
-
+            var response = await fetcher.FetchAsync(location, FetchBody.Text, stopping, MAX_ROBOTS_BYTES).ConfigureAwait(false);
             if (response.Outcome == FetchOutcome.Redirect && response.Location is { } next)
             {
                 location = next;
                 continue;
             }
 
-            var robots = Interpret(origin, response);
-            if (respectCrawlDelay && robots.CrawlDelaySeconds is { } delay && delay > 0)
-            {
-                gates.For(new Uri(origin)).RaiseMinimumInterval(TimeSpan.FromSeconds(delay));
-            }
-
             await RecordAsync(origin, response.StatusCode, response.Body, response.Error).ConfigureAwait(false);
             logger.LogInformation("robots.txt for {Origin}: HTTP {Status}", origin, response.StatusCode);
-            return robots;
+            return Interpret(origin, response, entry);
         }
 
         // RFC 9309 lets crawlers treat a robots.txt behind too many redirects as unavailable.
@@ -66,24 +78,43 @@ internal sealed class RobotsCache(
         return RobotsTxt.AllowAll;
     }
 
-    private RobotsTxt Interpret(string origin, FetchResponse response)
+    private RobotsTxt Interpret(string origin, FetchResponse response, RobotsCacheEntry entry)
     {
         if (response.Outcome == FetchOutcome.Success)
         {
-            return RobotsTxtParser.Parse(response.Body ?? string.Empty, robotsToken);
+            var robots = RobotsTxtParser.Parse(response.Body ?? string.Empty, robotsToken);
+            if (options.RespectCrawlDelay && robots.CrawlDelaySeconds is { } delay && delay > 0)
+            {
+                gates.For(new Uri(origin)).RaiseMinimumInterval(TimeSpan.FromSeconds(delay));
+            }
+
+            return robots;
         }
 
-        if (response.StatusCode is >= 400 and < 500)
+        // Any other 4xx means there are no rules. Google treats 429 like a server error, and so does the analysis.
+        if (response.StatusCode is >= 400 and < 500 and not 429)
+        {
+            return RobotsTxt.AllowAll;
+        }
+
+        // Still unreadable after the retries: keep the verdict for a while, not for the rest of the crawl.
+        entry.RetryFrom(timeProvider.GetUtcNow() + RETRY_AFTER);
+        var isInternal = scope.IsInternal(new Uri(origin));
+        if (response.StatusCode is null && !isInternal)
         {
             return RobotsTxt.AllowAll;
         }
 
         var reason = response.StatusCode is { } status ? $"HTTP {status}" : response.Error ?? response.Outcome.ToString();
-        observer.OnNotice(new CrawlNotice(
-            CrawlNoticeLevel.Warning,
-            "robots-unreachable",
-            $"robots.txt for {origin} could not be read ({reason}). The site is treated as fully disallowed, as RFC 9309 requires. Re-run with robots.txt ignored to crawl it anyway."));
-        return RobotsTxt.DisallowAll;
+        if (isInternal && options.RespectRobotsTxt && _reported.TryAdd(origin, true))
+        {
+            observer.OnNotice(new CrawlNotice(
+                CrawlNoticeLevel.Warning,
+                "robots-unreachable",
+                $"robots.txt for {origin} could not be read ({reason}). Until it can, the site is treated as fully disallowed, as RFC 9309 requires; the crawler asks again every {RETRY_AFTER.TotalMinutes:0} minutes. Re-run with robots.txt ignored to crawl it anyway."));
+        }
+
+        return RobotsTxt.Unreachable(reason);
     }
 
     private ValueTask RecordAsync(string origin, int? statusCode, string? content, string? error) =>
