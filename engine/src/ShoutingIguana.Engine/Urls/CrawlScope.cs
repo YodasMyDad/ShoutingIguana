@@ -32,12 +32,7 @@ internal sealed class CrawlScope
     /// <summary>The start URL's scheme, host and port: the origin that stands for the site when another of its origins goes quiet.</summary>
     public Uri StartOrigin { get; }
 
-    public bool IsInternal(Uri uri) => IsOwn(uri, withSubdomains: true);
-
-    /// <summary>The start URL's host or its www twin, without the subdomains <see cref="IsInternal"/> may add.</summary>
-    public bool IsStartSite(Uri uri) => IsOwn(uri, withSubdomains: false);
-
-    private bool IsOwn(Uri uri, bool withSubdomains)
+    public bool IsInternal(Uri uri)
     {
         var samePort = uri.IsDefaultPort ? _isDefaultPort : !_isDefaultPort && uri.Port == _port;
         if (!samePort)
@@ -51,7 +46,7 @@ internal sealed class CrawlScope
             return true;
         }
 
-        return withSubdomains && _subdomainSuffix is not null && host.EndsWith(_subdomainSuffix, StringComparison.Ordinal);
+        return _subdomainSuffix is not null && host.EndsWith(_subdomainSuffix, StringComparison.Ordinal);
     }
 
     /// <summary>The host without a leading www., which names the site: www.example.com and example.com are one.</summary>
