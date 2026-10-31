@@ -34,7 +34,19 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
         for (var id = 1; id < urls.Length; id++)
         {
             var url = urls[id];
-            if (!url.IsInternal || !url.Fetched)
+
+            // sitemaps.org: every URL in a sitemap must be on the sitemap's own host, or search engines drop it.
+            if (!url.IsInternal)
+            {
+                if (url.InSitemap)
+                {
+                    yield return new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, id, url.Fetched ? $"The URL {RuleText.Status(url)}" : "The URL wasn't checked");
+                }
+
+                continue;
+            }
+
+            if (!url.Fetched)
             {
                 continue;
             }

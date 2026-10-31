@@ -148,8 +148,10 @@ public sealed partial class SyntheticSite
                       $"<img src=\"{PLANTS_PATH}image-moved.jpg\" alt=\"A photo that moved, then went\" width=\"400\" height=\"300\">"
         });
         Other("image-moved.jpg", 301, linked: false, ["redirect-broken"], () => Redirect(301, "/img/missing.jpg"));
-        plants.Add(new Plant("/ext-moved", 301, Linked: false, InSitemap: false, [], () => Redirect(301, "/ext-gone"), OnPartnerSite: true));
-        plants.Add(new Plant("/ext-gone", 404, Linked: false, InSitemap: false, [], () => NotFound("/ext-gone"), OnPartnerSite: true));
+
+        // The sitemap also lists both partner URLs, as one left behind after a move to another host would.
+        plants.Add(new Plant("/ext-moved", 301, Linked: false, InSitemap: true, ["sitemap-url-other-host"], () => Redirect(301, "/ext-gone"), OnPartnerSite: true));
+        plants.Add(new Plant("/ext-gone", 404, Linked: false, InSitemap: true, ["sitemap-url-other-host"], () => NotFound("/ext-gone"), OnPartnerSite: true));
 
         Page("empty-anchor", "Link without text", ["empty-anchor-text"], page => page with
         {

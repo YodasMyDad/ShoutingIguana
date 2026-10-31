@@ -199,6 +199,11 @@ public static class IssueCatalog
         "No sitemap is listed in robots.txt or found at /sitemap.xml.",
         "Publish an XML sitemap and reference it in robots.txt.");
 
+    public static readonly IssueDefinition SITEMAP_URL_OTHER_HOST = new("sitemap-url-other-host", IssueCategory.Sitemaps, IssueSeverity.Warning,
+        "Sitemap lists a URL on another host",
+        "A sitemap lists a URL outside the site, often left over from a move to or from www. Search engines drop such entries unless that host's robots.txt points to the sitemap, so the page it was meant for isn't submitted.",
+        "List the URL as it is on the site's own host now, or remove the entry.");
+
     // Titles
     public static readonly IssueDefinition TITLE_MISSING = new("title-missing", IssueCategory.Titles, IssueSeverity.Error,
         "Missing title",
@@ -439,7 +444,7 @@ public static class IssueCatalog
         NOINDEX_PAGE, NOFOLLOW_PAGE, BLOCKED_BY_ROBOTS, SNIPPET_BLOCKED, ROBOTS_TXT_UNREACHABLE, ROBOTS_TXT_MISSING,
         CANONICALISED_PAGE, CANONICAL_MISSING, CANONICAL_MULTIPLE, CANONICAL_BROKEN, CANONICAL_TO_REDIRECT,
         CANONICAL_TO_NON_INDEXABLE, CANONICAL_OUTSIDE_HEAD, CANONICAL_RELATIVE, CANONICAL_INVALID,
-        SITEMAP_NON_INDEXABLE, NOT_IN_SITEMAP, SITEMAP_ERROR, SITEMAP_MISSING,
+        SITEMAP_NON_INDEXABLE, NOT_IN_SITEMAP, SITEMAP_ERROR, SITEMAP_MISSING, SITEMAP_URL_OTHER_HOST,
         TITLE_MISSING, TITLE_MULTIPLE, TITLE_TOO_LONG, TITLE_TOO_SHORT, TITLE_DUPLICATE,
         DESCRIPTION_MISSING, DESCRIPTION_MULTIPLE, DESCRIPTION_TOO_LONG, DESCRIPTION_TOO_SHORT, DESCRIPTION_DUPLICATE,
         H1_MISSING, H1_MULTIPLE, H1_DUPLICATE,

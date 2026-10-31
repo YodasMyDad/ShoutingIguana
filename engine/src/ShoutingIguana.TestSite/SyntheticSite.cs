@@ -634,7 +634,7 @@ public sealed partial class SyntheticSite
 
         foreach (var plant in _plants.Where(plant => plant.InSitemap))
         {
-            xml.Append("<url><loc>").Append(_base).Append(plant.Path).Append("</loc></url>");
+            xml.Append("<url><loc>").Append(plant.OnPartnerSite ? _external : _base).Append(plant.Path).Append("</loc></url>");
         }
 
         return xml.Append("</urlset>").ToString();

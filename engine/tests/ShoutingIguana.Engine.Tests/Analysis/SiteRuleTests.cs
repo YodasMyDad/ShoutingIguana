@@ -130,6 +130,35 @@ public sealed class SiteRuleTests
     }
 
     [Fact]
+    public void SitemapEntriesOnAnotherHostAreReportedWithTheirStatus()
+    {
+        // A sitemap on example.com still listing www.example.com after a move to the bare domain.
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/", inSitemap: true);
+        var moved = site.Fetched("https://www.example.com/page", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/page", inSitemap: true);
+        site.Ok($"{site.Site}/page", inSitemap: true);
+        var gone = site.Fetched("https://www.example.com/gone", FetchOutcome.ClientError, 404, inSitemap: true);
+        var fine = site.Fetched("https://www.example.com/fine", FetchOutcome.Success, 200, isHtml: true, inSitemap: true);
+        var notChecked = site.Id("https://www.example.com/unchecked");
+        site.Fetched("https://partner.example/linked", FetchOutcome.ClientError, 404);
+        var urls = site.Table();
+        var statuses = Enumerable.Range(0, urls.Length).Select(id => urls[id]).ToArray();
+        statuses[notChecked] = statuses[notChecked] with { InSitemap = true };
+        StoredSitemap[] sitemaps = [new($"{site.Site}/sitemap.xml", 200, false, 6, null)];
+
+        var hits = new SitemapRules(new UrlTable(statuses, urls.StartId), sitemaps, new CrawlOptions { StartUrl = site.Site }, crawlComplete: true)
+            .Finish().Where(hit => hit.Issue == IssueCatalog.SITEMAP_URL_OTHER_HOST).ToList();
+
+        Assert.Equal(
+        [
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, moved, "The URL redirects (HTTP 301)"),
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, gone, "The URL returns HTTP 404"),
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, fine, "The URL returns HTTP 200"),
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, notChecked, "The URL wasn't checked")
+        ], hits);
+    }
+
+    [Fact]
     public void AFailedGuessAtSitemapXmlMeansNoSitemapNotABrokenOne()
     {
         var site = new RuleHarness();
