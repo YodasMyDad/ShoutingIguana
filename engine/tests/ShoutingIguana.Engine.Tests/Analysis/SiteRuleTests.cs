@@ -193,6 +193,75 @@ public sealed class SiteRuleTests
     }
 
     [Fact]
+    public void CanonicalsThatLeadBackToThePageOrNowhereLeaveItIndexable()
+    {
+        var site = new RuleHarness();
+        AnalyzedPage Page(string path, string canonical) => site.Page($"{site.Site}{path}",
+            RuleHarness.Html($"<title>Short</title><link rel=\"canonical\" href=\"{site.Site}{canonical}\">"), IndexabilityReason.Canonicalised);
+
+        var backHere = Page("/page/", "/page");
+        site.Fetched($"{site.Site}/page", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/page/");
+        var toGone = Page("/a", "/gone");
+        site.Fetched($"{site.Site}/gone", FetchOutcome.ClientError, 404);
+        var toGoneLater = Page("/b", "/moved");
+        site.Fetched($"{site.Site}/moved", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/gone");
+        var toPage = Page("/c", "/d");
+        site.Ok($"{site.Site}/d");
+        var toRedirect = Page("/e", "/old");
+        site.Fetched($"{site.Site}/old", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/d");
+        AnalyzedPage[] pages = [backHere, toGone, toGoneLater, toPage, toRedirect];
+        var urls = site.Table(canonicals: pages.Select(page => (page.UrlId, page.Links.Single(link => link.Kind == LinkKind.Canonical).ToId)));
+        var analysed = pages.Select(page => RuleHarness.AsAnalysed(page, urls)).ToList();
+        var canonicalRules = new CanonicalRules(urls);
+        List<IssueHit> Hits(AnalyzedPage page) => canonicalRules.Check(page).ToList();
+
+        Assert.Equal([(backHere.UrlId, IndexabilityReason.None), (toGone.UrlId, IndexabilityReason.None), (toGoneLater.UrlId, IndexabilityReason.None)],
+            urls.IndexabilityChanges);
+        Assert.Equal([IndexabilityReason.None, IndexabilityReason.None, IndexabilityReason.None, IndexabilityReason.Canonicalised, IndexabilityReason.Canonicalised],
+            analysed.Select(page => page.IndexabilityReason));
+
+        // The canonical is still worth fixing, but the page is audited like any indexable page.
+        Assert.Equal([new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, backHere.UrlId, "The canonical URL redirects back to this page", site.Id($"{site.Site}/page"))],
+            Hits(analysed[0]));
+        Assert.Equal([IssueCatalog.TITLE_TOO_SHORT], new TitleRules(new AnalysisSettings()).Check(analysed[0]).Select(hit => hit.Issue));
+        Assert.Equal("The canonical URL returns HTTP 404", Hits(analysed[1]).Single().Detail);
+        Assert.Equal("The canonical URL redirects to a URL that returns HTTP 404", Hits(analysed[2]).Single(hit => hit.Issue == IssueCatalog.CANONICAL_BROKEN).Detail);
+        Assert.Equal([IssueCatalog.CANONICALISED_PAGE], Hits(analysed[3]).Select(hit => hit.Issue));
+        Assert.Equal([IssueCatalog.CANONICALISED_PAGE, IssueCatalog.CANONICAL_TO_REDIRECT], Hits(analysed[4]).Select(hit => hit.Issue));
+    }
+
+    [Fact]
+    public void AnInstantMetaRefreshIsARedirect()
+    {
+        var site = new RuleHarness();
+        var home = site.Page($"{site.Site}/", RuleHarness.Html(body: "<a href=\"/old\">Old</a><a href=\"/later\">Later</a>"));
+        var stub = site.Page($"{site.Site}/old", RuleHarness.Html("<meta http-equiv=\"refresh\" content=\"0; url=/new\"><meta name=\"robots\" content=\"noindex\">"),
+            IndexabilityReason.Noindex);
+        site.Ok($"{site.Site}/new", inSitemap: true);
+        var delayed = site.Page($"{site.Site}/later", RuleHarness.Html("<meta http-equiv=\"refresh\" content=\"5; url=/new\">"));
+        var target = site.Id($"{site.Site}/new");
+        var urls = site.Table(instantRefreshes: [(stub.UrlId, target)]);
+
+        Assert.Equal(new UrlStatus(Known: true, IsInternal: true, IsHttps: true, Depth: 1, Fetched: true, FetchOutcome.Redirect, 200, IsHtml: true,
+            IsParsed: true, IndexabilityReason.Redirected, target, null, InSitemap: false, IsMetaRefresh: true), urls[stub.UrlId]);
+        Assert.Equal([(stub.UrlId, IndexabilityReason.Redirected)], urls.IndexabilityChanges);
+        Assert.True(RuleHarness.AsAnalysed(stub, urls).IsRedirect);
+        Assert.False(RuleHarness.AsAnalysed(delayed, urls).IsRedirect);
+
+        // Linking to the stub is linking to a redirect, and the link reaches /new.
+        Assert.Equal("1 redirecting URL", new LinkRules(urls).Check(home).Single(hit => hit.Issue == IssueCatalog.LINKS_TO_REDIRECTS).Detail);
+        var inlinks = new InlinkRules(urls, crawlComplete: true);
+        inlinks.Observe(home);
+        Assert.Empty(inlinks.Finish());
+
+        // The noindex on a stub nobody sees doesn't matter; the refresh does.
+        Assert.Equal([IssueCatalog.META_REFRESH], new IndexabilityRules().Check(RuleHarness.AsAnalysed(stub, urls)).Select(hit => hit.Issue));
+        Assert.Equal("The canonical URL redirects with an instant meta refresh",
+            new CanonicalRules(urls).Check(site.Page($"{site.Site}/x", RuleHarness.Html($"<link rel=\"canonical\" href=\"{site.Site}/old\">"),
+                IndexabilityReason.Canonicalised)).Single(hit => hit.Issue == IssueCatalog.CANONICAL_TO_REDIRECT).Detail);
+    }
+
+    [Fact]
     public void OrphansAreSitemapPagesNoCrawledPageLinksTo()
     {
         var site = new RuleHarness();

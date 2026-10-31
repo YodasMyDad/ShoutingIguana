@@ -83,14 +83,15 @@ internal sealed class AnalysisReader : IDisposable
                 InSitemap: inSitemap[id]);
         });
 
-        return new UrlTable(statuses, startId);
+        return new UrlTable(statuses, startId, ReadInstantRefreshes(), ReadCanonicalTargets());
     }
 
     /// <summary>
     /// Every internal HTML page whose body was parsed, with its facts and outgoing links, in crawl order. URLs that were
     /// only status-checked (outside the start folder, iframes) have header facts alone and aren't pages to audit.
+    /// Indexability comes from <paramref name="urls"/>, which knows where canonicals and meta refreshes lead.
     /// </summary>
-    public IEnumerable<AnalyzedPage> ReadPages()
+    public IEnumerable<AnalyzedPage> ReadPages(UrlTable urls)
     {
         using var command = _connection.CreateCommand();
         command.CommandText = $"""
@@ -123,7 +124,7 @@ internal sealed class AnalysisReader : IDisposable
                 BodyBytes = reader.IsDBNull(4) ? null : reader.GetInt64(4),
                 TimeToFirstByteMs = reader.GetInt32(5),
                 ResponseMs = reader.GetInt32(6),
-                IndexabilityReason = (IndexabilityReason)reader.GetInt32(7),
+                IndexabilityReason = urls[id].IndexabilityReason,
                 Headers = details.Headers,
                 Facts = details.Page,
                 Links = ReadLinks(id)
@@ -212,6 +213,37 @@ internal sealed class AnalysisReader : IDisposable
         _links.Dispose();
         _details.Dispose();
         _connection.Dispose();
+    }
+
+    /// <summary>
+    /// Pages whose meta refresh moves on at once (0 seconds), with where to. The refresh target is a link of its own;
+    /// the delay is only in the page facts, which are read for those pages alone.
+    /// </summary>
+    private List<(int Page, int Target)> ReadInstantRefreshes()
+    {
+        List<(int Page, int Target)> candidates = [];
+        Rows($"SELECT from_id, to_id FROM links WHERE kind = {(int)LinkKind.MetaRefresh} AND from_id <> to_id",
+            reader => candidates.Add((reader.GetInt32(0), reader.GetInt32(1))));
+        return candidates.Where(candidate => ReadFacts(candidate.Page)?.MetaRefresh is { DelaySeconds: 0 }).ToList();
+    }
+
+    /// <summary>Pages the crawl recorded as canonicalised, with the target of their first canonical in the head or a Link header.</summary>
+    private List<(int Page, int Target)> ReadCanonicalTargets()
+    {
+        List<(int Page, int Target)> canonicals = [];
+        Rows($"""
+            SELECT r.url_id, (SELECT l.to_id FROM links l
+                              WHERE l.from_id = r.url_id AND l.kind = {(int)LinkKind.Canonical} AND (l.flags & {(int)LinkFlags.OutsideHead}) = 0
+                              ORDER BY l.rowid LIMIT 1)
+            FROM responses r WHERE r.indexability_reason = {(int)IndexabilityReason.Canonicalised}
+            """, reader =>
+        {
+            if (!reader.IsDBNull(1))
+            {
+                canonicals.Add((reader.GetInt32(0), reader.GetInt32(1)));
+            }
+        });
+        return canonicals;
     }
 
     private List<StoredLink> ReadLinks(int fromId)

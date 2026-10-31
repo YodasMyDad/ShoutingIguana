@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Storage;
@@ -26,7 +27,9 @@ internal sealed class IssueWriter : IDisposable
         _connection = connection;
         _logger = logger;
         _transaction = connection.BeginTransaction();
-        CrawlDatabase.Execute(connection, "DELETE FROM issues; DELETE FROM issue_types; DELETE FROM analysis; DELETE FROM analysis_notes;", _transaction);
+        CrawlDatabase.Execute(connection,
+            "DELETE FROM issues; DELETE FROM issue_types; DELETE FROM analysis; DELETE FROM analysis_notes; DELETE FROM effective_indexability;",
+            _transaction);
 
         _insert = connection.CreateCommand();
         _insert.Transaction = _transaction;
@@ -64,6 +67,20 @@ internal sealed class IssueWriter : IDisposable
         _detail.Value = (object?)hit.Detail ?? DBNull.Value;
         _relatedUrlId.Value = hit.RelatedUrlId is { } related ? related : DBNull.Value;
         _insert.ExecuteNonQuery();
+    }
+
+    /// <summary>Stores indexability the analysis judged differently from the crawl, for the stats and the UI.</summary>
+    public void AddIndexability(IReadOnlyList<(int UrlId, IndexabilityReason Reason)> changes)
+    {
+        using var insert = Command("INSERT OR REPLACE INTO effective_indexability (url_id, indexability_reason) VALUES ($urlId, $reason)");
+        var urlId = insert.Parameters.Add("$urlId", SqliteType.Integer);
+        var reason = insert.Parameters.Add("$reason", SqliteType.Integer);
+        foreach (var change in changes)
+        {
+            urlId.Value = change.UrlId;
+            reason.Value = (int)change.Reason;
+            insert.ExecuteNonQuery();
+        }
     }
 
     /// <summary>Records every check that ran with its URL count, plus the analysis itself and its notes, then commits.</summary>

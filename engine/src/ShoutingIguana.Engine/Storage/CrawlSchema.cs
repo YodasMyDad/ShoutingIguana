@@ -155,5 +155,13 @@ internal static class CrawlSchema
         ) WITHOUT ROWID;
 
         CREATE INDEX IF NOT EXISTS ix_issues_url ON issues (url_id);
+
+        -- Indexability as the analysis judged it, only where that differs from responses.indexability_reason: an
+        -- instant meta refresh is a redirect, and a canonical leading back to the page or to a broken URL is ignored.
+        -- Read COALESCE(e.indexability_reason, r.indexability_reason) for what search engines will see.
+        CREATE TABLE IF NOT EXISTS effective_indexability (
+            url_id INTEGER PRIMARY KEY,
+            indexability_reason INTEGER NOT NULL
+        );
         """;
 }

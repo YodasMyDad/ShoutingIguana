@@ -25,9 +25,13 @@ internal sealed record AnalyzedPage
 
     public int ResponseMs { get; init; }
 
+    /// <summary>As search engines will see it, which can differ from what the crawl recorded (see <see cref="UrlTable"/>).</summary>
     public IndexabilityReason IndexabilityReason { get; init; }
 
     public bool IsIndexable => IndexabilityReason == IndexabilityReason.None;
+
+    /// <summary>The page moves on with an instant meta refresh, so search engines treat it as a redirect, not a page.</summary>
+    public bool IsRedirect => IndexabilityReason == IndexabilityReason.Redirected;
 
     public IReadOnlyList<ResponseHeader> Headers { get; init; } = [];
 

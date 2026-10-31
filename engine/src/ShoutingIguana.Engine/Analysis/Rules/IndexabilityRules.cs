@@ -2,18 +2,18 @@ using ShoutingIguana.Engine.Analysis.Models;
 
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
-/// <summary>Robots directives and meta refresh.</summary>
+/// <summary>Robots directives and meta refresh. Directives on a page that redirects with an instant meta refresh don't matter.</summary>
 internal sealed class IndexabilityRules : IPageRule
 {
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
         var robots = page.Facts.Robots;
-        if (robots.NoIndex)
+        if (robots.NoIndex && !page.IsRedirect)
         {
             yield return new IssueHit(IssueCatalog.NOINDEX_PAGE, page.UrlId);
         }
 
-        if (robots.NoFollow)
+        if (robots.NoFollow && !page.IsRedirect)
         {
             yield return new IssueHit(IssueCatalog.NOFOLLOW_PAGE, page.UrlId);
         }

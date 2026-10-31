@@ -150,12 +150,12 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition CANONICAL_BROKEN = new("canonical-broken", IssueCategory.Canonicals, IssueSeverity.Error,
         "Canonical points to a broken URL",
-        "The canonical URL returns an error or doesn't respond, so the signal is ignored.",
+        "The canonical URL returns an error or doesn't respond, directly or at the end of its redirects, so search engines ignore it and judge the page on its own.",
         "Point the canonical at a working, indexable page.");
 
     public static readonly IssueDefinition CANONICAL_TO_REDIRECT = new("canonical-to-redirect", IssueCategory.Canonicals, IssueSeverity.Warning,
         "Canonical points to a redirect",
-        "The canonical URL redirects elsewhere, a mixed signal search engines may ignore.",
+        "The canonical URL redirects, a mixed signal search engines may ignore. When the redirect leads back to this page, the redirect wins and this page is the one indexed.",
         "Point the canonical at the final URL.");
 
     public static readonly IssueDefinition CANONICAL_TO_NON_INDEXABLE = new("canonical-to-non-indexable", IssueCategory.Canonicals, IssueSeverity.Warning,

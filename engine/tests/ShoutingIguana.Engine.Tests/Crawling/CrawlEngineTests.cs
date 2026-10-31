@@ -42,6 +42,9 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var summary = await CrawlAsync(Options(), path);
 
         Assert.Equal(CrawlStatus.Completed, summary.Status);
+
+        // The stats report indexability as analysed, which knows where canonicals and meta refreshes lead.
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
         var stats = CrawlStatsReader.Read(path);
         var expected = _server.Site.GetExpectations();
         Assert.Equal(expected.HtmlPages, stats.HtmlPageCount);
@@ -57,7 +60,6 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(0, Count(path, "SELECT COUNT(*) FROM urls WHERE state = 1"));
 
         // Every planted issue is reported exactly, and nothing else is.
-        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
         Assert.Equal(expected.AnalysedPages, analysis.PagesAnalyzed);
         Assert.False(analysis.IsPartial);
         var mismatches = expected.CompareIssues(IssueReader.ReadCounts(path), IssueCatalog.All.Select(issue => issue.Id));

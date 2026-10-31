@@ -81,12 +81,18 @@ internal sealed class RuleHarness(string site = "https://example.com")
         };
     }
 
-    public UrlTable Table(string? start = null)
+    /// <param name="instantRefreshes">Pages with a 0-second meta refresh and where it goes, as the reader finds them.</param>
+    /// <param name="canonicals">Canonicalised pages and their canonical's target, as the reader finds them.</param>
+    public UrlTable Table(string? start = null, IEnumerable<(int Page, int Target)>? instantRefreshes = null,
+        IEnumerable<(int Page, int Target)>? canonicals = null)
     {
         // Register the start URL before taking the snapshot.
         var startId = Id(start ?? Site + "/");
-        return new UrlTable([.. _statuses], startId);
+        return new UrlTable([.. _statuses], startId, instantRefreshes, canonicals);
     }
+
+    /// <summary>The page with the indexability the table settled on, as the reader hands pages to the rules.</summary>
+    public static AnalyzedPage AsAnalysed(AnalyzedPage page, UrlTable urls) => page with { IndexabilityReason = urls[page.UrlId].IndexabilityReason };
 
     /// <summary>A document whose head and body are clean apart from what the test passes in.</summary>
     public static string Html(string head = "", string body = "", string lang = " lang=\"en\"") =>

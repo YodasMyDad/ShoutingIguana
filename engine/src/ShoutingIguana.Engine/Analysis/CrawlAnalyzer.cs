@@ -85,13 +85,17 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             }
 
             var hreflang = new HreflangRules(urls);
+            var indexability = new IndexabilityRules();
             IPageRule[] pageRules =
             [
                 new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
-                new ImageRules(settings, urls), new LinkRules(urls), new CanonicalRules(urls), new IndexabilityRules(), hreflang,
+                new ImageRules(settings, urls), new LinkRules(urls), new CanonicalRules(urls), indexability, hreflang,
                 new StructuredDataRules(), new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings),
                 new HtmlRules()
             ];
+
+            // An instant meta refresh makes the page a redirect: nobody sees it, so only the refresh itself is reported.
+            IPageRule[] redirectRules = [indexability];
             ISiteRule[] siteRules =
             [
                 new InlinkRules(urls, linksComplete), new DuplicateRules(settings), new FragmentRules(urls, reader), hreflang,
@@ -99,11 +103,12 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 new SitemapRules(urls, sitemaps, options, crawlComplete), new RobotsTxtRules(urls, reader.ReadRobots(), scope)
             ];
 
-            foreach (var page in reader.ReadPages())
+            writer.AddIndexability(urls.IndexabilityChanges);
+            foreach (var page in reader.ReadPages(urls))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 pages++;
-                foreach (var rule in pageRules)
+                foreach (var rule in page.IsRedirect ? redirectRules : pageRules)
                 {
                     // Hits are collected first, so a rule that fails halfway through a page adds nothing for it.
                     hits.Clear();

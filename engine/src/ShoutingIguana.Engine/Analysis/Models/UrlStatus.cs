@@ -3,10 +3,15 @@ using ShoutingIguana.Engine.Parsing.Models;
 
 namespace ShoutingIguana.Engine.Analysis.Models;
 
-/// <summary>What the crawl learned about one URL, as link checks need it.</summary>
+/// <summary>
+/// What the crawl learned about one URL, as link checks need it, adjusted to what search engines make of it (see
+/// <see cref="UrlTable"/>): a page with an instant meta refresh is a redirect, and a canonical that leads back to the
+/// page or nowhere doesn't make it non-indexable.
+/// </summary>
 /// <param name="Fetched">A response (or a robots.txt verdict) was recorded. Skipped URLs were never checked.</param>
 /// <param name="IsParsed">The HTML body was parsed. Status-checked URLs (outside the start folder, iframes) only have headers.</param>
 /// <param name="RedirectTargetId">Where a redirect points, or 0 (also 0 for a redirect without a usable Location header).</param>
+/// <param name="IsMetaRefresh">A 200 page that moves on with an instant meta refresh, so it counts as a redirect.</param>
 internal readonly record struct UrlStatus(
     bool Known,
     bool IsInternal,
@@ -20,7 +25,8 @@ internal readonly record struct UrlStatus(
     IndexabilityReason IndexabilityReason,
     int RedirectTargetId,
     long? SizeBytes,
-    bool InSitemap)
+    bool InSitemap,
+    bool IsMetaRefresh = false)
 {
     /// <summary>Statuses many sites send crawlers but not people (Amazon answers unknown bots with 503, LinkedIn with 999).</summary>
     private static readonly HashSet<int> BOT_REFUSALS = [401, 403, 405, 429, 503, 999];

@@ -7,12 +7,18 @@ using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Storage;
 
-/// <summary>Aggregate queries over a stored crawl. Safe to run while the crawl is still writing.</summary>
+/// <summary>
+/// Aggregate queries over a stored crawl. Safe to run while the crawl is still writing. Once the crawl has been
+/// analysed, indexability is the analysis's, which knows where canonicals and meta refreshes lead.
+/// </summary>
 public static class CrawlStatsReader
 {
     public static CrawlStats Read(string databasePath)
     {
         using var connection = CrawlDatabase.OpenReader(databasePath);
+        var analysed = CrawlDatabase.Scalar(connection, "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'effective_indexability'") is not null;
+        var join = analysed ? "LEFT JOIN effective_indexability e ON e.url_id = r.url_id" : string.Empty;
+        var reason = analysed ? "COALESCE(e.indexability_reason, r.indexability_reason)" : "r.indexability_reason";
 
         string startUrl = string.Empty, engineVersion = string.Empty;
         var status = CrawlStatus.Running;
@@ -37,9 +43,9 @@ public static class CrawlStatsReader
 
         long htmlPages = 0, indexable = 0, totalBytes = 0;
         double averageMs = 0;
-        Rows(connection, """
-            SELECT COUNT(*), COALESCE(SUM(r.indexability = 0), 0), COALESCE(AVG(r.response_ms), 0), COALESCE(SUM(r.size_bytes), 0)
-            FROM responses r JOIN urls u ON u.id = r.url_id
+        Rows(connection, $"""
+            SELECT COUNT(*), COALESCE(SUM({reason} = 0), 0), COALESCE(AVG(r.response_ms), 0), COALESCE(SUM(r.size_bytes), 0)
+            FROM responses r JOIN urls u ON u.id = r.url_id {join}
             WHERE u.is_internal = 1 AND r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL
             """, reader =>
         {
@@ -73,9 +79,9 @@ public static class CrawlStatsReader
             Outcomes = Grouped(connection, "SELECT outcome, COUNT(*) FROM responses GROUP BY outcome", value => (FetchOutcome)value),
             StatusCodes = Grouped(connection, "SELECT status_code, COUNT(*) FROM responses WHERE status_code IS NOT NULL GROUP BY status_code", value => value),
             SkipReasons = Grouped(connection, "SELECT skip_reason, COUNT(*) FROM urls WHERE state = 3 GROUP BY skip_reason", value => (SkipReason)value),
-            NonIndexableReasons = Grouped(connection, """
-                SELECT r.indexability_reason, COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id
-                WHERE u.is_internal = 1 AND r.indexability = 1 GROUP BY r.indexability_reason
+            NonIndexableReasons = Grouped(connection, $"""
+                SELECT {reason}, COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id {join}
+                WHERE u.is_internal = 1 AND {reason} <> 0 GROUP BY 1
                 """, value => (IndexabilityReason)value)
         };
     }

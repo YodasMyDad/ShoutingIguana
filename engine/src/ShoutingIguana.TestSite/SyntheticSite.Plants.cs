@@ -108,10 +108,16 @@ public sealed partial class SyntheticSite
             Canonical = null, Content = page.Content + $"<link rel=\"canonical\" href=\"{_base}{page.Path}\">"
         });
         Page("canonical-invalid", "Invalid canonical", ["canonical-invalid"], page => page with { Canonical = "http://[not a host]/" });
-        Page("canonical-broken", "Canonical to a 404", ["canonicalised-page", "canonical-broken"],
-            page => page with { Canonical = $"{_base}{PLANTS_PATH}gone" }, inSitemap: false);
+        // A canonical that leads nowhere is ignored, so the page stays indexable (and belongs in the sitemap).
+        Page("canonical-broken", "Canonical to a 404", ["canonical-broken"], page => page with { Canonical = $"{_base}{PLANTS_PATH}gone" });
         Page("canonical-redirect", "Canonical to a redirect", ["canonicalised-page", "canonical-to-redirect"],
             page => page with { Canonical = $"{_base}{PLANTS_PATH}moved" }, inSitemap: false);
+
+        // /self-canonical/ names /self-canonical, which redirects back to it. The redirect is the stronger signal, so the
+        // page is indexed and audited: its short title is reported, and it isn't canonicalised or out of place in the sitemap.
+        Other("self-canonical", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "self-canonical/"));
+        Page("self-canonical/", "Canonical back through a redirect", ["canonical-to-redirect", "title-too-short"],
+            page => page with { Title = "Self canonical", Canonical = $"{_base}{PLANTS_PATH}self-canonical" });
         Page("canonical-noindex", "Canonical to a noindex page", ["canonicalised-page", "canonical-to-non-indexable"],
             page => page with { Canonical = $"{_base}{PLANTS_PATH}noindex" }, inSitemap: false);
 
@@ -122,6 +128,16 @@ public sealed partial class SyntheticSite
         {
             ExtraHead = $"<meta http-equiv=\"refresh\" content=\"30; url={PLANTS_PATH}thin\">"
         });
+
+        // Google treats an instant meta refresh as a permanent redirect, as static hosts' redirect stubs rely on. The
+        // stub isn't audited as a page (no title, H1 or text to speak of), the hub's link to it is a link to a redirect,
+        // and the page it moves to counts as linked, so it isn't an orphan.
+        Page("refresh-instant", "Instant meta refresh", ["meta-refresh"], page => page with
+        {
+            Title = null, Description = null, H1 = null, Content = "<p>Moved.</p>",
+            ExtraHead = $"<meta http-equiv=\"refresh\" content=\"0; url={PLANTS_PATH}refresh-target\">"
+        }, inSitemap: false);
+        Page("refresh-target", "Meta refresh target", [], linked: false);
 
         Page("empty-anchor", "Link without text", ["empty-anchor-text"], page => page with
         {
