@@ -56,8 +56,10 @@ internal sealed class CanonicalRules(UrlTable urls) : IPageRule
             yield return new IssueHit(IssueCatalog.CANONICALISED_PAGE, page.UrlId, null, targetId > 0 ? targetId : null);
         }
 
-        // The noindex wins, so the page isn't canonicalised, but the two signals contradict each other.
-        if (page.Facts.Robots.NoIndex)
+        // The noindex wins, so the page isn't canonicalised, but the two signals contradict each other. Not when the
+        // canonical leads back to this page through redirects (it's a self-reference), or leads nowhere and is ignored.
+        var pointsElsewhere = targetId == 0 || (urls.TraceRedirects(targetId).FinalId != page.UrlId && !urls.IsBrokenThroughRedirects(targetId));
+        if (page.Facts.Robots.NoIndex && pointsElsewhere)
         {
             yield return new IssueHit(IssueCatalog.NOINDEX_WITH_CANONICAL, page.UrlId, null, targetId > 0 ? targetId : null);
         }

@@ -190,6 +190,31 @@ public sealed class RuleConditionTests
         Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "3 links", page.UrlId)], rules.Finish());
     }
 
+    /// <summary>A page that moves on at once with a meta refresh is a redirect, so its links aren't checked, as for a 301.</summary>
+    [Fact]
+    public void AnInstantRefreshStubsFragmentLinksAreNotChecked()
+    {
+        var site = new RuleHarness();
+        var stub = site.Page($"{site.Site}/old", RuleHarness.Html("<meta http-equiv=\"refresh\" content=\"0; url=/new\">",
+            "<a href=\"#nowhere\">1</a><a href=\"/b#missing\">2</a>"));
+        var page = site.Page($"{site.Site}/a", RuleHarness.Html(body: "<a href=\"/b#missing\">3</a>"));
+        var target = site.Page($"{site.Site}/b", RuleHarness.Html(body: "<p id=\"there\">There</p>"));
+        var urls = site.Table(instantRefreshes: [(stub.UrlId, site.Id($"{site.Site}/new"))]);
+        Dictionary<int, PageFacts> facts = new() { [target.UrlId] = target.Facts };
+        var links = new[] { stub, page }
+            .SelectMany(from => from.Links.Where(link => link.Fragment is not null && link.ToId != from.UrlId).Select(link => (from.UrlId, link.ToId, link.Fragment!)))
+            .ToList();
+        var rules = new FragmentRules(urls, facts.GetValueOrDefault, () => links);
+
+        foreach (var analysed in new[] { stub, page, target })
+        {
+            rules.Observe(RuleHarness.AsAnalysed(analysed, urls));
+        }
+
+        Assert.True(urls[stub.UrlId].IsMetaRefresh);
+        Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "1 link", target.UrlId)], rules.Finish());
+    }
+
     [Fact]
     public void CanonicalTargetsMustBeIndexablePages()
     {

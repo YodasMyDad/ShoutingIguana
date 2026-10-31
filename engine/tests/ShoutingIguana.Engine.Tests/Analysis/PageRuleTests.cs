@@ -369,6 +369,13 @@ public sealed class PageRuleTests
         Assert.Equal("Product: needs offers or review or aggregateRating", rules.Check(nameOnly).Single().Detail);
         Assert.Equal("Recipe: needs image", rules.Check(type).Single().Detail);
         Assert.Equal("AggregateRating: needs itemReviewed", rules.Check(id).Single().Detail);
+
+        // A property name can't be read past the same way, so the block is reported as invalid instead of failing the page.
+        foreach (var json in new[] { """{"@type":"Product","\uDC00":"1","name":"x"}""", """{"@type":"Product","name":"x","offers":{"\uD83D":"1"}}""" })
+        {
+            var badName = site.Page($"{site.Site}/{Guid.NewGuid():N}", RuleHarness.Html(Script(json)));
+            Assert.Equal([IssueCatalog.STRUCTURED_DATA_INVALID], rules.Check(badName).Select(hit => hit.Issue));
+        }
     }
 
     [Fact]

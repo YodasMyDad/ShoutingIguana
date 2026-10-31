@@ -31,9 +31,17 @@ internal sealed class StructuredDataRules : IPageRule
 
             using (document)
             {
-                if (page.IsIndexable)
+                try
                 {
-                    RichResultRequirements.Check(document.RootElement, missing);
+                    if (page.IsIndexable)
+                    {
+                        RichResultRequirements.Check(document.RootElement, missing);
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    // A property name escaping half a character (\uDC00) parses, but can't be read back as a name.
+                    syntaxError ??= "A property name escapes an invalid character, such as half of a surrogate pair";
                 }
             }
         }

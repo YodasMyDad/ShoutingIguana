@@ -23,6 +23,12 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
 
     public void Observe(AnalyzedPage page)
     {
+        // A page that moves on at once with a meta refresh is a redirect nobody sees, so its links aren't checked.
+        if (page.IsRedirect)
+        {
+            return;
+        }
+
         HashSet<ulong>? ownIds = null;
         foreach (var link in page.Links)
         {
@@ -64,7 +70,7 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
         {
             foreach (var (from, to, raw) in readFragmentLinks())
             {
-                if (Checkable(raw) is { } fragment && missing.Contains((to, Hash(fragment))))
+                if (!urls[from].IsMetaRefresh && Checkable(raw) is { } fragment && missing.Contains((to, Hash(fragment))))
                 {
                     Record(from, to);
                 }

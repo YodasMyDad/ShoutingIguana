@@ -342,6 +342,31 @@ public sealed class SiteRuleTests
         Assert.Equal([IssueCatalog.CANONICALISED_PAGE, IssueCatalog.CANONICAL_TO_REDIRECT], Hits(analysed[4]).Select(hit => hit.Issue));
     }
 
+    /// <summary>noindex with a canonical elsewhere is a contradiction; with one that comes back here or leads nowhere, it isn't.</summary>
+    [Fact]
+    public void ANoindexPageWhoseCanonicalComesBackOrLeadsNowhereIsNoContradiction()
+    {
+        var site = new RuleHarness();
+        AnalyzedPage Page(string path, string canonical) => site.Page($"{site.Site}{path}",
+            RuleHarness.Html($"<title>A noindex page with a canonical</title><meta name=\"robots\" content=\"noindex\"><link rel=\"canonical\" href=\"{site.Site}{canonical}\">"),
+            IndexabilityReason.Noindex);
+
+        var backHere = Page("/page/", "/page");
+        site.Fetched($"{site.Site}/page", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/page/");
+        var toGone = Page("/a", "/gone");
+        site.Fetched($"{site.Site}/gone", FetchOutcome.ClientError, 404);
+        var elsewhere = Page("/b", "/c");
+        site.Ok($"{site.Site}/c");
+        var urls = site.Table();
+        var rules = new CanonicalRules(urls);
+        List<IssueDefinition> Issues(AnalyzedPage page) => [.. rules.Check(RuleHarness.AsAnalysed(page, urls)).Select(hit => hit.Issue)];
+
+        Assert.DoesNotContain(IssueCatalog.NOINDEX_WITH_CANONICAL, Issues(backHere));
+        Assert.DoesNotContain(IssueCatalog.NOINDEX_WITH_CANONICAL, Issues(toGone));
+        Assert.Contains(IssueCatalog.CANONICAL_BROKEN, Issues(toGone));
+        Assert.Contains(IssueCatalog.NOINDEX_WITH_CANONICAL, Issues(elsewhere));
+    }
+
     [Fact]
     public void AnInstantMetaRefreshIsARedirect()
     {
