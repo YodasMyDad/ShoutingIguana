@@ -393,12 +393,13 @@ internal sealed class CrawlSession
             return false;
         }
 
-        _deferred.Enqueue(item);
+        // Counted first: once the URL is in the queue, the dispatcher may start the retry pass and read the count.
         if (refusedByRobots)
         {
             Interlocked.Increment(ref _refusedByRobots);
         }
 
+        _deferred.Enqueue(item);
         return true;
     }
 
