@@ -5,8 +5,10 @@ using Microsoft.Extensions.Time.Testing;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Sitemaps;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
+using ShoutingIguana.Engine.Tests.Crawling;
 using ShoutingIguana.Engine.Tests.Fetching;
 using ShoutingIguana.Engine.Tests.Support;
 
@@ -23,6 +25,7 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
     private readonly List<string> _databases = [];
     private readonly Dictionary<string, (string ContentType, string Body)> _files = new(StringComparer.Ordinal);
     private readonly TaskCompletionSource _stalled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _robotsFailures;
     private LoopbackServer _server = null!;
 
     public async Task InitializeAsync() => _server = await LoopbackServer.StartAsync(RespondAsync);
@@ -93,6 +96,76 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         Assert.Equal(2, sitemap.UrlCount);
     }
 
+    /// <summary>robots.txt fails once, then names the sitemap: it is read once robots.txt can be, and nothing is guessed.</summary>
+    [Fact]
+    public async Task TheSitemapsOfARobotsTxtThatFailedAtFirstAreRead()
+    {
+        _robotsFailures = 1;
+        Serve("/robots.txt", "text/plain", "User-agent: *\nDisallow:\nSitemap: /real-sitemap.xml");
+        Serve("/real-sitemap.xml", "application/xml", $"{URLSET}{Loc("/a")}{Loc("/b")}</urlset>");
+        var time = new FakeTimeProvider();
+        var path = NewDatabasePath();
+
+        await using var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(
+            new CrawlRequest(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxRetries = 0 }, path));
+        var summary = await FakeClock.PumpAsync(time, job.Completion);
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        var sitemap = Assert.Single(Sitemaps(path));
+        Assert.Equal(_server.Url("/real-sitemap.xml").AbsoluteUri, sitemap.Url);
+        Assert.False(sitemap.IsProbe);
+        Assert.Equal(2, sitemap.UrlCount);
+    }
+
+    [Fact]
+    public async Task ASitemapNestedTooDeepIsRecordedAsNotRead()
+    {
+        // Each index lists the next; the last is one level deeper than the crawler follows.
+        Serve("/robots.txt", "text/plain", $"User-agent: *\nDisallow:\nSitemap: {_server.Url("/index-0.xml")}");
+        for (var level = 0; level <= SitemapDiscoverer.MAX_NESTING; level++)
+        {
+            Serve($"/index-{level}.xml", "application/xml",
+                $"<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><sitemap><loc>{_server.Url($"/index-{level + 1}.xml")}</loc></sitemap></sitemapindex>");
+        }
+
+        var observer = new RecordingObserver();
+        var path = await CrawlAsync(observer);
+
+        var sitemaps = Sitemaps(path);
+        Assert.Equal(SitemapDiscoverer.MAX_NESTING + 2, sitemaps.Count);
+        var notRead = sitemaps[^1];
+        Assert.Equal(_server.Url($"/index-{SitemapDiscoverer.MAX_NESTING + 1}.xml").AbsoluteUri, notRead.Url);
+        Assert.Equal($"{SitemapDiscoverer.NOT_READ_ERROR}: sitemap indexes nested more than 3 deep aren't followed", notRead.Error);
+        Assert.Null(notRead.StatusCode);
+        Assert.False(notRead.IsProbe);
+        Assert.Equal(1, observer.Count("sitemaps-not-read"));
+    }
+
+    [Fact]
+    public async Task SitemapsPastTheLimitAreRecordedAsNotRead()
+    {
+        // An index of more sitemaps than the crawler reads: it and all but the last of them are read.
+        Serve("/robots.txt", "text/plain", $"User-agent: *\nDisallow:\nSitemap: {_server.Url("/index.xml")}");
+        Serve("/index.xml", "application/xml", $"<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">{string.Concat(
+            Enumerable.Range(0, SitemapDiscoverer.MAX_SITEMAPS).Select(child => $"<sitemap><loc>{_server.Url($"/part-{child}.xml")}</loc></sitemap>"))}</sitemapindex>");
+        for (var child = 0; child < SitemapDiscoverer.MAX_SITEMAPS; child++)
+        {
+            Serve($"/part-{child}.xml", "application/xml", $"{URLSET}</urlset>");
+        }
+
+        var observer = new RecordingObserver();
+        var path = await CrawlAsync(observer);
+
+        var sitemaps = Sitemaps(path);
+        Assert.Equal(SitemapDiscoverer.MAX_SITEMAPS + 1, sitemaps.Count);
+        var notRead = sitemaps[^1];
+        Assert.Equal(_server.Url($"/part-{SitemapDiscoverer.MAX_SITEMAPS - 1}.xml").AbsoluteUri, notRead.Url);
+        Assert.Equal($"{SitemapDiscoverer.NOT_READ_ERROR}: the crawler reads at most 1,000 sitemaps", notRead.Error);
+        Assert.Null(notRead.StatusCode);
+        Assert.False(notRead.IsProbe);
+        Assert.Equal(1, observer.Count("sitemaps-not-read"));
+    }
+
     /// <remarks>
     /// The stalling crawls aren't disposed: a read that ignored its token would hold the stop for good. Disposing the
     /// server ends them either way.
@@ -142,11 +215,11 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         return path;
     }
 
-    private async Task<string> CrawlAsync()
+    private async Task<string> CrawlAsync(ICrawlObserver? observer = null)
     {
         var path = NewDatabasePath();
         var options = new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxRetries = 0 };
-        await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path));
+        await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path), observer);
         Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TimeSpan.FromMinutes(1))).Status);
         return path;
     }
@@ -168,6 +241,12 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         if (context.Request.Path == STALLING_SITEMAP)
         {
             return StallAsync(context);
+        }
+
+        if (context.Request.Path == "/robots.txt" && Interlocked.Decrement(ref _robotsFailures) >= 0)
+        {
+            context.Response.StatusCode = 503;
+            return Task.CompletedTask;
         }
 
         if (_files.TryGetValue(context.Request.Path.Value ?? "/", out var file))
