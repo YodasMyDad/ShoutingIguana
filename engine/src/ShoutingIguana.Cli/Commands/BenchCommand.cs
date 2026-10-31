@@ -70,9 +70,24 @@ internal static class BenchCommand
                 {
                     Console.WriteLine("Analysing...");
                     var sampler = new MemorySampler(TimeSpan.FromMilliseconds(250), () => 0);
-                    analysis = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(databasePath, cancellationToken: cancellationToken);
+                    try
+                    {
+                        analysis = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(databasePath, cancellationToken: cancellationToken);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        // Ctrl+C, handled below like one during the crawl.
+                    }
+
                     await sampler.DisposeAsync();
                     analysisSamples = sampler.Samples;
+                }
+
+                // A stopped run measured nothing worth reporting, and says so the way si crawl does.
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    Console.Error.WriteLine("Stopped before the benchmark finished.");
+                    return 130;
                 }
 
                 var result = Evaluate(parse.GetValue(maxPeak), parse.GetValue(maxGrowth), parse.GetValue(maxGrowthPerUrl), parse.GetValue(minRate),
@@ -81,7 +96,7 @@ internal static class BenchCommand
 
                 if (parse.GetValue(json) is { } jsonPath)
                 {
-                    await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(result, CliJsonContext.Default.BenchResult), cancellationToken);
+                    await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(result, CliJsonContext.Default.BenchResult), CancellationToken.None);
                 }
 
                 if (keepCrawl)
@@ -96,7 +111,7 @@ internal static class BenchCommand
                 // Also when the run fails or is cancelled part-way: at 100k pages the crawl is about 400 MB.
                 if (!keepCrawl)
                 {
-                    foreach (var file in new[] { databasePath, databasePath + "-wal", databasePath + "-shm" })
+                    foreach (var file in new[] { databasePath, databasePath + "-wal", databasePath + "-shm", databasePath + "-lock" })
                     {
                         File.Delete(file);
                     }
@@ -120,6 +135,20 @@ internal static class BenchCommand
                 IssueReader.ReadAll(databasePath).Select(row => (row.Issue, row.Url)),
                 IssueCatalog.All.Select(issue => issue.Id),
                 CrawlStatsReader.ReadSlowPages(databasePath, new AnalysisSettings().SlowResponseMs)));
+
+            // As in the end-to-end test: every check the site supports ran, and none failed on a page. A rule that throws
+            // on clean pages, or a check skipped by mistake, would otherwise pass, having flagged nothing extra.
+            var ran = analysis.Issues.Select(issue => issue.Issue.Id).ToHashSet(StringComparer.Ordinal);
+            var notRun = IssueCatalog.All.Select(issue => issue.Id).Where(id => !ran.Contains(id)).ToHashSet(StringComparer.Ordinal);
+            if (!notRun.SetEquals(expected.SkippedChecks))
+            {
+                mismatches.Add($"Checks skipped: {Listed(notRun)}; expected {Listed(expected.SkippedChecks)}");
+            }
+
+            if (analysis.IsPartial != expected.SkippedChecks.Count > 0 || analysis.Notes.Count != (expected.SkippedChecks.Count > 0 ? 1 : 0))
+            {
+                mismatches.Add($"The analysis is {(analysis.IsPartial ? "partial" : "complete")}, with notes: {Listed(analysis.Notes)}");
+            }
         }
 
         var total = Math.Max(1, summary.Progress.Fetched);
@@ -174,6 +203,8 @@ internal static class BenchCommand
             $"{Environment.ProcessorCount} cores, {RuntimeInformation.OSDescription}",
             RuntimeInformation.FrameworkDescription, mismatches, failures);
     }
+
+    private static string Listed(IEnumerable<string> values) => values.Any() ? string.Join(", ", values.Order(StringComparer.Ordinal)) : "none";
 
     private static long PeakWorkingSet(IEnumerable<MemorySample> samples) =>
         samples.Select(sample => sample.WorkingSetBytes).DefaultIfEmpty(0).Max();

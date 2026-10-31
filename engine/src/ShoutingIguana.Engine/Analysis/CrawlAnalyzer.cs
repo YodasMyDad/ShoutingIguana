@@ -201,7 +201,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
         foreach (var (rule, count) in failures)
         {
             _logger.LogWarning("Rule {Rule} failed on {Pages} pages; its results for them are missing", rule, count);
-            notes.Add($"{rule} failed on {RuleText.Count(count, "page", "pages")}, so its results for them are missing (see the log).");
+            notes.Add($"{rule} failed on {RuleText.Count(count, "page", "pages")}, so its results there are missing (see the log).");
         }
 
         // The reader is closed by now, so the writer can fold the write-ahead log when it closes.
