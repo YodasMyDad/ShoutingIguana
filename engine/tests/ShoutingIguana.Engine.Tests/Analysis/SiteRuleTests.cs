@@ -304,6 +304,54 @@ public sealed class SiteRuleTests
     }
 
     [Fact]
+    public void APaginatedSeriesMayRepeatItsHeadingButNotItsTitle()
+    {
+        var site = new RuleHarness();
+        AnalyzedPage Page(string path, string title, string pagination = "") =>
+            site.Page($"{site.Site}/{path}", RuleHarness.Html($"<title>{title}</title>{pagination}", "<h1>Garden sheds</h1>"));
+
+        var first = Page("sheds", "Garden sheds", $"<link rel=\"next\" href=\"{site.Site}/sheds?p=2\">");
+        var second = Page("sheds?p=2", "Garden sheds", $"<link rel=\"prev\" href=\"{site.Site}/sheds\"><link rel=\"next\" href=\"{site.Site}/sheds?p=3\">");
+        var third = Page("sheds?p=3", "Garden sheds, page 3", $"<link rel=\"prev\" href=\"{site.Site}/sheds?p=2\">");
+        var elsewhere = Page("more-sheds", "More garden sheds");
+
+        // Within the series, only the repeated title is reported.
+        var series = new DuplicateRules(new AnalysisSettings());
+        foreach (var page in new[] { first, second, third })
+        {
+            series.Observe(page);
+        }
+
+        var hits = series.Finish().ToList();
+        Assert.DoesNotContain(hits, hit => hit.Issue == IssueCatalog.H1_DUPLICATE);
+        Assert.Equal([first.UrlId, second.UrlId], hits.Where(hit => hit.Issue == IssueCatalog.TITLE_DUPLICATE).Select(hit => hit.UrlId).Order());
+
+        // A page outside it with the same heading is a duplicate of all three, and they of it.
+        var withOther = new DuplicateRules(new AnalysisSettings());
+        foreach (var page in new[] { first, second, third, elsewhere })
+        {
+            withOther.Observe(page);
+        }
+
+        Assert.Equal(
+        [
+            new IssueHit(IssueCatalog.H1_DUPLICATE, first.UrlId, "1 other page", elsewhere.UrlId),
+            new IssueHit(IssueCatalog.H1_DUPLICATE, second.UrlId, "1 other page", elsewhere.UrlId),
+            new IssueHit(IssueCatalog.H1_DUPLICATE, third.UrlId, "1 other page", elsewhere.UrlId),
+            new IssueHit(IssueCatalog.H1_DUPLICATE, elsewhere.UrlId, "3 other pages", first.UrlId)
+        ], withOther.Finish().Where(hit => hit.Issue == IssueCatalog.H1_DUPLICATE).OrderBy(hit => hit.UrlId));
+
+        // A noindex page in the middle joins the series with its own links, though it isn't compared itself.
+        var through = new DuplicateRules(new AnalysisSettings());
+        through.Observe(Page("racks", "Bike racks"));
+        through.Observe(site.Page($"{site.Site}/racks?p=2", RuleHarness.Html(
+            $"<title>Bike racks, page 2</title><link rel=\"prev\" href=\"{site.Site}/racks\"><link rel=\"next\" href=\"{site.Site}/racks?p=3\">",
+            "<h1>Garden sheds</h1>"), IndexabilityReason.Noindex));
+        through.Observe(Page("racks?p=3", "Bike racks, page 3"));
+        Assert.DoesNotContain(through.Finish(), hit => hit.Issue == IssueCatalog.H1_DUPLICATE);
+    }
+
+    [Fact]
     public void NearDuplicatesAreGroupedAndExactCopiesReportedSeparately()
     {
         var site = new RuleHarness();

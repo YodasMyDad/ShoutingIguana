@@ -73,6 +73,15 @@ public sealed partial class SyntheticSite
         Page("h1-copy-b", "Shared heading B", ["h1-duplicate"], page => page with { H1 = "Shared heading" });
 
         // A line break separates words, so these two headings read the same.
+        // The pages of a paginated series share their heading by design; their titles differ, so neither is flagged.
+        Page("series", "Paginated series, first page", [], page => page with
+        {
+            H1 = "Paginated series", ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}series-2\">"
+        });
+        Page("series-2", "Paginated series, second page", [], page => page with
+        {
+            H1 = "Paginated series", ExtraHead = $"<link rel=\"prev\" href=\"{PLANTS_PATH}series\">"
+        });
         Page("h1-break-a", "Heading with a line break", ["h1-duplicate"], page => page with { H1 = "Welcome to<br>our planted store" });
         Page("h1-break-b", "Heading without a line break", ["h1-duplicate"], page => page with { H1 = "Welcome to our planted store" });
 

@@ -2,12 +2,15 @@ using System.IO.Hashing;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Parsing.Models;
 
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
 /// <summary>
 /// Titles, descriptions, H1s and main content shared between indexable pages. Each page contributes a 64-bit hash per
-/// signal, so memory stays at a few bytes per page, and groups are found by sorting rather than comparing pairs.
+/// signal, so memory stays at a few bytes per page, and groups are found by sorting rather than comparing pairs. The
+/// pages of a paginated series (joined by rel=next/prev) repeat their H1 by design, so that isn't reported; a title or
+/// description they repeat is, as each page should say which one it is.
 /// </summary>
 internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
 {
@@ -19,9 +22,19 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
     private readonly List<(ulong Hash, int Id)> _h1s = [];
     private readonly List<(ulong Hash, int Id)> _content = [];
     private readonly List<(ulong SimHash, ulong ContentHash, int Id)> _fingerprints = [];
+    private readonly List<(int From, int To)> _pagination = [];
 
     public void Observe(AnalyzedPage page)
     {
+        // Every page's rel=next/prev, so a noindex page in the middle still joins the series.
+        foreach (var link in page.Links)
+        {
+            if (link.Kind == LinkKind.Pagination && link.ToId != page.UrlId)
+            {
+                _pagination.Add((page.UrlId, link.ToId));
+            }
+        }
+
         if (!page.IsIndexable)
         {
             return;
@@ -41,9 +54,31 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
     public IEnumerable<IssueHit> Finish() =>
         Groups(_titles, IssueCatalog.TITLE_DUPLICATE)
             .Concat(Groups(_descriptions, IssueCatalog.DESCRIPTION_DUPLICATE))
-            .Concat(Groups(_h1s, IssueCatalog.H1_DUPLICATE))
+            .Concat(Groups(_h1s, IssueCatalog.H1_DUPLICATE, SeriesOf()))
             .Concat(Groups(_content, IssueCatalog.DUPLICATE_CONTENT))
             .Concat(NearDuplicates());
+
+    /// <summary>
+    /// Which paginated series a page belongs to: a key shared by every page joined to it through rel=next/prev, or the
+    /// page's own id when it's in none. Series keys are negative, so they never equal a page id.
+    /// </summary>
+    private Func<int, int> SeriesOf()
+    {
+        Dictionary<int, int> index = [];
+        foreach (var (from, to) in _pagination)
+        {
+            index.TryAdd(from, index.Count);
+            index.TryAdd(to, index.Count);
+        }
+
+        var series = new DisjointSets(index.Count);
+        foreach (var (from, to) in _pagination)
+        {
+            series.Union(index[from], index[to]);
+        }
+
+        return id => index.TryGetValue(id, out var member) ? -1 - series.Find(member) : id;
+    }
 
     private static void AddText(List<(ulong Hash, int Id)> entries, string? text, int id)
     {
@@ -57,7 +92,10 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
         entries.Add((XxHash3.HashToUInt64(MemoryMarshal.AsBytes(normalized.AsSpan())), id));
     }
 
-    private static IEnumerable<IssueHit> Groups(List<(ulong Hash, int Id)> entries, IssueDefinition issue)
+    /// <param name="seriesOf">
+    /// For a signal that pages of one series share by design: only pages outside a page's own series count against it.
+    /// </param>
+    private static IEnumerable<IssueHit> Groups(List<(ulong Hash, int Id)> entries, IssueDefinition issue, Func<int, int>? seriesOf = null)
     {
         entries.Sort();
         for (var start = 0; start < entries.Count;)
@@ -68,11 +106,35 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
                 end++;
             }
 
-            var others = end - start - 1;
-            for (var index = start; others > 0 && index < end; index++)
+            if (end - start == 1)
             {
-                var related = entries[index == start ? start + 1 : start].Id;
-                yield return new IssueHit(issue, entries[index].Id, RuleText.Count(others, "other page", "other pages"), related);
+                start = end;
+                continue;
+            }
+
+            // Without series, every page is a series of its own.
+            var keys = new int[end - start];
+            Dictionary<int, int> members = [];
+            var firstOfAnotherSeries = -1;
+            for (var index = start; index < end; index++)
+            {
+                var key = keys[index - start] = seriesOf?.Invoke(entries[index].Id) ?? entries[index].Id;
+                members[key] = members.GetValueOrDefault(key) + 1;
+                if (firstOfAnotherSeries < 0 && key != keys[0])
+                {
+                    firstOfAnotherSeries = index;
+                }
+            }
+
+            for (var index = start; index < end; index++)
+            {
+                var key = keys[index - start];
+                var others = end - start - members[key];
+                if (others > 0)
+                {
+                    var related = entries[key == keys[0] ? firstOfAnotherSeries : start].Id;
+                    yield return new IssueHit(issue, entries[index].Id, RuleText.Count(others, "other page", "other pages"), related);
+                }
             }
 
             start = end;
