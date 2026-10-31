@@ -107,9 +107,8 @@ public sealed class RetryingFetcherTests : IAsyncLifetime
         // on later.
         _siteIsDown = false;
         Assert.Equal(200, (await FetchAsync(_server.Url("/ok"))).StatusCode);
-        var gate = _gates.For(_server.BaseUri);
-        Assert.False(gate.IsUnreachable);
-        Assert.Equal(TimeSpan.Zero, gate.UnreachableFor);
+        Assert.False(_gates.OriginOf(_server.BaseUri).IsDown);
+        Assert.Null(_gates.LongestOutage(_time.GetUtcNow()));
         Assert.Equal(1, _observer.Count("site-unreachable"));
     }
 
@@ -129,7 +128,7 @@ public sealed class RetryingFetcherTests : IAsyncLifetime
 
         Assert.DoesNotContain("Not checked", next.Error ?? string.Empty, StringComparison.Ordinal);
         Assert.InRange(Times(_server.BaseUri)[7] - asked, TimeSpan.Zero, SLACK);
-        Assert.False(_gates.For(_server.BaseUri).IsUnreachable);
+        Assert.False(_gates.OriginOf(_server.BaseUri).IsDown);
         Assert.Empty(_observer.Notices);
     }
 
@@ -157,10 +156,13 @@ public sealed class RetryingFetcherTests : IAsyncLifetime
         await AssertFailsFastWhileTheSiteAnswersAsync(cdn, fetcher, gates);
     }
 
+    /// <summary>
+    /// Nothing on the site answers, so its https, which never has, is waited out. Then its plain http answers: the site is
+    /// up after all, and https, still never having answered, is gone like a closed port.
+    /// </summary>
     [Fact]
-    public async Task AnAnswerFromAnyOfTheSitesOriginsEndsItBeingDown()
+    public async Task AnOriginThatNeverAnsweredIsWrittenOffOnceTheSiteAnswers()
     {
-        // The site's https stays down throughout; its plain http comes back.
         var httpIsDown = true;
         await using var server = await LoopbackServer.StartAsync(context =>
         {
@@ -184,15 +186,62 @@ public sealed class RetryingFetcherTests : IAsyncLifetime
             await FetchAsync(server.Url($"/page-{url}"), fetcher);
         }
 
-        var gate = gates.For(server.BaseUri);
-        Assert.True(gate.IsUnreachable);
+        var secure = gates.OriginOf(server.BaseUri);
+        Assert.True(secure.IsDown);
 
         Volatile.Write(ref httpIsDown, false);
         var plain = new UriBuilder(server.Url("/old-link")) { Scheme = Uri.UriSchemeHttp }.Uri;
         Assert.Equal(200, (await FetchAsync(plain, fetcher)).StatusCode);
 
-        Assert.False(gate.IsUnreachable);
-        Assert.Equal(TimeSpan.Zero, gate.UnreachableFor);
+        Assert.False(secure.IsDown);
+        Assert.True(secure.IsUnreachable);
+        Assert.Null(gates.LongestOutage(_time.GetUtcNow()));
+        Assert.Equal(1, _observer.Count("site-unreachable"));
+    }
+
+    /// <summary>
+    /// The start URL is http, which only redirects to https, where the site is. https answers, then stops for a while,
+    /// while the http redirects keep coming: https has answered, so it is waited out, never written off.
+    /// </summary>
+    [Fact]
+    public async Task AnOriginThatAnsweredBeforeIsWaitedOutWhileAnotherKeepsAnswering()
+    {
+        var httpsIsDown = false;
+        await using var server = await LoopbackServer.StartAsync(context =>
+        {
+            if (!context.Request.IsHttps)
+            {
+                context.Response.StatusCode = 301;
+                context.Response.Headers.Location = $"https://127.0.0.1:{context.Connection.LocalPort}{context.Request.Path}";
+                return Task.CompletedTask;
+            }
+
+            if (Volatile.Read(ref httpsIsDown))
+            {
+                context.Abort();
+                return Task.CompletedTask;
+            }
+
+            return context.Response.WriteAsync("ok");
+        }, https: true);
+        var start = new UriBuilder(server.BaseUri) { Scheme = Uri.UriSchemeHttp }.Uri;
+        var (http, gates, fetcher) = Create(new CrawlOptions { StartUrl = start.AbsoluteUri, MaxRetries = 0, TrustedCertificate = server.Certificate });
+        using var disposeHttp = http;
+        Assert.Equal(301, (await FetchAsync(start, fetcher)).StatusCode);
+        Assert.Equal(200, (await FetchAsync(server.BaseUri, fetcher)).StatusCode);
+
+        // The redirect answered last when https stops, so it is what stands for the site.
+        Assert.Equal(301, (await FetchAsync(new Uri(start, "/old-link"), fetcher)).StatusCode);
+        Volatile.Write(ref httpsIsDown, true);
+        for (var url = 0; url < HostGate.UNREACHABLE_AFTER_URLS; url++)
+        {
+            await FetchAsync(server.Url($"/page-{url}"), fetcher);
+        }
+
+        var waited = await FetchAsync(server.Url("/page-3"), fetcher);
+
+        Assert.DoesNotContain("Not checked", waited.Error ?? string.Empty, StringComparison.Ordinal);
+        Assert.True(gates.OriginOf(server.BaseUri).IsDown);
         Assert.Equal(1, _observer.Count("site-unreachable"));
     }
 
@@ -208,8 +257,9 @@ public sealed class RetryingFetcherTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Three URLs on <paramref name="dead"/> get no response. Its robots.txt doesn't answer either, but the start URL's
-    /// does: only that origin is gone, so its next URL fails without a request, and the site isn't paused.
+    /// Three URLs on <paramref name="dead"/>, which has never answered, get no response. Its robots.txt doesn't answer
+    /// either, but the site's does: only that origin is gone, so its next URL fails without a request, and the site isn't
+    /// paused.
     /// </summary>
     private async Task AssertFailsFastWhileTheSiteAnswersAsync(Uri dead, RetryingFetcher fetcher, HostGateRegistry gates)
     {
@@ -226,7 +276,7 @@ public sealed class RetryingFetcherTests : IAsyncLifetime
         Assert.Equal(["/robots.txt", "/ok"], Paths(_server.BaseUri));
         Assert.Equal(200, site.StatusCode);
         Assert.InRange(Times(_server.BaseUri)[^1] - asked, TimeSpan.Zero, SLACK);
-        Assert.False(gates.For(_server.BaseUri).IsUnreachable);
+        Assert.Null(gates.LongestOutage(_time.GetUtcNow()));
         Assert.Empty(_observer.Notices);
     }
 

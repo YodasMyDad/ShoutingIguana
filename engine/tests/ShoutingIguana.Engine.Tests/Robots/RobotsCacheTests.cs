@@ -216,7 +216,11 @@ public sealed class RobotsCacheTests : IAsyncLifetime
 
         Assert.Equal(RobotsTxtParser.MAX_CRAWL_DELAY_SECONDS, robots.CrawlDelaySeconds);
         var gate = harness.Gates.For(_server.BaseUri);
-        (await gate.AcquireAsync(CancellationToken.None)).Dispose();
+
+        // The delay counts from the last request to start, and the robots.txt request was one.
+        var first = gate.AcquireAsync(CancellationToken.None).AsTask();
+        harness.Time.Advance(TimeSpan.FromSeconds(60));
+        (await first.WaitAsync(TimeSpan.FromSeconds(5))).Dispose();
         var next = gate.AcquireAsync(CancellationToken.None).AsTask();
         harness.Time.Advance(TimeSpan.FromSeconds(60) - TimeSpan.FromMilliseconds(1));
         await Assert.ThrowsAsync<TimeoutException>(() => next.WaitAsync(TimeSpan.FromMilliseconds(100)));

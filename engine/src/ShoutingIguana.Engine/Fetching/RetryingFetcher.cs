@@ -10,11 +10,11 @@ namespace ShoutingIguana.Engine.Fetching;
 /// answered, and retrying transient failures (no response, 429, 502, 503, 504) after an exponential backoff or the
 /// server's Retry-After, capped at a minute. When <see cref="HostGate.UNREACHABLE_AFTER_URLS"/> URLs in a row on one
 /// origin get no answer, another site's remaining URLs there fail at once instead of each costing several timeouts. On
-/// the site being crawled, robots.txt is asked first (headers only), at that origin and then at the start URL's: an
-/// answer at the origin means the URLs failed for reasons of their own; an answer only at the start URL's means just
-/// that origin is gone (a dead www twin, a closed http port, a subdomain), and it fails fast like another site. With no
-/// answer at all the site is down, and it is waited out: its gate pauses for <see cref="UNREACHABLE_PAUSE"/> after every
-/// unanswered attempt until any of its origins answers.
+/// the site being crawled, the origin's robots.txt is asked first (headers only): an answer means the URLs failed for
+/// reasons of their own. An origin that has never answered, while the origin of the site that answered last still does,
+/// is gone (a dead www twin, a closed http port, a dead subdomain) and fails fast like another site. Otherwise the
+/// origin is down, and it is waited out, never written off: its gate pauses for <see cref="UNREACHABLE_PAUSE"/> after
+/// every unanswered attempt on it until it answers again, and the crawl gives up on it after <see cref="GIVE_UP_AFTER"/>.
 /// </summary>
 internal sealed class RetryingFetcher(
     HttpFetcher fetcher,
@@ -31,15 +31,20 @@ internal sealed class RetryingFetcher(
     private const int MAX_JITTER_MS = 250;
     private static readonly TimeSpan MAX_RETRY_WAIT = TimeSpan.FromSeconds(60);
 
-    /// <summary>How long the site's own gate holds every request after an unanswered attempt while the site is unreachable.</summary>
+    /// <summary>How long an origin's gate holds every request after an unanswered attempt on it while it is down.</summary>
     internal static readonly TimeSpan UNREACHABLE_PAUSE = TimeSpan.FromMinutes(1);
 
-    /// <summary>How long the site may go without answering before the crawl stops, resumable, instead of waiting on.</summary>
+    /// <summary>
+    /// How long an origin of the site may stay down, not counting time the crawl is paused, before the crawl stops,
+    /// resumable, instead of waiting on.
+    /// </summary>
     internal static readonly TimeSpan GIVE_UP_AFTER = TimeSpan.FromMinutes(10);
 
     private readonly Random _random = random ?? Random.Shared;
-    private readonly HostGate _siteGate = gates.For(scope.StartOrigin);
-    private readonly OriginReachability _startOrigin = gates.OriginOf(scope.StartOrigin);
+
+    // A URL on the site's origin that answered last: it stands for the site when an origin that never answered goes
+    // quiet. Before anything has answered, the start URL does.
+    private Uri _lastAnswered = scope.StartOrigin;
 
     /// <param name="singleAttempt">No retries: the URL already had them, and this is its one more try at the end of the crawl.</param>
     public async Task<FetchResponse> FetchAsync(Uri uri, FetchBody body, CancellationToken cancellationToken, int? maxBodyBytes = null, bool singleAttempt = false)
@@ -61,8 +66,8 @@ internal sealed class RetryingFetcher(
                 response = await fetcher.FetchAsync(uri, body, cancellationToken, maxBodyBytes).ConfigureAwait(false);
             }
 
-            var answered = Report(gate, response);
-            if (!answered && isInternal && _siteGate.IsUnreachable)
+            var answered = Report(uri, gate, origin, isInternal, response);
+            if (!answered && origin.IsDown)
             {
                 gate.Pause(UNREACHABLE_PAUSE);
             }
@@ -71,7 +76,7 @@ internal sealed class RetryingFetcher(
             {
                 if (origin.ReportUrl(answered))
                 {
-                    await JudgeAsync(uri, gate, origin, response, cancellationToken).ConfigureAwait(false);
+                    await JudgeAsync(uri, gate, origin, isInternal, response, cancellationToken).ConfigureAwait(false);
                 }
 
                 return response;
@@ -83,55 +88,58 @@ internal sealed class RetryingFetcher(
 
     /// <summary>
     /// <see cref="HostGate.UNREACHABLE_AFTER_URLS"/> URLs in a row on <paramref name="uri"/>'s origin got no response,
-    /// the last of them <paramref name="last"/>. Works out whether the origin, or the whole site, has stopped answering.
+    /// the last of them <paramref name="last"/>. Works out whether the origin is gone, down, or fine.
     /// </summary>
-    private async Task JudgeAsync(Uri uri, HostGate gate, OriginReachability origin, FetchResponse last, CancellationToken cancellationToken)
+    private async Task JudgeAsync(Uri uri, HostGate gate, OriginReachability origin, bool isInternal, FetchResponse last, CancellationToken cancellationToken)
     {
-        if (!scope.IsInternal(uri))
+        if (!isInternal)
         {
             origin.MarkUnreachable();
             return;
         }
 
-        if (await AnswersAsync(uri, gate, cancellationToken).ConfigureAwait(false))
+        if (await AnswersAsync(uri, gate, origin, cancellationToken).ConfigureAwait(false))
         {
             origin.Reset();
             return;
         }
 
-        if (origin != _startOrigin && await AnswersAsync(scope.StartOrigin, _siteGate, cancellationToken).ConfigureAwait(false))
+        // Never answered, while the site does: a dead www twin, a closed port, a dead subdomain.
+        var lastAnswered = Volatile.Read(ref _lastAnswered);
+        var lastAnsweredOrigin = gates.OriginOf(lastAnswered);
+        if (!origin.HasAnswered && lastAnsweredOrigin != origin &&
+            await AnswersAsync(lastAnswered, gates.For(lastAnswered), lastAnsweredOrigin, cancellationToken).ConfigureAwait(false))
         {
             origin.MarkUnreachable();
             return;
         }
 
-        // Nothing answers. Counting starts again, so an origin that tripped while the site was down is judged afresh later.
-        origin.Reset();
+        // It answered before, so it is having an outage; or nothing on the site answers. Either way it is waited out.
         gate.Pause(UNREACHABLE_PAUSE);
-        _siteGate.Pause(UNREACHABLE_PAUSE);
-        if (_siteGate.ReportUnreachable())
+        if (gates.ReportDown(origin, uri, timeProvider.GetUtcNow()))
         {
             observer.OnNotice(new CrawlNotice(
                 CrawlNoticeLevel.Warning,
                 "site-unreachable",
-                $"{scope.StartOrigin.Host} stopped answering: {HostGate.UNREACHABLE_AFTER_URLS} URLs in a row got no response ({last.Error}), and neither did its robots.txt. The crawler waits {UNREACHABLE_PAUSE.TotalMinutes:0} minute between tries until it answers again, and retries the URLs that failed at the end of the crawl. If it doesn't answer for {GIVE_UP_AFTER.TotalMinutes:0} minutes, the crawl stops, to be resumed once the site is back."));
+                $"{uri.GetLeftPart(UriPartial.Authority)} stopped answering: {HostGate.UNREACHABLE_AFTER_URLS} URLs in a row got no response ({last.Error}), and neither did its robots.txt. The crawler waits {UNREACHABLE_PAUSE.TotalMinutes:0} minute between tries until it answers again, and retries the URLs that failed at the end of the crawl. If it doesn't answer for {GIVE_UP_AFTER.TotalMinutes:0} minutes, the crawl stops, to be resumed once the site is back."));
         }
     }
 
     /// <summary>Whether the origin of <paramref name="uri"/> answers at all: one request for its robots.txt, headers only.</summary>
-    private async Task<bool> AnswersAsync(Uri uri, HostGate gate, CancellationToken cancellationToken)
+    private async Task<bool> AnswersAsync(Uri uri, HostGate gate, OriginReachability origin, CancellationToken cancellationToken)
     {
+        var robots = new Uri(uri, "/robots.txt");
         FetchResponse response;
         using (await gate.AcquireAsync(cancellationToken).ConfigureAwait(false))
         {
-            response = await fetcher.FetchAsync(new Uri(uri, "/robots.txt"), FetchBody.None, cancellationToken).ConfigureAwait(false);
+            response = await fetcher.FetchAsync(robots, FetchBody.None, cancellationToken).ConfigureAwait(false);
         }
 
-        return Report(gate, response);
+        return Report(robots, gate, origin, isInternal: true, response);
     }
 
-    /// <summary>Tells the gate how the host answered. Returns whether it answered at all, which ends the site being down.</summary>
-    private static bool Report(HostGate gate, FetchResponse response)
+    /// <summary>Tells the gate how the host answered, and the registry whether it answered at all. Returns the latter.</summary>
+    private bool Report(Uri uri, HostGate gate, OriginReachability origin, bool isInternal, FetchResponse response)
     {
         gate.Report(SignalFor(response), response.RetryAfter);
         if (response.StatusCode is null)
@@ -139,7 +147,12 @@ internal sealed class RetryingFetcher(
             return false;
         }
 
-        gate.ReportAnswered();
+        gates.ReportAnswer(origin, isInternal);
+        if (isInternal)
+        {
+            Volatile.Write(ref _lastAnswered, uri);
+        }
+
         return true;
     }
 

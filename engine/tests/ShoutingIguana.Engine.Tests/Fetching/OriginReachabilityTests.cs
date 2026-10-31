@@ -50,6 +50,52 @@ public sealed class OriginReachabilityTests
         Assert.True(origin.ReportUrl(answered: false));
     }
 
+    [Fact]
+    public void AnOriginThatAnsweredBeforeIsDownUntilItAnswersAgain()
+    {
+        var origin = new OriginReachability();
+        origin.ReportAnswer();
+        var start = DateTimeOffset.UnixEpoch;
+
+        Assert.True(origin.MarkDown(start));
+        Assert.False(origin.MarkDown(start + TimeSpan.FromMinutes(3)));
+        Assert.False(origin.WriteOffIfNeverAnswered());
+
+        // Down since it first went down, not since it was last judged.
+        Assert.Equal(TimeSpan.FromMinutes(5), origin.DownFor(start + TimeSpan.FromMinutes(5)));
+        Assert.True(origin.ReportAnswer());
+        Assert.False(origin.IsDown);
+        Assert.Equal(TimeSpan.Zero, origin.DownFor(start + TimeSpan.FromMinutes(6)));
+    }
+
+    [Fact]
+    public void AnOriginThatNeverAnsweredIsWrittenOffOnceTheSiteAnswers()
+    {
+        var origin = new OriginReachability();
+        origin.MarkDown(DateTimeOffset.UnixEpoch);
+
+        Assert.True(origin.WriteOffIfNeverAnswered());
+        Assert.True(origin.IsUnreachable);
+        Assert.False(origin.IsDown);
+    }
+
+    [Fact]
+    public void TimeSpentPausedIsNotTimeDown()
+    {
+        var start = DateTimeOffset.UnixEpoch;
+        var downBefore = new OriginReachability();
+        var downDuring = new OriginReachability();
+        downBefore.MarkDown(start);
+        downDuring.MarkDown(start + TimeSpan.FromMinutes(5));
+
+        downBefore.ExcludePause(start + TimeSpan.FromMinutes(2), start + TimeSpan.FromMinutes(14));
+        downDuring.ExcludePause(start + TimeSpan.FromMinutes(2), start + TimeSpan.FromMinutes(14));
+
+        // Two minutes down before the pause and one after; one that went down during the pause counts from the resume.
+        Assert.Equal(TimeSpan.FromMinutes(3), downBefore.DownFor(start + TimeSpan.FromMinutes(15)));
+        Assert.Equal(TimeSpan.FromMinutes(1), downDuring.DownFor(start + TimeSpan.FromMinutes(15)));
+    }
+
     private static OriginReachability Tripped()
     {
         var origin = new OriginReachability();

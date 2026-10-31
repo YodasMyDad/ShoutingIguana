@@ -91,9 +91,8 @@ public sealed class HostGateTests
             gate.Report(HostSignal.Success);
         }
 
-        // The last reservation still holds (500 ms after the second start), then requests go back to back.
+        // The spacing is worked out at each start, so once the backoff is gone, requests go back to back at once.
         Assert.Equal(TimeSpan.Zero, gate.CurrentBackoff);
-        await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromMilliseconds(500));
         AcquiredAtOnce(gate).Dispose();
         AcquiredAtOnce(gate).Dispose();
     }
@@ -105,9 +104,66 @@ public sealed class HostGateTests
         var gate = new HostGate(maxConcurrency: 4, TimeSpan.Zero, time);
 
         gate.Report(HostSignal.Failed);
+        gate.Report(HostSignal.Failed);
         AcquiredAtOnce(gate).Dispose();
 
         await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromMilliseconds(125));
+    }
+
+    [Fact]
+    public void ASingleFailureAmongSuccessesDoesNotSlowTheSite()
+    {
+        var gate = new HostGate(maxConcurrency: 4, TimeSpan.Zero, new FakeTimeProvider());
+
+        gate.Report(HostSignal.Success);
+        gate.Report(HostSignal.Failed);
+        gate.Report(HostSignal.Success);
+        gate.Report(HostSignal.Failed);
+
+        Assert.Equal(TimeSpan.Zero, gate.CurrentBackoff);
+        AcquiredAtOnce(gate).Dispose();
+        AcquiredAtOnce(gate).Dispose();
+    }
+
+    [Fact]
+    public void ABackoffEasesWithTime()
+    {
+        var time = new FakeTimeProvider();
+        var gate = new HostGate(maxConcurrency: 4, TimeSpan.Zero, time);
+
+        gate.Report(HostSignal.Throttled);
+        time.Advance(TimeSpan.FromMilliseconds(500));
+        Assert.Equal(TimeSpan.FromMilliseconds(125), gate.CurrentBackoff);
+
+        time.Advance(TimeSpan.FromSeconds(2));
+        Assert.Equal(TimeSpan.Zero, gate.CurrentBackoff);
+    }
+
+    /// <summary>
+    /// Requests queued behind a backoff start as it eases: each start is spaced by the backoff as it stands then, not as
+    /// it stood when the request joined the queue. Fifteen starts 250 ms apart would take 3.75 s.
+    /// </summary>
+    [Fact]
+    public async Task RequestsQueuedBehindABackoffStartAsItEases()
+    {
+        var time = new FakeTimeProvider();
+        var gate = new HostGate(maxConcurrency: 16, TimeSpan.Zero, time);
+        gate.Report(HostSignal.Throttled);
+        AcquiredAtOnce(gate).Dispose();
+        var queued = Enumerable.Range(0, 15).Select(_ => Acquire(gate)).ToList();
+        var started = time.GetUtcNow();
+
+        while (queued.Any(acquire => !acquire.IsCompleted) && time.GetUtcNow() - started < TimeSpan.FromSeconds(10))
+        {
+            time.Advance(TimeSpan.FromMilliseconds(10));
+            await Task.Delay(1);
+        }
+
+        Assert.InRange(time.GetUtcNow() - started, TimeSpan.Zero, TimeSpan.FromSeconds(2.5));
+        foreach (var acquire in queued)
+        {
+            (await acquire).Dispose();
+        }
     }
 
     [Fact]
@@ -120,25 +176,6 @@ public sealed class HostGateTests
         gate.Pause(TimeSpan.FromMinutes(1));
 
         await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromMinutes(2));
-    }
-
-    [Fact]
-    public void ASiteThatStoppedAnsweringIsUnreachableUntilItAnswers()
-    {
-        var time = new FakeTimeProvider();
-        var gate = new HostGate(maxConcurrency: 1, TimeSpan.Zero, time);
-
-        Assert.True(gate.ReportUnreachable());
-        time.Advance(TimeSpan.FromMinutes(3));
-        Assert.False(gate.ReportUnreachable());
-
-        // Since it first stopped answering, not since it was last told.
-        Assert.True(gate.IsUnreachable);
-        Assert.Equal(TimeSpan.FromMinutes(3), gate.UnreachableFor);
-
-        gate.ReportAnswered();
-        Assert.False(gate.IsUnreachable);
-        Assert.Equal(TimeSpan.Zero, gate.UnreachableFor);
     }
 
     [Fact]

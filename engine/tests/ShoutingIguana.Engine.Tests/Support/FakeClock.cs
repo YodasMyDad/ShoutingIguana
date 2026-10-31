@@ -29,4 +29,31 @@ internal static class FakeClock
 
         return await task;
     }
+
+    /// <summary>Pumps until <paramref name="condition"/> holds, such as a notice having been raised.</summary>
+    public static async Task PumpUntilAsync(FakeTimeProvider time, Func<bool> condition, TimeSpan? step = null)
+    {
+        var deadline = DateTime.UtcNow + REAL_LIMIT;
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException($"Still waiting after {REAL_LIMIT} of real time, at {time.GetUtcNow():O} on the fake clock.");
+            }
+
+            time.Advance(step ?? STEP);
+            await Task.Delay(1);
+        }
+    }
+
+    /// <summary>Pumps for <paramref name="duration"/> of fake time.</summary>
+    public static async Task PumpForAsync(FakeTimeProvider time, TimeSpan duration, TimeSpan? step = null)
+    {
+        var until = time.GetUtcNow() + duration;
+        while (time.GetUtcNow() < until)
+        {
+            time.Advance(step ?? STEP);
+            await Task.Delay(1);
+        }
+    }
 }
