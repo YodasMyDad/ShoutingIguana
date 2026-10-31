@@ -150,7 +150,7 @@ public sealed record CrawlOptions
             {
                 errors.Add($"Header '{name}' is not valid.");
             }
-            else if (CLIENT_HEADERS.Contains(name) || name.StartsWith("Content-", StringComparison.OrdinalIgnoreCase))
+            else if (CLIENT_HEADERS.Contains(name) || !IsRequestHeader(name, value))
             {
                 errors.Add($"Header '{name}' is set by the crawler's HTTP client and can't be overridden.");
             }
@@ -169,4 +169,14 @@ public sealed record CrawlOptions
 
     /// <summary>Printable ASCII, spaces and tabs: line breaks would inject headers, and HttpClient refuses non-ASCII values.</summary>
     private static bool IsFieldValue(string? value) => value is not null && value.All(character => character is '\t' or (>= ' ' and <= '~'));
+
+    /// <summary>
+    /// False for the headers HttpClient only takes on a request's content (Content-Type, Allow, Expires, Last-Modified...).
+    /// Set on the request itself, one makes every request throw.
+    /// </summary>
+    private static bool IsRequestHeader(string name, string value)
+    {
+        using var request = new HttpRequestMessage();
+        return request.Headers.TryAddWithoutValidation(name, value);
+    }
 }
