@@ -18,6 +18,9 @@ public sealed partial class SyntheticSite
     private const string LONG_SLUG =
         "a-deliberately-long-address-that-keeps-on-going-so-the-full-url-ends-up-past-the-recommended-length";
 
+    /// <summary>Files only nofollow links point to, so never fetched: the full-size photo behind a gallery lightbox.</summary>
+    private static readonly string[] NOFOLLOW_ONLY_FILES = ["/img/5.jpg?width=1400"];
+
     private static readonly byte[] LARGE_IMAGE_BYTES = BuildImage(300 * 1024);
     private static readonly string LONG_ALT = string.Join(' ', Enumerable.Repeat("a very long alt text", 8));
 
@@ -132,6 +135,15 @@ public sealed partial class SyntheticSite
             Robots = "noindex", Canonical = $"{_base}{PLANTS_PATH}hreflang-lonely"
         }, inSitemap: false);
         Page("nofollow", "Nofollow page", ["nofollow-page"], page => page with { Robots = "nofollow" });
+
+        // Gallery lightboxes: nofollow on links to image files is harmless, both for a file that was fetched (it's also
+        // shown) and for one that wasn't (the full-size version), unlike the nofollow links to /hidden/ pages on products.
+        Page("nofollow-image", "Nofollow image links", [], page => page with
+        {
+            Content = page.Content +
+                      $"<p><a href=\"{NOFOLLOW_ONLY_FILES[0]}\" rel=\"nofollow\" class=\"lightbox\"><img src=\"/img/5.jpg\" alt=\"A gallery photo\" width=\"400\" height=\"300\"></a> " +
+                      "<a href=\"/img/6.jpg\" rel=\"nofollow\" class=\"lightbox\"><img src=\"/img/6.jpg\" alt=\"Another gallery photo\" width=\"400\" height=\"300\"></a></p>"
+        });
         Page("nosnippet", "No snippet", ["snippet-blocked"], page => page with { Robots = "nosnippet" });
         Page("meta-refresh", "Meta refresh", ["meta-refresh"], page => page with
         {

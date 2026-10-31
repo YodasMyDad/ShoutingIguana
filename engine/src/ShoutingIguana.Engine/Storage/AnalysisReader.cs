@@ -56,7 +56,7 @@ internal sealed class AnalysisReader : IDisposable
         Rows($"""
             SELECT u.id, u.is_internal, substr(u.url, 1, 6) = 'https:', u.depth, u.source,
                    r.url_id IS NOT NULL, r.outcome, r.status_code, r.is_html, r.indexability_reason,
-                   r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0)
+                   r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0), u.url, r.content_type
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id
             """, reader =>
         {
@@ -67,20 +67,23 @@ internal sealed class AnalysisReader : IDisposable
                 startId = id;
             }
 
+            var outcome = fetched ? (FetchOutcome)reader.GetInt32(6) : default;
+            var contentType = outcome == FetchOutcome.Success && fetched && !reader.IsDBNull(14) ? reader.GetString(14) : null;
             statuses[id] = new UrlStatus(
                 Known: true,
                 IsInternal: reader.GetBoolean(1),
                 IsHttps: reader.GetBoolean(2),
                 Depth: reader.GetInt32(3),
                 Fetched: fetched,
-                Outcome: fetched ? (FetchOutcome)reader.GetInt32(6) : default,
+                Outcome: outcome,
                 StatusCode: reader.IsDBNull(7) ? 0 : reader.GetInt32(7),
                 IsHtml: fetched && reader.GetBoolean(8),
                 IsParsed: fetched && reader.GetBoolean(12),
                 IndexabilityReason: fetched ? (IndexabilityReason)reader.GetInt32(9) : default,
                 RedirectTargetId: reader.IsDBNull(10) ? 0 : reader.GetInt32(10),
                 SizeBytes: reader.IsDBNull(11) ? null : reader.GetInt64(11),
-                InSitemap: inSitemap[id]);
+                InSitemap: inSitemap[id],
+                IsResource: ResourceTypes.IsResource(reader.GetString(13), contentType));
         });
 
         return new UrlTable(statuses, startId, ReadInstantRefreshes(), ReadCanonicalTargets());

@@ -29,18 +29,21 @@ internal sealed class RuleHarness(string site = "https://example.com")
 
         var uri = new Uri(normalized);
         _statuses.Add(new UrlStatus(Known: true, IsInternal: uri.Host == _host, IsHttps: uri.Scheme == Uri.UriSchemeHttps, Depth: 1,
-            Fetched: false, default, 0, IsHtml: false, IsParsed: false, IndexabilityReason.None, 0, null, InSitemap: false));
+            Fetched: false, default, 0, IsHtml: false, IsParsed: false, IndexabilityReason.None, 0, null, InSitemap: false,
+            IsResource: ResourceTypes.IsResource(normalized, null)));
         _ids[normalized] = _statuses.Count - 1;
         return _statuses.Count - 1;
     }
 
     /// <summary>Records what the crawl found at a URL.</summary>
     public int Fetched(string url, FetchOutcome outcome, int status, bool isHtml = false, IndexabilityReason reason = IndexabilityReason.None,
-        string? redirectTo = null, long? size = null, bool inSitemap = false)
+        string? redirectTo = null, long? size = null, bool inSitemap = false, string? contentType = null)
     {
         var id = Id(url);
+        contentType ??= isHtml ? "text/html; charset=utf-8" : null;
         _statuses[id] = _statuses[id] with
         {
+            IsResource = ResourceTypes.IsResource(UrlNormalizer.Normalize(new Uri(url)), outcome == FetchOutcome.Success ? contentType : null),
             Fetched = true,
             Outcome = outcome,
             StatusCode = status,

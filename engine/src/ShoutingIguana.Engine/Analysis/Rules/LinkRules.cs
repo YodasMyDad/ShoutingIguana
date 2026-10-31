@@ -32,7 +32,8 @@ internal sealed class LinkRules(UrlTable urls) : IPageRule
                 continue;
             }
 
-            if (link.Flags.HasFlag(LinkFlags.NoFollow))
+            // Nofollow on a link to an image or other file is harmless (images are indexed through <img>), as on gallery lightboxes.
+            if (link.Flags.HasFlag(LinkFlags.NoFollow) && !target.IsResource)
             {
                 nofollow.Add(link.ToId);
             }

@@ -32,6 +32,9 @@ public sealed record SyntheticSiteExpectations(
     int ImagesMissingAlt,
     IReadOnlyDictionary<string, int> Issues)
 {
+    /// <summary>Of <see cref="NofollowOnly"/>, the URLs that are files (images) rather than HTML pages.</summary>
+    public int NofollowOnlyFiles { get; init; }
+
     /// <summary>Issues a busy machine can add to, so only the planted minimum is required.</summary>
     private static readonly HashSet<string> TIMING_DEPENDENT = new(StringComparer.Ordinal) { "slow-response" };
 

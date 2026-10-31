@@ -156,7 +156,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         await CrawlAsync(Options() with { RespectRobotsTxt = false, FollowNofollow = true }, permissive);
 
         var stats = CrawlStatsReader.Read(permissive);
-        Assert.Equal(expected.HtmlPages + expected.RobotsDisallowed + expected.NofollowOnly, stats.HtmlPageCount);
+        Assert.Equal(expected.HtmlPages + expected.RobotsDisallowed + expected.NofollowOnly - expected.NofollowOnlyFiles, stats.HtmlPageCount);
         Assert.False(stats.Outcomes.ContainsKey(FetchOutcome.RobotsDisallowed));
     }
 

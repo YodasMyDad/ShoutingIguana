@@ -334,7 +334,7 @@ public sealed partial class SyntheticSite
             ServerErrorUrls: errors.Count,
             Redirects: redirects.Count + _plants.Count(plant => plant.Status is >= 300 and < 400),
             RobotsDisallowed: disallowed.Count,
-            NofollowOnly: hidden.Count,
+            NofollowOnly: hidden.Count + NOFOLLOW_ONLY_FILES.Length,
             ExternalOk: externalOk.Count,
             ExternalMissing: externalMissing.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: true }),
             Images: images.Count,
@@ -343,7 +343,7 @@ public sealed partial class SyntheticSite
             DuplicateTitlePages: duplicateTitles,
             MissingDescriptions: missingDescriptions,
             ImagesMissingAlt: missingAlt,
-            Issues: issues);
+            Issues: issues) { NofollowOnlyFiles = NOFOLLOW_ONLY_FILES.Length };
     }
 
     /// <summary>Exact number of content-area links on a product page, for link-count assertions.</summary>

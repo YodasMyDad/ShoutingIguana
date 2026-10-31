@@ -170,6 +170,26 @@ public sealed class PageRuleTests
     }
 
     [Fact]
+    public void NofollowLinksToImagesAndOtherFilesAreHarmless()
+    {
+        var site = new RuleHarness();
+        site.Fetched($"{site.Site}/gallery/large", FetchOutcome.Success, 200, contentType: "image/jpeg");
+        site.Fetched($"{site.Site}/style", FetchOutcome.Success, 200, contentType: "text/css; charset=utf-8");
+        site.Fetched($"{site.Site}/pages/a.jpg", FetchOutcome.Success, 200, isHtml: true);
+        var page = site.Page($"{site.Site}/", RuleHarness.Html(body:
+            // A lightbox link to the full-size photo is never fetched, so its extension decides.
+            "<a href=\"/media/2474/mon-2.jpg?width=1400&upscale=false\" rel=\"nofollow\" class=\"lightbox\"><img src=\"/media/2474/mon-2.jpg\" alt=\"x\"></a>" +
+            "<a href=\"/clip.MP4\" rel=\"nofollow\">Clip</a><a href=\"/gallery/large\" rel=\"nofollow\">Large</a><a href=\"/style\" rel=\"nofollow\">CSS</a>" +
+            "<a href=\"/guide.pdf\" rel=\"nofollow\">Guide</a><a href=\"/download?file=a.jpg\" rel=\"nofollow\">Download</a>" +
+            "<a href=\"/pages/a.jpg\" rel=\"nofollow\">A page despite its name</a><a href=\"/private\" rel=\"nofollow\">Private</a>"));
+
+        var hit = new LinkRules(site.Table()).Check(page).Single(found => found.Issue == IssueCatalog.INTERNAL_NOFOLLOW_LINKS);
+
+        // PDFs can be indexed, a query isn't a path, and a fetched URL is judged by what it returned.
+        Assert.Equal(new IssueHit(IssueCatalog.INTERNAL_NOFOLLOW_LINKS, page.UrlId, "4 URLs", site.Id($"{site.Site}/guide.pdf")), hit);
+    }
+
+    [Fact]
     public void UppercaseIgnoresPercentEscapes()
     {
         var site = new RuleHarness();

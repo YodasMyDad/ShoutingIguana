@@ -83,7 +83,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition INTERNAL_NOFOLLOW_LINKS = new("internal-nofollow-links", IssueCategory.Links, IssueSeverity.Warning,
         "Nofollow internal links",
-        "The page marks links to its own site as nofollow, which stops them passing signals and can keep pages from being crawled.",
+        "The page marks links to its own pages as nofollow, which stops them passing signals and can keep pages from being crawled. Links to images and other files don't count.",
         "Remove rel=\"nofollow\" from internal links.");
 
     public static readonly IssueDefinition EMPTY_ANCHOR_TEXT = new("empty-anchor-text", IssueCategory.Links, IssueSeverity.Notice,
