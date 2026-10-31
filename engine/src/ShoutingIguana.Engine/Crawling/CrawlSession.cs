@@ -61,7 +61,7 @@ internal sealed class CrawlSession
         var scope = new CrawlScope(_startUri, _options.IncludeSubdomains, _options.StayInStartFolder);
         var userAgent = UserAgents.Resolve(_options.UserAgent, _options.CustomUserAgent);
         var interval = _options.MaxRequestsPerSecond > 0 ? TimeSpan.FromSeconds(1 / _options.MaxRequestsPerSecond) : TimeSpan.Zero;
-        var gates = new HostGateRegistry(uri => scope.IsInternal(uri)
+        var gates = new HostGateRegistry(scope, isInternal => isInternal
             ? new HostGate(_options.Concurrency, interval, timeProvider)
             : new HostGate(EXTERNAL_CONCURRENCY_PER_HOST, TimeSpan.Zero, timeProvider));
 

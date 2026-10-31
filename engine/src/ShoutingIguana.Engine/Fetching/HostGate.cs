@@ -49,21 +49,21 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
         await _slots.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            TimeSpan wait;
-            lock (_sync)
+            for (var start = Reserve(); ; start = Reserve())
             {
-                var now = timeProvider.GetUtcNow();
-                var start = Max(now, Max(_nextStart, _pausedUntil));
-                _nextStart = start + _minimumInterval + _backoff;
-                wait = start - now;
-            }
+                var wait = start - timeProvider.GetUtcNow();
+                if (wait > TimeSpan.Zero)
+                {
+                    await Task.Delay(wait, timeProvider, cancellationToken).ConfigureAwait(false);
+                }
 
-            if (wait > TimeSpan.Zero)
-            {
-                await Task.Delay(wait, timeProvider, cancellationToken).ConfigureAwait(false);
+                // A Retry-After that arrived while this request waited applies to it too: it takes a new place in
+                // line after the pause, so the requests held up by it don't all start at once when it ends.
+                if (!IsPaused())
+                {
+                    return new HostGateLease(this);
+                }
             }
-
-            return new HostGateLease(this);
         }
         catch
         {
@@ -97,6 +97,25 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
     }
 
     internal void Release() => _slots.Release();
+
+    /// <summary>Takes the next start time: after the previous request's spacing and after any pause.</summary>
+    private DateTimeOffset Reserve()
+    {
+        lock (_sync)
+        {
+            var start = Max(timeProvider.GetUtcNow(), Max(_nextStart, _pausedUntil));
+            _nextStart = start + _minimumInterval + _backoff;
+            return start;
+        }
+    }
+
+    private bool IsPaused()
+    {
+        lock (_sync)
+        {
+            return _pausedUntil > timeProvider.GetUtcNow();
+        }
+    }
 
     private static DateTimeOffset Max(DateTimeOffset left, DateTimeOffset right) => left > right ? left : right;
 
