@@ -25,16 +25,21 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
 
     private readonly WebApplication _app;
 
-    private SyntheticSiteServer(WebApplication app, SyntheticSite site, Uri baseUri, Uri externalBaseUri, X509Certificate2? certificate)
+    private SyntheticSiteServer(WebApplication app, SyntheticSite site, Uri baseUri, Uri externalBaseUri, X509Certificate2? certificate,
+        SyntheticRequestLog requests)
     {
         _app = app;
         Site = site;
         BaseUri = baseUri;
         ExternalBaseUri = externalBaseUri;
         Certificate = certificate;
+        Requests = requests;
     }
 
     public SyntheticSite Site { get; }
+
+    /// <summary>What the crawler sent the site, for tests of its options.</summary>
+    public SyntheticRequestLog Requests { get; }
 
     public Uri BaseUri { get; }
 
@@ -105,7 +110,8 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         // the start. Nothing can request a page before then: nobody knows the ports yet.
         SyntheticSite? syntheticSite = null;
         var boundExternalPort = 0;
-        app.Run(context => RespondAsync(context, syntheticSite!, boundExternalPort));
+        var requests = new SyntheticRequestLog();
+        app.Run(context => RespondAsync(context, syntheticSite!, boundExternalPort, requests));
         await app.StartAsync(cancellationToken).ConfigureAwait(false);
 
         var sitePort = ((IPEndPoint)site!.EndPoint).Port;
@@ -113,7 +119,7 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         var baseUri = new Uri($"{(certificate is null ? "http" : "https")}://127.0.0.1:{sitePort}/");
         var externalBaseUri = new Uri($"http://127.0.0.1:{boundExternalPort}/");
         syntheticSite = new SyntheticSite(options, baseUri, externalBaseUri);
-        return new SyntheticSiteServer(app, syntheticSite, baseUri, externalBaseUri, certificate);
+        return new SyntheticSiteServer(app, syntheticSite, baseUri, externalBaseUri, certificate, requests);
     }
 
     public async ValueTask DisposeAsync()
@@ -123,9 +129,28 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         Certificate?.Dispose();
     }
 
-    private static async Task RespondAsync(HttpContext context, SyntheticSite site, int externalPort)
+    private static async Task RespondAsync(HttpContext context, SyntheticSite site, int externalPort, SyntheticRequestLog requests)
     {
-        var response = site.Handle(context.Request.Path.Value ?? "/", context.Connection.LocalPort == externalPort);
+        var path = context.Request.Path.Value ?? "/";
+        if (context.Connection.LocalPort == externalPort)
+        {
+            await ServeAsync(context, site.Handle(path, external: true)).ConfigureAwait(false);
+            return;
+        }
+
+        requests.Started(context.Request);
+        try
+        {
+            await ServeAsync(context, site.Handle(path, external: false)).ConfigureAwait(false);
+        }
+        finally
+        {
+            requests.Finished();
+        }
+    }
+
+    private static async Task ServeAsync(HttpContext context, SyntheticResponse response)
+    {
         if (response.Abort)
         {
             context.Abort();

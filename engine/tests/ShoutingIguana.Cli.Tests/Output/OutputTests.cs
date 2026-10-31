@@ -19,6 +19,12 @@ public sealed class OutputTests
         Assert.Equal(@"title\u001B]0;owned\u0007 and \" + "u202Eevil", Format.Printable($"title\u001b]0;owned\u0007 and {rightToLeftOverride}evil"));
         Assert.Equal(@"line\u000Abreak", Format.Printable("line\nbreak"));
 
+        // Every bidirectional control: the isolates and marks reorder text as much as the overrides do.
+        foreach (var control in new[] { 0x061C, 0x200E, 0x200F, 0x202A, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069 })
+        {
+            Assert.Equal($@"a\u{control:X4}b", Format.Printable($"a{(char)control}b"));
+        }
+
         const string plain = "https://example.com/caf%C3%A9 Café 東京";
         Assert.Same(plain, Format.Printable(plain));
         Assert.Equal(string.Empty, Format.Printable(null));

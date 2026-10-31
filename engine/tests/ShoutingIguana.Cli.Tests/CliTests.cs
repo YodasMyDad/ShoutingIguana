@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using Microsoft.Data.Sqlite;
+using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
@@ -39,10 +41,40 @@ public sealed class CliTests : IAsyncLifetime
         Assert.Equal(0, oneIssue.ExitCode);
         Assert.Contains($"{_server.BaseUri}plants/title-long", oneIssue.Output);
 
+        // The synthetic site's sitemap index lists one sitemap that doesn't exist.
         var stats = await RunAsync("stats", crawl);
+        var stored = CrawlStatsReader.Read(crawl);
         Assert.Equal(0, stats.ExitCode);
         Assert.Contains("Status        Completed", stats.Output);
-        Assert.Contains("Sitemaps      ", stats.Output);
+        Assert.True(stored is { SitemapCount: > 1, SitemapErrorCount: 1 });
+        Assert.Contains($"Sitemaps      {stored.SitemapCount:N0} read, listing {stored.SitemapUrlCount:N0} URLs, 1 couldn't be read", stats.Output);
+
+        // Ctrl+C during an analysis: 130, and the results stay.
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        Assert.Equal(130, (await RunAsync(cancelled.Token, "analyze", crawl)).ExitCode);
+        Assert.Contains($"{_server.BaseUri}plants/title-long", (await RunAsync("issues", crawl, "title-too-long")).Output);
+    }
+
+    [Fact]
+    public async Task TextFromTheCrawlCantDriveTheTerminal()
+    {
+        var crawl = await CrawlAsync();
+
+        // A detail carrying an escape sequence (here, "turn red") and a right-to-left isolate, as page text could.
+        using (var connection = new SqliteConnection($"Data Source={crawl};Pooling=False"))
+        {
+            connection.Open();
+            using var update = connection.CreateCommand();
+            update.CommandText = "UPDATE issues SET detail = 'before' || char(27) || '[31m' || char(8295) || 'after' WHERE issue = 'title-too-long'";
+            Assert.True(update.ExecuteNonQuery() > 0);
+        }
+
+        var shown = await RunAsync("issues", crawl, "title-too-long");
+
+        Assert.Contains("before\\u001B[31m\\u2067after", shown.Output);
+        Assert.DoesNotContain((char)27, shown.Output);
+        Assert.DoesNotContain((char)0x2067, shown.Output);
     }
 
     [Fact]
@@ -100,6 +132,53 @@ public sealed class CliTests : IAsyncLifetime
         AssertFails(await RunAsync("issues", crawl, "--csv", Path.Combine(_folder, "missing", "issues.csv")), "doesn't exist");
         AssertFails(await RunAsync("crawl", "--resume", "--db", crawl, "--max-urls", "5"), "--max-urls can't change");
         AssertFails(await RunAsync("crawl", "--resume", "--db", crawl, _server.BaseUri.AbsoluteUri), "the start URL can't change");
+        AssertFails(await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", "", "-q"), "empty");
+        AssertFails(await RunAsync("issues", crawl, "--csv", ""), "empty");
+    }
+
+    /// <summary>
+    /// Stopped with Ctrl+C, resumed without the header (it isn't sent at all, not even empty), stopped again, then
+    /// resumed with every option that may change. What the site receives shows each was applied.
+    /// </summary>
+    [Fact]
+    public async Task ResumingAppliesTheOptionsThatMayChange()
+    {
+        var crawl = Path.Combine(_folder, "resumed.sicrawl");
+        var keys = _server.Requests.Watch("X-Crawler-Key");
+
+        var first = await StopAfterAsync(TimeSpan.FromMilliseconds(800),
+            "crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "--rate", "20", "--header", "X-Crawler-Key: first", "-q", "--no-analyze");
+        Assert.Equal(130, first.ExitCode);
+        Assert.Equal(["first"], keys.Distinct());
+        keys.Clear();
+
+        var withoutHeader = await StopAfterAsync(TimeSpan.FromMilliseconds(800), "crawl", "--resume", "--db", crawl, "-q", "--no-analyze");
+        Assert.Equal(130, withoutHeader.ExitCode);
+        Assert.Contains("X-Crawler-Key", withoutHeader.Error);
+        Assert.Empty(keys);
+
+        // One request at a time: the gate that -c sets covers every request to the site, robots.txt and sitemaps too.
+        _server.Requests.ResetMostOpen();
+        var resumed = await RunAsync("crawl", "--resume", "--db", crawl, "-c", "1", "--rate", "500", "--timeout", "15",
+            "--header", "X-Crawler-Key: second", "-q", "--no-analyze");
+        Assert.True(resumed.ExitCode == 0, resumed.Error);
+        Assert.Contains("Done:", resumed.Output);
+        Assert.Equal(["second"], keys.Distinct());
+        Assert.Equal(1, _server.Requests.MostOpen);
+    }
+
+    [Fact]
+    public async Task AProxyPasswordIsNeverStoredAndResumingAsksForTheProxyAgain()
+    {
+        // The site's own port stands in for the proxy: what matters here is what the crawl file keeps.
+        var crawl = Path.Combine(_folder, "proxied.sicrawl");
+        var proxy = $"http://crawler:pa55word@127.0.0.1:{_server.BaseUri.Port}/";
+        var crawled = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "--max-urls", "5", "--proxy", proxy, "-q", "--no-analyze");
+        Assert.True(crawled.ExitCode == 0, crawled.Error);
+
+        Assert.Equal($"http://{CrawlOptions.REDACTED}@127.0.0.1:{_server.BaseUri.Port}/", CrawlDatabase.ReadOptions(crawl).ProxyUrl);
+        Assert.True((await File.ReadAllBytesAsync(crawl)).AsSpan().IndexOf("pa55word"u8) < 0);
+        AssertFails(await RunAsync("crawl", "--resume", "--db", crawl, "-q", "--no-analyze"), "Pass --proxy again");
     }
 
     [Fact]
@@ -128,6 +207,13 @@ public sealed class CliTests : IAsyncLifetime
         return crawl;
     }
 
+    /// <summary>Runs a command and presses Ctrl+C after <paramref name="delay"/>.</summary>
+    private static async Task<(int ExitCode, string Output, string Error)> StopAfterAsync(TimeSpan delay, params string[] args)
+    {
+        using var stop = new CancellationTokenSource(delay);
+        return await RunAsync(stop.Token, args);
+    }
+
     private static void AssertFails((int ExitCode, string Output, string Error) result, string message)
     {
         Assert.Equal(2, result.ExitCode);
@@ -135,7 +221,10 @@ public sealed class CliTests : IAsyncLifetime
         Assert.DoesNotContain("   at ", result.Error);
     }
 
-    private static async Task<(int ExitCode, string Output, string Error)> RunAsync(params string[] args)
+    private static Task<(int ExitCode, string Output, string Error)> RunAsync(params string[] args) => RunAsync(CancellationToken.None, args);
+
+    /// <param name="cancellationToken">Cancelling it is Ctrl+C.</param>
+    private static async Task<(int ExitCode, string Output, string Error)> RunAsync(CancellationToken cancellationToken, params string[] args)
     {
         using StringWriter output = new(), error = new();
         var (originalOutput, originalError) = (Console.Out, Console.Error);
@@ -143,7 +232,7 @@ public sealed class CliTests : IAsyncLifetime
         Console.SetError(error);
         try
         {
-            var exitCode = await CliApp.Create().Parse(args).InvokeAsync();
+            var exitCode = await CliApp.Create().Parse(args).InvokeAsync(cancellationToken: cancellationToken);
             return (exitCode, output.ToString(), error.ToString());
         }
         finally

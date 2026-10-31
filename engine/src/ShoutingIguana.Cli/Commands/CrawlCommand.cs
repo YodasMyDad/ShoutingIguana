@@ -11,6 +11,9 @@ namespace ShoutingIguana.Cli.Commands;
 
 internal static class CrawlCommand
 {
+    /// <summary>Exit code for a crawl that stopped itself, resumable, because the site stopped answering.</summary>
+    public const int STOPPED_ITSELF = 3;
+
     public static Command Create()
     {
         var url = new Argument<string?>("url") { Description = "Start URL. Omit when resuming.", Arity = ArgumentArity.ZeroOrOne };
@@ -165,10 +168,11 @@ internal static class CrawlCommand
                 return await AnalyzeCommand.RunAsync(databasePath, loggerFactory, cancellationToken);
             }
 
+            // Stopped without Ctrl+C means the crawl stopped itself (the site stopped answering): resume it later.
             return summary.Status switch
             {
                 CrawlStatus.Completed => 0,
-                CrawlStatus.Stopped => AnalyzeCommand.CANCELLED,
+                CrawlStatus.Stopped => cancellationToken.IsCancellationRequested ? AnalyzeCommand.CANCELLED : STOPPED_ITSELF,
                 _ => 1
             };
         }));

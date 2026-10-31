@@ -42,6 +42,7 @@ public sealed record SyntheticSiteExpectations(
     public IReadOnlySet<string> SkippedChecks { get; init; } = new HashSet<string>(StringComparer.Ordinal);
 
     private const int LISTED_URLS = 5;
+    private const int MIN_UNPLANNED_SLOW_PAGES = 25;
 
     /// <summary>How many URLs an issue must flag (slow-response: at least this many).</summary>
     public int Count(string issueId) => IssueUrls.TryGetValue(issueId, out var urls) ? urls.Count : 0;
@@ -67,6 +68,15 @@ public sealed record SyntheticSiteExpectations(
             var expected = IssueUrls.TryGetValue(id, out var urls) ? urls.ToHashSet(StringComparer.Ordinal) : new HashSet<string>(StringComparer.Ordinal);
             if (id == SLOW_RESPONSE)
             {
+                // A busy machine can make a few more pages slow, but not most of them: that would be the crawler's own
+                // timing gone wrong (counting the wait for the host gate, say), which the allowance mustn't hide.
+                var unplanned = slowPages.Count(page => !expected.Contains(page));
+                var allowed = Math.Max(MIN_UNPLANNED_SLOW_PAGES, AnalysedPages / 20);
+                if (unplanned > allowed)
+                {
+                    mismatches.Add($"{SLOW_RESPONSE}: {unplanned:N0} unplanned pages are over the threshold; a busy machine explains at most {allowed:N0}");
+                }
+
                 expected.UnionWith(slowPages);
             }
 

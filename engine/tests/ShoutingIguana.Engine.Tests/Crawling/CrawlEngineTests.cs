@@ -89,6 +89,14 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(0, stats.QueuedCount);
         Assert.Equal(0, Count(path, "SELECT COUNT(*) FROM urls WHERE state = 1"));
 
+        // Response times are the server's: the planted slow page takes 1.2 s, a typical page far less than the 1 s
+        // threshold. The slow-response comparison below allows for a busy machine, so it can't prove this itself.
+        Assert.True(Count(path, $"SELECT r.response_ms FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url = '{server.BaseUri}plants/slow'") >= 1_200);
+        Assert.True(Count(path, """
+            SELECT response_ms FROM responses WHERE is_html = 1 AND outcome = 0 ORDER BY response_ms
+            LIMIT 1 OFFSET (SELECT COUNT(*) / 2 FROM responses WHERE is_html = 1 AND outcome = 0)
+            """) < new AnalysisSettings().SlowResponseMs / 2);
+
         // Every planted issue is reported on exactly the planted URLs, and nothing else is. Every check ran that the site
         // supports; the rest are skipped with one note saying why.
         Assert.Equal(expected.AnalysedPages, analysis.PagesAnalyzed);
@@ -255,10 +263,13 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(first.Issues.Select(issue => issue.Count), second.Issues.Select(issue => issue.Count));
         Assert.Equal(second.Issues.Count, Count(path, "SELECT COUNT(*) FROM issue_types"));
 
-        // Stricter thresholds flag more, from the same stored crawl.
+        // Stricter thresholds flag more, from the same stored crawl, and the defaults again flag what they did at first:
+        // the stricter run's extra rows are gone, not kept alongside.
         var strict = await analyzer.AnalyzeAsync(path, new AnalysisSettings { TitleMinLength = 10, TitleMaxLength = 20 });
         Assert.True(strict.Issues.Single(issue => issue.Issue == IssueCatalog.TITLE_TOO_LONG).Count >
                     second.Issues.Single(issue => issue.Issue == IssueCatalog.TITLE_TOO_LONG).Count);
+        await analyzer.AnalyzeAsync(path);
+        Assert.Equal(firstRows, IssueReader.ReadAll(path).ToList());
 
         using (var connection = CrawlDatabase.OpenWriter(path))
         {
@@ -266,7 +277,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         }
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => analyzer.AnalyzeAsync(path));
-        Assert.Equal(strict.Issues.Sum(issue => issue.Count), Count(path, "SELECT COUNT(*) FROM issues"));
+        Assert.Equal(firstRows, IssueReader.ReadAll(path).ToList());
     }
 
     /// <summary>

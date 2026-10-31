@@ -49,48 +49,59 @@ internal static class BenchCommand
             using var loggerFactory = Logging.Create(verbose: false);
             var observer = new ConsoleCrawlObserver(quiet: false);
 
-            CrawlSummary summary;
-            IReadOnlyList<MemorySample> samples;
-            await using (var job = new CrawlEngine(loggerFactory).Start(new CrawlRequest(options, databasePath), observer))
+            var keepCrawl = parse.GetValue(keep);
+            try
             {
-                var sampler = new MemorySampler(TimeSpan.FromMilliseconds(250), () => job.Progress.Fetched);
-                await using var stopOnCancel = cancellationToken.Register(() => job.StopAsync());
-                summary = await job.Completion;
-                await sampler.DisposeAsync();
-                samples = sampler.Samples;
-            }
+                CrawlSummary summary;
+                IReadOnlyList<MemorySample> samples;
+                await using (var job = new CrawlEngine(loggerFactory).Start(new CrawlRequest(options, databasePath), observer))
+                {
+                    var sampler = new MemorySampler(TimeSpan.FromMilliseconds(250), () => job.Progress.Fetched);
+                    await using var stopOnCancel = cancellationToken.Register(() => job.StopAsync());
+                    summary = await job.Completion;
+                    await sampler.DisposeAsync();
+                    samples = sampler.Samples;
+                }
 
-            observer.EndProgressLine();
-            AnalysisSummary? analysis = null;
-            IReadOnlyList<MemorySample> analysisSamples = [];
-            if (summary.Status == CrawlStatus.Completed)
+                observer.EndProgressLine();
+                AnalysisSummary? analysis = null;
+                IReadOnlyList<MemorySample> analysisSamples = [];
+                if (summary.Status == CrawlStatus.Completed)
+                {
+                    Console.WriteLine("Analysing...");
+                    var sampler = new MemorySampler(TimeSpan.FromMilliseconds(250), () => 0);
+                    analysis = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(databasePath, cancellationToken: cancellationToken);
+                    await sampler.DisposeAsync();
+                    analysisSamples = sampler.Samples;
+                }
+
+                var result = Evaluate(parse.GetValue(maxPeak), parse.GetValue(maxGrowth), parse.GetValue(maxGrowthPerUrl), parse.GetValue(minRate),
+                    pageCount, workers, site, summary, samples, analysis, analysisSamples, databasePath);
+                Print(result);
+
+                if (parse.GetValue(json) is { } jsonPath)
+                {
+                    await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(result, CliJsonContext.Default.BenchResult), cancellationToken);
+                }
+
+                if (keepCrawl)
+                {
+                    Console.WriteLine($"Crawl kept at {databasePath}");
+                }
+
+                return result.Failures.Count == 0 ? 0 : 1;
+            }
+            finally
             {
-                Console.WriteLine("Analysing...");
-                var sampler = new MemorySampler(TimeSpan.FromMilliseconds(250), () => 0);
-                analysis = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(databasePath, cancellationToken: cancellationToken);
-                await sampler.DisposeAsync();
-                analysisSamples = sampler.Samples;
+                // Also when the run fails or is cancelled part-way: at 100k pages the crawl is about 400 MB.
+                if (!keepCrawl)
+                {
+                    foreach (var file in new[] { databasePath, databasePath + "-wal", databasePath + "-shm" })
+                    {
+                        File.Delete(file);
+                    }
+                }
             }
-
-            var result = Evaluate(parse.GetValue(maxPeak), parse.GetValue(maxGrowth), parse.GetValue(maxGrowthPerUrl), parse.GetValue(minRate),
-                pageCount, workers, site, summary, samples, analysis, analysisSamples, databasePath);
-            Print(result);
-
-            if (parse.GetValue(json) is { } jsonPath)
-            {
-                await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(result, CliJsonContext.Default.BenchResult), cancellationToken);
-            }
-
-            if (parse.GetValue(keep))
-            {
-                Console.WriteLine($"Crawl kept at {databasePath}");
-            }
-            else
-            {
-                File.Delete(databasePath);
-            }
-
-            return result.Failures.Count == 0 ? 0 : 1;
         });
 
         return command;

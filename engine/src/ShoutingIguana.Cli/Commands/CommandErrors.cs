@@ -32,8 +32,9 @@ internal static class CommandErrors
         }
     }
 
+    // The path APIs reject a path the user typed (empty, invalid characters) with ArgumentException for "path".
     private static bool IsExpected(Exception exception) =>
-        exception is InvalidOperationException or SqliteException or IOException or UnauthorizedAccessException;
+        exception is InvalidOperationException or SqliteException or IOException or UnauthorizedAccessException or ArgumentException { ParamName: "path" };
 
     private static int Report(Exception exception)
     {
