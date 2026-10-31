@@ -158,6 +158,23 @@ public sealed class HtmlPageParserTests
         Assert.False(links[3].Flags.HasFlag(LinkFlags.SamePage));
     }
 
+    /// <summary>Icon and image links are named the way screen readers name them; only a link with no name at all has no text.</summary>
+    [Theory]
+    [InlineData("<a href=\"/cart\"><svg aria-label=\"Basket\"><path d=\"M0 0\"/></svg></a>", "Basket")]
+    [InlineData("<a href=\"/cart\"><span class=\"icon\" aria-label=\"Basket\"></span></a>", "Basket")]
+    [InlineData("<a href=\"/\"><img src=\"/spacer.gif\" alt=\"\"><img src=\"/logo.png\" alt=\"Home page\"></a>", "Home page")]
+    [InlineData("<a href=\"/cart\" aria-label=\"\" title=\"Basket\"><svg><path d=\"M0 0\"/></svg></a>", "Basket")]
+    [InlineData("<a href=\"/cart\" aria-labelledby=\"open basket\"><svg><path d=\"M0 0\"/></svg></a><span id=\"open\">Open</span><b id=\"basket\">basket</b>", "Open basket")]
+    [InlineData("<a href=\"/\"><svg><title>Home</title><path d=\"M0 0\"/></svg></a>", "Home")]
+    [InlineData("<a href=\"/\"><svg><path d=\"M0 0\"/></svg></a>", null)]
+    [InlineData("<a href=\"/\" aria-labelledby=\"nowhere\"><img src=\"/logo.png\" alt=\"\"></a>", null)]
+    public void LinksWithoutTextAreNamedAsScreenReadersNameThem(string body, string? name)
+    {
+        var link = Parse($"<html><body>{body}</body></html>").Links.First(found => found.Kind == LinkKind.Hyperlink);
+
+        Assert.Equal(name, link.Text);
+    }
+
     [Fact]
     public void SamePageLinksAreTheOnesThatResolveToThePage()
     {

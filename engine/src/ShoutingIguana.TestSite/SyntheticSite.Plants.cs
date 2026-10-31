@@ -199,6 +199,17 @@ public sealed partial class SyntheticSite
         {
             Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\"></a></p>"
         });
+
+        // Icon links named the ways screen readers name them (a labelled SVG, a title behind an empty aria-label, a label
+        // elsewhere on the page) have text, so none is flagged.
+        Page("icon-links", "Icon links with names", [], page => page with
+        {
+            Content = page.Content +
+                      $"<p><a href=\"{PLANTS_PATH}thin\"><svg aria-label=\"Thin page\"><path d=\"M0 0\"/></svg></a>" +
+                      $"<a href=\"{PLANTS_PATH}thin\" aria-label=\"\" title=\"Thin page\"><svg><path d=\"M0 0\"/></svg></a>" +
+                      $"<a href=\"{PLANTS_PATH}thin\" aria-labelledby=\"thin-label\"><svg><path d=\"M0 0\"/></svg></a>" +
+                      "<span id=\"thin-label\">Thin page</span></p>"
+        });
         Page("fragments", "Missing fragments", ["broken-fragment-links"], page => page with
         {
             Content = page.Content +

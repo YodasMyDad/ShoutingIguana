@@ -486,16 +486,12 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
         var label = element.LocalName == "area" ? Clean(element.GetAttribute("alt"), MAX_LABEL_CHARS) : ReadableText(element, MAX_LABEL_CHARS);
         if (label.Length == 0)
         {
-            if (FindFirstImage(element, 0) is { } image)
+            if (FindFirstImage(element, 0) is not null)
             {
                 flags |= LinkFlags.ImageLink;
-                label = Clean(image.GetAttribute("alt"), MAX_LABEL_CHARS);
             }
 
-            if (label.Length == 0)
-            {
-                label = Clean(element.GetAttribute("aria-label") ?? element.GetAttribute("title"), MAX_LABEL_CHARS);
-            }
+            label = NameWithoutText(element);
         }
 
         if (!UrlNormalizer.TryResolve(baseUri, href, out var target))
@@ -643,6 +639,29 @@ internal sealed class PageWalker(Uri pageUri, Uri baseUri, string robotsToken, T
 
         return flags;
     }
+
+    /// <summary>
+    /// What a screen reader announces for a link without text, and what search engines take as its anchor text: the alt
+    /// text of an image in it (the first that has some) or a labelled child such as an icon's SVG, else the link's own
+    /// aria-labelledby, aria-label or title.
+    /// </summary>
+    private static string NameWithoutText(IElement link)
+    {
+        var name = link.QuerySelectorAll("img[alt], [aria-label]")
+                       .Select(child => child.LocalName == "img" ? child.GetAttribute("alt") : child.GetAttribute("aria-label"))
+                       .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
+                   ?? LabelledBy(link)
+                   ?? NullIfBlank(link.GetAttribute("aria-label"))
+                   ?? link.GetAttribute("title");
+        return Clean(name, MAX_LABEL_CHARS);
+    }
+
+    /// <summary>The text of the elements aria-labelledby names, joined in order as screen readers read them.</summary>
+    private static string? LabelledBy(IElement element) =>
+        element.GetAttribute("aria-labelledby") is { } ids && element.Owner is { } document
+            ? NullIfBlank(string.Join(' ', ids.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+                .Select(document.GetElementById).OfType<IElement>().Select(label => ReadableText(label, MAX_LABEL_CHARS))))
+            : null;
 
     private static IElement? FindFirstImage(INode node, int depth)
     {
