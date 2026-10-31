@@ -93,6 +93,26 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ASiteWithoutRobotsTxtIsCrawledInFullAndToldSo()
+    {
+        _server = await LoopbackServer.StartAsync(context => context.Request.Path.Value switch
+        {
+            "/" => Html(context, "<a href=\"/private/x\">Anything goes</a>"),
+            "/private/x" => Html(context, "<p>Crawled, with no robots.txt to say otherwise.</p>"),
+            _ => Status(context, 404)
+        });
+        var path = NewDatabasePath();
+
+        var summary = await CrawlAsync(path, new RecordingObserver());
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        Assert.Equal(FetchOutcome.Success, Outcome(path, $"{_server.BaseUri}private/x"));
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        Assert.Equal(_server.BaseUri.AbsoluteUri, Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.ROBOTS_TXT_MISSING.Id, 10)).Url);
+        Assert.Equal(0, IssueReader.ReadCounts(path).GetValueOrDefault(IssueCatalog.ROBOTS_TXT_UNREACHABLE.Id));
+    }
+
+    [Fact]
     public async Task APageThatGotNoResponseIsTriedOnceMoreAtTheEnd()
     {
         var flakyRequests = 0;
