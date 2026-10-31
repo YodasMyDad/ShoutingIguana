@@ -20,7 +20,7 @@ internal static class RuleText
     public static string Status(UrlStatus url) => url.Outcome switch
     {
         FetchOutcome.Redirect when url.IsMetaRefresh => "redirects with an instant meta refresh",
-        FetchOutcome.Redirect when url.RedirectTargetId == 0 => $"redirects (HTTP {url.StatusCode}) without a usable Location header",
+        FetchOutcome.Redirect when url.RedirectTargetId == 0 => $"redirects with HTTP {url.StatusCode} but no usable Location header",
         FetchOutcome.Redirect => $"redirects (HTTP {url.StatusCode})",
         FetchOutcome.Timeout => "timed out",
         FetchOutcome.NetworkError => "couldn't be reached",
@@ -47,6 +47,18 @@ internal static class RuleText
                 $"is still redirecting after {Count(trace.Hops, "hop", "hops")}, more than browsers follow",
             _ => $"redirects to a URL that {Status(final)}"
         };
+    }
+
+    /// <summary>
+    /// "2 broken URLs", saying where the first one goes wrong when that's only at the end of its redirects, since the
+    /// first is the issue's related URL and a redirect there would look fine: "1 image (it redirects to a URL that returns HTTP 404)".
+    /// </summary>
+    public static string BrokenTargets(UrlTable urls, TargetSet targets, string singular, string plural)
+    {
+        var count = Count(targets.Count, singular, plural);
+        return targets.First is { } first && urls[first].Outcome == FetchOutcome.Redirect
+            ? $"{count} ({(targets.Count == 1 ? "it" : "the first")} {BrokenStatus(urls, first)})"
+            : count;
     }
 
     public static string Size(long bytes) => bytes >= 1024 * 1024

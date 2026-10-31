@@ -54,12 +54,12 @@ internal sealed class ImageRules(AnalysisSettings settings, UrlTable urls) : IPa
                 continue;
             }
 
-            var target = urls[link.ToId];
-            if (target.IsBroken)
+            // An image that redirects is judged by where the redirects end.
+            if (urls.IsBrokenThroughRedirects(link.ToId))
             {
                 broken.Add(link.ToId);
             }
-            else if (target.SizeBytes > settings.LargeImageBytes)
+            else if (urls[urls.TraceRedirects(link.ToId).FinalId].SizeBytes > settings.LargeImageBytes)
             {
                 large.Add(link.ToId);
             }
@@ -67,7 +67,7 @@ internal sealed class ImageRules(AnalysisSettings settings, UrlTable urls) : IPa
 
         if (broken.Count > 0)
         {
-            yield return new IssueHit(IssueCatalog.IMAGE_BROKEN, page.UrlId, RuleText.Count(broken.Count, "image", "images"), broken.First);
+            yield return new IssueHit(IssueCatalog.IMAGE_BROKEN, page.UrlId, RuleText.BrokenTargets(urls, broken, "image", "images"), broken.First);
         }
 
         if (large.Count > 0)

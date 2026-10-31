@@ -95,6 +95,44 @@ public sealed class PageRuleTests
     }
 
     [Fact]
+    public void LinksAndImagesAreJudgedByWhereTheirRedirectsEnd()
+    {
+        var site = new RuleHarness();
+        site.Fetched($"{site.Site}/old", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/gone");
+        site.Fetched($"{site.Site}/gone", FetchOutcome.ClientError, 404);
+        site.Fetched($"{site.Site}/loop-a", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/loop-b");
+        site.Fetched($"{site.Site}/loop-b", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/loop-a");
+        site.Fetched($"{site.Site}/moved", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/fine");
+        site.Ok($"{site.Site}/fine");
+        site.Fetched("https://partner.example/old", FetchOutcome.Redirect, 301, redirectTo: "https://partner.example/gone");
+        site.Fetched("https://partner.example/gone", FetchOutcome.ClientError, 404);
+        site.Fetched("https://partner.example/login", FetchOutcome.Redirect, 302, redirectTo: "https://partner.example/members");
+        site.Fetched("https://partner.example/members", FetchOutcome.ClientError, 403);
+        site.Fetched("https://cdn.example/photo.jpg", FetchOutcome.Redirect, 301, redirectTo: "https://cdn.example/missing.jpg");
+        site.Fetched("https://cdn.example/missing.jpg", FetchOutcome.ClientError, 404);
+        site.Fetched($"{site.Site}/big.jpg", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/big-final.jpg");
+        site.Fetched($"{site.Site}/big-final.jpg", FetchOutcome.Success, 200, size: 900_000);
+        var page = site.Page($"{site.Site}/", RuleHarness.Html(body:
+            "<a href=\"/old\">a</a><a href=\"/loop-a\">b</a><a href=\"/moved\">c</a>" +
+            "<a href=\"https://partner.example/old\">d</a><a href=\"https://partner.example/login\">e</a>" +
+            "<img src=\"https://cdn.example/photo.jpg\" alt=\"x\" width=\"1\" height=\"2\"><img src=\"/big.jpg\" alt=\"x\" width=\"1\" height=\"2\">"));
+        var urls = site.Table();
+
+        var links = new LinkRules(urls).Check(page).ToList();
+        var images = new ImageRules(SETTINGS, urls).Check(page).ToList();
+
+        Assert.Equal(new IssueHit(IssueCatalog.BROKEN_INTERNAL_LINKS, page.UrlId, "2 broken URLs (the first redirects to a URL that returns HTTP 404)",
+            site.Id($"{site.Site}/old")), links.Single(hit => hit.Issue == IssueCatalog.BROKEN_INTERNAL_LINKS));
+        Assert.Equal(new IssueHit(IssueCatalog.LINKS_TO_REDIRECTS, page.UrlId, "1 redirecting URL", site.Id($"{site.Site}/moved")),
+            links.Single(hit => hit.Issue == IssueCatalog.LINKS_TO_REDIRECTS));
+
+        // A partner's login redirect ending in a 403 may well work in a browser.
+        Assert.Equal("1 broken URL (it redirects to a URL that returns HTTP 404)", links.Single(hit => hit.Issue == IssueCatalog.BROKEN_EXTERNAL_LINKS).Detail);
+        Assert.Equal("1 image (it redirects to a URL that returns HTTP 404)", images.Single(hit => hit.Issue == IssueCatalog.IMAGE_BROKEN).Detail);
+        Assert.Equal(site.Id($"{site.Site}/big.jpg"), images.Single(hit => hit.Issue == IssueCatalog.IMAGE_TOO_LARGE).RelatedUrlId);
+    }
+
+    [Fact]
     public void UppercaseIgnoresPercentEscapes()
     {
         var site = new RuleHarness();

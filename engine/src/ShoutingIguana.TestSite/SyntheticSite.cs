@@ -58,6 +58,7 @@ public sealed partial class SyntheticSite
     private readonly string _external;
     private readonly IReadOnlyList<Plant> _plants;
     private readonly Dictionary<string, Plant> _plantsByPath;
+    private readonly Dictionary<string, Plant> _partnerPlantsByPath;
 
     public SyntheticSite(SyntheticSiteOptions options, Uri baseUri, Uri externalBaseUri)
     {
@@ -70,7 +71,8 @@ public sealed partial class SyntheticSite
         _base = baseUri.GetLeftPart(UriPartial.Authority);
         _external = externalBaseUri.GetLeftPart(UriPartial.Authority);
         _plants = CreatePlants();
-        _plantsByPath = _plants.ToDictionary(plant => plant.Path, StringComparer.Ordinal);
+        _plantsByPath = _plants.Where(plant => !plant.OnPartnerSite).ToDictionary(plant => plant.Path, StringComparer.Ordinal);
+        _partnerPlantsByPath = _plants.Where(plant => plant.OnPartnerSite).ToDictionary(plant => plant.Path, StringComparer.Ordinal);
     }
 
     public int PageCount => _options.PageCount;
@@ -83,6 +85,11 @@ public sealed partial class SyntheticSite
     {
         if (external)
         {
+            if (_partnerPlantsByPath.TryGetValue(path, out var partnerPlant))
+            {
+                return partnerPlant.Respond();
+            }
+
             return path.StartsWith("/ext/", StringComparison.Ordinal)
                 ? Html(RenderSimple("Partner site", "An external site linked from the shop.", path))
                 : NotFound(path);
@@ -320,13 +327,13 @@ public sealed partial class SyntheticSite
             AnalysedPages: htmlPages - _plants.Count(plant => plant is { Status: 200, IsPage: true, IsAnalysed: false }),
             Products: products,
             Orphans: OrphanCount,
-            BrokenUrls: broken.Count + _plants.Count(plant => plant.Status == 404),
+            BrokenUrls: broken.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: false }),
             ServerErrorUrls: errors.Count,
             Redirects: redirects.Count + _plants.Count(plant => plant.Status is >= 300 and < 400),
             RobotsDisallowed: disallowed.Count,
             NofollowOnly: hidden.Count,
             ExternalOk: externalOk.Count,
-            ExternalMissing: externalMissing.Count,
+            ExternalMissing: externalMissing.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: true }),
             Images: images.Count,
             Noindex: noindex + _plants.Count(plant => plant.Issues.Contains("noindex-page")),
             Canonicalised: canonicalised + _plants.Count(plant => plant.Issues.Contains("canonicalised-page")),

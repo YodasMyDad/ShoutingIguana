@@ -139,6 +139,18 @@ public sealed partial class SyntheticSite
         }, inSitemap: false);
         Page("refresh-target", "Meta refresh target", [], linked: false);
 
+        // A link, a partner-site link and an image that only fail once their redirects are followed are broken, not just
+        // redirects. The redirecting image is an internal redirect to a 404 itself.
+        Page("redirects-to-errors", "Redirects to errors", ["broken-internal-links", "broken-external-links", "image-broken"], page => page with
+        {
+            Content = page.Content +
+                      $"<p><a href=\"{PLANTS_PATH}redirect-broken\">Moved, then gone</a> <a href=\"{_external}/ext-moved\">Partner page, moved, then gone</a></p>" +
+                      $"<img src=\"{PLANTS_PATH}image-moved.jpg\" alt=\"A photo that moved, then went\" width=\"400\" height=\"300\">"
+        });
+        Other("image-moved.jpg", 301, linked: false, ["redirect-broken"], () => Redirect(301, "/img/missing.jpg"));
+        plants.Add(new Plant("/ext-moved", 301, Linked: false, InSitemap: false, [], () => Redirect(301, "/ext-gone"), OnPartnerSite: true));
+        plants.Add(new Plant("/ext-gone", 404, Linked: false, InSitemap: false, [], () => NotFound("/ext-gone"), OnPartnerSite: true));
+
         Page("empty-anchor", "Link without text", ["empty-anchor-text"], page => page with
         {
             Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\"></a></p>"
@@ -246,7 +258,8 @@ public sealed partial class SyntheticSite
         Other("gone-redirect", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone-redirect"));
         plants.Add(new Plant("/img/missing.jpg", 404, Linked: false, InSitemap: false, ["internal-client-error"], () => NotFound("/img/missing.jpg")));
 
-        // The hub links to the redirect loop and the unreachable URL, so it carries those link issues itself.
+        // The hub links to redirects, and to the unreachable URL, the redirect loop and the redirect to a 404, which are
+        // all broken, so it carries those link issues itself.
         plants.Add(new Plant(PLANTS_PATH, 200, Linked: false, InSitemap: true, ["links-to-redirects", "broken-internal-links"], () => Html(RenderPlantsHub())));
         return plants;
     }
