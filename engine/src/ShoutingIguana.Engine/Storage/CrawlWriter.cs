@@ -32,6 +32,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         new BoundedChannelOptions(CHANNEL_CAPACITY) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
 
     private readonly SqliteConnection _connection;
+    private readonly CrawlFileLock _fileLock;
     private readonly WriterStatements _statements;
     private readonly CrawlOptions _options;
     private readonly CrawlCounters _counters;
@@ -43,9 +44,10 @@ internal sealed class CrawlWriter : IAsyncDisposable
     private int _inFlight;
     private int _acceptedInternal;
 
-    private CrawlWriter(SqliteConnection connection, CrawlOptions options, CrawlCounters counters, ILogger logger)
+    private CrawlWriter(SqliteConnection connection, CrawlFileLock fileLock, CrawlOptions options, CrawlCounters counters, ILogger logger)
     {
         _connection = connection;
+        _fileLock = fileLock;
         _options = options;
         _counters = counters;
         _logger = logger;
@@ -57,21 +59,31 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
     public bool SitemapsDone { get; private set; }
 
-    /// <summary>Opens or creates the crawl database, restores a resumed crawl, and starts the write loop.</summary>
+    /// <summary>
+    /// Locks the crawl file, opens or creates the crawl database, restores a resumed crawl and marks it running, then
+    /// starts the write loop.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Another crawl or analysis is writing to the file, it already holds a crawl and this isn't a resume, or it isn't a
+    /// crawl this engine can read.
+    /// </exception>
     public static CrawlWriter Open(string databasePath, CrawlOptions options, bool resume, CrawlCounters counters, ILogger logger)
     {
-        var connection = CrawlDatabase.OpenWriter(databasePath);
+        var fileLock = CrawlFileLock.Acquire(databasePath);
+        SqliteConnection? connection = null;
         try
         {
+            connection = CrawlDatabase.OpenWriter(databasePath);
             var created = CrawlDatabase.EnsureSchema(connection);
-            var writer = new CrawlWriter(connection, options, counters, logger);
+            if (!created && !resume)
+            {
+                throw new InvalidOperationException($"'{databasePath}' already holds a crawl. Resume it or choose a new file.");
+            }
+
+            var writer = new CrawlWriter(connection, fileLock, options, counters, logger);
             if (created)
             {
                 writer.InsertCrawlRow();
-            }
-            else if (!resume)
-            {
-                throw new InvalidOperationException($"'{databasePath}' already holds a crawl. Resume it or choose a new file.");
             }
             else
             {
@@ -83,7 +95,12 @@ internal sealed class CrawlWriter : IAsyncDisposable
         }
         catch
         {
-            connection.Dispose();
+            if (connection is not null)
+            {
+                CrawlDatabase.CloseWriter(connection, logger);
+            }
+
+            fileLock.Dispose();
             throw;
         }
     }
@@ -141,6 +158,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         {
             _statements.Dispose();
             CrawlDatabase.CloseWriter(_connection, _logger);
+            _fileLock.Dispose();
         }
     }
 
@@ -466,8 +484,17 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
     private void RestoreState()
     {
-        // URLs claimed but never recorded when the last run stopped go back on the queue.
-        CrawlDatabase.Execute(_connection, "UPDATE urls SET state = 0 WHERE state = 1;");
+        // In one transaction: URLs claimed but never recorded when the last run stopped go back on the queue, and the
+        // crawl is marked running again. A status of Running left by a crash is fine; the lock says nothing else writes.
+        using (var transaction = _connection.BeginTransaction())
+        {
+            _statements.SetTransaction(transaction);
+            CrawlDatabase.Execute(_connection, "UPDATE urls SET state = 0 WHERE state = 1;", transaction);
+            _statements.UpdateCrawlStatus(CrawlStatus.Running, false, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            transaction.Commit();
+        }
+
+        _statements.SetTransaction(null);
         SitemapsDone = Convert.ToInt64(CrawlDatabase.Scalar(_connection, "SELECT sitemaps_done FROM crawl WHERE id = 1")) == 1;
 
         long queued = 0;

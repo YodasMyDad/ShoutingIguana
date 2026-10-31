@@ -1,18 +1,21 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Storage;
 
 /// <summary>
-/// Writes analysis results. The CrawlWriter owns the file while a crawl runs; this writer only opens it when no
-/// crawl is writing. Everything goes into one transaction that replaces the previous analysis, so readers see
-/// either the old issues or the new ones, never a mix, and a failed analysis leaves the old results in place.
+/// Writes analysis results. The CrawlWriter owns the file while a crawl runs; this writer takes the same file lock,
+/// so it only opens the file when no crawl is writing, and no crawl can start until it closes. Everything goes into
+/// one transaction that replaces the previous analysis, so readers see either the old issues or the new ones, never
+/// a mix, and a failed analysis leaves the old results in place.
 /// </summary>
 internal sealed class IssueWriter : IDisposable
 {
     private readonly SqliteConnection _connection;
+    private readonly CrawlFileLock _fileLock;
     private readonly SqliteTransaction _transaction;
     private readonly SqliteCommand _insert;
     private readonly SqliteParameter _issue;
@@ -21,9 +24,10 @@ internal sealed class IssueWriter : IDisposable
     private readonly SqliteParameter _relatedUrlId;
     private readonly ILogger _logger;
 
-    private IssueWriter(SqliteConnection connection, ILogger logger)
+    private IssueWriter(SqliteConnection connection, CrawlFileLock fileLock, ILogger logger)
     {
         _connection = connection;
+        _fileLock = fileLock;
         _logger = logger;
         _transaction = connection.BeginTransaction();
         CrawlDatabase.Execute(connection, "DELETE FROM issues; DELETE FROM issue_types; DELETE FROM analysis;", _transaction);
@@ -41,17 +45,36 @@ internal sealed class IssueWriter : IDisposable
         _insert.Prepare();
     }
 
+    /// <exception cref="InvalidOperationException">
+    /// A crawl is writing to the file, or it was interrupted and should be resumed first, or it isn't a crawl this
+    /// engine can read.
+    /// </exception>
     public static IssueWriter Open(string databasePath, ILogger logger)
     {
-        var connection = CrawlDatabase.OpenWriter(databasePath, allowNew: false);
+        var fileLock = CrawlFileLock.Acquire(databasePath);
+        SqliteConnection? connection = null;
         try
         {
+            connection = CrawlDatabase.OpenWriter(databasePath, allowNew: false);
+
+            // Checked under the lock, before anything is written: no crawl can start now, so the answer holds.
+            if (CrawlDatabase.ReadStatus(connection) is CrawlStatus.Running or CrawlStatus.Paused)
+            {
+                throw new InvalidOperationException(
+                    "This crawl is still running, or was interrupted. Finish it with --resume (or stop it) before analysing.");
+            }
+
             CrawlDatabase.Execute(connection, CrawlSchema.ANALYSIS);
-            return new IssueWriter(connection, logger);
+            return new IssueWriter(connection, fileLock, logger);
         }
         catch
         {
-            connection.Dispose();
+            if (connection is not null)
+            {
+                CrawlDatabase.CloseWriter(connection, logger);
+            }
+
+            fileLock.Dispose();
             throw;
         }
     }
@@ -132,6 +155,7 @@ internal sealed class IssueWriter : IDisposable
         finally
         {
             CrawlDatabase.CloseWriter(_connection, _logger);
+            _fileLock.Dispose();
         }
     }
 

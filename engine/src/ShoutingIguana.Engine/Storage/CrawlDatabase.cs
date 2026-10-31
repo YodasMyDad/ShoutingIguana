@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Configuration.Models;
+using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Serialization;
 using SQLitePCL;
 
@@ -123,6 +124,12 @@ public static class CrawlDatabase
         transaction.Commit();
         return true;
     }
+
+    /// <summary>The crawl's status as last stored. A crash leaves Running behind, so Running can also mean interrupted.</summary>
+    internal static CrawlStatus ReadStatus(SqliteConnection connection) =>
+        Scalar(connection, "SELECT status FROM crawl WHERE id = 1") is long status
+            ? (CrawlStatus)status
+            : throw new InvalidOperationException("This file is not a crawl database.");
 
     internal static void Execute(SqliteConnection connection, string sql, SqliteTransaction? transaction = null)
     {

@@ -132,7 +132,7 @@ internal sealed class CrawlSession
 
         try
         {
-            await _writer.UpdateStatusAsync(CrawlStatus.Running, false, _stop.Token).ConfigureAwait(false);
+            // Opening the writer has already marked the crawl running.
             await SeedAsync(_stop.Token).ConfigureAwait(false);
             sitemaps = DiscoverSitemapsAsync(_stop.Token);
             workers =
