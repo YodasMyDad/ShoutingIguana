@@ -211,7 +211,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition SITEMAP_URL_OTHER_HOST = new("sitemap-url-other-host", IssueCategory.Sitemaps, IssueSeverity.Warning,
         "Sitemap lists a URL on another host",
-        "A sitemap lists a URL outside the site, often left over from a move to or from www. Search engines drop such entries unless that host's robots.txt points to the sitemap, so the page it was meant for isn't submitted.",
+        "A sitemap lists a URL on a host other than its own, often left over from a move to or from www, or outside the site altogether. Search engines drop such entries unless that host's robots.txt points to the sitemap, so the page it was meant for isn't submitted.",
         "List the URL as it is on the site's own host now, or remove the entry.");
 
     // Titles

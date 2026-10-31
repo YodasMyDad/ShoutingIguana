@@ -11,9 +11,15 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// Coverage (pages missing from the sitemaps, no sitemap at all) needs a complete crawl with every sitemap read, and
 /// pages missing from the sitemaps can't be judged while a declared sitemap is <see cref="Unreadable"/>.
 /// </summary>
-internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> sitemaps, CrawlOptions options, bool crawlComplete) : ISiteRule
+/// <param name="offHostEntries">
+/// The site's own URLs listed only by sitemaps on another host (<see cref="Storage.AnalysisReader.ReadOffHostSitemapEntries"/>),
+/// such as www.example.com pages in example.com's sitemap. URLs off the site are always on another host.
+/// </param>
+internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> sitemaps, CrawlOptions options, bool crawlComplete,
+    IReadOnlySet<int>? offHostEntries = null) : ISiteRule
 {
     private const int LISTED_FAILURES = 3;
+    private readonly IReadOnlySet<int> _offHostEntries = offHostEntries ?? new HashSet<int>();
 
     /// <summary>
     /// The first sitemap listed in robots.txt or an index that failed for a reason that says nothing about what it
@@ -36,13 +42,13 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
             var url = urls[id];
 
             // sitemaps.org: every URL in a sitemap must be on the sitemap's own host, or search engines drop it.
+            if (url.InSitemap && (!url.IsInternal || _offHostEntries.Contains(id)))
+            {
+                yield return new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, id, url.Fetched ? $"The URL {RuleText.Status(url)}" : "The URL wasn't checked");
+            }
+
             if (!url.IsInternal)
             {
-                if (url.InSitemap)
-                {
-                    yield return new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, id, url.Fetched ? $"The URL {RuleText.Status(url)}" : "The URL wasn't checked");
-                }
-
                 continue;
             }
 

@@ -15,7 +15,9 @@ internal sealed class RuleHarness(string site = "https://example.com")
 {
     private readonly List<UrlStatus> _statuses = [default];
     private readonly Dictionary<string, int> _ids = new(StringComparer.Ordinal);
-    private readonly string _host = new Uri(site).Host;
+
+    // Internal as a crawl from the site's home page sees it: the www twin is the same site.
+    private readonly CrawlScope _scope = new(new Uri(site), includeSubdomains: false, stayInStartFolder: false);
 
     public string Site { get; } = site;
 
@@ -28,7 +30,7 @@ internal sealed class RuleHarness(string site = "https://example.com")
         }
 
         var uri = new Uri(normalized);
-        _statuses.Add(new UrlStatus(Known: true, IsInternal: uri.Host == _host, IsHttps: uri.Scheme == Uri.UriSchemeHttps, Depth: 1,
+        _statuses.Add(new UrlStatus(Known: true, IsInternal: _scope.IsInternal(uri), IsHttps: uri.Scheme == Uri.UriSchemeHttps, Depth: 1,
             Fetched: false, default, 0, IsHtml: false, IsParsed: false, IndexabilityReason.None, 0, null, InSitemap: false,
             IsResource: ResourceTypes.IsResource(normalized, null)));
         _ids[normalized] = _statuses.Count - 1;

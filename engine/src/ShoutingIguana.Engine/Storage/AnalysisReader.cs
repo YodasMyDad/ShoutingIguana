@@ -47,6 +47,36 @@ internal sealed class AnalysisReader : IDisposable
 
     public CrawlStatus ReadStatus() => CrawlDatabase.ReadStatus(_connection);
 
+    /// <summary>
+    /// Sitemap entries on a host (and port) that none of the sitemaps listing them is on (sitemaps.org: search engines
+    /// drop those), apart from entries on <paramref name="startAuthority"/>: the start site's robots.txt declared the
+    /// sitemaps, which the protocol accepts for that site's URLs wherever the sitemap lives.
+    /// </summary>
+    public HashSet<int> ReadOffHostSitemapEntries(string startAuthority)
+    {
+        // Stored URLs are normalised, so the authority runs from "://" to the first "/" after it.
+        static string Authority(string column) =>
+            $"substr({column}, instr({column}, '://') + 3, instr(substr({column}, instr({column}, '://') + 3), '/') - 1)";
+
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT id FROM (
+                SELECT su.url_id AS id, {Authority("u.url")} AS entry, {Authority("s.url")} AS sitemap
+                FROM sitemap_urls su JOIN sitemaps s ON s.id = su.sitemap_id JOIN urls u ON u.id = su.url_id)
+            WHERE entry <> $start
+            GROUP BY id HAVING MAX(entry = sitemap) = 0
+            """;
+        command.Parameters.AddWithValue("$start", startAuthority);
+        HashSet<int> ids = [];
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            ids.Add(reader.GetInt32(0));
+        }
+
+        return ids;
+    }
+
     /// <summary>URLs that were never requested because their host had stopped answering.</summary>
     public int CountNotChecked() =>
         Convert.ToInt32(CrawlDatabase.Scalar(_connection, $"SELECT COUNT(*) FROM responses r WHERE {NOT_CHECKED}"), CultureInfo.InvariantCulture);

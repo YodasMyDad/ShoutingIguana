@@ -114,7 +114,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             [
                 new InlinkRules(urls, linksComplete), new DuplicateRules(settings), new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks), hreflang,
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls),
-                new SitemapRules(urls, sitemaps, options, crawlComplete), new RobotsTxtRules(urls, reader.ReadRobots(), scope, mainOrigins)
+                new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(new Uri(startUrl).Authority)),
+                new RobotsTxtRules(urls, reader.ReadRobots(), scope, mainOrigins)
             ];
 
             writer.AddIndexability(urls.IndexabilityChanges);

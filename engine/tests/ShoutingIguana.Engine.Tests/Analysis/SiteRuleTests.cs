@@ -210,7 +210,7 @@ public sealed class SiteRuleTests
     [Fact]
     public void SitemapEntriesOnAnotherHostAreReportedWithTheirStatus()
     {
-        // A sitemap on example.com still listing www.example.com after a move to the bare domain.
+        // A sitemap on example.com still listing www.example.com after a move to the bare domain, and a partner's page.
         var site = new RuleHarness();
         site.Ok($"{site.Site}/", inSitemap: true);
         var moved = site.Fetched("https://www.example.com/page", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/page", inSitemap: true);
@@ -218,22 +218,30 @@ public sealed class SiteRuleTests
         var gone = site.Fetched("https://www.example.com/gone", FetchOutcome.ClientError, 404, inSitemap: true);
         var fine = site.Fetched("https://www.example.com/fine", FetchOutcome.Success, 200, isHtml: true, inSitemap: true);
         var notChecked = site.Id("https://www.example.com/unchecked");
+        var partner = site.Fetched("https://partner.example/listed", FetchOutcome.Success, 200, inSitemap: true);
         site.Fetched("https://partner.example/linked", FetchOutcome.ClientError, 404);
         var urls = site.Table();
         var statuses = Enumerable.Range(0, urls.Length).Select(id => urls[id]).ToArray();
         statuses[notChecked] = statuses[notChecked] with { InSitemap = true };
-        StoredSitemap[] sitemaps = [new($"{site.Site}/sitemap.xml", 200, false, 6, null)];
+        StoredSitemap[] sitemaps = [new($"{site.Site}/sitemap.xml", 200, false, 7, null)];
 
-        var hits = new SitemapRules(new UrlTable(statuses, urls.StartId), sitemaps, new CrawlOptions { StartUrl = site.Site }, crawlComplete: true)
-            .Finish().Where(hit => hit.Issue == IssueCatalog.SITEMAP_URL_OTHER_HOST).ToList();
+        // The www twin is the same site, so its entries are on another host only because example.com's sitemap lists
+        // them; the reader works that out from where each sitemap lives.
+        Assert.True(urls[moved].IsInternal);
+        var all = new SitemapRules(new UrlTable(statuses, urls.StartId), sitemaps, new CrawlOptions { StartUrl = site.Site }, crawlComplete: true,
+            offHostEntries: new HashSet<int> { moved, gone, fine, notChecked }).Finish().ToList();
 
         Assert.Equal(
         [
             new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, moved, "The URL redirects (HTTP 301)"),
             new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, gone, "The URL returns HTTP 404"),
             new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, fine, "The URL returns HTTP 200"),
-            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, notChecked, "The URL wasn't checked")
-        ], hits);
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, notChecked, "The URL wasn't checked"),
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, partner, "The URL returns HTTP 200")
+        ], all.Where(hit => hit.Issue == IssueCatalog.SITEMAP_URL_OTHER_HOST));
+
+        // Being the site's own URLs, the www ones are judged like any other entry as well.
+        Assert.Contains(all, hit => hit.Issue == IssueCatalog.SITEMAP_NON_INDEXABLE && hit.UrlId == moved);
     }
 
     [Fact]
