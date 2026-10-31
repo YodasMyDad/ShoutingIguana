@@ -5,6 +5,7 @@
     <Project Path="src/ShoutingIguana.TestSite/ShoutingIguana.TestSite.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ShoutingIguana.Cli.Tests/ShoutingIguana.Cli.Tests.csproj" />
     <Project Path="tests/ShoutingIguana.Engine.Tests/ShoutingIguana.Engine.Tests.csproj" />
   </Folder>
 </Solution>

@@ -18,6 +18,7 @@ namespace ShoutingIguana.Engine.Tests.Crawling;
 public sealed class CrawlEngineTests : IAsyncLifetime
 {
     private const int PAGES = 600;
+    private const int VARIANT_PAGES = 250;
     private static readonly TimeSpan CRAWL_TIMEOUT = TimeSpan.FromMinutes(2);
 
     private readonly List<string> _databases = [];
@@ -36,14 +37,42 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task FindsEveryPlantedIssue()
+    public Task FindsEveryPlantedIssue() => AssertFindsExactlyThePlantsAsync(_server, Options());
+
+    [Fact]
+    public async Task FindsEveryPlantedIssueOverHttps()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = VARIANT_PAGES, Https = true });
+        var path = await AssertFindsExactlyThePlantsAsync(server, Options(server) with { TrustedCertificate = server.Certificate });
+
+        // Most real sites are served over HTTP/2, so prove that path works. Kestrel doesn't offer it over TLS on every macOS.
+        if (!OperatingSystem.IsMacOS())
+        {
+            Assert.True(Count(path, "SELECT COUNT(*) FROM responses WHERE http_version = '2.0'") > 0);
+        }
+    }
+
+    [Fact]
+    public async Task ReportsASiteWithoutSitemaps()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = VARIANT_PAGES, Sitemaps = false });
+        await AssertFindsExactlyThePlantsAsync(server, Options(server));
+    }
+
+    /// <summary>Crawls the site and checks the crawl and every issue against what the site planted; returns the crawl file.</summary>
+    private async Task<string> AssertFindsExactlyThePlantsAsync(SyntheticSiteServer server, CrawlOptions options)
     {
         var path = NewDatabasePath();
-        var summary = await CrawlAsync(Options(), path);
+        Assert.Equal(CrawlStatus.Completed, (await CrawlAsync(options, path)).Status);
+        await AssertMatchesThePlantsAsync(server, path);
+        return path;
+    }
 
-        Assert.Equal(CrawlStatus.Completed, summary.Status);
+    /// <summary>Checks a completed crawl of the site, and an analysis of it, against everything the site planted.</summary>
+    private static async Task AssertMatchesThePlantsAsync(SyntheticSiteServer server, string path)
+    {
         var stats = CrawlStatsReader.Read(path);
-        var expected = _server.Site.GetExpectations();
+        var expected = server.Site.GetExpectations();
         Assert.Equal(expected.HtmlPages, stats.HtmlPageCount);
         Assert.Equal(expected.Orphans, stats.UnlinkedPageCount);
         Assert.Equal(expected.Redirects, stats.Outcomes.GetValueOrDefault(FetchOutcome.Redirect));
@@ -56,12 +85,22 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(0, stats.QueuedCount);
         Assert.Equal(0, Count(path, "SELECT COUNT(*) FROM urls WHERE state = 1"));
 
-        // Every planted issue is reported exactly, and nothing else is.
+        // Every planted issue is reported on exactly the planted URLs, and nothing else is.
         var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
         Assert.Equal(expected.AnalysedPages, analysis.PagesAnalyzed);
         Assert.False(analysis.IsPartial);
-        var mismatches = expected.CompareIssues(IssueReader.ReadCounts(path), IssueCatalog.All.Select(issue => issue.Id));
+        var rows = IssueReader.ReadAll(path).ToList();
+        var mismatches = expected.CompareIssues(
+            rows.Select(row => (row.Issue, row.Url)),
+            IssueCatalog.All.Select(issue => issue.Id),
+            CrawlStatsReader.ReadSlowPages(path, new AnalysisSettings().SlowResponseMs));
         Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
+
+        // The per-issue totals the summary shows agree with the flagged rows.
+        var flaggedPerIssue = rows.GroupBy(row => row.Issue).ToDictionary(group => group.Key, group => (long)group.Count());
+        var counts = IssueReader.ReadCounts(path);
+        Assert.Equal(IssueCatalog.All.Count, counts.Count);
+        Assert.All(IssueCatalog.All, issue => Assert.Equal((issue.Id, flaggedPerIssue.GetValueOrDefault(issue.Id)), (issue.Id, counts.GetValueOrDefault(issue.Id))));
     }
 
     [Fact]
@@ -123,28 +162,37 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.False(stats.Outcomes.ContainsKey(FetchOutcome.RobotsDisallowed));
     }
 
-    [Fact]
-    public async Task StoppedCrawlResumesToTheSameResult()
+    /// <summary>Stops early (while sitemaps are still being read) and part-way, then checks the resumed crawl exactly.</summary>
+    [Theory]
+    [InlineData(5)]
+    [InlineData(150)]
+    public async Task StoppedCrawlResumesToTheSameResult(int stopAfter)
     {
         var path = NewDatabasePath();
-        var engine = new CrawlEngine(NullLoggerFactory.Instance);
-
-        await using (var job = engine.Start(new CrawlRequest(Options() with { MaxRequestsPerSecond = 200 }, path)))
-        {
-            var deadline = DateTime.UtcNow + CRAWL_TIMEOUT;
-            while (job.Progress.Fetched < 150 && DateTime.UtcNow < deadline)
-            {
-                await Task.Delay(10);
-            }
-
-            Assert.Equal(CrawlStatus.Stopped, (await job.StopAsync()).Status);
-        }
+        await StopAfterAsync(Options() with { MaxRequestsPerSecond = 200 }, path, stopAfter);
 
         var resumedOptions = CrawlDatabase.ReadOptions(path) with { MaxRequestsPerSecond = 0 };
-        var summary = await CrawlAsync(resumedOptions, path, resume: true);
+        Assert.Equal(CrawlStatus.Completed, (await CrawlAsync(resumedOptions, path, resume: true)).Status);
+        await AssertMatchesThePlantsAsync(_server, path);
 
-        Assert.Equal(CrawlStatus.Completed, summary.Status);
-        Assert.Equal(_server.Site.GetExpectations().HtmlPages, CrawlStatsReader.Read(path).HtmlPageCount);
+        // The same URLs, in the same states, and the same links as a crawl that was never interrupted.
+        var uninterrupted = NewDatabasePath();
+        await CrawlAsync(Options(), uninterrupted);
+        const string URL_STATES = "SELECT url || ' ' || is_internal || ' ' || state || ' ' || skip_reason || ' ' || fetch_mode FROM urls ORDER BY url";
+        Assert.Equal(Strings(uninterrupted, URL_STATES), Strings(path, URL_STATES));
+        Assert.Equal(Count(uninterrupted, "SELECT COUNT(*) FROM links"), Count(path, "SELECT COUNT(*) FROM links"));
+    }
+
+    [Fact]
+    public async Task ResumedCrawlKeepsItsUrlLimit()
+    {
+        var path = NewDatabasePath();
+        await StopAfterAsync(Options() with { MaxUrls = 120, MaxRequestsPerSecond = 200 }, path, 40);
+
+        await CrawlAsync(CrawlDatabase.ReadOptions(path) with { MaxRequestsPerSecond = 0 }, path, resume: true);
+
+        Assert.Equal(120, Count(path, "SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state <> 3"));
+        Assert.True(CrawlStatsReader.Read(path).SkipReasons.GetValueOrDefault(SkipReason.UrlLimit) > 0);
     }
 
     [Fact]
@@ -154,10 +202,14 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         await CrawlAsync(Options() with { MaxUrls = 60 }, path);
         var analyzer = new CrawlAnalyzer(NullLoggerFactory.Instance);
 
+        // Analysing again gives the same rows, replacing the old ones rather than adding to them.
         var first = await analyzer.AnalyzeAsync(path);
+        var firstRows = IssueReader.ReadAll(path).ToList();
         var second = await analyzer.AnalyzeAsync(path);
-        Assert.Equal(first.Issues.Sum(issue => issue.Count), second.Issues.Sum(issue => issue.Count));
+        Assert.NotEmpty(firstRows);
+        Assert.Equal(firstRows, IssueReader.ReadAll(path).ToList());
         Assert.Equal(second.Issues.Sum(issue => issue.Count), Count(path, "SELECT COUNT(*) FROM issues"));
+        Assert.Equal(first.Issues.Select(issue => issue.Count), second.Issues.Select(issue => issue.Count));
         Assert.Equal(IssueCatalog.All.Count, Count(path, "SELECT COUNT(*) FROM issue_types"));
 
         // Stricter thresholds flag more, from the same stored crawl.
@@ -172,6 +224,42 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => analyzer.AnalyzeAsync(path));
         Assert.Equal(strict.Issues.Sum(issue => issue.Count), Count(path, "SELECT COUNT(*) FROM issues"));
+    }
+
+    /// <summary>
+    /// Cancels a re-analysis with stricter settings at a range of moments. Whenever it's cancelled, the file must still
+    /// hold the complete previous results: never a mix, never nothing.
+    /// </summary>
+    [Fact]
+    public async Task CancelledAnalysisKeepsThePreviousResults()
+    {
+        var path = NewDatabasePath();
+        await CrawlAsync(Options(), path);
+        var analyzer = new CrawlAnalyzer(NullLoggerFactory.Instance);
+        var strict = new AnalysisSettings { TitleMinLength = 10, TitleMaxLength = 20 };
+        await analyzer.AnalyzeAsync(path);
+        var previous = IssueReader.ReadAll(path).ToList();
+        Assert.NotEqual(previous.Count, (await analyzer.AnalyzeAsync(path, strict)).Issues.Sum(issue => issue.Count));
+        await analyzer.AnalyzeAsync(path);
+
+        var cancellations = 0;
+        foreach (var delayMs in new[] { 0, 1, 2, 5, 10, 20, 40, 80, 160 })
+        {
+            using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(delayMs));
+            try
+            {
+                await analyzer.AnalyzeAsync(path, strict, cancel.Token);
+                await analyzer.AnalyzeAsync(path);
+            }
+            catch (OperationCanceledException)
+            {
+                cancellations++;
+                Assert.Equal(previous, IssueReader.ReadAll(path).ToList());
+                Assert.Equal(previous.Count, IssueReader.ReadCounts(path).Values.Sum());
+            }
+        }
+
+        Assert.True(cancellations > 0);
     }
 
     [Fact]
@@ -192,7 +280,9 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Throws<ArgumentException>(() => engine.Start(new CrawlRequest(new CrawlOptions { StartUrl = "ftp://example.com" }, NewDatabasePath())));
     }
 
-    private CrawlOptions Options() => new() { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 8 };
+    private CrawlOptions Options() => Options(_server);
+
+    private static CrawlOptions Options(SyntheticSiteServer server) => new() { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 };
 
     private static async Task<CrawlSummary> CrawlAsync(CrawlOptions options, string path, bool resume = false)
     {
@@ -214,4 +304,32 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     }
 
     private static long Depth(string path, string url) => Count(path, $"SELECT depth FROM urls WHERE url = '{url}'");
+
+    private static List<string> Strings(string path, string sql)
+    {
+        using var connection = CrawlDatabase.OpenReader(path);
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        List<string> values = [];
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            values.Add(reader.GetString(0));
+        }
+
+        return values;
+    }
+
+    /// <summary>Starts a crawl and stops it once it has fetched the given number of URLs.</summary>
+    private static async Task StopAfterAsync(CrawlOptions options, string path, int fetched)
+    {
+        await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path));
+        var deadline = DateTime.UtcNow + CRAWL_TIMEOUT;
+        while (job.Progress.Fetched < fetched && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(5);
+        }
+
+        Assert.Equal(CrawlStatus.Stopped, (await job.StopAsync()).Status);
+    }
 }

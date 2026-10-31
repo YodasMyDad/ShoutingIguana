@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Configuration.Models;
@@ -7,6 +8,9 @@ namespace ShoutingIguana.Engine.Configuration.Models;
 /// </summary>
 public sealed record CrawlOptions
 {
+    /// <summary>Stands in for proxy credentials that <see cref="WithoutSecrets"/> removed.</summary>
+    public const string REDACTED = "***";
+
     public required string StartUrl { get; init; }
 
     /// <summary>Maximum internal URLs to fetch (pages and resources). 0 means unlimited.</summary>
@@ -52,6 +56,25 @@ public sealed record CrawlOptions
     public int RequestTimeoutSeconds { get; init; } = 20;
     public int MaxRetries { get; init; } = 2;
     public int MaxHtmlBytes { get; init; } = 8 * 1024 * 1024;
+
+    /// <summary>Tests only: also accept this self-signed certificate, which the HTTPS synthetic site serves.</summary>
+    internal X509Certificate2? TrustedCertificate { get; init; }
+
+    /// <summary>
+    /// What a crawl file stores, since people share them: header names without their values, and the proxy without
+    /// its credentials (<see cref="REDACTED"/> takes their place). Whoever resumes the crawl supplies them again.
+    /// </summary>
+    public CrawlOptions WithoutSecrets() => this with
+    {
+        ExtraHeaders = ExtraHeaders.ToDictionary(header => header.Key, _ => string.Empty, StringComparer.OrdinalIgnoreCase),
+        ProxyUrl = ProxyUrl is not null && Uri.TryCreate(ProxyUrl, UriKind.Absolute, out var proxy) && proxy.UserInfo.Length > 0
+            ? new UriBuilder(proxy) { UserName = REDACTED, Password = string.Empty }.Uri.AbsoluteUri
+            : ProxyUrl
+    };
+
+    /// <summary>True when the proxy's credentials were removed by <see cref="WithoutSecrets"/>.</summary>
+    public bool HasRedactedProxyCredentials =>
+        ProxyUrl is not null && Uri.TryCreate(ProxyUrl, UriKind.Absolute, out var proxy) && proxy.UserInfo == REDACTED;
 
     public IReadOnlyList<string> Validate()
     {

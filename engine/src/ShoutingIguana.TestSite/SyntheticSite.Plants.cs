@@ -230,6 +230,23 @@ public sealed partial class SyntheticSite
         Other("gone-redirect", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone-redirect"));
         plants.Add(new Plant("/img/missing.jpg", 404, Linked: false, InSitemap: false, ["internal-client-error"], () => NotFound("/img/missing.jpg")));
 
+        if (IsHttps)
+        {
+            // A page still answering over plain HTTP on the same host, with no redirect to HTTPS. Its base element points
+            // at the HTTPS site, so its links don't lead the crawler into a second, plain-HTTP copy of the shop.
+            var insecure = PlantPage("http-page", "Plain HTTP page");
+            var insecureUrl = "http" + _base["https".Length..] + insecure.Path;
+            var insecureHtml = Render(insecure with { Canonical = insecureUrl, ExtraHead = $"<base href=\"{_base}/\">" });
+            plants.Add(new Plant(insecure.Path, 200, Linked: true, InSitemap: true, ["http-page"],
+                () => new SyntheticResponse(200, HTML, insecureHtml, null, null, SECURITY_HEADERS), Url: insecureUrl));
+
+            Page("mixed-content", "Mixed content", ["mixed-content"], page => page with
+            {
+                Content = page.Content + $"<img src=\"{_external}/ext/img/1.jpg\" alt=\"A photo served over plain HTTP\" width=\"400\" height=\"300\">"
+            });
+            Other("downgrade", 301, linked: true, ["redirect-downgrade"], () => Redirect(301, $"{_external}/ext/plain-http"));
+        }
+
         // The hub links to the redirect loop and the unreachable URL, so it carries those link issues itself.
         plants.Add(new Plant(PLANTS_PATH, 200, Linked: false, InSitemap: true, ["links-to-redirects", "broken-internal-links"], () => Html(RenderPlantsHub())));
         return plants;
@@ -247,7 +264,7 @@ public sealed partial class SyntheticSite
     private string RenderPlantsHub()
     {
         var links = string.Concat(_plants.Where(plant => plant.Linked)
-            .Select(plant => $"<li><a href=\"{plant.Path}\">Planted page {plant.Path[PLANTS_PATH.Length..]}</a></li>"));
+            .Select(plant => $"<li><a href=\"{plant.Url ?? plant.Path}\">Planted page {plant.Path[PLANTS_PATH.Length..]}</a></li>"));
         return Render(new PageSpec
         {
             Path = PLANTS_PATH,

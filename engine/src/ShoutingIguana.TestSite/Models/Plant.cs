@@ -7,6 +7,7 @@ namespace ShoutingIguana.TestSite.Models;
 /// <param name="Issues">Issue ids the analysis reports for this URL.</param>
 /// <param name="IsPage">A 200 HTML page the crawler parses. An iframe's page is only status-checked.</param>
 /// <param name="IsAnalysed">A parsed page the analysis audits. Cloudflare's /cdn-cgi/ endpoints aren't.</param>
+/// <param name="Url">The absolute URL to link, list and expect issues on, when it isn't the site's base plus the path (an http:// page of the HTTPS site).</param>
 internal sealed record Plant(
     string Path,
     int Status,
@@ -15,4 +16,5 @@ internal sealed record Plant(
     IReadOnlyList<string> Issues,
     Func<SyntheticResponse> Respond,
     bool IsPage = true,
-    bool IsAnalysed = true);
+    bool IsAnalysed = true,
+    string? Url = null);

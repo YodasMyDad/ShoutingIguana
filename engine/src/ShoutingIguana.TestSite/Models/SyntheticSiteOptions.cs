@@ -12,4 +12,13 @@ public sealed record SyntheticSiteOptions
 
     /// <summary>Gzip HTML/XML/CSS/JS responses, as most real sites do.</summary>
     public bool Compress { get; init; } = true;
+
+    /// <summary>
+    /// Serve the site over HTTPS with a self-signed certificate (<see cref="SyntheticSiteServer.Certificate"/>), plus
+    /// plain HTTP on the same port, and plant the checks that only apply to HTTPS sites. The external site stays HTTP.
+    /// </summary>
+    public bool Https { get; init; }
+
+    /// <summary>Declare sitemaps in robots.txt and serve them. Without them the orphan pages can't be found.</summary>
+    public bool Sitemaps { get; init; } = true;
 }

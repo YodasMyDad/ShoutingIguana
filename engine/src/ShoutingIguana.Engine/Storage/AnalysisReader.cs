@@ -19,7 +19,7 @@ internal sealed class AnalysisReader : IDisposable
     /// A page of the site to audit: its HTML was parsed (status-checked URLs have no word count), and it isn't one of
     /// Cloudflare's /cdn-cgi/ endpoints, such as the email-protection page every obfuscated address links to.
     /// </summary>
-    private const string SITE_PAGE = "r.word_count IS NOT NULL AND instr(u.url, '/cdn-cgi/') = 0";
+    internal const string SITE_PAGE = "r.word_count IS NOT NULL AND instr(u.url, '/cdn-cgi/') = 0";
 
     private readonly SqliteConnection _connection;
     private readonly SqliteCommand _links;

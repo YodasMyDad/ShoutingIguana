@@ -7,13 +7,15 @@ namespace ShoutingIguana.Cli.Commands;
 
 internal static class AnalyzeCommand
 {
+    public const int CANCELLED = 130;
+
     public static Command Create()
     {
         var database = new Argument<string>("db") { Description = "A .sicrawl file." };
         var verbose = new Option<bool>("--verbose", "-v") { Description = "Detailed engine logging." };
         var command = new Command("analyze", "Run the SEO checks over a stored crawl (again), replacing its issues.") { database, verbose };
 
-        command.SetAction(async (parse, cancellationToken) =>
+        command.SetAction((parse, cancellationToken) => CommandErrors.RunAsync(async () =>
         {
             var path = parse.GetValue(database)!;
             if (!File.Exists(path))
@@ -23,14 +25,17 @@ internal static class AnalyzeCommand
             }
 
             using var loggerFactory = Logging.Create(parse.GetValue(verbose));
-            return await RunAsync(path, loggerFactory, cancellationToken) ? 0 : 1;
-        });
+            return await RunAsync(path, loggerFactory, cancellationToken);
+        }));
 
         return command;
     }
 
-    /// <summary>Analyses a crawl and prints the summary. Shared with the crawl command, which analyses when it finishes.</summary>
-    public static async Task<bool> RunAsync(string path, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
+    /// <summary>
+    /// Analyses a crawl and prints the summary; returns the exit code. Shared with the crawl command, which analyses
+    /// when it finishes. A cancelled analysis keeps the previous results.
+    /// </summary>
+    public static async Task<int> RunAsync(string path, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
     {
         try
         {
@@ -41,12 +46,12 @@ internal static class AnalyzeCommand
                 Console.WriteLine("  The crawl didn't finish, so orphan and sitemap-coverage checks were skipped.");
             }
             IssueSummaryPrinter.Print(summary.Issues);
-            return true;
+            return 0;
         }
-        catch (InvalidOperationException exception)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            Console.Error.WriteLine(exception.Message);
-            return false;
+            Console.Error.WriteLine("Analysis cancelled; the results of the previous analysis, if any, are unchanged.");
+            return CANCELLED;
         }
     }
 }

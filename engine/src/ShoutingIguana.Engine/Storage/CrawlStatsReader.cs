@@ -60,7 +60,8 @@ public static class CrawlStatsReader
             InternalUrlCount = internalUrls,
             QueuedCount = queued,
             LinkCount = Count(connection, "SELECT COUNT(*) FROM links"),
-            SitemapCount = Count(connection, "SELECT COUNT(*) FROM sitemaps"),
+            SitemapCount = Count(connection, "SELECT COUNT(*) FROM sitemaps WHERE error IS NULL"),
+            SitemapErrorCount = Count(connection, "SELECT COUNT(*) FROM sitemaps WHERE error IS NOT NULL AND is_probe = 0"),
             SitemapUrlCount = Count(connection, "SELECT COUNT(DISTINCT url_id) FROM sitemap_urls"),
             UnlinkedPageCount = Count(connection, $"""
                 SELECT COUNT(*) FROM urls u JOIN responses r ON r.url_id = u.id
@@ -78,6 +79,31 @@ public static class CrawlStatsReader
                 WHERE u.is_internal = 1 AND r.indexability = 1 GROUP BY r.indexability_reason
                 """, value => (IndexabilityReason)value)
         };
+    }
+
+    /// <summary>
+    /// Pages the analysis audits whose response took longer than <paramref name="thresholdMs"/>, in crawl order. How
+    /// slow a page is depends on the machine, so tests use this to check the slow-response issue exactly.
+    /// </summary>
+    public static IReadOnlyList<string> ReadSlowPages(string databasePath, int thresholdMs)
+    {
+        using var connection = CrawlDatabase.OpenReader(databasePath);
+        using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT u.url FROM responses r JOIN urls u ON u.id = r.url_id
+            WHERE u.is_internal = 1 AND r.is_html = 1 AND r.outcome = {(int)FetchOutcome.Success} AND {AnalysisReader.SITE_PAGE}
+              AND r.response_ms > $threshold
+            ORDER BY u.id
+            """;
+        command.Parameters.AddWithValue("$threshold", thresholdMs);
+        List<string> urls = [];
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            urls.Add(reader.GetString(0));
+        }
+
+        return urls;
     }
 
     private static long Count(SqliteConnection connection, string sql) =>

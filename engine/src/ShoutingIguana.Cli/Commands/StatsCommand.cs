@@ -12,7 +12,7 @@ internal static class StatsCommand
         var database = new Argument<string>("db") { Description = "A .sicrawl file." };
         var command = new Command("stats", "Summarise a stored crawl.") { database };
 
-        command.SetAction(parse =>
+        command.SetAction(parse => CommandErrors.Run(() =>
         {
             var path = parse.GetValue(database)!;
             if (!File.Exists(path))
@@ -27,7 +27,10 @@ internal static class StatsCommand
             Console.WriteLine($"  URLs          {stats.UrlCount:N0} known, {stats.InternalUrlCount:N0} internal, {stats.QueuedCount:N0} still queued");
             Console.WriteLine($"  Pages         {stats.HtmlPageCount:N0} HTML pages, {stats.IndexablePageCount:N0} indexable, {stats.UnlinkedPageCount:N0} only in sitemaps");
             Console.WriteLine($"  Links         {stats.LinkCount:N0}");
-            Console.WriteLine($"  Sitemaps      {stats.SitemapCount:N0} files listing {stats.SitemapUrlCount:N0} URLs");
+            var sitemapErrors = stats.SitemapErrorCount > 0 ? $", {stats.SitemapErrorCount:N0} couldn't be read" : string.Empty;
+            Console.WriteLine(stats.SitemapCount + stats.SitemapErrorCount == 0
+                ? "  Sitemaps      none found"
+                : $"  Sitemaps      {stats.SitemapCount:N0} read, listing {stats.SitemapUrlCount:N0} URLs{sitemapErrors}");
             Console.WriteLine($"  Speed         {stats.AverageResponseMs:N0} ms average page response, {Format.Bytes(stats.TotalBytes)} of HTML");
             Console.WriteLine($"  Database      {Format.Bytes(new FileInfo(path).Length)}");
 
@@ -41,7 +44,7 @@ internal static class StatsCommand
             }
 
             return 0;
-        });
+        }));
 
         return command;
     }

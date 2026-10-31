@@ -19,4 +19,8 @@
         <ProjectReference Include="..\ShoutingIguana.TestSite\ShoutingIguana.TestSite.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="ShoutingIguana.Cli.Tests" />
+    </ItemGroup>
+
 </Project>

@@ -75,6 +75,8 @@ public sealed partial class SyntheticSite
 
     public int PageCount => _options.PageCount;
 
+    private bool IsHttps => _base.StartsWith("https:", StringComparison.Ordinal);
+
     public int OrphanCount => Math.Max(1, _options.PageCount / 100);
 
     private int ChunkCount => (PageCount + SITEMAP_CHUNK_SIZE - 1) / SITEMAP_CHUNK_SIZE;
@@ -83,6 +85,11 @@ public sealed partial class SyntheticSite
     {
         if (external)
         {
+            if (path.StartsWith("/ext/img/", StringComparison.Ordinal))
+            {
+                return new SyntheticResponse(200, "image/jpeg", null, IMAGE_BYTES, null);
+            }
+
             return path.StartsWith("/ext/", StringComparison.Ordinal)
                 ? Html(RenderSimple("Partner site", "An external site linked from the shop.", path))
                 : NotFound(path);
@@ -96,25 +103,26 @@ public sealed partial class SyntheticSite
         // robots.txt names /sitemap.xml, which redirects to the index, as Yoast sites do.
         if (path == "/robots.txt")
         {
-            return new SyntheticResponse(200, "text/plain; charset=utf-8", $"User-agent: *\nDisallow: /private/\n\nSitemap: {_base}/sitemap.xml\n", null, null);
+            var sitemap = _options.Sitemaps ? $"\nSitemap: {_base}/sitemap.xml\n" : string.Empty;
+            return new SyntheticResponse(200, "text/plain; charset=utf-8", $"User-agent: *\nDisallow: /private/\n{sitemap}", null, null);
         }
 
-        if (path == "/sitemap.xml")
+        if (_options.Sitemaps && path == "/sitemap.xml")
         {
             return Redirect(301, "/sitemap_index.xml");
         }
 
-        if (path == "/sitemap_index.xml")
+        if (_options.Sitemaps && path == "/sitemap_index.xml")
         {
             return Xml(RenderSitemapIndex());
         }
 
-        if (path == "/sitemaps/extra.xml")
+        if (_options.Sitemaps && path == "/sitemaps/extra.xml")
         {
             return Xml(RenderExtraSitemap());
         }
 
-        if (TryNumber(path, "/sitemaps/pages-", ".xml", out var chunk) && chunk < ChunkCount)
+        if (_options.Sitemaps && TryNumber(path, "/sitemaps/pages-", ".xml", out var chunk) && chunk < ChunkCount)
         {
             return Xml(RenderPagesSitemap(chunk));
         }
@@ -189,61 +197,71 @@ public sealed partial class SyntheticSite
 
     public SyntheticSiteExpectations GetExpectations()
     {
-        HashSet<string> broken = [], errors = [], redirects = [], chains = [], disallowed = [], hidden = [], externalOk = [], externalMissing = [], images = [];
-        int noindex = 0, canonicalised = 0, listedNonIndexable = 0, canonicalToNonIndexable = 0, duplicateTitles = 0, missingDescriptions = 0, missingAlt = 0;
-        int linksToBroken = 0, linksToRedirects = 0, linksNofollow = 0, linksToDeadExternals = 0;
+        HashSet<string> broken = [], errors = [], redirects = [], disallowed = [], hidden = [], externalOk = [], externalMissing = [], images = [];
+        Dictionary<string, HashSet<string>> issues = new(StringComparer.Ordinal);
+
+        // Paths are on this site; links to the external site are already absolute.
+        void Flag(string issue, string pathOrUrl)
+        {
+            if (!issues.TryGetValue(issue, out var urls))
+            {
+                issues[issue] = urls = new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            urls.Add(pathOrUrl.StartsWith('/') ? _base + pathOrUrl : pathOrUrl);
+        }
 
         for (var product = 1; product < PageCount; product++)
         {
-            bool toBroken = false, toRedirect = false, nofollow = false, toDeadExternal = false;
+            var path = $"/p/{product}";
             foreach (var (href, _, _) in ContentLinks(product))
             {
                 if (href.StartsWith("/broken/", StringComparison.Ordinal))
                 {
                     broken.Add(href);
-                    toBroken = true;
+                    Flag("internal-client-error", href);
+                    Flag("broken-internal-links", path);
                 }
                 else if (href.StartsWith("/err/", StringComparison.Ordinal))
                 {
                     errors.Add(href);
-                    toBroken = true;
+                    Flag("internal-server-error", href);
+                    Flag("broken-internal-links", path);
                 }
                 else if (href.StartsWith("/r/", StringComparison.Ordinal))
                 {
                     redirects.Add(href);
-                    toRedirect = true;
+                    Flag("links-to-redirects", path);
                 }
                 else if (href.StartsWith("/r2/", StringComparison.Ordinal))
                 {
+                    // A 302 to a 301: a chain, and a temporary redirect.
                     redirects.Add(href);
                     redirects.Add("/r/" + href[4..]);
-                    chains.Add(href);
-                    toRedirect = true;
+                    Flag("redirect-chain", href);
+                    Flag("redirect-temporary", href);
+                    Flag("links-to-redirects", path);
                 }
                 else if (href.StartsWith("/private/", StringComparison.Ordinal))
                 {
                     disallowed.Add(href);
+                    Flag("blocked-by-robots", href);
                 }
                 else if (href.StartsWith("/hidden/", StringComparison.Ordinal))
                 {
                     hidden.Add(href);
-                    nofollow = true;
+                    Flag("internal-nofollow-links", path);
                 }
                 else if (href.Contains("/ext-missing/", StringComparison.Ordinal))
                 {
                     externalMissing.Add(href);
-                    toDeadExternal = true;
+                    Flag("broken-external-links", path);
                 }
                 else if (href.Contains("/ext/", StringComparison.Ordinal))
                 {
                     externalOk.Add(href);
                 }
             }
-
-            linksToBroken += toBroken ? 1 : 0;
-            linksToRedirects += toRedirect ? 1 : 0;
-            linksNofollow += nofollow ? 1 : 0;
-            linksToDeadExternals += toDeadExternal ? 1 : 0;
 
             for (var image = 0; image < 3; image++)
             {
@@ -252,74 +270,81 @@ public sealed partial class SyntheticSite
 
             if (IsNoindex(product))
             {
-                noindex++;
+                Flag("noindex-page", path);
             }
             else if (IsCanonicalised(product))
             {
-                canonicalised++;
+                Flag("canonicalised-page", path);
             }
 
             // Every product is in a sitemap, so each non-indexable one is a sitemap issue.
-            listedNonIndexable += IsIndexable(product) ? 0 : 1;
+            if (_options.Sitemaps && !IsIndexable(product))
+            {
+                Flag("sitemap-non-indexable", path);
+            }
 
             if (IsCanonicalised(product) && !IsIndexable(product - 1))
             {
-                canonicalToNonIndexable++;
+                Flag("canonical-to-non-indexable", path);
             }
 
             // Content checks only look at indexable pages, so a pair counts only when both are indexable.
             if (HasDuplicateTitle(product) && IsIndexable(product) && IsIndexable(product - 1))
             {
-                duplicateTitles += 2;
+                Flag("title-duplicate", path);
+                Flag("title-duplicate", $"/p/{product - 1}");
             }
 
             if (MissesDescription(product) && IsIndexable(product))
             {
-                missingDescriptions++;
+                Flag("description-missing", path);
             }
 
             if (MissesAlt(product))
             {
-                missingAlt++;
+                Flag("image-missing-alt", path);
             }
         }
 
-        Dictionary<string, int> issues = new(StringComparer.Ordinal)
-        {
-            ["no-https"] = _base.StartsWith("https:", StringComparison.Ordinal) ? 0 : 1,
-            ["sitemap-error"] = 1,
-            ["orphan-page"] = OrphanCount,
-            ["not-in-sitemap"] = CATEGORY_COUNT,
-            ["internal-client-error"] = broken.Count,
-            ["internal-server-error"] = errors.Count,
-            ["blocked-by-robots"] = disallowed.Count,
-            ["redirect-chain"] = chains.Count,
-            ["redirect-temporary"] = chains.Count,
-            ["broken-internal-links"] = linksToBroken,
-            ["links-to-redirects"] = linksToRedirects,
-            ["internal-nofollow-links"] = linksNofollow,
-            ["broken-external-links"] = linksToDeadExternals,
-            ["noindex-page"] = noindex,
-            ["canonicalised-page"] = canonicalised,
-            ["canonical-to-non-indexable"] = canonicalToNonIndexable,
-            ["sitemap-non-indexable"] = listedNonIndexable,
-            ["title-duplicate"] = duplicateTitles,
-            ["description-missing"] = missingDescriptions,
-            ["image-missing-alt"] = missingAlt
-        };
+        // Site-wide findings go on the home page: plain HTTP, or over HTTPS the missing Strict-Transport-Security header.
+        Flag(IsHttps ? "security-headers-missing" : "no-https", "/");
 
-        foreach (var issue in _plants.SelectMany(plant => plant.Issues))
+        if (_options.Sitemaps)
         {
-            issues[issue] = issues.GetValueOrDefault(issue) + 1;
+            // The sitemap index lists a file that doesn't exist, and the orphans are only in the extra sitemap.
+            Flag("sitemap-error", "/");
+            for (var orphan = 0; orphan < OrphanCount; orphan++)
+            {
+                Flag("orphan-page", $"/orphan/{orphan}");
+            }
+
+            // Categories are linked from every page but listed in no sitemap.
+            for (var category = 0; category < CATEGORY_COUNT; category++)
+            {
+                Flag("not-in-sitemap", $"/c/{category}");
+            }
+        }
+        else
+        {
+            Flag("sitemap-missing", "/");
+        }
+
+        foreach (var plant in _plants)
+        {
+            foreach (var issue in plant.Issues)
+            {
+                Flag(issue, plant.Url ?? plant.Path);
+            }
         }
 
         var products = PageCount - 1;
-        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + OrphanCount + _plants.Count(plant => plant is { Status: 200, IsPage: true });
+        var orphans = _options.Sitemaps ? OrphanCount : 0;
+        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + _plants.Count(plant => plant is { Status: 200, IsPage: true });
         return new SyntheticSiteExpectations(
             HtmlPages: htmlPages,
             AnalysedPages: htmlPages - _plants.Count(plant => plant is { Status: 200, IsPage: true, IsAnalysed: false }),
             Products: products,
-            Orphans: OrphanCount,
+            Orphans: orphans,
             BrokenUrls: broken.Count + _plants.Count(plant => plant.Status == 404),
             ServerErrorUrls: errors.Count,
             Redirects: redirects.Count + _plants.Count(plant => plant.Status is >= 300 and < 400),
@@ -328,13 +353,16 @@ public sealed partial class SyntheticSite
             ExternalOk: externalOk.Count,
             ExternalMissing: externalMissing.Count,
             Images: images.Count,
-            Noindex: noindex + _plants.Count(plant => plant.Issues.Contains("noindex-page")),
-            Canonicalised: canonicalised + _plants.Count(plant => plant.Issues.Contains("canonicalised-page")),
-            DuplicateTitlePages: duplicateTitles,
-            MissingDescriptions: missingDescriptions,
-            ImagesMissingAlt: missingAlt,
-            Issues: issues);
+            Noindex: Count(issues, "noindex-page"),
+            Canonicalised: Count(issues, "canonicalised-page"),
+            DuplicateTitlePages: Count(issues, "title-duplicate") - _plants.Count(plant => plant.Issues.Contains("title-duplicate")),
+            MissingDescriptions: Count(issues, "description-missing") - _plants.Count(plant => plant.Issues.Contains("description-missing")),
+            ImagesMissingAlt: Count(issues, "image-missing-alt") - _plants.Count(plant => plant.Issues.Contains("image-missing-alt")),
+            IssueUrls: issues.ToDictionary(pair => pair.Key, IReadOnlySet<string> (pair) => pair.Value, StringComparer.Ordinal));
     }
+
+    private static int Count(Dictionary<string, HashSet<string>> issues, string issue) =>
+        issues.TryGetValue(issue, out var urls) ? urls.Count : 0;
 
     /// <summary>Exact number of content-area links on a product page, for link-count assertions.</summary>
     public int ContentLinkCount(int product) => ContentLinks(product).Count();
@@ -627,7 +655,7 @@ public sealed partial class SyntheticSite
 
         foreach (var plant in _plants.Where(plant => plant.InSitemap))
         {
-            xml.Append("<url><loc>").Append(_base).Append(plant.Path).Append("</loc></url>");
+            xml.Append("<url><loc>").Append(plant.Url ?? _base + plant.Path).Append("</loc></url>");
         }
 
         return xml.Append("</urlset>").ToString();

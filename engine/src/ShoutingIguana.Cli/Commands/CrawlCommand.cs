@@ -45,12 +45,20 @@ internal static class CrawlCommand
             noAnalyze, quiet, verbose
         };
 
-        command.SetAction(async (parse, cancellationToken) =>
+        // A resumed crawl keeps the scope and rules it started with; only how it talks to the site can change.
+        Option[] fixedOnResume = [maxUrls, maxDepth, userAgent, userAgentString, ignoreRobots, crawlDelay, noResources, noExternal,
+            noSitemaps, subdomains, anyFolder, followNofollow, storeHtml];
+
+        command.SetAction((parse, cancellationToken) => CommandErrors.RunAsync(async () =>
         {
             var databasePath = parse.GetValue(database);
             var isResume = parse.GetValue(resume);
-            CrawlOptions options;
+            if (!TryParseHeaders(parse.GetValue(headers) ?? [], out var extraHeaders, out var headerError))
+            {
+                return Fail(headerError);
+            }
 
+            CrawlOptions options;
             if (isResume)
             {
                 if (databasePath is null || !File.Exists(databasePath))
@@ -58,11 +66,41 @@ internal static class CrawlCommand
                     return Fail("--resume needs --db pointing at an existing crawl file.");
                 }
 
+                List<string> unchangeable = [.. fixedOnResume.Where(option => parse.GetResult(option) is { Implicit: false }).Select(option => option.Name)];
+                if (parse.GetValue(url) is not null)
+                {
+                    unchangeable.Insert(0, "the start URL");
+                }
+
+                if (unchangeable.Count > 0)
+                {
+                    return Fail($"{string.Join(", ", unchangeable)} can't change when resuming: a crawl keeps the settings it started with. " +
+                                "When resuming you can change --concurrency, --rate, --timeout, --header and --proxy.");
+                }
+
                 var stored = CrawlDatabase.ReadOptions(databasePath);
+                var proxyUrl = parse.GetValue(proxy) ?? stored.ProxyUrl;
+                if (parse.GetValue(proxy) is null && stored.HasRedactedProxyCredentials)
+                {
+                    return Fail("This crawl used a proxy with a user name and password, which crawl files don't store. Pass --proxy again.");
+                }
+
+                // Header values aren't stored either: warn about any that weren't given again, rather than send them empty.
+                var notResent = stored.ExtraHeaders.Keys.Where(name => !extraHeaders.ContainsKey(name)).ToList();
+                if (notResent.Count > 0)
+                {
+                    Console.Error.WriteLine($"Warning: this crawl was started with the header{(notResent.Count == 1 ? string.Empty : "s")} " +
+                                            $"{string.Join(", ", notResent)}, which crawl files don't store. Pass {(notResent.Count == 1 ? "it" : "them")} " +
+                                            "again with --header to keep sending them.");
+                }
+
                 options = stored with
                 {
                     Concurrency = parse.GetValue(concurrency) ?? stored.Concurrency,
-                    MaxRequestsPerSecond = parse.GetValue(rate) ?? stored.MaxRequestsPerSecond
+                    MaxRequestsPerSecond = parse.GetValue(rate) ?? stored.MaxRequestsPerSecond,
+                    RequestTimeoutSeconds = parse.GetValue(timeout) ?? stored.RequestTimeoutSeconds,
+                    ExtraHeaders = extraHeaders,
+                    ProxyUrl = proxyUrl
                 };
             }
             else
@@ -71,11 +109,6 @@ internal static class CrawlCommand
                 if (startUrl is null)
                 {
                     return Fail("Give a start URL, or --resume with --db.");
-                }
-
-                if (!TryParseHeaders(parse.GetValue(headers) ?? [], out var extraHeaders, out var headerError))
-                {
-                    return Fail(headerError);
                 }
 
                 var defaults = new CrawlOptions { StartUrl = startUrl };
@@ -129,16 +162,16 @@ internal static class CrawlCommand
             if (summary.Status == CrawlStatus.Completed && !parse.GetValue(noAnalyze))
             {
                 Console.WriteLine();
-                await AnalyzeCommand.RunAsync(databasePath, loggerFactory, cancellationToken);
+                return await AnalyzeCommand.RunAsync(databasePath, loggerFactory, cancellationToken);
             }
 
             return summary.Status switch
             {
                 CrawlStatus.Completed => 0,
-                CrawlStatus.Stopped => 130,
+                CrawlStatus.Stopped => AnalyzeCommand.CANCELLED,
                 _ => 1
             };
-        });
+        }));
 
         return command;
     }
@@ -162,10 +195,12 @@ internal static class CrawlCommand
         return true;
     }
 
-    private static string DefaultDatabasePath(string startUrl)
+    /// <summary>host-timestamp.sicrawl, with characters no file system allows in a name (an IPv6 host's colons) replaced.</summary>
+    internal static string DefaultDatabasePath(string startUrl)
     {
         var host = UrlNormalizer.TryNormalize(startUrl, out var normalized) ? new Uri(normalized).Host : "crawl";
-        return $"{host}-{DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}.sicrawl";
+        var name = string.Concat(host.Select(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '-')).Trim('-');
+        return $"{(name.Length == 0 ? "crawl" : name)}-{DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}.sicrawl";
     }
 
     private static int Fail(string message)

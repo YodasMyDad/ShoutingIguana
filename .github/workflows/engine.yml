@@ -3,12 +3,13 @@
 # issue, memory grows as the crawl grows, or throughput collapses.
 name: Engine (v2)
 
+# The engine's Directory.Build.props imports the root one, so a change there can break the engine too.
 on:
   push:
     branches: [v2]
-    paths: ['engine/**', '.github/workflows/engine.yml']
+    paths: ['engine/**', 'Directory.Build.props', '.github/workflows/engine.yml']
   pull_request:
-    paths: ['engine/**', '.github/workflows/engine.yml']
+    paths: ['engine/**', 'Directory.Build.props', '.github/workflows/engine.yml']
   workflow_dispatch:
 
 jobs:
@@ -19,23 +20,28 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: engine
     steps:
       - uses: actions/checkout@v4
 
+      # Warnings are errors, so the SDK is pinned to a feature band: a new band's analyzers arrive by choice, not
+      # on an unrelated push. Bump it deliberately.
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '10.0.4xx'
 
+      # A hung test fails the run after 10 minutes, naming the test, instead of holding the runner for hours.
       - name: Test
-        run: dotnet test ShoutingIguana.Engine.slnx -c Release
+        run: dotnet test ShoutingIguana.Engine.slnx -c Release --blame-hang-timeout 10m --blame-hang-dump-type none
 
   benchmark:
     name: 100k-page benchmark
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: engine
@@ -44,18 +50,18 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '10.0.4xx'
 
       - name: Build CLI
         run: dotnet build src/ShoutingIguana.Cli/ShoutingIguana.Cli.csproj -c Release
 
-      # Thresholds leave headroom for a 4-core runner. Locally (32 cores) the same crawl runs at
-      # ~3,000 pages/s with a 166 MB peak and no growth.
+      # Thresholds leave headroom for a 4-core runner, which crawls ~1,100 pages/s with a ~190 MB peak and
+      # ~40 bytes of growth per URL. A per-URL leak of a few hundred bytes, or a halving of speed, fails the run.
       - name: Crawl a generated 100,000-page site
         run: >
           dotnet src/ShoutingIguana.Cli/bin/Release/net10.0/si.dll bench
           --pages 100000 --concurrency 16
-          --max-peak-mb 400 --max-growth-mb 100 --min-pages-per-sec 250
+          --max-peak-mb 400 --max-growth-mb 100 --max-growth-bytes-per-url 250 --min-pages-per-sec 600
           --json bench.json
 
       - uses: actions/upload-artifact@v4

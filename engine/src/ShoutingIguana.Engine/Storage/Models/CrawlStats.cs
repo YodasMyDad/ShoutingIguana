@@ -16,7 +16,12 @@ public sealed record CrawlStats
     public long InternalUrlCount { get; init; }
     public long QueuedCount { get; init; }
     public long LinkCount { get; init; }
+    /// <summary>Sitemap files read successfully.</summary>
     public long SitemapCount { get; init; }
+
+    /// <summary>Sitemap files that were declared or listed but couldn't be read. A failed guess at /sitemap.xml isn't one.</summary>
+    public long SitemapErrorCount { get; init; }
+
     public long SitemapUrlCount { get; init; }
 
     /// <summary>Internal HTML pages found only through sitemaps: candidates for orphan pages.</summary>

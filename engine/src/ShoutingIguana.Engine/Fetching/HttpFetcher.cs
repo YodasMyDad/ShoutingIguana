@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Net;
+using System.Net.Security;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Urls;
@@ -45,6 +46,12 @@ internal sealed class HttpFetcher : IDisposable
             UseProxy = options.ProxyUrl is not null,
             Proxy = CreateProxy(options.ProxyUrl)
         };
+
+        if (options.TrustedCertificate is { } trusted)
+        {
+            handler.SslOptions.RemoteCertificateValidationCallback = (_, certificate, _, errors) =>
+                errors == SslPolicyErrors.None || certificate?.GetCertHashString() == trusted.GetCertHashString();
+        }
 
         _client = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
     }

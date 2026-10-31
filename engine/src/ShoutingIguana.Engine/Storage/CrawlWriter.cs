@@ -452,7 +452,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
             VALUES (1, $url, $options, $status, $now, $now, $version)
             """;
         command.Parameters.AddWithValue("$url", _options.StartUrl);
-        command.Parameters.AddWithValue("$options", JsonSerializer.Serialize(_options, EngineJsonContext.Default.CrawlOptions));
+        command.Parameters.AddWithValue("$options", JsonSerializer.Serialize(_options.WithoutSecrets(), EngineJsonContext.Default.CrawlOptions));
         command.Parameters.AddWithValue("$status", (int)CrawlStatus.Running);
         command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         command.Parameters.AddWithValue("$version", EngineInfo.Version);

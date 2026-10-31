@@ -60,7 +60,7 @@ internal sealed class ConsoleCrawlObserver(bool quiet) : ICrawlObserver
                 CrawlNoticeLevel.Warning => ConsoleColor.Yellow,
                 _ => previous
             };
-            Console.WriteLine($"{notice.Level.ToString().ToUpperInvariant()}: {notice.Message}");
+            Console.WriteLine($"{notice.Level.ToString().ToUpperInvariant()}: {Format.Printable(notice.Message)}");
             Console.ForegroundColor = previous;
         }
     }

@@ -8,9 +8,10 @@ namespace ShoutingIguana.TestSite.Models;
 /// <param name="RobotsDisallowed">Distinct URLs blocked by robots.txt.</param>
 /// <param name="NofollowOnly">Distinct URLs reachable only through nofollow links, so never fetched.</param>
 /// <param name="DuplicateTitlePages">Indexable pages whose title is shared with another indexable page.</param>
-/// <param name="Issues">
-/// Flagged URLs per issue id after analysis. Every other issue must come out at 0, except slow-response, which
-/// lists only the planted slow page because a busy machine can make others slow too.
+/// <param name="IssueUrls">
+/// The exact URLs each issue id must flag after analysis. Every other issue must flag nothing. slow-response lists
+/// only the planted slow page, because a busy machine can make other pages slow too: the comparison adds every page
+/// whose stored response time is over the threshold.
 /// </param>
 public sealed record SyntheticSiteExpectations(
     int HtmlPages,
@@ -30,28 +31,52 @@ public sealed record SyntheticSiteExpectations(
     int DuplicateTitlePages,
     int MissingDescriptions,
     int ImagesMissingAlt,
-    IReadOnlyDictionary<string, int> Issues)
+    IReadOnlyDictionary<string, IReadOnlySet<string>> IssueUrls)
 {
-    /// <summary>Issues a busy machine can add to, so only the planted minimum is required.</summary>
-    private static readonly HashSet<string> TIMING_DEPENDENT = new(StringComparer.Ordinal) { "slow-response" };
+    public const string SLOW_RESPONSE = "slow-response";
 
-    /// <summary>Differences between an analysis and these expectations, one line per issue.</summary>
-    /// <param name="allIssueIds">Every issue the analysis can report, so issues that weren't planted are checked for zero.</param>
-    public IReadOnlyList<string> CompareIssues(IReadOnlyDictionary<string, long> found, IEnumerable<string> allIssueIds)
+    private const int LISTED_URLS = 5;
+
+    /// <summary>How many URLs an issue must flag (slow-response: at least this many).</summary>
+    public int Count(string issueId) => IssueUrls.TryGetValue(issueId, out var urls) ? urls.Count : 0;
+
+    /// <summary>Differences between an analysis and these expectations, one line per issue, naming the URLs involved.</summary>
+    /// <param name="found">Every (issue id, URL) pair the analysis stored.</param>
+    /// <param name="allIssueIds">Every issue the analysis can report, so issues that weren't planted are checked for nothing flagged.</param>
+    /// <param name="slowPages">Audited pages whose stored response time is over the slow-response threshold.</param>
+    public IReadOnlyList<string> CompareIssues(
+        IEnumerable<(string Issue, string Url)> found,
+        IEnumerable<string> allIssueIds,
+        IReadOnlyCollection<string> slowPages)
     {
         var known = allIssueIds.ToHashSet(StringComparer.Ordinal);
-        List<string> mismatches = [.. Issues.Keys.Where(id => !known.Contains(id)).Select(id => $"Expected issue '{id}' isn't in the catalog")];
+        var flagged = found
+            .GroupBy(row => row.Issue, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Select(row => row.Url).ToHashSet(StringComparer.Ordinal), StringComparer.Ordinal);
+
+        List<string> mismatches = [.. IssueUrls.Keys.Where(id => !known.Contains(id)).Select(id => $"Expected issue '{id}' isn't in the catalog")];
+        mismatches.AddRange(flagged.Keys.Where(id => !known.Contains(id)).Select(id => $"Found issue '{id}', which isn't in the catalog"));
         foreach (var id in known.Order(StringComparer.Ordinal))
         {
-            var expected = Issues.GetValueOrDefault(id);
-            var actual = found.GetValueOrDefault(id);
-            var atLeast = TIMING_DEPENDENT.Contains(id);
-            if (atLeast ? actual < expected : actual != expected)
+            var expected = IssueUrls.TryGetValue(id, out var urls) ? urls.ToHashSet(StringComparer.Ordinal) : new HashSet<string>(StringComparer.Ordinal);
+            if (id == SLOW_RESPONSE)
             {
-                mismatches.Add($"{id}: expected {(atLeast ? "at least " : string.Empty)}{expected:N0}, found {actual:N0}");
+                expected.UnionWith(slowPages);
+            }
+
+            var actual = flagged.GetValueOrDefault(id) ?? [];
+            var missing = expected.Where(url => !actual.Contains(url)).Order(StringComparer.Ordinal).ToList();
+            var unexpected = actual.Where(url => !expected.Contains(url)).Order(StringComparer.Ordinal).ToList();
+            if (missing.Count > 0 || unexpected.Count > 0)
+            {
+                mismatches.Add($"{id}: expected {expected.Count:N0}, found {actual.Count:N0}{List("missing", missing)}{List("unexpected", unexpected)}");
             }
         }
 
         return mismatches;
     }
+
+    private static string List(string label, IReadOnlyList<string> urls) => urls.Count == 0
+        ? string.Empty
+        : $"; {label} {string.Join(", ", urls.Take(LISTED_URLS))}{(urls.Count > LISTED_URLS ? $" and {urls.Count - LISTED_URLS:N0} more" : string.Empty)}";
 }

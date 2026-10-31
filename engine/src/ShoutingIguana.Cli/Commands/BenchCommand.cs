@@ -27,13 +27,14 @@ internal static class BenchCommand
         var concurrency = new Option<int>("--concurrency", "-c") { Description = "Crawler concurrency.", DefaultValueFactory = _ => 16 };
         var maxPeak = new Option<double>("--max-peak-mb") { Description = "Fail if the peak working set exceeds this (0 = no check)." };
         var maxGrowth = new Option<double>("--max-growth-mb") { Description = "Fail if memory grows more than this between early and late crawl (0 = no check)." };
+        var maxGrowthPerUrl = new Option<double>("--max-growth-bytes-per-url") { Description = "Fail if memory grows by more than this per URL fetched, a leak (0 = no check)." };
         var minRate = new Option<double>("--min-pages-per-sec") { Description = "Fail if throughput is lower (0 = no check)." };
         var json = new Option<string?>("--json") { Description = "Write the results as JSON to this file." };
         var keep = new Option<bool>("--keep") { Description = "Keep the crawl file instead of deleting it." };
 
         var command = new Command("bench", "Benchmark the crawler against a generated site.")
         {
-            pages, concurrency, maxPeak, maxGrowth, minRate, json, keep
+            pages, concurrency, maxPeak, maxGrowth, maxGrowthPerUrl, minRate, json, keep
         };
 
         command.SetAction(async (parse, cancellationToken) =>
@@ -71,7 +72,7 @@ internal static class BenchCommand
                 analysisSamples = sampler.Samples;
             }
 
-            var result = Evaluate(parse.GetValue(maxPeak), parse.GetValue(maxGrowth), parse.GetValue(minRate),
+            var result = Evaluate(parse.GetValue(maxPeak), parse.GetValue(maxGrowth), parse.GetValue(maxGrowthPerUrl), parse.GetValue(minRate),
                 pageCount, workers, site, summary, samples, analysis, analysisSamples, databasePath);
             Print(result);
 
@@ -95,7 +96,7 @@ internal static class BenchCommand
         return command;
     }
 
-    private static BenchResult Evaluate(double maxPeakMb, double maxGrowthMb, double minPagesPerSecond, int pageCount,
+    private static BenchResult Evaluate(double maxPeakMb, double maxGrowthMb, double maxGrowthBytesPerUrl, double minPagesPerSecond, int pageCount,
         int concurrency, ChildSiteProcess site, CrawlSummary summary, IReadOnlyList<MemorySample> samples,
         AnalysisSummary? analysis, IReadOnlyList<MemorySample> analysisSamples, string databasePath)
     {
@@ -104,7 +105,10 @@ internal static class BenchCommand
         var mismatches = ExpectationCheck.Compare(stats, expected);
         if (analysis is not null)
         {
-            mismatches.AddRange(expected.CompareIssues(IssueReader.ReadCounts(databasePath), IssueCatalog.All.Select(issue => issue.Id)));
+            mismatches.AddRange(expected.CompareIssues(
+                IssueReader.ReadAll(databasePath).Select(row => (row.Issue, row.Url)),
+                IssueCatalog.All.Select(issue => issue.Id),
+                CrawlStatsReader.ReadSlowPages(databasePath, new AnalysisSettings().SlowResponseMs)));
         }
 
         var total = Math.Max(1, summary.Progress.Fetched);
@@ -116,6 +120,7 @@ internal static class BenchCommand
         var seconds = Math.Max(0.001, summary.Progress.Elapsed.TotalSeconds);
         var pagesPerSecond = Math.Round(stats.HtmlPageCount / seconds, 1);
         var growth = Format.Megabytes(late - early);
+        var growthPerUrl = GrowthPerUrl(samples, total);
 
         List<string> failures = [];
         if (summary.Status != CrawlStatus.Completed)
@@ -139,6 +144,11 @@ internal static class BenchCommand
             failures.Add($"Memory grew {growth} MB during the crawl, over the {maxGrowthMb} MB limit");
         }
 
+        if (maxGrowthBytesPerUrl > 0 && growthPerUrl > maxGrowthBytesPerUrl)
+        {
+            failures.Add($"Memory grew {growthPerUrl:N0} bytes per URL fetched, over the {maxGrowthBytesPerUrl:N0} byte limit: a leak");
+        }
+
         if (minPagesPerSecond > 0 && pagesPerSecond < minPagesPerSecond)
         {
             failures.Add($"{pagesPerSecond} pages/s is under the {minPagesPerSecond} pages/s floor");
@@ -147,7 +157,7 @@ internal static class BenchCommand
         return new BenchResult(
             pageCount, concurrency, summary.Status.ToString(), mismatches.Count == 0, expected.HtmlPages, stats.HtmlPageCount,
             summary.Progress.Fetched, stats.LinkCount, Math.Round(seconds, 1), pagesPerSecond, Format.Megabytes(peak),
-            Format.Megabytes(peakManaged), Format.Megabytes(early), Format.Megabytes(late), growth,
+            Format.Megabytes(peakManaged), Format.Megabytes(early), Format.Megabytes(late), growth, growthPerUrl,
             Format.Megabytes(new FileInfo(databasePath).Length), Math.Round(analysis?.Duration.TotalSeconds ?? 0, 1),
             analysis?.Issues.Sum(issue => issue.Count) ?? 0, Format.Megabytes(analysisPeak),
             $"{Environment.ProcessorCount} cores, {RuntimeInformation.OSDescription}",
@@ -157,6 +167,25 @@ internal static class BenchCommand
     private static long PeakWorkingSet(IEnumerable<MemorySample> samples) =>
         samples.Select(sample => sample.WorkingSetBytes).DefaultIfEmpty(0).Max();
 
+    /// <summary>
+    /// Least-squares slope of the working set against URLs fetched, over the last 80% of the crawl (the first 20% is
+    /// warm-up: caches and pools filling). Unlike comparing two peaks, an early spike can't hide later growth.
+    /// </summary>
+    private static double GrowthPerUrl(IReadOnlyList<MemorySample> samples, long total)
+    {
+        var window = samples.Where(sample => sample.Fetched >= total * 0.2).ToList();
+        if (window.Count < 3)
+        {
+            return 0;
+        }
+
+        var meanFetched = window.Average(sample => (double)sample.Fetched);
+        var meanBytes = window.Average(sample => (double)sample.WorkingSetBytes);
+        var covariance = window.Sum(sample => (sample.Fetched - meanFetched) * (sample.WorkingSetBytes - meanBytes));
+        var variance = window.Sum(sample => (sample.Fetched - meanFetched) * (sample.Fetched - meanFetched));
+        return variance == 0 ? 0 : Math.Round(covariance / variance, 1);
+    }
+
     private static void Print(BenchResult result)
     {
         Console.WriteLine();
@@ -165,7 +194,7 @@ internal static class BenchCommand
         Console.WriteLine($"  Crawled      {result.CrawledHtmlPages:N0} of {result.ExpectedHtmlPages:N0} pages, {result.Fetched:N0} URLs, {result.Links:N0} links in {result.ElapsedSeconds:N1} s");
         Console.WriteLine($"  Throughput   {result.PagesPerSecond:N0} pages/s");
         Console.WriteLine($"  Memory       peak {result.PeakWorkingSetMb:N0} MB working set (managed heap peak {result.PeakManagedMb:N0} MB)");
-        Console.WriteLine($"  Flatness     {result.EarlyWorkingSetMb:N0} MB at 10-30% -> {result.LateWorkingSetMb:N0} MB at 70-100% ({result.GrowthMb:+0;-0} MB)");
+        Console.WriteLine($"  Flatness     {result.EarlyWorkingSetMb:N0} MB at 10-30% -> {result.LateWorkingSetMb:N0} MB at 70-100% ({result.GrowthMb:+0;-0} MB), {result.GrowthBytesPerUrl:N0} bytes per URL");
         Console.WriteLine($"  Database     {result.DatabaseMb:N0} MB");
         Console.WriteLine($"  Analysis     {result.AnalysisSeconds:N1} s, {result.IssuesFound:N0} issues found, peak {result.AnalysisPeakWorkingSetMb:N0} MB working set");
 

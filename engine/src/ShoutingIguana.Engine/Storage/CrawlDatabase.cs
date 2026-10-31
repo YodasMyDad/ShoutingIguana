@@ -25,7 +25,10 @@ public static class CrawlDatabase
         return connection;
     }
 
-    /// <summary>Reads the options a crawl was started with, so it can be resumed exactly.</summary>
+    /// <summary>
+    /// Reads the options a crawl was started with, so it can be resumed exactly. Header values and proxy credentials
+    /// aren't stored (see <see cref="CrawlOptions.WithoutSecrets"/>): supply them again to resume.
+    /// </summary>
     public static CrawlOptions ReadOptions(string path)
     {
         using var connection = OpenReader(path);
