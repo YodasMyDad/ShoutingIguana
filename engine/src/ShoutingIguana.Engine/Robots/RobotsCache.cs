@@ -57,10 +57,10 @@ internal sealed class RobotsCache(
     }
 
     /// <summary>
-    /// Like <see cref="GetAsync"/>, but a robots.txt that couldn't be read is waited out: once its cool-down is over it is
-    /// asked once more, and that answer stands, whatever it is.
+    /// Like <see cref="GetAsync"/>, but a robots.txt that couldn't be read is waited out: once its cool-down is over, and
+    /// the crawl isn't paused, it is asked once more, and that answer stands, whatever it is.
     /// </summary>
-    public async Task<RobotsTxt> GetAfterCoolDownAsync(Uri uri, CancellationToken cancellationToken)
+    public async Task<RobotsTxt> GetAfterCoolDownAsync(Uri uri, PauseGate pause, CancellationToken cancellationToken)
     {
         var rules = await GetAsync(uri).WaitAsync(cancellationToken).ConfigureAwait(false);
         if (rules.UnreachableReason is null ||
@@ -75,6 +75,7 @@ internal sealed class RobotsCache(
             await Task.Delay(wait, timeProvider, cancellationToken).ConfigureAwait(false);
         }
 
+        await pause.WaitAsync(cancellationToken).ConfigureAwait(false);
         return await GetAsync(uri).WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 

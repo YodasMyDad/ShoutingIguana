@@ -55,6 +55,39 @@ public sealed class HostGateRegistryTests
         (await https.WaitAsync(TimeSpan.FromSeconds(5))).Dispose();
     }
 
+    [Fact]
+    public void AnAnswerFromTheSiteWritesOffADownOriginThatNeverAnswered()
+    {
+        var registry = Registry("https://example.com/", new FakeTimeProvider());
+        var twinUri = new Uri("https://www.example.com/");
+        var twin = registry.OriginOf(twinUri);
+        var start = DateTimeOffset.UnixEpoch;
+        registry.ReportDown(twin, twinUri, start);
+        Assert.Equal(("https://www.example.com", TimeSpan.FromMinutes(1)), registry.LongestOutage(start + TimeSpan.FromMinutes(1)));
+
+        registry.ReportAnswer(registry.OriginOf(new Uri("https://example.com/")), isInternal: true);
+
+        Assert.True(twin.IsUnreachable);
+        Assert.Null(registry.LongestOutage(start + TimeSpan.FromMinutes(2)));
+    }
+
+    [Fact]
+    public void AnOriginThatAnsweredBeforeStaysDownWhileAnotherAnswers()
+    {
+        var registry = Registry("http://example.com/", new FakeTimeProvider());
+        var secureUri = new Uri("https://example.com/");
+        var secure = registry.OriginOf(secureUri);
+        secure.ReportAnswer();
+        var start = DateTimeOffset.UnixEpoch;
+        registry.ReportDown(secure, secureUri, start);
+
+        // The http start URL only redirects to https, and keeps answering.
+        registry.ReportAnswer(registry.OriginOf(new Uri("http://example.com/")), isInternal: true);
+
+        Assert.False(secure.IsUnreachable);
+        Assert.Equal(("https://example.com", TimeSpan.FromMinutes(4)), registry.LongestOutage(start + TimeSpan.FromMinutes(4)));
+    }
+
     /// <summary>A registry like the crawl's: the site capped at one request a second, other sites uncapped.</summary>
     private static HostGateRegistry Registry(string startUrl, TimeProvider time) =>
         new(new CrawlScope(new Uri(startUrl), false, false),

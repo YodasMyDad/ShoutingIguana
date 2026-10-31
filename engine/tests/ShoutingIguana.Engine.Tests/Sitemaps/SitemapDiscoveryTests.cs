@@ -27,6 +27,7 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
     private readonly Dictionary<string, (string ContentType, string Body)> _files = new(StringComparer.Ordinal);
     private readonly TaskCompletionSource _stalled = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _robotsFailures;
+    private int _sitemapRequests;
     private LoopbackServer _server = null!;
 
     public async Task InitializeAsync() => _server = await LoopbackServer.StartAsync(RespondAsync);
@@ -109,13 +110,42 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
 
         await using var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(
             new CrawlRequest(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxRetries = 0 }, path));
-        var summary = await FakeClock.PumpAsync(time, job.Completion);
+
+        // Small steps: a sitemap read has a 60-second deadline on this clock, which large steps on a fast pump could pass
+        // while one is still being read.
+        var summary = await FakeClock.PumpAsync(time, job.Completion, TimeSpan.FromMilliseconds(100));
 
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         var sitemap = Assert.Single(Sitemaps(path));
         Assert.Equal(_server.Url("/real-sitemap.xml").AbsoluteUri, sitemap.Url);
         Assert.False(sitemap.IsProbe);
         Assert.Equal(2, sitemap.UrlCount);
+    }
+
+    /// <summary>A crawl paused as it starts reads no sitemaps until it is resumed.</summary>
+    [Fact]
+    public async Task APausedCrawlReadsNoSitemaps()
+    {
+        Serve("/robots.txt", "text/plain", $"User-agent: *\nDisallow:\nSitemap: {_server.Url("/sitemap_index.xml")}");
+        Serve("/sitemap_index.xml", "application/xml",
+            $"<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">{string.Concat(Enumerable.Range(0, 5).Select(child => $"<sitemap><loc>{_server.Url($"/sitemap-{child}.xml")}</loc></sitemap>"))}</sitemapindex>");
+        for (var child = 0; child < 5; child++)
+        {
+            Serve($"/sitemap-{child}.xml", "application/xml", $"{URLSET}{Loc($"/s{child}")}</urlset>");
+        }
+
+        var path = NewDatabasePath();
+        await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(
+            new CrawlRequest(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxRetries = 0 }, path));
+        job.Pause();
+
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        var readWhilePaused = Volatile.Read(ref _sitemapRequests);
+        job.Resume();
+
+        Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TimeSpan.FromMinutes(1))).Status);
+        Assert.Equal(0, readWhilePaused);
+        Assert.Equal(6, Sitemaps(path).Count);
     }
 
     [Fact]
@@ -278,6 +308,11 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
 
         if (_files.TryGetValue(context.Request.Path.Value ?? "/", out var file))
         {
+            if (file.ContentType == "application/xml")
+            {
+                Interlocked.Increment(ref _sitemapRequests);
+            }
+
             context.Response.ContentType = file.ContentType;
             return context.Response.WriteAsync(file.Body);
         }

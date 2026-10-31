@@ -20,9 +20,10 @@ namespace ShoutingIguana.Engine.Crawling;
 /// One run of a crawl. A dispatcher claims batches of queued URLs from the writer and hands them to two
 /// worker pools: one for the site itself, one for status checks on other sites. Workers fetch and parse,
 /// then send records back to the writer. The site's URLs that got no response (or met an unreadable
-/// robots.txt) are held back and tried once more when everything else is done. The crawl is complete when a
-/// claim finds nothing queued and nothing in flight after sitemap discovery has finished. Stopping leaves the
-/// database resumable; held-back URLs are claimed but unrecorded, so a resume fetches them again.
+/// robots.txt) are held back and tried once more when nothing else can be claimed. That comes before the URLs only
+/// sitemaps list: the writer hands those out once no linked URL is in flight, and a held-back URL still is. The crawl
+/// is complete when a claim finds nothing queued and nothing in flight after sitemap discovery has finished. Stopping
+/// leaves the database resumable; held-back URLs are claimed but unrecorded, so a resume fetches them again.
 /// </summary>
 internal sealed class CrawlSession
 {
@@ -51,14 +52,18 @@ internal sealed class CrawlSession
     private readonly PageProcessor _processor;
     private readonly RobotsCache _robots;
     private readonly SitemapDiscoverer _sitemaps;
-    private readonly HostGate _startGate;
+    private readonly HostGateRegistry _gates;
     private readonly Channel<FrontierItem> _internalQueue;
     private readonly Channel<FrontierItem> _externalQueue;
-    private readonly ConcurrentQueue<FrontierItem> _deferred = new();
-    private readonly ConcurrentDictionary<int, bool> _retried = new();
+
+    // Held back with how they ended, which is what gets recorded if their origin is written off before their one more try.
+    private readonly ConcurrentQueue<PageRecord> _deferred = new();
+    private readonly ConcurrentDictionary<int, PageRecord> _retried = new();
+    private readonly Lock _pauseSync = new();
     private volatile CrawlStatus _status = CrawlStatus.Running;
     private double _pagesPerSecond;
     private int _deferredTotal;
+    private DateTimeOffset? _pausedAt;
 
     // Held back since the last retry pass began because robots.txt couldn't be read.
     private int _refusedByRobots;
@@ -76,19 +81,18 @@ internal sealed class CrawlSession
         var scope = new CrawlScope(_startUri, _options.IncludeSubdomains, _options.StayInStartFolder);
         var userAgent = UserAgents.Resolve(_options.UserAgent, _options.CustomUserAgent);
         var interval = _options.MaxRequestsPerSecond > 0 ? TimeSpan.FromSeconds(1 / _options.MaxRequestsPerSecond) : TimeSpan.Zero;
-        var gates = new HostGateRegistry(scope, isInternal => isInternal
+        _gates = new HostGateRegistry(scope, isInternal => isInternal
             ? new HostGate(_options.Concurrency, interval, timeProvider)
             : new HostGate(EXTERNAL_CONCURRENCY_PER_HOST, TimeSpan.Zero, timeProvider));
-        _startGate = gates.For(_startUri);
 
         _writer = CrawlWriter.Open(request.DatabasePath, _options, request.Resume, _counters, loggerFactory.CreateLogger<CrawlWriter>());
         _fetcher = new HttpFetcher(_options, userAgent, scope, timeProvider);
-        var fetcher = new RetryingFetcher(_fetcher, gates, scope, _options.MaxRetries, _observer, timeProvider);
-        _robots = new RobotsCache(fetcher, gates, _writer, scope, _options, userAgent.RobotsToken, _observer,
+        var fetcher = new RetryingFetcher(_fetcher, _gates, scope, _options.MaxRetries, _observer, timeProvider);
+        _robots = new RobotsCache(fetcher, _gates, _writer, scope, _options, userAgent.RobotsToken, _observer,
             timeProvider, loggerFactory.CreateLogger<RobotsCache>(), _stop.Token);
         _links = new OutLinkFactory(scope);
         _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, timeProvider);
-        _sitemaps = new SitemapDiscoverer(_options, _fetcher, gates, _robots, _writer, _links, _observer, timeProvider,
+        _sitemaps = new SitemapDiscoverer(_options, _fetcher, _gates, _robots, _writer, _links, _observer, _pause, timeProvider,
             loggerFactory.CreateLogger<SitemapDiscoverer>());
         _internalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.Concurrency * 2) { SingleWriter = true });
         _externalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.ExternalConcurrency * 2) { SingleWriter = true });
@@ -108,9 +112,29 @@ internal sealed class CrawlSession
         return new CrawlSession(request, observer, loggerFactory, timeProvider);
     }
 
-    public void Pause() => _pause.Pause();
+    public void Pause()
+    {
+        lock (_pauseSync)
+        {
+            _pausedAt ??= _timeProvider.GetUtcNow();
+            _pause.Pause();
+        }
+    }
 
-    public void Resume() => _pause.Resume();
+    /// <summary>Time spent paused doesn't count as a site not answering: nothing was asked of it.</summary>
+    public void Resume()
+    {
+        lock (_pauseSync)
+        {
+            if (_pausedAt is { } pausedAt)
+            {
+                _gates.ExcludePause(pausedAt, _timeProvider.GetUtcNow());
+                _pausedAt = null;
+            }
+
+            _pause.Resume();
+        }
+    }
 
     public void RequestStop()
     {
@@ -331,33 +355,33 @@ internal sealed class CrawlSession
     }
 
     /// <summary>
-    /// The site hasn't answered for <see cref="RetryingFetcher.GIVE_UP_AFTER"/>: stop rather than wait on it for good.
-    /// Whatever wasn't recorded yet stays queued, so resuming once the site is back carries on where this left off.
+    /// An origin of the site hasn't answered for <see cref="RetryingFetcher.GIVE_UP_AFTER"/>, paused time aside: stop
+    /// rather than wait on it for good. Whatever wasn't recorded yet stays queued, so resuming once the site is back
+    /// carries on where this left off.
     /// </summary>
     private async ValueTask<bool> GiveUpOnADeadSiteAsync()
     {
-        var down = _startGate.UnreachableFor;
-        if (down < RetryingFetcher.GIVE_UP_AFTER)
+        if (_gates.LongestOutage(_timeProvider.GetUtcNow()) is not { } outage || outage.Duration < RetryingFetcher.GIVE_UP_AFTER)
         {
             return false;
         }
 
         _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Error, "site-down",
-            $"{_startUri.Host} hasn't answered for {down.TotalMinutes:0} minutes, so the crawl stopped. Resume it once the site is back."));
+            $"{outage.Origin} hasn't answered for {outage.Duration.TotalMinutes:0} minutes, so the crawl stopped. Resume it once the site is back."));
         await _stop.CancelAsync().ConfigureAwait(false);
         return true;
     }
 
     /// <summary>
-    /// Everything else is done, so the URLs held back get their one more try: as many as the site's queue has room for.
-    /// Returns true while some are still waiting their turn.
+    /// Nothing else can be claimed, so the URLs held back get their one more try: as many as the site's queue has room
+    /// for. Returns true while some are still waiting their turn.
     /// </summary>
     private bool FeedDeferred()
     {
-        while (_deferred.TryPeek(out var item))
+        while (_deferred.TryPeek(out var heldBack))
         {
-            _retried.TryAdd(item.Id, true);
-            if (!_internalQueue.Writer.TryWrite(item))
+            _retried.TryAdd(heldBack.Item.Id, heldBack);
+            if (!_internalQueue.Writer.TryWrite(heldBack.Item))
             {
                 return true;
             }
@@ -399,9 +423,16 @@ internal sealed class CrawlSession
             Interlocked.Increment(ref _refusedByRobots);
         }
 
-        _deferred.Enqueue(item);
+        _deferred.Enqueue(record);
         return true;
     }
+
+    /// <summary>
+    /// A held-back URL whose origin was written off before its one more try comes back "Not checked". It was asked for,
+    /// though, so it keeps how it ended then: its real error is what makes a link to it broken.
+    /// </summary>
+    private static PageRecord KeepTheRealError(PageRecord retried, PageRecord heldBack) =>
+        retried.Response.Error?.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) == true ? heldBack : retried;
 
     private Task[] StartWorkers(ChannelReader<FrontierItem> queue, int count) =>
         Enumerable.Range(0, count).Select(_ => Task.Run(() => WorkAsync(queue, _stop.Token))).ToArray();
@@ -415,9 +446,11 @@ internal sealed class CrawlSession
                 await _pause.WaitAsync(cancellationToken).ConfigureAwait(false);
 
                 PageRecord record;
+                var isRetry = _retried.TryGetValue(item.Id, out var heldBack);
                 try
                 {
-                    record = await _processor.ProcessAsync(item, cancellationToken, _retried.ContainsKey(item.Id)).ConfigureAwait(false);
+                    record = await _processor.ProcessAsync(item, cancellationToken, isRetry).ConfigureAwait(false);
+                    record = heldBack is null ? record : KeepTheRealError(record, heldBack);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
@@ -430,6 +463,12 @@ internal sealed class CrawlSession
                 if (!Defer(record))
                 {
                     await _writer.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+                }
+
+                if (isRetry)
+                {
+                    // Its one more try is over, so its held-back record isn't needed any more.
+                    _retried.TryRemove(item.Id, out _);
                 }
             }
         }

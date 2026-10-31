@@ -28,6 +28,7 @@ internal sealed class SitemapDiscoverer(
     CrawlWriter writer,
     OutLinkFactory links,
     ICrawlObserver observer,
+    PauseGate pause,
     TimeProvider timeProvider,
     ILogger logger)
 {
@@ -45,8 +46,9 @@ internal sealed class SitemapDiscoverer(
     public async Task RunAsync(Uri startUri, CancellationToken cancellationToken)
     {
         // A robots.txt that couldn't be read says nothing about the sitemaps it declares, so it is asked once more when its
-        // cool-down ends rather than leave them out of the crawl.
-        var rules = await robots.GetAfterCoolDownAsync(startUri, cancellationToken).ConfigureAwait(false);
+        // cool-down ends rather than leave them out of the crawl. Nothing is read while the crawl is paused.
+        await pause.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var rules = await robots.GetAfterCoolDownAsync(startUri, pause, cancellationToken).ConfigureAwait(false);
 
         // Sitemap: lines should be absolute, but relative ones are common; they resolve against robots.txt.
         var robotsUri = new Uri(startUri, "/robots.txt");
@@ -76,6 +78,7 @@ internal sealed class SitemapDiscoverer(
         var tooDeepRecorded = false;
         while (pending.Count > 0 && sitemapCount < MAX_SITEMAPS)
         {
+            await pause.WaitAsync(cancellationToken).ConfigureAwait(false);
             var (url, parentId, level) = pending.Dequeue();
             sitemapCount++;
             var sitemapId = await writer.RegisterSitemapAsync(url, parentId, cancellationToken).ConfigureAwait(false);

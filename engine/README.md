@@ -50,21 +50,29 @@ Exit codes, for scripts and schedulers:
 2. A dispatcher claims queued URLs breadth-first and hands them to two worker pools: one for the site itself and
    one for status checks on other sites.
 3. Each worker checks robots.txt and waits on a per-site gate. `example.com` and `www.example.com` are one site,
-   on http and https alike, so they share one: sites serve one host and redirect the other. The gate caps concurrency, applies the optional rate cap, and backs off automatically on 429/503 responses and
-   block pages, honouring Retry-After. The worker then fetches over plain HTTP without following redirects (every
-   hop is its own URL) and parses the HTML once into `PageFacts`.
+   on http and https alike, so they share one: sites serve one host and redirect the other.
+   - The gate caps concurrency and applies the optional rate cap.
+   - It backs off automatically on 429/503 responses, block pages and repeated failures, honouring Retry-After. The
+     backoff halves every half second, and a request waiting on it starts by the backoff as it stands when it is
+     due.
+
+   The worker then fetches over plain HTTP without following redirects (every hop is its own URL) and parses the
+   HTML once into `PageFacts`.
    - A robots.txt that can't be read (5xx, 429, no answer) is retried like a page, then means "disallow
      everything" for two minutes, as RFC 9309 requires. An origin other than the start URL's that doesn't answer
      at all (another site, a dead www twin, a closed http port) gets no verdict, so links to it record their real
-     network error.
+     network error. That departs from RFC 9309 on purpose, as `docs/v2-rebuild.md` explains.
    - Whether an origin answers is counted per scheme, host and port. After three URLs in a row on one get no
      response, another site's remaining URLs there fail at once ("Not checked"). On the site being crawled,
-     robots.txt is asked first: if it answers, those URLs failed for reasons of their own; if only the start URL's
-     origin answers, that origin alone is dead and fails fast like another site; if nothing answers, the site is
-     waited out with one-minute pauses and a notice, and after ten minutes the crawl stops, to be resumed.
-   - The site's URLs that got no response are tried once more at the end of the crawl (at most 10,000 are held
-     back for it), handed to the workers as they have room. URLs refused because robots.txt couldn't be read wait
-     for its two-minute cool-down first, as do the sitemaps it declares.
+     robots.txt is asked first: if it answers, those URLs failed for reasons of their own. An origin that has never
+     answered, while the site's last answering origin still does, is dead (a www twin, a closed port) and fails fast
+     like another site; the URLs it was asked for keep their real error. Any other origin is down: it is waited out
+     with one-minute pauses and a notice, never written off, and after ten minutes down (time paused aside) the
+     crawl stops, to be resumed.
+   - The site's URLs that got no response are tried once more when nothing else can be claimed (at most 10,000 are
+     held back for it), handed to the workers as they have room. That comes before the URLs only sitemaps list. URLs
+     refused because robots.txt couldn't be read wait for its two-minute cool-down first, as do the sitemaps it
+     declares. Sitemaps aren't read while the crawl is paused.
 4. A single writer applies results in batched transactions: the response row, a compressed detail blob, the
    links, and newly discovered URLs. It also owns the frontier, so "nothing queued and nothing in flight" is an
    exact completion test.

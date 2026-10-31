@@ -78,6 +78,11 @@ public sealed class SitemapReaderTests
         await Assert.ThrowsAsync<XmlException>(() => ReadAsync("<urlset><url><loc>https://example.com/a</loc></urlset>"));
 
     /// <summary>A sitemap that sends one URL and then nothing more, never closing: cancelling ends the read.</summary>
+    /// <remarks>
+    /// XML is read by XmlReader, which reads its stream without a token, so only <see cref="CancellableReadStream"/> lets
+    /// that case end. Text is read with the token on every read already, so that case guards the text reader itself: it
+    /// passes without the wrap, and fails once the text reader's own reads lose the token too.
+    /// </remarks>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
