@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
@@ -42,6 +43,24 @@ public sealed class CliTests : IAsyncLifetime
         Assert.Equal(0, stats.ExitCode);
         Assert.Contains("Status        Completed", stats.Output);
         Assert.Contains("Sitemaps      ", stats.Output);
+    }
+
+    [Fact]
+    public async Task ChecksALimitedCrawlCantSupportAreReportedAsNotChecked()
+    {
+        var crawl = Path.Combine(_folder, "limited.sicrawl");
+        var result = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "--max-urls", "20", "-q");
+        Assert.Equal(0, result.ExitCode);
+
+        // Said once, in the summary, not again as a log warning (the console log writes to either stream).
+        const string NOTE = "Orphan pages weren't checked: the URL limit";
+        Assert.Contains(NOTE, result.Output);
+        Assert.Equal(1, Regex.Count(result.Output + result.Error, Regex.Escape(NOTE)));
+
+        var orphans = await RunAsync("issues", crawl, "orphan-page");
+        Assert.Equal(0, orphans.ExitCode);
+        Assert.Contains(NOTE, orphans.Output);
+        Assert.Contains("not checked in this analysis", orphans.Output);
     }
 
     [Fact]

@@ -66,6 +66,11 @@ internal static class IssuesCommand
             }
 
             Console.WriteLine($"Analysed {analysis.AnalyzedAt.ToLocalTime():g} by engine {analysis.EngineVersion}: {analysis.PagesAnalyzed:N0} pages");
+            foreach (var note in IssueReader.ReadNotes(path))
+            {
+                Console.WriteLine($"  {Format.Printable(note)}");
+            }
+
             if (id is null)
             {
                 var counts = IssueReader.ReadCounts(path);
@@ -82,7 +87,14 @@ internal static class IssuesCommand
 
     private static void PrintIssue(string path, IssueDefinition issue, int limit)
     {
-        var total = IssueReader.ReadCounts(path).GetValueOrDefault(issue.Id);
+        // A check the crawl couldn't support (an orphan check on a limited crawl) has no count, which isn't the same as 0.
+        if (!IssueReader.ReadCounts(path).TryGetValue(issue.Id, out var total))
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  {issue.Title}: not checked in this analysis.");
+            return;
+        }
+
         Console.WriteLine();
         Console.WriteLine($"  {issue.Severity}: {issue.Title} ({total:N0} URLs)");
         Console.WriteLine($"  {issue.Description}");

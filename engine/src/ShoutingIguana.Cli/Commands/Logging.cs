@@ -13,10 +13,12 @@ internal static class Logging
         });
         builder.SetMinimumLevel(verbose ? LogLevel.Information : LogLevel.Warning);
 
-        // Notices are already printed by the console observer; only crawl failures need the log too.
+        // Notices are already printed by the console observer, and skipped checks by the analysis summary's notes; only
+        // failures need the log too.
         if (!verbose)
         {
             builder.AddFilter("ShoutingIguana.Engine.Crawling.CrawlSession", LogLevel.Error);
+            builder.AddFilter("ShoutingIguana.Engine.Analysis.CrawlAnalyzer", LogLevel.Error);
         }
     });
 }
