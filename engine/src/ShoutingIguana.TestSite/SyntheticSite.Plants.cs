@@ -135,6 +135,8 @@ public sealed partial class SyntheticSite
             Robots = "noindex", Canonical = $"{_base}{PLANTS_PATH}hreflang-lonely"
         }, inSitemap: false);
         Page("nofollow", "Nofollow page", ["nofollow-page"], page => page with { Robots = "nofollow" });
+        Page("robots-spaces", "Robots directives without commas", ["noindex-page", "nofollow-page"], page => page with { Robots = "noindex nofollow" },
+            inSitemap: false);
 
         // Gallery lightboxes: nofollow on links to image files is harmless, both for a file that was fetched (it's also
         // shown) and for one that wasn't (the full-size version), unlike the nofollow links to /hidden/ pages on products.
@@ -265,6 +267,14 @@ public sealed partial class SyntheticSite
         Page("no-lang", "Missing lang", ["lang-missing"], page => page with { Lang = false });
         Page("no-charset", "Missing charset", ["charset-missing"], page => page with { Charset = false }, contentType: "text/html");
         Page("no-open-graph", "Missing Open Graph", ["open-graph-missing"], page => page with { OpenGraph = false });
+
+        // One meta tag serving as both the description and og:description is both.
+        Page("meta-name-and-property", "Shared description tag", [], page => page with
+        {
+            Description = null, OpenGraph = false,
+            ExtraHead = $"<meta name=\"description\" property=\"og:description\" content=\"{page.Description}\">" +
+                        $"<meta property=\"og:title\" content=\"{page.Title}\"><meta property=\"og:image\" content=\"{_base}/img/0.jpg\">"
+        });
 
         var slow = PlantPage("slow", "Slow page");
         plants.Add(new Plant(slow.Path, 200, Linked: true, InSitemap: true, ["slow-response"], () => Html(Render(slow)) with { DelayMs = SLOW_PAGE_DELAY_MS }));

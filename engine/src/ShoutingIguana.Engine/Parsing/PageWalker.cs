@@ -304,25 +304,37 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
             return;
         }
 
-        var name = (element.GetAttribute("name") ?? element.GetAttribute("property"))?.Trim().ToLowerInvariant();
-        if (string.IsNullOrEmpty(name) || content is null)
+        // One tag can serve both: <meta name="description" property="og:description" content="...">.
+        var name = NullIfBlank(element.GetAttribute("name"))?.Trim().ToLowerInvariant();
+        var property = NullIfBlank(element.GetAttribute("property"))?.Trim().ToLowerInvariant();
+        if ((name is null && property is null) || content is null)
         {
             return;
         }
 
         var cleaned = Clean(content, MAX_META_CHARS);
-        if (MetaTags.Count < MAX_META_TAGS)
+        AddMetaTag(name, cleaned);
+        if (property != name)
         {
-            MetaTags.Add(new MetaTagFact(name, cleaned));
+            AddMetaTag(property, cleaned);
         }
 
+        // Search engines read the description and robots directives from name; property is RDFa, as Open Graph uses.
         if (name == "description")
         {
             MetaDescriptions.Add(cleaned);
         }
-        else if (RobotsMetaParser.AppliesToMetaName(name, robotsToken))
+        else if (name is not null && RobotsMetaParser.AppliesToMetaName(name, robotsToken))
         {
             RobotsMetaContents.Add(content);
+        }
+    }
+
+    private void AddMetaTag(string? name, string content)
+    {
+        if (name is not null && MetaTags.Count < MAX_META_TAGS)
+        {
+            MetaTags.Add(new MetaTagFact(name, content));
         }
     }
 

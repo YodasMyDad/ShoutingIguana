@@ -59,6 +59,55 @@ public sealed class HtmlPageParserTests
     }
 
     [Fact]
+    public void AMetaTagCanBeBothADescriptionAndAnOpenGraphTag()
+    {
+        var facts = Parse("""
+            <html><head><meta name="description" property="og:description" content="Shared text">
+            <meta property="description" content="Not a meta description"><meta name="twitter:title" property="og:title" content="Title">
+            </head><body></body></html>
+            """).Facts;
+
+        Assert.Equal(["Shared text"], facts.MetaDescriptions);
+        Assert.Equal([new MetaTagFact("description", "Shared text"), new MetaTagFact("og:description", "Shared text"),
+            new MetaTagFact("description", "Not a meta description"), new MetaTagFact("twitter:title", "Title"), new MetaTagFact("og:title", "Title")],
+            facts.MetaTags);
+    }
+
+    [Theory]
+    [InlineData("noindex nofollow", true, true)]
+    [InlineData("NOINDEX  NOFOLLOW max-snippet:0", true, true)]
+    [InlineData("noindex, follow", true, false)]
+    [InlineData("index follow", false, false)]
+    [InlineData("noindexnofollow", false, false)]
+    public void RobotsDirectivesSeparatedBySpacesCount(string content, bool noIndex, bool noFollow)
+    {
+        var robots = Parse($"<html><head><meta name=\"robots\" content=\"{content}\"></head><body></body></html>").Facts.Robots;
+
+        Assert.Equal((noIndex, noFollow), (robots.NoIndex, robots.NoFollow));
+    }
+
+    [Theory]
+    [InlineData("bingbot: noindex, googlebot: nofollow", false, true)]
+    [InlineData("googlebot: noindex, nofollow", true, true)]
+    [InlineData("noindex, bingbot: nofollow", true, false)]
+    [InlineData("otherbot: noindex nofollow", false, false)]
+    [InlineData("ShoutingIguana: noindex", true, false)]
+    public void HeaderValuesCanAddressSeveralCrawlers(string value, bool noIndex, bool noFollow)
+    {
+        var robots = Parse("<html></html>", [new ResponseHeader("x-robots-tag", value)]).Facts.Robots;
+
+        Assert.Equal((noIndex, noFollow), (robots.NoIndex, robots.NoFollow));
+    }
+
+    [Fact]
+    public void ValuedHeaderDirectivesKeepTheirValues()
+    {
+        var robots = Parse("<html></html>", [new ResponseHeader("x-robots-tag", "unavailable_after: 25 Jun 2030 15:00:00 PST, max-snippet: 0")]).Facts.Robots;
+
+        Assert.Equal(["unavailable_after: 25 jun 2030 15:00:00 pst", "max-snippet: 0"], robots.Directives);
+    }
+
+    [Fact]
     public void ClassifiesLinkPositions()
     {
         var links = Parse("""
