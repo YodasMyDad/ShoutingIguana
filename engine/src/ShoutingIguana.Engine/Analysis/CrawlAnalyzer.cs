@@ -97,8 +97,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             }
 
             // The site lives on the start URL's origin and the home page's (after redirects); robots.txt failing there stops all crawling.
-            var mainOrigins = new[] { startUrl, reader.ReadUrl(urls.HomeId) }.OfType<string>()
-                .Select(url => new Uri(url).GetLeftPart(UriPartial.Authority)).ToHashSet(StringComparer.Ordinal);
+            var mainUrls = new[] { startUrl, reader.ReadUrl(urls.HomeId) }.OfType<string>().Select(url => new Uri(url)).ToList();
+            var mainOrigins = mainUrls.Select(uri => uri.GetLeftPart(UriPartial.Authority)).ToHashSet(StringComparer.Ordinal);
 
             var hreflang = new HreflangRules(urls);
             var indexability = new IndexabilityRules();
@@ -116,7 +116,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             [
                 new InlinkRules(urls, linksComplete), new DuplicateRules(settings), new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks), hreflang,
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls),
-                new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(new Uri(startUrl).Authority)),
+                new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList())),
                 new RobotsTxtRules(urls, reader.ReadRobots(), scope, mainOrigins)
             ];
 

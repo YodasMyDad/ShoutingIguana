@@ -49,10 +49,14 @@ internal sealed class AnalysisReader : IDisposable
 
     /// <summary>
     /// Sitemap entries on a host (and port) that none of the sitemaps listing them is on (sitemaps.org: search engines
-    /// drop those), apart from entries on <paramref name="startAuthority"/>: the start site's robots.txt declared the
+    /// drop those), apart from entries on <paramref name="siteAuthorities"/>: the site's robots.txt declared the
     /// sitemaps, which the protocol accepts for that site's URLs wherever the sitemap lives.
     /// </summary>
-    public HashSet<int> ReadOffHostSitemapEntries(string startAuthority)
+    /// <param name="siteAuthorities">
+    /// The start URL's host and port, and the home page's after redirects. A sitemap is stored under the URL it was
+    /// found at, so one the bare domain's robots.txt leads to sits on the bare domain even when it is read from www.
+    /// </param>
+    public HashSet<int> ReadOffHostSitemapEntries(IReadOnlyList<string> siteAuthorities)
     {
         // Stored URLs are normalised, so the authority runs from "://" to the first "/" after it.
         static string Authority(string column) =>
@@ -63,10 +67,13 @@ internal sealed class AnalysisReader : IDisposable
             SELECT id FROM (
                 SELECT su.url_id AS id, {Authority("u.url")} AS entry, {Authority("s.url")} AS sitemap
                 FROM sitemap_urls su JOIN sitemaps s ON s.id = su.sitemap_id JOIN urls u ON u.id = su.url_id)
-            WHERE entry <> $start
+            WHERE entry NOT IN ({string.Join(", ", siteAuthorities.Select((_, index) => $"$site{index}"))})
             GROUP BY id HAVING MAX(entry = sitemap) = 0
             """;
-        command.Parameters.AddWithValue("$start", startAuthority);
+        for (var index = 0; index < siteAuthorities.Count; index++)
+        {
+            command.Parameters.AddWithValue($"$site{index}", siteAuthorities[index]);
+        }
         HashSet<int> ids = [];
         using var reader = command.ExecuteReader();
         while (reader.Read())

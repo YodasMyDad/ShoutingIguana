@@ -47,6 +47,55 @@ public sealed class SitemapHostCrawlTests : IAsyncLifetime
             IssueReader.ReadIssues(_path, IssueCatalog.SITEMAP_URL_OTHER_HOST.Id, 10).Select(row => row.Url).Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// The site lives on www, and the bare domain typed as the start URL redirects everything there, robots.txt included.
+    /// However its sitemap is declared (relative, on the bare host, on www, or not at all), its www pages are the site's
+    /// own. The loopback server answers for both hosts as the crawl's proxy, so no DNS is needed.
+    /// </summary>
+    [Theory]
+    [InlineData("/sitemap.xml")]
+    [InlineData("http://example.com/sitemap.xml")]
+    [InlineData("http://www.example.com/sitemap.xml")]
+    [InlineData(null)]
+    public async Task ASiteThatRedirectsToWwwOwnsItsWwwEntries(string? sitemapLine)
+    {
+        const string WWW = "http://www.example.com";
+        await using var site = await LoopbackServer.StartAsync(context =>
+        {
+            var path = context.Request.Path.Value ?? "/";
+            if (context.Request.Host.Host != "www.example.com")
+            {
+                context.Response.StatusCode = 301;
+                context.Response.Headers.Location = WWW + path;
+                return Task.CompletedTask;
+            }
+
+            return path switch
+            {
+                // Without a Sitemap line, the crawler guesses /sitemap.xml on the start host.
+                "/robots.txt" => Text(context, sitemapLine is null ? "User-agent: *\nAllow: /" : $"User-agent: *\nAllow: /\nSitemap: {sitemapLine}"),
+                "/sitemap.xml" => Xml(context, Sitemap($"{WWW}/", $"{WWW}/a")),
+                "/" => Html(context, "<a href=\"/a\">A</a>"),
+                "/a" => Html(context, "<p>A page</p>"),
+                _ => Status(context, 404)
+            };
+        });
+
+        var options = new CrawlOptions { StartUrl = "http://example.com/", ProxyUrl = site.BaseUri.AbsoluteUri, MaxRetries = 0 };
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, _path)))
+        {
+            Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TimeSpan.FromMinutes(1))).Status);
+        }
+
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_path);
+
+        // Both www pages were crawled and the sitemap listing them was read, and neither is on another host.
+        var stats = CrawlStatsReader.Read(_path);
+        Assert.Equal(2, stats.HtmlPageCount);
+        Assert.Equal(2, stats.SitemapUrlCount);
+        Assert.Equal(0, analysis.Issues.Single(issue => issue.Issue == IssueCatalog.SITEMAP_URL_OTHER_HOST).Count);
+    }
+
     private string Twin(string path) => $"http://www.127.0.0.1:{_server.BaseUri.Port}{path}";
 
     private Task RespondAsync(HttpContext context)
