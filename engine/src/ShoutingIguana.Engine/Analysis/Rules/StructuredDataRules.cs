@@ -33,6 +33,8 @@ internal sealed class StructuredDataRules : IPageRule
             {
                 try
                 {
+                    // Every page's names are read, as an unreadable one is a syntax fault, whatever the page's indexability.
+                    ReadNames(document.RootElement);
                     if (page.IsIndexable)
                     {
                         RichResultRequirements.Check(document.RootElement, missing);
@@ -54,6 +56,29 @@ internal sealed class StructuredDataRules : IPageRule
         if (missing.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.STRUCTURED_DATA_MISSING_REQUIRED, page.UrlId, string.Join("; ", missing.Distinct()));
+        }
+    }
+
+    /// <summary>Reads every property name, which throws for one escaping half a surrogate pair. JsonDocument caps the depth.</summary>
+    private static void ReadNames(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    _ = property.Name;
+                    ReadNames(property.Value);
+                }
+
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    ReadNames(item);
+                }
+
+                break;
         }
     }
 }

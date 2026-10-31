@@ -375,6 +375,10 @@ public sealed class PageRuleTests
         {
             var badName = site.Page($"{site.Site}/{Guid.NewGuid():N}", RuleHarness.Html(Script(json)));
             Assert.Equal([IssueCatalog.STRUCTURED_DATA_INVALID], rules.Check(badName).Select(hit => hit.Issue));
+
+            // Like any syntax fault, on a noindex page too, which the rich-result checks don't look at.
+            var noindex = site.Page($"{site.Site}/{Guid.NewGuid():N}", RuleHarness.Html(Script(json)), IndexabilityReason.Noindex);
+            Assert.Equal([IssueCatalog.STRUCTURED_DATA_INVALID], rules.Check(noindex).Select(hit => hit.Issue));
         }
     }
 
