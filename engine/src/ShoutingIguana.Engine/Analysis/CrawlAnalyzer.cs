@@ -46,6 +46,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
         HashSet<IssueDefinition> skipped = [];
         Dictionary<string, int> failures = new(StringComparer.Ordinal);
         List<IssueHit> hits = [];
+        var finishFailed = false;
 
         // Opening the writer locks the file against crawls first, then refuses a crawl that is running or was interrupted.
         using var writer = IssueWriter.Open(databasePath, _logger);
@@ -62,17 +63,35 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             // Orphans and sitemap coverage need every page and sitemap; a stopped crawl can't tell missing from not yet seen.
             var crawlComplete = status == CrawlStatus.Completed && (reader.ReadSitemapsDone() || !options.DiscoverSitemaps);
             var linksComplete = crawlComplete && SeesEveryLinkingPage(reader.ReadLimitSkips(), scope, notes, skipped);
-            if (!crawlComplete)
+            if (!options.DiscoverSitemaps)
+            {
+                Skip(notes, skipped, "Sitemaps weren't read in this crawl, so orphan pages and sitemap coverage weren't checked.",
+                    IssueCatalog.ORPHAN_PAGE, IssueCatalog.NOT_IN_SITEMAP, IssueCatalog.SITEMAP_MISSING);
+            }
+            else if (!crawlComplete)
             {
                 Skip(notes, skipped, status == CrawlStatus.Completed
                         ? "Not every sitemap was read, so orphan pages and sitemap coverage weren't checked."
                         : "The crawl didn't finish, so orphan pages and sitemap coverage weren't checked.",
                     IssueCatalog.ORPHAN_PAGE, IssueCatalog.NOT_IN_SITEMAP, IssueCatalog.SITEMAP_MISSING);
             }
+            else if (!sitemaps.Any(sitemap => sitemap is { Error: null, StatusCode: >= 200 and < 300 }))
+            {
+                // Orphans are sitemap pages nothing links to, and coverage compares with what the sitemaps list.
+                Skip(notes, skipped, "No sitemap could be read, so orphan pages and pages missing from the sitemaps weren't checked.",
+                    IssueCatalog.ORPHAN_PAGE, IssueCatalog.NOT_IN_SITEMAP);
+            }
             else if (SitemapRules.Unreadable(sitemaps) is { } unreadable)
             {
                 Skip(notes, skipped, $"Pages missing from the sitemaps weren't checked: {unreadable.Url} couldn't be read ({unreadable.Error}), and it may list them.",
                     IssueCatalog.NOT_IN_SITEMAP);
+            }
+
+            if (reader.CountNotChecked() is > 0 and var notChecked)
+            {
+                notes.Add(notChecked == 1
+                    ? "1 URL wasn't checked because its site had stopped answering, so links to it aren't judged."
+                    : $"{notChecked:N0} URLs weren't checked because their sites had stopped answering, so links to them aren't judged.");
             }
 
             // The site lives on the start URL's origin and the home page's (after redirects); robots.txt failing there stops all crawling.
@@ -145,6 +164,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 {
                     _logger.LogError(exception, "Rule {Rule} failed after the page pass; its cross-page results are left out", RuleName(rule));
                     notes.Add($"{RuleName(rule)} failed after reading every page, so its cross-page results are missing (see the log).");
+                    finishFailed = true;
                     continue;
                 }
 
@@ -166,7 +186,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 
         _logger.LogInformation("Analysed {Pages} pages in {Elapsed}: {Flagged} issues across {Types} checks",
             pages, stopwatch.Elapsed, issues.Sum(issue => issue.Count), issues.Count(issue => issue.Count > 0));
-        return new AnalysisSummary(pages, issues, stopwatch.Elapsed, IsPartial: skipped.Count > 0) { Notes = notes };
+        // Partial when a check was skipped, or a rule failed and left results out.
+        return new AnalysisSummary(pages, issues, stopwatch.Elapsed, IsPartial: skipped.Count > 0 || failures.Count > 0 || finishFailed) { Notes = notes };
     }
 
     /// <summary>

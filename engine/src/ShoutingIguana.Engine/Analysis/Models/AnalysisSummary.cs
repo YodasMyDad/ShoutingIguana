@@ -5,8 +5,9 @@ namespace ShoutingIguana.Engine.Analysis.Models;
 /// on a depth-limited crawl, say) are left out, and <see cref="Notes"/> says why.
 /// </param>
 /// <param name="IsPartial">
-/// Some checks were skipped because the crawl doesn't cover what they need: it was stopped, limited or kept to a
-/// folder, or a sitemap couldn't be read.
+/// Some results are missing: checks were skipped because the crawl doesn't cover what they need (it was stopped,
+/// limited or kept to a folder, sitemaps weren't read or one couldn't be), or a rule failed on some pages.
+/// <see cref="Notes"/> says which.
 /// </param>
 public sealed record AnalysisSummary(long PagesAnalyzed, IReadOnlyList<IssueCount> Issues, TimeSpan Duration, bool IsPartial = false)
 {

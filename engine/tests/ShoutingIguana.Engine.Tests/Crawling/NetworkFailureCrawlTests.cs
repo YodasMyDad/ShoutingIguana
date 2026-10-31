@@ -93,6 +93,39 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task UrlsNotCheckedBecauseTheirSiteStoppedAnsweringAreNotCalledBroken()
+    {
+        _server = await LoopbackServer.StartAsync(context =>
+        {
+            if (context.Connection.LocalPort == _server!.OtherBaseUri.Port)
+            {
+                // The partner site has gone: no answer to anything.
+                context.Abort();
+                return Task.CompletedTask;
+            }
+
+            return context.Request.Path.Value == "/"
+                ? Html(context, string.Concat(Enumerable.Range(0, 30).Select(page => $"<a href=\"{_server.OtherBaseUri}p{page}\">Partner {page}</a> ")))
+                : Status(context, 404);
+        });
+        var path = NewDatabasePath();
+
+        await CrawlAsync(path, new RecordingObserver());
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+
+        // The URLs it asked for before the breaker tripped are broken links. The rest weren't asked for, and say so.
+        var notChecked = Convert.ToInt32(Scalar(path, $"SELECT COUNT(*) FROM responses WHERE error LIKE '{RetryingFetcher.NOT_CHECKED_ERROR}%'"), CultureInfo.InvariantCulture);
+        var failed = Convert.ToInt32(Scalar(path, $"""
+            SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id
+            WHERE u.is_internal = 0 AND r.outcome = {(int)FetchOutcome.NetworkError}
+            """), CultureInfo.InvariantCulture) - notChecked;
+        Assert.True(notChecked > 0);
+        Assert.Equal(30, failed + notChecked);
+        Assert.StartsWith($"{failed} broken URL", Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.BROKEN_EXTERNAL_LINKS.Id, 10)).Detail);
+        Assert.Contains(analysis.Notes, note => note.StartsWith($"{notChecked} URLs weren't checked", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ASiteWithoutRobotsTxtIsCrawledInFullAndToldSo()
     {
         _server = await LoopbackServer.StartAsync(context => context.Request.Path.Value switch

@@ -23,6 +23,9 @@ internal sealed class RetryingFetcher(
     TimeProvider timeProvider,
     Random? random = null)
 {
+    /// <summary>Starts the error of a URL failed without a request, so the analysis can tell it from one that failed.</summary>
+    internal const string NOT_CHECKED_ERROR = "Not checked";
+
     private const int MAX_JITTER_MS = 250;
     private static readonly TimeSpan MAX_RETRY_WAIT = TimeSpan.FromSeconds(60);
 
@@ -83,7 +86,7 @@ internal sealed class RetryingFetcher(
     {
         RequestUri = uri,
         Outcome = FetchOutcome.NetworkError,
-        Error = $"Not checked: {uri.Host} stopped answering ({HostGate.UNREACHABLE_AFTER_URLS} URLs in a row got no response)"
+        Error = $"{NOT_CHECKED_ERROR}: {uri.Host} stopped answering ({HostGate.UNREACHABLE_AFTER_URLS} URLs in a row got no response)"
     };
 
     private static HostSignal SignalFor(FetchResponse response) => response switch

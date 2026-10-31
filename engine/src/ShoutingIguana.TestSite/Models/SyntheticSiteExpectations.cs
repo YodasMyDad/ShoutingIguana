@@ -38,6 +38,9 @@ public sealed record SyntheticSiteExpectations(
     /// <summary>Of <see cref="NofollowOnly"/>, the URLs that are files (images) rather than HTML pages.</summary>
     public int NofollowOnlyFiles { get; init; }
 
+    /// <summary>Checks the analysis can't run on this site, so it skips them and says why: orphans and coverage without sitemaps.</summary>
+    public IReadOnlySet<string> SkippedChecks { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+
     private const int LISTED_URLS = 5;
 
     /// <summary>How many URLs an issue must flag (slow-response: at least this many).</summary>

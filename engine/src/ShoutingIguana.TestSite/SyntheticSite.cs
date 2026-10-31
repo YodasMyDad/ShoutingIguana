@@ -374,7 +374,10 @@ public sealed partial class SyntheticSite
             ImagesMissingAlt: Count(issues, "image-missing-alt") - _plants.Count(plant => plant.Issues.Contains("image-missing-alt")),
             IssueUrls: issues.ToDictionary(pair => pair.Key, IReadOnlySet<string> (pair) => pair.Value, StringComparer.Ordinal))
         {
-            NofollowOnlyFiles = NOFOLLOW_ONLY_FILES.Length
+            NofollowOnlyFiles = NOFOLLOW_ONLY_FILES.Length,
+            SkippedChecks = _options.Sitemaps
+                ? new HashSet<string>(StringComparer.Ordinal)
+                : new HashSet<string>(StringComparer.Ordinal) { "orphan-page", "not-in-sitemap" }
         };
     }
 

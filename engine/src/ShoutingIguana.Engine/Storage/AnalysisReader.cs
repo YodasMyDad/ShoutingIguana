@@ -5,6 +5,7 @@ using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Serialization;
@@ -20,6 +21,10 @@ internal sealed class AnalysisReader : IDisposable
     /// Cloudflare's /cdn-cgi/ endpoints, such as the email-protection page every obfuscated address links to.
     /// </summary>
     internal const string SITE_PAGE = "r.word_count IS NOT NULL AND instr(u.url, '/cdn-cgi/') = 0";
+
+    /// <summary>A response stored without a request, because the URL's host had stopped answering.</summary>
+    private static readonly string NOT_CHECKED =
+        $"COALESCE(substr(r.error, 1, {RetryingFetcher.NOT_CHECKED_ERROR.Length}) = '{RetryingFetcher.NOT_CHECKED_ERROR}', 0)";
 
     private readonly SqliteConnection _connection;
     private readonly SqliteCommand _links;
@@ -42,6 +47,10 @@ internal sealed class AnalysisReader : IDisposable
 
     public CrawlStatus ReadStatus() => CrawlDatabase.ReadStatus(_connection);
 
+    /// <summary>URLs that were never requested because their host had stopped answering.</summary>
+    public int CountNotChecked() =>
+        Convert.ToInt32(CrawlDatabase.Scalar(_connection, $"SELECT COUNT(*) FROM responses r WHERE {NOT_CHECKED}"), CultureInfo.InvariantCulture);
+
     public UrlTable ReadUrls()
     {
         var maxId = Convert.ToInt32(CrawlDatabase.Scalar(_connection, "SELECT COALESCE(MAX(id), 0) FROM urls"), CultureInfo.InvariantCulture);
@@ -50,9 +59,11 @@ internal sealed class AnalysisReader : IDisposable
 
         var statuses = new UrlStatus[maxId + 1];
         var startId = 0;
+        // A URL failed without a request, because its host had stopped answering, was never checked: links to it can't
+        // be judged, so it counts as unfetched.
         Rows($"""
             SELECT u.id, u.is_internal, substr(u.url, 1, 6) = 'https:', u.depth, u.source,
-                   r.url_id IS NOT NULL, r.outcome, r.status_code, r.is_html, r.indexability_reason,
+                   r.url_id IS NOT NULL AND NOT {NOT_CHECKED}, r.outcome, r.status_code, r.is_html, r.indexability_reason,
                    r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0), u.url, r.content_type
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id
             """, reader =>

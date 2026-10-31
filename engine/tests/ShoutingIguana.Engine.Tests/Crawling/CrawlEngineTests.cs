@@ -89,10 +89,11 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(0, stats.QueuedCount);
         Assert.Equal(0, Count(path, "SELECT COUNT(*) FROM urls WHERE state = 1"));
 
-        // Every planted issue is reported on exactly the planted URLs, and nothing else is, and every check ran.
+        // Every planted issue is reported on exactly the planted URLs, and nothing else is. Every check ran that the site
+        // supports; the rest are skipped with one note saying why.
         Assert.Equal(expected.AnalysedPages, analysis.PagesAnalyzed);
-        Assert.False(analysis.IsPartial);
-        Assert.Empty(analysis.Notes);
+        Assert.Equal(expected.SkippedChecks.Count > 0, analysis.IsPartial);
+        Assert.Equal(expected.SkippedChecks.Count > 0 ? 1 : 0, analysis.Notes.Count);
         var rows = IssueReader.ReadAll(path).ToList();
         var mismatches = expected.CompareIssues(
             rows.Select(row => (row.Issue, row.Url)),
@@ -103,8 +104,9 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         // The per-issue totals the summary shows agree with the flagged rows.
         var flaggedPerIssue = rows.GroupBy(row => row.Issue).ToDictionary(group => group.Key, group => (long)group.Count());
         var counts = IssueReader.ReadCounts(path);
-        Assert.Equal(IssueCatalog.All.Count, counts.Count);
-        Assert.All(IssueCatalog.All, issue => Assert.Equal((issue.Id, flaggedPerIssue.GetValueOrDefault(issue.Id)), (issue.Id, counts.GetValueOrDefault(issue.Id))));
+        var ran = IssueCatalog.All.Where(issue => !expected.SkippedChecks.Contains(issue.Id)).ToList();
+        Assert.Equal(ran.Select(issue => issue.Id).Order(StringComparer.Ordinal), counts.Keys.Order(StringComparer.Ordinal));
+        Assert.All(ran, issue => Assert.Equal((issue.Id, flaggedPerIssue.GetValueOrDefault(issue.Id)), (issue.Id, counts.GetValueOrDefault(issue.Id))));
     }
 
     [Fact]
