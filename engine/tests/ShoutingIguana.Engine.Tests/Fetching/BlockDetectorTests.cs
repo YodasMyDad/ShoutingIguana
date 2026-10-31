@@ -81,6 +81,22 @@ public sealed class BlockDetectorTests
         Assert.Null(BlockDetector.Detect(403, [new ResponseHeader("x-sucuri-id", "18015"), new ResponseHeader("server", "Sucuri/Cloudproxy")], FORBIDDEN_PAGE));
 
     [Fact]
+    public void AkamaiBlockPage() =>
+        Assert.Equal("Akamai", BlockDetector.Detect(403, [new ResponseHeader("server", "AkamaiGHost")],
+            "<HTML><HEAD><TITLE>Access Denied</TITLE></HEAD><BODY><H1>Access Denied</H1>You don't have permission to access this server.<P>Reference #18.4f2e1b2c</BODY></HTML>"));
+
+    [Fact]
+    public void AccessDeniedFromAServerOtherThanAkamaiIsNotABlock() =>
+        Assert.Null(BlockDetector.Detect(403, [new ResponseHeader("server", "nginx")], "<title>Access Denied</title>"));
+
+    [Theory]
+    [InlineData("<div class=\"g-recaptcha\" data-sitekey=\"6Lc\"></div>")]
+    [InlineData("<div class=\"h-captcha\" data-sitekey=\"10000000\"></div>")]
+    [InlineData("<div class=\"cf-turnstile\" data-sitekey=\"0x4AAA\"></div>")]
+    public void ACaptchaOnAnErrorPageIsABlock(string widget) =>
+        Assert.Equal("CAPTCHA challenge", BlockDetector.Detect(403, [new ResponseHeader("server", "nginx")], $"<form>{widget}</form>"));
+
+    [Fact]
     public void PlainForbiddenIsNotABlock() =>
         Assert.Null(BlockDetector.Detect(403, [new ResponseHeader("server", "nginx")], "<h1>Forbidden</h1>"));
 
