@@ -152,7 +152,9 @@ public sealed class CrawlWriterTests : IAsyncLifetime
 
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         Assert.Equal(_server.Site.GetExpectations().HtmlPages, CrawlStatsReader.Read(path).HtmlPageCount);
-        Assert.False(File.Exists(path + "-lock"));
+
+        // The lock file goes with the lock on Windows; elsewhere it stays for the next writer to lock (see CrawlFileLock).
+        Assert.Equal(!OperatingSystem.IsWindows(), File.Exists(path + "-lock"));
     }
 
     [Fact]

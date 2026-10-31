@@ -4,7 +4,7 @@ namespace ShoutingIguana.Engine.Storage;
 /// Makes "one writer per crawl file" a guarantee rather than a status check. A crawl or an analysis holds an exclusive
 /// lock on a file beside the crawl for as long as it writes, so a second writer is refused at once, in this process or
 /// another. The operating system drops the lock when a process ends, so a crashed crawl stays resumable, and a lock
-/// file that a crash leaves behind is simply reused.
+/// file that a crash leaves behind is simply reused. On Linux and macOS the lock file stays beside the crawl.
 /// </summary>
 internal sealed class CrawlFileLock : IDisposable
 {
@@ -17,9 +17,12 @@ internal sealed class CrawlFileLock : IDisposable
     {
         try
         {
-            // FileShare.None is a sharing lock on Windows and flock(LOCK_EX) on Linux and macOS.
+            // FileShare.None is a sharing lock on Windows and flock(LOCK_EX) on Linux and macOS. There, deleting the file on
+            // close would unlink it before unlocking it: a writer that had just opened it would then lock a file nobody else
+            // can see, while a third created a new one and locked that, and two would write at once.
+            var options = OperatingSystem.IsWindows() ? FileOptions.DeleteOnClose : FileOptions.None;
             return new CrawlFileLock(new FileStream(databasePath + "-lock", FileMode.OpenOrCreate, FileAccess.ReadWrite,
-                FileShare.None, bufferSize: 1, FileOptions.DeleteOnClose));
+                FileShare.None, bufferSize: 1, options));
         }
         catch (IOException exception) when (exception.GetType() == typeof(IOException))
         {
