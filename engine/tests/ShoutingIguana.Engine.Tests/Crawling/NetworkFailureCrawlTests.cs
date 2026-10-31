@@ -1,10 +1,12 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Robots;
 using ShoutingIguana.Engine.Storage;
@@ -61,6 +63,7 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
 
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
         Assert.Equal(1, IssueReader.ReadCounts(path).GetValueOrDefault(IssueCatalog.BROKEN_EXTERNAL_LINKS.Id));
+        Assert.Null(Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.BLOCKED_BY_ROBOTS.Id, 10)).Detail);
     }
 
     [Fact]
@@ -83,6 +86,10 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
         var issues = IssueReader.ReadCounts(path);
         Assert.Equal(1, issues.GetValueOrDefault(IssueCatalog.ROBOTS_TXT_UNREACHABLE.Id));
         Assert.Equal(1, issues.GetValueOrDefault(IssueCatalog.BLOCKED_BY_ROBOTS.Id));
+
+        // The blocked URL says it wasn't a robots.txt rule.
+        var blocked = Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.BLOCKED_BY_ROBOTS.Id, 10));
+        Assert.Equal($"{RobotsTxt.UNREACHABLE_ERROR}: HTTP 503", blocked.Detail);
     }
 
     [Fact]
@@ -162,6 +169,81 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
         Assert.Equal(FetchOutcome.Success, Outcome(path, _server.BaseUri.AbsoluteUri));
         Assert.Equal(FetchOutcome.Success, Outcome(path, $"{_server.BaseUri}about"));
         Assert.Equal(2, robotsRequests);
+    }
+
+    [Fact]
+    public async Task AStartUrlThatRedirectsToAnotherSiteSaysSo()
+    {
+        // A site that moved to a new domain: the start URL is all there is to crawl, which looks broken unless it's said.
+        const string MOVED_TO = "http://moved.invalid/";
+        _server = await LoopbackServer.StartAsync(context =>
+        {
+            if (context.Request.Path.Value == "/robots.txt")
+            {
+                return Status(context, 404);
+            }
+
+            context.Response.Headers.Location = MOVED_TO;
+            return Status(context, 301);
+        });
+        var observer = new RecordingObserver();
+        var path = NewDatabasePath();
+
+        var summary = await CrawlAsync(path, observer);
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        Assert.Equal(FetchOutcome.Redirect, Outcome(path, _server.BaseUri.AbsoluteUri));
+        var notice = Assert.Single(observer.Notices, notice => notice.Code == "start-redirects-away");
+        Assert.Equal(CrawlNoticeLevel.Warning, notice.Level);
+        Assert.Contains(MOVED_TO, notice.Message);
+    }
+
+    /// <summary>
+    /// The home page answers, then the site goes down for good. On the fake clock, so the 1-minute pauses between
+    /// tries and the 10 minutes before giving up pass in a couple of seconds.
+    /// </summary>
+    [Fact]
+    public async Task ASiteThatStaysDownStopsTheCrawlAndCanBeResumed()
+    {
+        var links = string.Concat(Enumerable.Range(0, 60).Select(page => $"<a href=\"/p{page}\">Page {page}</a> "));
+        _server = await LoopbackServer.StartAsync(context =>
+        {
+            switch (context.Request.Path.Value)
+            {
+                case "/":
+                    return Html(context, links);
+                case "/robots.txt":
+                    return Status(context, 404);
+                default:
+                    context.Abort();
+                    return Task.CompletedTask;
+            }
+        });
+        var time = new FakeTimeProvider();
+        var observer = new RecordingObserver();
+        var path = NewDatabasePath();
+        var options = new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxRetries = 0, DiscoverSitemaps = false, Concurrency = 2 };
+
+        await using var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(new CrawlRequest(options, path), observer);
+        var started = time.GetUtcNow();
+        var deadline = DateTime.UtcNow + CRAWL_TIMEOUT;
+        while (!job.Completion.IsCompleted && DateTime.UtcNow < deadline)
+        {
+            time.Advance(TimeSpan.FromSeconds(5));
+            await Task.Delay(1);
+        }
+
+        var summary = await job.Completion.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(CrawlStatus.Stopped, summary.Status);
+        Assert.Equal(1, observer.Count("site-down"));
+        Assert.InRange(time.GetUtcNow() - started, RetryingFetcher.GIVE_UP_AFTER, RetryingFetcher.GIVE_UP_AFTER + TimeSpan.FromMinutes(2));
+
+        // Nothing it couldn't reach was written off as broken: it's all still to do, for when the site is back.
+        Assert.Equal(0L, Scalar(path, $"""
+            SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id
+            WHERE u.is_internal = 1 AND r.outcome IN ({(int)FetchOutcome.Timeout}, {(int)FetchOutcome.NetworkError})
+            """));
+        Assert.Equal(60L, Scalar(path, "SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state IN (0, 1)"));
     }
 
     private async Task<CrawlSummary> CrawlAsync(string path, ICrawlObserver observer, int maxRetries = 0)

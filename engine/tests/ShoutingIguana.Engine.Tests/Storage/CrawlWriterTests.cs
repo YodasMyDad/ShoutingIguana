@@ -159,5 +159,40 @@ public sealed class CrawlWriterTests : IAsyncLifetime
             TestCrawls.Rows(path, "SELECT u.url, c.url FROM responses r JOIN urls u ON u.id = r.url_id LEFT JOIN urls c ON c.id = r.canonical_url_id"));
     }
 
+    [Fact]
+    public async Task DownloadedBytesAreTheBodiesReadLiveAndAfterResuming()
+    {
+        var path = _files.NewPath();
+        var links = new OutLinkFactory(new CrawlScope(_server.BaseUri, includeSubdomains: false, stayInStartFolder: true));
+        OutLink Link(string target, LinkKind kind) => links.Create(new Uri(_server.BaseUri, target), kind, LinkFlags.None, LinkPosition.Content, null);
+        var counters = new CrawlCounters();
+
+        await using (var writer = CrawlWriter.Open(path, Options(), resume: false, counters, NullLogger.Instance))
+        {
+            await writer.DiscoverAsync([Link("/page", LinkKind.Hyperlink), Link("/photo.jpg", LinkKind.Image)], DiscoverySource.Seed, null, CancellationToken.None);
+            var claim = await writer.ClaimAsync(2, 0, CancellationToken.None);
+            Assert.Equal(2, claim.Internal.Count);
+            foreach (var item in claim.Internal)
+            {
+                // A page read in full, 9,000 bytes sent as 2,000 compressed, and a photo only checked, which says it's 300 KB.
+                var isPage = item.Url.EndsWith("/page", StringComparison.Ordinal);
+                var response = new ResponseRow
+                {
+                    UrlId = item.Id, FetchedAt = 0, Outcome = FetchOutcome.Success, StatusCode = 200, IsHtml = isPage,
+                    SizeBytes = isPage ? 2_000 : 300_000, BodyBytes = isPage ? 9_000 : null
+                };
+                await writer.RecordAsync(new PageRecord(item, response, [], false, null, null), CancellationToken.None);
+            }
+        }
+
+        Assert.Equal(2_000, counters.Bytes);
+
+        var resumed = new CrawlCounters();
+        await using (CrawlWriter.Open(path, Options(), resume: true, resumed, NullLogger.Instance))
+        {
+            Assert.Equal(2_000, resumed.Bytes);
+        }
+    }
+
     private CrawlOptions Options() => new() { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 4 };
 }

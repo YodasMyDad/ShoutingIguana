@@ -27,6 +27,7 @@ internal sealed class HttpFetcher : IDisposable
     private readonly HttpClient _client;
     private readonly CrawlOptions _options;
     private readonly CrawlScope _scope;
+    private readonly bool _startsOnHttps;
     private readonly TimeProvider _timeProvider;
     private readonly string _userAgent;
     private readonly TimeSpan _timeout;
@@ -35,6 +36,7 @@ internal sealed class HttpFetcher : IDisposable
     {
         _options = options;
         _scope = scope;
+        _startsOnHttps = Uri.TryCreate(options.StartUrl, UriKind.Absolute, out var start) && start.Scheme == Uri.UriSchemeHttps;
         _timeProvider = timeProvider;
         _userAgent = userAgent.Header;
         _timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
@@ -104,8 +106,9 @@ internal sealed class HttpFetcher : IDisposable
             else if (isSuccess && contentLength is null && contentType?.StartsWith("image/", StringComparison.Ordinal) == true)
             {
                 // Image CDNs often send chunked responses without a length; counting the bytes is the only way to
-                // know the image's size, which the large-image check needs.
+                // know the image's size, which the large-image check needs. Its body is the image as sent.
                 transferBytes = await MeasureBodyAsync(response, timeout.Token, cancellationToken).ConfigureAwait(false);
+                bodyBytes = transferBytes;
             }
 
             var blockReason = BlockDetector.Detect(statusCode, headers, isSuccess ? null : text);
@@ -178,8 +181,9 @@ internal sealed class HttpFetcher : IDisposable
         headers.TryAddWithoutValidation("Upgrade-Insecure-Requests", "1");
 
         // Extra headers often carry a firewall allowlist secret, so they only go to the site being crawled, never to
-        // other sites: not to their links, their robots.txt or a redirect that leads there.
-        if (_scope.IsInternal(uri))
+        // other sites: not to their links, their robots.txt or a redirect that leads there. Nor over plain http when
+        // the crawl started on https, where anyone on the way could read them.
+        if (_scope.IsInternal(uri) && (uri.Scheme == Uri.UriSchemeHttps || !_startsOnHttps))
         {
             foreach (var (name, value) in _options.ExtraHeaders)
             {

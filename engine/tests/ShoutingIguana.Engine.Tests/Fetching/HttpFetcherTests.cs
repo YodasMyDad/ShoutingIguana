@@ -172,6 +172,19 @@ public sealed class HttpFetcherTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ExtraHeadersStayOffPlainHttpWhenTheCrawlStartedOnHttps()
+    {
+        var secure = new UriBuilder(_server.BaseUri) { Scheme = Uri.UriSchemeHttps }.Uri.AbsoluteUri;
+        var secret = new Dictionary<string, string> { [SECRET_HEADER] = "s3cret" };
+        using var fetcher = Fetcher(Options() with { StartUrl = secure, ExtraHeaders = secret });
+
+        // An http:// link on an https site goes out unencrypted, so the secret stays behind.
+        var downgraded = await fetcher.FetchAsync(_server.Url("/echo"), FetchBody.Text, CancellationToken.None);
+
+        Assert.Equal("(none)", downgraded.Body);
+    }
+
+    [Fact]
     public async Task MeasuresImagesSentWithoutALength()
     {
         using var fetcher = Fetcher();

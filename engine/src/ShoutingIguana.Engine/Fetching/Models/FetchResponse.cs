@@ -17,7 +17,7 @@ internal sealed record FetchResponse
     /// <summary>Bytes read off the wire, before decompression. Null when the body was not read.</summary>
     public long? TransferBytes { get; init; }
 
-    /// <summary>Decoded body size. Null when the body was not read.</summary>
+    /// <summary>Decoded body size (for an image that was only measured, its size as sent). Null when the body was not read.</summary>
     public long? BodyBytes { get; init; }
 
     /// <summary>The decoded body, when one was requested and the response qualified.</summary>

@@ -11,8 +11,33 @@ public sealed class CrawlScopeTests
 
         Assert.True(scope.IsInternal(new Uri("https://www.example.com/page")));
         Assert.True(scope.IsInternal(new Uri("http://www.example.com/page")));
-        Assert.False(scope.IsInternal(new Uri("https://example.com/page")));
+        Assert.False(scope.IsInternal(new Uri("https://shop.example.com/page")));
         Assert.False(scope.IsInternal(new Uri("https://other.com/")));
+    }
+
+    /// <summary>Starting from either is the same crawl, so a start URL that redirects to its twin crawls the site.</summary>
+    [Theory]
+    [InlineData("https://example.com/")]
+    [InlineData("https://www.example.com/")]
+    public void TheBareDomainAndItsWwwHostAreOneSite(string start)
+    {
+        var scope = new CrawlScope(new Uri(start), includeSubdomains: false, stayInStartFolder: false);
+
+        Assert.True(scope.IsInternal(new Uri("https://example.com/page")));
+        Assert.True(scope.IsInternal(new Uri("http://www.example.com/page")));
+        Assert.False(scope.IsInternal(new Uri("https://shop.example.com/")));
+        Assert.False(scope.IsInternal(new Uri("https://www.example.com.other.test/")));
+        Assert.False(scope.IsInternal(new Uri("https://wwwexample.com/")));
+    }
+
+    [Fact]
+    public void SubdomainsAreTheStartHostsOwn()
+    {
+        var scope = new CrawlScope(new Uri("https://shop.example.com/"), includeSubdomains: true, stayInStartFolder: false);
+
+        Assert.True(scope.IsInternal(new Uri("https://eu.shop.example.com/")));
+        Assert.True(scope.IsInternal(new Uri("https://www.shop.example.com/")));
+        Assert.False(scope.IsInternal(new Uri("https://www.example.com/")));
     }
 
     [Fact]

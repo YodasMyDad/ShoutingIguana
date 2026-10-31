@@ -19,6 +19,14 @@ public sealed class HostGateRegistryTests
     }
 
     [Fact]
+    public void TheBareDomainAndItsWwwHostShareOneGate()
+    {
+        var registry = Registry("https://example.com/", new FakeTimeProvider());
+
+        Assert.Same(registry.For(new Uri("https://example.com/")), registry.For(new Uri("https://www.example.com/")));
+    }
+
+    [Fact]
     public void AnotherPortOnTheSameHostIsAnotherSite()
     {
         List<bool> created = [];

@@ -30,6 +30,8 @@ internal sealed class CrawlCounters
     public long Errors => Interlocked.Read(ref _errors);
     public long Blocked => Interlocked.Read(ref _blocked);
     public long RobotsDisallowed => Interlocked.Read(ref _robotsDisallowed);
+
+    /// <summary>Bytes of the bodies the crawler read, as sent; sizes it was only told by Content-Length aren't counted.</summary>
     public long Bytes => Interlocked.Read(ref _bytes);
 
     public void OnUrlAdded(bool queued)

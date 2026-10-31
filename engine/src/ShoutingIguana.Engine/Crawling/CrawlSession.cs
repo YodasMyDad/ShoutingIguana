@@ -51,6 +51,7 @@ internal sealed class CrawlSession
     private readonly PageProcessor _processor;
     private readonly RobotsCache _robots;
     private readonly SitemapDiscoverer _sitemaps;
+    private readonly HostGate _startGate;
     private readonly Channel<FrontierItem> _internalQueue;
     private readonly Channel<FrontierItem> _externalQueue;
     private readonly ConcurrentQueue<FrontierItem> _deferred = new();
@@ -75,6 +76,7 @@ internal sealed class CrawlSession
         var gates = new HostGateRegistry(scope, isInternal => isInternal
             ? new HostGate(_options.Concurrency, interval, timeProvider)
             : new HostGate(EXTERNAL_CONCURRENCY_PER_HOST, TimeSpan.Zero, timeProvider));
+        _startGate = gates.For(_startUri);
 
         _writer = CrawlWriter.Open(request.DatabasePath, _options, request.Resume, _counters, loggerFactory.CreateLogger<CrawlWriter>());
         _fetcher = new HttpFetcher(_options, userAgent, scope, timeProvider);
@@ -239,6 +241,10 @@ internal sealed class CrawlSession
         while (!cancellationToken.IsCancellationRequested)
         {
             await _pause.WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (await GiveUpOnADeadSiteAsync().ConfigureAwait(false))
+            {
+                return false;
+            }
 
             var wantInternal = internalCapacity - _internalQueue.Reader.Count;
             var wantExternal = externalCapacity - _externalQueue.Reader.Count;
@@ -284,6 +290,24 @@ internal sealed class CrawlSession
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// The site hasn't answered for <see cref="RetryingFetcher.GIVE_UP_AFTER"/>: stop rather than wait on it for good.
+    /// Whatever wasn't recorded yet stays queued, so resuming once the site is back carries on where this left off.
+    /// </summary>
+    private async ValueTask<bool> GiveUpOnADeadSiteAsync()
+    {
+        var down = _startGate.UnreachableFor;
+        if (down < RetryingFetcher.GIVE_UP_AFTER)
+        {
+            return false;
+        }
+
+        _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Error, "site-down",
+            $"{_startUri.Host} hasn't answered for {down.TotalMinutes:0} minutes, so the crawl stopped. Resume it once the site is back."));
+        await _stop.CancelAsync().ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>Everything else is done: the URLs held back get their one more try, robots.txt included.</summary>

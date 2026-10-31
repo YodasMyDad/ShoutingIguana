@@ -27,7 +27,8 @@ internal sealed class ResponseCodeRules(UrlTable urls, IReadOnlyDictionary<int, 
                 FetchOutcome.Timeout => new IssueHit(IssueCatalog.INTERNAL_UNREACHABLE, id, "Timed out"),
                 FetchOutcome.NetworkError => new IssueHit(IssueCatalog.INTERNAL_UNREACHABLE, id, "Connection failed"),
                 FetchOutcome.Blocked => new IssueHit(IssueCatalog.INTERNAL_BLOCKED, id, blockReasons.GetValueOrDefault(id) ?? $"HTTP {url.StatusCode}"),
-                FetchOutcome.RobotsDisallowed => new IssueHit(IssueCatalog.BLOCKED_BY_ROBOTS, id),
+                // Refused because robots.txt couldn't be read says so; a robots.txt rule needs no explaining.
+                FetchOutcome.RobotsDisallowed => new IssueHit(IssueCatalog.BLOCKED_BY_ROBOTS, id, blockReasons.GetValueOrDefault(id)),
                 _ => (IssueHit?)null
             };
 

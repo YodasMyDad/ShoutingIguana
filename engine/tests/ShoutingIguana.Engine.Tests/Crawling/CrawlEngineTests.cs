@@ -63,7 +63,9 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     private async Task<string> AssertFindsExactlyThePlantsAsync(SyntheticSiteServer server, CrawlOptions options)
     {
         var path = NewDatabasePath();
-        Assert.Equal(CrawlStatus.Completed, (await CrawlAsync(options, path)).Status);
+        var summary = await CrawlAsync(options, path);
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        AssertDownloadedIsWhatWasRead(summary, path);
         await AssertMatchesThePlantsAsync(server, path);
         return path;
     }
@@ -209,7 +211,9 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         await StopAfterAsync(Options() with { MaxRequestsPerSecond = 200 }, path, stopAfter);
 
         var resumedOptions = CrawlDatabase.ReadOptions(path) with { MaxRequestsPerSecond = 0 };
-        Assert.Equal(CrawlStatus.Completed, (await CrawlAsync(resumedOptions, path, resume: true)).Status);
+        var resumed = await CrawlAsync(resumedOptions, path, resume: true);
+        Assert.Equal(CrawlStatus.Completed, resumed.Status);
+        AssertDownloadedIsWhatWasRead(resumed, path);
         await AssertMatchesThePlantsAsync(_server, path);
 
         // The same URLs, in the same states, and the same links as a crawl that was never interrupted.
@@ -369,6 +373,16 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     }
 
     private static long Depth(string path, string url) => Count(path, $"SELECT depth FROM urls WHERE url = '{url}'");
+
+    /// <summary>
+    /// Downloaded means the bodies the crawler read. The images it only checked don't count, whatever size their
+    /// Content-Length gives, like the planted 300 KB one.
+    /// </summary>
+    private static void AssertDownloadedIsWhatWasRead(CrawlSummary summary, string path)
+    {
+        Assert.Equal(Count(path, "SELECT COALESCE(SUM(size_bytes), 0) FROM responses WHERE body_bytes IS NOT NULL"), summary.Progress.BytesDownloaded);
+        Assert.Equal(1, Count(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url LIKE '%/img/large.jpg' AND r.body_bytes IS NULL"));
+    }
 
     private static List<string> Strings(string path, string sql)
     {

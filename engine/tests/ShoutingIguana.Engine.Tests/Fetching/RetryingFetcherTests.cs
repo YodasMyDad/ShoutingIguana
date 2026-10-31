@@ -105,9 +105,32 @@ public sealed class RetryingFetcherTests : IAsyncLifetime
         Assert.Equal(1, _observer.Count("site-unreachable"));
     }
 
-    private async Task<FetchResponse> FetchAsync(Uri uri)
+    [Fact]
+    public async Task AnIncludedSubdomainThatStopsAnsweringFailsFastLikeAnotherSite()
     {
-        var fetch = _fetcher.FetchAsync(uri, FetchBody.None, CancellationToken.None);
+        // Names under .invalid never resolve, so they get no answer at all, like a dead CDN.
+        var options = new CrawlOptions { StartUrl = "http://shop.invalid/", IncludeSubdomains = true, MaxRetries = 0 };
+        var scope = new CrawlScope(new Uri(options.StartUrl), options.IncludeSubdomains, stayInStartFolder: false);
+        var gates = new HostGateRegistry(scope, _ => new HostGate(4, TimeSpan.Zero, _time));
+        using var http = new HttpFetcher(options, UserAgents.Resolve(options.UserAgent, null), scope, _time);
+        var fetcher = new RetryingFetcher(http, gates, scope, options.MaxRetries, _observer, _time, new NoJitter());
+        var cdn = new Uri("http://cdn.shop.invalid/");
+        Assert.True(scope.IsInternal(cdn));
+
+        for (var url = 0; url < HostGate.UNREACHABLE_AFTER_URLS; url++)
+        {
+            Assert.Null((await FetchAsync(new Uri(cdn, $"{url}.jpg"), fetcher)).StatusCode);
+        }
+
+        var skipped = await FetchAsync(new Uri(cdn, "3.jpg"), fetcher);
+
+        Assert.StartsWith("Not checked:", skipped.Error);
+        Assert.Empty(_observer.Notices);
+    }
+
+    private async Task<FetchResponse> FetchAsync(Uri uri, RetryingFetcher? fetcher = null)
+    {
+        var fetch = (fetcher ?? _fetcher).FetchAsync(uri, FetchBody.None, CancellationToken.None);
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
         while (!fetch.IsCompleted)
         {

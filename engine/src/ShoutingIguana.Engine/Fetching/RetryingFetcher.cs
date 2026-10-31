@@ -9,8 +9,10 @@ namespace ShoutingIguana.Engine.Fetching;
 /// The polite way to fetch, shared by pages and robots.txt: through the host's gate, telling the gate how the host
 /// answered, and retrying transient failures (no response, 429, 502, 503, 504) after an exponential backoff or the
 /// server's Retry-After, capped at a minute. When <see cref="HostGate.UNREACHABLE_AFTER_URLS"/> URLs in a row get no
-/// answer, another site's remaining URLs fail at once instead of each costing several timeouts, and the site being
-/// crawled is waited out: its gate pauses for <see cref="UNREACHABLE_PAUSE"/> after every unanswered attempt.
+/// answer, another host's remaining URLs fail at once instead of each costing several timeouts, and the site being
+/// crawled is waited out: its gate pauses for <see cref="UNREACHABLE_PAUSE"/> after every unanswered attempt. Only the
+/// start URL's host and its www twin are waited out; an included subdomain that stops answering (a dead CDN) fails
+/// fast like another site, so it can't hold up the crawl.
 /// </summary>
 internal sealed class RetryingFetcher(
     HttpFetcher fetcher,
@@ -27,17 +29,20 @@ internal sealed class RetryingFetcher(
     /// <summary>How long the site's own gate holds every request after an unanswered attempt while the site is unreachable.</summary>
     internal static readonly TimeSpan UNREACHABLE_PAUSE = TimeSpan.FromMinutes(1);
 
+    /// <summary>How long the site may go without answering before the crawl stops, resumable, instead of waiting on.</summary>
+    internal static readonly TimeSpan GIVE_UP_AFTER = TimeSpan.FromMinutes(10);
+
     private readonly Random _random = random ?? Random.Shared;
 
     /// <param name="singleAttempt">No retries: the URL already had them, and this is its one more try at the end of the crawl.</param>
     public async Task<FetchResponse> FetchAsync(Uri uri, FetchBody body, CancellationToken cancellationToken, int? maxBodyBytes = null, bool singleAttempt = false)
     {
         var gate = gates.For(uri);
-        var isInternal = scope.IsInternal(uri);
+        var waitedOut = scope.IsStartSite(uri);
         var retries = singleAttempt ? 0 : maxRetries;
         for (var attempt = 0; ; attempt++)
         {
-            if (!isInternal && gate.IsUnreachable)
+            if (!waitedOut && gate.IsUnreachable)
             {
                 return NotChecked(uri);
             }
@@ -50,20 +55,20 @@ internal sealed class RetryingFetcher(
 
             gate.Report(SignalFor(response), response.RetryAfter);
             var answered = response.StatusCode is not null;
-            if (isInternal && !answered && gate.IsUnreachable)
+            if (waitedOut && !answered && gate.IsUnreachable)
             {
                 gate.Pause(UNREACHABLE_PAUSE);
             }
 
             if (attempt >= retries || !IsRetryable(response))
             {
-                if (gate.ReportUrl(answered) && isInternal)
+                if (gate.ReportUrl(answered) && waitedOut)
                 {
                     gate.Pause(UNREACHABLE_PAUSE);
                     observer.OnNotice(new CrawlNotice(
                         CrawlNoticeLevel.Warning,
                         "site-unreachable",
-                        $"{uri.Host} stopped answering: {HostGate.UNREACHABLE_AFTER_URLS} URLs in a row got no response ({response.Error}). The crawler waits {UNREACHABLE_PAUSE.TotalMinutes:0} minute between tries until it answers again, and retries the URLs that failed at the end of the crawl."));
+                        $"{uri.Host} stopped answering: {HostGate.UNREACHABLE_AFTER_URLS} URLs in a row got no response ({response.Error}). The crawler waits {UNREACHABLE_PAUSE.TotalMinutes:0} minute between tries until it answers again, and retries the URLs that failed at the end of the crawl. If it doesn't answer for {GIVE_UP_AFTER.TotalMinutes:0} minutes, the crawl stops, to be resumed once the site is back."));
                 }
 
                 return response;

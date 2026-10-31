@@ -31,6 +31,7 @@ internal sealed class PageProcessor(
     private int _internalFetches;
     private int _internalForbidden;
     private int _forbiddenReported;
+    private int _startLeftReported;
 
     /// <param name="isRetry">The URL's one more try at the end of the crawl: a single attempt, as it had its retries.</param>
     public async Task<PageRecord> ProcessAsync(FrontierItem item, CancellationToken cancellationToken, bool isRetry = false)
@@ -88,7 +89,9 @@ internal sealed class PageProcessor(
         List<OutLink> outLinks = [];
         if (response is { Outcome: FetchOutcome.Redirect, Location: { } location })
         {
-            outLinks.Add(links.Create(location, LinkKind.Redirect, LinkFlags.None, LinkPosition.Head, null));
+            var target = links.Create(location, LinkKind.Redirect, LinkFlags.None, LinkPosition.Head, null);
+            outLinks.Add(target);
+            WarnIfTheStartLeavesTheSite(item, target);
         }
 
         if (parsed is not null && item.Mode == FetchMode.Crawl)
@@ -154,6 +157,21 @@ internal sealed class PageProcessor(
     private static bool CanonicalisedElsewhere(string url, PageFacts? facts) =>
         facts?.Canonicals.FirstOrDefault(canonical => canonical.Url is not null && (canonical.InHead || canonical.FromHttpHeader))
             is { Url: { } target } && target != url;
+
+    /// <summary>
+    /// Redirects keep their depth, so depth 0 is the start URL and its redirects. One that leads off the site leaves
+    /// nothing else to crawl, which looks like a broken crawl unless it's said.
+    /// </summary>
+    private void WarnIfTheStartLeavesTheSite(FrontierItem item, OutLink target)
+    {
+        if (item is { Depth: 0, IsInternal: true } && !target.IsInternal && Interlocked.Exchange(ref _startLeftReported, 1) == 0)
+        {
+            observer.OnNotice(new CrawlNotice(
+                CrawlNoticeLevel.Warning,
+                "start-redirects-away",
+                $"The start URL redirects to {target.Url}, which is outside the site being crawled, so there's nothing more to crawl. Start from {target.Url} instead."));
+        }
+    }
 
     private void WatchForBlocking(Uri uri, FetchResponse response)
     {

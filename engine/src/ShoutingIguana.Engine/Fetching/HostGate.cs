@@ -25,6 +25,7 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
     private DateTimeOffset _nextStart = DateTimeOffset.MinValue;
     private DateTimeOffset _pausedUntil = DateTimeOffset.MinValue;
     private int _unansweredUrls;
+    private DateTimeOffset? _unreachableSince;
 
     public TimeSpan CurrentBackoff
     {
@@ -49,6 +50,18 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
         }
     }
 
+    /// <summary>How long the host has been <see cref="IsUnreachable"/>; zero while it answers.</summary>
+    public TimeSpan UnreachableFor
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _unreachableSince is { } since ? timeProvider.GetUtcNow() - since : TimeSpan.Zero;
+            }
+        }
+    }
+
     /// <summary>
     /// Records how a URL ended once its retries were spent. Any response, even an error status, resets the count.
     /// Returns true for the URL that makes the host unreachable.
@@ -60,10 +73,17 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
             if (answered)
             {
                 _unansweredUrls = 0;
+                _unreachableSince = null;
                 return false;
             }
 
-            return ++_unansweredUrls == UNREACHABLE_AFTER_URLS;
+            if (++_unansweredUrls != UNREACHABLE_AFTER_URLS)
+            {
+                return false;
+            }
+
+            _unreachableSince = timeProvider.GetUtcNow();
+            return true;
         }
     }
 

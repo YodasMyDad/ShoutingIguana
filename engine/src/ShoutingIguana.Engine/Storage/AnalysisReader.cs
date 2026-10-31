@@ -177,12 +177,18 @@ internal sealed class AnalysisReader : IDisposable
                ?? throw new InvalidOperationException("The crawl options can't be read.");
     }
 
-    /// <summary>Why the firewall stopped the crawler, per blocked URL.</summary>
+    /// <summary>
+    /// Why the crawler was kept out, per URL: the firewall's reason for a blocked URL, and for a URL refused because
+    /// robots.txt couldn't be read, that failure. A refusal by a robots.txt rule has none.
+    /// </summary>
     public Dictionary<int, string> ReadBlockReasons()
     {
         Dictionary<int, string> reasons = [];
-        Rows($"SELECT url_id, block_reason FROM responses WHERE outcome = {(int)FetchOutcome.Blocked} AND block_reason IS NOT NULL",
-            reader => reasons[reader.GetInt32(0)] = reader.GetString(1));
+        Rows($"""
+            SELECT url_id, COALESCE(block_reason, error) FROM responses
+            WHERE (outcome = {(int)FetchOutcome.Blocked} AND block_reason IS NOT NULL)
+               OR (outcome = {(int)FetchOutcome.RobotsDisallowed} AND error IS NOT NULL)
+            """, reader => reasons[reader.GetInt32(0)] = reader.GetString(1));
         return reasons;
     }
 

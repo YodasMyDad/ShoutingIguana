@@ -325,9 +325,15 @@ internal sealed class CrawlWriter : IAsyncDisposable
         _urls[key] = _urls[key] with { State = UrlState.Done };
 
         var isSitePage = item.IsInternal && response.IsHtml && response.Outcome == FetchOutcome.Success;
-        _counters.OnRecorded(response.Outcome, isSitePage, response.SizeBytes ?? 0);
+        _counters.OnRecorded(response.Outcome, isSitePage, DownloadedBytes(response.SizeBytes, response.BodyBytes));
         PropagateDepths();
     }
+
+    /// <summary>
+    /// The bytes of a body the crawler read. A size it was only told, by the Content-Length of a URL it checked
+    /// without downloading, isn't. Matches the restore on resume, which goes by the stored body size the same way.
+    /// </summary>
+    private static long DownloadedBytes(long? sizeBytes, long? bodyBytes) => bodyBytes is null ? 0 : sizeBytes ?? 0;
 
     private void ApplyDiscover(DiscoverCommand command)
     {
@@ -730,7 +736,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
             command.CommandText = """
                 SELECT r.outcome, COUNT(*),
                        SUM(CASE WHEN r.is_html = 1 AND r.outcome = 0 AND u.is_internal = 1 THEN 1 ELSE 0 END),
-                       COALESCE(SUM(r.size_bytes), 0)
+                       COALESCE(SUM(CASE WHEN r.body_bytes IS NOT NULL THEN r.size_bytes END), 0)
                 FROM responses r JOIN urls u ON u.id = r.url_id
                 GROUP BY r.outcome
                 """;

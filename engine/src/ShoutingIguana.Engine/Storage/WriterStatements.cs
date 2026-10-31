@@ -66,7 +66,7 @@ internal sealed class WriterStatements : IDisposable
             "$descriptionCount", "$h1", "$h1Count", "$canonical", "$noindex", "$nofollow", "$indexability",
             "$indexabilityReason", "$words", "$contentHash", "$simhash", "$language", "$outlinks");
         _readOutcome = Prepare(connection,
-            "SELECT outcome, is_html, COALESCE(size_bytes, 0) FROM responses WHERE url_id = $id", "$id");
+            "SELECT outcome, is_html, CASE WHEN body_bytes IS NOT NULL THEN COALESCE(size_bytes, 0) ELSE 0 END FROM responses WHERE url_id = $id", "$id");
         _deleteResponse = Prepare(connection, """
             DELETE FROM responses WHERE url_id = $id;
             DELETE FROM response_details WHERE url_id = $id;
