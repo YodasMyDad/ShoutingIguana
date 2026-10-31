@@ -111,6 +111,37 @@ public sealed class HostGateTests
     }
 
     [Fact]
+    public async Task AShorterPauseDoesNotCutALongerOneShort()
+    {
+        var time = new FakeTimeProvider();
+        var gate = new HostGate(maxConcurrency: 1, TimeSpan.Zero, time);
+
+        gate.Pause(TimeSpan.FromMinutes(2));
+        gate.Pause(TimeSpan.FromMinutes(1));
+
+        await AssertWaitsAsync(time, Acquire(gate), TimeSpan.FromMinutes(2));
+    }
+
+    [Fact]
+    public void ASiteThatStoppedAnsweringIsUnreachableUntilItAnswers()
+    {
+        var time = new FakeTimeProvider();
+        var gate = new HostGate(maxConcurrency: 1, TimeSpan.Zero, time);
+
+        Assert.True(gate.ReportUnreachable());
+        time.Advance(TimeSpan.FromMinutes(3));
+        Assert.False(gate.ReportUnreachable());
+
+        // Since it first stopped answering, not since it was last told.
+        Assert.True(gate.IsUnreachable);
+        Assert.Equal(TimeSpan.FromMinutes(3), gate.UnreachableFor);
+
+        gate.ReportAnswered();
+        Assert.False(gate.IsUnreachable);
+        Assert.Equal(TimeSpan.Zero, gate.UnreachableFor);
+    }
+
+    [Fact]
     public async Task CrawlDelayRaisesTheIntervalButNeverLowersIt()
     {
         var time = new FakeTimeProvider();

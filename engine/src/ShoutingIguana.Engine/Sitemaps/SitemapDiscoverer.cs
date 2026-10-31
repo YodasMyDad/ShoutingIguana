@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Xml;
@@ -27,16 +28,25 @@ internal sealed class SitemapDiscoverer(
     CrawlWriter writer,
     OutLinkFactory links,
     ICrawlObserver observer,
+    TimeProvider timeProvider,
     ILogger logger)
 {
-    private const int MAX_SITEMAPS = 1_000;
-    private const int MAX_NESTING = 3;
+    /// <summary>
+    /// Starts the error of a sitemap the crawler chose not to read (one past the limits below), so the analysis can tell
+    /// that the sitemaps it has aren't all there are.
+    /// </summary>
+    internal const string NOT_READ_ERROR = "Not read";
+
+    internal const int MAX_SITEMAPS = 1_000;
+    internal const int MAX_NESTING = 3;
     private const int MAX_REDIRECTS = 5;
     private const int BATCH_SIZE = 1_000;
 
     public async Task RunAsync(Uri startUri, CancellationToken cancellationToken)
     {
-        var rules = await robots.GetAsync(startUri).WaitAsync(cancellationToken).ConfigureAwait(false);
+        // A robots.txt that couldn't be read says nothing about the sitemaps it declares, so it is asked once more when its
+        // cool-down ends rather than leave them out of the crawl.
+        var rules = await robots.GetAfterCoolDownAsync(startUri, cancellationToken).ConfigureAwait(false);
 
         // Sitemap: lines should be absolute, but relative ones are common; they resolve against robots.txt.
         var robotsUri = new Uri(startUri, "/robots.txt");
@@ -63,6 +73,7 @@ internal sealed class SitemapDiscoverer(
 
         var sitemapCount = 0;
         var urlCount = 0;
+        var tooDeepRecorded = false;
         while (pending.Count > 0 && sitemapCount < MAX_SITEMAPS)
         {
             var (url, parentId, level) = pending.Dequeue();
@@ -71,18 +82,29 @@ internal sealed class SitemapDiscoverer(
             var (children, listed) = await ReadSitemapAsync(new Uri(url), sitemapId, isProbe && level == 0, cancellationToken).ConfigureAwait(false);
             urlCount += listed;
 
-            if (level >= MAX_NESTING)
-            {
-                continue;
-            }
-
             foreach (var child in children)
             {
-                if (UrlNormalizer.TryNormalize(child, out var normalized) && seen.Add(normalized))
+                if (!UrlNormalizer.TryNormalize(child, out var normalized) || !seen.Add(normalized))
+                {
+                    continue;
+                }
+
+                if (level < MAX_NESTING)
                 {
                     pending.Enqueue((normalized, sitemapId, level + 1));
                 }
+                else if (!tooDeepRecorded)
+                {
+                    tooDeepRecorded = true;
+                    await RecordNotReadAsync(normalized, sitemapId, $"sitemap indexes nested more than {MAX_NESTING} deep aren't followed", cancellationToken).ConfigureAwait(false);
+                }
             }
+        }
+
+        if (pending.TryDequeue(out var dropped))
+        {
+            await RecordNotReadAsync(dropped.Url, dropped.ParentId,
+                $"the crawler reads at most {MAX_SITEMAPS.ToString("N0", CultureInfo.InvariantCulture)} sitemaps", cancellationToken).ConfigureAwait(false);
         }
 
         await writer.MarkSitemapsDoneAsync(cancellationToken).ConfigureAwait(false);
@@ -90,6 +112,20 @@ internal sealed class SitemapDiscoverer(
             CrawlNoticeLevel.Info,
             "sitemaps",
             urlCount > 0 ? $"Read {sitemapCount} sitemap(s) listing {urlCount:N0} URLs." : "No sitemap URLs found."));
+    }
+
+    /// <summary>
+    /// Records the first sitemap left unread for a reason, without a status, so the sitemaps read aren't taken for all
+    /// there are. The notice says there may be more like it.
+    /// </summary>
+    private async Task RecordNotReadAsync(string url, int? parentId, string reason, CancellationToken cancellationToken)
+    {
+        var sitemapId = await writer.RegisterSitemapAsync(url, parentId, cancellationToken).ConfigureAwait(false);
+        await writer.CompleteSitemapAsync(new SitemapRecord(sitemapId, null, false, 0, $"{NOT_READ_ERROR}: {reason}"), cancellationToken).ConfigureAwait(false);
+        observer.OnNotice(new CrawlNotice(
+            CrawlNoticeLevel.Warning,
+            "sitemaps-not-read",
+            $"Not every sitemap was read: {reason}, so {url} was left out, and any more like it. Checks against the sitemaps only see the ones read."));
     }
 
     private async Task<(List<string> Children, int UrlCount)> ReadSitemapAsync(Uri uri, int sitemapId, bool isProbe, CancellationToken cancellationToken)
@@ -103,8 +139,8 @@ internal sealed class SitemapDiscoverer(
 
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(60, options.RequestTimeoutSeconds * 3)));
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(60, options.RequestTimeoutSeconds * 3)), timeProvider);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
 
             var (response, lease, location) = await SendFollowingRedirectsAsync(uri, timeout.Token).ConfigureAwait(false);
             using var heldLease = lease;

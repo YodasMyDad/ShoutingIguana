@@ -16,8 +16,9 @@ namespace ShoutingIguana.Engine.Robots;
 /// Fetches each origin's robots.txt on first contact and shares the result with every worker. Status handling follows
 /// RFC 9309 and Google: a 4xx means no restrictions; a 5xx, a 429 or no answer means a full disallow. Those failures
 /// are retried like page fetches first, then asked again after a cool-down, and on the site's own origins they raise a
-/// notice so they never look like a silent empty crawl. Another site that doesn't answer at all gets no verdict, so
-/// links to it are fetched and show their real network error.
+/// notice so they never look like a silent empty crawl. An origin that doesn't answer at all gets no verdict, unless it
+/// is the start URL's, which stands for the site: links to another site, a dead www twin or a closed http port are
+/// fetched, show their real network error, and let the fetcher tell a dead origin from a site that is down.
 /// </summary>
 internal sealed class RobotsCache(
     RetryingFetcher fetcher,
@@ -39,6 +40,7 @@ internal sealed class RobotsCache(
 
     private readonly ConcurrentDictionary<string, RobotsCacheEntry> _origins = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, bool> _reported = new(StringComparer.Ordinal);
+    private readonly string _startOrigin = scope.StartOrigin.GetLeftPart(UriPartial.Authority);
 
     public Task<RobotsTxt> GetAsync(Uri uri)
     {
@@ -54,13 +56,38 @@ internal sealed class RobotsCache(
         return entry.Load;
     }
 
-    /// <summary>Lets every robots.txt that couldn't be read be fetched again on next use, cool-down or not.</summary>
-    public void ExpireFailures()
+    /// <summary>
+    /// Like <see cref="GetAsync"/>, but a robots.txt that couldn't be read is waited out: once its cool-down is over it is
+    /// asked once more, and that answer stands, whatever it is.
+    /// </summary>
+    public async Task<RobotsTxt> GetAfterCoolDownAsync(Uri uri, CancellationToken cancellationToken)
     {
-        foreach (var entry in _origins.Values.Where(entry => entry.IsFailed))
+        var rules = await GetAsync(uri).WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (rules.UnreachableReason is null ||
+            !_origins.TryGetValue(uri.GetLeftPart(UriPartial.Authority), out var entry) || entry.RetryAt is not { } retryAt)
         {
-            entry.RetryFrom(DateTimeOffset.MinValue);
+            return rules;
         }
+
+        var wait = retryAt - timeProvider.GetUtcNow();
+        if (wait > TimeSpan.Zero)
+        {
+            await Task.Delay(wait, timeProvider, cancellationToken).ConfigureAwait(false);
+        }
+
+        return await GetAsync(uri).WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// When robots.txt may be asked again everywhere it couldn't be read and so refused URLs: the end of the last of those
+    /// cool-downs, or null when none is still running.
+    /// </summary>
+    public DateTimeOffset? CoolDownEndsAt()
+    {
+        var now = timeProvider.GetUtcNow();
+        return _origins.Values
+            .Where(entry => entry.RetryAt > now && entry.Load is { IsCompletedSuccessfully: true, Result.UnreachableReason: not null })
+            .Max(entry => entry.RetryAt);
     }
 
     private RobotsCacheEntry NewEntry(string origin) => new(entry => LoadAsync(origin, entry));
@@ -71,10 +98,18 @@ internal sealed class RobotsCache(
         for (var hop = 0; hop <= MAX_REDIRECTS; hop++)
         {
             var response = await fetcher.FetchAsync(location, FetchBody.Text, stopping, MAX_ROBOTS_BYTES).ConfigureAwait(false);
-            if (response.Outcome == FetchOutcome.Redirect && response.Location is { } next)
+            if (response.Outcome == FetchOutcome.Redirect)
             {
-                location = next;
-                continue;
+                if (response.Location is { } next)
+                {
+                    location = next;
+                    continue;
+                }
+
+                // A redirect that can't be followed (no Location, or not to http or https) leaves robots.txt unavailable
+                // too, as RFC 9309 has it, so it's recorded and treated like one behind too many redirects.
+                await RecordAsync(origin, null, null, $"HTTP {response.StatusCode} redirects to no http or https URL").ConfigureAwait(false);
+                return RobotsTxt.AllowAll;
             }
 
             await RecordAsync(origin, response.StatusCode, response.Body, response.Error).ConfigureAwait(false);
@@ -108,12 +143,12 @@ internal sealed class RobotsCache(
 
         // Still unreadable after the retries: keep the verdict for a while, not for the rest of the crawl.
         entry.RetryFrom(timeProvider.GetUtcNow() + RETRY_AFTER);
-        var isInternal = scope.IsInternal(new Uri(origin));
-        if (response.StatusCode is null && !isInternal)
+        if (response.StatusCode is null && origin != _startOrigin)
         {
             return RobotsTxt.AllowAll;
         }
 
+        var isInternal = scope.IsInternal(new Uri(origin));
         var reason = response.StatusCode is { } status ? $"HTTP {status}" : response.Error ?? response.Outcome.ToString();
         if (isInternal && options.RespectRobotsTxt && _reported.TryAdd(origin, true))
         {

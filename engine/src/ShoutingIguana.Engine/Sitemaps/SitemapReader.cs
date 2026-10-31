@@ -30,6 +30,8 @@ internal static class SitemapReader
         bool isText,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        // XmlReader reads without a token, so a sitemap that stalls part-way would otherwise outlast the timeout and a stop.
+        stream = new CancellableReadStream(stream, cancellationToken);
         if (isText)
         {
             var pipe = PipeReader.Create(stream, new StreamPipeReaderOptions(leaveOpen: true));

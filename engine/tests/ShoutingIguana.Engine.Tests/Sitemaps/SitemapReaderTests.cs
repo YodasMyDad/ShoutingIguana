@@ -1,3 +1,4 @@
+using System.IO.Pipelines;
 using System.Text;
 using System.Xml;
 using ShoutingIguana.Engine.Sitemaps;
@@ -75,6 +76,31 @@ public sealed class SitemapReaderTests
     [Fact]
     public async Task MalformedXmlThrows() =>
         await Assert.ThrowsAsync<XmlException>(() => ReadAsync("<urlset><url><loc>https://example.com/a</loc></urlset>"));
+
+    /// <summary>A sitemap that sends one URL and then nothing more, never closing: cancelling ends the read.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AStalledSitemapEndsWhenCancelled(bool isText)
+    {
+        var pipe = new Pipe();
+        var start = isText ? "https://example.com/a\n" : "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>https://example.com/a</loc></url>";
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes(start));
+        using var cancel = new CancellationTokenSource();
+        var first = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var reading = Task.Run(async () =>
+        {
+            await foreach (var entry in SitemapReader.ReadAsync(pipe.Reader.AsStream(), isText, cancel.Token))
+            {
+                first.TrySetResult(entry.Location);
+            }
+        });
+
+        Assert.Equal("https://example.com/a", await first.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        await cancel.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => reading.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
 
     private static async Task<List<SitemapEntry>> ReadAsync(string content, bool isText = false)
     {

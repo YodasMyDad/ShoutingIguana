@@ -144,7 +144,9 @@ internal static class RobotsTxtParser
     {
         var anchored = value.EndsWith('$');
         var pattern = NormalizePattern(anchored ? value[..^1] : value);
-        return new RobotsRule(pattern, allow, anchored, pattern.Contains('*'), value.Length);
+
+        // Measured once normalised, as the URLs are, so /%61bc and /abc are equally specific and the allow wins the tie.
+        return new RobotsRule(pattern, allow, anchored, pattern.Contains('*'), pattern.Length + (anchored ? 1 : 0));
     }
 
     private static string ProductTokenOf(string userAgent)

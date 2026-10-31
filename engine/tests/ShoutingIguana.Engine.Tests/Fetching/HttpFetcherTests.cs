@@ -27,6 +27,9 @@ public sealed class HttpFetcherTests : IAsyncLifetime
     private static readonly byte[] GZIPPED = Compress(COMPRESSIBLE_BYTES, "gzip");
     private static readonly byte[] BROTLI = Compress(COMPRESSIBLE_BYTES, "br");
 
+    /// <summary>HTTP's "deflate" is the zlib format (RFC 9110), not raw deflate.</summary>
+    private static readonly byte[] DEFLATED = Compress(COMPRESSIBLE_BYTES, "deflate");
+
     private LoopbackServer _server = null!;
 
     public async Task InitializeAsync() => _server = await LoopbackServer.StartAsync(RespondAsync);
@@ -70,13 +73,14 @@ public sealed class HttpFetcherTests : IAsyncLifetime
     [Theory]
     [InlineData("gzip")]
     [InlineData("br")]
+    [InlineData("deflate")]
     public async Task DecompressesThenDecodesTheCharset(string encoding)
     {
         using var fetcher = Fetcher();
 
         var response = await fetcher.FetchAsync(_server.Url($"/compressed?encoding={encoding}"), FetchBody.Html, CancellationToken.None);
 
-        var compressed = encoding == "gzip" ? GZIPPED : BROTLI;
+        var compressed = Compressed(encoding);
         Assert.Equal(COMPRESSIBLE_PAGE, response.Body);
         Assert.Equal(COMPRESSIBLE_BYTES.Length, response.BodyBytes);
         Assert.Equal(compressed.Length, response.TransferBytes);
@@ -99,6 +103,20 @@ public sealed class HttpFetcherTests : IAsyncLifetime
         Assert.Equal(1_000, capped.BodyBytes);
         Assert.False(whole.BodyTruncated);
         Assert.Equal(LARGE_PAGE_BYTES, whole.BodyBytes);
+    }
+
+    [Theory]
+    [InlineData(LARGE_PAGE_BYTES, false)]
+    [InlineData(LARGE_PAGE_BYTES - 1, true)]
+    public async Task ABodyExactlyAtTheLimitIsWhole(int limit, bool truncated)
+    {
+        using var fetcher = Fetcher();
+
+        var response = await fetcher.FetchAsync(_server.Url("/large"), FetchBody.Html, CancellationToken.None, maxBodyBytes: limit);
+
+        Assert.Equal(truncated, response.BodyTruncated);
+        Assert.Equal(limit, response.BodyBytes);
+        Assert.Equal(limit, response.Body!.Length);
     }
 
     [Fact]
@@ -185,6 +203,25 @@ public sealed class HttpFetcherTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ExtraHeadersGoToTheSiteOverHttps()
+    {
+        await using var secure = await LoopbackServer.StartAsync(RespondAsync, https: true);
+        var options = new CrawlOptions
+        {
+            StartUrl = secure.BaseUri.AbsoluteUri,
+            ExtraHeaders = new Dictionary<string, string> { [SECRET_HEADER] = "s3cret" },
+            TrustedCertificate = secure.Certificate
+        };
+        using var fetcher = new HttpFetcher(options, UserAgents.Resolve(options.UserAgent, null),
+            new CrawlScope(secure.BaseUri, includeSubdomains: false, stayInStartFolder: false), TimeProvider.System);
+
+        var response = await fetcher.FetchAsync(secure.Url("/echo"), FetchBody.Text, CancellationToken.None);
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal("s3cret", response.Body);
+    }
+
+    [Fact]
     public async Task MeasuresImagesSentWithoutALength()
     {
         using var fetcher = Fetcher();
@@ -226,7 +263,7 @@ public sealed class HttpFetcherTests : IAsyncLifetime
                 await response.Body.WriteAsync(WINDOWS_1252.GetBytes(PAGE));
                 break;
             case "/compressed":
-                var compressed = request.Query["encoding"] == "gzip" ? GZIPPED : BROTLI;
+                var compressed = Compressed(request.Query["encoding"].ToString());
                 response.Headers.ContentType = "text/html; charset=windows-1252";
                 response.Headers.ContentEncoding = request.Query["encoding"].ToString();
                 response.ContentLength = compressed.Length;
@@ -288,12 +325,22 @@ public sealed class HttpFetcherTests : IAsyncLifetime
         }
     }
 
+    private static byte[] Compressed(string encoding) => encoding switch
+    {
+        "gzip" => GZIPPED,
+        "br" => BROTLI,
+        _ => DEFLATED
+    };
+
     private static byte[] Compress(byte[] bytes, string encoding)
     {
         using var output = new MemoryStream();
-        using (Stream compressor = encoding == "gzip"
-                   ? new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true)
-                   : new BrotliStream(output, CompressionLevel.Optimal, leaveOpen: true))
+        using (Stream compressor = encoding switch
+               {
+                   "gzip" => new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true),
+                   "br" => new BrotliStream(output, CompressionLevel.Optimal, leaveOpen: true),
+                   _ => new ZLibStream(output, CompressionLevel.Optimal, leaveOpen: true)
+               })
         {
             compressor.Write(bytes);
         }

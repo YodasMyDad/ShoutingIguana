@@ -60,6 +60,9 @@ internal sealed class CrawlSession
     private double _pagesPerSecond;
     private int _deferredTotal;
 
+    // Held back since the last retry pass began because robots.txt couldn't be read.
+    private int _refusedByRobots;
+
     private CrawlSession(CrawlRequest request, ICrawlObserver observer, ILoggerFactory loggerFactory, TimeProvider timeProvider)
     {
         _request = request;
@@ -85,7 +88,7 @@ internal sealed class CrawlSession
             timeProvider, loggerFactory.CreateLogger<RobotsCache>(), _stop.Token);
         _links = new OutLinkFactory(scope);
         _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, timeProvider);
-        _sitemaps = new SitemapDiscoverer(_options, _fetcher, gates, _robots, _writer, _links, _observer,
+        _sitemaps = new SitemapDiscoverer(_options, _fetcher, gates, _robots, _writer, _links, _observer, timeProvider,
             loggerFactory.CreateLogger<SitemapDiscoverer>());
         _internalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.Concurrency * 2) { SingleWriter = true });
         _externalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.ExternalConcurrency * 2) { SingleWriter = true });
@@ -181,20 +184,7 @@ internal sealed class CrawlSession
             await progressStop.CancelAsync().ConfigureAwait(false);
             await WhenAllQuietlyAsync([progress]).ConfigureAwait(false);
             _elapsed.Stop();
-
-            if (!_writer.Completion.IsCompleted)
-            {
-                await _writer.UpdateStatusAsync(_status, _status == CrawlStatus.Completed, CancellationToken.None).ConfigureAwait(false);
-            }
-
-            try
-            {
-                await _writer.DisposeAsync().ConfigureAwait(false);
-            }
-            finally
-            {
-                _fetcher.Dispose();
-            }
+            await CloseAsync().ConfigureAwait(false);
         }
 
         if (_status == CrawlStatus.Failed)
@@ -206,6 +196,41 @@ internal sealed class CrawlSession
         _observer.OnProgress(final);
         _logger.LogInformation("Crawl {Status}: {Fetched} URLs fetched in {Elapsed}", _status, final.Fetched, final.Elapsed);
         return new CrawlSummary(_status, final, _request.DatabasePath, error);
+    }
+
+    /// <summary>
+    /// Stores the final status, closes the crawl file and lets go of the network. A write loop that failed, even on this
+    /// last drain, fails the crawl: the writer marks the file failed, and the summary says so too.
+    /// </summary>
+    private async Task CloseAsync()
+    {
+        try
+        {
+            if (!_writer.Completion.IsCompleted)
+            {
+                await _writer.UpdateStatusAsync(_status, _status == CrawlStatus.Completed, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+        catch (ChannelClosedException)
+        {
+            // The write loop failed after the check above; its error is reported below.
+        }
+        finally
+        {
+            try
+            {
+                await _writer.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _fetcher.Dispose();
+            }
+        }
+
+        if (_writer.Completion.IsFaulted)
+        {
+            _status = CrawlStatus.Failed;
+        }
     }
 
     private ValueTask SeedAsync(CancellationToken cancellationToken)
@@ -237,6 +262,7 @@ internal sealed class CrawlSession
     {
         var internalCapacity = _options.Concurrency * 2;
         var externalCapacity = _options.ExternalConcurrency * 2;
+        var retrying = false;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -244,6 +270,13 @@ internal sealed class CrawlSession
             if (await GiveUpOnADeadSiteAsync().ConfigureAwait(false))
             {
                 return false;
+            }
+
+            // Held-back URLs are handed out as the queue has room, so the checks above still run while a site that is
+            // down lets one through a minute.
+            if (retrying)
+            {
+                retrying = FeedDeferred();
             }
 
             var wantInternal = internalCapacity - _internalQueue.Reader.Count;
@@ -274,15 +307,20 @@ internal sealed class CrawlSession
                 // Read after claiming: workers only ever add to the held-back URLs, so if everything in flight at the
                 // claim is held back now, nothing else is still being fetched.
                 var deferred = _deferred.Count;
-                if (claim.InFlight == deferred && producersDone)
+                if (claim.InFlight == deferred && producersDone && !retrying)
                 {
                     if (deferred == 0)
                     {
                         return true;
                     }
 
-                    await RetryDeferredAsync(cancellationToken).ConfigureAwait(false);
-                    continue;
+                    if (!IsRobotsTxtCoolingDown())
+                    {
+                        _logger.LogInformation("Retrying {Count} URLs that got no response", deferred);
+                        Interlocked.Exchange(ref _refusedByRobots, 0);
+                        retrying = FeedDeferred();
+                        continue;
+                    }
                 }
 
                 await Task.Delay(IDLE_DELAY, _timeProvider, cancellationToken).ConfigureAwait(false);
@@ -310,32 +348,55 @@ internal sealed class CrawlSession
         return true;
     }
 
-    /// <summary>Everything else is done: the URLs held back get their one more try, robots.txt included.</summary>
-    private async Task RetryDeferredAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Everything else is done, so the URLs held back get their one more try: as many as the site's queue has room for.
+    /// Returns true while some are still waiting their turn.
+    /// </summary>
+    private bool FeedDeferred()
     {
-        _logger.LogInformation("Retrying {Count} URLs that got no response", _deferred.Count);
-        _robots.ExpireFailures();
-        while (_deferred.TryDequeue(out var item))
+        while (_deferred.TryPeek(out var item))
         {
             _retried.TryAdd(item.Id, true);
-            await _internalQueue.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
+            if (!_internalQueue.Writer.TryWrite(item))
+            {
+                return true;
+            }
+
+            _deferred.TryDequeue(out _);
         }
+
+        return false;
     }
 
     /// <summary>
+    /// A held-back URL was refused because robots.txt couldn't be read, and that robots.txt may not be asked again yet. Its
+    /// one more try waits for that, as the notice promised, rather than meet the same failure a moment later.
+    /// </summary>
+    private bool IsRobotsTxtCoolingDown() => Volatile.Read(ref _refusedByRobots) > 0 && _robots.CoolDownEndsAt() is not null;
+
+    /// <summary>
     /// The site's own URLs that got no response, or were refused because robots.txt couldn't be read, are held back
-    /// (unrecorded) for one more try at the end of the crawl, when a site that was briefly down is usually back.
+    /// (unrecorded) for one more try at the end of the crawl, when a site that was briefly down is usually back. URLs
+    /// failed without a request ("Not checked") aren't: their origin is gone, and one more try would fail the same way.
     /// </summary>
     private bool Defer(PageRecord record)
     {
         var item = record.Item;
         var response = record.Response;
-        var failedToConnect = response.Outcome is FetchOutcome.Timeout or FetchOutcome.NetworkError ||
-                              (response.Outcome == FetchOutcome.RobotsDisallowed &&
-                               response.Error?.StartsWith(RobotsTxt.UNREACHABLE_ERROR, StringComparison.Ordinal) == true);
-        if (!item.IsInternal || !failedToConnect || _retried.ContainsKey(item.Id) || Interlocked.Increment(ref _deferredTotal) > MAX_DEFERRED)
+        var refusedByRobots = response.Outcome == FetchOutcome.RobotsDisallowed &&
+                              response.Error?.StartsWith(RobotsTxt.UNREACHABLE_ERROR, StringComparison.Ordinal) == true;
+        var gotNoResponse = response.Outcome is FetchOutcome.Timeout or FetchOutcome.NetworkError &&
+                            response.Error?.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) != true;
+        if (!item.IsInternal || !(gotNoResponse || refusedByRobots) || _retried.ContainsKey(item.Id) ||
+            Interlocked.Increment(ref _deferredTotal) > MAX_DEFERRED)
         {
             return false;
+        }
+
+        // Counted first: once the URL is in the queue, the dispatcher may start the retry pass and read the count.
+        if (refusedByRobots)
+        {
+            Interlocked.Increment(ref _refusedByRobots);
         }
 
         _deferred.Enqueue(item);

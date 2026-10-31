@@ -23,6 +23,7 @@ internal sealed class RobotsCacheHarness : IAsyncDisposable
 {
     private static readonly TimeSpan PUMP_STEP = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan PUMP_LIMIT = TimeSpan.FromSeconds(60);
+    private static readonly Socket DEAD_PORT = BindWithoutListening();
 
     private readonly HttpFetcher _fetcher;
     private readonly CrawlWriter _writer;
@@ -55,15 +56,11 @@ internal sealed class RobotsCacheHarness : IAsyncDisposable
         return new RobotsCacheHarness(configure?.Invoke(options) ?? options);
     }
 
-    /// <summary>A loopback URL nothing listens on, so connecting to it fails at once.</summary>
-    public static Uri DeadSite()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return new Uri($"http://127.0.0.1:{port}/");
-    }
+    /// <summary>
+    /// A loopback URL nothing listens on, so connecting to it is refused at once. Its port stays bound, without listening,
+    /// for as long as the tests run, so no other test can be given it.
+    /// </summary>
+    public static Uri DeadSite() => new($"http://127.0.0.1:{((IPEndPoint)DEAD_PORT.LocalEndPoint!).Port}/");
 
     public async Task<RobotsTxt> GetAsync(Uri uri)
     {
@@ -108,5 +105,12 @@ internal sealed class RobotsCacheHarness : IAsyncDisposable
             _writerClosed = true;
             await _writer.DisposeAsync();
         }
+    }
+
+    private static Socket BindWithoutListening()
+    {
+        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        return socket;
     }
 }

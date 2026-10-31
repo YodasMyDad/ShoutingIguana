@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Robots;
@@ -127,11 +128,60 @@ public sealed class RobotsCacheTests : IAsyncLifetime
         Assert.Equal(tooMany ? "More than 5 redirects" : null, record.Error);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("ftp://files.example/robots.txt")]
+    public async Task ARedirectThatCantBeFollowedMeansNoRules(string? location)
+    {
+        _robots = (context, _) =>
+        {
+            context.Response.StatusCode = 301;
+            if (location is not null)
+            {
+                context.Response.Headers.Location = location;
+            }
+
+            return Task.CompletedTask;
+        };
+        var harness = Harness();
+
+        var robots = await harness.GetAsync(_server.BaseUri);
+
+        Assert.True(robots.IsAllowed("/page"));
+        Assert.Null(robots.UnreachableReason);
+        Assert.Empty(harness.Observer.Notices);
+        var record = Assert.Single(await harness.ReadRecordsAsync());
+        Assert.Null(record.StatusCode);
+        Assert.Equal("HTTP 301 redirects to no http or https URL", record.Error);
+    }
+
     [Fact]
     public async Task ADeadExternalHostGetsNoVerdictSoItsLinksAreChecked()
     {
         var harness = Harness(options => options with { MaxRetries = 0 });
         var dead = RobotsCacheHarness.DeadSite();
+
+        var robots = await harness.GetAsync(dead);
+
+        Assert.True(robots.IsAllowed("/page"));
+        Assert.Null(robots.UnreachableReason);
+        Assert.Empty(harness.Observer.Notices);
+        var record = Assert.Single(await harness.ReadRecordsAsync());
+        Assert.Null(record.StatusCode);
+        Assert.NotNull(record.Error);
+    }
+
+    /// <summary>
+    /// A www twin whose name doesn't resolve, or https on a port that only speaks http: its URLs are fetched, and fail with
+    /// their real error, rather than be called blocked by a robots.txt nobody could read.
+    /// </summary>
+    [Theory]
+    [InlineData("http://www.127.0.0.1:{0}/")]
+    [InlineData("https://127.0.0.1:{0}/")]
+    public async Task ADeadOriginOfOurOwnOtherThanTheStartUrlsGetsNoVerdict(string deadOrigin)
+    {
+        var harness = Harness(options => options with { MaxRetries = 0 });
+        var dead = new Uri(string.Format(CultureInfo.InvariantCulture, deadOrigin, _server.BaseUri.Port));
 
         var robots = await harness.GetAsync(dead);
 
