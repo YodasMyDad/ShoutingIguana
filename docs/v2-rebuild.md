@@ -225,8 +225,9 @@ Latest results, on commit `68d55a2`:
 | Run | Tests | Crawl | Peak memory | Analysis |
 | --- | --- | --- | --- | --- |
 | Local, 32 cores | 417 engine + 16 CLI | 35 s (2,916 pages/s) | 168 MB | 7 s |
+| GitHub runner, 4 cores | 417 + 16 on Windows, macOS and Linux | 76 s (1,338 pages/s) | 195 MB | 7 s |
 
-It found every planted issue and flagged nothing else, with no check skipped or failing.
+Both runs found every planted issue and flagged nothing else, with no check skipped or failing.
 
 ## Working with the owner
 
