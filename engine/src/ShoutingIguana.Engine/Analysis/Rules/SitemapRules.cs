@@ -23,8 +23,9 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
 
     /// <summary>
     /// The first sitemap listed in robots.txt or an index that failed for a reason that says nothing about what it
-    /// lists: a server error, rate limit, block, timeout or unparseable file. A 404 or 410 is different: that sitemap
-    /// doesn't exist, so pages it was meant to list really are in no sitemap a search engine can read.
+    /// lists: a server error, rate limit, block, timeout or unparseable file, or the crawler's limits, which leave it
+    /// unread. A 404 or 410 is different: that sitemap doesn't exist, so pages it was meant to list really are in no
+    /// sitemap a search engine can read.
     /// </summary>
     public static StoredSitemap? Unreadable(IReadOnlyList<StoredSitemap> sitemaps) =>
         sitemaps.FirstOrDefault(sitemap => sitemap is { Error: not null, IsProbe: false, StatusCode: not (404 or 410) });
@@ -76,8 +77,9 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
             yield break;
         }
 
-        // A failed guess at /sitemap.xml means there's no sitemap, not a broken one.
-        var failed = sitemaps.Where(sitemap => sitemap is { Error: not null, IsProbe: false }).ToList();
+        // A failed guess at /sitemap.xml means there's no sitemap, not a broken one. One the crawler chose not to read
+        // isn't broken either.
+        var failed = sitemaps.Where(sitemap => sitemap is { Error: not null, IsProbe: false, NotReadReason: null }).ToList();
         if (failed.Count > 0)
         {
             var listed = string.Join(", ", failed.Take(LISTED_FAILURES).Select(sitemap => $"{sitemap.Url} ({sitemap.Error})"));

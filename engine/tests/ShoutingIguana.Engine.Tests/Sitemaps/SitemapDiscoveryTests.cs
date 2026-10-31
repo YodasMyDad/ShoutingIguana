@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -120,13 +121,7 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
     [Fact]
     public async Task ASitemapNestedTooDeepIsRecordedAsNotRead()
     {
-        // Each index lists the next; the last is one level deeper than the crawler follows.
-        Serve("/robots.txt", "text/plain", $"User-agent: *\nDisallow:\nSitemap: {_server.Url("/index-0.xml")}");
-        for (var level = 0; level <= SitemapDiscoverer.MAX_NESTING; level++)
-        {
-            Serve($"/index-{level}.xml", "application/xml",
-                $"<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><sitemap><loc>{_server.Url($"/index-{level + 1}.xml")}</loc></sitemap></sitemapindex>");
-        }
+        ServeIndexesNestedTooDeep();
 
         var observer = new RecordingObserver();
         var path = await CrawlAsync(observer);
@@ -139,6 +134,27 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         Assert.Null(notRead.StatusCode);
         Assert.False(notRead.IsProbe);
         Assert.Equal(1, observer.Count("sitemaps-not-read"));
+    }
+
+    /// <summary>
+    /// The sitemap left unread may list any page, so coverage isn't judged, and the note says why. It isn't broken, so
+    /// it isn't reported as a sitemap error, or counted as one.
+    /// </summary>
+    [Fact]
+    public async Task ASitemapLeftUnreadSkipsTheCoverageCheckWithoutBeingAnError()
+    {
+        ServeIndexesNestedTooDeep();
+        var path = await CrawlAsync();
+
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+
+        Assert.Equal(
+            $"Pages missing from the sitemaps weren't checked: sitemap indexes nested more than 3 deep aren't followed, so {_server.Url("/index-4.xml")} and any more like it weren't read, and they may list them.",
+            Assert.Single(analysis.Notes));
+        var counts = IssueReader.ReadCounts(path);
+        Assert.False(counts.ContainsKey(IssueCatalog.NOT_IN_SITEMAP.Id));
+        Assert.Equal(0, counts[IssueCatalog.SITEMAP_ERROR.Id]);
+        Assert.Equal(0, CrawlStatsReader.Read(path).SitemapErrorCount);
     }
 
     [Fact]
@@ -203,6 +219,17 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         MaxRetries = 0,
         ExtraSitemaps = [_server.Url(STALLING_SITEMAP).AbsoluteUri]
     };
+
+    /// <summary>Each index lists the next; the last is one level deeper than the crawler follows.</summary>
+    private void ServeIndexesNestedTooDeep()
+    {
+        Serve("/robots.txt", "text/plain", $"User-agent: *\nDisallow:\nSitemap: {_server.Url("/index-0.xml")}");
+        for (var level = 0; level <= SitemapDiscoverer.MAX_NESTING; level++)
+        {
+            Serve($"/index-{level}.xml", "application/xml",
+                $"<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><sitemap><loc>{_server.Url($"/index-{level + 1}.xml")}</loc></sitemap></sitemapindex>");
+        }
+    }
 
     private string Loc(string path) => $"<url><loc>{_server.Url(path)}</loc></url>";
 

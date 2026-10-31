@@ -4,6 +4,7 @@ using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
+using ShoutingIguana.Engine.Sitemaps;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Urls;
 
@@ -205,6 +206,28 @@ public sealed class SiteRuleTests
         Assert.Equal(coverageChecked, hits.Contains(new IssueHit(IssueCatalog.NOT_IN_SITEMAP, post)));
         Assert.Equal(coverageChecked ? null : sitemaps[1], SitemapRules.Unreadable(sitemaps));
         Assert.Contains(hits, hit => hit.Issue == IssueCatalog.SITEMAP_ERROR);
+    }
+
+    [Fact]
+    public void ASitemapLeftUnreadAtTheCrawlersLimitsIsNotBrokenButMayListAnyPage()
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/", inSitemap: true);
+        site.Ok($"{site.Site}/blog/post");
+        var urls = site.Table();
+        StoredSitemap[] sitemaps =
+        [
+            new($"{site.Site}/sitemap-1.xml", 200, false, 1, null),
+            new($"{site.Site}/sitemap-1001.xml", null, false, 0, $"{SitemapDiscoverer.NOT_READ_ERROR}: the crawler reads at most 1,000 sitemaps")
+        ];
+
+        var hits = new SitemapRules(urls, sitemaps, new CrawlOptions { StartUrl = site.Site }, crawlComplete: true).Finish();
+
+        // Neither a broken sitemap nor a post missing from them: the sitemap left unread may well list it.
+        Assert.Empty(hits);
+        Assert.Equal(sitemaps[1], SitemapRules.Unreadable(sitemaps));
+        Assert.Equal("the crawler reads at most 1,000 sitemaps", sitemaps[1].NotReadReason);
+        Assert.Null(sitemaps[0].NotReadReason);
     }
 
     [Fact]

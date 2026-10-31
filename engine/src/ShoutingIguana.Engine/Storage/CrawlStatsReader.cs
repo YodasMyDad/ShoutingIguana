@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
+using ShoutingIguana.Engine.Sitemaps;
 using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Storage;
@@ -64,7 +65,10 @@ public static class CrawlStatsReader
             QueuedCount = queued,
             LinkCount = Count(connection, "SELECT COUNT(*) FROM links"),
             SitemapCount = Count(connection, "SELECT COUNT(*) FROM sitemaps WHERE error IS NULL"),
-            SitemapErrorCount = Count(connection, "SELECT COUNT(*) FROM sitemaps WHERE error IS NOT NULL AND is_probe = 0"),
+            SitemapErrorCount = Count(connection, $"""
+                SELECT COUNT(*) FROM sitemaps WHERE error IS NOT NULL AND is_probe = 0
+                AND substr(error, 1, {SitemapDiscoverer.NOT_READ_ERROR.Length}) <> '{SitemapDiscoverer.NOT_READ_ERROR}'
+                """),
             SitemapUrlCount = Count(connection, "SELECT COUNT(DISTINCT url_id) FROM sitemap_urls"),
             // From the links themselves rather than depth: a sitemap page that no other URL links to.
             UnlinkedPageCount = Count(connection, $"""

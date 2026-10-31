@@ -83,7 +83,9 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             }
             else if (SitemapRules.Unreadable(sitemaps) is { } unreadable)
             {
-                Skip(notes, skipped, $"Pages missing from the sitemaps weren't checked: {unreadable.Url} couldn't be read ({unreadable.Error}), and it may list them.",
+                Skip(notes, skipped, unreadable.NotReadReason is { } reason
+                        ? $"Pages missing from the sitemaps weren't checked: {reason}, so {unreadable.Url} and any more like it weren't read, and they may list them."
+                        : $"Pages missing from the sitemaps weren't checked: {unreadable.Url} couldn't be read ({unreadable.Error}), and it may list them.",
                     IssueCatalog.NOT_IN_SITEMAP);
             }
 

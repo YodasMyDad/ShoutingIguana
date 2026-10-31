@@ -19,7 +19,10 @@ public sealed record CrawlStats
     /// <summary>Sitemap files read successfully.</summary>
     public long SitemapCount { get; init; }
 
-    /// <summary>Sitemap files that were declared or listed but couldn't be read. A failed guess at /sitemap.xml isn't one.</summary>
+    /// <summary>
+    /// Sitemap files that were declared or listed but couldn't be read. A failed guess at /sitemap.xml isn't one, and nor
+    /// is a sitemap left unread because it was past the crawler's limits.
+    /// </summary>
     public long SitemapErrorCount { get; init; }
 
     public long SitemapUrlCount { get; init; }
