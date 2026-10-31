@@ -294,9 +294,14 @@ public sealed class SiteRuleTests
 
         var hits = rules.Finish().ToList();
         Assert.Equal([original.UrlId, copy.UrlId], hits.Where(hit => hit.Issue == IssueCatalog.DUPLICATE_CONTENT).Select(hit => hit.UrlId).Order());
-        var nearHits = hits.Where(hit => hit.Issue == IssueCatalog.NEAR_DUPLICATE_CONTENT).ToList();
-        Assert.Contains(nearHits, hit => hit.UrlId == near.UrlId);
-        Assert.DoesNotContain(nearHits, hit => hit.UrlId == other.UrlId);
+
+        // The edit is near both copies, so all three form one group, each pointing at its lowest-id other member.
+        Assert.Equal(
+        [
+            new IssueHit(IssueCatalog.NEAR_DUPLICATE_CONTENT, original.UrlId, "2 similar pages", copy.UrlId),
+            new IssueHit(IssueCatalog.NEAR_DUPLICATE_CONTENT, copy.UrlId, "2 similar pages", original.UrlId),
+            new IssueHit(IssueCatalog.NEAR_DUPLICATE_CONTENT, near.UrlId, "2 similar pages", original.UrlId)
+        ], hits.Where(hit => hit.Issue == IssueCatalog.NEAR_DUPLICATE_CONTENT).OrderBy(hit => hit.UrlId));
     }
 
     [Fact]
