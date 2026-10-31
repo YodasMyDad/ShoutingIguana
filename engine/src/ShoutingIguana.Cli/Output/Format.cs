@@ -22,6 +22,9 @@ internal static class Format
 
     public static double Megabytes(long bytes) => Math.Round(bytes / (1024d * 1024d), 1);
 
+    /// <summary>"1 page", "2 pages", "1,204 pages".</summary>
+    public static string Count(long count, string one, string many) => $"{count:N0} {(count == 1 ? one : many)}";
+
     /// <summary>mm:ss, or h:mm:ss with as many hours as it takes (a two-day crawl shows 49:12:03).</summary>
     public static string Duration(TimeSpan duration) =>
         duration.TotalHours >= 1

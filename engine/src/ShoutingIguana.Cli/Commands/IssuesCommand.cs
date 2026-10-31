@@ -61,11 +61,11 @@ internal static class IssuesCommand
                 }
 
                 var written = ExportCsv(path, id, csvPath);
-                Console.WriteLine($"Wrote {written:N0} rows to {Path.GetFullPath(csvPath)}");
+                Console.WriteLine($"Wrote {Format.Count(written, "row", "rows")} to {Path.GetFullPath(csvPath)}");
                 return 0;
             }
 
-            Console.WriteLine($"Analysed {analysis.AnalyzedAt.ToLocalTime():g} by engine {analysis.EngineVersion}: {analysis.PagesAnalyzed:N0} pages");
+            Console.WriteLine($"Analysed {analysis.AnalyzedAt.ToLocalTime():g} by engine {analysis.EngineVersion}: {Format.Count(analysis.PagesAnalyzed, "page", "pages")}");
             foreach (var note in IssueReader.ReadNotes(path))
             {
                 Console.WriteLine($"  {Format.Printable(note)}");
@@ -97,7 +97,7 @@ internal static class IssuesCommand
         }
 
         Console.WriteLine();
-        Console.WriteLine($"  {issue.Severity}: {issue.Title} ({total:N0} {(total == 1 ? "URL" : "URLs")})");
+        Console.WriteLine($"  {issue.Severity}: {issue.Title} ({Format.Count(total, "URL", "URLs")})");
         Console.WriteLine($"  {issue.Description}");
         Console.WriteLine($"  Fix: {issue.Fix}");
         Console.WriteLine();

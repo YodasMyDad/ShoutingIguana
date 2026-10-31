@@ -25,12 +25,12 @@ internal static class StatsCommand
             Console.WriteLine($"Crawl of {stats.StartUrl}");
             Console.WriteLine($"  Status        {stats.Status}  (engine {stats.EngineVersion}, started {stats.StartedAt.ToLocalTime():g})");
             Console.WriteLine($"  URLs          {stats.UrlCount:N0} known, {stats.InternalUrlCount:N0} internal, {stats.QueuedCount:N0} still queued");
-            Console.WriteLine($"  Pages         {stats.HtmlPageCount:N0} HTML pages, {stats.IndexablePageCount:N0} indexable, {stats.UnlinkedPageCount:N0} only in sitemaps");
+            Console.WriteLine($"  Pages         {Format.Count(stats.HtmlPageCount, "HTML page", "HTML pages")}, {stats.IndexablePageCount:N0} indexable, {stats.UnlinkedPageCount:N0} only in sitemaps");
             Console.WriteLine($"  Links         {stats.LinkCount:N0}");
             var sitemapErrors = stats.SitemapErrorCount > 0 ? $", {stats.SitemapErrorCount:N0} couldn't be read" : string.Empty;
             Console.WriteLine(stats.SitemapCount + stats.SitemapErrorCount == 0
                 ? "  Sitemaps      none found"
-                : $"  Sitemaps      {stats.SitemapCount:N0} read, listing {stats.SitemapUrlCount:N0} URLs{sitemapErrors}");
+                : $"  Sitemaps      {stats.SitemapCount:N0} read, listing {Format.Count(stats.SitemapUrlCount, "URL", "URLs")}{sitemapErrors}");
             Console.WriteLine($"  Speed         {stats.AverageResponseMs:N0} ms average page response, {Format.Bytes(stats.TotalBytes)} of HTML");
             Console.WriteLine($"  Database      {Format.Bytes(new FileInfo(path).Length)}");
 

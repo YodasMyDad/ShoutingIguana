@@ -65,8 +65,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             var linksComplete = crawlComplete && SeesEveryLinkingPage(reader.ReadLimitSkips(), scope, notes, skipped);
             if (!options.DiscoverSitemaps)
             {
-                Skip(notes, skipped, "Sitemaps weren't read in this crawl, so orphan pages and sitemap coverage weren't checked.",
-                    IssueCatalog.ORPHAN_PAGE, IssueCatalog.NOT_IN_SITEMAP, IssueCatalog.SITEMAP_MISSING);
+                Skip(notes, skipped, "Sitemaps weren't read in this crawl, so orphan pages and the sitemap checks weren't run.",
+                    [IssueCatalog.ORPHAN_PAGE, .. IssueCatalog.All.Where(issue => issue.Category == IssueCategory.Sitemaps)]);
             }
             else if (!crawlComplete)
             {
@@ -87,6 +87,19 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                         ? $"Pages missing from the sitemaps weren't checked: {reason}, so {unreadable.Url} and any more like it weren't read, and they may list them."
                         : $"Pages missing from the sitemaps weren't checked: {unreadable.Url} couldn't be read ({unreadable.Error}), and it may list them.",
                     IssueCatalog.NOT_IN_SITEMAP);
+            }
+
+            // What the crawl was told not to fetch can't be found broken, which isn't the same as finding it fine.
+            if (!options.CheckExternalLinks)
+            {
+                Skip(notes, skipped, "Links to other sites weren't checked in this crawl, so broken external links weren't looked for.",
+                    IssueCatalog.BROKEN_EXTERNAL_LINKS);
+            }
+
+            if (!options.CheckResources)
+            {
+                Skip(notes, skipped, "Images weren't fetched in this crawl, so broken and oversized images weren't looked for.",
+                    IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE);
             }
 
             if (reader.CountNotChecked() is > 0 and var notChecked)
@@ -139,7 +152,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                         continue;
                     }
 
-                    hits.ForEach(writer.Add);
+                    Store(hits);
                 }
 
                 foreach (var rule in siteRules)
@@ -171,7 +184,17 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                     continue;
                 }
 
-                hits.ForEach(writer.Add);
+                Store(hits);
+            }
+        }
+
+        // A skipped check stores nothing, whatever its rule found on the way: it isn't in the results, so its rows
+        // would turn up only in exports.
+        void Store(List<IssueHit> found)
+        {
+            foreach (var hit in found.Where(hit => !skipped.Contains(hit.Issue)))
+            {
+                writer.Add(hit);
             }
         }
 

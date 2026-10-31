@@ -157,7 +157,7 @@ internal static class CrawlCommand
 
             Console.WriteLine(summary.Status switch
             {
-                CrawlStatus.Completed => $"Done: {summary.Progress.Fetched:N0} URLs fetched ({summary.Progress.HtmlPages:N0} pages) in {Format.Duration(summary.Progress.Elapsed)}.",
+                CrawlStatus.Completed => $"Done: {Format.Count(summary.Progress.Fetched, "URL", "URLs")} fetched ({Format.Count(summary.Progress.HtmlPages, "page", "pages")}) in {Format.Duration(summary.Progress.Elapsed)}.",
                 CrawlStatus.Stopped => $"Stopped. Continue with: si crawl --resume --db \"{databasePath}\"  (or check what's there: si analyze \"{databasePath}\")",
                 _ => $"Failed: {summary.Error}"
             });

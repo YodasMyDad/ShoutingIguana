@@ -1,0 +1,103 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
+using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Configuration.Models;
+using ShoutingIguana.Engine.Crawling;
+using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Tests.Fetching;
+using ShoutingIguana.TestSite;
+using ShoutingIguana.TestSite.Models;
+
+namespace ShoutingIguana.Engine.Tests.Analysis;
+
+/// <summary>
+/// Crawls that can't support a check, analysed end to end: the check is left out of the results, a note says why, and
+/// nothing is stored for it, so an export can't show rows for a check the results say didn't run.
+/// </summary>
+public sealed class SkippedCheckCrawlTests : IAsyncLifetime
+{
+    private readonly string _path = Path.Combine(Path.GetTempPath(), $"si-test-{Guid.NewGuid():N}.sicrawl");
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync()
+    {
+        foreach (var path in new[] { _path, _path + "-wal", _path + "-shm" })
+        {
+            File.Delete(path);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>The synthetic site plants every one of these checks, so a check that still ran would store rows.</summary>
+    [Fact]
+    public async Task ChecksOfWhatTheCrawlDidntFetchAreSkipped()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
+        var options = new CrawlOptions
+        {
+            StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, CheckExternalLinks = false, CheckResources = false, DiscoverSitemaps = false
+        };
+
+        var analysis = await CrawlAndAnalyseAsync(options);
+
+        IssueDefinition[] notRun =
+        [
+            IssueCatalog.BROKEN_EXTERNAL_LINKS, IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE, IssueCatalog.ORPHAN_PAGE,
+            IssueCatalog.NOT_IN_SITEMAP, IssueCatalog.SITEMAP_ERROR, IssueCatalog.SITEMAP_MISSING, IssueCatalog.SITEMAP_NON_INDEXABLE,
+            IssueCatalog.SITEMAP_URL_OTHER_HOST
+        ];
+        Assert.True(analysis.IsPartial);
+        Assert.Equal(
+        [
+            "Sitemaps weren't read in this crawl, so orphan pages and the sitemap checks weren't run.",
+            "Links to other sites weren't checked in this crawl, so broken external links weren't looked for.",
+            "Images weren't fetched in this crawl, so broken and oversized images weren't looked for."
+        ], analysis.Notes);
+        Assert.Equal(IssueCatalog.All.Except(notRun), analysis.Issues.Select(issue => issue.Issue));
+        Assert.DoesNotContain(IssueReader.ReadAll(_path), row => notRun.Any(issue => issue.Id == row.Issue));
+    }
+
+    /// <summary>
+    /// The site's only sitemap breaks after its first entry, an unlinked page. That page really is in the sitemap, but
+    /// with no sitemap read in full the orphan check is skipped, so it isn't stored as an orphan either.
+    /// </summary>
+    [Fact]
+    public async Task ASkippedOrphanCheckStoresNoOrphans()
+    {
+        await using var site = await LoopbackServer.StartAsync(context => context.Request.Path.Value switch
+        {
+            "/robots.txt" => Write(context, "text/plain", "User-agent: *\nAllow: /\nSitemap: /sitemap.xml"),
+            "/sitemap.xml" => Write(context, "application/xml",
+                "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>/unlinked</loc></url><url><loc>/a?x=1&y=2</loc></url></urlset>"
+                    .Replace("<loc>/", $"<loc>{context.Request.Scheme}://{context.Request.Host}/", StringComparison.Ordinal)),
+            _ => Write(context, "text/html; charset=utf-8", "<!doctype html><html lang=\"en\"><head><title>A page</title></head><body><p>Text</p></body></html>")
+        });
+
+        var analysis = await CrawlAndAnalyseAsync(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, MaxRetries = 0 });
+
+        Assert.Contains("No sitemap could be read, so orphan pages and pages missing from the sitemaps weren't checked.", analysis.Notes);
+        Assert.False(IssueReader.ReadCounts(_path).ContainsKey(IssueCatalog.ORPHAN_PAGE.Id));
+        Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.ORPHAN_PAGE.Id));
+        Assert.Equal(1, CrawlStatsReader.Read(_path).SitemapUrlCount);
+    }
+
+    private async Task<AnalysisSummary> CrawlAndAnalyseAsync(CrawlOptions options)
+    {
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, _path)))
+        {
+            Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TimeSpan.FromMinutes(1))).Status);
+        }
+
+        return await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_path);
+    }
+
+    private static Task Write(HttpContext context, string contentType, string body)
+    {
+        context.Response.ContentType = contentType;
+        return context.Response.WriteAsync(body);
+    }
+}

@@ -40,7 +40,7 @@ internal static class AnalyzeCommand
         try
         {
             var summary = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(path, cancellationToken: cancellationToken);
-            Console.WriteLine($"Analysed {summary.PagesAnalyzed:N0} pages in {summary.Duration.TotalSeconds:N1} s.");
+            Console.WriteLine($"Analysed {Format.Count(summary.PagesAnalyzed, "page", "pages")} in {summary.Duration.TotalSeconds:N1} s.");
             foreach (var note in summary.Notes)
             {
                 Console.WriteLine($"  {Format.Printable(note)}");
