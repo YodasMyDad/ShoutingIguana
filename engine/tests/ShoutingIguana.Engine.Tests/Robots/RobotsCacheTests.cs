@@ -127,6 +127,33 @@ public sealed class RobotsCacheTests : IAsyncLifetime
         Assert.Equal(tooMany ? "More than 5 redirects" : null, record.Error);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("ftp://files.example/robots.txt")]
+    public async Task ARedirectThatCantBeFollowedMeansNoRules(string? location)
+    {
+        _robots = (context, _) =>
+        {
+            context.Response.StatusCode = 301;
+            if (location is not null)
+            {
+                context.Response.Headers.Location = location;
+            }
+
+            return Task.CompletedTask;
+        };
+        var harness = Harness();
+
+        var robots = await harness.GetAsync(_server.BaseUri);
+
+        Assert.True(robots.IsAllowed("/page"));
+        Assert.Null(robots.UnreachableReason);
+        Assert.Empty(harness.Observer.Notices);
+        var record = Assert.Single(await harness.ReadRecordsAsync());
+        Assert.Null(record.StatusCode);
+        Assert.Equal("HTTP 301 redirects to no http or https URL", record.Error);
+    }
+
     [Fact]
     public async Task ADeadExternalHostGetsNoVerdictSoItsLinksAreChecked()
     {

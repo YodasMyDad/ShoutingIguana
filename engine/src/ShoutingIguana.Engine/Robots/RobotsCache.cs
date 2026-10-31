@@ -71,10 +71,18 @@ internal sealed class RobotsCache(
         for (var hop = 0; hop <= MAX_REDIRECTS; hop++)
         {
             var response = await fetcher.FetchAsync(location, FetchBody.Text, stopping, MAX_ROBOTS_BYTES).ConfigureAwait(false);
-            if (response.Outcome == FetchOutcome.Redirect && response.Location is { } next)
+            if (response.Outcome == FetchOutcome.Redirect)
             {
-                location = next;
-                continue;
+                if (response.Location is { } next)
+                {
+                    location = next;
+                    continue;
+                }
+
+                // A redirect that can't be followed (no Location, or not to http or https) leaves robots.txt unavailable
+                // too, as RFC 9309 has it, so it's recorded and treated like one behind too many redirects.
+                await RecordAsync(origin, null, null, $"HTTP {response.StatusCode} redirects to no http or https URL").ConfigureAwait(false);
+                return RobotsTxt.AllowAll;
             }
 
             await RecordAsync(origin, response.StatusCode, response.Body, response.Error).ConfigureAwait(false);
