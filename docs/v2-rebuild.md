@@ -68,6 +68,10 @@ As of 2026-10-31:
   - `--resume` continues from there.
   - Whether something answers is judged per origin, with its robots.txt as the probe. So one part of the site
     going quiet (a dead `www` twin, a closed port 80, a section that never answers) doesn't stop a healthy crawl.
+  - An origin that has answered before is waited out, never written off. Only one that has never answered can be
+    written off, and only while the site's last answering origin still answers. A start URL that only redirects
+    (`http://` to `https://`) therefore can't make the real site look dead.
+  - Time spent paused doesn't count toward the 10 minutes.
   - A URL the crawler gave up on without asking is "Not checked", never broken.
 - **A check that can't be accurate is skipped, not reported clean.**
   - The orphan and sitemap coverage checks need a complete crawl and readable sitemaps.
