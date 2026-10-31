@@ -310,9 +310,9 @@ public static class IssueCatalog
         "Keep alt text to a short description.");
 
     public static readonly IssueDefinition IMAGE_MISSING_DIMENSIONS = new("image-missing-dimensions", IssueCategory.Images, IssueSeverity.Notice,
-        "Images without width and height",
-        "Without width and height the browser can't reserve space, so the layout jumps as images load (Cumulative Layout Shift).",
-        "Set width and height attributes on images.");
+        "Images without width and height attributes",
+        "Without width and height the browser can't reserve space, so the layout jumps as images load (Cumulative Layout Shift), unless CSS sizes the image box. The crawler reads the HTML, not the CSS, so check those before fixing.",
+        "Set width and height attributes on images, or give their box a fixed size or aspect-ratio in CSS.");
 
     public static readonly IssueDefinition IMAGE_BROKEN = new("image-broken", IssueCategory.Images, IssueSeverity.Error,
         "Broken images",
