@@ -57,6 +57,30 @@ public sealed class CrawlWriterTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AWriteThatFailsAsTheCrawlEndsFailsTheCrawl()
+    {
+        // A crawl file whose database rejects only the last write, the one that marks the crawl completed.
+        var path = _files.NewPath();
+        await using (CrawlWriter.Open(path, Options(), resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+        }
+
+        using (var connection = CrawlDatabase.OpenWriter(path))
+        {
+            CrawlDatabase.Execute(connection, $"""
+                CREATE TRIGGER reject_completion BEFORE UPDATE OF status ON crawl WHEN NEW.status = {(int)CrawlStatus.Completed}
+                BEGIN SELECT RAISE(ABORT, 'injected write failure'); END;
+                """);
+        }
+
+        var summary = await TestCrawls.RunAsync(Options(), path, resume: true);
+
+        Assert.Equal(CrawlStatus.Failed, summary.Status);
+        Assert.Contains("injected write failure", summary.Error);
+        Assert.Equal(CrawlStatus.Failed, CrawlStatsReader.Read(path).Status);
+    }
+
+    [Fact]
     public async Task AnAnalysisIsRefusedWhileACrawlIsWriting()
     {
         var path = _files.NewPath();

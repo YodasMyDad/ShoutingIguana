@@ -184,20 +184,7 @@ internal sealed class CrawlSession
             await progressStop.CancelAsync().ConfigureAwait(false);
             await WhenAllQuietlyAsync([progress]).ConfigureAwait(false);
             _elapsed.Stop();
-
-            if (!_writer.Completion.IsCompleted)
-            {
-                await _writer.UpdateStatusAsync(_status, _status == CrawlStatus.Completed, CancellationToken.None).ConfigureAwait(false);
-            }
-
-            try
-            {
-                await _writer.DisposeAsync().ConfigureAwait(false);
-            }
-            finally
-            {
-                _fetcher.Dispose();
-            }
+            await CloseAsync().ConfigureAwait(false);
         }
 
         if (_status == CrawlStatus.Failed)
@@ -209,6 +196,41 @@ internal sealed class CrawlSession
         _observer.OnProgress(final);
         _logger.LogInformation("Crawl {Status}: {Fetched} URLs fetched in {Elapsed}", _status, final.Fetched, final.Elapsed);
         return new CrawlSummary(_status, final, _request.DatabasePath, error);
+    }
+
+    /// <summary>
+    /// Stores the final status, closes the crawl file and lets go of the network. A write loop that failed, even on this
+    /// last drain, fails the crawl: the writer marks the file failed, and the summary says so too.
+    /// </summary>
+    private async Task CloseAsync()
+    {
+        try
+        {
+            if (!_writer.Completion.IsCompleted)
+            {
+                await _writer.UpdateStatusAsync(_status, _status == CrawlStatus.Completed, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+        catch (ChannelClosedException)
+        {
+            // The write loop failed after the check above; its error is reported below.
+        }
+        finally
+        {
+            try
+            {
+                await _writer.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _fetcher.Dispose();
+            }
+        }
+
+        if (_writer.Completion.IsFaulted)
+        {
+            _status = CrawlStatus.Failed;
+        }
     }
 
     private ValueTask SeedAsync(CancellationToken cancellationToken)
