@@ -9,7 +9,8 @@ Guidance for Claude / agents working in this repo. Read this before making chang
 ## v2 rebuild (branch `v2`, folder `engine/`)
 
 The WPF app in `src/` is being replaced by a cross-platform engine in `engine/` (read `engine/README.md`). New work
-goes there; `src/` is legacy and only gets critical fixes.
+goes there; `src/` is legacy and only gets critical fixes. **Start with `docs/v2-rebuild.md`**: the plan, decisions,
+status and open owner decisions. Update it at the end of each step.
 
 - Solution: `engine/ShoutingIguana.Engine.slnx`. Test with `dotnet test engine/ShoutingIguana.Engine.slnx`.
 - CLI: `dotnet run --project engine/src/ShoutingIguana.Cli -- crawl <url>` (also `analyze`, `issues`, `stats`, `testsite`, `bench`).
