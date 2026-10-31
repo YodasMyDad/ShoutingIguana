@@ -4,8 +4,12 @@ using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Support;
+using ShoutingIguana.Engine.Urls;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
 
@@ -120,6 +124,39 @@ public sealed class CrawlWriterTests : IAsyncLifetime
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         Assert.Equal(_server.Site.GetExpectations().HtmlPages, CrawlStatsReader.Read(path).HtmlPageCount);
         Assert.False(File.Exists(path + "-lock"));
+    }
+
+    [Fact]
+    public async Task StoresTheCanonicalThatIndexabilityGoesBy()
+    {
+        var path = _files.NewPath();
+        var links = new OutLinkFactory(new CrawlScope(_server.BaseUri, includeSubdomains: false, stayInStartFolder: true));
+        OutLink Link(string target, LinkKind kind, LinkFlags flags = LinkFlags.None) =>
+            links.Create(new Uri(_server.BaseUri, target), kind, flags, LinkPosition.Head, null);
+
+        await using (var writer = CrawlWriter.Open(path, Options(), resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+            await writer.DiscoverAsync([Link("/body-only", LinkKind.Hyperlink), Link("/body-and-header", LinkKind.Hyperlink)],
+                DiscoverySource.Seed, null, CancellationToken.None);
+            var claim = await writer.ClaimAsync(2, 0, CancellationToken.None);
+            foreach (var item in claim.Internal)
+            {
+                // A canonical in the body comes first in document order, but Google ignores it; the header's counts.
+                List<OutLink> canonicals = [Link("/from-body", LinkKind.Canonical, LinkFlags.OutsideHead)];
+                if (item.Url.EndsWith("/body-and-header", StringComparison.Ordinal))
+                {
+                    canonicals.Add(Link("/from-header", LinkKind.Canonical, LinkFlags.FromHttpHeader));
+                }
+
+                var response = new ResponseRow { UrlId = item.Id, FetchedAt = 0, Outcome = FetchOutcome.Success, StatusCode = 200, IsHtml = true };
+                await writer.RecordAsync(new PageRecord(item, response, canonicals, false, null, null), CancellationToken.None);
+            }
+        }
+
+        var origin = _server.BaseUri.GetLeftPart(UriPartial.Authority);
+        Assert.Equal(
+            [$"{origin}/body-and-header | {origin}/from-header", $"{origin}/body-only | null"],
+            TestCrawls.Rows(path, "SELECT u.url, c.url FROM responses r JOIN urls u ON u.id = r.url_id LEFT JOIN urls c ON c.id = r.canonical_url_id"));
     }
 
     private CrawlOptions Options() => new() { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 4 };

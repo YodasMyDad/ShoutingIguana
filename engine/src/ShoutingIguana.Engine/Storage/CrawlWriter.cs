@@ -269,7 +269,8 @@ internal sealed class CrawlWriter : IAsyncDisposable
                 case LinkKind.Redirect:
                     redirectId ??= targetId;
                     break;
-                case LinkKind.Canonical:
+                case LinkKind.Canonical when (link.Flags & LinkFlags.OutsideHead) == 0:
+                    // The canonical indexability goes by: from the head or an HTTP header, never one in the body.
                     canonicalId ??= targetId;
                     break;
                 case LinkKind.Hyperlink:
