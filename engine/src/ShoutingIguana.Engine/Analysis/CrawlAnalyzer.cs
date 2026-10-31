@@ -15,10 +15,14 @@ namespace ShoutingIguana.Engine.Analysis;
 /// Runs every rule over a stored crawl and replaces its issues. Works from the stored page facts, links and URL
 /// statuses, so it never refetches or reparses anything, and any crawl can be re-analysed with new rules or
 /// thresholds. One streaming pass over the pages, then the cross-page checks; memory stays at a few dozen bytes
-/// per URL.
+/// per URL. Page content is untrusted, so a rule that throws on one page is logged and skipped for that page
+/// instead of ending the analysis.
 /// </summary>
 public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 {
+    /// <summary>Failures logged in full per rule; the rest are only counted, so a rule that fails everywhere can't flood the log.</summary>
+    private const int LOGGED_FAILURES_PER_RULE = 5;
+
     private readonly ILogger _logger = loggerFactory.CreateLogger<CrawlAnalyzer>();
 
     /// <summary>Analyses a crawl that is not being written to. A crawl still running (or interrupted) is refused.</summary>
@@ -49,6 +53,9 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
         }
 
         var crawlComplete = false;
+        List<string> notes = [];
+        Dictionary<string, int> failures = new(StringComparer.Ordinal);
+        List<IssueHit> hits = [];
 
         using var writer = IssueWriter.Open(databasePath, _logger);
         long pages = 0;
@@ -82,26 +89,57 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 pages++;
                 foreach (var rule in pageRules)
                 {
-                    foreach (var hit in rule.Check(page))
+                    // Hits are collected first, so a rule that fails halfway through a page adds nothing for it.
+                    hits.Clear();
+                    try
                     {
-                        writer.Add(hit);
+                        hits.AddRange(rule.Check(page));
                     }
+                    catch (Exception exception) when (exception is not OperationCanceledException)
+                    {
+                        RecordFailure(failures, rule, page.Url, exception);
+                        continue;
+                    }
+
+                    hits.ForEach(writer.Add);
                 }
 
                 foreach (var rule in siteRules)
                 {
-                    rule.Observe(page);
+                    try
+                    {
+                        rule.Observe(page);
+                    }
+                    catch (Exception exception) when (exception is not OperationCanceledException)
+                    {
+                        RecordFailure(failures, rule, page.Url, exception);
+                    }
                 }
             }
 
             foreach (var rule in siteRules)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                foreach (var hit in rule.Finish())
+                hits.Clear();
+                try
                 {
-                    writer.Add(hit);
+                    hits.AddRange(rule.Finish());
                 }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    _logger.LogError(exception, "Rule {Rule} failed after the page pass; its cross-page results are left out", RuleName(rule));
+                    notes.Add($"{RuleName(rule)} failed after reading every page, so its cross-page results are missing (see the log).");
+                    continue;
+                }
+
+                hits.ForEach(writer.Add);
             }
+        }
+
+        foreach (var (rule, count) in failures)
+        {
+            _logger.LogWarning("Rule {Rule} failed on {Pages} pages; its results for them are missing", rule, count);
+            notes.Add($"{rule} failed on {RuleText.Count(count, "page", "pages")}, so its results for them are missing (see the log).");
         }
 
         // The reader is closed by now, so the writer can fold the write-ahead log when it closes.
@@ -111,6 +149,18 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 
         _logger.LogInformation("Analysed {Pages} pages in {Elapsed}: {Flagged} issues across {Types} checks",
             pages, stopwatch.Elapsed, issues.Sum(issue => issue.Count), issues.Count(issue => issue.Count > 0));
-        return new AnalysisSummary(pages, issues, stopwatch.Elapsed, IsPartial: !crawlComplete);
+        return new AnalysisSummary(pages, issues, stopwatch.Elapsed, IsPartial: !crawlComplete) { Notes = notes };
     }
+
+    private void RecordFailure(Dictionary<string, int> failures, object rule, string url, Exception exception)
+    {
+        var name = RuleName(rule);
+        var count = failures[name] = failures.GetValueOrDefault(name) + 1;
+        if (count <= LOGGED_FAILURES_PER_RULE)
+        {
+            _logger.LogError(exception, "Rule {Rule} failed on {Url}; its results for this page are left out", name, url);
+        }
+    }
+
+    private static string RuleName(object rule) => rule.GetType().Name;
 }

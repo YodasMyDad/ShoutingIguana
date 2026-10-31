@@ -175,6 +175,34 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ARuleThatFailsOnOnePageDoesNotStopTheAnalysis()
+    {
+        var path = NewDatabasePath();
+        await CrawlAsync(Options() with { MaxUrls = 60 }, path);
+        var analyzer = new CrawlAnalyzer(NullLoggerFactory.Instance);
+        var clean = await analyzer.AnalyzeAsync(path);
+
+        // A link to a URL id the file doesn't have: link checks on the home page can't look its target up.
+        using (var connection = CrawlDatabase.OpenWriter(path))
+        {
+            CrawlDatabase.Execute(connection, $"""
+                UPDATE links SET to_id = 2147483647 WHERE rowid = (
+                    SELECT MIN(l.rowid) FROM links l JOIN urls u ON u.id = l.from_id
+                    WHERE u.url = '{_server.BaseUri.AbsoluteUri}' AND l.kind = {(int)LinkKind.Hyperlink})
+                """);
+        }
+
+        var damaged = await analyzer.AnalyzeAsync(path);
+
+        Assert.Equal(clean.PagesAnalyzed, damaged.PagesAnalyzed);
+        Assert.Contains(damaged.Notes, note => note.StartsWith("LinkRules failed on 1 page", StringComparison.Ordinal));
+        Assert.Contains(damaged.Notes, note => note.StartsWith("InlinkRules failed on 1 page", StringComparison.Ordinal));
+        Assert.DoesNotContain(clean.Notes, note => note.Contains("failed", StringComparison.Ordinal));
+        Assert.Equal(clean.Issues.Single(issue => issue.Issue == IssueCatalog.TITLE_TOO_LONG).Count,
+            damaged.Issues.Single(issue => issue.Issue == IssueCatalog.TITLE_TOO_LONG).Count);
+    }
+
+    [Fact]
     public async Task RefusesToOverwriteAnExistingCrawl()
     {
         var path = NewDatabasePath();

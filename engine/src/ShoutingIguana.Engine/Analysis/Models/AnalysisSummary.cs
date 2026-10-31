@@ -4,4 +4,8 @@ namespace ShoutingIguana.Engine.Analysis.Models;
 /// <param name="IsPartial">
 /// The crawl was stopped or its sitemaps weren't all read, so orphan and sitemap-coverage checks were skipped.
 /// </param>
-public sealed record AnalysisSummary(long PagesAnalyzed, IReadOnlyList<IssueCount> Issues, TimeSpan Duration, bool IsPartial = false);
+public sealed record AnalysisSummary(long PagesAnalyzed, IReadOnlyList<IssueCount> Issues, TimeSpan Duration, bool IsPartial = false)
+{
+    /// <summary>What the analysis couldn't do and why, one sentence each, for the analysis output.</summary>
+    public IReadOnlyList<string> Notes { get; init; } = [];
+}

@@ -32,7 +32,7 @@ internal static class RichResultRequirements
         {
             // A node that another node points at by @id is nested in effect (Yoast and Rank Math build graphs this
             // way), so a rating attached to a product like that doesn't need its own itemReviewed.
-            var isReferenced = entity.TryGetProperty("@id", out var id) && id.ValueKind == JsonValueKind.String && referenced.Contains(id.GetString()!);
+            var isReferenced = entity.TryGetProperty("@id", out var id) && ReadString(id) is { } idText && referenced.Contains(idText);
             foreach (var type in Types(entity))
             {
                 if (!REQUIRED.TryGetValue(type, out var required))
@@ -77,7 +77,11 @@ internal static class RichResultRequirements
                 var properties = element.EnumerateObject().ToList();
                 if (properties is [{ Name: "@id", Value.ValueKind: JsonValueKind.String } reference])
                 {
-                    referenced.Add(reference.Value.GetString()!);
+                    if (ReadString(reference.Value) is { } target)
+                    {
+                        referenced.Add(target);
+                    }
+
                     break;
                 }
 
@@ -105,23 +109,40 @@ internal static class RichResultRequirements
             return [];
         }
 
-        var values = type.ValueKind switch
-        {
-            JsonValueKind.String => [type.GetString()!],
-            JsonValueKind.Array => type.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.String).Select(item => item.GetString()!).ToList(),
-            _ => []
-        };
-
-        return values.Select(value => value[(value.LastIndexOfAny(['/', ':']) + 1)..]);
+        var values = type.ValueKind == JsonValueKind.Array ? type.EnumerateArray().Select(ReadString) : [ReadString(type)];
+        return values.OfType<string>().Select(value => value[(value.LastIndexOfAny(['/', ':']) + 1)..]);
     }
 
+    /// <summary>A string that can't be read is there all the same, just invalid, so it counts as a value.</summary>
     private static bool HasValue(JsonElement entity, string property) =>
         entity.TryGetProperty(property, out var value) && value.ValueKind switch
         {
             JsonValueKind.Null or JsonValueKind.Undefined => false,
-            JsonValueKind.String => !string.IsNullOrWhiteSpace(value.GetString()),
+            JsonValueKind.String => ReadString(value) is not { } text || !string.IsNullOrWhiteSpace(text),
             JsonValueKind.Array => value.GetArrayLength() > 0,
             JsonValueKind.Object => value.EnumerateObject().Any(),
             _ => true
         };
+
+    /// <summary>
+    /// A string value, or null for anything else and for strings that can't be read: JSON may escape half of a
+    /// surrogate pair (<c>"\uDC00"</c>, from text cut mid-emoji), which System.Text.Json won't turn into a .NET string
+    /// and offers no non-throwing way to detect. Page content is untrusted, so that's an expected outcome here.
+    /// </summary>
+    private static string? ReadString(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        try
+        {
+            return value.GetString();
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
 }

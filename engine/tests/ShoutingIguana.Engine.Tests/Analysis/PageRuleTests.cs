@@ -237,6 +237,49 @@ public sealed class PageRuleTests
     }
 
     [Fact]
+    public void StructuredDataWithUnreadableStringsCountsThemAsPresent()
+    {
+        var site = new RuleHarness();
+        var rules = new StructuredDataRules();
+        string Script(string json) => $"<script type=\"application/ld+json\">{json}</script>";
+
+        // JSON.stringify of text cut mid-emoji leaves half a surrogate pair, which System.Text.Json can't read as a string.
+        var name = site.Page($"{site.Site}/a", RuleHarness.Html(Script("""{"@type":"Product","name":"\uDC00x","offers":{"price":"1"}}""")));
+        var nameOnly = site.Page($"{site.Site}/b", RuleHarness.Html(Script("""{"@type":"Product","name":"\uD83D"}""")));
+        var type = site.Page($"{site.Site}/c", RuleHarness.Html(Script("""{"@type":["Product\uDC00","Recipe"],"name":"x"}""")));
+        var id = site.Page($"{site.Site}/d", RuleHarness.Html(Script(
+            """{"@graph":[{"@type":"AggregateRating","@id":"\uDC00","ratingValue":4,"reviewCount":2},{"@type":"Product","name":"x","aggregateRating":{"@id":"\uDC00"}}]}""")));
+
+        Assert.Empty(Issues(rules, name));
+        Assert.Equal("Product: needs offers or review or aggregateRating", rules.Check(nameOnly).Single().Detail);
+        Assert.Equal("Recipe: needs image", rules.Check(type).Single().Detail);
+        Assert.Equal("AggregateRating: needs itemReviewed", rules.Check(id).Single().Detail);
+    }
+
+    [Fact]
+    public void DeeplyNestedJsonLdIsReportedNotOverflowed()
+    {
+        var site = new RuleHarness();
+        var nested = string.Concat(Enumerable.Repeat("""{"a":""", 10_000)) + "1" + new string('}', 10_000);
+        var page = site.Page($"{site.Site}/", RuleHarness.Html($"<script type=\"application/ld+json\">{nested}</script>"));
+
+        Assert.Equal([IssueCatalog.STRUCTURED_DATA_INVALID], Issues(new StructuredDataRules(), page));
+    }
+
+    [Fact]
+    public void InvalidPunycodeHostsAreMeasuredAsWritten()
+    {
+        // DNS accepts any xn-- label, but IDNA rejects this one, so it can't be shown in Unicode.
+        var site = new RuleHarness("https://xn--55555577.example");
+        var page = site.Page($"{site.Site}/{new string('a', 120)}", RuleHarness.Html());
+
+        var hit = new UrlRules(SETTINGS).Check(page).Single();
+
+        Assert.Equal(IssueCatalog.URL_TOO_LONG, hit.Issue);
+        Assert.Equal(RuleText.Characters($"{site.Site}/{new string('a', 120)}".Length), hit.Detail);
+    }
+
+    [Fact]
     public void UrlLengthIsMeasuredAsPeopleReadIt()
     {
         var site = new RuleHarness("https://пример.рф");
