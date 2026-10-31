@@ -13,7 +13,10 @@ internal sealed class RobotsCacheEntry
 
     public Task<RobotsTxt> Load => _load.Value;
 
-    public bool IsFailed => Volatile.Read(ref _retryFromTicks) != long.MaxValue;
+    /// <summary>When a fresh attempt may replace the failed load; null while the load hasn't failed.</summary>
+    public DateTimeOffset? RetryAt => Volatile.Read(ref _retryFromTicks) is var ticks && ticks != long.MaxValue
+        ? new DateTimeOffset(ticks, TimeSpan.Zero)
+        : null;
 
     public bool CanRetry(DateTimeOffset now) => now.UtcTicks >= Volatile.Read(ref _retryFromTicks);
 

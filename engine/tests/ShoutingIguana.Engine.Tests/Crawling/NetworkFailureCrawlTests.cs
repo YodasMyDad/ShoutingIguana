@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -82,7 +83,8 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
         var observer = new RecordingObserver();
         var path = NewDatabasePath();
 
-        var summary = await CrawlAsync(path, observer);
+        // Asked again once the cool-down is over, still 503.
+        var summary = await CrawlOnFakeClockAsync(Options(), path, observer, new FakeTimeProvider());
 
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         Assert.Equal(FetchOutcome.RobotsDisallowed, Outcome(path, _server.BaseUri.AbsoluteUri));
@@ -223,12 +225,50 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
         });
         var path = NewDatabasePath();
 
-        var summary = await CrawlAsync(path, new RecordingObserver());
+        var summary = await CrawlOnFakeClockAsync(Options(), path, new RecordingObserver(), new FakeTimeProvider());
 
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         Assert.Equal(FetchOutcome.Success, Outcome(path, _server.BaseUri.AbsoluteUri));
         Assert.Equal(FetchOutcome.Success, Outcome(path, $"{_server.BaseUri}about"));
         Assert.Equal(2, robotsRequests);
+    }
+
+    /// <summary>
+    /// robots.txt is down for the first half minute, so the start URL is refused and nothing else is known. Its notice
+    /// promises a re-ask in two minutes, and that is when the start URL gets its one more try: not a moment after the
+    /// failure, when robots.txt would still be down and the crawl would end empty.
+    /// </summary>
+    [Fact]
+    public async Task ARobotsTxtThatFailsAtTheStartIsAskedAgainWhenItsCoolDownEnds()
+    {
+        var time = new FakeTimeProvider();
+        var started = time.GetUtcNow();
+        var robotsRequests = new ConcurrentQueue<DateTimeOffset>();
+        _server = await LoopbackServer.StartAsync(context =>
+        {
+            if (context.Request.Path == "/robots.txt")
+            {
+                robotsRequests.Enqueue(time.GetUtcNow());
+                return time.GetUtcNow() - started < TimeSpan.FromSeconds(30) ? Status(context, 503) : Text(context, "User-agent: *\nDisallow:");
+            }
+
+            return context.Request.Path.Value switch
+            {
+                "/" => Html(context, "<a href=\"/about\">About</a>"),
+                "/about" => Html(context, "<p>About us</p>"),
+                _ => Status(context, 404)
+            };
+        });
+        var path = NewDatabasePath();
+
+        var summary = await CrawlOnFakeClockAsync(Options(), path, new RecordingObserver(), time);
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        Assert.Equal(FetchOutcome.Success, Outcome(path, _server.BaseUri.AbsoluteUri));
+        Assert.Equal(FetchOutcome.Success, Outcome(path, $"{_server.BaseUri}about"));
+        var asked = robotsRequests.ToArray();
+        Assert.Equal(2, asked.Length);
+        Assert.True(asked[1] - asked[0] >= RobotsCache.RETRY_AFTER, $"robots.txt was asked again after {asked[1] - asked[0]}.");
     }
 
     [Fact]
@@ -313,6 +353,48 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
         await using var resumed = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path, Resume: true));
         Assert.Equal(CrawlStatus.Completed, (await resumed.Completion.WaitAsync(CRAWL_TIMEOUT)).Status);
         Assert.Equal(60L, Scalar(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url LIKE '%/p%' AND r.status_code = 200"));
+    }
+
+    /// <summary>
+    /// Every other URL gets no response, never three in a row, so they are all held back for the end; then the site goes
+    /// down for good. However many held-back URLs are left, the crawl gives up ten minutes after the site stopped
+    /// answering.
+    /// </summary>
+    [Fact]
+    public async Task ASiteThatGoesDownForTheLastTriesIsGivenUpOnInTime()
+    {
+        const int PAIRS = 40;
+        var answered = 0;
+        var links = string.Concat(Enumerable.Range(0, PAIRS).Select(page => $"<a href=\"/dead/{page}\">Dead</a> <a href=\"/ok/{page}\">OK</a> "));
+        _server = await LoopbackServer.StartAsync(context =>
+        {
+            var requestPath = context.Request.Path.Value ?? "/";
+            if (Volatile.Read(ref answered) == PAIRS || requestPath.StartsWith("/dead/", StringComparison.Ordinal))
+            {
+                context.Abort();
+                return Task.CompletedTask;
+            }
+
+            if (requestPath.StartsWith("/ok/", StringComparison.Ordinal))
+            {
+                Interlocked.Increment(ref answered);
+            }
+
+            return requestPath switch
+            {
+                "/robots.txt" => Status(context, 404),
+                "/" => Html(context, links),
+                _ => Html(context, "<p>OK</p>")
+            };
+        });
+        var time = new FakeTimeProvider();
+        var observer = new RecordingObserver(time);
+
+        var summary = await CrawlOnFakeClockAsync(Options() with { Concurrency = 1 }, NewDatabasePath(), observer, time, LONG_STEP);
+
+        Assert.Equal(CrawlStatus.Stopped, summary.Status);
+        Assert.InRange(observer.FirstAt("site-down") - observer.FirstAt("site-unreachable"),
+            RetryingFetcher.GIVE_UP_AFTER - LONG_STEP, RetryingFetcher.GIVE_UP_AFTER + TimeSpan.FromMinutes(2));
     }
 
     /// <summary>

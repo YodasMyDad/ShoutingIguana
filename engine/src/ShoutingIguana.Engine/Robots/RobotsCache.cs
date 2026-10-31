@@ -56,13 +56,38 @@ internal sealed class RobotsCache(
         return entry.Load;
     }
 
-    /// <summary>Lets every robots.txt that couldn't be read be fetched again on next use, cool-down or not.</summary>
-    public void ExpireFailures()
+    /// <summary>
+    /// Like <see cref="GetAsync"/>, but a robots.txt that couldn't be read is waited out: once its cool-down is over it is
+    /// asked once more, and that answer stands, whatever it is.
+    /// </summary>
+    public async Task<RobotsTxt> GetAfterCoolDownAsync(Uri uri, CancellationToken cancellationToken)
     {
-        foreach (var entry in _origins.Values.Where(entry => entry.IsFailed))
+        var rules = await GetAsync(uri).WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (rules.UnreachableReason is null ||
+            !_origins.TryGetValue(uri.GetLeftPart(UriPartial.Authority), out var entry) || entry.RetryAt is not { } retryAt)
         {
-            entry.RetryFrom(DateTimeOffset.MinValue);
+            return rules;
         }
+
+        var wait = retryAt - timeProvider.GetUtcNow();
+        if (wait > TimeSpan.Zero)
+        {
+            await Task.Delay(wait, timeProvider, cancellationToken).ConfigureAwait(false);
+        }
+
+        return await GetAsync(uri).WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// When robots.txt may be asked again everywhere it couldn't be read and so refused URLs: the end of the last of those
+    /// cool-downs, or null when none is still running.
+    /// </summary>
+    public DateTimeOffset? CoolDownEndsAt()
+    {
+        var now = timeProvider.GetUtcNow();
+        return _origins.Values
+            .Where(entry => entry.RetryAt > now && entry.Load is { IsCompletedSuccessfully: true, Result.UnreachableReason: not null })
+            .Max(entry => entry.RetryAt);
     }
 
     private RobotsCacheEntry NewEntry(string origin) => new(entry => LoadAsync(origin, entry));
