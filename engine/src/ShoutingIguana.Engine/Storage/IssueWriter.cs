@@ -119,9 +119,20 @@ internal sealed class IssueWriter : IDisposable
     /// <summary>Rolls back unless committed, then folds the write-ahead log and closes the file.</summary>
     public void Dispose()
     {
-        _insert.Dispose();
-        _transaction.Dispose();
-        CrawlDatabase.CloseWriter(_connection, _logger);
+        try
+        {
+            _insert.Dispose();
+            _transaction.Dispose();
+        }
+        catch (SqliteException exception)
+        {
+            // Rolling back an analysis that failed part-way; SQLite may already have rolled it back itself.
+            _logger.LogDebug(exception, "Rolling back the analysis reported an error");
+        }
+        finally
+        {
+            CrawlDatabase.CloseWriter(_connection, _logger);
+        }
     }
 
     private SqliteCommand Command(string sql)

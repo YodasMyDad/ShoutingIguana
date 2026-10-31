@@ -120,7 +120,10 @@ internal sealed class CrawlWriter : IAsyncDisposable
     public ValueTask UpdateStatusAsync(CrawlStatus status, bool isFinished, CancellationToken cancellationToken) =>
         _commands.Writer.WriteAsync(new UpdateCrawlStatusCommand(status, isFinished), cancellationToken);
 
-    /// <summary>Stops accepting commands, drains and commits what is queued, then folds the WAL into the file.</summary>
+    /// <summary>
+    /// Stops accepting commands, drains and commits what is queued, then folds the WAL into the file. Never throws: a
+    /// failed loop has already surfaced its error through <see cref="Completion"/>, and the file is closed either way.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         _commands.Writer.TryComplete();
@@ -132,6 +135,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         {
             // Already logged by the loop and surfaced to the session through Completion.
             _logger.LogDebug(exception, "Writer loop had faulted before shutdown");
+            RecordFailure();
         }
         finally
         {
@@ -177,6 +181,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         catch (Exception exception)
         {
             _logger.LogError(exception, "Crawl database writer failed; the crawl cannot continue");
+            RollBackTransaction();
             _commands.Writer.TryComplete(exception);
             while (reader.TryRead(out var pending))
             {
@@ -529,6 +534,46 @@ internal sealed class CrawlWriter : IAsyncDisposable
         _transaction.Dispose();
         _transaction = null;
         _statements.SetTransaction(null);
+    }
+
+    /// <summary>Abandons the batch a failure interrupted, so the connection is free to be closed.</summary>
+    private void RollBackTransaction()
+    {
+        if (_transaction is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _transaction.Dispose();
+        }
+        catch (SqliteException exception)
+        {
+            // SQLite rolls some failures back by itself (a full disk, an I/O error), leaving nothing to undo.
+            _logger.LogDebug(exception, "Rolling back the failed batch reported an error");
+        }
+        finally
+        {
+            _transaction = null;
+            _statements.SetTransaction(null);
+        }
+    }
+
+    /// <summary>
+    /// Marks the crawl failed so the file doesn't claim it is still running. Best effort: whatever stopped the writer
+    /// (a full disk, say) may stop this too, and then the file reads as an interrupted crawl, which resumes the same way.
+    /// </summary>
+    private void RecordFailure()
+    {
+        try
+        {
+            _statements.UpdateCrawlStatus(CrawlStatus.Failed, false, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        }
+        catch (Exception exception) when (exception is SqliteException or InvalidOperationException)
+        {
+            _logger.LogWarning(exception, "Could not record the failure in the crawl database");
+        }
     }
 
     private static void FailReply(WriterCommand command, Exception exception)

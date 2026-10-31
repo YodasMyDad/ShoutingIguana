@@ -80,12 +80,15 @@ public static class CrawlDatabase
         {
             Execute(connection, "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode = DELETE;");
         }
-        catch (SqliteException exception)
+        catch (Exception exception) when (exception is SqliteException or InvalidOperationException)
         {
+            // The file is closed regardless; whatever went wrong before this already has its own error.
             logger.LogWarning(exception, "Could not fold the write-ahead log back into the crawl database");
         }
-
-        connection.Dispose();
+        finally
+        {
+            connection.Dispose();
+        }
     }
 
     /// <summary>

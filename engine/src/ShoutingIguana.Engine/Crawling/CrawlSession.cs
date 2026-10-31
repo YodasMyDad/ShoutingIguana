@@ -173,8 +173,14 @@ internal sealed class CrawlSession
                 await _writer.UpdateStatusAsync(_status, _status == CrawlStatus.Completed, CancellationToken.None).ConfigureAwait(false);
             }
 
-            await _writer.DisposeAsync().ConfigureAwait(false);
-            _fetcher.Dispose();
+            try
+            {
+                await _writer.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _fetcher.Dispose();
+            }
         }
 
         if (_status == CrawlStatus.Failed)
