@@ -168,5 +168,5 @@ public sealed record CrawlOptions
         name.Length > 0 && name.All(character => char.IsAsciiLetterOrDigit(character) || TOKEN_PUNCTUATION.Contains(character));
 
     /// <summary>Printable ASCII, spaces and tabs: line breaks would inject headers, and HttpClient refuses non-ASCII values.</summary>
-    private static bool IsFieldValue(string value) => value.All(character => character is '\t' or (>= ' ' and <= '~'));
+    private static bool IsFieldValue(string? value) => value is not null && value.All(character => character is '\t' or (>= ' ' and <= '~'));
 }

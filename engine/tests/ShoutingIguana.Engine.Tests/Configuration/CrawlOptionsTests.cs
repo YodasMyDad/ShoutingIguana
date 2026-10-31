@@ -29,6 +29,10 @@ public sealed class CrawlOptionsTests
     public void RejectsValuesARequestCantCarry(string value) =>
         Assert.Equal(["Header 'X-Token' is not valid."], WithHeader("X-Token", value).Validate());
 
+    [Fact]
+    public void RejectsAMissingValueFromDeserializedOptions() =>
+        Assert.Equal(["Header 'X-Token' is not valid."], WithHeader("X-Token", null!).Validate());
+
     [Theory]
     [InlineData("X-Api-Key", "s3cret")]
     [InlineData("Accept-Language", "de-DE,de;q=0.9")]
