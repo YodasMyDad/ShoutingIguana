@@ -43,12 +43,17 @@ start-folder scope, nofollow, stored HTML, and `--no-analyze`.
    block pages, honouring Retry-After. The worker then fetches over plain HTTP without following redirects (every
    hop is its own URL) and parses the HTML once into `PageFacts`.
    - A robots.txt that can't be read (5xx, 429, no answer) is retried like a page, then means "disallow
-     everything" for two minutes, as RFC 9309 requires. Another site that doesn't answer at all gets no verdict,
-     so links to it record their real network error.
-   - After three URLs in a row get no response, another site's remaining URLs fail at once ("Not checked"), and
-     the site being crawled is waited out with one-minute pauses and a notice.
+     everything" for two minutes, as RFC 9309 requires. An origin other than the start URL's that doesn't answer
+     at all (another site, a dead www twin, a closed http port) gets no verdict, so links to it record their real
+     network error.
+   - Whether an origin answers is counted per scheme, host and port. After three URLs in a row on one get no
+     response, another site's remaining URLs there fail at once ("Not checked"). On the site being crawled,
+     robots.txt is asked first: if it answers, those URLs failed for reasons of their own; if only the start URL's
+     origin answers, that origin alone is dead and fails fast like another site; if nothing answers, the site is
+     waited out with one-minute pauses and a notice, and after ten minutes the crawl stops, to be resumed.
    - The site's URLs that got no response are tried once more at the end of the crawl (at most 10,000 are held
-     back for it).
+     back for it), handed to the workers as they have room. URLs refused because robots.txt couldn't be read wait
+     for its two-minute cool-down first, as do the sitemaps it declares.
 4. A single writer applies results in batched transactions: the response row, a compressed detail blob, the
    links, and newly discovered URLs. It also owns the frontier, so "nothing queued and nothing in flight" is an
    exact completion test.
@@ -112,7 +117,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `response_details` | Brotli-compressed JSON of the headers and full `PageFacts` (headings, meta tags, images, hreflang, JSON-LD, ids) |
 | `response_html` | Compressed HTML, only with `--store-html` |
 | `links` | Every link: source, target, kind (link/image/script/canonical/hreflang/redirect...), rel flags, page region, anchor text |
-| `robots`, `sitemaps`, `sitemap_urls` | robots.txt per origin, sitemaps read (after redirects; `is_probe` marks a guess at `/sitemap.xml` when nothing declared one), and which URLs each listed |
+| `robots`, `sitemaps`, `sitemap_urls` | robots.txt per origin, sitemaps read (after redirects; `is_probe` marks a guess at `/sitemap.xml` when nothing declared one; the first one left unread, past 1,000 sitemaps or nested more than 3 deep, has an error starting "Not read"), and which URLs each listed |
 | `issues` | One row per flagged URL and issue: a short detail, and the other URL involved (broken target, duplicate, canonical) |
 | `issue_types` | Every check that ran: its title, category, severity, description, fix, and how many URLs it flagged |
 | `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, and what it couldn't do and why |
