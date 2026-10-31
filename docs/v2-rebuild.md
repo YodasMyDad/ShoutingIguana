@@ -220,14 +220,13 @@ dotnet run --project engine/src/ShoutingIguana.Cli -c Release -- bench --pages 1
 
 CI (`.github/workflows/engine.yml`) runs both on every push to `v2`.
 
-Latest results, on commit `90589c6`:
+Latest results, on commit `68d55a2`:
 
 | Run | Tests | Crawl | Peak memory | Analysis |
 | --- | --- | --- | --- | --- |
-| Local, 32 cores | 135/135 | 42 s (2,424 pages/s) | 172 MB | 6 s |
-| GitHub runner, 4 cores | 135/135 on all three OSes | 90 s (1,128 pages/s) | 192 MB | 12 s |
+| Local, 32 cores | 417 engine + 16 CLI | 35 s (2,916 pages/s) | 168 MB | 7 s |
 
-Both runs found every planted issue and flagged nothing else.
+It found every planted issue and flagged nothing else, with no check skipped or failing.
 
 ## Working with the owner
 

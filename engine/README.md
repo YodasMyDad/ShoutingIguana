@@ -194,7 +194,7 @@ On a 32-core Windows machine, at concurrency 16, against the local synthetic sit
 
 | Pages | URLs | Links | Crawl | Throughput | Peak memory | Growth over the crawl | Analysis | File |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 101,088 | 110,203 | 5.05 M | 42 s | 2,424 pages/s | 172 MB | none (−8 MB) | 6 s, 161 MB peak | 406 MB |
+| 101,107 | 110,251 | 5.05 M | 35 s | 2,916 pages/s | 168 MB | none (−1 MB) | 7 s, 157 MB peak | 400 MB |
 
 Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and
 unreachable URL make the crawler back off briefly, as it would on a real site. On real sites, speed is set by the
