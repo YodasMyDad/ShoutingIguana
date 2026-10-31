@@ -1,0 +1,65 @@
+# v2 engine: build and test on every OS we ship to, then hold the line on speed and memory by
+# crawling a generated 100,000-page site. The benchmark fails the run if the crawl misses a planted
+# issue, memory grows as the crawl grows, or throughput collapses.
+name: Engine (v2)
+
+on:
+  push:
+    branches: [v2]
+    paths: ['engine/**', '.github/workflows/engine.yml']
+  pull_request:
+    paths: ['engine/**', '.github/workflows/engine.yml']
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Test
+        run: dotnet test ShoutingIguana.Engine.slnx -c Release
+
+  benchmark:
+    name: 100k-page benchmark
+    needs: test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build CLI
+        run: dotnet build src/ShoutingIguana.Cli/ShoutingIguana.Cli.csproj -c Release
+
+      # Thresholds leave headroom for a 4-core runner. Locally (32 cores) the same crawl runs at
+      # ~3,000 pages/s with a 166 MB peak and no growth.
+      - name: Crawl a generated 100,000-page site
+        run: >
+          dotnet src/ShoutingIguana.Cli/bin/Release/net10.0/si.dll bench
+          --pages 100000 --concurrency 16
+          --max-peak-mb 400 --max-growth-mb 100 --min-pages-per-sec 250
+          --json bench.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark
+          path: engine/bench.json

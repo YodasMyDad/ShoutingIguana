@@ -6,6 +6,20 @@ Guidance for Claude / agents working in this repo. Read this before making chang
 
 **Shouting Iguana** — a Windows desktop SEO crawler & site auditor. WPF on .NET 10, SQLite per project, Playwright (headless Chromium) for JS rendering, plugin-based analysis. Think "self-hosted Screaming Frog with a plugin SDK."
 
+## v2 rebuild (branch `v2`, folder `engine/`)
+
+The WPF app in `src/` is being replaced by a cross-platform engine in `engine/` (read `engine/README.md`). New work
+goes there; `src/` is legacy and only gets critical fixes.
+
+- Solution: `engine/ShoutingIguana.Engine.slnx`. Test with `dotnet test engine/ShoutingIguana.Engine.slnx`.
+- CLI: `dotnet run --project engine/src/ShoutingIguana.Cli -- crawl <url>` (also `stats`, `testsite`, `bench`).
+- Gate: `si bench --pages 100000` must find every planted issue with flat memory; CI runs it (`.github/workflows/engine.yml`).
+- `engine/Directory.Build.props` targets `net10.0` with warnings as errors. Package versions live only in
+  `engine/Directory.Packages.props` (central package management), never in a csproj.
+- Engine rules: one SQLite file per crawl. Only `Storage/CrawlWriter` writes to it, so never open a write path anywhere
+  else. HTML is parsed once (`Parsing/HtmlPageParser`): add new facts to `PageFacts` instead of re-parsing.
+- The conventions below apply to the engine too.
+
 ## Working style with this user
 
 - Be casual, terse, concise. Treat the user as an expert — no moral lectures, no "Here's how you can…" preamble.

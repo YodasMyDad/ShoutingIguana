@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <RootNamespace>ShoutingIguana.Engine</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AngleSharp" />
+        <PackageReference Include="Microsoft.Data.Sqlite" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="System.IO.Hashing" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="ShoutingIguana.Engine.Tests" />
+    </ItemGroup>
+
+</Project>

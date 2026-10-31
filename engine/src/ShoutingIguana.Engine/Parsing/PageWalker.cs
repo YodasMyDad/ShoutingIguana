@@ -1,0 +1,555 @@
+using System.Globalization;
+using AngleSharp.Dom;
+using ShoutingIguana.Engine.Parsing.Models;
+using ShoutingIguana.Engine.Urls;
+
+namespace ShoutingIguana.Engine.Parsing;
+
+/// <summary>
+/// One pass over a parsed document that collects every SEO fact and link. It tracks whether the walk is
+/// in the head, which page region a link sits in, and which text counts as main content. Nav, footer and
+/// head text are left out of the content, matching how duplicate content is usually judged.
+/// </summary>
+internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulator text)
+{
+    private const int MAX_DEPTH = 512;
+    private const int MAX_LABEL_CHARS = 200;
+    private const int MAX_TITLE_CHARS = 1_000;
+    private const int MAX_META_CHARS = 2_000;
+    private const int MAX_HEADING_CHARS = 500;
+    private const int MAX_LINKS = 10_000;
+    private const int MAX_IMAGES = 2_000;
+    private const int MAX_HEADINGS = 500;
+    private const int MAX_META_TAGS = 200;
+    private const int MAX_IDS = 5_000;
+    private const int MAX_JSON_LD_BLOCKS = 50;
+    private const int MAX_JSON_LD_CHARS = 200_000;
+    private const string WHITESPACE = " \t\n\r\f";
+
+    private static readonly HashSet<string> BLOCK_ELEMENTS = new(
+    [
+        "address", "article", "aside", "blockquote", "br", "dd", "div", "dl", "dt", "figcaption", "figure",
+        "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "li", "main", "nav", "ol", "p",
+        "pre", "section", "table", "td", "th", "tr", "ul"
+    ], StringComparer.Ordinal);
+
+    private static readonly (string Token, LinkPosition Position)[] REGION_HINTS =
+    [
+        ("nav", LinkPosition.Navigation), ("navbar", LinkPosition.Navigation), ("navigation", LinkPosition.Navigation),
+        ("menu", LinkPosition.Navigation), ("main-menu", LinkPosition.Navigation), ("main-nav", LinkPosition.Navigation),
+        ("site-nav", LinkPosition.Navigation), ("breadcrumb", LinkPosition.Navigation), ("breadcrumbs", LinkPosition.Navigation),
+        ("header", LinkPosition.Header), ("site-header", LinkPosition.Header), ("masthead", LinkPosition.Header),
+        ("footer", LinkPosition.Footer), ("site-footer", LinkPosition.Footer),
+        ("sidebar", LinkPosition.Sidebar)
+    ];
+
+    public List<string> Titles { get; } = [];
+    public List<string> MetaDescriptions { get; } = [];
+    public List<MetaTagFact> MetaTags { get; } = [];
+    public List<string> RobotsMetaContents { get; } = [];
+    public List<CanonicalFact> Canonicals { get; } = [];
+    public List<HreflangFact> Hreflangs { get; } = [];
+    public List<HeadingFact> Headings { get; } = [];
+    public List<ImageFact> Images { get; } = [];
+    public List<string> JsonLd { get; } = [];
+    public List<string> AnchorIds { get; } = [];
+    public List<ExtractedLink> Links { get; } = [];
+    public MetaRefreshFact? MetaRefresh { get; private set; }
+    public string? Language { get; private set; }
+    public string? DeclaredCharset { get; private set; }
+
+    public void Walk(IElement root) =>
+        VisitElement(root, new WalkContext(LinkPosition.Content, InHead: false, ExcludeText: false, InArticle: false), 0);
+
+    internal static string Clean(string? value, int maxChars)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder(Math.Min(value.Length, maxChars));
+        var pendingSpace = false;
+        foreach (var character in value)
+        {
+            if (char.IsWhiteSpace(character))
+            {
+                pendingSpace = builder.Length > 0;
+                continue;
+            }
+
+            if (pendingSpace)
+            {
+                builder.Append(' ');
+                pendingSpace = false;
+            }
+
+            builder.Append(character);
+            if (builder.Length >= maxChars)
+            {
+                break;
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private void VisitChildren(INode node, WalkContext context, int depth)
+    {
+        if (depth > MAX_DEPTH)
+        {
+            return;
+        }
+
+        for (var child = node.FirstChild; child is not null; child = child.NextSibling)
+        {
+            if (child is IElement element)
+            {
+                VisitElement(element, context, depth + 1);
+            }
+            else if (child is IText textNode && !context.ExcludeText)
+            {
+                text.Append(textNode.Data);
+            }
+        }
+    }
+
+    private void VisitElement(IElement element, WalkContext context, int depth)
+    {
+        // SVG and MathML carry no signals we use, and their <title>/<a> elements are not page titles or links.
+        if (element.NamespaceUri != NamespaceNames.HtmlUri)
+        {
+            return;
+        }
+
+        var name = element.LocalName;
+        var childContext = context;
+        switch (name)
+        {
+            case "head":
+                childContext = context with { InHead = true, Position = LinkPosition.Head, ExcludeText = true };
+                break;
+            case "body":
+                childContext = context with { InHead = false, Position = LinkPosition.Content, ExcludeText = false };
+                break;
+            case "html":
+                Language ??= NullIfBlank(element.GetAttribute("lang"))?.Trim();
+                break;
+            case "title":
+                Titles.Add(Clean(element.TextContent, MAX_TITLE_CHARS));
+                return;
+            case "meta":
+                AddMeta(element);
+                return;
+            case "link":
+                AddLinkElement(element, context);
+                return;
+            case "script":
+                AddScript(element, context);
+                return;
+            case "style" or "template" or "base":
+                return;
+            case "noscript":
+                childContext = context with { ExcludeText = true };
+                break;
+            case "img":
+                AddImage(element, context);
+                return;
+            case "iframe":
+                AddLink(element.GetAttribute("src"), LinkKind.Iframe, LinkFlags.None, context.Position, null);
+                return;
+            case "video" or "audio" or "source" or "track":
+                AddLink(element.GetAttribute("src"), LinkKind.Media, LinkFlags.None, context.Position, null);
+                break;
+            case "a" or "area":
+                AddAnchor(element, context);
+                break;
+            case "h1" or "h2" or "h3" or "h4" or "h5" or "h6":
+                if (Headings.Count < MAX_HEADINGS)
+                {
+                    Headings.Add(new HeadingFact(name[1] - '0', Clean(element.TextContent, MAX_HEADING_CHARS)));
+                }
+
+                break;
+            case "nav":
+                childContext = context with { Position = LinkPosition.Navigation, ExcludeText = true };
+                break;
+            case "footer" when !context.InArticle:
+                childContext = context with { Position = LinkPosition.Footer, ExcludeText = true };
+                break;
+            case "header" when !context.InArticle:
+                childContext = context with { Position = LinkPosition.Header };
+                break;
+            case "aside":
+                childContext = context with { Position = LinkPosition.Sidebar };
+                break;
+            case "main":
+                childContext = context with { Position = LinkPosition.Content, InArticle = true };
+                break;
+            case "article":
+                childContext = context with { InArticle = true };
+                break;
+            default:
+                if (context.Position == LinkPosition.Content)
+                {
+                    childContext = ApplyRegionHints(element, context);
+                }
+
+                break;
+        }
+
+        if (element.Id is { Length: > 0 } id)
+        {
+            AddAnchorId(id);
+        }
+
+        var isBlock = BLOCK_ELEMENTS.Contains(name);
+        if (isBlock)
+        {
+            text.AppendSeparator();
+        }
+
+        VisitChildren(element, childContext, depth);
+
+        if (isBlock)
+        {
+            text.AppendSeparator();
+        }
+    }
+
+    private static WalkContext ApplyRegionHints(IElement element, WalkContext context)
+    {
+        var region = element.GetAttribute("role") switch
+        {
+            "navigation" => LinkPosition.Navigation,
+            "banner" => LinkPosition.Header,
+            "contentinfo" => LinkPosition.Footer,
+            "complementary" => LinkPosition.Sidebar,
+            _ => RegionFromTokens(element.Id) ?? RegionFromTokens(element.ClassName) ?? LinkPosition.Content
+        };
+
+        if (region == LinkPosition.Content || (context.InArticle && region is LinkPosition.Header or LinkPosition.Footer))
+        {
+            return context;
+        }
+
+        return context with
+        {
+            Position = region,
+            ExcludeText = context.ExcludeText || region is LinkPosition.Navigation or LinkPosition.Footer
+        };
+    }
+
+    private static LinkPosition? RegionFromTokens(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return null;
+        }
+
+        var span = value.AsSpan();
+        foreach (var range in span.SplitAny(WHITESPACE))
+        {
+            var token = span[range];
+            foreach (var (hint, position) in REGION_HINTS)
+            {
+                if (token.Equals(hint, StringComparison.OrdinalIgnoreCase))
+                {
+                    return position;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private void AddMeta(IElement element)
+    {
+        var content = element.GetAttribute("content");
+        if (NullIfBlank(element.GetAttribute("charset")) is { } charset)
+        {
+            DeclaredCharset ??= charset.Trim();
+        }
+
+        var httpEquiv = element.GetAttribute("http-equiv")?.Trim().ToLowerInvariant();
+        if (httpEquiv == "refresh" && content is not null)
+        {
+            if (MetaRefresh is null)
+            {
+                MetaRefresh = ParseRefresh(content);
+                AddLink(MetaRefresh.Url, LinkKind.MetaRefresh, LinkFlags.None, LinkPosition.Head, null);
+            }
+
+            return;
+        }
+
+        if (httpEquiv == "content-type" && content is not null)
+        {
+            var charsetAt = content.IndexOf("charset=", StringComparison.OrdinalIgnoreCase);
+            if (charsetAt >= 0)
+            {
+                DeclaredCharset ??= content[(charsetAt + 8)..].Trim().Trim('"', '\'');
+            }
+
+            return;
+        }
+
+        var name = (element.GetAttribute("name") ?? element.GetAttribute("property"))?.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(name) || content is null)
+        {
+            return;
+        }
+
+        var cleaned = Clean(content, MAX_META_CHARS);
+        if (MetaTags.Count < MAX_META_TAGS)
+        {
+            MetaTags.Add(new MetaTagFact(name, cleaned));
+        }
+
+        if (name == "description")
+        {
+            MetaDescriptions.Add(cleaned);
+        }
+        else if (RobotsMetaParser.AppliesToMetaName(name, robotsToken))
+        {
+            RobotsMetaContents.Add(content);
+        }
+    }
+
+    private void AddLinkElement(IElement element, WalkContext context)
+    {
+        var rel = element.GetAttribute("rel");
+        var href = element.GetAttribute("href");
+        if (string.IsNullOrWhiteSpace(rel) || href is null)
+        {
+            return;
+        }
+
+        var flags = context.InHead ? LinkFlags.None : LinkFlags.OutsideHead;
+        var position = context.InHead ? LinkPosition.Head : context.Position;
+        var tokens = rel.AsSpan();
+
+        foreach (var range in tokens.SplitAny(WHITESPACE))
+        {
+            var token = tokens[range];
+            if (token.Equals("canonical", StringComparison.OrdinalIgnoreCase))
+            {
+                Canonicals.Add(new CanonicalFact(href, NormalizeOrNull(href), context.InHead, FromHttpHeader: false));
+                AddLink(href, LinkKind.Canonical, flags, position, null);
+            }
+            else if (token.Equals("alternate", StringComparison.OrdinalIgnoreCase) &&
+                     NullIfBlank(element.GetAttribute("hreflang")) is { } language)
+            {
+                var code = language.Trim();
+                Hreflangs.Add(new HreflangFact(code, href, NormalizeOrNull(href), context.InHead, FromHttpHeader: false));
+                AddLink(href, LinkKind.Hreflang, flags, position, code);
+            }
+            else if (token.Equals("next", StringComparison.OrdinalIgnoreCase) ||
+                     token.Equals("prev", StringComparison.OrdinalIgnoreCase) ||
+                     token.Equals("previous", StringComparison.OrdinalIgnoreCase))
+            {
+                AddLink(href, LinkKind.Pagination, flags, position, null);
+            }
+            else if (token.Equals("stylesheet", StringComparison.OrdinalIgnoreCase))
+            {
+                AddLink(href, LinkKind.Stylesheet, LinkFlags.None, position, null);
+            }
+            else if (token.Equals("icon", StringComparison.OrdinalIgnoreCase) ||
+                     token.Equals("apple-touch-icon", StringComparison.OrdinalIgnoreCase))
+            {
+                AddLink(href, LinkKind.Icon, LinkFlags.None, position, null);
+            }
+            else if (token.Equals("amphtml", StringComparison.OrdinalIgnoreCase))
+            {
+                AddLink(href, LinkKind.Hyperlink, LinkFlags.None, position, null);
+            }
+        }
+    }
+
+    private void AddScript(IElement element, WalkContext context)
+    {
+        var type = element.GetAttribute("type")?.Trim();
+        if (string.Equals(type, "application/ld+json", StringComparison.OrdinalIgnoreCase))
+        {
+            if (JsonLd.Count < MAX_JSON_LD_BLOCKS)
+            {
+                var json = element.TextContent.Trim();
+                JsonLd.Add(json.Length > MAX_JSON_LD_CHARS ? json[..MAX_JSON_LD_CHARS] : json);
+            }
+
+            return;
+        }
+
+        AddLink(element.GetAttribute("src"), LinkKind.Script, LinkFlags.None, context.InHead ? LinkPosition.Head : context.Position, null);
+    }
+
+    private void AddAnchor(IElement element, WalkContext context)
+    {
+        if (NullIfBlank(element.GetAttribute("name")) is { } anchorName)
+        {
+            AddAnchorId(anchorName);
+        }
+
+        var href = element.GetAttribute("href");
+        if (href is null)
+        {
+            return;
+        }
+
+        var flags = RelFlags(element.GetAttribute("rel"));
+        var label = Clean(element.TextContent, MAX_LABEL_CHARS);
+        if (label.Length == 0)
+        {
+            if (FindFirstImage(element, 0) is { } image)
+            {
+                flags |= LinkFlags.ImageLink;
+                label = Clean(image.GetAttribute("alt"), MAX_LABEL_CHARS);
+            }
+
+            if (label.Length == 0)
+            {
+                label = Clean(element.GetAttribute("aria-label") ?? element.GetAttribute("title"), MAX_LABEL_CHARS);
+            }
+        }
+
+        if (href.TrimStart().StartsWith('#'))
+        {
+            flags |= LinkFlags.SamePage;
+        }
+
+        AddLink(href, LinkKind.Hyperlink, flags, context.Position, label.Length == 0 ? null : label);
+    }
+
+    private void AddImage(IElement element, WalkContext context)
+    {
+        var source = element.GetAttribute("src");
+        var lazySource = element.GetAttribute("data-src") ?? element.GetAttribute("data-lazy-src");
+        if (lazySource is not null &&
+            (string.IsNullOrWhiteSpace(source) || source.TrimStart().StartsWith("data:", StringComparison.OrdinalIgnoreCase)))
+        {
+            source = lazySource;
+        }
+
+        var alt = element.GetAttribute("alt");
+        string? url = null;
+        if (source is not null && Links.Count < MAX_LINKS && UrlNormalizer.TryResolve(baseUri, source, out var target))
+        {
+            url = UrlNormalizer.Normalize(target);
+            Links.Add(new ExtractedLink(target, LinkKind.Image, LinkFlags.None, context.Position, NullIfBlank(Clean(alt, MAX_LABEL_CHARS))));
+        }
+
+        if (Images.Count < MAX_IMAGES)
+        {
+            Images.Add(new ImageFact(
+                url,
+                alt is null ? null : Clean(alt, MAX_LABEL_CHARS),
+                alt is not null,
+                NullIfBlank(element.GetAttribute("width")),
+                NullIfBlank(element.GetAttribute("height")),
+                element.HasAttribute("srcset"),
+                NullIfBlank(element.GetAttribute("loading"))));
+        }
+    }
+
+    private void AddLink(string? href, LinkKind kind, LinkFlags flags, LinkPosition position, string? label)
+    {
+        if (href is not null && Links.Count < MAX_LINKS && UrlNormalizer.TryResolve(baseUri, href, out var target))
+        {
+            Links.Add(new ExtractedLink(target, kind, flags, position, label));
+        }
+    }
+
+    private void AddAnchorId(string id)
+    {
+        if (AnchorIds.Count < MAX_IDS)
+        {
+            AnchorIds.Add(id);
+        }
+    }
+
+    private string? NormalizeOrNull(string href) =>
+        UrlNormalizer.TryResolve(baseUri, href, out var target) ? UrlNormalizer.Normalize(target) : null;
+
+    private static MetaRefreshFact ParseRefresh(string content)
+    {
+        var separator = content.IndexOfAny([';', ',']);
+        var delayText = (separator < 0 ? content : content[..separator]).Trim();
+        int? delay = int.TryParse(delayText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) ? seconds : null;
+        if (separator < 0)
+        {
+            return new MetaRefreshFact(delay, null);
+        }
+
+        var target = content[(separator + 1)..].Trim();
+        if (target.StartsWith("url", StringComparison.OrdinalIgnoreCase))
+        {
+            var equals = target.IndexOf('=');
+            if (equals >= 0)
+            {
+                target = target[(equals + 1)..];
+            }
+        }
+
+        target = target.Trim().Trim('"', '\'').Trim();
+        return new MetaRefreshFact(delay, target.Length == 0 ? null : target);
+    }
+
+    private static LinkFlags RelFlags(string? rel)
+    {
+        if (string.IsNullOrWhiteSpace(rel))
+        {
+            return LinkFlags.None;
+        }
+
+        var flags = LinkFlags.None;
+        var tokens = rel.AsSpan();
+        foreach (var range in tokens.SplitAny(WHITESPACE))
+        {
+            var token = tokens[range];
+            if (token.Equals("nofollow", StringComparison.OrdinalIgnoreCase))
+            {
+                flags |= LinkFlags.NoFollow;
+            }
+            else if (token.Equals("sponsored", StringComparison.OrdinalIgnoreCase))
+            {
+                flags |= LinkFlags.Sponsored;
+            }
+            else if (token.Equals("ugc", StringComparison.OrdinalIgnoreCase))
+            {
+                flags |= LinkFlags.Ugc;
+            }
+        }
+
+        return flags;
+    }
+
+    private static IElement? FindFirstImage(INode node, int depth)
+    {
+        if (depth > 8)
+        {
+            return null;
+        }
+
+        for (var child = node.FirstChild; child is not null; child = child.NextSibling)
+        {
+            if (child is not IElement element)
+            {
+                continue;
+            }
+
+            if (element.LocalName == "img")
+            {
+                return element;
+            }
+
+            if (FindFirstImage(element, depth + 1) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+}

@@ -84,3 +84,9 @@ $RECYCLE.BIN/
 .DS_Store
 
 /.idea/*
+
+# v2 engine crawl files (SQLite) and benchmark output
+*.sicrawl
+*.sicrawl-wal
+*.sicrawl-shm
+engine/bench.json

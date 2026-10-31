@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <AssemblyName>si</AssemblyName>
+        <RootNamespace>ShoutingIguana.Cli</RootNamespace>
+        <!-- Workstation GC keeps the footprint small; the crawler is I/O bound, not GC bound. -->
+        <ServerGarbageCollection>false</ServerGarbageCollection>
+        <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+        <PackageReference Include="System.CommandLine" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ShoutingIguana.Engine\ShoutingIguana.Engine.csproj" />
+        <ProjectReference Include="..\ShoutingIguana.TestSite\ShoutingIguana.TestSite.csproj" />
+    </ItemGroup>
+
+</Project>

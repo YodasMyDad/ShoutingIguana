@@ -1,0 +1,21 @@
+<Project>
+
+    <!-- Authorship and reproducibility settings are shared with the rest of the repo. -->
+    <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..'))" />
+
+    <PropertyGroup Label="Version">
+        <Version>2.0.0-alpha.1</Version>
+        <AssemblyVersion>2.0.0.0</AssemblyVersion>
+        <FileVersion>2.0.0.0</FileVersion>
+        <InformationalVersion>2.0.0-alpha.1</InformationalVersion>
+    </PropertyGroup>
+
+    <PropertyGroup Label="Build">
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+
+</Project>

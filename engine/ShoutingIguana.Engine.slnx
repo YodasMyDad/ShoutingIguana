@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ShoutingIguana.Cli/ShoutingIguana.Cli.csproj" />
+    <Project Path="src/ShoutingIguana.Engine/ShoutingIguana.Engine.csproj" />
+    <Project Path="src/ShoutingIguana.TestSite/ShoutingIguana.TestSite.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ShoutingIguana.Engine.Tests/ShoutingIguana.Engine.Tests.csproj" />
+  </Folder>
+</Solution>
