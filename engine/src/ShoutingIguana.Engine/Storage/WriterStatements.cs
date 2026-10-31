@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage.Models;
 
@@ -18,6 +19,8 @@ internal sealed class WriterStatements : IDisposable
     private readonly SqliteCommand _requeueUrl;
     private readonly SqliteCommand _insertLink;
     private readonly SqliteCommand _insertResponse;
+    private readonly SqliteCommand _readOutcome;
+    private readonly SqliteCommand _deleteResponse;
     private readonly SqliteCommand _upsertDetails;
     private readonly SqliteCommand _upsertHtml;
     private readonly SqliteCommand _claim;
@@ -37,7 +40,7 @@ internal sealed class WriterStatements : IDisposable
         _updateUrlState = Prepare(connection, "UPDATE urls SET state = $state WHERE id = $id", "$state", "$id");
         _updateUrlDepth = Prepare(connection, "UPDATE urls SET depth = $depth WHERE id = $id", "$depth", "$id");
         _updateUrlMode = Prepare(connection, "UPDATE urls SET fetch_mode = $mode WHERE id = $id", "$mode", "$id");
-        _updateUrlSkip = Prepare(connection, "UPDATE urls SET skip_reason = $skip WHERE id = $id", "$skip", "$id");
+        _updateUrlSkip = Prepare(connection, "UPDATE urls SET skip_reason = $skip, fetch_mode = $mode WHERE id = $id", "$skip", "$mode", "$id");
         _requeueUrl = Prepare(connection,
             "UPDATE urls SET state = 0, skip_reason = 0, fetch_mode = $mode, depth = $depth WHERE id = $id",
             "$mode", "$depth", "$id");
@@ -60,6 +63,14 @@ internal sealed class WriterStatements : IDisposable
             "$httpVersion", "$redirect", "$block", "$error", "$isHtml", "$title", "$titleCount", "$description",
             "$descriptionCount", "$h1", "$h1Count", "$canonical", "$noindex", "$nofollow", "$indexability",
             "$indexabilityReason", "$words", "$contentHash", "$simhash", "$language", "$outlinks");
+        _readOutcome = Prepare(connection,
+            "SELECT outcome, is_html, COALESCE(size_bytes, 0) FROM responses WHERE url_id = $id", "$id");
+        _deleteResponse = Prepare(connection, """
+            DELETE FROM responses WHERE url_id = $id;
+            DELETE FROM response_details WHERE url_id = $id;
+            DELETE FROM response_html WHERE url_id = $id;
+            DELETE FROM links WHERE from_id = $id;
+            """, "$id");
         _upsertDetails = Prepare(connection,
             "INSERT OR REPLACE INTO response_details (url_id, data) VALUES ($id, $data)", "$id", "$data");
         _upsertHtml = Prepare(connection,
@@ -115,7 +126,7 @@ internal sealed class WriterStatements : IDisposable
 
     public void UpdateUrlMode(int id, FetchMode mode) => Run(_updateUrlMode, (int)mode, id);
 
-    public void UpdateUrlSkip(int id, SkipReason skip) => Run(_updateUrlSkip, (int)skip, id);
+    public void UpdateUrlSkip(int id, SkipReason skip, FetchMode mode) => Run(_updateUrlSkip, (int)skip, (int)mode, id);
 
     public void RequeueUrl(int id, FetchMode mode, int depth) => Run(_requeueUrl, (int)mode, depth, id);
 
@@ -129,6 +140,17 @@ internal sealed class WriterStatements : IDisposable
             row.Title, row.TitleCount, row.MetaDescription, row.MetaDescriptionCount, row.H1, row.H1Count, canonicalId,
             row.IsNoindex, row.IsNofollow, (int)row.Indexability, (int)row.IndexabilityReason, row.WordCount,
             AsSigned(row.ContentHash), AsSigned(row.SimHash), row.Language, outlinkCount);
+
+    /// <summary>What the stored response of a URL was, or null when it has none.</summary>
+    public (FetchOutcome Outcome, bool IsHtml, long Bytes)? ReadOutcome(int urlId)
+    {
+        _readOutcome.Parameters[0].Value = urlId;
+        using var reader = _readOutcome.ExecuteReader();
+        return reader.Read() ? ((FetchOutcome)reader.GetInt32(0), reader.GetBoolean(1), reader.GetInt64(2)) : null;
+    }
+
+    /// <summary>Removes everything a fetch of the URL stored, before it is fetched again.</summary>
+    public void DeleteResponse(int urlId) => Run(_deleteResponse, urlId);
 
     public void UpsertDetails(int urlId, byte[] data) => Run(_upsertDetails, urlId, data);
 

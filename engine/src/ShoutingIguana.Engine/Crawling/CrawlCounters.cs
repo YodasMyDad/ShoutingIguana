@@ -50,6 +50,20 @@ internal sealed class CrawlCounters
         Interlocked.Add(ref _inFlight, count);
     }
 
+    /// <summary>A claimed URL went back on the queue without a response, to be fetched again in full.</summary>
+    public void OnReturned()
+    {
+        Interlocked.Decrement(ref _inFlight);
+        Interlocked.Increment(ref _queued);
+    }
+
+    /// <summary>A stored response was dropped so its URL can be fetched again in full, and the URL queued again.</summary>
+    public void OnResponseRemoved(FetchOutcome outcome, bool isSitePage, long bytes)
+    {
+        AddResponses(outcome, -1, isSitePage ? -1 : 0, -bytes);
+        Interlocked.Increment(ref _queued);
+    }
+
     /// <param name="isSitePage">A successful HTML page on the site being crawled (external pages are only checked).</param>
     public void OnRecorded(FetchOutcome outcome, bool isSitePage, long bytes)
     {

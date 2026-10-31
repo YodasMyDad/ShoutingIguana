@@ -255,6 +255,20 @@ internal sealed class CrawlWriter : IAsyncDisposable
     private void ApplyRecord(PageRecord record)
     {
         var item = record.Item;
+        var key = UrlKey.Compute(item.Url);
+        var response = record.Response;
+        _inFlight--;
+
+        // Promoted to a full crawl while its status check was in flight, and the check found something to crawl:
+        // fetch it again in full rather than store the check.
+        if (item.Mode == FetchMode.Check && _urls[key].Mode == FetchMode.Crawl && response.Outcome == FetchOutcome.Success)
+        {
+            _urls[key] = _urls[key] with { State = UrlState.Queued };
+            _statements.UpdateUrlState(item.Id, UrlState.Queued);
+            _counters.OnReturned();
+            return;
+        }
+
         int? redirectId = null;
         int? canonicalId = null;
         var outlinkCount = 0;
@@ -279,7 +293,6 @@ internal sealed class CrawlWriter : IAsyncDisposable
             }
         }
 
-        var response = record.Response;
         _statements.InsertResponse(response, redirectId, canonicalId, outlinkCount);
         if (record.Details is not null)
         {
@@ -292,8 +305,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         }
 
         _statements.UpdateUrlState(item.Id, UrlState.Done);
-        SetState(item.Url, UrlState.Done);
-        _inFlight--;
+        _urls[key] = _urls[key] with { State = UrlState.Done };
 
         var isSitePage = item.IsInternal && response.IsHtml && response.Outcome == FetchOutcome.Success;
         _counters.OnRecorded(response.Outcome, isSitePage, response.SizeBytes ?? 0);
@@ -305,19 +317,17 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
         foreach (var link in command.Urls)
         {
+            // Sitemap and start URLs are crawled in full, whatever link found them first, and never held to the depth limit.
+            var skip = !link.IsInternal && !_options.CheckExternalLinks ? SkipReason.ExternalsDisabled : SkipReason.None;
             int id;
             if (_urls.TryGetValue(link.Key, out var entry))
             {
                 id = entry.Id;
-                if (command.Source == DiscoverySource.Seed)
-                {
-                    Revisit(link, entry, depth);
-                }
+                Rediscover(link, entry, depth, skip, exemptFromDepthLimit: true);
             }
             else
             {
-                var skip = !link.IsInternal && !_options.CheckExternalLinks ? SkipReason.ExternalsDisabled : SkipReason.None;
-                id = Insert(link, depth, skip, command.Source, null);
+                id = Insert(link, depth, skip, command.Source, null, exemptFromDepthLimit: true);
             }
 
             if (command.SitemapId is { } sitemapId)
@@ -350,51 +360,59 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
         if (_urls.TryGetValue(link.Key, out var entry))
         {
-            if (skip == SkipReason.None)
-            {
-                Revisit(link, entry, depth);
-            }
-
+            Rediscover(link, entry, depth, skip, exemptFromDepthLimit: false);
             return entry.Id;
         }
 
-        return Insert(link, depth, skip, DiscoverySource.Link, source.Id);
+        return Insert(link, depth, skip, DiscoverySource.Link, source.Id, exemptFromDepthLimit: false);
     }
 
     /// <summary>
-    /// A known URL found again through a followed link: keep its shortest depth, queue it if it was only
-    /// skipped for a reason this link overrides, and upgrade a queued status check to a full crawl.
+    /// A known URL found again, so that what is stored for it doesn't depend on the order links and sitemaps turn up
+    /// in. Any link can shorten its depth. A followed link or a sitemap listing can queue it or promote it to a full
+    /// crawl; a link that isn't followed only leaves the strongest reason for skipping it.
     /// </summary>
-    private void Revisit(OutLink link, UrlEntry entry, int depth)
+    /// <param name="skip">Why this discovery alone would not be fetched, or None.</param>
+    private void Rediscover(OutLink link, UrlEntry entry, int depth, SkipReason skip, bool exemptFromDepthLimit)
     {
-        var updated = entry;
-        if (depth < updated.Depth)
+        if (depth < entry.Depth)
         {
-            updated.Depth = depth;
-            _statements.UpdateUrlDepth(updated.Id, depth);
+            entry = LowerDepth(link.Key, entry, depth, link.IsInternal);
         }
 
-        if (updated.State == UrlState.Skipped &&
-            updated.Skip is SkipReason.NoFollow or SkipReason.NotFollowedByOption or SkipReason.DepthLimit)
+        if (skip == SkipReason.None)
         {
-            var mode = link.IsCrawlable ? FetchMode.Crawl : updated.Mode;
-            var skip = Accept(link.IsInternal, mode, updated.Depth);
-            if (skip == SkipReason.None)
+            Revisit(link, entry, exemptFromDepthLimit);
+        }
+        else if (entry.State == UrlState.Skipped && skip > entry.Skip)
+        {
+            _urls[link.Key] = SetSkip(entry, skip, ModeFor(link));
+        }
+    }
+
+    /// <summary>
+    /// A known URL reached through a followed link or listed in a sitemap. If it was skipped only for a reason this
+    /// overrides, it is queued. A status check becomes a full crawl when the URL can be crawled: queued or in flight,
+    /// it switches mode; already done, it is fetched again in full if the check found something to crawl.
+    /// </summary>
+    private void Revisit(OutLink link, UrlEntry entry, bool exemptFromDepthLimit)
+    {
+        var mode = ModeFor(link);
+        var updated = entry;
+        if (entry.State == UrlState.Skipped)
+        {
+            if (entry.Skip is SkipReason.NoFollow or SkipReason.NotFollowedByOption or SkipReason.ResourcesDisabled or SkipReason.DepthLimit)
             {
-                updated = updated with { State = UrlState.Queued, Skip = SkipReason.None, Mode = mode };
-                _statements.RequeueUrl(updated.Id, mode, updated.Depth);
-                _counters.OnUrlRequeued();
-            }
-            else if (skip != updated.Skip)
-            {
-                updated.Skip = skip;
-                _statements.UpdateUrlSkip(updated.Id, skip);
+                var skip = Accept(link.IsInternal, mode, entry.Depth, exemptFromDepthLimit);
+                updated = skip == SkipReason.None ? Requeue(entry, mode)
+                    : skip > entry.Skip ? SetSkip(entry, skip, mode)
+                    : entry;
             }
         }
-        else if (updated is { State: UrlState.Queued, Mode: FetchMode.Check } && link.IsCrawlable)
+        else if (entry.Mode == FetchMode.Check && mode == FetchMode.Crawl && WithinDepthLimit(entry.Depth, exemptFromDepthLimit))
         {
-            updated.Mode = FetchMode.Crawl;
-            _statements.UpdateUrlMode(updated.Id, FetchMode.Crawl);
+            // A URL in flight keeps its claim; the record of its check comes back here and is queued again.
+            updated = entry.State == UrlState.Done ? PromoteChecked(entry, link.IsInternal) : SetMode(entry, FetchMode.Crawl);
         }
 
         if (updated != entry)
@@ -403,12 +421,71 @@ internal sealed class CrawlWriter : IAsyncDisposable
         }
     }
 
-    private int Insert(OutLink link, int depth, SkipReason skip, DiscoverySource source, int? foundOnId)
+    /// <summary>
+    /// Any link counts for depth, followed or not, so a URL's depth is its shortest path from the start whichever order
+    /// the links arrive in. A URL that was too deep to crawl and now isn't is queued.
+    /// </summary>
+    private UrlEntry LowerDepth(UInt128 key, UrlEntry entry, int depth, bool isInternal)
     {
-        var mode = link.IsCrawlable ? FetchMode.Crawl : FetchMode.Check;
+        _statements.UpdateUrlDepth(entry.Id, depth);
+        var updated = entry with { Depth = depth };
+        if (updated is { State: UrlState.Skipped, Skip: SkipReason.DepthLimit })
+        {
+            // Only a followed page link is ever too deep, and it still leads here, now by a shorter path.
+            var skip = Accept(isInternal, FetchMode.Crawl, depth, exemptFromDepthLimit: false);
+            updated = skip == SkipReason.None ? Requeue(updated, FetchMode.Crawl)
+                : skip > updated.Skip ? SetSkip(updated, skip, FetchMode.Crawl)
+                : updated;
+        }
+
+        _urls[key] = updated;
+        return updated;
+    }
+
+    /// <summary>
+    /// A URL already status-checked that can now be crawled. A full fetch only differs when the check succeeded (a
+    /// page's body, the links in its headers), so only then is it queued again; otherwise the check stands for it.
+    /// </summary>
+    private UrlEntry PromoteChecked(UrlEntry entry, bool isInternal)
+    {
+        if (_statements.ReadOutcome(entry.Id) is { Outcome: FetchOutcome.Success } check)
+        {
+            _statements.DeleteResponse(entry.Id);
+            _statements.RequeueUrl(entry.Id, FetchMode.Crawl, entry.Depth);
+            _counters.OnResponseRemoved(check.Outcome, isInternal && check.IsHtml, check.Bytes);
+            return entry with { State = UrlState.Queued, Mode = FetchMode.Crawl };
+        }
+
+        return SetMode(entry, FetchMode.Crawl);
+    }
+
+    private UrlEntry Requeue(UrlEntry entry, FetchMode mode)
+    {
+        _statements.RequeueUrl(entry.Id, mode, entry.Depth);
+        _counters.OnUrlRequeued();
+        return entry with { State = UrlState.Queued, Skip = SkipReason.None, Mode = mode };
+    }
+
+    private UrlEntry SetSkip(UrlEntry entry, SkipReason skip, FetchMode mode)
+    {
+        _statements.UpdateUrlSkip(entry.Id, skip, mode);
+        return entry with { Skip = skip, Mode = mode };
+    }
+
+    private UrlEntry SetMode(UrlEntry entry, FetchMode mode)
+    {
+        _statements.UpdateUrlMode(entry.Id, mode);
+        return entry with { Mode = mode };
+    }
+
+    private static FetchMode ModeFor(OutLink link) => link.IsCrawlable ? FetchMode.Crawl : FetchMode.Check;
+
+    private int Insert(OutLink link, int depth, SkipReason skip, DiscoverySource source, int? foundOnId, bool exemptFromDepthLimit)
+    {
+        var mode = ModeFor(link);
         if (skip == SkipReason.None)
         {
-            skip = Accept(link.IsInternal, mode, depth);
+            skip = Accept(link.IsInternal, mode, depth, exemptFromDepthLimit);
         }
 
         var state = skip == SkipReason.None ? UrlState.Queued : UrlState.Skipped;
@@ -419,10 +496,10 @@ internal sealed class CrawlWriter : IAsyncDisposable
         return id;
     }
 
-    /// <summary>Applies the depth and URL limits to a URL about to be queued.</summary>
-    private SkipReason Accept(bool isInternal, FetchMode mode, int depth)
+    /// <summary>Applies the depth and URL limits to a URL about to be queued. Status checks have no depth limit.</summary>
+    private SkipReason Accept(bool isInternal, FetchMode mode, int depth, bool exemptFromDepthLimit)
     {
-        if (mode == FetchMode.Crawl && _options.MaxDepth > 0 && depth > _options.MaxDepth && depth < CrawlDepth.UNLINKED)
+        if (mode == FetchMode.Crawl && !WithinDepthLimit(depth, exemptFromDepthLimit))
         {
             return SkipReason.DepthLimit;
         }
@@ -439,6 +516,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
         return SkipReason.None;
     }
+
+    private bool WithinDepthLimit(int depth, bool exemptFromDepthLimit) =>
+        exemptFromDepthLimit || _options.MaxDepth == 0 || depth <= _options.MaxDepth || depth >= CrawlDepth.UNLINKED;
 
     private SkipReason FollowDecision(OutLink link, bool pageNoFollow)
     {
