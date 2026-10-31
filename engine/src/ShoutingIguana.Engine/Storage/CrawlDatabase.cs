@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Serialization;
+using SQLitePCL;
 
 namespace ShoutingIguana.Engine.Storage;
 
@@ -71,14 +72,28 @@ public static class CrawlDatabase
     }
 
     /// <summary>
-    /// Folds the write-ahead log back so the crawl is a single file again, then closes the connection. Folding
-    /// needs every other connection closed; when a reader is still open the file simply stays in WAL mode.
+    /// Folds the write-ahead log back so the crawl is a single file again, then closes the connection. Leaving WAL mode
+    /// needs every other connection closed. When one is still open (si stats, a SQLite browser, an export, the UI) the
+    /// file stays in WAL mode, and SQLite folds the log in when that connection closes. Nothing here waits for them.
     /// </summary>
     internal static void CloseWriter(SqliteConnection connection, ILogger logger)
     {
         try
         {
-            Execute(connection, "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode = DELETE;");
+            // A reader part-way through a query holds back part of the log; checkpoint the rest rather than wait.
+            Execute(connection, "PRAGMA busy_timeout = 0; PRAGMA wal_checkpoint(TRUNCATE);");
+
+            // One attempt through the native API: Microsoft.Data.Sqlite retries a busy result for its whole command
+            // timeout (30 s), and SQLite's busy timeout doesn't cover the lock this needs.
+            var result = raw.sqlite3_exec(connection.Handle!, "PRAGMA journal_mode = DELETE;");
+            if (result == raw.SQLITE_BUSY)
+            {
+                logger.LogDebug("Another connection has the crawl file open, so it stays in WAL mode until that closes");
+            }
+            else if (result != raw.SQLITE_OK)
+            {
+                logger.LogWarning("Could not leave WAL mode: {Error}", raw.sqlite3_errmsg(connection.Handle!).utf8_to_string());
+            }
         }
         catch (Exception exception) when (exception is SqliteException or InvalidOperationException)
         {

@@ -1,7 +1,10 @@
+using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Configuration.Models;
+using ShoutingIguana.Engine.Crawling;
+using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Tests.Support;
 
@@ -62,6 +65,38 @@ public sealed class CrawlDatabaseTests : IDisposable
         using var check = Raw(path);
         Assert.Equal(1L, CrawlDatabase.Scalar(check, "SELECT COUNT(*) FROM sqlite_master"));
         Assert.Equal("delete", CrawlDatabase.Scalar(check, "PRAGMA journal_mode"));
+    }
+
+    [Fact]
+    public async Task ClosingAWriterDoesNotWaitForReaders()
+    {
+        var path = _files.NewPath();
+        var crawl = CrawlWriter.Open(path, NOWHERE, resume: false, new CrawlCounters(), NullLogger.Instance);
+
+        // Another connection part-way through reading the file, as si stats, a SQLite browser or an export would be.
+        using var reader = CrawlDatabase.OpenReader(path);
+        using var query = reader.CreateCommand();
+        query.CommandText = "SELECT start_url FROM crawl";
+        using var rows = query.ExecuteReader();
+        Assert.True(rows.Read());
+
+        var stopwatch = Stopwatch.StartNew();
+        await crawl.DisposeAsync();
+        var crawlClose = stopwatch.Elapsed;
+
+        using (var connection = CrawlDatabase.OpenWriter(path))
+        {
+            CrawlDatabase.Execute(connection, $"UPDATE crawl SET status = {(int)CrawlStatus.Completed}");
+        }
+
+        stopwatch.Restart();
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        var analysisClose = stopwatch.Elapsed;
+
+        Assert.True(crawlClose < TimeSpan.FromSeconds(5), $"Closing the crawl took {crawlClose}");
+        Assert.True(analysisClose < TimeSpan.FromSeconds(5), $"The analysis took {analysisClose}");
+        Assert.Equal(NOWHERE.StartUrl, rows.GetString(0));
+        Assert.Equal(1L, TestCrawls.Count(path, "SELECT COUNT(*) FROM analysis"));
     }
 
     private static SqliteConnection Raw(string path)
