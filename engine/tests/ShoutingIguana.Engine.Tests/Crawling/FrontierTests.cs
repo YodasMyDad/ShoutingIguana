@@ -21,17 +21,13 @@ public sealed class FrontierTests : IAsyncLifetime
     private readonly CrawlFiles _files = new();
     private TestWebHost _synthetic = null!;
     private SyntheticSite _site = null!;
-    private string _origin = null!;
 
-    public async Task InitializeAsync()
-    {
+    public async Task InitializeAsync() =>
         _synthetic = await TestWebHost.StartAsync((baseUri, externalBaseUri) =>
         {
             _site = new SyntheticSite(new SyntheticSiteOptions { PageCount = PAGES }, baseUri, externalBaseUri);
             return _site.Handle;
         });
-        _origin = _synthetic.BaseUri.GetLeftPart(UriPartial.Authority);
-    }
 
     public async Task DisposeAsync()
     {
