@@ -234,22 +234,22 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// robots.txt is down for the first half minute, so the start URL is refused and nothing else is known. Its notice
-    /// promises a re-ask in two minutes, and that is when the start URL gets its one more try: not a moment after the
-    /// failure, when robots.txt would still be down and the crawl would end empty.
+    /// robots.txt fails at first, so the start URL is refused and nothing else is known. Its notice promises a re-ask in
+    /// two minutes, and that is when the start URL gets its one more try: not a moment after the failure, when a robots.txt
+    /// that is down for a while would still be down and the crawl would end empty. The first request fails by count, not
+    /// by time: how much fake time the crawl's start-up takes depends on the machine.
     /// </summary>
     [Fact]
     public async Task ARobotsTxtThatFailsAtTheStartIsAskedAgainWhenItsCoolDownEnds()
     {
         var time = new FakeTimeProvider();
-        var started = time.GetUtcNow();
         var robotsRequests = new ConcurrentQueue<DateTimeOffset>();
         _server = await LoopbackServer.StartAsync(context =>
         {
             if (context.Request.Path == "/robots.txt")
             {
                 robotsRequests.Enqueue(time.GetUtcNow());
-                return time.GetUtcNow() - started < TimeSpan.FromSeconds(30) ? Status(context, 503) : Text(context, "User-agent: *\nDisallow:");
+                return robotsRequests.Count == 1 ? Status(context, 503) : Text(context, "User-agent: *\nDisallow:");
             }
 
             return context.Request.Path.Value switch

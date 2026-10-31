@@ -110,7 +110,10 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
 
         await using var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(
             new CrawlRequest(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxRetries = 0 }, path));
-        var summary = await FakeClock.PumpAsync(time, job.Completion);
+
+        // Small steps: a sitemap read has a 60-second deadline on this clock, which large steps on a fast pump could pass
+        // while one is still being read.
+        var summary = await FakeClock.PumpAsync(time, job.Completion, TimeSpan.FromMilliseconds(100));
 
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         var sitemap = Assert.Single(Sitemaps(path));
