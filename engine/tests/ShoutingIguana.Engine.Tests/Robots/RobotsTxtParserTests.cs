@@ -31,6 +31,14 @@ public sealed class RobotsTxtParserTests
     public void AllowWinsATie() =>
         Assert.True(RobotsTxtParser.Parse("User-agent: *\nDisallow: /page\nAllow: /page", TOKEN).IsAllowed("/page"));
 
+    /// <summary>A rule is as specific as it is long once normalised, the form the URLs it's matched against take.</summary>
+    [Theory]
+    [InlineData("Disallow: /%61bc\nAllow: /abc", "/abc")]
+    [InlineData("Disallow: /caf%C3%A9\nAllow: /café", "/caf%C3%A9")]
+    [InlineData("Allow: /über\nDisallow: /%C3%BC*", "/%C3%BCber")]
+    public void SpecificityIsMeasuredOnTheNormalisedRule(string rules, string path) =>
+        Assert.True(RobotsTxtParser.Parse($"User-agent: *\n{rules}", TOKEN).IsAllowed(path));
+
     [Fact]
     public void OwnGroupReplacesTheWildcardGroup()
     {
