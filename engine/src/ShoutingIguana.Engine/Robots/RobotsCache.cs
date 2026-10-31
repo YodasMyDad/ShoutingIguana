@@ -54,6 +54,15 @@ internal sealed class RobotsCache(
         return entry.Load;
     }
 
+    /// <summary>Lets every robots.txt that couldn't be read be fetched again on next use, cool-down or not.</summary>
+    public void ExpireFailures()
+    {
+        foreach (var entry in _origins.Values.Where(entry => entry.IsFailed))
+        {
+            entry.RetryFrom(DateTimeOffset.MinValue);
+        }
+    }
+
     private RobotsCacheEntry NewEntry(string origin) => new(entry => LoadAsync(origin, entry));
 
     private async Task<RobotsTxt> LoadAsync(string origin, RobotsCacheEntry entry)

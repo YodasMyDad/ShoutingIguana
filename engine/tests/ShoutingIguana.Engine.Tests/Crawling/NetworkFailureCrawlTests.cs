@@ -85,9 +85,88 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
         Assert.Equal(1, issues.GetValueOrDefault(IssueCatalog.BLOCKED_BY_ROBOTS.Id));
     }
 
-    private async Task<CrawlSummary> CrawlAsync(string path, ICrawlObserver observer)
+    [Fact]
+    public async Task APageThatGotNoResponseIsTriedOnceMoreAtTheEnd()
     {
-        var options = new CrawlOptions { StartUrl = _server!.BaseUri.AbsoluteUri, MaxRetries = 0, DiscoverSitemaps = false };
+        var flakyRequests = 0;
+        _server = await LoopbackServer.StartAsync(context =>
+        {
+            if (context.Request.Path == "/")
+            {
+                return Html(context, "<a href=\"/flaky\">Flaky</a>");
+            }
+
+            if (context.Request.Path != "/flaky")
+            {
+                return Status(context, 404);
+            }
+
+            if (Interlocked.Increment(ref flakyRequests) == 1)
+            {
+                context.Abort();
+                return Task.CompletedTask;
+            }
+
+            return Html(context, "<p>Back again</p>");
+        });
+        var path = NewDatabasePath();
+
+        var summary = await CrawlAsync(path, new RecordingObserver());
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        Assert.Equal(FetchOutcome.Success, Outcome(path, $"{_server.BaseUri}flaky"));
+        Assert.Equal(2, flakyRequests);
+    }
+
+    [Fact]
+    public async Task TheTryAtTheEndIsASingleAttempt()
+    {
+        var deadRequests = 0;
+        _server = await LoopbackServer.StartAsync(context =>
+        {
+            if (context.Request.Path != "/dead")
+            {
+                return Html(context, "<a href=\"/dead\">Dead</a>");
+            }
+
+            Interlocked.Increment(ref deadRequests);
+            context.Abort();
+            return Task.CompletedTask;
+        });
+        var path = NewDatabasePath();
+
+        await CrawlAsync(path, new RecordingObserver(), maxRetries: 1);
+
+        // Two attempts in the crawl, one at the end.
+        Assert.Equal(FetchOutcome.NetworkError, Outcome(path, $"{_server.BaseUri}dead"));
+        Assert.Equal(3, deadRequests);
+    }
+
+    [Fact]
+    public async Task ARobotsTxtThatFailedIsReadAgainAtTheEnd()
+    {
+        var robotsRequests = 0;
+        _server = await LoopbackServer.StartAsync(context => context.Request.Path.Value switch
+        {
+            "/robots.txt" when Interlocked.Increment(ref robotsRequests) == 1 => Status(context, 503),
+            "/robots.txt" => Text(context, "User-agent: *\nDisallow:"),
+            "/" => Html(context, "<a href=\"/about\">About</a>"),
+            "/about" => Html(context, "<p>About us</p>"),
+            _ => Status(context, 404)
+        });
+        var path = NewDatabasePath();
+
+        var summary = await CrawlAsync(path, new RecordingObserver());
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        Assert.Equal(FetchOutcome.Success, Outcome(path, _server.BaseUri.AbsoluteUri));
+        Assert.Equal(FetchOutcome.Success, Outcome(path, $"{_server.BaseUri}about"));
+        Assert.Equal(2, robotsRequests);
+    }
+
+    private async Task<CrawlSummary> CrawlAsync(string path, ICrawlObserver observer, int maxRetries = 0)
+    {
+        var options = new CrawlOptions { StartUrl = _server!.BaseUri.AbsoluteUri, MaxRetries = maxRetries, DiscoverSitemaps = false };
         await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path), observer);
         return await job.Completion.WaitAsync(CRAWL_TIMEOUT);
     }

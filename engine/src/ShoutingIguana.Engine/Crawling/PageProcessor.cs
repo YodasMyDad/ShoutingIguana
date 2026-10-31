@@ -32,7 +32,8 @@ internal sealed class PageProcessor(
     private int _internalForbidden;
     private int _forbiddenReported;
 
-    public async Task<PageRecord> ProcessAsync(FrontierItem item, CancellationToken cancellationToken)
+    /// <param name="isRetry">The URL's one more try at the end of the crawl: a single attempt, as it had its retries.</param>
+    public async Task<PageRecord> ProcessAsync(FrontierItem item, CancellationToken cancellationToken, bool isRetry = false)
     {
         var uri = new Uri(item.Url);
         var fetchedAt = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
@@ -49,7 +50,7 @@ internal sealed class PageProcessor(
         }
 
         var body = item.Mode == FetchMode.Crawl ? FetchBody.Html : FetchBody.None;
-        var response = await fetcher.FetchAsync(uri, body, cancellationToken).ConfigureAwait(false);
+        var response = await fetcher.FetchAsync(uri, body, cancellationToken, singleAttempt: isRetry).ConfigureAwait(false);
         if (item.IsInternal)
         {
             WatchForBlocking(uri, response);

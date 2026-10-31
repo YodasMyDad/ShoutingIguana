@@ -37,8 +37,8 @@ internal sealed class RobotsCacheHarness : IAsyncDisposable
         _fetcher = new HttpFetcher(options, UserAgents.Resolve(options.UserAgent, null), scope, Time);
         _path = Path.Combine(Path.GetTempPath(), $"si-robots-{Guid.NewGuid():N}.sicrawl");
         _writer = CrawlWriter.Open(_path, options, resume: false, new CrawlCounters(), NullLogger.Instance);
-        Robots = new RobotsCache(new RetryingFetcher(_fetcher, Gates, options.MaxRetries, Time, new NoJitter()), Gates, _writer, scope,
-            options, UserAgents.ROBOTS_TOKEN, Observer, Time, NullLogger.Instance, CancellationToken.None);
+        Robots = new RobotsCache(new RetryingFetcher(_fetcher, Gates, scope, options.MaxRetries, Observer, Time, new NoJitter()), Gates,
+            _writer, scope, options, UserAgents.ROBOTS_TOKEN, Observer, Time, NullLogger.Instance, CancellationToken.None);
     }
 
     public FakeTimeProvider Time { get; } = new();
