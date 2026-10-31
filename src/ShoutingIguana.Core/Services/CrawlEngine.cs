@@ -2448,11 +2448,22 @@ public class CrawlEngine(
                     return;
                 }
                 
-                // Also check if already crawled
+                // Also check if already crawled. A Pending row is not a crawl: PersistLinkRelationshipsAsync
+                // commits one for every link target before the page's links are enqueued, so a Pending row
+                // under this exact address just means "discovered, not yet queued".
                 var existing = await urlRepository.GetByAddressAsync(projectId, url).ConfigureAwait(false);
-                if (existing != null)
+                if (existing != null && existing.Status != UrlStatus.Pending)
                 {
                     logger.LogDebug("URL already crawled, skipping: {Url}", url);
+                    return;
+                }
+
+                // A Pending row stored under a different address is a variant of the same normalized URL
+                // (/Page vs /page, ?utm_source=...). Only the address the row was created with is queued,
+                // so the page is crawled once.
+                if (existing != null && !string.Equals(existing.Address, url, StringComparison.Ordinal))
+                {
+                    logger.LogDebug("URL variant of {ExistingUrl} already discovered, skipping: {Url}", existing.Address, url);
                     return;
                 }
             }
