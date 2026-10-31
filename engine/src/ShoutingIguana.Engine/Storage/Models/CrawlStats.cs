@@ -19,7 +19,7 @@ public sealed record CrawlStats
     public long SitemapCount { get; init; }
     public long SitemapUrlCount { get; init; }
 
-    /// <summary>Internal HTML pages found only through sitemaps: candidates for orphan pages.</summary>
+    /// <summary>Internal HTML pages found only through sitemaps, with no link to them from any other URL: candidates for orphan pages.</summary>
     public long UnlinkedPageCount { get; init; }
 
     /// <summary>Internal HTML pages fetched successfully.</summary>

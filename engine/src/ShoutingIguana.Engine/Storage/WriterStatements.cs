@@ -24,6 +24,8 @@ internal sealed class WriterStatements : IDisposable
     private readonly SqliteCommand _upsertDetails;
     private readonly SqliteCommand _upsertHtml;
     private readonly SqliteCommand _claim;
+    private readonly SqliteCommand _skipQueuedInternal;
+    private readonly SqliteCommand _readLinkTargets;
     private readonly SqliteCommand _upsertRobots;
     private readonly SqliteCommand _registerSitemap;
     private readonly SqliteCommand _updateSitemap;
@@ -79,11 +81,19 @@ internal sealed class WriterStatements : IDisposable
             UPDATE urls SET state = 1
             WHERE id IN (
                 SELECT id FROM urls
-                WHERE state = 0 AND is_internal = $internal
+                WHERE state = 0 AND is_internal = $internal AND depth >= $fromDepth AND depth < $toDepth
                 ORDER BY depth, id
                 LIMIT $limit)
             RETURNING id, url, depth, fetch_mode
-            """, "$internal", "$limit");
+            """, "$internal", "$limit", "$fromDepth", "$toDepth");
+        _skipQueuedInternal = Prepare(connection, $"""
+            UPDATE urls SET state = 3, skip_reason = {(int)SkipReason.UrlLimit}
+            WHERE state = 0 AND is_internal = 1
+            RETURNING id, url
+            """);
+        _readLinkTargets = Prepare(connection, """
+            SELECT l.kind, u.url, u.is_internal FROM links l JOIN urls u ON u.id = l.to_id WHERE l.from_id = $id
+            """, "$id");
         _upsertRobots = Prepare(connection, """
             INSERT OR REPLACE INTO robots (origin, status_code, content, error, fetched_at)
             VALUES ($origin, $status, $content, $error, $fetchedAt)
@@ -156,10 +166,13 @@ internal sealed class WriterStatements : IDisposable
 
     public void UpsertHtml(int urlId, byte[] html) => Run(_upsertHtml, urlId, html);
 
-    public List<FrontierItem> ClaimQueued(bool isInternal, int limit)
+    /// <summary>Claims up to <paramref name="limit"/> queued URLs with a depth in [fromDepth, toDepth), shallowest first.</summary>
+    public List<FrontierItem> ClaimQueued(bool isInternal, int limit, int fromDepth, int toDepth)
     {
         _claim.Parameters[0].Value = isInternal;
         _claim.Parameters[1].Value = limit;
+        _claim.Parameters[2].Value = fromDepth;
+        _claim.Parameters[3].Value = toDepth;
 
         List<FrontierItem> items = [];
         using var reader = _claim.ExecuteReader();
@@ -169,6 +182,33 @@ internal sealed class WriterStatements : IDisposable
         }
 
         return items;
+    }
+
+    /// <summary>Skips every internal URL still queued, for the URL limit, and returns them.</summary>
+    public List<(int Id, string Url)> SkipQueuedInternal()
+    {
+        List<(int Id, string Url)> skipped = [];
+        using var reader = _skipQueuedInternal.ExecuteReader();
+        while (reader.Read())
+        {
+            skipped.Add((reader.GetInt32(0), reader.GetString(1)));
+        }
+
+        return skipped;
+    }
+
+    /// <summary>Where a recorded URL's links go, read in full before anything is updated.</summary>
+    public List<(LinkKind Kind, string Url, bool IsInternal)> ReadLinkTargets(int fromId)
+    {
+        _readLinkTargets.Parameters[0].Value = fromId;
+        List<(LinkKind Kind, string Url, bool IsInternal)> targets = [];
+        using var reader = _readLinkTargets.ExecuteReader();
+        while (reader.Read())
+        {
+            targets.Add(((LinkKind)reader.GetInt32(0), reader.GetString(1), reader.GetBoolean(2)));
+        }
+
+        return targets;
     }
 
     public void UpsertRobots(RobotsRecord record) =>

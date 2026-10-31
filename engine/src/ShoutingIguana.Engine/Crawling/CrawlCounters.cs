@@ -50,6 +50,13 @@ internal sealed class CrawlCounters
         Interlocked.Add(ref _inFlight, count);
     }
 
+    /// <summary>Queued URLs skipped all at once, when the URL limit is reached.</summary>
+    public void OnUrlsSkipped(long count)
+    {
+        Interlocked.Add(ref _queued, -count);
+        Interlocked.Add(ref _skipped, count);
+    }
+
     /// <summary>A claimed URL went back on the queue without a response, to be fetched again in full.</summary>
     public void OnReturned()
     {

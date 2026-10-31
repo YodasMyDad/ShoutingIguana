@@ -38,11 +38,21 @@ internal sealed class CrawlWriter : IAsyncDisposable
     private readonly CrawlCounters _counters;
     private readonly ILogger _logger;
     private readonly Dictionary<UInt128, UrlEntry> _urls = new();
+
+    // Recorded pages whose depth dropped after their links were stored, to pass the shorter path on to.
+    private readonly Queue<UInt128> _depthChanges = new();
+
+    // Internal URLs queued again for a full fetch: counted against the URL limit when first claimed, not again.
+    private readonly HashSet<int> _refetches = [];
     private SqliteTransaction? _transaction;
     private Task _loop = Task.CompletedTask;
     private int _nextUrlId = 1;
     private int _inFlight;
-    private int _acceptedInternal;
+
+    // Internal URLs in flight that were claimed with a link depth, as opposed to sitemap-only ones.
+    private int _linkedInFlight;
+    private int _claimedInternal;
+    private bool _urlLimitReached;
 
     private CrawlWriter(SqliteConnection connection, CrawlFileLock fileLock, CrawlOptions options, CrawlCounters counters, ILogger logger)
     {
@@ -258,6 +268,10 @@ internal sealed class CrawlWriter : IAsyncDisposable
         var key = UrlKey.Compute(item.Url);
         var response = record.Response;
         _inFlight--;
+        if (item.IsInternal && item.Depth < CrawlDepth.UNLINKED)
+        {
+            _linkedInFlight--;
+        }
 
         // Promoted to a full crawl while its status check was in flight, and the check found something to crawl:
         // fetch it again in full rather than store the check.
@@ -266,16 +280,19 @@ internal sealed class CrawlWriter : IAsyncDisposable
             _urls[key] = _urls[key] with { State = UrlState.Queued };
             _statements.UpdateUrlState(item.Id, UrlState.Queued);
             _counters.OnReturned();
+            NoteRefetch(item.Id, item.IsInternal);
             return;
         }
 
+        // The page's depth as it is now: a shorter path may have turned up while it was being fetched.
+        var depth = _urls[key].Depth;
         int? redirectId = null;
         int? canonicalId = null;
         var outlinkCount = 0;
 
         foreach (var link in record.Links)
         {
-            var targetId = ResolveLink(link, item, record.PageNoFollow);
+            var targetId = ResolveLink(link, item.Id, depth, record.PageNoFollow);
             _statements.InsertLink(item.Id, targetId, link);
 
             switch (link.Kind)
@@ -309,6 +326,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
         var isSitePage = item.IsInternal && response.IsHtml && response.Outcome == FetchOutcome.Success;
         _counters.OnRecorded(response.Outcome, isSitePage, response.SizeBytes ?? 0);
+        PropagateDepths();
     }
 
     private void ApplyDiscover(DiscoverCommand command)
@@ -335,12 +353,14 @@ internal sealed class CrawlWriter : IAsyncDisposable
                 _statements.InsertSitemapUrl(sitemapId, id);
             }
         }
+
+        PropagateDepths();
     }
 
     private FrontierClaim ApplyClaim(int internalCount, int externalCount)
     {
-        List<FrontierItem> internalItems = internalCount > 0 ? _statements.ClaimQueued(true, internalCount) : [];
-        List<FrontierItem> externalItems = externalCount > 0 ? _statements.ClaimQueued(false, externalCount) : [];
+        var internalItems = internalCount > 0 ? ClaimInternal(internalCount) : [];
+        List<FrontierItem> externalItems = externalCount > 0 ? _statements.ClaimQueued(false, externalCount, 0, int.MaxValue) : [];
 
         foreach (var item in internalItems.Concat(externalItems))
         {
@@ -353,18 +373,79 @@ internal sealed class CrawlWriter : IAsyncDisposable
         return new FrontierClaim(internalItems, externalItems, _inFlight);
     }
 
-    private int ResolveLink(OutLink link, FrontierItem source, bool pageNoFollow)
+    /// <summary>
+    /// Claims the site's own URLs breadth-first. URLs only a sitemap lists wait until no linked URL is queued or in
+    /// flight, so every link depth is settled first and they never take the place of a linked page. The URL limit is
+    /// spent here, in that order, rather than as URLs are discovered.
+    /// </summary>
+    private List<FrontierItem> ClaimInternal(int count)
     {
-        var depth = link.Kind.KeepsDepth() ? source.Depth : CrawlDepth.Next(source.Depth);
+        var limit = _options.MaxUrls > 0 && !_urlLimitReached ? Math.Min(count, _options.MaxUrls - _claimedInternal) : count;
+        var items = _statements.ClaimQueued(true, limit, 0, CrawlDepth.UNLINKED);
+        if (items.Count == 0 && _linkedInFlight == 0)
+        {
+            items = _statements.ClaimQueued(true, limit, CrawlDepth.UNLINKED, int.MaxValue);
+        }
+
+        foreach (var item in items)
+        {
+            if (item.Depth < CrawlDepth.UNLINKED)
+            {
+                _linkedInFlight++;
+            }
+
+            if (_refetches.Count == 0 || !_refetches.Remove(item.Id))
+            {
+                _claimedInternal++;
+            }
+        }
+
+        if (_options.MaxUrls > 0 && !_urlLimitReached && _claimedInternal >= _options.MaxUrls)
+        {
+            _urlLimitReached = true;
+            SkipQueuedInternal();
+        }
+
+        return items;
+    }
+
+    /// <summary>The URL limit is reached: internal URLs still queued are skipped, except those already counted.</summary>
+    private void SkipQueuedInternal()
+    {
+        var skipped = 0;
+        foreach (var (id, url) in _statements.SkipQueuedInternal())
+        {
+            var key = UrlKey.Compute(url);
+            var entry = _urls[key];
+            if (_refetches.Contains(id))
+            {
+                // A status check waiting to be fetched again in full; its slot was taken the first time.
+                _statements.RequeueUrl(id, entry.Mode, entry.Depth);
+                continue;
+            }
+
+            _urls[key] = entry with { State = UrlState.Skipped, Skip = SkipReason.UrlLimit };
+            skipped++;
+        }
+
+        _counters.OnUrlsSkipped(skipped);
+    }
+
+    private int ResolveLink(OutLink link, int sourceId, int sourceDepth, bool pageNoFollow)
+    {
+        var depth = link.Kind.KeepsDepth() ? sourceDepth : CrawlDepth.Next(sourceDepth);
         var skip = FollowDecision(link, pageNoFollow);
 
+        // Depth-limited crawls don't follow links on pages only a sitemap lists, or the sitemap would lift the limit
+        // for everything those pages lead to. A redirect is part of fetching the listed URL, so it keeps the exemption.
+        var exemptFromDepthLimit = sourceDepth >= CrawlDepth.UNLINKED && link.Kind.KeepsDepth();
         if (_urls.TryGetValue(link.Key, out var entry))
         {
-            Rediscover(link, entry, depth, skip, exemptFromDepthLimit: false);
+            Rediscover(link, entry, depth, skip, exemptFromDepthLimit);
             return entry.Id;
         }
 
-        return Insert(link, depth, skip, DiscoverySource.Link, source.Id, exemptFromDepthLimit: false);
+        return Insert(link, depth, skip, DiscoverySource.Link, sourceId, exemptFromDepthLimit);
     }
 
     /// <summary>
@@ -423,7 +504,8 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
     /// <summary>
     /// Any link counts for depth, followed or not, so a URL's depth is its shortest path from the start whichever order
-    /// the links arrive in. A URL that was too deep to crawl and now isn't is queued.
+    /// the links arrive in. A URL that was too deep to crawl and now isn't is queued, and a page already recorded passes
+    /// the shorter path on to its links.
     /// </summary>
     private UrlEntry LowerDepth(UInt128 key, UrlEntry entry, int depth, bool isInternal)
     {
@@ -437,9 +519,34 @@ internal sealed class CrawlWriter : IAsyncDisposable
                 : skip > updated.Skip ? SetSkip(updated, skip, FetchMode.Crawl)
                 : updated;
         }
+        else if (updated.State == UrlState.Done)
+        {
+            _depthChanges.Enqueue(key);
+        }
 
         _urls[key] = updated;
         return updated;
+    }
+
+    /// <summary>
+    /// Passes depth reductions on through the links of pages already recorded, so depth is the shortest path even when
+    /// the page with the shorter path loaded last. Rare: breadth-first, links mostly arrive in depth order.
+    /// </summary>
+    private void PropagateDepths()
+    {
+        while (_depthChanges.TryDequeue(out var key))
+        {
+            var source = _urls[key];
+            foreach (var (kind, url, isInternal) in _statements.ReadLinkTargets(source.Id))
+            {
+                var depth = kind.KeepsDepth() ? source.Depth : CrawlDepth.Next(source.Depth);
+                var targetKey = UrlKey.Compute(url);
+                if (_urls.TryGetValue(targetKey, out var target) && depth < target.Depth)
+                {
+                    LowerDepth(targetKey, target, depth, isInternal);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -453,10 +560,19 @@ internal sealed class CrawlWriter : IAsyncDisposable
             _statements.DeleteResponse(entry.Id);
             _statements.RequeueUrl(entry.Id, FetchMode.Crawl, entry.Depth);
             _counters.OnResponseRemoved(check.Outcome, isInternal && check.IsHtml, check.Bytes);
+            NoteRefetch(entry.Id, isInternal);
             return entry with { State = UrlState.Queued, Mode = FetchMode.Crawl };
         }
 
         return SetMode(entry, FetchMode.Crawl);
+    }
+
+    private void NoteRefetch(int id, bool isInternal)
+    {
+        if (isInternal && _options.MaxUrls > 0)
+        {
+            _refetches.Add(id);
+        }
     }
 
     private UrlEntry Requeue(UrlEntry entry, FetchMode mode)
@@ -496,7 +612,10 @@ internal sealed class CrawlWriter : IAsyncDisposable
         return id;
     }
 
-    /// <summary>Applies the depth and URL limits to a URL about to be queued. Status checks have no depth limit.</summary>
+    /// <summary>
+    /// Applies the depth and URL limits to a URL about to be queued. Status checks have no depth limit, and the URL
+    /// limit is spent as URLs are claimed: once it is reached, no more internal URLs are queued.
+    /// </summary>
     private SkipReason Accept(bool isInternal, FetchMode mode, int depth, bool exemptFromDepthLimit)
     {
         if (mode == FetchMode.Crawl && !WithinDepthLimit(depth, exemptFromDepthLimit))
@@ -504,21 +623,11 @@ internal sealed class CrawlWriter : IAsyncDisposable
             return SkipReason.DepthLimit;
         }
 
-        if (isInternal)
-        {
-            if (_options.MaxUrls > 0 && _acceptedInternal >= _options.MaxUrls)
-            {
-                return SkipReason.UrlLimit;
-            }
-
-            _acceptedInternal++;
-        }
-
-        return SkipReason.None;
+        return isInternal && _urlLimitReached ? SkipReason.UrlLimit : SkipReason.None;
     }
 
     private bool WithinDepthLimit(int depth, bool exemptFromDepthLimit) =>
-        exemptFromDepthLimit || _options.MaxDepth == 0 || depth <= _options.MaxDepth || depth >= CrawlDepth.UNLINKED;
+        exemptFromDepthLimit || _options.MaxDepth == 0 || depth <= _options.MaxDepth;
 
     private SkipReason FollowDecision(OutLink link, bool pageNoFollow)
     {
@@ -601,15 +710,20 @@ internal sealed class CrawlWriter : IAsyncDisposable
                 {
                     queued++;
                 }
-
-                if (reader.GetBoolean(6))
+                else if (reader.GetBoolean(6))
                 {
-                    _acceptedInternal++;
+                    // Fetched already, so it took one of the URL limit's slots.
+                    _claimedInternal++;
                 }
             }
         }
 
         _counters.RestoreUrls(_urls.Count, queued, skipped);
+        if (_options.MaxUrls > 0 && _claimedInternal >= _options.MaxUrls)
+        {
+            _urlLimitReached = true;
+            SkipQueuedInternal();
+        }
 
         using (var command = _connection.CreateCommand())
         {
