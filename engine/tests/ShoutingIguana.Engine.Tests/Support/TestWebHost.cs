@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using System.Net;
-using System.Net.Sockets;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.TestSite.Models;
 
@@ -17,37 +17,42 @@ internal sealed class TestWebHost : IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, TaskCompletionSource> _holds = new(StringComparer.Ordinal);
     private WebApplication _app = null!;
+    private Func<string, bool, SyntheticResponse> _handler = null!;
+    private int _externalPort;
 
-    private TestWebHost(Uri baseUri, Uri externalBaseUri)
+    private TestWebHost()
     {
-        BaseUri = baseUri;
-        ExternalBaseUri = externalBaseUri;
     }
 
-    public Uri BaseUri { get; }
+    public Uri BaseUri { get; private set; } = null!;
 
-    public Uri ExternalBaseUri { get; }
+    public Uri ExternalBaseUri { get; private set; } = null!;
 
     /// <param name="createHandler">Given both base URIs, returns the response for a path and whether it came to the external port.</param>
     public static async Task<TestWebHost> StartAsync(Func<Uri, Uri, Func<string, bool, SyntheticResponse>> createHandler)
     {
-        var port = FindFreePort();
-        var externalPort = FindFreePort();
-        var host = new TestWebHost(new Uri($"http://127.0.0.1:{port}/"), new Uri($"http://127.0.0.1:{externalPort}/"));
-        var handler = createHandler(host.BaseUri, host.ExternalBaseUri);
-
+        var host = new TestWebHost();
+        ListenOptions? site = null, external = null;
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
             kestrel.AddServerHeader = false;
-            kestrel.Listen(IPAddress.Loopback, port);
-            kestrel.Listen(IPAddress.Loopback, externalPort);
+
+            // Port 0: the OS picks free ports as Kestrel binds them, so tests running side by side can't collide.
+            kestrel.Listen(IPAddress.Loopback, 0, listen => site = listen);
+            kestrel.Listen(IPAddress.Loopback, 0, listen => external = listen);
         });
 
         host._app = builder.Build();
-        host._app.Run(context => host.RespondAsync(context, handler, externalPort));
+        host._app.Run(host.RespondAsync);
         await host._app.StartAsync();
+
+        // Nobody knows the ports until now, so no request can arrive before the handler is set.
+        host._externalPort = ((IPEndPoint)external!.EndPoint).Port;
+        host.BaseUri = new Uri($"http://127.0.0.1:{((IPEndPoint)site!.EndPoint).Port}/");
+        host.ExternalBaseUri = new Uri($"http://127.0.0.1:{host._externalPort}/");
+        host._handler = createHandler(host.BaseUri, host.ExternalBaseUri);
         return host;
     }
 
@@ -73,7 +78,7 @@ internal sealed class TestWebHost : IAsyncDisposable
         await _app.DisposeAsync();
     }
 
-    private async Task RespondAsync(HttpContext context, Func<string, bool, SyntheticResponse> handler, int externalPort)
+    private async Task RespondAsync(HttpContext context)
     {
         var path = context.Request.Path.Value ?? "/";
         if (_holds.TryGetValue(path, out var hold))
@@ -81,7 +86,7 @@ internal sealed class TestWebHost : IAsyncDisposable
             await hold.Task.WaitAsync(context.RequestAborted);
         }
 
-        var response = handler(path, context.Connection.LocalPort == externalPort);
+        var response = _handler(path, context.Connection.LocalPort == _externalPort);
         if (response.Abort)
         {
             context.Abort();
@@ -113,20 +118,6 @@ internal sealed class TestWebHost : IAsyncDisposable
         else if (response.Text is not null)
         {
             await context.Response.WriteAsync(response.Text, context.RequestAborted);
-        }
-    }
-
-    private static int FindFreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        try
-        {
-            return ((IPEndPoint)listener.LocalEndpoint).Port;
-        }
-        finally
-        {
-            listener.Stop();
         }
     }
 }

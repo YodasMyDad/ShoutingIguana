@@ -21,6 +21,17 @@ public sealed class CrawlDatabaseTests : IDisposable
     public void Dispose() => _files.Dispose();
 
     [Fact]
+    public async Task AnalysingAMissingFileLeavesNothingBehind()
+    {
+        var path = _files.NewPath();
+
+        await Assert.ThrowsAsync<FileNotFoundException>(() => new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path));
+
+        Assert.False(File.Exists(path));
+        Assert.False(File.Exists(path + "-lock"));
+    }
+
+    [Fact]
     public async Task RefusesAFileFromAnotherSchemaWithoutWritingToIt()
     {
         // A crawl file from step 1: schema 1, without columns this engine reads, such as sitemaps.is_probe.

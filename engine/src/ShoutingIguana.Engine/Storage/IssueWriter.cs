@@ -54,6 +54,12 @@ internal sealed class IssueWriter : IDisposable
     /// </exception>
     public static IssueWriter Open(string databasePath, ILogger logger)
     {
+        // Before the lock and the writer, which would create the file (and its lock file) in passing.
+        if (!File.Exists(databasePath))
+        {
+            throw new FileNotFoundException("Crawl database not found.", databasePath);
+        }
+
         var fileLock = CrawlFileLock.Acquire(databasePath);
         SqliteConnection? connection = null;
         try

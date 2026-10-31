@@ -51,7 +51,12 @@ public sealed class CrawlWriterTests : IAsyncLifetime
         Assert.Contains("injected write failure", summary.Error);
         Assert.Equal(CrawlStatus.Failed, CrawlStatsReader.Read(path).Status);
 
-        // Deleting fails on Windows while any connection still has the file open.
+        // The lock went with the writer, so another one can open the file at once, on every OS (and the crawl can be
+        // resumed). Deleting also fails on Windows while any connection still has the file open.
+        await using (CrawlWriter.Open(path, Options(), resume: true, new CrawlCounters(), NullLogger.Instance))
+        {
+        }
+
         File.Delete(path);
         Assert.False(File.Exists(path));
     }
