@@ -45,29 +45,62 @@ public sealed class FrontierTests : IAsyncLifetime
         var unhindered = await CrawlSyntheticAsync(Options());
 
         // The sitemaps are read before the home page answers, so sitemap URLs are queued long before any link.
-        var sitemapsFirst = await CrawlSyntheticAsync(Options(), "/", "SELECT sitemaps_done FROM crawl");
+        var sitemapsFirst = await CrawlSitemapsFirstAsync(Options());
 
-        // The only path to some pages goes through /c/0, which answers last: their first links are longer paths, and
-        // pages recorded meanwhile have to pass the shorter path on.
-        var shortcutLast = await CrawlSyntheticAsync(Options(), "/c/0", $"""
-            SELECT (SELECT COUNT(*) FROM urls WHERE state IN ({(int)UrlState.Queued}, {(int)UrlState.Fetching}) AND depth < {CrawlDepth.UNLINKED}) = 1
-               AND (SELECT state FROM urls WHERE url = '{_origin}/c/0') = {(int)UrlState.Fetching}
-            """);
-
-        var expected = TestCrawls.Rows(unhindered, CrawlTables.URLS);
-        Assert.Equal(expected, TestCrawls.Rows(sitemapsFirst, CrawlTables.URLS));
-        Assert.Equal(expected, TestCrawls.Rows(shortcutLast, CrawlTables.URLS));
-        foreach (var path in new[] { unhindered, sitemapsFirst, shortcutLast })
+        Assert.Equal(TestCrawls.Rows(unhindered, CrawlTables.URLS), TestCrawls.Rows(sitemapsFirst, CrawlTables.URLS));
+        foreach (var path in new[] { unhindered, sitemapsFirst })
         {
             Assert.Equal(_site.GetExpectations().Orphans, CrawlStatsReader.Read(path).UnlinkedPageCount);
         }
     }
 
     [Fact]
+    public async Task DepthIsTheShortestPathWhicheverPageAnswersFirst()
+    {
+        // Home links /a and /b; /b leads to /d through /c, and /a links /d directly. So /d is two clicks deep and /e,
+        // linked only from /d, three.
+        await using var site = await StartChainSiteAsync();
+        var origin = site.BaseUri.GetLeftPart(UriPartial.Authority);
+        string StateIs(string page, UrlState state) => $"SELECT COUNT(*) FROM urls WHERE url = '{origin}{page}' AND state = {(int)state}";
+
+        var unhindered = _files.NewPath();
+        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(Options(site), unhindered)).Status);
+
+        // /a answers last: /d and /e are recorded through the long way first, and the shorter path to /d arrives after.
+        var shortcutLast = _files.NewPath();
+        site.Hold("/a");
+        await using (var job = TestCrawls.Start(Options(site), shortcutLast))
+        {
+            await TestCrawls.WaitUntilAsync(shortcutLast, StateIs("/e", UrlState.Done));
+            site.Release("/a");
+            Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
+        }
+
+        // /d is claimed the long way and still loading when the shorter path to it arrives.
+        var shortcutWhileLoading = _files.NewPath();
+        site.Hold("/a");
+        site.Hold("/d");
+        await using (var job = TestCrawls.Start(Options(site), shortcutWhileLoading))
+        {
+            await TestCrawls.WaitUntilAsync(shortcutWhileLoading, StateIs("/d", UrlState.Fetching));
+            site.Release("/a");
+            await TestCrawls.WaitUntilAsync(shortcutWhileLoading, $"SELECT COUNT(*) FROM urls WHERE url = '{origin}/d' AND depth = 2");
+            site.Release("/d");
+            Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
+        }
+
+        const string DEPTHS = "SELECT url, depth FROM urls";
+        List<string> expected = [$"{origin}/ | 0", $"{origin}/a | 1", $"{origin}/b | 1", $"{origin}/c | 2", $"{origin}/d | 2", $"{origin}/e | 3"];
+        Assert.Equal(expected, TestCrawls.Rows(unhindered, DEPTHS));
+        Assert.Equal(expected, TestCrawls.Rows(shortcutLast, DEPTHS));
+        Assert.Equal(expected, TestCrawls.Rows(shortcutWhileLoading, DEPTHS));
+    }
+
+    [Fact]
     public async Task SitemapsDoNotLiftTheDepthLimit()
     {
         // Sitemaps first, so every sitemap page is known before any link: the case that let them cascade.
-        var path = await CrawlSyntheticAsync(Options() with { MaxDepth = 1 }, "/", "SELECT sitemaps_done FROM crawl");
+        var path = await CrawlSitemapsFirstAsync(Options() with { MaxDepth = 1 });
 
         // Sitemap URLs are crawled whatever their depth, but nothing else past depth 1 is: links found on them aren't
         // followed beyond the limit. Off the sitemaps, only the 20 categories the home page links are crawled.
@@ -87,7 +120,7 @@ public sealed class FrontierTests : IAsyncLifetime
     public async Task LinkedUrlsGetTheUrlLimitFirst()
     {
         const int LIMIT = 150;
-        var path = await CrawlSyntheticAsync(Options() with { MaxUrls = LIMIT }, "/", "SELECT sitemaps_done FROM crawl");
+        var path = await CrawlSitemapsFirstAsync(Options() with { MaxUrls = LIMIT });
 
         // Breadth-first from the home page: everything it links, then pages two clicks away, and no page that only
         // a sitemap lists, although the sitemaps were read first.
@@ -121,11 +154,12 @@ public sealed class FrontierTests : IAsyncLifetime
             Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
         }
 
-        // Sitemap first: the home page waits until every sitemap URL is stored.
+        // Sitemap first: the home page waits until every sitemap URL is stored, and a little longer.
         site.Hold("/");
         await using (var job = TestCrawls.Start(Options(site), sitemapFirst))
         {
             await TestCrawls.WaitUntilAsync(sitemapFirst, "SELECT sitemaps_done FROM crawl");
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
             site.Release("/");
             Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
         }
@@ -146,8 +180,15 @@ public sealed class FrontierTests : IAsyncLifetime
 
     private static CrawlOptions Options(TestWebHost site) => new() { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 4 };
 
-    /// <summary>Crawls the synthetic site to completion, holding back one path until a query on the crawl is true.</summary>
-    private async Task<string> CrawlSyntheticAsync(CrawlOptions options, string? heldPath = null, string? releaseWhen = null)
+    /// <summary>
+    /// Crawls the synthetic site with the home page held back until every sitemap URL is stored, and half a second
+    /// longer: time enough for a crawler that doesn't wait for linked pages to crawl the sitemaps first.
+    /// </summary>
+    private Task<string> CrawlSitemapsFirstAsync(CrawlOptions options) =>
+        CrawlSyntheticAsync(options, "/", "SELECT sitemaps_done FROM crawl", TimeSpan.FromMilliseconds(500));
+
+    /// <summary>Crawls the synthetic site to completion, holding back one path until a query on the crawl is true, then for <paramref name="linger"/>.</summary>
+    private async Task<string> CrawlSyntheticAsync(CrawlOptions options, string? heldPath = null, string? releaseWhen = null, TimeSpan linger = default)
     {
         var path = _files.NewPath();
         if (heldPath is not null)
@@ -159,6 +200,7 @@ public sealed class FrontierTests : IAsyncLifetime
         if (heldPath is not null)
         {
             await TestCrawls.WaitUntilAsync(path, releaseWhen!);
+            await Task.Delay(linger);
             _synthetic.Release(heldPath);
         }
 
@@ -189,8 +231,22 @@ public sealed class FrontierTests : IAsyncLifetime
             responses[path] = Page($"Page {path}", string.Empty, "<p>A page of the test site.</p>");
         }
 
-        return (path, _) => responses.TryGetValue(path, out var response) ? response : new SyntheticResponse(404, HTML, "<p>Not found</p>", null, null);
+        return Serve(responses);
     });
+
+    /// <summary>Home links /a and /b. The long way to /d goes /b, /c; /a links /d directly; /d links /e. No sitemap.</summary>
+    private static Task<TestWebHost> StartChainSiteAsync() => TestWebHost.StartAsync((_, _) => Serve(new(StringComparer.Ordinal)
+    {
+        ["/"] = Page("Home", string.Empty, """<a href="/a">A</a> <a href="/b">B</a>"""),
+        ["/a"] = Page("A", string.Empty, """<a href="/d">D</a>"""),
+        ["/b"] = Page("B", string.Empty, """<a href="/c">C</a>"""),
+        ["/c"] = Page("C", string.Empty, """<a href="/d">D</a>"""),
+        ["/d"] = Page("D", string.Empty, """<a href="/e">E</a>"""),
+        ["/e"] = Page("E", string.Empty, "<p>The end of the chain.</p>")
+    }));
+
+    private static Func<string, bool, SyntheticResponse> Serve(Dictionary<string, SyntheticResponse> responses) =>
+        (path, _) => responses.TryGetValue(path, out var response) ? response : new SyntheticResponse(404, HTML, "<p>Not found</p>", null, null);
 
     private static SyntheticResponse Page(string title, string head, string body) => new(200, HTML,
         $"""<!DOCTYPE html><html lang="en"><head><title>{title}</title>{head}</head><body><h1>{title}</h1>{body}<p><a href="/">Home</a></p></body></html>""",
