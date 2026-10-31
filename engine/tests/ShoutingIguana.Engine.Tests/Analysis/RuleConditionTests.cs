@@ -207,6 +207,31 @@ public sealed class RuleConditionTests
         Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "3 links", page.UrlId)], rules.Finish());
     }
 
+    /// <summary>
+    /// An id written percent-encoded, as table-of-contents plugins write non-Latin headings, is found by a link written the
+    /// same way, and a plain id by an encoded link, as browsers find both. A link matching neither form is still broken.
+    /// </summary>
+    [Fact]
+    public void FragmentsMatchIdsAsWrittenOrDecoded()
+    {
+        const string ENCODED = "%E3%81%AF%E3%81%98%E3%82%81%E3%81%AB";
+        var site = new RuleHarness();
+        var page = site.Page($"{site.Site}/post", RuleHarness.Html(body:
+            $"<h2 id=\"{ENCODED}\">はじめに</h2><h2 id=\"まとめ\">まとめ</h2><a href=\"#{ENCODED}\">1</a><a href=\"#まとめ\">2</a>" +
+            $"<a href=\"#%E3%81%BE%E3%81%A8%E3%82%81\">3</a><a href=\"/other#{ENCODED}\">4</a><a href=\"#%E3%81%AA%E3%81%84\">5</a>"));
+        var other = site.Page($"{site.Site}/other", RuleHarness.Html(body: $"<p id=\"{ENCODED}\">はじめに</p>"));
+        var urls = site.Table();
+        Dictionary<int, PageFacts> facts = new() { [other.UrlId] = other.Facts };
+        var links = page.Links.Where(link => link.Fragment is not null && link.ToId != page.UrlId).Select(link => (page.UrlId, link.ToId, link.Fragment!)).ToList();
+        var rules = new FragmentRules(urls, facts.GetValueOrDefault, () => links);
+
+        rules.Observe(page);
+        rules.Observe(other);
+
+        // Only #ない (encoded) has no id to find.
+        Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "1 link", page.UrlId)], rules.Finish());
+    }
+
     /// <summary>A page that moves on at once with a meta refresh is a redirect, so its links aren't checked, as for a 301.</summary>
     [Fact]
     public void AnInstantRefreshStubsFragmentLinksAreNotChecked()

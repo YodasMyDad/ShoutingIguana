@@ -19,7 +19,9 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
     : ISiteRule
 {
     private readonly Dictionary<int, (int Count, int FirstTarget)> _broken = [];
-    private readonly HashSet<(int Target, ulong Fragment)> _wanted = [];
+
+    /// <summary>Each fragment as written and decoded: browsers look for an id matching either (see <see cref="Finds"/>).</summary>
+    private readonly HashSet<(int Target, ulong Raw, ulong Decoded)> _wanted = [];
 
     public void Observe(AnalyzedPage page)
     {
@@ -39,21 +41,21 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
 
             if (link.ToId == page.UrlId)
             {
-                if (page.Facts.AnchorIds.Count < PageWalker.MAX_IDS && !(ownIds ??= HashIds(page.Facts.AnchorIds)).Contains(Hash(fragment)))
+                if (page.Facts.AnchorIds.Count < PageWalker.MAX_IDS && !Finds(ownIds ??= HashIds(page.Facts.AnchorIds), Hash(link.Fragment), Hash(fragment)))
                 {
                     Record(page.UrlId, link.ToId);
                 }
             }
             else if (urls[link.ToId] is { IsInternal: true, IsPage: true })
             {
-                _wanted.Add((link.ToId, Hash(fragment)));
+                _wanted.Add((link.ToId, Hash(link.Fragment), Hash(fragment)));
             }
         }
     }
 
     public IEnumerable<IssueHit> Finish()
     {
-        HashSet<(int Target, ulong Fragment)> missing = [];
+        HashSet<(int Target, ulong Raw, ulong Decoded)> missing = [];
         foreach (var target in _wanted.GroupBy(pair => pair.Target))
         {
             // A capped id list can't prove an id is missing.
@@ -63,14 +65,14 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
             }
 
             var ids = HashIds(facts.AnchorIds);
-            missing.UnionWith(target.Where(pair => !ids.Contains(pair.Fragment)));
+            missing.UnionWith(target.Where(pair => !Finds(ids, pair.Raw, pair.Decoded)));
         }
 
         if (missing.Count > 0)
         {
             foreach (var (from, to, raw) in readFragmentLinks())
             {
-                if (!urls[from].IsMetaRefresh && Checkable(raw) is { } fragment && missing.Contains((to, Hash(fragment))))
+                if (!urls[from].IsMetaRefresh && Checkable(raw) is { } fragment && missing.Contains((to, Hash(raw), Hash(fragment))))
                 {
                     Record(from, to);
                 }
@@ -96,6 +98,12 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
             ? null
             : fragment;
     }
+
+    /// <summary>
+    /// Browsers look for the fragment as written first, then decoded (HTML spec, "find a potential indicated element"), so
+    /// id="%E3%81%AF" is found by #%E3%81%AF, and id="は" by #は however the link encodes it.
+    /// </summary>
+    private static bool Finds(HashSet<ulong> ids, ulong raw, ulong decoded) => ids.Contains(raw) || ids.Contains(decoded);
 
     private static HashSet<ulong> HashIds(IReadOnlyList<string> ids) => ids.Select(Hash).ToHashSet();
 
