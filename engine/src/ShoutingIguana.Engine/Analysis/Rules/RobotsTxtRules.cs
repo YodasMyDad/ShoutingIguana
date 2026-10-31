@@ -23,19 +23,25 @@ internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> 
 
         var own = robots.Where(file => Uri.TryCreate(file.Origin, UriKind.Absolute, out var origin) && scope.IsInternal(origin)).ToList();
 
-        // RFC 9309: a 5xx or no answer means "disallow everything"; a 4xx means there are no rules.
-        var unreachable = own.Where(file => file.StatusCode is null or >= 500).ToList();
+        // RFC 9309 and Google: a 5xx, a 429 or no answer means "disallow everything"; another 4xx, or a robots.txt
+        // behind too many redirects, means there are no rules (the crawler treats them the same way).
+        var unreachable = own.Where(file => file.StatusCode is >= 500 or 429 || (file.StatusCode is null && !TooManyRedirects(file))).ToList();
         if (unreachable.Count > 0)
         {
-            yield return new IssueHit(IssueCatalog.ROBOTS_TXT_UNREACHABLE, urls.HomeId, string.Join(", ",
-                unreachable.Select(file => $"{file.Origin}/robots.txt ({(file.StatusCode is { } status ? $"HTTP {status}" : file.Error ?? "no response")})")));
+            yield return new IssueHit(IssueCatalog.ROBOTS_TXT_UNREACHABLE, urls.HomeId, string.Join(", ", unreachable.Select(Describe)));
         }
 
-        var missing = own.Where(file => file.StatusCode is >= 400 and < 500).ToList();
+        var missing = own.Where(file => file.StatusCode is >= 400 and < 500 and not 429 || TooManyRedirects(file)).ToList();
         if (missing.Count > 0)
         {
-            yield return new IssueHit(IssueCatalog.ROBOTS_TXT_MISSING, urls.HomeId, string.Join(", ",
-                missing.Select(file => $"{file.Origin}/robots.txt (HTTP {file.StatusCode})")));
+            yield return new IssueHit(IssueCatalog.ROBOTS_TXT_MISSING, urls.HomeId, string.Join(", ", missing.Select(Describe)));
         }
     }
+
+    /// <summary>RobotsCache records a robots.txt behind too many redirects without a status, and allows everything.</summary>
+    private static bool TooManyRedirects(RobotsRecord file) =>
+        file.StatusCode is null && file.Error?.Contains("redirects", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static string Describe(RobotsRecord file) =>
+        $"{file.Origin}/robots.txt ({(file.StatusCode is { } status ? $"HTTP {status}" : file.Error ?? "no response")})";
 }

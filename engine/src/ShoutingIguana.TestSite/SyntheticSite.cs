@@ -93,9 +93,15 @@ public sealed partial class SyntheticSite
             return Html(RenderHome());
         }
 
+        // robots.txt names /sitemap.xml, which redirects to the index, as Yoast sites do.
         if (path == "/robots.txt")
         {
-            return new SyntheticResponse(200, "text/plain; charset=utf-8", $"User-agent: *\nDisallow: /private/\n\nSitemap: {_base}/sitemap_index.xml\n", null, null);
+            return new SyntheticResponse(200, "text/plain; charset=utf-8", $"User-agent: *\nDisallow: /private/\n\nSitemap: {_base}/sitemap.xml\n", null, null);
+        }
+
+        if (path == "/sitemap.xml")
+        {
+            return Redirect(301, "/sitemap_index.xml");
         }
 
         if (path == "/sitemap_index.xml")
@@ -308,8 +314,10 @@ public sealed partial class SyntheticSite
         }
 
         var products = PageCount - 1;
+        var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + OrphanCount + _plants.Count(plant => plant is { Status: 200, IsPage: true });
         return new SyntheticSiteExpectations(
-            HtmlPages: 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + OrphanCount + _plants.Count(plant => plant.Status == 200),
+            HtmlPages: htmlPages,
+            AnalysedPages: htmlPages - _plants.Count(plant => plant is { Status: 200, IsPage: true, IsAnalysed: false }),
             Products: products,
             Orphans: OrphanCount,
             BrokenUrls: broken.Count + _plants.Count(plant => plant.Status == 404),
@@ -511,6 +519,9 @@ public sealed partial class SyntheticSite
         {
             html.Append("<meta charset=\"utf-8\">");
         }
+
+        // A tracking pixel's noscript fallback high in the head, as most sites have. It must not end the head early.
+        html.Append("<noscript><img height=\"1\" width=\"1\" src=\"/img/0.jpg\" alt=\"\"></noscript>");
 
         if (page.Title is not null)
         {

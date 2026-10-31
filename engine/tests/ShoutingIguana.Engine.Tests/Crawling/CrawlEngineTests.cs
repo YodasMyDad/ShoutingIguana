@@ -58,7 +58,8 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 
         // Every planted issue is reported exactly, and nothing else is.
         var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
-        Assert.Equal(expected.HtmlPages, analysis.PagesAnalyzed);
+        Assert.Equal(expected.AnalysedPages, analysis.PagesAnalyzed);
+        Assert.False(analysis.IsPartial);
         var mismatches = expected.CompareIssues(IssueReader.ReadCounts(path), IssueCatalog.All.Select(issue => issue.Id));
         Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
     }

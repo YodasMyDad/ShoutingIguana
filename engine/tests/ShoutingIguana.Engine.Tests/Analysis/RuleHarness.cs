@@ -29,7 +29,7 @@ internal sealed class RuleHarness(string site = "https://example.com")
 
         var uri = new Uri(normalized);
         _statuses.Add(new UrlStatus(Known: true, IsInternal: uri.Host == _host, IsHttps: uri.Scheme == Uri.UriSchemeHttps, Depth: 1,
-            Fetched: false, default, 0, false, IndexabilityReason.None, 0, null, InSitemap: false));
+            Fetched: false, default, 0, IsHtml: false, IsParsed: false, IndexabilityReason.None, 0, null, InSitemap: false));
         _ids[normalized] = _statuses.Count - 1;
         return _statuses.Count - 1;
     }
@@ -45,6 +45,7 @@ internal sealed class RuleHarness(string site = "https://example.com")
             Outcome = outcome,
             StatusCode = status,
             IsHtml = isHtml,
+            IsParsed = isHtml,
             IndexabilityReason = reason,
             RedirectTargetId = redirectTo is null ? 0 : Id(redirectTo),
             SizeBytes = size,

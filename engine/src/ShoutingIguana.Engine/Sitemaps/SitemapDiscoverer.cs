@@ -31,13 +31,18 @@ internal sealed class SitemapDiscoverer(
 {
     private const int MAX_SITEMAPS = 1_000;
     private const int MAX_NESTING = 3;
+    private const int MAX_REDIRECTS = 5;
     private const int BATCH_SIZE = 1_000;
 
     public async Task RunAsync(Uri startUri, CancellationToken cancellationToken)
     {
         var rules = await robots.GetAsync(startUri).WaitAsync(cancellationToken).ConfigureAwait(false);
         var candidates = rules.Sitemaps.Concat(options.ExtraSitemaps).ToList();
-        if (candidates.Count == 0)
+
+        // Nothing declares a sitemap, so try the conventional location. Analysis treats a failed probe as "no
+        // sitemap" rather than as a broken one.
+        var isProbe = candidates.Count == 0;
+        if (isProbe)
         {
             candidates.Add(startUri.GetLeftPart(UriPartial.Authority) + "/sitemap.xml");
         }
@@ -59,7 +64,7 @@ internal sealed class SitemapDiscoverer(
             var (url, parentId, level) = pending.Dequeue();
             sitemapCount++;
             var sitemapId = await writer.RegisterSitemapAsync(url, parentId, cancellationToken).ConfigureAwait(false);
-            var (children, listed) = await ReadSitemapAsync(new Uri(url), sitemapId, cancellationToken).ConfigureAwait(false);
+            var (children, listed) = await ReadSitemapAsync(new Uri(url), sitemapId, isProbe && level == 0, cancellationToken).ConfigureAwait(false);
             urlCount += listed;
 
             if (level >= MAX_NESTING)
@@ -83,7 +88,7 @@ internal sealed class SitemapDiscoverer(
             urlCount > 0 ? $"Read {sitemapCount} sitemap(s) listing {urlCount:N0} URLs." : "No sitemap URLs found."));
     }
 
-    private async Task<(List<string> Children, int UrlCount)> ReadSitemapAsync(Uri uri, int sitemapId, CancellationToken cancellationToken)
+    private async Task<(List<string> Children, int UrlCount)> ReadSitemapAsync(Uri uri, int sitemapId, bool isProbe, CancellationToken cancellationToken)
     {
         List<string> children = [];
         var urlCount = 0;
@@ -93,11 +98,13 @@ internal sealed class SitemapDiscoverer(
 
         try
         {
-            using var lease = await gates.For(uri).AcquireAsync(cancellationToken).ConfigureAwait(false);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(60, options.RequestTimeoutSeconds * 3)));
 
-            using var response = await fetcher.SendAsync(uri, timeout.Token).ConfigureAwait(false);
+            var (response, lease, location) = await SendFollowingRedirectsAsync(uri, timeout.Token).ConfigureAwait(false);
+            using var heldLease = lease;
+            using var disposeResponse = response;
+            uri = location;
             statusCode = (int)response.StatusCode;
             if (statusCode is < 200 or >= 300)
             {
@@ -150,8 +157,40 @@ internal sealed class SitemapDiscoverer(
             logger.LogWarning("Sitemap {Url} could not be read: {Error}", uri, exception.Message);
         }
 
-        await writer.CompleteSitemapAsync(new SitemapRecord(sitemapId, statusCode, isIndex, urlCount, error), cancellationToken).ConfigureAwait(false);
+        await writer.CompleteSitemapAsync(new SitemapRecord(sitemapId, statusCode, isIndex, urlCount, error, isProbe), cancellationToken).ConfigureAwait(false);
         return (children, urlCount);
+    }
+
+    /// <summary>
+    /// Sitemaps often redirect (Yoast's /sitemap.xml goes to /sitemap_index.xml, http to https), so follow up to
+    /// <see cref="MAX_REDIRECTS"/> hops. The gate lease for the last hop is held while its body is read.
+    /// </summary>
+    private async Task<(HttpResponseMessage Response, HostGateLease Lease, Uri Location)> SendFollowingRedirectsAsync(Uri uri, CancellationToken cancellationToken)
+    {
+        for (var hop = 0; ; hop++)
+        {
+            var lease = await gates.For(uri).AcquireAsync(cancellationToken).ConfigureAwait(false);
+            HttpResponseMessage response;
+            try
+            {
+                response = await fetcher.SendAsync(uri, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                lease.Dispose();
+                throw;
+            }
+
+            if ((int)response.StatusCode is < 300 or >= 400 || hop == MAX_REDIRECTS || response.Headers.Location is not { } location ||
+                !Uri.TryCreate(uri, location, out var next) || !UrlNormalizer.IsHttp(next))
+            {
+                return (response, lease, uri);
+            }
+
+            response.Dispose();
+            lease.Dispose();
+            uri = next;
+        }
     }
 
     /// <summary>A .gz sitemap served as a file, as opposed to plain XML that was only gzipped in transit.</summary>

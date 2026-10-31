@@ -40,7 +40,7 @@ public static class CrawlStatsReader
         Rows(connection, """
             SELECT COUNT(*), COALESCE(SUM(r.indexability = 0), 0), COALESCE(AVG(r.response_ms), 0), COALESCE(SUM(r.size_bytes), 0)
             FROM responses r JOIN urls u ON u.id = r.url_id
-            WHERE u.is_internal = 1 AND r.is_html = 1 AND r.outcome = 0
+            WHERE u.is_internal = 1 AND r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL
             """, reader =>
         {
             htmlPages = reader.GetInt64(0);
@@ -64,7 +64,7 @@ public static class CrawlStatsReader
             SitemapUrlCount = Count(connection, "SELECT COUNT(DISTINCT url_id) FROM sitemap_urls"),
             UnlinkedPageCount = Count(connection, $"""
                 SELECT COUNT(*) FROM urls u JOIN responses r ON r.url_id = u.id
-                WHERE u.is_internal = 1 AND u.depth >= {CrawlDepth.UNLINKED} AND r.is_html = 1 AND r.outcome = 0
+                WHERE u.is_internal = 1 AND u.depth >= {CrawlDepth.UNLINKED} AND r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL
                 """),
             HtmlPageCount = htmlPages,
             IndexablePageCount = indexable,

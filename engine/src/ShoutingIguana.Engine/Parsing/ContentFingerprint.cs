@@ -37,14 +37,22 @@ public static class ContentFingerprint
             }
 
             var length = 0;
-            while (index < text.Length && char.IsLetterOrDigit(text[index]))
+            if (IsUnspaced(text[index]))
             {
-                if (length < MAX_TOKEN_CHARS)
+                // Chinese, Japanese, Thai and their neighbours don't put spaces between words; each character counts as one.
+                token[length++] = text[index++];
+            }
+            else
+            {
+                while (index < text.Length && char.IsLetterOrDigit(text[index]) && !IsUnspaced(text[index]))
                 {
-                    token[length++] = char.ToLowerInvariant(text[index]);
-                }
+                    if (length < MAX_TOKEN_CHARS)
+                    {
+                        token[length++] = char.ToLowerInvariant(text[index]);
+                    }
 
-                index++;
+                    index++;
+                }
             }
 
             var tokenBytes = MemoryMarshal.AsBytes(token[..length]);
@@ -92,6 +100,14 @@ public static class ContentFingerprint
 
     /// <summary>Number of differing bits: unrelated text is about 32 apart, near-identical text 6 or fewer.</summary>
     public static int Distance(ulong left, ulong right) => BitOperations.PopCount(left ^ right);
+
+    private static bool IsUnspaced(char character) => character is >= '฀' and <= '໿' // Thai, Lao
+        or >= 'က' and <= '႟' // Myanmar
+        or >= 'ក' and <= '៿' // Khmer
+        or >= '぀' and <= 'ヿ' // Hiragana, Katakana
+        or >= '㐀' and <= '䶿' // CJK extension A
+        or >= '一' and <= '鿿' // CJK unified ideographs
+        or >= '豈' and <= '﫿'; // CJK compatibility ideographs
 
     private static ulong Mix(ulong first, ulong second, ulong third)
     {

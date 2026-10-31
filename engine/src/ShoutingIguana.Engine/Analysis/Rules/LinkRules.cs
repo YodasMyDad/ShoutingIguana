@@ -7,9 +7,6 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// <summary>Where a page's hyperlinks go: broken targets, redirects, nofollow and links without text.</summary>
 internal sealed class LinkRules(UrlTable urls) : IPageRule
 {
-    /// <summary>Statuses many sites send crawlers but not people, so an external link that gets one isn't necessarily broken.</summary>
-    private static readonly HashSet<int> BOT_REFUSALS = [401, 403, 405, 429, 999];
-
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
         TargetSet brokenInternal = new(), brokenExternal = new(), redirects = new(), nofollow = new(), withoutText = new();
@@ -23,7 +20,7 @@ internal sealed class LinkRules(UrlTable urls) : IPageRule
             var target = urls[link.ToId];
             if (!target.IsInternal)
             {
-                if (target.IsBroken && !BOT_REFUSALS.Contains(target.StatusCode))
+                if (target.IsBroken)
                 {
                     brokenExternal.Add(link.ToId);
                 }
@@ -36,7 +33,8 @@ internal sealed class LinkRules(UrlTable urls) : IPageRule
                 nofollow.Add(link.ToId);
             }
 
-            if (string.IsNullOrWhiteSpace(link.Text))
+            // Head <link> elements such as rel="amphtml" have no text by design.
+            if (link.Position != LinkPosition.Head && string.IsNullOrWhiteSpace(link.Text))
             {
                 withoutText.Add(link.ToId);
             }

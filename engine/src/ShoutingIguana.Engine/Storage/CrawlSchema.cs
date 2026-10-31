@@ -6,7 +6,7 @@ namespace ShoutingIguana.Engine.Storage;
 /// </summary>
 internal static class CrawlSchema
 {
-    public const int VERSION = 1;
+    public const int VERSION = 2;
 
     public const string CREATE = """
         CREATE TABLE crawl (
@@ -103,7 +103,9 @@ internal static class CrawlSchema
             status_code INTEGER,
             is_index INTEGER NOT NULL DEFAULT 0,
             url_count INTEGER NOT NULL DEFAULT 0,
-            error TEXT
+            error TEXT,
+            -- 1 when nothing declared a sitemap and the crawler tried the conventional /sitemap.xml.
+            is_probe INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE TABLE sitemap_urls (

@@ -89,7 +89,7 @@ internal static class IssuesCommand
         {
             csv.WriteRow("issue", "severity", "category", "title", "url", "detail", "related_url");
             long rows = 0;
-            foreach (var row in IssueReader.ReadAll(path).Where(row => issueId is null || row.Issue == issueId))
+            foreach (var row in IssueReader.ReadAll(path, issueId))
             {
                 var issue = IssueCatalog.Find(row.Issue);
                 csv.WriteRow(row.Issue, issue?.Severity.ToString(), issue?.Category.DisplayName(), issue?.Title, row.Url, row.Detail, row.RelatedUrl);

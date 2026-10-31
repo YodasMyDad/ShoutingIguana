@@ -83,9 +83,9 @@ internal sealed class WriterStatements : IDisposable
             RETURNING id
             """, "$url", "$parent");
         _updateSitemap = Prepare(connection, """
-            UPDATE sitemaps SET status_code = $status, is_index = $isIndex, url_count = $count, error = $error
+            UPDATE sitemaps SET status_code = $status, is_index = $isIndex, url_count = $count, error = $error, is_probe = $isProbe
             WHERE id = $id
-            """, "$status", "$isIndex", "$count", "$error", "$id");
+            """, "$status", "$isIndex", "$count", "$error", "$isProbe", "$id");
         _insertSitemapUrl = Prepare(connection,
             "INSERT OR IGNORE INTO sitemap_urls (sitemap_id, url_id) VALUES ($sitemap, $url)", "$sitemap", "$url");
         _updateCrawlStatus = Prepare(connection, """
@@ -160,7 +160,7 @@ internal sealed class WriterStatements : IDisposable
     }
 
     public void UpdateSitemap(SitemapRecord record) =>
-        Run(_updateSitemap, record.StatusCode, record.IsIndex, record.UrlCount, record.Error, record.Id);
+        Run(_updateSitemap, record.StatusCode, record.IsIndex, record.UrlCount, record.Error, record.IsProbe, record.Id);
 
     public void InsertSitemapUrl(int sitemapId, int urlId) => Run(_insertSitemapUrl, sitemapId, urlId);
 

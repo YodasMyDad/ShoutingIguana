@@ -1,7 +1,8 @@
 namespace ShoutingIguana.TestSite.Models;
 
 /// <summary>What a correct crawl of a <see cref="SyntheticSite"/> must find.</summary>
-/// <param name="HtmlPages">Internal 200 HTML pages: home, products, categories, static pages, sitemap-only orphans and plant pages.</param>
+/// <param name="HtmlPages">Internal 200 HTML pages the crawler parses: home, products, categories, static pages, sitemap-only orphans and plant pages.</param>
+/// <param name="AnalysedPages">HTML pages the analysis audits: all of them except Cloudflare-style /cdn-cgi/ endpoints.</param>
 /// <param name="BrokenUrls">Distinct internal URLs that return 404.</param>
 /// <param name="Redirects">Distinct redirecting URLs (single hops, both hops of each chain, and the redirect plants).</param>
 /// <param name="RobotsDisallowed">Distinct URLs blocked by robots.txt.</param>
@@ -13,6 +14,7 @@ namespace ShoutingIguana.TestSite.Models;
 /// </param>
 public sealed record SyntheticSiteExpectations(
     int HtmlPages,
+    int AnalysedPages,
     int Products,
     int Orphans,
     int BrokenUrls,

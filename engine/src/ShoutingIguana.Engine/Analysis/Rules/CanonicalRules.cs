@@ -70,7 +70,9 @@ internal sealed class CanonicalRules(UrlTable urls) : IPageRule
         {
             yield return new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, page.UrlId, detail, targetId);
         }
-        else if (target.Outcome is FetchOutcome.RobotsDisallowed or FetchOutcome.Blocked || target is { IsPage: true, IsIndexablePage: false })
+        // Another site blocking or disallowing the crawler says nothing about whether Google can see the page.
+        else if ((target.IsInternal && target.Outcome is FetchOutcome.RobotsDisallowed or FetchOutcome.Blocked) ||
+                 target is { IsPage: true, IsIndexablePage: false })
         {
             yield return new IssueHit(IssueCatalog.CANONICAL_TO_NON_INDEXABLE, page.UrlId, detail, targetId);
         }

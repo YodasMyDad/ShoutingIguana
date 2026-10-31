@@ -9,11 +9,12 @@ namespace ShoutingIguana.Engine.Parsing;
 /// <summary>
 /// Parses a page once with a spec-compliant HTML5 parser and returns its facts and links. The tree is the
 /// one a browser builds, so a canonical pushed into the body by a stray element in the head is reported
-/// as outside the head, exactly as Google sees it.
+/// as outside the head, exactly as Google sees it. Parsing runs with scripting on, as in browsers and Google's
+/// renderer: noscript content is then text, so a tracking pixel's &lt;noscript&gt;&lt;img&gt; in the head doesn't end it.
 /// </summary>
 public static class HtmlPageParser
 {
-    private static readonly ThreadLocal<HtmlParser> PARSER = new(() => new HtmlParser());
+    private static readonly ThreadLocal<HtmlParser> PARSER = new(() => new HtmlParser(new HtmlParserOptions { IsScripting = true }));
 
     public static ParsedPage Parse(string html, Uri pageUri, IReadOnlyList<ResponseHeader> headers, string robotsToken)
     {

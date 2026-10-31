@@ -36,6 +36,10 @@ internal static class AnalyzeCommand
         {
             var summary = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(path, cancellationToken: cancellationToken);
             Console.WriteLine($"Analysed {summary.PagesAnalyzed:N0} pages in {summary.Duration.TotalSeconds:N1} s.");
+            if (summary.IsPartial)
+            {
+                Console.WriteLine("  The crawl didn't finish, so orphan and sitemap-coverage checks were skipped.");
+            }
             IssueSummaryPrinter.Print(summary.Issues);
             return true;
         }

@@ -26,7 +26,7 @@ internal sealed class UrlTable
         StartId = startId;
 
         var home = startId == 0 ? 0 : TraceRedirects(startId).FinalId;
-        HomeId = home != 0 && _statuses[home].IsPage ? home : startId;
+        HomeId = home != 0 && _statuses[home] is { IsInternal: true, IsPage: true } ? home : startId;
     }
 
     public int StartId { get; }
@@ -68,6 +68,28 @@ internal sealed class UrlTable
                 _pageTargets.Add(link.ToId))
             {
                 _nofollowInlinks[link.ToId]++;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Credits links to a redirecting URL to where the redirects end, so a menu link to /services that redirects to
+    /// /services/ still counts for /services/. Call once, after every page has been counted.
+    /// </summary>
+    public void CreditRedirectTargets()
+    {
+        for (var id = 1; id < _statuses.Length; id++)
+        {
+            if (_statuses[id] is not { Fetched: true, Outcome: FetchOutcome.Redirect } || (_followedInlinks[id] == 0 && _nofollowInlinks[id] == 0))
+            {
+                continue;
+            }
+
+            var final = TraceRedirects(id).FinalId;
+            if (final != id)
+            {
+                _followedInlinks[final] += _followedInlinks[id];
+                _nofollowInlinks[final] += _nofollowInlinks[id];
             }
         }
     }

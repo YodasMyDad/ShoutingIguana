@@ -26,8 +26,13 @@ internal static class RichResultRequirements
     /// <summary>Adds "Type: needs a, b" for every top-level entity that lacks required properties.</summary>
     public static void Check(JsonElement root, List<string> problems)
     {
+        HashSet<string> referenced = new(StringComparer.Ordinal);
+        CollectReferences(root, referenced);
         foreach (var entity in TopLevelEntities(root))
         {
+            // A node that another node points at by @id is nested in effect (Yoast and Rank Math build graphs this
+            // way), so a rating attached to a product like that doesn't need its own itemReviewed.
+            var isReferenced = entity.TryGetProperty("@id", out var id) && id.ValueKind == JsonValueKind.String && referenced.Contains(id.GetString()!);
             foreach (var type in Types(entity))
             {
                 if (!REQUIRED.TryGetValue(type, out var required))
@@ -35,7 +40,9 @@ internal static class RichResultRequirements
                     continue;
                 }
 
-                var absent = required.Where(options => !options.Split('|').Any(property => HasValue(entity, property))).ToList();
+                var absent = required
+                    .Where(options => !(isReferenced && options == "itemReviewed") && !options.Split('|').Any(property => HasValue(entity, property)))
+                    .ToList();
                 if (absent.Count > 0)
                 {
                     problems.Add($"{type}: needs {string.Join(", ", absent.Select(options => options.Replace("|", " or ", StringComparison.Ordinal)))}");
@@ -58,6 +65,35 @@ internal static class RichResultRequirements
                     yield return node;
                 }
             }
+        }
+    }
+
+    /// <summary>@id values used as references: objects whose only property is @id.</summary>
+    private static void CollectReferences(JsonElement element, HashSet<string> referenced)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                var properties = element.EnumerateObject().ToList();
+                if (properties is [{ Name: "@id", Value.ValueKind: JsonValueKind.String } reference])
+                {
+                    referenced.Add(reference.Value.GetString()!);
+                    break;
+                }
+
+                foreach (var property in properties)
+                {
+                    CollectReferences(property.Value, referenced);
+                }
+
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    CollectReferences(item, referenced);
+                }
+
+                break;
         }
     }
 

@@ -37,14 +37,18 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     private AnalysisSummary Analyze(string databasePath, AnalysisSettings settings, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
+        CrawlStatus status;
         using (var probe = AnalysisReader.Open(databasePath))
         {
-            if (probe.ReadStatus() is CrawlStatus.Running or CrawlStatus.Paused)
+            status = probe.ReadStatus();
+            if (status is CrawlStatus.Running or CrawlStatus.Paused)
             {
                 throw new InvalidOperationException(
                     "This crawl is still running, or was interrupted. Finish it with --resume (or stop it) before analysing.");
             }
         }
+
+        var crawlComplete = false;
 
         using var writer = IssueWriter.Open(databasePath, _logger);
         long pages = 0;
@@ -54,6 +58,9 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             var options = reader.ReadOptions();
             UrlNormalizer.TryNormalize(options.StartUrl, out var startUrl);
             var scope = new CrawlScope(new Uri(startUrl), options.IncludeSubdomains, options.StayInStartFolder);
+
+            // Orphans and sitemap coverage need every page and sitemap; a stopped crawl can't tell missing from not yet seen.
+            crawlComplete = status == CrawlStatus.Completed && (reader.ReadSitemapsDone() || !options.DiscoverSitemaps);
             var hreflang = new HreflangRules(urls);
             IPageRule[] pageRules =
             [
@@ -64,9 +71,9 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             ];
             ISiteRule[] siteRules =
             [
-                new InlinkRules(urls), new DuplicateRules(settings), new FragmentRules(urls, reader), hreflang,
+                new InlinkRules(urls, crawlComplete), new DuplicateRules(settings), new FragmentRules(urls, reader), hreflang,
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls),
-                new SitemapRules(urls, reader.ReadSitemaps(), options), new RobotsTxtRules(urls, reader.ReadRobots(), scope)
+                new SitemapRules(urls, reader.ReadSitemaps(), options, crawlComplete), new RobotsTxtRules(urls, reader.ReadRobots(), scope)
             ];
 
             foreach (var page in reader.ReadPages())
@@ -104,6 +111,6 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 
         _logger.LogInformation("Analysed {Pages} pages in {Elapsed}: {Flagged} issues across {Types} checks",
             pages, stopwatch.Elapsed, issues.Sum(issue => issue.Count), issues.Count(issue => issue.Count > 0));
-        return new AnalysisSummary(pages, issues, stopwatch.Elapsed);
+        return new AnalysisSummary(pages, issues, stopwatch.Elapsed, IsPartial: !crawlComplete);
     }
 }

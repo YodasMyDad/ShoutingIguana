@@ -2,6 +2,7 @@ using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Parsing;
 using ShoutingIguana.Engine.Parsing.Models;
 
 namespace ShoutingIguana.Engine.Tests.Analysis;
@@ -204,6 +205,46 @@ public sealed class PageRuleTests
 
         Assert.Equal([IssueCatalog.NO_HTTPS], Issues(rules, home));
         Assert.Empty(Issues(rules, other));
+    }
+
+    [Fact]
+    public void HeadLinksAndBotRefusalsAreNotLinkProblems()
+    {
+        var site = new RuleHarness();
+        site.Fetched("https://shop.example/dp/123", FetchOutcome.ServerError, 503);
+        site.Fetched($"{site.Site}/amp/page", FetchOutcome.Success, 200, isHtml: true);
+        var page = site.Page($"{site.Site}/page", RuleHarness.Html($"<link rel=\"amphtml\" href=\"{site.Site}/amp/page\">",
+            "<a href=\"https://shop.example/dp/123\">Buy on the shop</a>"));
+
+        Assert.Empty(Issues(new LinkRules(site.Table()), page));
+    }
+
+    [Fact]
+    public void StructuredDataSkipsTruncatedBlocksAndReferencedRatings()
+    {
+        var site = new RuleHarness();
+        var truncated = site.Page($"{site.Site}/a", RuleHarness.Html(
+            $"<script type=\"application/ld+json\">{{\"@type\":\"ItemList\",\"x\":\"{new string('x', PageWalker.MAX_JSON_LD_CHARS)}\"}}</script>"));
+        var graph = site.Page($"{site.Site}/b", RuleHarness.Html("""
+            <script type="application/ld+json">{"@context":"https://schema.org","@graph":[
+              {"@type":"Product","@id":"#product","name":"Widget","aggregateRating":{"@id":"#rating"}},
+              {"@type":"AggregateRating","@id":"#rating","ratingValue":4.5,"reviewCount":12}]}</script>
+            """));
+        var rules = new StructuredDataRules();
+
+        Assert.Empty(Issues(rules, truncated));
+        Assert.Empty(Issues(rules, graph));
+    }
+
+    [Fact]
+    public void UrlLengthIsMeasuredAsPeopleReadIt()
+    {
+        var site = new RuleHarness("https://пример.рф");
+        var cyrillic = site.Page($"{site.Site}/{string.Concat(Enumerable.Repeat("каталог/", 10))}", RuleHarness.Html());
+
+        // 80 readable characters of path, but 480 once percent-encoded.
+        Assert.True(cyrillic.Url.Length > 400);
+        Assert.Empty(Issues(new UrlRules(SETTINGS), cyrillic));
     }
 
     private static List<IssueDefinition> Issues(IPageRule rule, AnalyzedPage page) => rule.Check(page).Select(hit => hit.Issue).ToList();

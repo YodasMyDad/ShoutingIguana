@@ -38,6 +38,14 @@ public sealed class ContentFingerprintTests
     [Fact]
     public void EmptyTextHasNoFingerprint() => Assert.Equal(default, ContentFingerprint.Compute(string.Empty));
 
+    [Fact]
+    public void UnspacedScriptsCountEachCharacterAsAWord()
+    {
+        Assert.Equal(7, ContentFingerprint.Compute("我们的产品很好").WordCount);
+        Assert.Equal(5, ContentFingerprint.Compute("新しい shoes 靴").WordCount);
+        Assert.Equal(2, ContentFingerprint.Compute("hello world").WordCount);
+    }
+
     private static string Text(int seed, int words)
     {
         var random = new Random(seed);

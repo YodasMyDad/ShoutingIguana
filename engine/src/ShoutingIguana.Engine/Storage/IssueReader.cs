@@ -72,8 +72,8 @@ public static class IssueReader
         return ReadRows(command).ToList();
     }
 
-    /// <summary>Every flagged URL, streamed in issue then crawl order, for exports.</summary>
-    public static IEnumerable<IssueRow> ReadAll(string databasePath)
+    /// <summary>Every flagged URL (or those for one issue), streamed in issue then crawl order, for exports.</summary>
+    public static IEnumerable<IssueRow> ReadAll(string databasePath, string? issueId = null)
     {
         using var connection = CrawlDatabase.OpenReader(databasePath);
         if (!HasAnalysis(connection))
@@ -83,6 +83,11 @@ public static class IssueReader
 
         using var command = connection.CreateCommand();
         command.CommandText = $"{SELECT_ROWS} ORDER BY i.issue, i.url_id";
+        if (issueId is not null)
+        {
+            command.CommandText = $"{SELECT_ROWS} WHERE i.issue = $issue ORDER BY i.url_id";
+            command.Parameters.AddWithValue("$issue", issueId);
+        }
         foreach (var row in ReadRows(command))
         {
             yield return row;

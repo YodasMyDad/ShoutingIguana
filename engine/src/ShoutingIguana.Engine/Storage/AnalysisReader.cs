@@ -15,6 +15,12 @@ namespace ShoutingIguana.Engine.Storage;
 /// <summary>Read-only access to a stored crawl for the analysis pass.</summary>
 internal sealed class AnalysisReader : IDisposable
 {
+    /// <summary>
+    /// A page of the site to audit: its HTML was parsed (status-checked URLs have no word count), and it isn't one of
+    /// Cloudflare's /cdn-cgi/ endpoints, such as the email-protection page every obfuscated address links to.
+    /// </summary>
+    private const string SITE_PAGE = "r.word_count IS NOT NULL AND instr(u.url, '/cdn-cgi/') = 0";
+
     private readonly SqliteConnection _connection;
     private readonly SqliteCommand _links;
     private readonly SqliteParameter _linksFromId;
@@ -50,7 +56,7 @@ internal sealed class AnalysisReader : IDisposable
         Rows($"""
             SELECT u.id, u.is_internal, substr(u.url, 1, 6) = 'https:', u.depth, u.source,
                    r.url_id IS NOT NULL, r.outcome, r.status_code, r.is_html, r.indexability_reason,
-                   r.redirect_url_id, r.size_bytes
+                   r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0)
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id
             """, reader =>
         {
@@ -70,6 +76,7 @@ internal sealed class AnalysisReader : IDisposable
                 Outcome: fetched ? (FetchOutcome)reader.GetInt32(6) : default,
                 StatusCode: reader.IsDBNull(7) ? 0 : reader.GetInt32(7),
                 IsHtml: fetched && reader.GetBoolean(8),
+                IsParsed: fetched && reader.GetBoolean(12),
                 IndexabilityReason: fetched ? (IndexabilityReason)reader.GetInt32(9) : default,
                 RedirectTargetId: reader.IsDBNull(10) ? 0 : reader.GetInt32(10),
                 SizeBytes: reader.IsDBNull(11) ? null : reader.GetInt64(11),
@@ -79,7 +86,10 @@ internal sealed class AnalysisReader : IDisposable
         return new UrlTable(statuses, startId);
     }
 
-    /// <summary>Every successful internal HTML page with its facts and outgoing links, in crawl order.</summary>
+    /// <summary>
+    /// Every internal HTML page whose body was parsed, with its facts and outgoing links, in crawl order. URLs that were
+    /// only status-checked (outside the start folder, iframes) have header facts alone and aren't pages to audit.
+    /// </summary>
     public IEnumerable<AnalyzedPage> ReadPages()
     {
         using var command = _connection.CreateCommand();
@@ -88,7 +98,7 @@ internal sealed class AnalysisReader : IDisposable
             FROM responses r
             JOIN urls u ON u.id = r.url_id
             JOIN response_details d ON d.url_id = r.url_id
-            WHERE u.is_internal = 1 AND r.is_html = 1 AND r.outcome = {(int)FetchOutcome.Success}
+            WHERE u.is_internal = 1 AND r.is_html = 1 AND r.outcome = {(int)FetchOutcome.Success} AND {SITE_PAGE}
             ORDER BY r.url_id
             """;
 
@@ -128,6 +138,21 @@ internal sealed class AnalysisReader : IDisposable
         return _details.ExecuteScalar() is byte[] data ? BlobCodec.DecodeDetails(data).Page : null;
     }
 
+    /// <summary>Whether sitemap discovery finished, so coverage checks against the sitemaps are meaningful.</summary>
+    public bool ReadSitemapsDone() => CrawlDatabase.Scalar(_connection, "SELECT sitemaps_done FROM crawl WHERE id = 1") is 1L;
+
+    /// <summary>Links from one page to a #fragment on another, streamed for the fragment check.</summary>
+    public IEnumerable<(int From, int To, string Fragment)> ReadFragmentLinks()
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"SELECT from_id, to_id, fragment FROM links WHERE kind = {(int)LinkKind.Hyperlink} AND fragment IS NOT NULL AND from_id <> to_id";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            yield return (reader.GetInt32(0), reader.GetInt32(1), reader.GetString(2));
+        }
+    }
+
     public CrawlOptions ReadOptions()
     {
         var json = CrawlDatabase.Scalar(_connection, "SELECT options_json FROM crawl WHERE id = 1") as string
@@ -160,12 +185,13 @@ internal sealed class AnalysisReader : IDisposable
     public IReadOnlyList<StoredSitemap> ReadSitemaps()
     {
         List<StoredSitemap> sitemaps = [];
-        Rows("SELECT url, status_code, is_index, url_count, error FROM sitemaps ORDER BY id", reader => sitemaps.Add(new StoredSitemap(
+        Rows("SELECT url, status_code, is_index, url_count, error, is_probe FROM sitemaps ORDER BY id", reader => sitemaps.Add(new StoredSitemap(
             reader.GetString(0),
             reader.IsDBNull(1) ? null : reader.GetInt32(1),
             reader.GetBoolean(2),
             reader.GetInt32(3),
-            reader.IsDBNull(4) ? null : reader.GetString(4))));
+            reader.IsDBNull(4) ? null : reader.GetString(4),
+            reader.GetBoolean(5))));
         return sitemaps;
     }
 

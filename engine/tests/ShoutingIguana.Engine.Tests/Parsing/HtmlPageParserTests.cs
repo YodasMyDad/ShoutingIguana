@@ -161,6 +161,31 @@ public sealed class HtmlPageParserTests
         Assert.Equal(LinkKind.Canonical, Assert.Single(parsed.Links).Kind);
     }
 
+    [Fact]
+    public void NoscriptPixelsInTheHeadDoNotPushLaterTagsIntoTheBody()
+    {
+        // Facebook's pixel snippet, placed above the canonical as many sites do.
+        var parsed = Parse("""
+            <!DOCTYPE html><html><head><meta charset="utf-8">
+            <noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1&ev=PageView"></noscript>
+            <link rel="canonical" href="https://example.com/dir/page">
+            <link rel="alternate" hreflang="de" href="https://example.com/de/page">
+            </head><body><p>Text</p></body></html>
+            """);
+
+        Assert.True(Assert.Single(parsed.Facts.Canonicals).InHead);
+        Assert.True(Assert.Single(parsed.Facts.Hreflangs).InHead);
+        Assert.Empty(parsed.Facts.Images);
+    }
+
+    [Fact]
+    public void LogoHeadingsUseTheImageAltText()
+    {
+        var facts = Parse("<html><body><h1><a href=\"/\"><img src=\"/logo.png\" alt=\"Acme Tools\"></a></h1></body></html>").Facts;
+
+        Assert.Equal("Acme Tools", Assert.Single(facts.Headings).Text);
+    }
+
     private static ParsedPage Parse(string html, IReadOnlyList<ResponseHeader>? headers = null) =>
         HtmlPageParser.Parse(html, PAGE, headers ?? [], TOKEN);
 }

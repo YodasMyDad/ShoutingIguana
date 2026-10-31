@@ -22,7 +22,7 @@ internal sealed class RedirectRules(UrlTable urls) : ISiteRule
 
             if (url.RedirectTargetId == 0)
             {
-                yield return new IssueHit(IssueCatalog.REDIRECT_BROKEN, id, $"HTTP {url.StatusCode} without a Location header");
+                yield return new IssueHit(IssueCatalog.REDIRECT_BROKEN, id, $"HTTP {url.StatusCode} without a usable Location header");
                 continue;
             }
 

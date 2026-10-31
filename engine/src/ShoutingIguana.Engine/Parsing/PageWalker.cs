@@ -23,7 +23,8 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
     private const int MAX_META_TAGS = 200;
     internal const int MAX_IDS = 5_000;
     private const int MAX_JSON_LD_BLOCKS = 50;
-    private const int MAX_JSON_LD_CHARS = 200_000;
+    /// <summary>Longer blocks are cut to this length, which leaves them unparseable; rules skip blocks this long.</summary>
+    internal const int MAX_JSON_LD_CHARS = 200_000;
     private const string WHITESPACE = " \t\n\r\f";
 
     private static readonly HashSet<string> BLOCK_ELEMENTS = new(
@@ -167,7 +168,7 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
             case "h1" or "h2" or "h3" or "h4" or "h5" or "h6":
                 if (Headings.Count < MAX_HEADINGS)
                 {
-                    Headings.Add(new HeadingFact(name[1] - '0', Clean(element.TextContent, MAX_HEADING_CHARS)));
+                    Headings.Add(new HeadingFact(name[1] - '0', HeadingText(element)));
                 }
 
                 break;
@@ -215,6 +216,15 @@ internal sealed class PageWalker(Uri baseUri, string robotsToken, TextAccumulato
         {
             text.AppendSeparator();
         }
+    }
+
+    /// <summary>A heading's text, or for a logo heading (an image and no text) the image's alt, as screen readers announce it.</summary>
+    private static string HeadingText(IElement heading)
+    {
+        var text = Clean(heading.TextContent, MAX_HEADING_CHARS);
+        return text.Length == 0 && heading.QuerySelector("img[alt]")?.GetAttribute("alt") is { } alt
+            ? Clean(alt, MAX_HEADING_CHARS)
+            : text;
     }
 
     private static WalkContext ApplyRegionHints(IElement element, WalkContext context)

@@ -46,7 +46,7 @@ public sealed class SiteRuleTests
         Assert.Contains(new IssueHit(IssueCatalog.REDIRECT_DOWNGRADE, downgrade, null, site.Id("http://example.com/insecure")), hits);
         Assert.Contains(hits, hit => hit.Issue == IssueCatalog.REDIRECT_TEMPORARY && hit.UrlId == temporary);
         Assert.Contains(hits, hit => hit.Issue == IssueCatalog.REDIRECT_BROKEN && hit.UrlId == broken);
-        Assert.Equal("HTTP 301 without a Location header", hits.Single(hit => hit.UrlId == dangling).Detail);
+        Assert.Equal("HTTP 301 without a usable Location header", hits.Single(hit => hit.UrlId == dangling).Detail);
         Assert.Equal(4, hits.Count);
     }
 
@@ -68,6 +68,12 @@ public sealed class SiteRuleTests
         var unreachable = Assert.Single(hits);
         Assert.Equal(IssueCatalog.ROBOTS_TXT_UNREACHABLE, unreachable.Issue);
         Assert.Equal("https://example.com/robots.txt (HTTP 503)", unreachable.Detail);
+
+        // Google treats 429 like a server error; a redirect loop is handled as "no rules", as the crawler does.
+        var limited = new RobotsTxtRules(site.Table(), [new("https://example.com", 429, null, null, 0)], scope).Finish().Single();
+        var looping = new RobotsTxtRules(site.Table(), [new("https://example.com", null, null, "More than 5 redirects", 0)], scope).Finish().Single();
+        Assert.Equal(IssueCatalog.ROBOTS_TXT_UNREACHABLE, limited.Issue);
+        Assert.Equal(IssueCatalog.ROBOTS_TXT_MISSING, looping.Issue);
     }
 
     [Fact]
@@ -85,7 +91,7 @@ public sealed class SiteRuleTests
             new($"{site.Site}/sitemap-old.xml", 404, false, 0, "HTTP 404")
         ];
 
-        var hits = new SitemapRules(urls, sitemaps, new CrawlOptions { StartUrl = site.Site }).Finish().ToList();
+        var hits = new SitemapRules(urls, sitemaps, new CrawlOptions { StartUrl = site.Site }, crawlComplete: true).Finish().ToList();
 
         Assert.Contains(hits, hit => hit.Issue == IssueCatalog.NOT_IN_SITEMAP && hit.UrlId == unlisted);
         Assert.Equal("The URL is noindex", hits.Single(hit => hit.Issue == IssueCatalog.SITEMAP_NON_INDEXABLE).Detail);
@@ -96,15 +102,20 @@ public sealed class SiteRuleTests
     }
 
     [Fact]
-    public void NoSitemapIsOneNoticeAndNothingCountsAsMissingFromIt()
+    public void AFailedGuessAtSitemapXmlMeansNoSitemapNotABrokenOne()
     {
         var site = new RuleHarness();
         site.Ok($"{site.Site}/");
         site.Ok($"{site.Site}/page");
         var urls = site.Table();
+        StoredSitemap[] probe = [new($"{site.Site}/sitemap.xml", 404, false, 0, "HTTP 404", IsProbe: true)];
+        var options = new CrawlOptions { StartUrl = site.Site };
 
-        Assert.Equal([IssueCatalog.SITEMAP_MISSING], new SitemapRules(urls, [], new CrawlOptions { StartUrl = site.Site }).Finish().Select(hit => hit.Issue));
-        Assert.Empty(new SitemapRules(urls, [], new CrawlOptions { StartUrl = site.Site, DiscoverSitemaps = false }).Finish());
+        Assert.Equal([IssueCatalog.SITEMAP_MISSING], new SitemapRules(urls, probe, options, crawlComplete: true).Finish().Select(hit => hit.Issue));
+        Assert.Empty(new SitemapRules(urls, probe, options with { DiscoverSitemaps = false }, crawlComplete: true).Finish());
+
+        // A stopped crawl can't know what's missing yet.
+        Assert.Empty(new SitemapRules(urls, probe, options, crawlComplete: false).Finish());
     }
 
     [Fact]
@@ -157,15 +168,24 @@ public sealed class SiteRuleTests
     public void OrphansAreSitemapPagesNoCrawledPageLinksTo()
     {
         var site = new RuleHarness();
-        var home = site.Page($"{site.Site}/", RuleHarness.Html(body: "<a href=\"/linked\">Linked</a><a href=\"/only-nofollow\" rel=\"nofollow\">Hidden</a>"));
+        var home = site.Page($"{site.Site}/", RuleHarness.Html(body:
+            "<a href=\"/linked\">Linked</a><a href=\"/only-nofollow\" rel=\"nofollow\">Hidden</a><a href=\"/services\">Services</a>"));
         site.Ok($"{site.Site}/linked", inSitemap: true);
         site.Ok($"{site.Site}/only-nofollow", inSitemap: true);
+        site.Fetched($"{site.Site}/services", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/services/");
+        site.Ok($"{site.Site}/services/", inSitemap: true);
         var orphan = site.Ok($"{site.Site}/orphan", inSitemap: true);
         site.Ok($"{site.Site}/", inSitemap: true);
-        var rules = new InlinkRules(site.Table());
+        var urls = site.Table();
+        var rules = new InlinkRules(urls, crawlComplete: true);
 
         rules.Observe(home);
 
+        // /services/ is only linked through its redirecting form, which still counts.
         Assert.Equal([orphan], rules.Finish().Select(hit => hit.UrlId));
+
+        var partial = new InlinkRules(urls, crawlComplete: false);
+        partial.Observe(home);
+        Assert.Empty(partial.Finish());
     }
 }

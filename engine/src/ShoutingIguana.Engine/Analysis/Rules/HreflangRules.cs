@@ -5,18 +5,20 @@ using ShoutingIguana.Engine.Parsing.Models;
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
 /// <summary>
-/// Hreflang annotations: valid codes, a self-reference, one URL per code, x-default and working targets on each page,
-/// then return links across pages. Only annotations in the head or an HTTP Link header count, as with Google.
+/// Hreflang annotations on indexable pages: valid codes, a self-reference, one URL per code, x-default and working
+/// targets on each page, then return links across pages. Only annotations in the head or an HTTP Link header count,
+/// as with Google, and only on indexable pages: Google reads hreflang on canonical pages, so a canonicalised variant
+/// that repeats its canonical's set is doing the recommended thing.
 /// </summary>
 internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
 {
-    /// <summary>The alternates each page declares, for the return-link check.</summary>
-    private readonly Dictionary<int, HashSet<int>> _alternates = [];
+    /// <summary>Every declared alternate as (page &lt;&lt; 32 | alternate): 8 bytes each, sorted for the return-link lookups.</summary>
+    private readonly List<long> _alternates = [];
 
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
         var all = page.Facts.Hreflangs;
-        if (all.Count == 0)
+        if (!page.IsIndexable || all.Count == 0)
         {
             yield break;
         }
@@ -72,8 +74,9 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
             {
                 broken.Add(target);
             }
-            else if (status.Outcome is FetchOutcome.Redirect or FetchOutcome.RobotsDisallowed or FetchOutcome.Blocked ||
-                     status is { IsInternal: true, IsPage: true, IsIndexablePage: false })
+            else if (status.Outcome is FetchOutcome.Redirect or FetchOutcome.RobotsDisallowed ||
+                     (status.Outcome == FetchOutcome.Blocked && status.IsInternal) ||
+                     status is { IsPage: true, IsIndexablePage: false })
             {
                 nonIndexable.Add(target);
             }
@@ -93,28 +96,30 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
 
     public void Observe(AnalyzedPage page)
     {
-        HashSet<int>? targets = null;
-        foreach (var target in HonouredTargets(page))
+        if (!page.IsIndexable)
         {
-            (targets ??= []).Add(target);
+            return;
         }
 
-        if (targets is not null)
+        foreach (var target in HonouredTargets(page).Distinct())
         {
-            _alternates[page.UrlId] = targets;
+            _alternates.Add(Pair(page.UrlId, target));
         }
     }
 
     public IEnumerable<IssueHit> Finish()
     {
-        foreach (var (pageId, targets) in _alternates)
+        _alternates.Sort();
+        for (var start = 0; start < _alternates.Count;)
         {
+            var pageId = (int)(_alternates[start] >> 32);
             TargetSet missing = new();
-            foreach (var target in targets)
+            var end = start;
+            for (; end < _alternates.Count && (int)(_alternates[end] >> 32) == pageId; end++)
             {
                 // Broken and non-indexable alternates are reported on their own; other sites' pages aren't parsed.
-                if (urls[target] is { IsInternal: true, IsIndexablePage: true } &&
-                    (!_alternates.TryGetValue(target, out var back) || !back.Contains(pageId)))
+                var target = (int)_alternates[end];
+                if (urls[target] is { IsInternal: true, IsIndexablePage: true } && _alternates.BinarySearch(Pair(target, pageId)) < 0)
                 {
                     missing.Add(target);
                 }
@@ -125,8 +130,12 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
                 yield return new IssueHit(IssueCatalog.HREFLANG_MISSING_RETURN, pageId,
                     $"{RuleText.Count(missing.Count, "alternate doesn't", "alternates don't")} link back", missing.First);
             }
+
+            start = end;
         }
     }
+
+    private static long Pair(int page, int target) => ((long)page << 32) | (uint)target;
 
     private static IEnumerable<int> HonouredTargets(AnalyzedPage page) => page.Links
         .Where(link => link.Kind == LinkKind.Hreflang && !link.Flags.HasFlag(LinkFlags.OutsideHead) && link.ToId != page.UrlId)

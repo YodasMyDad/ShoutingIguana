@@ -24,11 +24,12 @@ public sealed partial class SyntheticSite
     {
         List<Plant> plants = [];
 
-        void Page(string slug, string name, string[] issues, Func<PageSpec, PageSpec>? change = null, bool inSitemap = true, string contentType = HTML)
+        void Page(string slug, string name, string[] issues, Func<PageSpec, PageSpec>? change = null, bool inSitemap = true,
+            string contentType = HTML, bool linked = true)
         {
             var page = PlantPage(slug, name);
             page = change?.Invoke(page) ?? page;
-            plants.Add(new Plant(page.Path, 200, Linked: true, inSitemap, issues,
+            plants.Add(new Plant(page.Path, 200, linked, inSitemap, issues,
                 () => new SyntheticResponse(200, contentType, Render(page), null, null, SECURITY_HEADERS)));
         }
 
@@ -133,7 +134,25 @@ public sealed partial class SyntheticSite
                       $"<a href=\"{PLANTS_PATH}fragment-target#missing\">Missing section</a> " +
                       "<a href=\"#nowhere\">Nowhere on this page</a> <a href=\"#top\">Back to top</a></p>"
         });
-        Page("fragment-target", "Fragment target", [], page => page with { Content = "<h2 id=\"present\">Present section</h2>" + page.Content });
+        // Links that look like fragments but name no element: Cloudflare's email obfuscation and an Elementor popup.
+        Page("fragment-target", "Fragment target", [], page => page with
+        {
+            Content = "<h2 id=\"present\">Present section</h2>" + page.Content +
+                      "<p><a href=\"/cdn-cgi/l/email-protection#7a1f021b170a161f3a1f021b170a161f54191517\">[email&#160;protected]</a> " +
+                      "<a href=\"#elementor-action%3Aaction%3Dpopup%3Aopen%26settings%3DeyJpZCI6IjEyMyJ9\">Open the popup</a></p>"
+        });
+        plants.Add(new Plant("/cdn-cgi/l/email-protection", 200, Linked: false, InSitemap: false, [],
+            () => Html(Render(PlantPage("cdn-cgi-email", "Email Protection") with { Path = "/cdn-cgi/l/email-protection", Title = null })),
+            IsAnalysed: false));
+
+        // A page shown only in an iframe is status-checked, not crawled, so there's nothing to audit on it.
+        Page("iframe", "Embedded frame", [], page => page with { Content = page.Content + $"<iframe src=\"{PLANTS_PATH}embedded\" title=\"Embedded\"></iframe>" });
+        plants.Add(new Plant(PLANTS_PATH + "embedded", 200, Linked: false, InSitemap: false, [],
+            () => Html(Render(PlantPage("embedded", "Embedded") with { Title = null, Content = "<p>Too short.</p>" })), IsPage: false, IsAnalysed: false));
+
+        // The hub links the redirecting form; the page itself, in the sitemap, still counts as linked.
+        Other("trailing", 301, linked: true, [], () => Redirect(301, PLANTS_PATH + "trailing/"));
+        Page("trailing/", "Trailing slash page", [], linked: false);
 
         Page("Upper-Case", "Uppercase URL", ["url-uppercase"]);
         Page("under_score", "Underscore URL", ["url-underscores"]);
@@ -144,6 +163,10 @@ public sealed partial class SyntheticSite
         Page("hreflang-en", "Hreflang English", [], page => page with { ExtraHead = pair });
         Page("hreflang-fr", "Hreflang French", [], page => page with { ExtraHead = pair });
         Page("hreflang-lonely", "Hreflang alternate", []);
+
+        // A canonicalised variant repeating its canonical's set is what Google recommends, so only the canonical counts.
+        Page("hreflang-variant", "Hreflang variant", ["canonicalised-page"],
+            page => page with { Canonical = $"{_base}{PLANTS_PATH}hreflang-en", ExtraHead = pair }, inSitemap: false);
         Page("hreflang-no-return", "Hreflang without return", ["hreflang-missing-return"], page => page with
         {
             ExtraHead = Hreflang(("en", "hreflang-no-return"), ("de", "hreflang-lonely"), ("x-default", "hreflang-no-return"))

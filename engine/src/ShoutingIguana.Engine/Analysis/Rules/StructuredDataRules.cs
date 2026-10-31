@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Parsing;
 
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
@@ -13,7 +14,8 @@ internal sealed class StructuredDataRules : IPageRule
     {
         string? syntaxError = null;
         List<string> missing = [];
-        foreach (var block in page.Facts.JsonLd.Where(block => !string.IsNullOrWhiteSpace(block)))
+        // A block at the length cap was cut short when the page was parsed, so it can't be judged.
+        foreach (var block in page.Facts.JsonLd.Where(block => !string.IsNullOrWhiteSpace(block) && block.Length < PageWalker.MAX_JSON_LD_CHARS))
         {
             JsonDocument document;
             try

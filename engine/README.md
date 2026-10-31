@@ -67,9 +67,13 @@ file. It never refetches or reparses anything, so any crawl can be analysed agai
   severity (Error, Warning or Notice), title, why it matters, and how to fix it. Ids are stored in crawl files,
   so never change one.
 - **Scope.** Content checks (titles, descriptions, headings, word count, duplicates, Open Graph, URL style,
-  rich-result requirements) look only at indexable pages. Technical checks look at every crawled page.
-  Site-wide settings (HTTPS, security headers, robots.txt, sitemap files) are reported once, on the home page,
-  rather than on every URL.
+  rich-result requirements, hreflang) look only at indexable pages. Technical checks look at every page the
+  crawler parsed; status-checked URLs (outside the start folder, iframes) and Cloudflare's `/cdn-cgi/`
+  endpoints aren't audited as pages. Site-wide settings (HTTPS, security headers, robots.txt, sitemap files) are
+  reported once, on the home page, rather than on every URL. Orphan and sitemap-coverage checks need a complete
+  crawl, so a stopped crawl skips them and says so.
+- **Other sites.** A status many sites only send crawlers (401, 403, 405, 429, 503, 999) doesn't make an external
+  link, canonical, alternate or image "broken".
 - **Thresholds.** `AnalysisSettings` holds every limit (title 30–60 characters, description 70–155, 200
   words, images over 200 KB, pages slower than 1 s...). Each analysis stores the values it used.
 - **Atomic.** The issues are replaced in one transaction, so a failed or cancelled analysis keeps the
@@ -90,7 +94,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `response_details` | Brotli-compressed JSON of the headers and full `PageFacts` (headings, meta tags, images, hreflang, JSON-LD, ids) |
 | `response_html` | Compressed HTML, only with `--store-html` |
 | `links` | Every link: source, target, kind (link/image/script/canonical/hreflang/redirect...), rel flags, page region, anchor text |
-| `robots`, `sitemaps`, `sitemap_urls` | robots.txt per origin, sitemaps read, and which URLs each listed |
+| `robots`, `sitemaps`, `sitemap_urls` | robots.txt per origin, sitemaps read (after redirects; `is_probe` marks a guess at `/sitemap.xml` when nothing declared one), and which URLs each listed |
 | `issues` | One row per flagged URL and issue: a short detail, and the other URL involved (broken target, duplicate, canonical) |
 | `issue_types` | Every check that ran: its title, category, severity, description, fix, and how many URLs it flagged |
 | `analysis` | When the last analysis ran, with which engine version and settings |
@@ -117,7 +121,7 @@ On a 32-core Windows machine, at concurrency 16, against the local synthetic sit
 
 | Pages | URLs | Links | Crawl | Throughput | Peak memory | Growth over the crawl | Analysis | File |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 101,084 | 110,197 | 5.05 M | 46 s | 2,202 pages/s | 173 MB | none (−3 MB) | 6 s, 166 MB peak | 406 MB |
+| 101,088 | 110,203 | 5.05 M | 42 s | 2,424 pages/s | 172 MB | none (−8 MB) | 6 s, 161 MB peak | 406 MB |
 
 Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and
 unreachable URL make the crawler back off briefly, as it would on a real site. On real sites, speed is set by the
