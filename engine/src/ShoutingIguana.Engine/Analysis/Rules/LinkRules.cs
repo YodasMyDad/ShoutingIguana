@@ -4,7 +4,10 @@ using ShoutingIguana.Engine.Parsing.Models;
 
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
-/// <summary>Where a page's hyperlinks go: broken targets, redirects, nofollow and links without text.</summary>
+/// <summary>
+/// Where a page's hyperlinks go: broken targets, redirects, nofollow and links without text. A link whose redirects
+/// end at an error (or loop) is broken, not just a link to a redirect.
+/// </summary>
 internal sealed class LinkRules(UrlTable urls) : IPageRule
 {
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
@@ -18,9 +21,10 @@ internal sealed class LinkRules(UrlTable urls) : IPageRule
             }
 
             var target = urls[link.ToId];
+            var isBroken = urls.IsBrokenThroughRedirects(link.ToId);
             if (!target.IsInternal)
             {
-                if (target.IsBroken)
+                if (isBroken)
                 {
                     brokenExternal.Add(link.ToId);
                 }
@@ -28,7 +32,8 @@ internal sealed class LinkRules(UrlTable urls) : IPageRule
                 continue;
             }
 
-            if (link.Flags.HasFlag(LinkFlags.NoFollow))
+            // Nofollow on a link to an image or other file is harmless (images are indexed through <img>), as on gallery lightboxes.
+            if (link.Flags.HasFlag(LinkFlags.NoFollow) && !target.IsResource)
             {
                 nofollow.Add(link.ToId);
             }
@@ -39,7 +44,7 @@ internal sealed class LinkRules(UrlTable urls) : IPageRule
                 withoutText.Add(link.ToId);
             }
 
-            if (target.IsBroken)
+            if (isBroken)
             {
                 brokenInternal.Add(link.ToId);
             }
@@ -52,13 +57,13 @@ internal sealed class LinkRules(UrlTable urls) : IPageRule
         if (brokenInternal.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.BROKEN_INTERNAL_LINKS, page.UrlId,
-                RuleText.Count(brokenInternal.Count, "broken URL", "broken URLs"), brokenInternal.First);
+                RuleText.BrokenTargets(urls, brokenInternal, "broken URL", "broken URLs"), brokenInternal.First);
         }
 
         if (brokenExternal.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.BROKEN_EXTERNAL_LINKS, page.UrlId,
-                RuleText.Count(brokenExternal.Count, "broken URL", "broken URLs"), brokenExternal.First);
+                RuleText.BrokenTargets(urls, brokenExternal, "broken URL", "broken URLs"), brokenExternal.First);
         }
 
         if (redirects.Count > 0)

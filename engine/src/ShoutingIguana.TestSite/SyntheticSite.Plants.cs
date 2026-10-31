@@ -10,12 +10,18 @@ public sealed partial class SyntheticSite
 {
     private const int PLANT_WORDS = 250;
     private const int SLOW_PAGE_DELAY_MS = 1_200;
+    private const int LONG_CHAIN_HOPS = 22;
 
     private const string SHARED_DESCRIPTION =
         "Two planted pages share this exact meta description, so the duplicate description check has to flag both of them.";
 
     private const string LONG_SLUG =
         "a-deliberately-long-address-that-keeps-on-going-so-the-full-url-ends-up-past-the-recommended-length";
+
+    private static readonly string[] HINDI_WORDS = ["नमस्ते", "दुनिया", "किताब", "पानी", "घर", "बच्चे"];
+
+    /// <summary>Files only nofollow links point to, so never fetched: the full-size photo behind a gallery lightbox.</summary>
+    private static readonly string[] NOFOLLOW_ONLY_FILES = ["/img/5.jpg?width=1400"];
 
     private static readonly byte[] LARGE_IMAGE_BYTES = BuildImage(300 * 1024);
     private static readonly string LONG_ALT = string.Join(' ', Enumerable.Repeat("a very long alt text", 8));
@@ -44,6 +50,10 @@ public sealed partial class SyntheticSite
         });
         Page("title-short", "Short title", ["title-too-short"], page => page with { Title = "Short page" });
 
+        // Full-width characters take twice the room in results: 21 of them make a normal title, 48 a long one.
+        Page("title-wide", "Full-width title", [], page => page with { Title = "合成ストアの全角タイトル付き試験ページです" });
+        Page("title-wide-long", "Long full-width title", ["title-too-long"], page => page with { Title = string.Concat(Enumerable.Repeat("日本語の題名", 8)) });
+
         Page("description-multiple", "Two descriptions", ["description-multiple"], page => page with
         {
             ExtraHead = "<meta name=\"description\" content=\"A second meta description on the same planted page, which search engines may ignore.\">"
@@ -62,6 +72,10 @@ public sealed partial class SyntheticSite
         Page("h1-copy-a", "Shared heading A", ["h1-duplicate"], page => page with { H1 = "Shared heading" });
         Page("h1-copy-b", "Shared heading B", ["h1-duplicate"], page => page with { H1 = "Shared heading" });
 
+        // A line break separates words, so these two headings read the same.
+        Page("h1-break-a", "Heading with a line break", ["h1-duplicate"], page => page with { H1 = "Welcome to<br>our planted store" });
+        Page("h1-break-b", "Heading without a line break", ["h1-duplicate"], page => page with { H1 = "Welcome to our planted store" });
+
         // Identical main content means an identical H1 too, so the copies are also duplicate H1s.
         var copied = $"<p>{Text("plant-content-copy", 300)}</p>";
         Page("content-copy-a", "Copied content A", ["duplicate-content", "h1-duplicate"], page => page with { H1 = "Copied content", Content = copied });
@@ -78,6 +92,12 @@ public sealed partial class SyntheticSite
             H1 = "Nearly copied content", Content = $"<p>{string.Join(' ', nearCopy)}</p>"
         });
         Page("thin", "Thin page", ["low-word-count"], page => page with { Content = $"<p>{Text("plant-thin", 60)}</p>" });
+
+        // 150 Hindi words: vowel signs and the virama are part of each word, so it's thin, not 300-odd words.
+        Page("thin-hindi", "Thin Hindi page", ["low-word-count"], page => page with
+        {
+            Content = $"<p lang=\"hi\">{string.Join(' ', Enumerable.Range(0, 150).Select(word => HINDI_WORDS[word % HINDI_WORDS.Length]))}</p>"
+        });
         Page("soft-404", "Soft 404", ["soft-404"], page => page with { Title = "Sorry, this page was not found | Synthetic Store", H1 = "Page not found" });
 
         Page("image-alt-long", "Long alt text", ["image-alt-too-long"], page => page with
@@ -97,6 +117,13 @@ public sealed partial class SyntheticSite
             Content = page.Content + "<img src=\"/img/large.jpg\" alt=\"A very large photo\" width=\"400\" height=\"300\">"
         });
 
+        // Images without a src are still images: one with only srcset lacks alt text, a lazy one lacks a size.
+        Page("image-srcset", "Images without src", ["image-missing-alt", "image-missing-dimensions"], page => page with
+        {
+            Content = page.Content + "<img srcset=\"/img/9.jpg 1x, /img/10.jpg 2x\" width=\"400\" height=\"300\">" +
+                      "<img src=\"data:image/gif;base64,R0lGODlhAQABAAAAACw=\" data-original=\"/img/11.jpg\" alt=\"A lazily loaded photo\">"
+        });
+
         Page("canonical-missing", "Missing canonical", ["canonical-missing"], page => page with { Canonical = null });
         Page("canonical-multiple", "Two canonicals", ["canonical-multiple"], page => page with
         {
@@ -108,20 +135,65 @@ public sealed partial class SyntheticSite
             Canonical = null, Content = page.Content + $"<link rel=\"canonical\" href=\"{_base}{page.Path}\">"
         });
         Page("canonical-invalid", "Invalid canonical", ["canonical-invalid"], page => page with { Canonical = "http://[not a host]/" });
-        Page("canonical-broken", "Canonical to a 404", ["canonicalised-page", "canonical-broken"],
-            page => page with { Canonical = $"{_base}{PLANTS_PATH}gone" }, inSitemap: false);
+        // A canonical that leads nowhere is ignored, so the page stays indexable (and belongs in the sitemap).
+        Page("canonical-broken", "Canonical to a 404", ["canonical-broken"], page => page with { Canonical = $"{_base}{PLANTS_PATH}gone" });
         Page("canonical-redirect", "Canonical to a redirect", ["canonicalised-page", "canonical-to-redirect"],
             page => page with { Canonical = $"{_base}{PLANTS_PATH}moved" }, inSitemap: false);
+
+        // /self-canonical/ names /self-canonical, which redirects back to it. The redirect is the stronger signal, so the
+        // page is indexed and audited: its short title is reported, and it isn't canonicalised or out of place in the sitemap.
+        Other("self-canonical", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "self-canonical/"));
+        Page("self-canonical/", "Canonical back through a redirect", ["canonical-to-redirect", "title-too-short"],
+            page => page with { Title = "Self canonical", Canonical = $"{_base}{PLANTS_PATH}self-canonical" });
         Page("canonical-noindex", "Canonical to a noindex page", ["canonicalised-page", "canonical-to-non-indexable"],
             page => page with { Canonical = $"{_base}{PLANTS_PATH}noindex" }, inSitemap: false);
 
         Page("noindex", "Noindex page", ["noindex-page"], page => page with { Robots = "noindex" }, inSitemap: false);
+        Page("noindex-canonical", "Noindex with a canonical elsewhere", ["noindex-page", "noindex-with-canonical"], page => page with
+        {
+            Robots = "noindex", Canonical = $"{_base}{PLANTS_PATH}hreflang-lonely"
+        }, inSitemap: false);
         Page("nofollow", "Nofollow page", ["nofollow-page"], page => page with { Robots = "nofollow" });
+        Page("robots-spaces", "Robots directives without commas", ["noindex-page", "nofollow-page"], page => page with { Robots = "noindex nofollow" },
+            inSitemap: false);
+
+        // Gallery lightboxes: nofollow on links to image files is harmless, both for a file that was fetched (it's also
+        // shown) and for one that wasn't (the full-size version), unlike the nofollow links to /hidden/ pages on products.
+        Page("nofollow-image", "Nofollow image links", [], page => page with
+        {
+            Content = page.Content +
+                      $"<p><a href=\"{NOFOLLOW_ONLY_FILES[0]}\" rel=\"nofollow\" class=\"lightbox\"><img src=\"/img/5.jpg\" alt=\"A gallery photo\" width=\"400\" height=\"300\"></a> " +
+                      "<a href=\"/img/6.jpg\" rel=\"nofollow\" class=\"lightbox\"><img src=\"/img/6.jpg\" alt=\"Another gallery photo\" width=\"400\" height=\"300\"></a></p>"
+        });
         Page("nosnippet", "No snippet", ["snippet-blocked"], page => page with { Robots = "nosnippet" });
         Page("meta-refresh", "Meta refresh", ["meta-refresh"], page => page with
         {
             ExtraHead = $"<meta http-equiv=\"refresh\" content=\"30; url={PLANTS_PATH}thin\">"
         });
+
+        // Google treats an instant meta refresh as a permanent redirect, as static hosts' redirect stubs rely on. The
+        // stub isn't audited as a page (no title, H1 or text to speak of), the hub's link to it is a link to a redirect,
+        // and the page it moves to counts as linked, so it isn't an orphan.
+        Page("refresh-instant", "Instant meta refresh", ["meta-refresh"], page => page with
+        {
+            Title = null, Description = null, H1 = null, Content = "<p>Moved.</p>",
+            ExtraHead = $"<meta http-equiv=\"refresh\" content=\"0; url={PLANTS_PATH}refresh-target\">"
+        }, inSitemap: false);
+        Page("refresh-target", "Meta refresh target", [], linked: false);
+
+        // A link, a partner-site link and an image that only fail once their redirects are followed are broken, not just
+        // redirects. The redirecting image is an internal redirect to a 404 itself.
+        Page("redirects-to-errors", "Redirects to errors", ["broken-internal-links", "broken-external-links", "image-broken"], page => page with
+        {
+            Content = page.Content +
+                      $"<p><a href=\"{PLANTS_PATH}redirect-broken\">Moved, then gone</a> <a href=\"{_external}/ext-moved\">Partner page, moved, then gone</a></p>" +
+                      $"<img src=\"{PLANTS_PATH}image-moved.jpg\" alt=\"A photo that moved, then went\" width=\"400\" height=\"300\">"
+        });
+        Other("image-moved.jpg", 301, linked: false, ["redirect-broken"], () => Redirect(301, "/img/missing.jpg"));
+
+        // The sitemap also lists both partner URLs, as one left behind after a move to another host would.
+        plants.Add(new Plant("/ext-moved", 301, Linked: false, InSitemap: true, ["sitemap-url-other-host"], () => Redirect(301, "/ext-gone"), OnPartnerSite: true));
+        plants.Add(new Plant("/ext-gone", 404, Linked: false, InSitemap: true, ["sitemap-url-other-host"], () => NotFound("/ext-gone"), OnPartnerSite: true));
 
         Page("empty-anchor", "Link without text", ["empty-anchor-text"], page => page with
         {
@@ -134,6 +206,24 @@ public sealed partial class SyntheticSite
                       $"<a href=\"{PLANTS_PATH}fragment-target#missing\">Missing section</a> " +
                       "<a href=\"#nowhere\">Nowhere on this page</a> <a href=\"#top\">Back to top</a></p>"
         });
+        // Fragments can point at images, frames and SVG shapes, and an image map's area is labelled by its alt text.
+        Page("fragment-elements", "Fragments to images and maps", [], page => page with
+        {
+            Content = page.Content +
+                      "<img id=\"photo\" src=\"/img/7.jpg\" alt=\"A photo\" width=\"400\" height=\"300\">" +
+                      $"<iframe id=\"map\" src=\"{PLANTS_PATH}embedded\" title=\"A map\"></iframe><svg width=\"10\" height=\"10\"><g id=\"chart\"></g></svg>" +
+                      "<p><a href=\"#photo\">The photo</a> <a href=\"#map\">The map</a> <a href=\"#chart\">The chart</a></p>" +
+                      "<img src=\"/img/8.jpg\" usemap=\"#areas\" alt=\"A clickable plan\" width=\"400\" height=\"300\">" +
+                      $"<map name=\"areas\"><area href=\"{PLANTS_PATH}thin\" alt=\"The thin page\" shape=\"rect\" coords=\"0,0,10,10\"></map>"
+        });
+
+        // A base pushed into the body by a stray element in the head still applies, so "0" is /c/0, not /plants/0.
+        Page("base-in-body", "Base in the body", [], page => page with
+        {
+            ExtraHead = "<img src=\"/img/12.jpg\" alt=\"\" width=\"1\" height=\"1\"><base href=\"/c/\">",
+            Content = page.Content + "<p><a href=\"0\">Category zero</a></p>"
+        });
+
         // Links that look like fragments but name no element: Cloudflare's email obfuscation and an Elementor popup.
         Page("fragment-target", "Fragment target", [], page => page with
         {
@@ -215,6 +305,14 @@ public sealed partial class SyntheticSite
         Page("no-charset", "Missing charset", ["charset-missing"], page => page with { Charset = false }, contentType: "text/html");
         Page("no-open-graph", "Missing Open Graph", ["open-graph-missing"], page => page with { OpenGraph = false });
 
+        // One meta tag serving as both the description and og:description is both.
+        Page("meta-name-and-property", "Shared description tag", [], page => page with
+        {
+            Description = null, OpenGraph = false,
+            ExtraHead = $"<meta name=\"description\" property=\"og:description\" content=\"{page.Description}\">" +
+                        $"<meta property=\"og:title\" content=\"{page.Title}\"><meta property=\"og:image\" content=\"{_base}/img/0.jpg\">"
+        });
+
         var slow = PlantPage("slow", "Slow page");
         plants.Add(new Plant(slow.Path, 200, Linked: true, InSitemap: true, ["slow-response"], () => Html(Render(slow)) with { DelayMs = SLOW_PAGE_DELAY_MS }));
 
@@ -225,6 +323,18 @@ public sealed partial class SyntheticSite
         Other("loop-a", 301, linked: true, ["redirect-loop"], () => Redirect(301, PLANTS_PATH + "loop-b"));
         Other("loop-b", 301, linked: false, ["redirect-loop"], () => Redirect(301, PLANTS_PATH + "loop-a"));
         Other("redirect-broken", 301, linked: true, ["redirect-broken"], () => Redirect(301, PLANTS_PATH + "gone-redirect"));
+
+        // A chain is reported where visitors enter it, chain-a, which the hub links, and not again at chain-b.
+        Other("chain-a", 301, linked: true, ["redirect-chain"], () => Redirect(301, PLANTS_PATH + "chain-b"));
+        Other("chain-b", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "chain-c"));
+        Other("chain-c", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "thin"));
+
+        // A very long chain is a chain, not a loop: no URL repeats. Browsers give up after 20 hops, so the hub's link to it is broken.
+        for (var hop = 0; hop < LONG_CHAIN_HOPS; hop++)
+        {
+            var next = hop + 1 < LONG_CHAIN_HOPS ? $"{PLANTS_PATH}long-chain-{hop + 1}" : PLANTS_PATH + "thin";
+            Other($"long-chain-{hop}", 301, linked: hop == 0, hop == 0 ? ["redirect-chain"] : [], () => Redirect(301, next));
+        }
         Other("moved", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "thin"));
         Other("gone", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone"));
         Other("gone-redirect", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone-redirect"));
@@ -247,7 +357,8 @@ public sealed partial class SyntheticSite
             Other("downgrade", 301, linked: true, ["redirect-downgrade"], () => Redirect(301, $"{_external}/ext/plain-http"));
         }
 
-        // The hub links to the redirect loop and the unreachable URL, so it carries those link issues itself.
+        // The hub links to redirects, and to the unreachable URL, the redirect loop and the redirect to a 404, which are
+        // all broken, so it carries those link issues itself.
         plants.Add(new Plant(PLANTS_PATH, 200, Linked: false, InSitemap: true, ["links-to-redirects", "broken-internal-links"], () => Html(RenderPlantsHub())));
         return plants;
     }

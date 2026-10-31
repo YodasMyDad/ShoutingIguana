@@ -2,7 +2,7 @@ using ShoutingIguana.Engine.Analysis.Models;
 
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
-/// <summary>Meta description presence and length on indexable pages.</summary>
+/// <summary>Meta description presence and length on indexable pages, measured as the room it takes (<see cref="DisplayWidth"/>).</summary>
 internal sealed class DescriptionRules(AnalysisSettings settings) : IPageRule
 {
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
@@ -25,14 +25,14 @@ internal sealed class DescriptionRules(AnalysisSettings settings) : IPageRule
                 RuleText.Count(descriptions.Count, "meta description", "meta descriptions"));
         }
 
-        var length = RuleText.Length(descriptions[0]);
-        if (length > settings.DescriptionMaxLength)
+        var measured = DisplayWidth.Measure(descriptions[0]);
+        if (measured.Width > settings.DescriptionMaxLength)
         {
-            yield return new IssueHit(IssueCatalog.DESCRIPTION_TOO_LONG, page.UrlId, RuleText.Characters(length));
+            yield return new IssueHit(IssueCatalog.DESCRIPTION_TOO_LONG, page.UrlId, RuleText.Width(measured));
         }
-        else if (length < settings.DescriptionMinLength)
+        else if (measured.Width < settings.DescriptionMinLength)
         {
-            yield return new IssueHit(IssueCatalog.DESCRIPTION_TOO_SHORT, page.UrlId, RuleText.Characters(length));
+            yield return new IssueHit(IssueCatalog.DESCRIPTION_TOO_SHORT, page.UrlId, RuleText.Width(measured));
         }
     }
 }

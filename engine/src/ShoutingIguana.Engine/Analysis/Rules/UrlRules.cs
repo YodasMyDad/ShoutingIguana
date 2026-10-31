@@ -36,9 +36,29 @@ internal sealed class UrlRules(AnalysisSettings settings) : IPageRule
     /// <summary>The URL as people read it: escapes decoded and the host in its own script, so /каталог/ is 9 characters, not 42.</summary>
     private static string DisplayUrl(Uri uri)
     {
-        var host = uri.IdnHost.Contains("xn--", StringComparison.Ordinal) ? IDN.GetUnicode(uri.IdnHost) : uri.IdnHost;
         var port = uri.IsDefaultPort ? string.Empty : $":{uri.Port}";
-        return $"{uri.Scheme}://{host}{port}{Uri.UnescapeDataString(uri.PathAndQuery)}";
+        return $"{uri.Scheme}://{UnicodeHost(uri.IdnHost)}{port}{Uri.UnescapeDataString(uri.PathAndQuery)}";
+    }
+
+    /// <summary>
+    /// The host in Unicode, or as written when a label isn't valid punycode: DNS accepts any xn-- label, IDNA rejects
+    /// some, and IdnMapping has no non-throwing way to tell.
+    /// </summary>
+    private static string UnicodeHost(string host)
+    {
+        if (!host.Contains("xn--", StringComparison.Ordinal))
+        {
+            return host;
+        }
+
+        try
+        {
+            return IDN.GetUnicode(host);
+        }
+        catch (ArgumentException)
+        {
+            return host;
+        }
     }
 
     /// <summary>Percent-escapes are written in uppercase hex by convention (%2F), so they don't count.</summary>

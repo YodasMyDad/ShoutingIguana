@@ -55,6 +55,27 @@ public static class IssueReader
         return counts;
     }
 
+    /// <summary>What the last analysis couldn't do and why, e.g. orphans skipped on a depth-limited crawl.</summary>
+    public static IReadOnlyList<string> ReadNotes(string databasePath)
+    {
+        using var connection = CrawlDatabase.OpenReader(databasePath);
+        List<string> notes = [];
+        if (!HasTable(connection, "analysis_notes"))
+        {
+            return notes;
+        }
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT note FROM analysis_notes ORDER BY id";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            notes.Add(reader.GetString(0));
+        }
+
+        return notes;
+    }
+
     /// <summary>One page of the URLs flagged with an issue, in crawl order.</summary>
     public static IReadOnlyList<IssueRow> ReadIssues(string databasePath, string issueId, int limit, int offset = 0)
     {
@@ -107,6 +128,9 @@ public static class IssueReader
         }
     }
 
-    private static bool HasAnalysis(SqliteConnection connection) =>
-        CrawlDatabase.Scalar(connection, "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'analysis'") is not null;
+    private static bool HasAnalysis(SqliteConnection connection) => HasTable(connection, "analysis");
+
+    /// <summary>Files analysed by an older engine may lack tables added since.</summary>
+    private static bool HasTable(SqliteConnection connection, string name) =>
+        CrawlDatabase.Scalar(connection, $"SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '{name}'") is not null;
 }

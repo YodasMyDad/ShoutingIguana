@@ -29,18 +29,21 @@ internal sealed class RuleHarness(string site = "https://example.com")
 
         var uri = new Uri(normalized);
         _statuses.Add(new UrlStatus(Known: true, IsInternal: uri.Host == _host, IsHttps: uri.Scheme == Uri.UriSchemeHttps, Depth: 1,
-            Fetched: false, default, 0, IsHtml: false, IsParsed: false, IndexabilityReason.None, 0, null, InSitemap: false));
+            Fetched: false, default, 0, IsHtml: false, IsParsed: false, IndexabilityReason.None, 0, null, InSitemap: false,
+            IsResource: ResourceTypes.IsResource(normalized, null)));
         _ids[normalized] = _statuses.Count - 1;
         return _statuses.Count - 1;
     }
 
     /// <summary>Records what the crawl found at a URL.</summary>
     public int Fetched(string url, FetchOutcome outcome, int status, bool isHtml = false, IndexabilityReason reason = IndexabilityReason.None,
-        string? redirectTo = null, long? size = null, bool inSitemap = false)
+        string? redirectTo = null, long? size = null, bool inSitemap = false, string? contentType = null)
     {
         var id = Id(url);
+        contentType ??= isHtml ? "text/html; charset=utf-8" : null;
         _statuses[id] = _statuses[id] with
         {
+            IsResource = ResourceTypes.IsResource(UrlNormalizer.Normalize(new Uri(url)), outcome == FetchOutcome.Success ? contentType : null),
             Fetched = true,
             Outcome = outcome,
             StatusCode = status,
@@ -81,12 +84,18 @@ internal sealed class RuleHarness(string site = "https://example.com")
         };
     }
 
-    public UrlTable Table(string? start = null)
+    /// <param name="instantRefreshes">Pages with a 0-second meta refresh and where it goes, as the reader finds them.</param>
+    /// <param name="canonicals">Canonicalised pages and their canonical's target, as the reader finds them.</param>
+    public UrlTable Table(string? start = null, IEnumerable<(int Page, int Target)>? instantRefreshes = null,
+        IEnumerable<(int Page, int Target)>? canonicals = null)
     {
         // Register the start URL before taking the snapshot.
         var startId = Id(start ?? Site + "/");
-        return new UrlTable([.. _statuses], startId);
+        return new UrlTable([.. _statuses], startId, instantRefreshes, canonicals);
     }
+
+    /// <summary>The page with the indexability the table settled on, as the reader hands pages to the rules.</summary>
+    public static AnalyzedPage AsAnalysed(AnalyzedPage page, UrlTable urls) => page with { IndexabilityReason = urls[page.UrlId].IndexabilityReason };
 
     /// <summary>A document whose head and body are clean apart from what the test passes in.</summary>
     public static string Html(string head = "", string body = "", string lang = " lang=\"en\"") =>

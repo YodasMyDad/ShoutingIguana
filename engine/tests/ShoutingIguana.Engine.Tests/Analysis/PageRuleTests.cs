@@ -25,6 +25,43 @@ public sealed class PageRuleTests
         Assert.Equal([IssueCatalog.TITLE_MULTIPLE],
             Issues(rules, site.Page($"{site.Site}/d", RuleHarness.Html("<title>A perfectly sized page title here</title><title>Second one</title>"))));
         Assert.Empty(Issues(rules, site.Page($"{site.Site}/e", RuleHarness.Html(), IndexabilityReason.Noindex)));
+
+        // 55 characters but 65 UTF-16 units: each é is an e and a combining accent.
+        var accented = string.Concat(Enumerable.Repeat("é", 10)) + new string('x', 45);
+        Assert.True(accented.Length > SETTINGS.TitleMaxLength);
+        Assert.Empty(Issues(rules, site.Page($"{site.Site}/f", RuleHarness.Html($"<title>{accented}</title>"))));
+    }
+
+    [Fact]
+    public void FullWidthCharactersAndEmojiTakeTwiceTheRoomInTitles()
+    {
+        var site = new RuleHarness();
+        var rules = new TitleRules(SETTINGS);
+        List<IssueHit> Hits(string path, string title) => rules.Check(site.Page($"{site.Site}/{path}", RuleHarness.Html($"<title>{title}</title>"))).ToList();
+
+        // 21 Japanese characters are a normal title; 48 run past what results show.
+        Assert.Empty(Hits("a", "合成ストアの全角タイトル付き試験ページです"));
+        Assert.Equal([new IssueHit(IssueCatalog.TITLE_TOO_LONG, site.Id($"{site.Site}/b"), "48 characters (96 counting full-width characters as two)")],
+            Hits("b", string.Concat(Enumerable.Repeat("日本語の題名", 8))));
+
+        // An emoji with a skin tone is one character (4 UTF-16 units) taking two widths.
+        Assert.Equal("31 characters (62 counting full-width characters as two)",
+            Hits("c", string.Concat(Enumerable.Repeat("\U0001F44D\U0001F3FD", 31))).Single(hit => hit.Issue == IssueCatalog.TITLE_TOO_LONG).Detail);
+        Assert.Equal("14 characters", Hits("d", "Hello, Mädchen").Single(hit => hit.Issue == IssueCatalog.TITLE_TOO_SHORT).Detail);
+    }
+
+    [Fact]
+    public void DescriptionLengthsCountFullWidthCharactersAsTwo()
+    {
+        var site = new RuleHarness();
+        var rules = new DescriptionRules(SETTINGS);
+        List<IssueDefinition> Issues(string path, string description) =>
+            rules.Check(site.Page($"{site.Site}/{path}", RuleHarness.Html($"<meta name=\"description\" content=\"{description}\">"))).Select(hit => hit.Issue).ToList();
+
+        // 40 full-width characters fill as much of a result as 80 Latin ones.
+        Assert.Empty(Issues("a", string.Concat(Enumerable.Repeat("全角文字の説明", 6))[..40]));
+        Assert.Equal([IssueCatalog.DESCRIPTION_TOO_SHORT], Issues("b", new string('x', 40)));
+        Assert.Equal([IssueCatalog.DESCRIPTION_TOO_LONG], Issues("c", string.Concat(Enumerable.Repeat("説明", 40))));
     }
 
     [Theory]
@@ -95,6 +132,64 @@ public sealed class PageRuleTests
     }
 
     [Fact]
+    public void LinksAndImagesAreJudgedByWhereTheirRedirectsEnd()
+    {
+        var site = new RuleHarness();
+        site.Fetched($"{site.Site}/old", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/gone");
+        site.Fetched($"{site.Site}/gone", FetchOutcome.ClientError, 404);
+        site.Fetched($"{site.Site}/loop-a", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/loop-b");
+        site.Fetched($"{site.Site}/loop-b", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/loop-a");
+        site.Fetched($"{site.Site}/moved", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/fine");
+        site.Ok($"{site.Site}/fine");
+        site.Fetched("https://partner.example/old", FetchOutcome.Redirect, 301, redirectTo: "https://partner.example/gone");
+        site.Fetched("https://partner.example/gone", FetchOutcome.ClientError, 404);
+        site.Fetched("https://partner.example/login", FetchOutcome.Redirect, 302, redirectTo: "https://partner.example/members");
+        site.Fetched("https://partner.example/members", FetchOutcome.ClientError, 403);
+        site.Fetched("https://cdn.example/photo.jpg", FetchOutcome.Redirect, 301, redirectTo: "https://cdn.example/missing.jpg");
+        site.Fetched("https://cdn.example/missing.jpg", FetchOutcome.ClientError, 404);
+        site.Fetched($"{site.Site}/big.jpg", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/big-final.jpg");
+        site.Fetched($"{site.Site}/big-final.jpg", FetchOutcome.Success, 200, size: 900_000);
+        var page = site.Page($"{site.Site}/", RuleHarness.Html(body:
+            "<a href=\"/old\">a</a><a href=\"/loop-a\">b</a><a href=\"/moved\">c</a>" +
+            "<a href=\"https://partner.example/old\">d</a><a href=\"https://partner.example/login\">e</a>" +
+            "<img src=\"https://cdn.example/photo.jpg\" alt=\"x\" width=\"1\" height=\"2\"><img src=\"/big.jpg\" alt=\"x\" width=\"1\" height=\"2\">"));
+        var urls = site.Table();
+
+        var links = new LinkRules(urls).Check(page).ToList();
+        var images = new ImageRules(SETTINGS, urls).Check(page).ToList();
+
+        Assert.Equal(new IssueHit(IssueCatalog.BROKEN_INTERNAL_LINKS, page.UrlId, "2 broken URLs (the first redirects to a URL that returns HTTP 404)",
+            site.Id($"{site.Site}/old")), links.Single(hit => hit.Issue == IssueCatalog.BROKEN_INTERNAL_LINKS));
+        Assert.Equal(new IssueHit(IssueCatalog.LINKS_TO_REDIRECTS, page.UrlId, "1 redirecting URL", site.Id($"{site.Site}/moved")),
+            links.Single(hit => hit.Issue == IssueCatalog.LINKS_TO_REDIRECTS));
+
+        // A partner's login redirect ending in a 403 may well work in a browser.
+        Assert.Equal("1 broken URL (it redirects to a URL that returns HTTP 404)", links.Single(hit => hit.Issue == IssueCatalog.BROKEN_EXTERNAL_LINKS).Detail);
+        Assert.Equal("1 image (it redirects to a URL that returns HTTP 404)", images.Single(hit => hit.Issue == IssueCatalog.IMAGE_BROKEN).Detail);
+        Assert.Equal(site.Id($"{site.Site}/big.jpg"), images.Single(hit => hit.Issue == IssueCatalog.IMAGE_TOO_LARGE).RelatedUrlId);
+    }
+
+    [Fact]
+    public void NofollowLinksToImagesAndOtherFilesAreHarmless()
+    {
+        var site = new RuleHarness();
+        site.Fetched($"{site.Site}/gallery/large", FetchOutcome.Success, 200, contentType: "image/jpeg");
+        site.Fetched($"{site.Site}/style", FetchOutcome.Success, 200, contentType: "text/css; charset=utf-8");
+        site.Fetched($"{site.Site}/pages/a.jpg", FetchOutcome.Success, 200, isHtml: true);
+        var page = site.Page($"{site.Site}/", RuleHarness.Html(body:
+            // A lightbox link to the full-size photo is never fetched, so its extension decides.
+            "<a href=\"/media/2474/mon-2.jpg?width=1400&upscale=false\" rel=\"nofollow\" class=\"lightbox\"><img src=\"/media/2474/mon-2.jpg\" alt=\"x\"></a>" +
+            "<a href=\"/clip.MP4\" rel=\"nofollow\">Clip</a><a href=\"/gallery/large\" rel=\"nofollow\">Large</a><a href=\"/style\" rel=\"nofollow\">CSS</a>" +
+            "<a href=\"/guide.pdf\" rel=\"nofollow\">Guide</a><a href=\"/download?file=a.jpg\" rel=\"nofollow\">Download</a>" +
+            "<a href=\"/pages/a.jpg\" rel=\"nofollow\">A page despite its name</a><a href=\"/private\" rel=\"nofollow\">Private</a>"));
+
+        var hit = new LinkRules(site.Table()).Check(page).Single(found => found.Issue == IssueCatalog.INTERNAL_NOFOLLOW_LINKS);
+
+        // PDFs can be indexed, a query isn't a path, and a fetched URL is judged by what it returned.
+        Assert.Equal(new IssueHit(IssueCatalog.INTERNAL_NOFOLLOW_LINKS, page.UrlId, "4 URLs", site.Id($"{site.Site}/guide.pdf")), hit);
+    }
+
+    [Fact]
     public void UppercaseIgnoresPercentEscapes()
     {
         var site = new RuleHarness();
@@ -158,6 +253,26 @@ public sealed class PageRuleTests
         Assert.Equal([IssueCatalog.CANONICAL_INVALID], Issues(rules, invalid));
         Assert.Equal([IssueCatalog.CANONICAL_MISSING], Issues(rules, none));
         Assert.Empty(Issues(rules, noneButNoindex));
+    }
+
+    [Fact]
+    public void NoindexWithACanonicalElsewhereIsAConflict()
+    {
+        var site = new RuleHarness();
+        var other = $"<link rel=\"canonical\" href=\"{site.Site}/other\">";
+
+        var conflict = site.Page($"{site.Site}/a", RuleHarness.Html(other + "<meta name=\"robots\" content=\"noindex\">"), IndexabilityReason.Noindex);
+        var fromHeaders = site.Page($"{site.Site}/b", RuleHarness.Html(), IndexabilityReason.Noindex,
+            [new ResponseHeader("x-robots-tag", "noindex"), new ResponseHeader("link", $"<{site.Site}/other>; rel=\"canonical\"")]);
+        var selfCanonical = site.Page($"{site.Site}/c", RuleHarness.Html($"<link rel=\"canonical\" href=\"{site.Site}/c\"><meta name=\"robots\" content=\"noindex\">"),
+            IndexabilityReason.Noindex);
+        var canonicalOnly = site.Page($"{site.Site}/d", RuleHarness.Html(other), IndexabilityReason.Canonicalised);
+        var rules = new CanonicalRules(site.Table());
+
+        Assert.Equal(new IssueHit(IssueCatalog.NOINDEX_WITH_CANONICAL, conflict.UrlId, null, site.Id($"{site.Site}/other")), rules.Check(conflict).Single());
+        Assert.Equal([IssueCatalog.NOINDEX_WITH_CANONICAL], Issues(rules, fromHeaders));
+        Assert.Empty(Issues(rules, selfCanonical));
+        Assert.Equal([IssueCatalog.CANONICALISED_PAGE], Issues(rules, canonicalOnly));
     }
 
     [Theory]
@@ -234,6 +349,49 @@ public sealed class PageRuleTests
 
         Assert.Empty(Issues(rules, truncated));
         Assert.Empty(Issues(rules, graph));
+    }
+
+    [Fact]
+    public void StructuredDataWithUnreadableStringsCountsThemAsPresent()
+    {
+        var site = new RuleHarness();
+        var rules = new StructuredDataRules();
+        string Script(string json) => $"<script type=\"application/ld+json\">{json}</script>";
+
+        // JSON.stringify of text cut mid-emoji leaves half a surrogate pair, which System.Text.Json can't read as a string.
+        var name = site.Page($"{site.Site}/a", RuleHarness.Html(Script("""{"@type":"Product","name":"\uDC00x","offers":{"price":"1"}}""")));
+        var nameOnly = site.Page($"{site.Site}/b", RuleHarness.Html(Script("""{"@type":"Product","name":"\uD83D"}""")));
+        var type = site.Page($"{site.Site}/c", RuleHarness.Html(Script("""{"@type":["Product\uDC00","Recipe"],"name":"x"}""")));
+        var id = site.Page($"{site.Site}/d", RuleHarness.Html(Script(
+            """{"@graph":[{"@type":"AggregateRating","@id":"\uDC00","ratingValue":4,"reviewCount":2},{"@type":"Product","name":"x","aggregateRating":{"@id":"\uDC00"}}]}""")));
+
+        Assert.Empty(Issues(rules, name));
+        Assert.Equal("Product: needs offers or review or aggregateRating", rules.Check(nameOnly).Single().Detail);
+        Assert.Equal("Recipe: needs image", rules.Check(type).Single().Detail);
+        Assert.Equal("AggregateRating: needs itemReviewed", rules.Check(id).Single().Detail);
+    }
+
+    [Fact]
+    public void DeeplyNestedJsonLdIsReportedNotOverflowed()
+    {
+        var site = new RuleHarness();
+        var nested = string.Concat(Enumerable.Repeat("""{"a":""", 10_000)) + "1" + new string('}', 10_000);
+        var page = site.Page($"{site.Site}/", RuleHarness.Html($"<script type=\"application/ld+json\">{nested}</script>"));
+
+        Assert.Equal([IssueCatalog.STRUCTURED_DATA_INVALID], Issues(new StructuredDataRules(), page));
+    }
+
+    [Fact]
+    public void InvalidPunycodeHostsAreMeasuredAsWritten()
+    {
+        // DNS accepts any xn-- label, but IDNA rejects this one, so it can't be shown in Unicode.
+        var site = new RuleHarness("https://xn--55555577.example");
+        var page = site.Page($"{site.Site}/{new string('a', 120)}", RuleHarness.Html());
+
+        var hit = new UrlRules(SETTINGS).Check(page).Single();
+
+        Assert.Equal(IssueCatalog.URL_TOO_LONG, hit.Issue);
+        Assert.Equal(RuleText.Characters($"{site.Site}/{new string('a', 120)}".Length), hit.Detail);
     }
 
     [Fact]

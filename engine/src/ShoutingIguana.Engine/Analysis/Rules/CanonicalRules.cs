@@ -56,25 +56,35 @@ internal sealed class CanonicalRules(UrlTable urls) : IPageRule
             yield return new IssueHit(IssueCatalog.CANONICALISED_PAGE, page.UrlId, null, targetId > 0 ? targetId : null);
         }
 
+        // The noindex wins, so the page isn't canonicalised, but the two signals contradict each other.
+        if (page.Facts.Robots.NoIndex)
+        {
+            yield return new IssueHit(IssueCatalog.NOINDEX_WITH_CANONICAL, page.UrlId, null, targetId > 0 ? targetId : null);
+        }
+
         if (targetId == 0 || urls[targetId] is not { Fetched: true } target)
         {
             yield break;
         }
 
-        var detail = $"The canonical URL {RuleText.Status(target)}";
-        if (target.IsBroken)
+        // A canonical that leads nowhere, even through redirects, is ignored, which leaves the page indexable.
+        if (urls.IsBrokenThroughRedirects(targetId))
         {
-            yield return new IssueHit(IssueCatalog.CANONICAL_BROKEN, page.UrlId, detail, targetId);
+            yield return new IssueHit(IssueCatalog.CANONICAL_BROKEN, page.UrlId, $"The canonical URL {RuleText.BrokenStatus(urls, targetId)}", targetId);
         }
         else if (target.Outcome == FetchOutcome.Redirect)
         {
+            // /page/ naming /page, which redirects to /page/, still points search engines at /page/.
+            var detail = urls.TraceRedirects(targetId).FinalId == page.UrlId
+                ? "The canonical URL redirects back to this page"
+                : $"The canonical URL {RuleText.Status(target)}";
             yield return new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, page.UrlId, detail, targetId);
         }
         // Another site blocking or disallowing the crawler says nothing about whether Google can see the page.
         else if ((target.IsInternal && target.Outcome is FetchOutcome.RobotsDisallowed or FetchOutcome.Blocked) ||
                  target is { IsPage: true, IsIndexablePage: false })
         {
-            yield return new IssueHit(IssueCatalog.CANONICAL_TO_NON_INDEXABLE, page.UrlId, detail, targetId);
+            yield return new IssueHit(IssueCatalog.CANONICAL_TO_NON_INDEXABLE, page.UrlId, $"The canonical URL {RuleText.Status(target)}", targetId);
         }
     }
 

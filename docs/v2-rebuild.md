@@ -21,7 +21,7 @@ v2 is a fresh solution that ports the useful logic.
 | Step | What | Status |
 | --- | --- | --- |
 | 1 | Headless engine, storage and CLI (`si`), proven on a generated 100k-page site, with the benchmark in CI | Done: `3e556be` |
-| 2 | SEO rules and issue catalog (81 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, review fixes `90589c6` |
+| 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, review fixes `90589c6`, second review on branch `fix/rules-review` (not merged) |
 | 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API | Next |
 | 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | Later |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
@@ -45,6 +45,10 @@ and see mockups before anything is built.
   `IssueWriter` for analysis. Memory stays flat because the frontier, results and links live on disk.
 - **Analysis runs after the crawl, from stored data.** Any crawl can be re-analysed with new rules or thresholds
   without recrawling. Issue ids are stored in crawl files, so they never change.
+- **Analysis judges what search engines will see.** An instant meta refresh is a redirect, and a canonical whose
+  target leads back to the page or nowhere leaves the page indexable (a broken canonical is ignored; a redirect is
+  the stronger signal). The crawl's own record stays as fetched; the analysis stores where it differs in
+  `effective_indexability`, which the stats and the UI read.
 - **The proof is exact.**
   - The synthetic site (`engine/src/ShoutingIguana.TestSite`) is clean by construction: problems appear only where
     they are planted.
@@ -71,8 +75,12 @@ and see mockups before anything is built.
 - Near-duplicate detection compares at most 1,000 neighbours per fingerprint bucket, so past roughly 500k pages a
   few pairs can be missed.
 - Links are capped at 10,000 per page, so pages linked only from a huge HTML sitemap can look orphaned.
-- A stopped crawl skips the orphan and sitemap-coverage checks, and the analysis output says so.
+- A stopped, depth- or URL-limited, or folder-scoped crawl skips the orphan check, and a declared sitemap that
+  failed (other than with 404/410) skips the not-in-sitemap check. The analysis notes say why; `si analyze` still
+  prints a fixed "the crawl didn't finish" line for any partial analysis and doesn't print the notes yet.
 - Word counts for Chinese, Japanese and Thai count characters, which is close enough for thin-content checks.
+- Title and description widths count full-width characters and emoji as two, an estimate of the room they take,
+  not a pixel measurement.
 
 ## How to verify
 

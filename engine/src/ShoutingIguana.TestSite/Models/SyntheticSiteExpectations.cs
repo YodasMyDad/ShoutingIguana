@@ -35,6 +35,9 @@ public sealed record SyntheticSiteExpectations(
 {
     public const string SLOW_RESPONSE = "slow-response";
 
+    /// <summary>Of <see cref="NofollowOnly"/>, the URLs that are files (images) rather than HTML pages.</summary>
+    public int NofollowOnlyFiles { get; init; }
+
     private const int LISTED_URLS = 5;
 
     /// <summary>How many URLs an issue must flag (slow-response: at least this many).</summary>

@@ -71,6 +71,8 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     /// <summary>Checks a completed crawl of the site, and an analysis of it, against everything the site planted.</summary>
     private static async Task AssertMatchesThePlantsAsync(SyntheticSiteServer server, string path)
     {
+        // The stats report indexability as analysed, which knows where canonicals and meta refreshes lead.
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
         var stats = CrawlStatsReader.Read(path);
         var expected = server.Site.GetExpectations();
         Assert.Equal(expected.HtmlPages, stats.HtmlPageCount);
@@ -85,10 +87,10 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(0, stats.QueuedCount);
         Assert.Equal(0, Count(path, "SELECT COUNT(*) FROM urls WHERE state = 1"));
 
-        // Every planted issue is reported on exactly the planted URLs, and nothing else is.
-        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        // Every planted issue is reported on exactly the planted URLs, and nothing else is, and every check ran.
         Assert.Equal(expected.AnalysedPages, analysis.PagesAnalyzed);
         Assert.False(analysis.IsPartial);
+        Assert.Empty(analysis.Notes);
         var rows = IssueReader.ReadAll(path).ToList();
         var mismatches = expected.CompareIssues(
             rows.Select(row => (row.Issue, row.Url)),
@@ -150,6 +152,41 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.True(CrawlStatsReader.Read(path).SkipReasons.GetValueOrDefault(SkipReason.UrlLimit) > 0);
     }
 
+    [Theory]
+    [InlineData(1, 0, "depth limit")]
+    [InlineData(0, 300, "URL limit")]
+    public async Task LimitedCrawlsSkipTheOrphanCheckAndSayWhy(int maxDepth, int maxUrls, string reason)
+    {
+        var path = NewDatabasePath();
+        await CrawlAsync(Options() with { MaxDepth = maxDepth, MaxUrls = maxUrls }, path);
+
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+
+        // /plants/trailing/ is in the sitemap and only linked through a redirect the limit kept out of the crawl.
+        Assert.True(analysis.IsPartial);
+        Assert.DoesNotContain(analysis.Issues, issue => issue.Issue == IssueCatalog.ORPHAN_PAGE);
+        Assert.False(IssueReader.ReadCounts(path).ContainsKey(IssueCatalog.ORPHAN_PAGE.Id));
+        var note = Assert.Single(analysis.Notes);
+        Assert.Contains(reason, note);
+        Assert.Equal([note], IssueReader.ReadNotes(path));
+
+        // Sitemap coverage doesn't depend on which pages link where, so it still runs.
+        Assert.Contains(analysis.Issues, issue => issue.Issue == IssueCatalog.NOT_IN_SITEMAP);
+    }
+
+    [Fact]
+    public async Task AFolderScopedCrawlSkipsTheOrphanCheck()
+    {
+        var path = NewDatabasePath();
+        await CrawlAsync(Options() with { StartUrl = new Uri(_server.BaseUri, SyntheticSite.PLANTS_PATH).AbsoluteUri }, path);
+
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+
+        Assert.True(analysis.IsPartial);
+        Assert.DoesNotContain(analysis.Issues, issue => issue.Issue == IssueCatalog.ORPHAN_PAGE);
+        Assert.Contains(SyntheticSite.PLANTS_PATH, Assert.Single(analysis.Notes));
+    }
+
     [Fact]
     public async Task OptionsChangeWhatIsFollowed()
     {
@@ -158,7 +195,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         await CrawlAsync(Options() with { RespectRobotsTxt = false, FollowNofollow = true }, permissive);
 
         var stats = CrawlStatsReader.Read(permissive);
-        Assert.Equal(expected.HtmlPages + expected.RobotsDisallowed + expected.NofollowOnly, stats.HtmlPageCount);
+        Assert.Equal(expected.HtmlPages + expected.RobotsDisallowed + expected.NofollowOnly - expected.NofollowOnlyFiles, stats.HtmlPageCount);
         Assert.False(stats.Outcomes.ContainsKey(FetchOutcome.RobotsDisallowed));
     }
 
@@ -210,7 +247,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(firstRows, IssueReader.ReadAll(path).ToList());
         Assert.Equal(second.Issues.Sum(issue => issue.Count), Count(path, "SELECT COUNT(*) FROM issues"));
         Assert.Equal(first.Issues.Select(issue => issue.Count), second.Issues.Select(issue => issue.Count));
-        Assert.Equal(IssueCatalog.All.Count, Count(path, "SELECT COUNT(*) FROM issue_types"));
+        Assert.Equal(second.Issues.Count, Count(path, "SELECT COUNT(*) FROM issue_types"));
 
         // Stricter thresholds flag more, from the same stored crawl.
         var strict = await analyzer.AnalyzeAsync(path, new AnalysisSettings { TitleMinLength = 10, TitleMaxLength = 20 });
@@ -260,6 +297,34 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         }
 
         Assert.True(cancellations > 0);
+    }
+
+    [Fact]
+    public async Task ARuleThatFailsOnOnePageDoesNotStopTheAnalysis()
+    {
+        var path = NewDatabasePath();
+        await CrawlAsync(Options() with { MaxUrls = 60 }, path);
+        var analyzer = new CrawlAnalyzer(NullLoggerFactory.Instance);
+        var clean = await analyzer.AnalyzeAsync(path);
+
+        // A link to a URL id the file doesn't have: link checks on the home page can't look its target up.
+        using (var connection = CrawlDatabase.OpenWriter(path))
+        {
+            CrawlDatabase.Execute(connection, $"""
+                UPDATE links SET to_id = 2147483647 WHERE rowid = (
+                    SELECT MIN(l.rowid) FROM links l JOIN urls u ON u.id = l.from_id
+                    WHERE u.url = '{_server.BaseUri.AbsoluteUri}' AND l.kind = {(int)LinkKind.Hyperlink} AND (l.flags & {(int)LinkFlags.SamePage}) = 0)
+                """);
+        }
+
+        var damaged = await analyzer.AnalyzeAsync(path);
+
+        Assert.Equal(clean.PagesAnalyzed, damaged.PagesAnalyzed);
+        Assert.Contains(damaged.Notes, note => note.StartsWith("LinkRules failed on 1 page", StringComparison.Ordinal));
+        Assert.Contains(damaged.Notes, note => note.StartsWith("InlinkRules failed on 1 page", StringComparison.Ordinal));
+        Assert.DoesNotContain(clean.Notes, note => note.Contains("failed", StringComparison.Ordinal));
+        Assert.Equal(clean.Issues.Single(issue => issue.Issue == IssueCatalog.TITLE_TOO_LONG).Count,
+            damaged.Issues.Single(issue => issue.Issue == IssueCatalog.TITLE_TOO_LONG).Count);
     }
 
     [Fact]

@@ -13,7 +13,10 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// that links every product's #reviews costs one entry per product, not one per link. Each target's ids are then read
 /// once, and the links table is streamed to find the pages whose links miss.
 /// </summary>
-internal sealed class FragmentRules(UrlTable urls, AnalysisReader reader) : ISiteRule
+/// <param name="readFacts">The stored facts of a URL (<see cref="AnalysisReader.ReadFacts"/>).</param>
+/// <param name="readFragmentLinks">Every link to a #fragment on another page (<see cref="AnalysisReader.ReadFragmentLinks"/>).</param>
+internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFacts, Func<IEnumerable<(int From, int To, string Fragment)>> readFragmentLinks)
+    : ISiteRule
 {
     private readonly Dictionary<int, (int Count, int FirstTarget)> _broken = [];
     private readonly HashSet<(int Target, ulong Fragment)> _wanted = [];
@@ -48,7 +51,7 @@ internal sealed class FragmentRules(UrlTable urls, AnalysisReader reader) : ISit
         foreach (var target in _wanted.GroupBy(pair => pair.Target))
         {
             // A capped id list can't prove an id is missing.
-            if (reader.ReadFacts(target.Key) is not { } facts || facts.AnchorIds.Count >= PageWalker.MAX_IDS)
+            if (readFacts(target.Key) is not { } facts || facts.AnchorIds.Count >= PageWalker.MAX_IDS)
             {
                 continue;
             }
@@ -59,7 +62,7 @@ internal sealed class FragmentRules(UrlTable urls, AnalysisReader reader) : ISit
 
         if (missing.Count > 0)
         {
-            foreach (var (from, to, raw) in reader.ReadFragmentLinks())
+            foreach (var (from, to, raw) in readFragmentLinks())
             {
                 if (Checkable(raw) is { } fragment && missing.Contains((to, Hash(fragment))))
                 {

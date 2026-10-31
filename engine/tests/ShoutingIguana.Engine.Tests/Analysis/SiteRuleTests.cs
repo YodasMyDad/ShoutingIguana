@@ -51,11 +51,65 @@ public sealed class SiteRuleTests
     }
 
     [Fact]
+    public void ChainsAreReportedWhereVisitorsEnterThemAndLongOnesAreNotLoops()
+    {
+        var site = new RuleHarness();
+        var home = site.Page($"{site.Site}/", RuleHarness.Html(body: "<a href=\"http://example.com/a\">A</a><a href=\"/linked-mid\">M</a><a href=\"/long-0\">L</a>"));
+
+        // http -> https -> trailing slash -> new place: three hops, entered only at the first.
+        var start = site.Fetched("http://example.com/a", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/a");
+        site.Fetched($"{site.Site}/a", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/a/");
+        site.Fetched($"{site.Site}/a/", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/b/");
+        site.Ok($"{site.Site}/b/");
+
+        // Mid-chain hops still count when something links to them, or a sitemap lists them.
+        var linkedMid = site.Fetched($"{site.Site}/linked-mid", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/listed-mid");
+        var listedMid = site.Fetched($"{site.Site}/listed-mid", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/x", inSitemap: true);
+        site.Fetched($"{site.Site}/x", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/b/");
+
+        // 25 hops: past the trace limit without repeating a URL.
+        for (var hop = 0; hop < 25; hop++)
+        {
+            site.Fetched($"{site.Site}/long-{hop}", FetchOutcome.Redirect, 301, redirectTo: hop < 24 ? $"{site.Site}/long-{hop + 1}" : $"{site.Site}/b/");
+        }
+
+        var urls = site.Table();
+        var rules = new RedirectRules(urls);
+        rules.Observe(home);
+        var chains = rules.Finish().Where(hit => hit.Issue == IssueCatalog.REDIRECT_CHAIN).ToList();
+
+        var longChain = site.Id($"{site.Site}/long-0");
+        Assert.Equal([start, linkedMid, longChain, listedMid], chains.Select(hit => hit.UrlId));
+        Assert.Equal("3 redirects", chains.Single(hit => hit.UrlId == start).Detail);
+        Assert.Equal("More than 20 redirects, which browsers don't follow", chains.Single(hit => hit.UrlId == longChain).Detail);
+        Assert.Equal(new RedirectTrace(site.Id($"{site.Site}/long-20"), UrlTable.MAX_REDIRECT_HOPS, IsLoop: false), urls.TraceRedirects(site.Id($"{site.Site}/long-0")));
+        Assert.True(urls.IsBrokenThroughRedirects(site.Id($"{site.Site}/long-0")));
+        Assert.False(urls.IsBrokenThroughRedirects(site.Id($"{site.Site}/long-5")));
+    }
+
+    [Theory]
+    [InlineData(10, "10 redirects")]
+    [InlineData(12, "12 redirects, more than the 10 Googlebot follows")]
+    public void ChainsLongerThanGooglebotFollowsSaySo(int hops, string detail)
+    {
+        var site = new RuleHarness();
+        for (var hop = 0; hop < hops; hop++)
+        {
+            site.Fetched($"{site.Site}/r{hop}", FetchOutcome.Redirect, 301, redirectTo: hop < hops - 1 ? $"{site.Site}/r{hop + 1}" : $"{site.Site}/end", inSitemap: hop == 0);
+        }
+
+        site.Ok($"{site.Site}/end");
+
+        Assert.Equal(detail, new RedirectRules(site.Table()).Finish().Single(hit => hit.Issue == IssueCatalog.REDIRECT_CHAIN).Detail);
+    }
+
+    [Fact]
     public void RobotsTxtProblemsCountOnlyForTheSitesOwnOrigins()
     {
         var site = new RuleHarness();
         site.Ok($"{site.Site}/");
         var scope = new CrawlScope(new Uri($"{site.Site}/"), includeSubdomains: false, stayInStartFolder: false);
+        HashSet<string> main = ["https://example.com"];
         RobotsRecord[] robots =
         [
             new("https://example.com", 503, null, null, 0),
@@ -63,17 +117,41 @@ public sealed class SiteRuleTests
             new("https://cdn.example", null, null, "Timed out", 0)
         ];
 
-        var hits = new RobotsTxtRules(site.Table(), robots, scope).Finish().ToList();
+        var hits = new RobotsTxtRules(site.Table(), robots, scope, main).Finish().ToList();
 
         var unreachable = Assert.Single(hits);
         Assert.Equal(IssueCatalog.ROBOTS_TXT_UNREACHABLE, unreachable.Issue);
         Assert.Equal("https://example.com/robots.txt (HTTP 503)", unreachable.Detail);
 
         // Google treats 429 like a server error; a redirect loop is handled as "no rules", as the crawler does.
-        var limited = new RobotsTxtRules(site.Table(), [new("https://example.com", 429, null, null, 0)], scope).Finish().Single();
-        var looping = new RobotsTxtRules(site.Table(), [new("https://example.com", null, null, "More than 5 redirects", 0)], scope).Finish().Single();
+        var limited = new RobotsTxtRules(site.Table(), [new("https://example.com", 429, null, null, 0)], scope, main).Finish().Single();
+        var looping = new RobotsTxtRules(site.Table(), [new("https://example.com", null, null, "More than 5 redirects", 0)], scope, main).Finish().Single();
         Assert.Equal(IssueCatalog.ROBOTS_TXT_UNREACHABLE, limited.Issue);
         Assert.Equal(IssueCatalog.ROBOTS_TXT_MISSING, looping.Issue);
+    }
+
+    [Fact]
+    public void RobotsTxtFailingOnAnotherOfTheSitesOriginsOnlyAffectsThatOrigin()
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/");
+        var scope = new CrawlScope(new Uri($"{site.Site}/"), includeSubdomains: true, stayInStartFolder: false);
+        RobotsRecord[] robots =
+        [
+            new("https://example.com", 200, "User-agent: *", null, 0),
+            new("https://blog.example.com", 503, null, null, 0),
+            new("http://example.com", null, null, "Timed out", 0)
+        ];
+
+        var hit = new RobotsTxtRules(site.Table(), robots, scope, new HashSet<string> { "https://example.com" }).Finish().Single();
+
+        Assert.Equal(new IssueHit(IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, site.Id($"{site.Site}/"),
+            "https://blog.example.com/robots.txt (HTTP 503), http://example.com/robots.txt (Timed out)"), hit);
+        Assert.Equal(IssueSeverity.Warning, hit.Issue.Severity);
+
+        // The home page's origin counts as the site's own once the start URL redirects there.
+        var moved = new RobotsTxtRules(site.Table(), robots, scope, new HashSet<string> { "https://example.com", "https://blog.example.com" }).Finish().ToList();
+        Assert.Equal([IssueCatalog.ROBOTS_TXT_UNREACHABLE, IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN], moved.Select(found => found.Issue));
     }
 
     [Fact]
@@ -99,6 +177,63 @@ public sealed class SiteRuleTests
         Assert.Contains("sitemap-old.xml (HTTP 404)", hits.Single(hit => hit.Issue == IssueCatalog.SITEMAP_ERROR).Detail);
         Assert.Equal(3, hits.Count);
 
+    }
+
+    [Theory]
+    [InlineData(503, "HTTP 503", false)]
+    [InlineData(429, "HTTP 429", false)]
+    [InlineData(403, "HTTP 403", false)]
+    [InlineData(null, "Timed out", false)]
+    [InlineData(200, "Unexpected end of file", false)]
+    [InlineData(404, "HTTP 404", true)]
+    [InlineData(410, "HTTP 410", true)]
+    public void SitemapCoverageNeedsEveryDeclaredSitemapToSayWhatItLists(int? status, string error, bool coverageChecked)
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/", inSitemap: true);
+        var post = site.Ok($"{site.Site}/blog/post");
+        var urls = site.Table();
+        StoredSitemap[] sitemaps =
+        [
+            new($"{site.Site}/page-sitemap.xml", 200, false, 1, null),
+            new($"{site.Site}/post-sitemap.xml", status, false, 0, error)
+        ];
+
+        var hits = new SitemapRules(urls, sitemaps, new CrawlOptions { StartUrl = site.Site }, crawlComplete: true).Finish().ToList();
+
+        // A sitemap that failed for a reason that says nothing about its contents may well list the post.
+        Assert.Equal(coverageChecked, hits.Contains(new IssueHit(IssueCatalog.NOT_IN_SITEMAP, post)));
+        Assert.Equal(coverageChecked ? null : sitemaps[1], SitemapRules.Unreadable(sitemaps));
+        Assert.Contains(hits, hit => hit.Issue == IssueCatalog.SITEMAP_ERROR);
+    }
+
+    [Fact]
+    public void SitemapEntriesOnAnotherHostAreReportedWithTheirStatus()
+    {
+        // A sitemap on example.com still listing www.example.com after a move to the bare domain.
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/", inSitemap: true);
+        var moved = site.Fetched("https://www.example.com/page", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/page", inSitemap: true);
+        site.Ok($"{site.Site}/page", inSitemap: true);
+        var gone = site.Fetched("https://www.example.com/gone", FetchOutcome.ClientError, 404, inSitemap: true);
+        var fine = site.Fetched("https://www.example.com/fine", FetchOutcome.Success, 200, isHtml: true, inSitemap: true);
+        var notChecked = site.Id("https://www.example.com/unchecked");
+        site.Fetched("https://partner.example/linked", FetchOutcome.ClientError, 404);
+        var urls = site.Table();
+        var statuses = Enumerable.Range(0, urls.Length).Select(id => urls[id]).ToArray();
+        statuses[notChecked] = statuses[notChecked] with { InSitemap = true };
+        StoredSitemap[] sitemaps = [new($"{site.Site}/sitemap.xml", 200, false, 6, null)];
+
+        var hits = new SitemapRules(new UrlTable(statuses, urls.StartId), sitemaps, new CrawlOptions { StartUrl = site.Site }, crawlComplete: true)
+            .Finish().Where(hit => hit.Issue == IssueCatalog.SITEMAP_URL_OTHER_HOST).ToList();
+
+        Assert.Equal(
+        [
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, moved, "The URL redirects (HTTP 301)"),
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, gone, "The URL returns HTTP 404"),
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, fine, "The URL returns HTTP 200"),
+            new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, notChecked, "The URL wasn't checked")
+        ], hits);
     }
 
     [Fact]
@@ -159,9 +294,83 @@ public sealed class SiteRuleTests
 
         var hits = rules.Finish().ToList();
         Assert.Equal([original.UrlId, copy.UrlId], hits.Where(hit => hit.Issue == IssueCatalog.DUPLICATE_CONTENT).Select(hit => hit.UrlId).Order());
-        var nearHits = hits.Where(hit => hit.Issue == IssueCatalog.NEAR_DUPLICATE_CONTENT).ToList();
-        Assert.Contains(nearHits, hit => hit.UrlId == near.UrlId);
-        Assert.DoesNotContain(nearHits, hit => hit.UrlId == other.UrlId);
+
+        // The edit is near both copies, so all three form one group, each pointing at its lowest-id other member.
+        Assert.Equal(
+        [
+            new IssueHit(IssueCatalog.NEAR_DUPLICATE_CONTENT, original.UrlId, "2 similar pages", copy.UrlId),
+            new IssueHit(IssueCatalog.NEAR_DUPLICATE_CONTENT, copy.UrlId, "2 similar pages", original.UrlId),
+            new IssueHit(IssueCatalog.NEAR_DUPLICATE_CONTENT, near.UrlId, "2 similar pages", original.UrlId)
+        ], hits.Where(hit => hit.Issue == IssueCatalog.NEAR_DUPLICATE_CONTENT).OrderBy(hit => hit.UrlId));
+    }
+
+    [Fact]
+    public void CanonicalsThatLeadBackToThePageOrNowhereLeaveItIndexable()
+    {
+        var site = new RuleHarness();
+        AnalyzedPage Page(string path, string canonical) => site.Page($"{site.Site}{path}",
+            RuleHarness.Html($"<title>Short</title><link rel=\"canonical\" href=\"{site.Site}{canonical}\">"), IndexabilityReason.Canonicalised);
+
+        var backHere = Page("/page/", "/page");
+        site.Fetched($"{site.Site}/page", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/page/");
+        var toGone = Page("/a", "/gone");
+        site.Fetched($"{site.Site}/gone", FetchOutcome.ClientError, 404);
+        var toGoneLater = Page("/b", "/moved");
+        site.Fetched($"{site.Site}/moved", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/gone");
+        var toPage = Page("/c", "/d");
+        site.Ok($"{site.Site}/d");
+        var toRedirect = Page("/e", "/old");
+        site.Fetched($"{site.Site}/old", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/d");
+        AnalyzedPage[] pages = [backHere, toGone, toGoneLater, toPage, toRedirect];
+        var urls = site.Table(canonicals: pages.Select(page => (page.UrlId, page.Links.Single(link => link.Kind == LinkKind.Canonical).ToId)));
+        var analysed = pages.Select(page => RuleHarness.AsAnalysed(page, urls)).ToList();
+        var canonicalRules = new CanonicalRules(urls);
+        List<IssueHit> Hits(AnalyzedPage page) => canonicalRules.Check(page).ToList();
+
+        Assert.Equal([(backHere.UrlId, IndexabilityReason.None), (toGone.UrlId, IndexabilityReason.None), (toGoneLater.UrlId, IndexabilityReason.None)],
+            urls.IndexabilityChanges);
+        Assert.Equal([IndexabilityReason.None, IndexabilityReason.None, IndexabilityReason.None, IndexabilityReason.Canonicalised, IndexabilityReason.Canonicalised],
+            analysed.Select(page => page.IndexabilityReason));
+
+        // The canonical is still worth fixing, but the page is audited like any indexable page.
+        Assert.Equal([new IssueHit(IssueCatalog.CANONICAL_TO_REDIRECT, backHere.UrlId, "The canonical URL redirects back to this page", site.Id($"{site.Site}/page"))],
+            Hits(analysed[0]));
+        Assert.Equal([IssueCatalog.TITLE_TOO_SHORT], new TitleRules(new AnalysisSettings()).Check(analysed[0]).Select(hit => hit.Issue));
+        Assert.Equal("The canonical URL returns HTTP 404", Hits(analysed[1]).Single().Detail);
+        Assert.Equal("The canonical URL redirects to a URL that returns HTTP 404", Hits(analysed[2]).Single(hit => hit.Issue == IssueCatalog.CANONICAL_BROKEN).Detail);
+        Assert.Equal([IssueCatalog.CANONICALISED_PAGE], Hits(analysed[3]).Select(hit => hit.Issue));
+        Assert.Equal([IssueCatalog.CANONICALISED_PAGE, IssueCatalog.CANONICAL_TO_REDIRECT], Hits(analysed[4]).Select(hit => hit.Issue));
+    }
+
+    [Fact]
+    public void AnInstantMetaRefreshIsARedirect()
+    {
+        var site = new RuleHarness();
+        var home = site.Page($"{site.Site}/", RuleHarness.Html(body: "<a href=\"/old\">Old</a><a href=\"/later\">Later</a>"));
+        var stub = site.Page($"{site.Site}/old", RuleHarness.Html("<meta http-equiv=\"refresh\" content=\"0; url=/new\"><meta name=\"robots\" content=\"noindex\">"),
+            IndexabilityReason.Noindex);
+        site.Ok($"{site.Site}/new", inSitemap: true);
+        var delayed = site.Page($"{site.Site}/later", RuleHarness.Html("<meta http-equiv=\"refresh\" content=\"5; url=/new\">"));
+        var target = site.Id($"{site.Site}/new");
+        var urls = site.Table(instantRefreshes: [(stub.UrlId, target)]);
+
+        Assert.Equal(new UrlStatus(Known: true, IsInternal: true, IsHttps: true, Depth: 1, Fetched: true, FetchOutcome.Redirect, 200, IsHtml: true,
+            IsParsed: true, IndexabilityReason.Redirected, target, null, InSitemap: false, IsMetaRefresh: true), urls[stub.UrlId]);
+        Assert.Equal([(stub.UrlId, IndexabilityReason.Redirected)], urls.IndexabilityChanges);
+        Assert.True(RuleHarness.AsAnalysed(stub, urls).IsRedirect);
+        Assert.False(RuleHarness.AsAnalysed(delayed, urls).IsRedirect);
+
+        // Linking to the stub is linking to a redirect, and the link reaches /new.
+        Assert.Equal("1 redirecting URL", new LinkRules(urls).Check(home).Single(hit => hit.Issue == IssueCatalog.LINKS_TO_REDIRECTS).Detail);
+        var inlinks = new InlinkRules(urls, crawlComplete: true);
+        inlinks.Observe(home);
+        Assert.Empty(inlinks.Finish());
+
+        // The noindex on a stub nobody sees doesn't matter; the refresh does.
+        Assert.Equal([IssueCatalog.META_REFRESH], new IndexabilityRules().Check(RuleHarness.AsAnalysed(stub, urls)).Select(hit => hit.Issue));
+        Assert.Equal("The canonical URL redirects with an instant meta refresh",
+            new CanonicalRules(urls).Check(site.Page($"{site.Site}/x", RuleHarness.Html($"<link rel=\"canonical\" href=\"{site.Site}/old\">"),
+                IndexabilityReason.Canonicalised)).Single(hit => hit.Issue == IssueCatalog.CANONICAL_TO_REDIRECT).Detail);
     }
 
     [Fact]

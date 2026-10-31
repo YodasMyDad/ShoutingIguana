@@ -19,13 +19,15 @@ public static class HtmlPageParser
     public static ParsedPage Parse(string html, Uri pageUri, IReadOnlyList<ResponseHeader> headers, string robotsToken)
     {
         using var document = PARSER.Value!.ParseDocument(html);
-        var baseHref = document.Head?.QuerySelector("base[href]")?.GetAttribute("href");
+
+        // Browsers use the first base with an href anywhere in the document, even one a stray element pushed into the body.
+        var baseHref = document.QuerySelector("base[href]")?.GetAttribute("href");
         var baseUri = baseHref is not null && UrlNormalizer.TryResolve(pageUri, baseHref, out var resolvedBase)
             ? resolvedBase
             : pageUri;
 
         using var text = new TextAccumulator();
-        var walker = new PageWalker(baseUri, robotsToken, text);
+        var walker = new PageWalker(pageUri, baseUri, robotsToken, text);
         if (document.DocumentElement is { } root)
         {
             walker.Walk(root);

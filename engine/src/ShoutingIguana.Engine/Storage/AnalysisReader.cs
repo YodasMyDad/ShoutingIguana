@@ -53,7 +53,7 @@ internal sealed class AnalysisReader : IDisposable
         Rows($"""
             SELECT u.id, u.is_internal, substr(u.url, 1, 6) = 'https:', u.depth, u.source,
                    r.url_id IS NOT NULL, r.outcome, r.status_code, r.is_html, r.indexability_reason,
-                   r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0)
+                   r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0), u.url, r.content_type
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id
             """, reader =>
         {
@@ -64,30 +64,34 @@ internal sealed class AnalysisReader : IDisposable
                 startId = id;
             }
 
+            var outcome = fetched ? (FetchOutcome)reader.GetInt32(6) : default;
+            var contentType = outcome == FetchOutcome.Success && fetched && !reader.IsDBNull(14) ? reader.GetString(14) : null;
             statuses[id] = new UrlStatus(
                 Known: true,
                 IsInternal: reader.GetBoolean(1),
                 IsHttps: reader.GetBoolean(2),
                 Depth: reader.GetInt32(3),
                 Fetched: fetched,
-                Outcome: fetched ? (FetchOutcome)reader.GetInt32(6) : default,
+                Outcome: outcome,
                 StatusCode: reader.IsDBNull(7) ? 0 : reader.GetInt32(7),
                 IsHtml: fetched && reader.GetBoolean(8),
                 IsParsed: fetched && reader.GetBoolean(12),
                 IndexabilityReason: fetched ? (IndexabilityReason)reader.GetInt32(9) : default,
                 RedirectTargetId: reader.IsDBNull(10) ? 0 : reader.GetInt32(10),
                 SizeBytes: reader.IsDBNull(11) ? null : reader.GetInt64(11),
-                InSitemap: inSitemap[id]);
+                InSitemap: inSitemap[id],
+                IsResource: ResourceTypes.IsResource(reader.GetString(13), contentType));
         });
 
-        return new UrlTable(statuses, startId);
+        return new UrlTable(statuses, startId, ReadInstantRefreshes(), ReadCanonicalTargets());
     }
 
     /// <summary>
     /// Every internal HTML page whose body was parsed, with its facts and outgoing links, in crawl order. URLs that were
     /// only status-checked (outside the start folder, iframes) have header facts alone and aren't pages to audit.
+    /// Indexability comes from <paramref name="urls"/>, which knows where canonicals and meta refreshes lead.
     /// </summary>
-    public IEnumerable<AnalyzedPage> ReadPages()
+    public IEnumerable<AnalyzedPage> ReadPages(UrlTable urls)
     {
         using var command = _connection.CreateCommand();
         command.CommandText = $"""
@@ -120,13 +124,16 @@ internal sealed class AnalysisReader : IDisposable
                 BodyBytes = reader.IsDBNull(4) ? null : reader.GetInt64(4),
                 TimeToFirstByteMs = reader.GetInt32(5),
                 ResponseMs = reader.GetInt32(6),
-                IndexabilityReason = (IndexabilityReason)reader.GetInt32(7),
+                IndexabilityReason = urls[id].IndexabilityReason,
                 Headers = details.Headers,
                 Facts = details.Page,
                 Links = ReadLinks(id)
             };
         }
     }
+
+    /// <summary>The stored URL with this id, or null when there's none (0 means no URL).</summary>
+    public string? ReadUrl(int urlId) => CrawlDatabase.Scalar(_connection, $"SELECT url FROM urls WHERE id = {urlId}") as string;
 
     /// <summary>The stored facts of one URL, or null when it has none (not HTML, not internal, or not fetched).</summary>
     public PageFacts? ReadFacts(int urlId)
@@ -137,6 +144,18 @@ internal sealed class AnalysisReader : IDisposable
 
     /// <summary>Whether sitemap discovery finished, so coverage checks against the sitemaps are meaningful.</summary>
     public bool ReadSitemapsDone() => CrawlDatabase.Scalar(_connection, "SELECT sitemaps_done FROM crawl WHERE id = 1") is 1L;
+
+    /// <summary>Internal URLs the depth or URL limit kept out of the crawl, per reason.</summary>
+    public Dictionary<SkipReason, long> ReadLimitSkips()
+    {
+        Dictionary<SkipReason, long> skips = [];
+        Rows($"""
+            SELECT skip_reason, COUNT(*) FROM urls
+            WHERE is_internal = 1 AND state = {(int)UrlState.Skipped} AND skip_reason IN ({(int)SkipReason.DepthLimit}, {(int)SkipReason.UrlLimit})
+            GROUP BY skip_reason
+            """, reader => skips[(SkipReason)reader.GetInt32(0)] = reader.GetInt64(1));
+        return skips;
+    }
 
     /// <summary>Links from one page to a #fragment on another, streamed for the fragment check.</summary>
     public IEnumerable<(int From, int To, string Fragment)> ReadFragmentLinks()
@@ -197,6 +216,37 @@ internal sealed class AnalysisReader : IDisposable
         _links.Dispose();
         _details.Dispose();
         _connection.Dispose();
+    }
+
+    /// <summary>
+    /// Pages whose meta refresh moves on at once (0 seconds), with where to. The refresh target is a link of its own;
+    /// the delay is only in the page facts, which are read for those pages alone.
+    /// </summary>
+    private List<(int Page, int Target)> ReadInstantRefreshes()
+    {
+        List<(int Page, int Target)> candidates = [];
+        Rows($"SELECT from_id, to_id FROM links WHERE kind = {(int)LinkKind.MetaRefresh} AND from_id <> to_id",
+            reader => candidates.Add((reader.GetInt32(0), reader.GetInt32(1))));
+        return candidates.Where(candidate => ReadFacts(candidate.Page)?.MetaRefresh is { DelaySeconds: 0 }).ToList();
+    }
+
+    /// <summary>Pages the crawl recorded as canonicalised, with the target of their first canonical in the head or a Link header.</summary>
+    private List<(int Page, int Target)> ReadCanonicalTargets()
+    {
+        List<(int Page, int Target)> canonicals = [];
+        Rows($"""
+            SELECT r.url_id, (SELECT l.to_id FROM links l
+                              WHERE l.from_id = r.url_id AND l.kind = {(int)LinkKind.Canonical} AND (l.flags & {(int)LinkFlags.OutsideHead}) = 0
+                              ORDER BY l.rowid LIMIT 1)
+            FROM responses r WHERE r.indexability_reason = {(int)IndexabilityReason.Canonicalised}
+            """, reader =>
+        {
+            if (!reader.IsDBNull(1))
+            {
+                canonicals.Add((reader.GetInt32(0), reader.GetInt32(1)));
+            }
+        });
+        return canonicals;
     }
 
     private List<StoredLink> ReadLinks(int fromId)

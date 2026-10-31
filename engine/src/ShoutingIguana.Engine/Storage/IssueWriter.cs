@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Storage;
@@ -30,7 +31,9 @@ internal sealed class IssueWriter : IDisposable
         _fileLock = fileLock;
         _logger = logger;
         _transaction = connection.BeginTransaction();
-        CrawlDatabase.Execute(connection, "DELETE FROM issues; DELETE FROM issue_types; DELETE FROM analysis;", _transaction);
+        CrawlDatabase.Execute(connection,
+            "DELETE FROM issues; DELETE FROM issue_types; DELETE FROM analysis; DELETE FROM analysis_notes; DELETE FROM effective_indexability;",
+            _transaction);
 
         _insert = connection.CreateCommand();
         _insert.Transaction = _transaction;
@@ -89,9 +92,24 @@ internal sealed class IssueWriter : IDisposable
         _insert.ExecuteNonQuery();
     }
 
-    /// <summary>Records every check that ran with its URL count, plus the analysis itself, then commits.</summary>
+    /// <summary>Stores indexability the analysis judged differently from the crawl, for the stats and the UI.</summary>
+    public void AddIndexability(IReadOnlyList<(int UrlId, IndexabilityReason Reason)> changes)
+    {
+        using var insert = Command("INSERT OR REPLACE INTO effective_indexability (url_id, indexability_reason) VALUES ($urlId, $reason)");
+        var urlId = insert.Parameters.Add("$urlId", SqliteType.Integer);
+        var reason = insert.Parameters.Add("$reason", SqliteType.Integer);
+        foreach (var change in changes)
+        {
+            urlId.Value = change.UrlId;
+            reason.Value = (int)change.Reason;
+            insert.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>Records every check that ran with its URL count, plus the analysis itself and its notes, then commits.</summary>
+    /// <param name="checks">The checks that ran; ones the crawl couldn't support are left out.</param>
     /// <returns>Flagged URL counts per issue id.</returns>
-    public Dictionary<string, long> Commit(IReadOnlyList<IssueDefinition> catalog, AnalysisInfo info, string settingsJson)
+    public Dictionary<string, long> Commit(IReadOnlyList<IssueDefinition> checks, AnalysisInfo info, string settingsJson, IReadOnlyList<string> notes)
     {
         Dictionary<string, long> counts = new(StringComparer.Ordinal);
         using (var count = Command("SELECT issue, COUNT(*) FROM issues GROUP BY issue"))
@@ -108,7 +126,7 @@ internal sealed class IssueWriter : IDisposable
                    VALUES ($id, $category, $severity, $title, $description, $fix, $count)
                    """))
         {
-            foreach (var issue in catalog)
+            foreach (var issue in checks)
             {
                 type.Parameters.Clear();
                 type.Parameters.AddWithValue("$id", issue.Id);
@@ -133,6 +151,16 @@ internal sealed class IssueWriter : IDisposable
             analysis.Parameters.AddWithValue("$pages", info.PagesAnalyzed);
             analysis.Parameters.AddWithValue("$durationMs", (long)info.Duration.TotalMilliseconds);
             analysis.ExecuteNonQuery();
+        }
+
+        using (var note = Command("INSERT INTO analysis_notes (note) VALUES ($note)"))
+        {
+            var text = note.Parameters.Add("$note", SqliteType.Text);
+            foreach (var value in notes)
+            {
+                text.Value = value;
+                note.ExecuteNonQuery();
+            }
         }
 
         _transaction.Commit();

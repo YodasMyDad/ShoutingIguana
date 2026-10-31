@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Hashing;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -8,9 +9,16 @@ namespace ShoutingIguana.Engine.Parsing;
 /// <summary>
 /// Word count plus two duplicate-detection keys computed in one pass, without allocating per word: an
 /// exact hash of the lowercased words, and a 64-bit SimHash over 3-word shingles for near-duplicates.
+/// A word runs on through combining marks (Hindi vowel signs, decomposed accents), and through invisible
+/// joiners and an apostrophe between letters ("don't" is one word), which are left out of its spelling.
 /// </summary>
 public static class ContentFingerprint
 {
+    private const char SOFT_HYPHEN = '­';
+    private const char ZERO_WIDTH_NON_JOINER = '‌';
+    private const char ZERO_WIDTH_JOINER = '‍';
+    private const char RIGHT_SINGLE_QUOTATION_MARK = '’';
+
     private const int MAX_TOKEN_CHARS = 64;
     private const ulong GOLDEN_RATIO = 0x9E3779B97F4A7C15;
     private const ulong FINALIZER = 0xFF51AFD7ED558CCD;
@@ -44,14 +52,21 @@ public static class ContentFingerprint
             }
             else
             {
-                while (index < text.Length && char.IsLetterOrDigit(text[index]) && !IsUnspaced(text[index]))
+                for (; index < text.Length && !IsUnspaced(text[index]); index++)
                 {
-                    if (length < MAX_TOKEN_CHARS)
+                    var character = text[index];
+                    if (char.IsLetterOrDigit(character) || IsCombiningMark(character))
                     {
-                        token[length++] = char.ToLowerInvariant(text[index]);
+                        if (length < MAX_TOKEN_CHARS)
+                        {
+                            token[length++] = char.ToLowerInvariant(character);
+                        }
                     }
-
-                    index++;
+                    else if (!IsInvisibleJoiner(character) &&
+                             !(character is '\'' or RIGHT_SINGLE_QUOTATION_MARK && index + 1 < text.Length && char.IsLetter(text[index + 1])))
+                    {
+                        break;
+                    }
                 }
             }
 
@@ -108,6 +123,11 @@ public static class ContentFingerprint
         or >= '㐀' and <= '䶿' // CJK extension A
         or >= '一' and <= '鿿' // CJK unified ideographs
         or >= '豈' and <= '﫿'; // CJK compatibility ideographs
+
+    private static bool IsCombiningMark(char character) => char.GetUnicodeCategory(character)
+        is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark;
+
+    private static bool IsInvisibleJoiner(char character) => character is SOFT_HYPHEN or ZERO_WIDTH_NON_JOINER or ZERO_WIDTH_JOINER;
 
     private static ulong Mix(ulong first, ulong second, ulong third)
     {

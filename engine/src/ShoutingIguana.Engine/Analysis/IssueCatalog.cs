@@ -83,7 +83,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition INTERNAL_NOFOLLOW_LINKS = new("internal-nofollow-links", IssueCategory.Links, IssueSeverity.Warning,
         "Nofollow internal links",
-        "The page marks links to its own site as nofollow, which stops them passing signals and can keep pages from being crawled.",
+        "The page marks links to its own pages as nofollow, which stops them passing signals and can keep pages from being crawled. Links to images and other files don't count.",
         "Remove rel=\"nofollow\" from internal links.");
 
     public static readonly IssueDefinition EMPTY_ANCHOR_TEXT = new("empty-anchor-text", IssueCategory.Links, IssueSeverity.Notice,
@@ -127,6 +127,11 @@ public static class IssueCatalog
         "robots.txt returns a server error or doesn't respond. Google treats that as \"disallow everything\" and stops crawling the site.",
         "Make robots.txt return 200 (or 404 if you don't need one).");
 
+    public static readonly IssueDefinition ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN = new("robots-txt-unreachable-other-origin", IssueCategory.Indexability, IssueSeverity.Warning,
+        "robots.txt unavailable on another of the site's origins",
+        "robots.txt on one of the site's other origins (a subdomain, or the http:// version) returns a server error or doesn't respond, so Google stops crawling that origin. The main site isn't affected.",
+        "Make robots.txt on that origin return 200 (or 404 if you don't need one), or stop linking to the origin.");
+
     public static readonly IssueDefinition ROBOTS_TXT_MISSING = new("robots-txt-missing", IssueCategory.Indexability, IssueSeverity.Notice,
         "No robots.txt",
         "The site has no robots.txt. Everything may be crawled, which is fine, but there's nowhere to point crawlers at your sitemap.",
@@ -150,12 +155,12 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition CANONICAL_BROKEN = new("canonical-broken", IssueCategory.Canonicals, IssueSeverity.Error,
         "Canonical points to a broken URL",
-        "The canonical URL returns an error or doesn't respond, so the signal is ignored.",
+        "The canonical URL returns an error or doesn't respond, directly or at the end of its redirects, so search engines ignore it and judge the page on its own.",
         "Point the canonical at a working, indexable page.");
 
     public static readonly IssueDefinition CANONICAL_TO_REDIRECT = new("canonical-to-redirect", IssueCategory.Canonicals, IssueSeverity.Warning,
         "Canonical points to a redirect",
-        "The canonical URL redirects elsewhere, a mixed signal search engines may ignore.",
+        "The canonical URL redirects, a mixed signal search engines may ignore. When the redirect leads back to this page, the redirect wins and this page is the one indexed.",
         "Point the canonical at the final URL.");
 
     public static readonly IssueDefinition CANONICAL_TO_NON_INDEXABLE = new("canonical-to-non-indexable", IssueCategory.Canonicals, IssueSeverity.Warning,
@@ -178,6 +183,11 @@ public static class IssueCatalog
         "The canonical isn't a valid http(s) URL, so it's ignored.",
         "Fix the canonical URL.");
 
+    public static readonly IssueDefinition NOINDEX_WITH_CANONICAL = new("noindex-with-canonical", IssueCategory.Canonicals, IssueSeverity.Warning,
+        "Noindex page with a canonical to another URL",
+        "The page is noindex and names another URL as its canonical. Google advises against combining them: the noindex drops the page from search, while the canonical says it's a duplicate whose signals belong to the other URL.",
+        "Use the canonical alone to fold the page into the other URL, or the noindex alone, with a self-referencing canonical, to keep it out of search.");
+
     // Sitemaps
     public static readonly IssueDefinition SITEMAP_NON_INDEXABLE = new("sitemap-non-indexable", IssueCategory.Sitemaps, IssueSeverity.Warning,
         "Non-indexable URL in sitemap",
@@ -198,6 +208,11 @@ public static class IssueCatalog
         "No XML sitemap found",
         "No sitemap is listed in robots.txt or found at /sitemap.xml.",
         "Publish an XML sitemap and reference it in robots.txt.");
+
+    public static readonly IssueDefinition SITEMAP_URL_OTHER_HOST = new("sitemap-url-other-host", IssueCategory.Sitemaps, IssueSeverity.Warning,
+        "Sitemap lists a URL on another host",
+        "A sitemap lists a URL outside the site, often left over from a move to or from www. Search engines drop such entries unless that host's robots.txt points to the sitemap, so the page it was meant for isn't submitted.",
+        "List the URL as it is on the site's own host now, or remove the entry.");
 
     // Titles
     public static readonly IssueDefinition TITLE_MISSING = new("title-missing", IssueCategory.Titles, IssueSeverity.Error,
@@ -436,10 +451,10 @@ public static class IssueCatalog
         REDIRECT_CHAIN, REDIRECT_LOOP, REDIRECT_BROKEN, REDIRECT_TEMPORARY, REDIRECT_DOWNGRADE, META_REFRESH,
         BROKEN_INTERNAL_LINKS, BROKEN_EXTERNAL_LINKS, LINKS_TO_REDIRECTS, INTERNAL_NOFOLLOW_LINKS, EMPTY_ANCHOR_TEXT,
         BROKEN_FRAGMENT_LINKS, ORPHAN_PAGE,
-        NOINDEX_PAGE, NOFOLLOW_PAGE, BLOCKED_BY_ROBOTS, SNIPPET_BLOCKED, ROBOTS_TXT_UNREACHABLE, ROBOTS_TXT_MISSING,
+        NOINDEX_PAGE, NOFOLLOW_PAGE, BLOCKED_BY_ROBOTS, SNIPPET_BLOCKED, ROBOTS_TXT_UNREACHABLE, ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, ROBOTS_TXT_MISSING,
         CANONICALISED_PAGE, CANONICAL_MISSING, CANONICAL_MULTIPLE, CANONICAL_BROKEN, CANONICAL_TO_REDIRECT,
-        CANONICAL_TO_NON_INDEXABLE, CANONICAL_OUTSIDE_HEAD, CANONICAL_RELATIVE, CANONICAL_INVALID,
-        SITEMAP_NON_INDEXABLE, NOT_IN_SITEMAP, SITEMAP_ERROR, SITEMAP_MISSING,
+        CANONICAL_TO_NON_INDEXABLE, CANONICAL_OUTSIDE_HEAD, CANONICAL_RELATIVE, CANONICAL_INVALID, NOINDEX_WITH_CANONICAL,
+        SITEMAP_NON_INDEXABLE, NOT_IN_SITEMAP, SITEMAP_ERROR, SITEMAP_MISSING, SITEMAP_URL_OTHER_HOST,
         TITLE_MISSING, TITLE_MULTIPLE, TITLE_TOO_LONG, TITLE_TOO_SHORT, TITLE_DUPLICATE,
         DESCRIPTION_MISSING, DESCRIPTION_MULTIPLE, DESCRIPTION_TOO_LONG, DESCRIPTION_TOO_SHORT, DESCRIPTION_DUPLICATE,
         H1_MISSING, H1_MULTIPLE, H1_DUPLICATE,

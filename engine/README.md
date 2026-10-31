@@ -55,9 +55,10 @@ responses and rate limits are recorded as `Blocked`, with the reason, and raise 
 
 ## SEO analysis
 
-When a crawl completes, `CrawlAnalyzer` runs 81 checks over what was stored and writes the issues into the same
+When a crawl completes, `CrawlAnalyzer` runs 84 checks over what was stored and writes the issues into the same
 file. It never refetches or reparses anything, so any crawl can be analysed again with new rules or thresholds
-(`si analyze`). It refuses a crawl that is still running.
+(`si analyze`). It refuses a crawl that is still running. A rule that fails on one page (page content is untrusted)
+is logged with the URL and skipped for that page, and the analysis notes say which rule failed on how many pages.
 
 - **One pass.** Page rules see each page's stored facts, headers and outgoing links, with the status of every
   link target looked up from an in-memory table indexed by URL id (a few dozen bytes per URL). Site rules
@@ -70,12 +71,21 @@ file. It never refetches or reparses anything, so any crawl can be analysed agai
   rich-result requirements, hreflang) look only at indexable pages. Technical checks look at every page the
   crawler parsed; status-checked URLs (outside the start folder, iframes) and Cloudflare's `/cdn-cgi/`
   endpoints aren't audited as pages. Site-wide settings (HTTPS, security headers, robots.txt, sitemap files) are
-  reported once, on the home page, rather than on every URL. Orphan and sitemap-coverage checks need a complete
-  crawl, so a stopped crawl skips them and says so.
+  reported once, on the home page, rather than on every URL.
+- **Coverage.** The orphan check needs every page that could link to a sitemap page, so a stopped, depth- or
+  URL-limited, or folder-scoped crawl skips it. Pages missing from the sitemaps need every sitemap read, so that
+  check is skipped while a declared sitemap fails for a reason that says nothing about its contents (a 5xx, 429,
+  403, timeout or bad XML; a 404 or 410 sitemap simply doesn't exist). Skipped checks are left out of
+  `issue_types`, and the analysis notes (`analysis_notes`, `AnalysisSummary.Notes`) say why.
+- **As search engines see it.** An instant (0-second) meta refresh is a redirect, as Google treats it. A canonical
+  whose target leads back to the page (through a redirect) or nowhere doesn't make the page non-indexable. Links and
+  images are judged by where their redirects end, so a link to a redirect that ends at a 404 is broken. Where this
+  differs from what the crawl recorded, the analysis stores it in `effective_indexability`, which `si stats` reads.
 - **Other sites.** A status many sites only send crawlers (401, 403, 405, 429, 503, 999) doesn't make an external
   link, canonical, alternate or image "broken".
 - **Thresholds.** `AnalysisSettings` holds every limit (title 30–60 characters, description 70–155, 200
-  words, images over 200 KB, pages slower than 1 s...). Each analysis stores the values it used.
+  words, images over 200 KB, pages slower than 1 s...). Each analysis stores the values it used. Title and
+  description lengths count full-width (CJK) characters and emoji as two, as they take about twice the room.
 - **Atomic.** The issues are replaced in one transaction, so a failed or cancelled analysis keeps the
   previous results.
 
@@ -97,7 +107,8 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `robots`, `sitemaps`, `sitemap_urls` | robots.txt per origin, sitemaps read (after redirects; `is_probe` marks a guess at `/sitemap.xml` when nothing declared one), and which URLs each listed |
 | `issues` | One row per flagged URL and issue: a short detail, and the other URL involved (broken target, duplicate, canonical) |
 | `issue_types` | Every check that ran: its title, category, severity, description, fix, and how many URLs it flagged |
-| `analysis` | When the last analysis ran, with which engine version and settings |
+| `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, and what it couldn't do and why |
+| `effective_indexability` | Indexability as analysed, for URLs where it differs from the crawl's (an instant meta refresh, a canonical leading back to the page) |
 
 URLs that only appear in sitemaps keep depth `1000000` (`CrawlDepth.UNLINKED`), which is how orphan pages show up.
 

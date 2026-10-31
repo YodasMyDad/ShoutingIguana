@@ -58,6 +58,7 @@ public sealed partial class SyntheticSite
     private readonly string _external;
     private readonly IReadOnlyList<Plant> _plants;
     private readonly Dictionary<string, Plant> _plantsByPath;
+    private readonly Dictionary<string, Plant> _partnerPlantsByPath;
 
     public SyntheticSite(SyntheticSiteOptions options, Uri baseUri, Uri externalBaseUri)
     {
@@ -70,7 +71,8 @@ public sealed partial class SyntheticSite
         _base = baseUri.GetLeftPart(UriPartial.Authority);
         _external = externalBaseUri.GetLeftPart(UriPartial.Authority);
         _plants = CreatePlants();
-        _plantsByPath = _plants.ToDictionary(plant => plant.Path, StringComparer.Ordinal);
+        _plantsByPath = _plants.Where(plant => !plant.OnPartnerSite).ToDictionary(plant => plant.Path, StringComparer.Ordinal);
+        _partnerPlantsByPath = _plants.Where(plant => plant.OnPartnerSite).ToDictionary(plant => plant.Path, StringComparer.Ordinal);
     }
 
     public int PageCount => _options.PageCount;
@@ -85,6 +87,11 @@ public sealed partial class SyntheticSite
     {
         if (external)
         {
+            if (_partnerPlantsByPath.TryGetValue(path, out var partnerPlant))
+            {
+                return partnerPlant.Respond();
+            }
+
             if (path.StartsWith("/ext/img/", StringComparison.Ordinal))
             {
                 return new SyntheticResponse(200, "image/jpeg", null, IMAGE_BYTES, null);
@@ -271,6 +278,12 @@ public sealed partial class SyntheticSite
             if (IsNoindex(product))
             {
                 Flag("noindex-page", path);
+
+                // noindex decides the page, so a canonical elsewhere is a mixed signal rather than a canonicalised page.
+                if (IsCanonicalised(product))
+                {
+                    Flag("noindex-with-canonical", path);
+                }
             }
             else if (IsCanonicalised(product))
             {
@@ -329,11 +342,12 @@ public sealed partial class SyntheticSite
             Flag("sitemap-missing", "/");
         }
 
+        // A plant's sitemap issues come from its sitemap entry, which a site without sitemaps doesn't have.
         foreach (var plant in _plants)
         {
-            foreach (var issue in plant.Issues)
+            foreach (var issue in plant.Issues.Where(issue => _options.Sitemaps || !issue.StartsWith("sitemap-", StringComparison.Ordinal)))
             {
-                Flag(issue, plant.Url ?? plant.Path);
+                Flag(issue, PlantUrl(plant));
             }
         }
 
@@ -345,24 +359,30 @@ public sealed partial class SyntheticSite
             AnalysedPages: htmlPages - _plants.Count(plant => plant is { Status: 200, IsPage: true, IsAnalysed: false }),
             Products: products,
             Orphans: orphans,
-            BrokenUrls: broken.Count + _plants.Count(plant => plant.Status == 404),
+            BrokenUrls: broken.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: false }),
             ServerErrorUrls: errors.Count,
             Redirects: redirects.Count + _plants.Count(plant => plant.Status is >= 300 and < 400),
             RobotsDisallowed: disallowed.Count,
-            NofollowOnly: hidden.Count,
+            NofollowOnly: hidden.Count + NOFOLLOW_ONLY_FILES.Length,
             ExternalOk: externalOk.Count,
-            ExternalMissing: externalMissing.Count,
+            ExternalMissing: externalMissing.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: true }),
             Images: images.Count,
             Noindex: Count(issues, "noindex-page"),
             Canonicalised: Count(issues, "canonicalised-page"),
             DuplicateTitlePages: Count(issues, "title-duplicate") - _plants.Count(plant => plant.Issues.Contains("title-duplicate")),
             MissingDescriptions: Count(issues, "description-missing") - _plants.Count(plant => plant.Issues.Contains("description-missing")),
             ImagesMissingAlt: Count(issues, "image-missing-alt") - _plants.Count(plant => plant.Issues.Contains("image-missing-alt")),
-            IssueUrls: issues.ToDictionary(pair => pair.Key, IReadOnlySet<string> (pair) => pair.Value, StringComparer.Ordinal));
+            IssueUrls: issues.ToDictionary(pair => pair.Key, IReadOnlySet<string> (pair) => pair.Value, StringComparer.Ordinal))
+        {
+            NofollowOnlyFiles = NOFOLLOW_ONLY_FILES.Length
+        };
     }
 
     private static int Count(Dictionary<string, HashSet<string>> issues, string issue) =>
         issues.TryGetValue(issue, out var urls) ? urls.Count : 0;
+
+    /// <summary>The absolute URL a plant is served, linked and listed at.</summary>
+    private string PlantUrl(Plant plant) => plant.Url ?? (plant.OnPartnerSite ? _external : _base) + plant.Path;
 
     /// <summary>Exact number of content-area links on a product page, for link-count assertions.</summary>
     public int ContentLinkCount(int product) => ContentLinks(product).Count();
@@ -655,7 +675,7 @@ public sealed partial class SyntheticSite
 
         foreach (var plant in _plants.Where(plant => plant.InSitemap))
         {
-            xml.Append("<url><loc>").Append(plant.Url ?? _base + plant.Path).Append("</loc></url>");
+            xml.Append("<url><loc>").Append(PlantUrl(plant)).Append("</loc></url>");
         }
 
         return xml.Append("</urlset>").ToString();

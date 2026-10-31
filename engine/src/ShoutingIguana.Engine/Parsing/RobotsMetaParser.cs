@@ -5,7 +5,8 @@ namespace ShoutingIguana.Engine.Parsing;
 /// <summary>
 /// Merges robots meta tags and X-Robots-Tag headers. Directives addressed to all robots, to the crawler's
 /// own token, or to Googlebot apply. Googlebot is always included because the point of an audit is what
-/// Google will do. Header values prefixed with another crawler's name (<c>bingbot: noindex</c>) are skipped.
+/// Google will do. A header value can address several crawlers (<c>bingbot: noindex, googlebot: nofollow</c>): each
+/// crawler's name starts a run of directives for it, and runs for other crawlers are skipped.
 /// </summary>
 internal static class RobotsMetaParser
 {
@@ -13,6 +14,13 @@ internal static class RobotsMetaParser
 
     private static readonly HashSet<string> VALUED_DIRECTIVES =
         new(["max-snippet", "max-image-preview", "max-video-preview", "unavailable_after"], StringComparer.Ordinal);
+
+    /// <summary>Directive names Google and Bing document, for telling "noindex nofollow" (two directives) from free text.</summary>
+    private static readonly HashSet<string> KNOWN_DIRECTIVES = new(
+    [
+        "all", "none", "index", "noindex", "follow", "nofollow", "noarchive", "nocache", "nosnippet", "noimageindex",
+        "notranslate", "indexifembedded", "noodp", "noydir", .. VALUED_DIRECTIVES
+    ], StringComparer.Ordinal);
 
     public static bool AppliesToMetaName(string metaName, string robotsToken) =>
         metaName == "robots" || metaName == GOOGLEBOT || metaName.Equals(robotsToken, StringComparison.OrdinalIgnoreCase);
@@ -23,29 +31,34 @@ internal static class RobotsMetaParser
 
         foreach (var content in metaContents)
         {
-            AddDirectives(directives, content);
+            foreach (var part in content.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                AddDirectives(directives, part);
+            }
         }
 
         foreach (var value in headerValues)
         {
-            var remainder = value.Trim();
-            var colon = remainder.IndexOf(':');
-            if (colon > 0)
+            var applies = true;
+            foreach (var part in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
-                var prefix = remainder[..colon].Trim().ToLowerInvariant();
-                var isCrawlerName = !VALUED_DIRECTIVES.Contains(prefix) && !prefix.Contains(',') && !prefix.Contains(' ');
-                if (isCrawlerName)
+                var directive = part;
+                var colon = part.IndexOf(':');
+                if (colon > 0)
                 {
-                    if (prefix != GOOGLEBOT && !prefix.Equals(robotsToken, StringComparison.OrdinalIgnoreCase))
+                    var prefix = part[..colon].Trim().ToLowerInvariant();
+                    if (!VALUED_DIRECTIVES.Contains(prefix) && !prefix.Contains(' '))
                     {
-                        continue;
+                        applies = prefix == GOOGLEBOT || prefix.Equals(robotsToken, StringComparison.OrdinalIgnoreCase);
+                        directive = part[(colon + 1)..].Trim();
                     }
+                }
 
-                    remainder = remainder[(colon + 1)..];
+                if (applies && directive.Length > 0)
+                {
+                    AddDirectives(directives, directive);
                 }
             }
-
-            AddDirectives(directives, remainder);
         }
 
         if (directives.Count == 0)
@@ -57,11 +70,17 @@ internal static class RobotsMetaParser
         return new RobotsDirectives(none || directives.Contains("noindex"), none || directives.Contains("nofollow"), directives);
     }
 
-    private static void AddDirectives(List<string> directives, string content)
+    /// <summary>
+    /// Adds one comma-separated part. Directives separated only by spaces ("noindex nofollow") count separately when
+    /// every word is a known directive; anything else stays as written.
+    /// </summary>
+    private static void AddDirectives(List<string> directives, string part)
     {
-        foreach (var part in content.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        var lower = part.ToLowerInvariant();
+        var words = lower.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var spaced = words.Length > 1 && words.All(word => KNOWN_DIRECTIVES.Contains(word.Split(':')[0]));
+        foreach (var directive in spaced ? words : [lower])
         {
-            var directive = part.ToLowerInvariant();
             if (!directives.Contains(directive))
             {
                 directives.Add(directive);

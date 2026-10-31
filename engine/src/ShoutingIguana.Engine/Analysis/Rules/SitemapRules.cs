@@ -8,11 +8,20 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 
 /// <summary>
 /// Compares the sitemaps with what the crawl found. Problems with the sitemap files themselves go on the home page.
-/// Coverage (pages missing from the sitemaps, no sitemap at all) needs a complete crawl with every sitemap read.
+/// Coverage (pages missing from the sitemaps, no sitemap at all) needs a complete crawl with every sitemap read, and
+/// pages missing from the sitemaps can't be judged while a declared sitemap is <see cref="Unreadable"/>.
 /// </summary>
 internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> sitemaps, CrawlOptions options, bool crawlComplete) : ISiteRule
 {
     private const int LISTED_FAILURES = 3;
+
+    /// <summary>
+    /// The first sitemap listed in robots.txt or an index that failed for a reason that says nothing about what it
+    /// lists: a server error, rate limit, block, timeout or unparseable file. A 404 or 410 is different: that sitemap
+    /// doesn't exist, so pages it was meant to list really are in no sitemap a search engine can read.
+    /// </summary>
+    public static StoredSitemap? Unreadable(IReadOnlyList<StoredSitemap> sitemaps) =>
+        sitemaps.FirstOrDefault(sitemap => sitemap is { Error: not null, IsProbe: false, StatusCode: not (404 or 410) });
 
     public void Observe(AnalyzedPage page)
     {
@@ -20,11 +29,24 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
 
     public IEnumerable<IssueHit> Finish()
     {
-        var anyRead = sitemaps.Any(sitemap => sitemap is { Error: null, StatusCode: >= 200 and < 300 });
+        var checkCoverage = crawlComplete && Unreadable(sitemaps) is null &&
+                            sitemaps.Any(sitemap => sitemap is { Error: null, StatusCode: >= 200 and < 300 });
         for (var id = 1; id < urls.Length; id++)
         {
             var url = urls[id];
-            if (!url.IsInternal || !url.Fetched)
+
+            // sitemaps.org: every URL in a sitemap must be on the sitemap's own host, or search engines drop it.
+            if (!url.IsInternal)
+            {
+                if (url.InSitemap)
+                {
+                    yield return new IssueHit(IssueCatalog.SITEMAP_URL_OTHER_HOST, id, url.Fetched ? $"The URL {RuleText.Status(url)}" : "The URL wasn't checked");
+                }
+
+                continue;
+            }
+
+            if (!url.Fetched)
             {
                 continue;
             }
@@ -37,7 +59,7 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
             {
                 yield return new IssueHit(IssueCatalog.SITEMAP_NON_INDEXABLE, id, $"The URL {RuleText.Status(url)}");
             }
-            else if (crawlComplete && anyRead && !url.InSitemap && url.IsIndexablePage)
+            else if (checkCoverage && !url.InSitemap && url.IsIndexablePage)
             {
                 yield return new IssueHit(IssueCatalog.NOT_IN_SITEMAP, id);
             }
