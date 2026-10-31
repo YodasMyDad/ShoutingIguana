@@ -51,6 +51,59 @@ public sealed class SiteRuleTests
     }
 
     [Fact]
+    public void ChainsAreReportedWhereVisitorsEnterThemAndLongOnesAreNotLoops()
+    {
+        var site = new RuleHarness();
+        var home = site.Page($"{site.Site}/", RuleHarness.Html(body: "<a href=\"http://example.com/a\">A</a><a href=\"/linked-mid\">M</a><a href=\"/long-0\">L</a>"));
+
+        // http -> https -> trailing slash -> new place: three hops, entered only at the first.
+        var start = site.Fetched("http://example.com/a", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/a");
+        site.Fetched($"{site.Site}/a", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/a/");
+        site.Fetched($"{site.Site}/a/", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/b/");
+        site.Ok($"{site.Site}/b/");
+
+        // Mid-chain hops still count when something links to them, or a sitemap lists them.
+        var linkedMid = site.Fetched($"{site.Site}/linked-mid", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/listed-mid");
+        var listedMid = site.Fetched($"{site.Site}/listed-mid", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/x", inSitemap: true);
+        site.Fetched($"{site.Site}/x", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/b/");
+
+        // 25 hops: past the trace limit without repeating a URL.
+        for (var hop = 0; hop < 25; hop++)
+        {
+            site.Fetched($"{site.Site}/long-{hop}", FetchOutcome.Redirect, 301, redirectTo: hop < 24 ? $"{site.Site}/long-{hop + 1}" : $"{site.Site}/b/");
+        }
+
+        var urls = site.Table();
+        var rules = new RedirectRules(urls);
+        rules.Observe(home);
+        var chains = rules.Finish().Where(hit => hit.Issue == IssueCatalog.REDIRECT_CHAIN).ToList();
+
+        var longChain = site.Id($"{site.Site}/long-0");
+        Assert.Equal([start, linkedMid, longChain, listedMid], chains.Select(hit => hit.UrlId));
+        Assert.Equal("3 redirects", chains.Single(hit => hit.UrlId == start).Detail);
+        Assert.Equal("More than 20 redirects, which browsers don't follow", chains.Single(hit => hit.UrlId == longChain).Detail);
+        Assert.Equal(new RedirectTrace(site.Id($"{site.Site}/long-20"), UrlTable.MAX_REDIRECT_HOPS, IsLoop: false), urls.TraceRedirects(site.Id($"{site.Site}/long-0")));
+        Assert.True(urls.IsBrokenThroughRedirects(site.Id($"{site.Site}/long-0")));
+        Assert.False(urls.IsBrokenThroughRedirects(site.Id($"{site.Site}/long-5")));
+    }
+
+    [Theory]
+    [InlineData(10, "10 redirects")]
+    [InlineData(12, "12 redirects, more than the 10 Googlebot follows")]
+    public void ChainsLongerThanGooglebotFollowsSaySo(int hops, string detail)
+    {
+        var site = new RuleHarness();
+        for (var hop = 0; hop < hops; hop++)
+        {
+            site.Fetched($"{site.Site}/r{hop}", FetchOutcome.Redirect, 301, redirectTo: hop < hops - 1 ? $"{site.Site}/r{hop + 1}" : $"{site.Site}/end", inSitemap: hop == 0);
+        }
+
+        site.Ok($"{site.Site}/end");
+
+        Assert.Equal(detail, new RedirectRules(site.Table()).Finish().Single(hit => hit.Issue == IssueCatalog.REDIRECT_CHAIN).Detail);
+    }
+
+    [Fact]
     public void RobotsTxtProblemsCountOnlyForTheSitesOwnOrigins()
     {
         var site = new RuleHarness();

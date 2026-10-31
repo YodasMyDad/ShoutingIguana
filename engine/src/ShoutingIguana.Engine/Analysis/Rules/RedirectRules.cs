@@ -1,13 +1,32 @@
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Parsing.Models;
 
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
-/// <summary>Internal redirects: chains, loops, where they end up, temporary status codes and HTTPS downgrades.</summary>
+/// <summary>
+/// Internal redirects: chains, loops, where they end up, temporary status codes and HTTPS downgrades. A chain is
+/// reported once, where visitors and crawlers enter it (a URL that's linked, in a sitemap, or the start URL), not again
+/// at every hop along the way.
+/// </summary>
 internal sealed class RedirectRules(UrlTable urls) : ISiteRule
 {
+    /// <summary>Google Search Central: "Googlebot generally follows 10 redirect hops".</summary>
+    private const int GOOGLEBOT_MAX_HOPS = 10;
+
+    /// <summary>Redirecting URLs a crawled page links to in any way.</summary>
+    private readonly HashSet<int> _linked = [];
+
     public void Observe(AnalyzedPage page)
     {
+        foreach (var link in page.Links)
+        {
+            // An instant meta refresh is a hop of the chain itself, not a way into it.
+            if (!(page.IsRedirect && link.Kind == LinkKind.MetaRefresh) && urls[link.ToId] is { Fetched: true, Outcome: FetchOutcome.Redirect })
+            {
+                _linked.Add(link.ToId);
+            }
+        }
     }
 
     public IEnumerable<IssueHit> Finish()
@@ -43,9 +62,9 @@ internal sealed class RedirectRules(UrlTable urls) : ISiteRule
                 continue;
             }
 
-            if (trace.Hops >= 2)
+            if (trace.Hops >= 2 && (id == urls.StartId || url.InSitemap || _linked.Contains(id)))
             {
-                yield return new IssueHit(IssueCatalog.REDIRECT_CHAIN, id, RuleText.Count(trace.Hops, "redirect", "redirects"), trace.FinalId);
+                yield return new IssueHit(IssueCatalog.REDIRECT_CHAIN, id, ChainLength(trace), trace.FinalId);
             }
 
             var final = urls[trace.FinalId];
@@ -54,5 +73,16 @@ internal sealed class RedirectRules(UrlTable urls) : ISiteRule
                 yield return new IssueHit(IssueCatalog.REDIRECT_BROKEN, id, $"Ends at a URL that {RuleText.Status(final)}", trace.FinalId);
             }
         }
+    }
+
+    private string ChainLength(RedirectTrace trace)
+    {
+        if (urls[trace.FinalId] is { Outcome: FetchOutcome.Redirect, RedirectTargetId: > 0 })
+        {
+            return $"More than {UrlTable.MAX_REDIRECT_HOPS} redirects, which browsers don't follow";
+        }
+
+        var hops = RuleText.Count(trace.Hops, "redirect", "redirects");
+        return trace.Hops > GOOGLEBOT_MAX_HOPS ? $"{hops}, more than the {GOOGLEBOT_MAX_HOPS} Googlebot follows" : hops;
     }
 }

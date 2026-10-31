@@ -17,7 +17,8 @@ namespace ShoutingIguana.Engine.Analysis;
 /// </summary>
 internal sealed class UrlTable
 {
-    private const int MAX_REDIRECT_HOPS = 20;
+    /// <summary>Redirects followed before a trace stops: as many as Chrome and Firefox follow before giving up.</summary>
+    public const int MAX_REDIRECT_HOPS = 20;
 
     private readonly UrlStatus[] _statuses;
     private readonly int[] _followedInlinks;
@@ -130,15 +131,18 @@ internal sealed class UrlTable
         }
     }
 
-    /// <summary>Follows recorded redirects from a URL until one is not a redirect, comes back on itself, or is unknown.</summary>
+    /// <summary>
+    /// Follows recorded redirects from a URL until one is not a redirect, comes back on itself, or is unknown. A chain
+    /// longer than <see cref="MAX_REDIRECT_HOPS"/> stops there, still at a redirect: long, but not a loop.
+    /// </summary>
     public RedirectTrace TraceRedirects(int id)
     {
         HashSet<int> visited = [];
         var current = id;
         var hops = 0;
-        while (_statuses[current] is { Fetched: true, Outcome: FetchOutcome.Redirect, RedirectTargetId: > 0 } redirect)
+        while (hops < MAX_REDIRECT_HOPS && _statuses[current] is { Fetched: true, Outcome: FetchOutcome.Redirect, RedirectTargetId: > 0 } redirect)
         {
-            if (!visited.Add(current) || hops == MAX_REDIRECT_HOPS)
+            if (!visited.Add(current))
             {
                 return new RedirectTrace(current, hops, IsLoop: true);
             }

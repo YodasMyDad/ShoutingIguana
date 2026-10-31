@@ -10,6 +10,7 @@ public sealed partial class SyntheticSite
 {
     private const int PLANT_WORDS = 250;
     private const int SLOW_PAGE_DELAY_MS = 1_200;
+    private const int LONG_CHAIN_HOPS = 22;
 
     private const string SHARED_DESCRIPTION =
         "Two planted pages share this exact meta description, so the duplicate description check has to flag both of them.";
@@ -255,6 +256,18 @@ public sealed partial class SyntheticSite
         Other("loop-a", 301, linked: true, ["redirect-loop"], () => Redirect(301, PLANTS_PATH + "loop-b"));
         Other("loop-b", 301, linked: false, ["redirect-loop"], () => Redirect(301, PLANTS_PATH + "loop-a"));
         Other("redirect-broken", 301, linked: true, ["redirect-broken"], () => Redirect(301, PLANTS_PATH + "gone-redirect"));
+
+        // A chain is reported where visitors enter it, chain-a, which the hub links, and not again at chain-b.
+        Other("chain-a", 301, linked: true, ["redirect-chain"], () => Redirect(301, PLANTS_PATH + "chain-b"));
+        Other("chain-b", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "chain-c"));
+        Other("chain-c", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "thin"));
+
+        // A very long chain is a chain, not a loop: no URL repeats. Browsers give up after 20 hops, so the hub's link to it is broken.
+        for (var hop = 0; hop < LONG_CHAIN_HOPS; hop++)
+        {
+            var next = hop + 1 < LONG_CHAIN_HOPS ? $"{PLANTS_PATH}long-chain-{hop + 1}" : PLANTS_PATH + "thin";
+            Other($"long-chain-{hop}", 301, linked: hop == 0, hop == 0 ? ["redirect-chain"] : [], () => Redirect(301, next));
+        }
         Other("moved", 301, linked: false, [], () => Redirect(301, PLANTS_PATH + "thin"));
         Other("gone", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone"));
         Other("gone-redirect", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone-redirect"));
