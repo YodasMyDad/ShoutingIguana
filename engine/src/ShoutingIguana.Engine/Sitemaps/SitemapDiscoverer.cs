@@ -27,6 +27,7 @@ internal sealed class SitemapDiscoverer(
     CrawlWriter writer,
     OutLinkFactory links,
     ICrawlObserver observer,
+    TimeProvider timeProvider,
     ILogger logger)
 {
     private const int MAX_SITEMAPS = 1_000;
@@ -103,8 +104,8 @@ internal sealed class SitemapDiscoverer(
 
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(60, options.RequestTimeoutSeconds * 3)));
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(60, options.RequestTimeoutSeconds * 3)), timeProvider);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
 
             var (response, lease, location) = await SendFollowingRedirectsAsync(uri, timeout.Token).ConfigureAwait(false);
             using var heldLease = lease;

@@ -1,12 +1,14 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Fetching;
+using ShoutingIguana.Engine.Tests.Support;
 
 namespace ShoutingIguana.Engine.Tests.Sitemaps;
 
@@ -15,8 +17,12 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
 {
     private const string URLSET = "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">";
 
+    /// <summary>Sends a sitemap's first URL, then nothing more, without closing.</summary>
+    private const string STALLING_SITEMAP = "/stalls.xml";
+
     private readonly List<string> _databases = [];
     private readonly Dictionary<string, (string ContentType, string Body)> _files = new(StringComparer.Ordinal);
+    private readonly TaskCompletionSource _stalled = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private LoopbackServer _server = null!;
 
     public async Task InitializeAsync() => _server = await LoopbackServer.StartAsync(RespondAsync);
@@ -87,14 +93,58 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         Assert.Equal(2, sitemap.UrlCount);
     }
 
+    /// <remarks>
+    /// The stalling crawls aren't disposed: a read that ignored its token would hold the stop for good. Disposing the
+    /// server ends them either way.
+    /// </remarks>
+    [Fact]
+    public async Task ASitemapThatStallsTimesOutAndKeepsWhatItListed()
+    {
+        var time = new FakeTimeProvider();
+        var path = NewDatabasePath();
+
+        var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(new CrawlRequest(StallingOptions(), path));
+        var summary = await FakeClock.PumpAsync(time, job.Completion, realLimit: TimeSpan.FromSeconds(30));
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        var sitemap = Assert.Single(Sitemaps(path));
+        Assert.Equal("Timed out", sitemap.Error);
+        Assert.Equal(1, sitemap.UrlCount);
+        Assert.Equal(1, Count(path, "SELECT COUNT(*) FROM sitemap_urls"));
+    }
+
+    [Fact]
+    public async Task StoppingWhileASitemapStallsEndsTheCrawl()
+    {
+        var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(StallingOptions(), NewDatabasePath()));
+        await _stalled.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+        var summary = await job.StopAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(CrawlStatus.Stopped, summary.Status);
+    }
+
+    private CrawlOptions StallingOptions() => new()
+    {
+        StartUrl = _server.BaseUri.AbsoluteUri,
+        MaxRetries = 0,
+        ExtraSitemaps = [_server.Url(STALLING_SITEMAP).AbsoluteUri]
+    };
+
     private string Loc(string path) => $"<url><loc>{_server.Url(path)}</loc></url>";
 
     private void Serve(string path, string contentType, string body) => _files[path] = (contentType, body);
 
-    private async Task<string> CrawlAsync()
+    private string NewDatabasePath()
     {
         var path = Path.Combine(Path.GetTempPath(), $"si-test-{Guid.NewGuid():N}.sicrawl");
         _databases.Add(path);
+        return path;
+    }
+
+    private async Task<string> CrawlAsync()
+    {
+        var path = NewDatabasePath();
         var options = new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxRetries = 0 };
         await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path));
         Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TimeSpan.FromMinutes(1))).Status);
@@ -115,6 +165,11 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
 
     private Task RespondAsync(HttpContext context)
     {
+        if (context.Request.Path == STALLING_SITEMAP)
+        {
+            return StallAsync(context);
+        }
+
         if (_files.TryGetValue(context.Request.Path.Value ?? "/", out var file))
         {
             context.Response.ContentType = file.ContentType;
@@ -123,5 +178,21 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
 
         context.Response.ContentType = "text/html; charset=utf-8";
         return context.Response.WriteAsync("<!doctype html><html lang=\"en\"><head><title>Page</title></head><body><p>Page</p></body></html>");
+    }
+
+    private async Task StallAsync(HttpContext context)
+    {
+        context.Response.ContentType = "application/xml";
+        await context.Response.WriteAsync($"{URLSET}{Loc("/a")}");
+        await context.Response.Body.FlushAsync();
+        _stalled.TrySetResult();
+        try
+        {
+            await Task.Delay(Timeout.Infinite, context.RequestAborted);
+        }
+        catch (OperationCanceledException)
+        {
+            // The crawler gave up on it.
+        }
     }
 }

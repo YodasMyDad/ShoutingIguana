@@ -85,7 +85,7 @@ internal sealed class CrawlSession
             timeProvider, loggerFactory.CreateLogger<RobotsCache>(), _stop.Token);
         _links = new OutLinkFactory(scope);
         _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, timeProvider);
-        _sitemaps = new SitemapDiscoverer(_options, _fetcher, gates, _robots, _writer, _links, _observer,
+        _sitemaps = new SitemapDiscoverer(_options, _fetcher, gates, _robots, _writer, _links, _observer, timeProvider,
             loggerFactory.CreateLogger<SitemapDiscoverer>());
         _internalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.Concurrency * 2) { SingleWriter = true });
         _externalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.ExternalConcurrency * 2) { SingleWriter = true });
