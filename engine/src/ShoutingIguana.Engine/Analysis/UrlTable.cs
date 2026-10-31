@@ -137,6 +137,12 @@ internal sealed class UrlTable
     /// </summary>
     public RedirectTrace TraceRedirects(int id)
     {
+        // Most URLs aren't redirects, and link checks trace every target, so skip the bookkeeping for them.
+        if (_statuses[id] is not { Fetched: true, Outcome: FetchOutcome.Redirect, RedirectTargetId: > 0 })
+        {
+            return new RedirectTrace(id, 0, IsLoop: false);
+        }
+
         HashSet<int> visited = [];
         var current = id;
         var hops = 0;
