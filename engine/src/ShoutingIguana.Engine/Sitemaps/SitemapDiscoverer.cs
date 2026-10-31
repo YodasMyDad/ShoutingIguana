@@ -37,24 +37,28 @@ internal sealed class SitemapDiscoverer(
     public async Task RunAsync(Uri startUri, CancellationToken cancellationToken)
     {
         var rules = await robots.GetAsync(startUri).WaitAsync(cancellationToken).ConfigureAwait(false);
-        var candidates = rules.Sitemaps.Concat(options.ExtraSitemaps).ToList();
 
-        // Nothing declares a sitemap, so try the conventional location. Analysis treats a failed probe as "no
-        // sitemap" rather than as a broken one.
-        var isProbe = candidates.Count == 0;
-        if (isProbe)
-        {
-            candidates.Add(startUri.GetLeftPart(UriPartial.Authority) + "/sitemap.xml");
-        }
+        // Sitemap: lines should be absolute, but relative ones are common; they resolve against robots.txt.
+        var robotsUri = new Uri(startUri, "/robots.txt");
+        var declared = rules.Sitemaps.Select(sitemap => UrlNormalizer.TryResolve(robotsUri, sitemap, out var resolved) ? resolved.AbsoluteUri : sitemap);
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var pending = new Queue<(string Url, int? ParentId, int Level)>();
-        foreach (var candidate in candidates)
+        foreach (var candidate in declared.Concat(options.ExtraSitemaps))
         {
             if (UrlNormalizer.TryNormalize(candidate, out var normalized) && seen.Add(normalized))
             {
                 pending.Enqueue((normalized, null, 0));
             }
+        }
+
+        // Nothing usable declares a sitemap, so try the conventional location. Analysis treats a failed probe as "no
+        // sitemap" rather than as a broken one.
+        var isProbe = pending.Count == 0;
+        if (isProbe && UrlNormalizer.TryNormalize(startUri.GetLeftPart(UriPartial.Authority) + "/sitemap.xml", out var probe))
+        {
+            seen.Add(probe);
+            pending.Enqueue((probe, null, 0));
         }
 
         var sitemapCount = 0;
@@ -91,6 +95,7 @@ internal sealed class SitemapDiscoverer(
     private async Task<(List<string> Children, int UrlCount)> ReadSitemapAsync(Uri uri, int sitemapId, bool isProbe, CancellationToken cancellationToken)
     {
         List<string> children = [];
+        var batch = new List<OutLink>(BATCH_SIZE);
         var urlCount = 0;
         var isIndex = false;
         int? statusCode = null;
@@ -114,10 +119,9 @@ internal sealed class SitemapDiscoverer(
             {
                 await using var body = await HttpFetcher.OpenBodyAsync(response, timeout.Token).ConfigureAwait(false);
                 await using var content = IsGzipFile(uri, response.Content.Headers) ? new GZipStream(body, CompressionMode.Decompress) : body;
-                var isText = response.Content.Headers.ContentType?.MediaType == "text/plain" ||
+                var isText = MediaTypeOf(response.Content.Headers) == "text/plain" ||
                              uri.AbsolutePath.EndsWith(".txt", StringComparison.OrdinalIgnoreCase);
 
-                var batch = new List<OutLink>(BATCH_SIZE);
                 await foreach (var entry in SitemapReader.ReadAsync(content, isText, timeout.Token).ConfigureAwait(false))
                 {
                     if (entry.IsSitemap)
@@ -140,11 +144,6 @@ internal sealed class SitemapDiscoverer(
                         batch = new List<OutLink>(BATCH_SIZE);
                     }
                 }
-
-                if (batch.Count > 0)
-                {
-                    await writer.DiscoverAsync(batch, DiscoverySource.Sitemap, sitemapId, cancellationToken).ConfigureAwait(false);
-                }
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -155,6 +154,12 @@ internal sealed class SitemapDiscoverer(
         {
             error = exception.Message;
             logger.LogWarning("Sitemap {Url} could not be read: {Error}", uri, exception.Message);
+        }
+
+        // Also after a parse error or a timeout part-way through: the URLs read before it are listed, and counted.
+        if (batch.Count > 0)
+        {
+            await writer.DiscoverAsync(batch, DiscoverySource.Sitemap, sitemapId, cancellationToken).ConfigureAwait(false);
         }
 
         await writer.CompleteSitemapAsync(new SitemapRecord(sitemapId, statusCode, isIndex, urlCount, error, isProbe), cancellationToken).ConfigureAwait(false);
@@ -197,9 +202,10 @@ internal sealed class SitemapDiscoverer(
     private static bool IsGzipFile(Uri uri, HttpContentHeaders headers)
     {
         var transportGzip = headers.ContentEncoding.Any(encoding => encoding.Contains("gzip", StringComparison.OrdinalIgnoreCase));
-        var mediaType = headers.ContentType?.MediaType;
-        var looksGzip = mediaType is "application/gzip" or "application/x-gzip" ||
+        var looksGzip = MediaTypeOf(headers) is "application/gzip" or "application/x-gzip" ||
                         uri.AbsolutePath.EndsWith(".gz", StringComparison.OrdinalIgnoreCase);
         return looksGzip && !transportGzip;
     }
+
+    private static string? MediaTypeOf(HttpContentHeaders headers) => ContentTypeHeader.MediaTypeOf(ContentTypeHeader.Read(headers));
 }

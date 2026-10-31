@@ -12,6 +12,12 @@ internal static class RobotsTxtParser
 {
     private const string UNRESERVED_PUNCTUATION = "-._~";
 
+    /// <summary>Characters <see cref="Uri"/> percent-encodes in a path or query, so URLs never contain them raw.</summary>
+    private const string ESCAPED_BY_URI = " \"<>^`{|}";
+
+    /// <summary>A longer Crawl-delay would stall the crawl (and a huge one overflows TimeSpan), so it is capped.</summary>
+    internal const double MAX_CRAWL_DELAY_SECONDS = 60;
+
     public static RobotsTxt Parse(string content, string productToken)
     {
         var token = productToken.ToLowerInvariant();
@@ -42,14 +48,20 @@ internal static class RobotsTxtParser
 
                     current.Agents.Add(ProductTokenOf(value));
                     break;
-                case "allow" or "disallow" when current is not null && value.Length > 0:
-                    current.Rules.Add(CreateRule(value, key == "allow"));
+                case "allow" or "disallow" when current is not null:
+                    // An empty rule allows everything, but like any rule it ends the run of user-agent lines, so a
+                    // following user-agent starts a new group (RFC 9309 grammar, and Google's parser).
+                    if (value.Length > 0)
+                    {
+                        current.Rules.Add(CreateRule(value, key == "allow"));
+                    }
+
                     current.HasDirectives = true;
                     break;
                 case "crawl-delay" when current is not null:
                     if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var delay) && delay >= 0)
                     {
-                        current.CrawlDelaySeconds = delay;
+                        current.CrawlDelaySeconds = Math.Min(delay, MAX_CRAWL_DELAY_SECONDS);
                     }
 
                     current.HasDirectives = true;
@@ -71,11 +83,17 @@ internal static class RobotsTxtParser
         return new RobotsTxt(rules, sitemaps, crawlDelay);
     }
 
-    /// <summary>Normalises a path pattern the same way URLs are normalised so they compare byte for byte.</summary>
+    /// <summary>
+    /// Normalises a path pattern the way <see cref="Uri"/> and <c>UrlNormalizer</c> normalise the URLs it is matched
+    /// against, so they compare byte for byte: characters a URL can't hold raw (non-ASCII, controls, space,
+    /// <c>" &lt; &gt; ^ ` { | }</c> and a <c>%</c> that starts no escape) are percent-encoded, and a backslash in the
+    /// path becomes a slash.
+    /// </summary>
     internal static string NormalizePattern(string pattern)
     {
         var builder = new StringBuilder(pattern.Length);
         Span<byte> utf8 = stackalloc byte[4];
+        var inQuery = false;
 
         for (var i = 0; i < pattern.Length; i++)
         {
@@ -94,7 +112,11 @@ internal static class RobotsTxtParser
 
                 i += 2;
             }
-            else if (character > 0x7F || character == ' ')
+            else if (character == '\\' && !inQuery)
+            {
+                builder.Append('/');
+            }
+            else if (character > 0x7F || char.IsControl(character) || character is '%' or '\\' || ESCAPED_BY_URI.Contains(character))
             {
                 var isPair = char.IsHighSurrogate(character) && i + 1 < pattern.Length;
                 var written = Encoding.UTF8.GetBytes(pattern.AsSpan(i, isPair ? 2 : 1), utf8);
@@ -110,6 +132,7 @@ internal static class RobotsTxtParser
             }
             else
             {
+                inQuery |= character == '?';
                 builder.Append(character);
             }
         }

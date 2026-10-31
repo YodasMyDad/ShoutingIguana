@@ -4,8 +4,10 @@ namespace ShoutingIguana.Engine.Fetching;
 
 /// <summary>
 /// Recognises responses where a firewall or bot protection stopped the crawler, so they are reported as
-/// "Blocked" rather than looking like ordinary 403/503 pages. Body checks only run on error statuses, so a
-/// normal page with a CAPTCHA contact form is never flagged.
+/// "Blocked" rather than looking like ordinary 403/503 pages. Only signals vendors send when they challenge or
+/// block count: protected sites carry x-datadome, x-iinfo, x-sucuri-id and Cloudflare's challenge-platform
+/// scripts on every response, so a real 403 from such a site stays a 403. Body checks only run on error
+/// statuses, so a normal page with a CAPTCHA contact form is never flagged.
 /// </summary>
 internal static class BlockDetector
 {
@@ -21,6 +23,12 @@ internal static class BlockDetector
             return $"AWS WAF {awsAction.ToLowerInvariant()}";
         }
 
+        // DataDome marks every challenge or block it serves with X-DD-B (1 is a CAPTCHA, 2 a block).
+        if (GetHeader(headers, "x-dd-b") is not null)
+        {
+            return "DataDome";
+        }
+
         if (statusCode == 429)
         {
             return "Rate limited (HTTP 429)";
@@ -31,19 +39,20 @@ internal static class BlockDetector
             return null;
         }
 
-        if (GetHeader(headers, "x-datadome") is not null || SetsCookie(headers, "datadome="))
+        if (GetHeader(headers, "x-sucuri-block") is not null ||
+            Contains(body, "Access Denied - Sucuri Website Firewall") || Contains(body, "Sucuri WebSite Firewall - Access Denied"))
+        {
+            return "Sucuri";
+        }
+
+        if (Contains(body, "captcha-delivery.com"))
         {
             return "DataDome";
         }
 
-        if (GetHeader(headers, "x-iinfo") is not null || Contains(body, "Incapsula incident ID"))
+        if (Contains(body, "Incapsula incident ID") || Contains(body, "_Incapsula_Resource?CWUDNSAI="))
         {
             return "Imperva";
-        }
-
-        if (GetHeader(headers, "x-sucuri-id") is not null || Contains(body, "Sucuri WebSite Firewall"))
-        {
-            return "Sucuri";
         }
 
         if (body is null)
@@ -51,10 +60,12 @@ internal static class BlockDetector
             return null;
         }
 
+        // Cloudflare injects /cdn-cgi/challenge-platform/ scripts into ordinary pages, and Turnstile widgets carry
+        // cf-chl- ids, so only the challenge page's own options object and the interstitial and block pages count.
         var server = GetHeader(headers, "server") ?? string.Empty;
         if (server.Contains("cloudflare", StringComparison.OrdinalIgnoreCase) &&
-            (Contains(body, "challenge-platform") || Contains(body, "cf-chl") ||
-             Contains(body, "Just a moment...") || Contains(body, "Attention Required! | Cloudflare")))
+            (Contains(body, "_cf_chl_opt") || Contains(body, "Just a moment...") ||
+             Contains(body, "Attention Required! | Cloudflare") || Contains(body, "Sorry, you have been blocked")))
         {
             return "Cloudflare";
         }
@@ -89,10 +100,6 @@ internal static class BlockDetector
 
         return null;
     }
-
-    private static bool SetsCookie(IReadOnlyList<ResponseHeader> headers, string cookiePrefix) =>
-        headers.Any(header => header.Name == "set-cookie" &&
-                              header.Value.StartsWith(cookiePrefix, StringComparison.OrdinalIgnoreCase));
 
     private static bool Contains(string? body, string marker) =>
         body?.Contains(marker, StringComparison.OrdinalIgnoreCase) == true;

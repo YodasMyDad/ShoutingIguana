@@ -45,6 +45,34 @@ public sealed class SitemapReaderTests
     }
 
     [Fact]
+    public async Task ReadsTextSitemapsWithWindowsLineEndings()
+    {
+        var entries = await ReadAsync("https://example.com/a\r\nhttps://example.com/b", isText: true);
+
+        Assert.Equal(["https://example.com/a", "https://example.com/b"], entries.Select(entry => entry.Location));
+    }
+
+    [Theory]
+    [InlineData("﻿<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">")]
+    [InlineData("\n   <urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">")]
+    public async Task XmlSentAsTextIsReadAsXml(string start)
+    {
+        var entries = await ReadAsync($"{start}\n<url><loc>https://example.com/a</loc></url>\n<url><loc>https://example.com/b</loc></url>\n</urlset>", isText: true);
+
+        Assert.Equal(["https://example.com/a", "https://example.com/b"], entries.Select(entry => entry.Location));
+    }
+
+    [Fact]
+    public async Task TextLinesLongerThanAnyUrlAreSkipped()
+    {
+        var longUrl = "https://example.com/" + new string('a', 2_000);
+
+        var entries = await ReadAsync($"{new string('x', 200_000)}\n{longUrl}\nhttps://example.com/b\n", isText: true);
+
+        Assert.Equal([longUrl, "https://example.com/b"], entries.Select(entry => entry.Location));
+    }
+
+    [Fact]
     public async Task MalformedXmlThrows() =>
         await Assert.ThrowsAsync<XmlException>(() => ReadAsync("<urlset><url><loc>https://example.com/a</loc></urlset>"));
 

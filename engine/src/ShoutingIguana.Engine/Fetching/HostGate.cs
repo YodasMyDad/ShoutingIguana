@@ -5,10 +5,14 @@ namespace ShoutingIguana.Engine.Fetching;
 /// <summary>
 /// Politeness for one host. Caps parallel requests and spaces request starts by the configured interval.
 /// Backs off automatically when the host signals overload (429, 503, block pages; Retry-After is
-/// honoured), then decays back to full speed as successful responses return.
+/// honoured), then decays back to full speed as successful responses return. It also counts URLs in a row
+/// that got no answer at all, so a host that has stopped answering can be recognised as unreachable.
 /// </summary>
 internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, TimeProvider timeProvider)
 {
+    /// <summary>URLs in a row, each after its retries, that got no response before a host counts as unreachable.</summary>
+    public const int UNREACHABLE_AFTER_URLS = 3;
+
     private static readonly TimeSpan MIN_BACKOFF = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan MAX_BACKOFF = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan SETTLED_BACKOFF = TimeSpan.FromMilliseconds(10);
@@ -20,6 +24,7 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
     private TimeSpan _backoff = TimeSpan.Zero;
     private DateTimeOffset _nextStart = DateTimeOffset.MinValue;
     private DateTimeOffset _pausedUntil = DateTimeOffset.MinValue;
+    private int _unansweredUrls;
 
     public TimeSpan CurrentBackoff
     {
@@ -29,6 +34,45 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
             {
                 return _backoff;
             }
+        }
+    }
+
+    /// <summary>The last <see cref="UNREACHABLE_AFTER_URLS"/> URLs got no response at all: timeouts, refused or reset connections.</summary>
+    public bool IsUnreachable
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _unansweredUrls >= UNREACHABLE_AFTER_URLS;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Records how a URL ended once its retries were spent. Any response, even an error status, resets the count.
+    /// Returns true for the URL that makes the host unreachable.
+    /// </summary>
+    public bool ReportUrl(bool answered)
+    {
+        lock (_sync)
+        {
+            if (answered)
+            {
+                _unansweredUrls = 0;
+                return false;
+            }
+
+            return ++_unansweredUrls == UNREACHABLE_AFTER_URLS;
+        }
+    }
+
+    /// <summary>Holds every request back for <paramref name="duration"/>, e.g. while the host is unreachable.</summary>
+    public void Pause(TimeSpan duration)
+    {
+        lock (_sync)
+        {
+            _pausedUntil = Max(_pausedUntil, timeProvider.GetUtcNow() + duration);
         }
     }
 
@@ -49,21 +93,21 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
         await _slots.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            TimeSpan wait;
-            lock (_sync)
+            for (var start = Reserve(); ; start = Reserve())
             {
-                var now = timeProvider.GetUtcNow();
-                var start = Max(now, Max(_nextStart, _pausedUntil));
-                _nextStart = start + _minimumInterval + _backoff;
-                wait = start - now;
-            }
+                var wait = start - timeProvider.GetUtcNow();
+                if (wait > TimeSpan.Zero)
+                {
+                    await Task.Delay(wait, timeProvider, cancellationToken).ConfigureAwait(false);
+                }
 
-            if (wait > TimeSpan.Zero)
-            {
-                await Task.Delay(wait, timeProvider, cancellationToken).ConfigureAwait(false);
+                // A Retry-After that arrived while this request waited applies to it too: it takes a new place in
+                // line after the pause, so the requests held up by it don't all start at once when it ends.
+                if (!IsPaused())
+                {
+                    return new HostGateLease(this);
+                }
             }
-
-            return new HostGateLease(this);
         }
         catch
         {
@@ -97,6 +141,25 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
     }
 
     internal void Release() => _slots.Release();
+
+    /// <summary>Takes the next start time: after the previous request's spacing and after any pause.</summary>
+    private DateTimeOffset Reserve()
+    {
+        lock (_sync)
+        {
+            var start = Max(timeProvider.GetUtcNow(), Max(_nextStart, _pausedUntil));
+            _nextStart = start + _minimumInterval + _backoff;
+            return start;
+        }
+    }
+
+    private bool IsPaused()
+    {
+        lock (_sync)
+        {
+            return _pausedUntil > timeProvider.GetUtcNow();
+        }
+    }
 
     private static DateTimeOffset Max(DateTimeOffset left, DateTimeOffset right) => left > right ? left : right;
 

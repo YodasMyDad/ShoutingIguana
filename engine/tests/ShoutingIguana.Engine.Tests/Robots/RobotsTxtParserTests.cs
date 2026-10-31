@@ -1,4 +1,5 @@
 using ShoutingIguana.Engine.Robots;
+using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Tests.Robots;
 
@@ -55,6 +56,89 @@ public sealed class RobotsTxtParserTests
         Assert.True(RobotsTxtParser.Parse("User-agent: *\nDisallow:", TOKEN).IsAllowed("/anything"));
 
     [Fact]
+    public void EmptyDisallowEndsTheGroupSoTheNextAgentGetsItsOwnRules()
+    {
+        const string content = """
+            User-agent: *
+            Disallow:
+            User-agent: AhrefsBot
+            Disallow: /
+            """;
+
+        Assert.True(RobotsTxtParser.Parse(content, TOKEN).IsAllowed("/anything"));
+        Assert.False(RobotsTxtParser.Parse(content, "AhrefsBot").IsAllowed("/anything"));
+    }
+
+    [Fact]
+    public void EmptyAllowEndsTheGroupToo()
+    {
+        const string content = """
+            User-agent: *
+            Allow:
+            User-agent: BadBot
+            Disallow: /
+            """;
+
+        Assert.True(RobotsTxtParser.Parse(content, TOKEN).IsAllowed("/anything"));
+        Assert.False(RobotsTxtParser.Parse(content, "BadBot").IsAllowed("/anything"));
+    }
+
+    [Fact]
+    public void GooglebotPresetGetsItsOwnEmptyGroup()
+    {
+        const string content = """
+            User-agent: Googlebot
+            Disallow:
+            User-agent: *
+            Disallow: /
+            """;
+
+        Assert.True(RobotsTxtParser.Parse(content, "Googlebot").IsAllowed("/page"));
+        Assert.False(RobotsTxtParser.Parse(content, TOKEN).IsAllowed("/page"));
+    }
+
+    [Fact]
+    public void ConsecutiveAgentsStillShareTheRulesThatFollow()
+    {
+        const string content = """
+            User-agent: Googlebot
+            User-agent: ShoutingIguana
+            Disallow: /admin
+            User-agent: *
+            Disallow: /
+            """;
+
+        Assert.False(RobotsTxtParser.Parse(content, "Googlebot").IsAllowed("/admin/users"));
+        Assert.True(RobotsTxtParser.Parse(content, "Googlebot").IsAllowed("/page"));
+        Assert.True(RobotsTxtParser.Parse(content, TOKEN).IsAllowed("/page"));
+    }
+
+    [Theory]
+    [InlineData("/a{b}", "https://example.com/a{b}/page")]
+    [InlineData("/a|b", "https://example.com/a|b")]
+    [InlineData("/x^y`z", "https://example.com/x^y`z")]
+    [InlineData("/say\"hi\"<now>", "https://example.com/say\"hi\"<now>")]
+    [InlineData("/50%off", "https://example.com/50%off")]
+    [InlineData("/end%$", "https://example.com/end%")]
+    [InlineData("/back\\slash", "https://example.com/back\\slash")]
+    [InlineData("/search?q=a|b", "https://example.com/search?q=a|b")]
+    [InlineData("/search?q=a\\b", "https://example.com/search?q=a\\b")]
+    public void PatternsMatchCharactersUriPercentEncodes(string pattern, string url)
+    {
+        var robots = RobotsTxtParser.Parse($"User-agent: *\nDisallow: {pattern}", TOKEN);
+
+        Assert.False(robots.IsAllowed(PathAndQueryOf(url)));
+    }
+
+    [Fact]
+    public void CrawlDelayIsCapped()
+    {
+        Assert.Equal(RobotsTxtParser.MAX_CRAWL_DELAY_SECONDS, RobotsTxtParser.Parse("User-agent: *\nCrawl-delay: 1e12", TOKEN).CrawlDelaySeconds);
+        Assert.Equal(30, RobotsTxtParser.Parse("User-agent: *\nCrawl-delay: 30", TOKEN).CrawlDelaySeconds);
+        Assert.Null(RobotsTxtParser.Parse("User-agent: *\nCrawl-delay: NaN", TOKEN).CrawlDelaySeconds);
+    }
+
+    [Fact]
     public void RobotsTxtItselfIsAlwaysAllowed() =>
         Assert.True(RobotsTxtParser.Parse("User-agent: *\nDisallow: /", TOKEN).IsAllowed("/robots.txt"));
 
@@ -79,4 +163,7 @@ public sealed class RobotsTxtParserTests
     [Fact]
     public void RulesBeforeAnyUserAgentAreIgnored() =>
         Assert.True(RobotsTxtParser.Parse("Disallow: /\nUser-agent: *\nAllow: /", TOKEN).IsAllowed("/page"));
+
+    /// <summary>The path the crawler checks: that of the stored (normalised) URL, as PageProcessor reads it.</summary>
+    private static string PathAndQueryOf(string url) => new Uri(UrlNormalizer.Normalize(new Uri(url))).PathAndQuery;
 }

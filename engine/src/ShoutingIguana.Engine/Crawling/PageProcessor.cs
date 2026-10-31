@@ -19,22 +19,21 @@ namespace ShoutingIguana.Engine.Crawling;
 internal sealed class PageProcessor(
     CrawlOptions options,
     ResolvedUserAgent userAgent,
-    HttpFetcher fetcher,
-    HostGateRegistry gates,
+    RetryingFetcher fetcher,
     RobotsCache robots,
     OutLinkFactory links,
     ICrawlObserver observer,
     TimeProvider timeProvider)
 {
     private const int FORBIDDEN_SAMPLE_SIZE = 20;
-    private static readonly TimeSpan MAX_RETRY_WAIT = TimeSpan.FromSeconds(60);
 
     private readonly ConcurrentDictionary<string, bool> _blockedHostsReported = new(StringComparer.Ordinal);
     private int _internalFetches;
     private int _internalForbidden;
     private int _forbiddenReported;
 
-    public async Task<PageRecord> ProcessAsync(FrontierItem item, CancellationToken cancellationToken)
+    /// <param name="isRetry">The URL's one more try at the end of the crawl: a single attempt, as it had its retries.</param>
+    public async Task<PageRecord> ProcessAsync(FrontierItem item, CancellationToken cancellationToken, bool isRetry = false)
     {
         var uri = new Uri(item.Url);
         var fetchedAt = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
@@ -44,11 +43,14 @@ internal sealed class PageProcessor(
             var rules = await robots.GetAsync(uri).WaitAsync(cancellationToken).ConfigureAwait(false);
             if (!rules.IsAllowed(uri.PathAndQuery))
             {
-                return Failed(item, fetchedAt, FetchOutcome.RobotsDisallowed, null);
+                // Refused because robots.txt couldn't be read is stored apart from refused by a rule.
+                var error = rules.UnreachableReason is { } reason ? $"{RobotsTxt.UNREACHABLE_ERROR}: {reason}" : null;
+                return Failed(item, fetchedAt, FetchOutcome.RobotsDisallowed, error);
             }
         }
 
-        var response = await FetchWithRetriesAsync(uri, item, cancellationToken).ConfigureAwait(false);
+        var body = item.Mode == FetchMode.Crawl ? FetchBody.Html : FetchBody.None;
+        var response = await fetcher.FetchAsync(uri, body, cancellationToken, singleAttempt: isRetry).ConfigureAwait(false);
         if (item.IsInternal)
         {
             WatchForBlocking(uri, response);
@@ -71,29 +73,6 @@ internal sealed class PageProcessor(
         };
 
         return new PageRecord(item, row, [], false, null, null);
-    }
-
-    private async Task<FetchResponse> FetchWithRetriesAsync(Uri uri, FrontierItem item, CancellationToken cancellationToken)
-    {
-        var gate = gates.For(uri);
-        var body = item.Mode == FetchMode.Crawl ? FetchBody.Html : FetchBody.None;
-
-        for (var attempt = 0; ; attempt++)
-        {
-            FetchResponse response;
-            using (await gate.AcquireAsync(cancellationToken).ConfigureAwait(false))
-            {
-                response = await fetcher.FetchAsync(uri, body, cancellationToken).ConfigureAwait(false);
-            }
-
-            gate.Report(SignalFor(response), response.RetryAfter);
-            if (attempt >= options.MaxRetries || !IsRetryable(response))
-            {
-                return response;
-            }
-
-            await Task.Delay(RetryDelay(attempt, response.RetryAfter), timeProvider, cancellationToken).ConfigureAwait(false);
-        }
     }
 
     private PageRecord Build(FrontierItem item, Uri uri, FetchResponse response, long fetchedAt)
@@ -196,25 +175,5 @@ internal sealed class PageProcessor(
                 "mostly-forbidden",
                 $"{forbidden} of the first {fetches} pages returned 403 Forbidden. The site may be blocking crawlers."));
         }
-    }
-
-    private static HostSignal SignalFor(FetchResponse response) => response switch
-    {
-        { Outcome: FetchOutcome.Blocked } or { StatusCode: 429 or 503 } => HostSignal.Throttled,
-        { Outcome: FetchOutcome.Timeout or FetchOutcome.NetworkError } or { StatusCode: 502 or 504 } => HostSignal.Failed,
-        _ => HostSignal.Success
-    };
-
-    private static bool IsRetryable(FetchResponse response) =>
-        response.IsTransientFailure || response.StatusCode is 429 or 502 or 503 or 504;
-
-    private static TimeSpan RetryDelay(int attempt, TimeSpan? retryAfter)
-    {
-        if (retryAfter is { } wait && wait > TimeSpan.Zero)
-        {
-            return wait < MAX_RETRY_WAIT ? wait : MAX_RETRY_WAIT;
-        }
-
-        return TimeSpan.FromSeconds(Math.Pow(2, attempt)) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 250));
     }
 }

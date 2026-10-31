@@ -8,13 +8,20 @@ namespace ShoutingIguana.Engine.Robots;
 /// </summary>
 public sealed class RobotsTxt
 {
+    /// <summary>
+    /// Start of the error stored for a URL refused because its site's robots.txt couldn't be read, which sets it apart
+    /// from a URL a rule disallows (stored without an error).
+    /// </summary>
+    public const string UNREACHABLE_ERROR = "robots.txt unreachable";
+
     private readonly IReadOnlyList<RobotsRule> _rules;
 
-    internal RobotsTxt(IReadOnlyList<RobotsRule> rules, IReadOnlyList<string> sitemaps, double? crawlDelaySeconds)
+    internal RobotsTxt(IReadOnlyList<RobotsRule> rules, IReadOnlyList<string> sitemaps, double? crawlDelaySeconds, string? unreachableReason = null)
     {
         _rules = rules;
         Sitemaps = sitemaps;
         CrawlDelaySeconds = crawlDelaySeconds;
+        UnreachableReason = unreachableReason;
     }
 
     public static RobotsTxt AllowAll { get; } = new([], [], null);
@@ -24,6 +31,12 @@ public sealed class RobotsTxt
     public IReadOnlyList<string> Sitemaps { get; }
 
     public double? CrawlDelaySeconds { get; }
+
+    /// <summary>Why robots.txt couldn't be read (<c>HTTP 503</c>, <c>Timed out</c>...) when that left a full disallow.</summary>
+    public string? UnreachableReason { get; }
+
+    /// <summary>RFC 9309: a robots.txt that can't be read (5xx, 429, no answer) means nothing may be crawled.</summary>
+    internal static RobotsTxt Unreachable(string reason) => new(DisallowAll._rules, [], null, reason);
 
     /// <param name="pathAndQuery">Path and query of a URL normalised by <c>UrlNormalizer</c>.</param>
     public bool IsAllowed(string pathAndQuery)

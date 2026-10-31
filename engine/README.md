@@ -30,18 +30,25 @@ dotnet run --project src/ShoutingIguana.Cli -c Release -- bench --pages 100000
 ```
 
 `si crawl --help` lists every option: concurrency and rate cap, user agent presets, extra headers (for firewall
-allowlisting), proxy, depth and URL limits, robots.txt, subdomains, start-folder scope, nofollow, stored HTML, and
-`--no-analyze`.
+allowlisting; they are only sent to the site being crawled), proxy, depth and URL limits, robots.txt, subdomains,
+start-folder scope, nofollow, stored HTML, and `--no-analyze`.
 
 ## How a crawl works
 
 1. The start URL (and every sitemap URL) goes into the `urls` table of the crawl's SQLite file.
 2. A dispatcher claims queued URLs breadth-first and hands them to two worker pools: one for the site itself and
    one for status checks on other sites.
-3. Each worker checks robots.txt and waits on a per-host gate. The gate caps concurrency, applies the optional
-   rate cap, and backs off automatically on 429/503 responses and block pages, honouring Retry-After. The worker
-   then fetches over plain HTTP without following redirects (every hop is its own URL) and parses the HTML once
-   into `PageFacts`.
+3. Each worker checks robots.txt and waits on a per-host gate (the site's http and https URLs share one). The
+   gate caps concurrency, applies the optional rate cap, and backs off automatically on 429/503 responses and
+   block pages, honouring Retry-After. The worker then fetches over plain HTTP without following redirects (every
+   hop is its own URL) and parses the HTML once into `PageFacts`.
+   - A robots.txt that can't be read (5xx, 429, no answer) is retried like a page, then means "disallow
+     everything" for two minutes, as RFC 9309 requires. Another site that doesn't answer at all gets no verdict,
+     so links to it record their real network error.
+   - After three URLs in a row get no response, another site's remaining URLs fail at once ("Not checked"), and
+     the site being crawled is waited out with one-minute pauses and a notice.
+   - The site's URLs that got no response are tried once more at the end of the crawl (at most 10,000 are held
+     back for it).
 4. A single writer applies results in batched transactions: the response row, a compressed detail blob, the
    links, and newly discovered URLs. It also owns the frontier, so "nothing queued and nothing in flight" is an
    exact completion test.
@@ -51,7 +58,8 @@ Memory stays flat because the only thing in memory that grows with the crawl is 
 40 bytes). The frontier, results and links all live on disk.
 
 Sites that block crawlers are reported, not hidden. Cloudflare/Akamai/DataDome/Imperva/Sucuri/CAPTCHA
-responses and rate limits are recorded as `Blocked`, with the reason, and raise a notice.
+responses and rate limits are recorded as `Blocked`, with the reason, and raise a notice. Only challenge and block
+pages count: a genuine 403 from a site behind one of those firewalls stays a 403.
 
 ## SEO analysis
 

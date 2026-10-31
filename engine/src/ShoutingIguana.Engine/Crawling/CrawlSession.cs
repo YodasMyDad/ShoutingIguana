@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
@@ -18,13 +19,19 @@ namespace ShoutingIguana.Engine.Crawling;
 /// <summary>
 /// One run of a crawl. A dispatcher claims batches of queued URLs from the writer and hands them to two
 /// worker pools: one for the site itself, one for status checks on other sites. Workers fetch and parse,
-/// then send records back to the writer. The crawl is complete when a claim finds nothing queued and
-/// nothing in flight after sitemap discovery has finished. Stopping leaves the database resumable.
+/// then send records back to the writer. The site's URLs that got no response (or met an unreadable
+/// robots.txt) are held back and tried once more when everything else is done. The crawl is complete when a
+/// claim finds nothing queued and nothing in flight after sitemap discovery has finished. Stopping leaves the
+/// database resumable; held-back URLs are claimed but unrecorded, so a resume fetches them again.
 /// </summary>
 internal sealed class CrawlSession
 {
     private const int EXTERNAL_CONCURRENCY_PER_HOST = 2;
     private const int RATE_WINDOW_SECONDS = 5;
+
+    /// <summary>At most this many URLs are held back for a second try, so memory stays flat when a site goes down.</summary>
+    private const int MAX_DEFERRED = 10_000;
+
     private static readonly TimeSpan IDLE_DELAY = TimeSpan.FromMilliseconds(20);
     private static readonly TimeSpan PROGRESS_INTERVAL = TimeSpan.FromMilliseconds(500);
 
@@ -42,11 +49,15 @@ internal sealed class CrawlSession
     private readonly HttpFetcher _fetcher;
     private readonly OutLinkFactory _links;
     private readonly PageProcessor _processor;
+    private readonly RobotsCache _robots;
     private readonly SitemapDiscoverer _sitemaps;
     private readonly Channel<FrontierItem> _internalQueue;
     private readonly Channel<FrontierItem> _externalQueue;
+    private readonly ConcurrentQueue<FrontierItem> _deferred = new();
+    private readonly ConcurrentDictionary<int, bool> _retried = new();
     private volatile CrawlStatus _status = CrawlStatus.Running;
     private double _pagesPerSecond;
+    private int _deferredTotal;
 
     private CrawlSession(CrawlRequest request, ICrawlObserver observer, ILoggerFactory loggerFactory, TimeProvider timeProvider)
     {
@@ -61,17 +72,18 @@ internal sealed class CrawlSession
         var scope = new CrawlScope(_startUri, _options.IncludeSubdomains, _options.StayInStartFolder);
         var userAgent = UserAgents.Resolve(_options.UserAgent, _options.CustomUserAgent);
         var interval = _options.MaxRequestsPerSecond > 0 ? TimeSpan.FromSeconds(1 / _options.MaxRequestsPerSecond) : TimeSpan.Zero;
-        var gates = new HostGateRegistry(uri => scope.IsInternal(uri)
+        var gates = new HostGateRegistry(scope, isInternal => isInternal
             ? new HostGate(_options.Concurrency, interval, timeProvider)
             : new HostGate(EXTERNAL_CONCURRENCY_PER_HOST, TimeSpan.Zero, timeProvider));
 
         _writer = CrawlWriter.Open(request.DatabasePath, _options, request.Resume, _counters, loggerFactory.CreateLogger<CrawlWriter>());
-        _fetcher = new HttpFetcher(_options, userAgent);
-        var robots = new RobotsCache(_fetcher, gates, _writer, userAgent.RobotsToken, _options.RespectCrawlDelay, _observer,
+        _fetcher = new HttpFetcher(_options, userAgent, scope, timeProvider);
+        var fetcher = new RetryingFetcher(_fetcher, gates, scope, _options.MaxRetries, _observer, timeProvider);
+        _robots = new RobotsCache(fetcher, gates, _writer, scope, _options, userAgent.RobotsToken, _observer,
             timeProvider, loggerFactory.CreateLogger<RobotsCache>(), _stop.Token);
         _links = new OutLinkFactory(scope);
-        _processor = new PageProcessor(_options, userAgent, _fetcher, gates, robots, _links, _observer, timeProvider);
-        _sitemaps = new SitemapDiscoverer(_options, _fetcher, gates, robots, _writer, _links, _observer,
+        _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, timeProvider);
+        _sitemaps = new SitemapDiscoverer(_options, _fetcher, gates, _robots, _writer, _links, _observer,
             loggerFactory.CreateLogger<SitemapDiscoverer>());
         _internalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.Concurrency * 2) { SingleWriter = true });
         _externalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.ExternalConcurrency * 2) { SingleWriter = true });
@@ -253,9 +265,18 @@ internal sealed class CrawlSession
 
             if (claim.Internal.Count + claim.External.Count == 0)
             {
-                if (claim.InFlight == 0 && producersDone)
+                // Read after claiming: workers only ever add to the held-back URLs, so if everything in flight at the
+                // claim is held back now, nothing else is still being fetched.
+                var deferred = _deferred.Count;
+                if (claim.InFlight == deferred && producersDone)
                 {
-                    return true;
+                    if (deferred == 0)
+                    {
+                        return true;
+                    }
+
+                    await RetryDeferredAsync(cancellationToken).ConfigureAwait(false);
+                    continue;
                 }
 
                 await Task.Delay(IDLE_DELAY, _timeProvider, cancellationToken).ConfigureAwait(false);
@@ -263,6 +284,38 @@ internal sealed class CrawlSession
         }
 
         return false;
+    }
+
+    /// <summary>Everything else is done: the URLs held back get their one more try, robots.txt included.</summary>
+    private async Task RetryDeferredAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Retrying {Count} URLs that got no response", _deferred.Count);
+        _robots.ExpireFailures();
+        while (_deferred.TryDequeue(out var item))
+        {
+            _retried.TryAdd(item.Id, true);
+            await _internalQueue.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// The site's own URLs that got no response, or were refused because robots.txt couldn't be read, are held back
+    /// (unrecorded) for one more try at the end of the crawl, when a site that was briefly down is usually back.
+    /// </summary>
+    private bool Defer(PageRecord record)
+    {
+        var item = record.Item;
+        var response = record.Response;
+        var failedToConnect = response.Outcome is FetchOutcome.Timeout or FetchOutcome.NetworkError ||
+                              (response.Outcome == FetchOutcome.RobotsDisallowed &&
+                               response.Error?.StartsWith(RobotsTxt.UNREACHABLE_ERROR, StringComparison.Ordinal) == true);
+        if (!item.IsInternal || !failedToConnect || _retried.ContainsKey(item.Id) || Interlocked.Increment(ref _deferredTotal) > MAX_DEFERRED)
+        {
+            return false;
+        }
+
+        _deferred.Enqueue(item);
+        return true;
     }
 
     private Task[] StartWorkers(ChannelReader<FrontierItem> queue, int count) =>
@@ -279,7 +332,7 @@ internal sealed class CrawlSession
                 PageRecord record;
                 try
                 {
-                    record = await _processor.ProcessAsync(item, cancellationToken).ConfigureAwait(false);
+                    record = await _processor.ProcessAsync(item, cancellationToken, _retried.ContainsKey(item.Id)).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
@@ -289,7 +342,10 @@ internal sealed class CrawlSession
                         FetchOutcome.ProcessingError, exception.Message);
                 }
 
-                await _writer.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+                if (!Defer(record))
+                {
+                    await _writer.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+                }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
