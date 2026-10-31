@@ -141,6 +141,18 @@ internal sealed class AnalysisReader : IDisposable
     /// <summary>Whether sitemap discovery finished, so coverage checks against the sitemaps are meaningful.</summary>
     public bool ReadSitemapsDone() => CrawlDatabase.Scalar(_connection, "SELECT sitemaps_done FROM crawl WHERE id = 1") is 1L;
 
+    /// <summary>Internal URLs the depth or URL limit kept out of the crawl, per reason.</summary>
+    public Dictionary<SkipReason, long> ReadLimitSkips()
+    {
+        Dictionary<SkipReason, long> skips = [];
+        Rows($"""
+            SELECT skip_reason, COUNT(*) FROM urls
+            WHERE is_internal = 1 AND state = {(int)UrlState.Skipped} AND skip_reason IN ({(int)SkipReason.DepthLimit}, {(int)SkipReason.UrlLimit})
+            GROUP BY skip_reason
+            """, reader => skips[(SkipReason)reader.GetInt32(0)] = reader.GetInt64(1));
+        return skips;
+    }
+
     /// <summary>Links from one page to a #fragment on another, streamed for the fragment check.</summary>
     public IEnumerable<(int From, int To, string Fragment)> ReadFragmentLinks()
     {

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Analysis.Models;
@@ -52,8 +53,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             }
         }
 
-        var crawlComplete = false;
         List<string> notes = [];
+        HashSet<IssueDefinition> skipped = [];
         Dictionary<string, int> failures = new(StringComparer.Ordinal);
         List<IssueHit> hits = [];
 
@@ -63,11 +64,26 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
         {
             var urls = reader.ReadUrls();
             var options = reader.ReadOptions();
+            var sitemaps = reader.ReadSitemaps();
             UrlNormalizer.TryNormalize(options.StartUrl, out var startUrl);
             var scope = new CrawlScope(new Uri(startUrl), options.IncludeSubdomains, options.StayInStartFolder);
 
             // Orphans and sitemap coverage need every page and sitemap; a stopped crawl can't tell missing from not yet seen.
-            crawlComplete = status == CrawlStatus.Completed && (reader.ReadSitemapsDone() || !options.DiscoverSitemaps);
+            var crawlComplete = status == CrawlStatus.Completed && (reader.ReadSitemapsDone() || !options.DiscoverSitemaps);
+            var linksComplete = crawlComplete && SeesEveryLinkingPage(reader.ReadLimitSkips(), scope, notes, skipped);
+            if (!crawlComplete)
+            {
+                Skip(notes, skipped, status == CrawlStatus.Completed
+                        ? "Not every sitemap was read, so orphan pages and sitemap coverage weren't checked."
+                        : "The crawl didn't finish, so orphan pages and sitemap coverage weren't checked.",
+                    IssueCatalog.ORPHAN_PAGE, IssueCatalog.NOT_IN_SITEMAP, IssueCatalog.SITEMAP_MISSING);
+            }
+            else if (SitemapRules.Unreadable(sitemaps) is { } unreadable)
+            {
+                Skip(notes, skipped, $"Pages missing from the sitemaps weren't checked: {unreadable.Url} couldn't be read ({unreadable.Error}), and it may list them.",
+                    IssueCatalog.NOT_IN_SITEMAP);
+            }
+
             var hreflang = new HreflangRules(urls);
             IPageRule[] pageRules =
             [
@@ -78,9 +94,9 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             ];
             ISiteRule[] siteRules =
             [
-                new InlinkRules(urls, crawlComplete), new DuplicateRules(settings), new FragmentRules(urls, reader), hreflang,
+                new InlinkRules(urls, linksComplete), new DuplicateRules(settings), new FragmentRules(urls, reader), hreflang,
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls),
-                new SitemapRules(urls, reader.ReadSitemaps(), options, crawlComplete), new RobotsTxtRules(urls, reader.ReadRobots(), scope)
+                new SitemapRules(urls, sitemaps, options, crawlComplete), new RobotsTxtRules(urls, reader.ReadRobots(), scope)
             ];
 
             foreach (var page in reader.ReadPages())
@@ -144,12 +160,48 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 
         // The reader is closed by now, so the writer can fold the write-ahead log when it closes.
         var info = new AnalysisInfo(DateTimeOffset.UtcNow, EngineInfo.Version, pages, stopwatch.Elapsed);
-        var counts = writer.Commit(IssueCatalog.All, info, JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings));
-        var issues = IssueCatalog.All.Select(issue => new IssueCount(issue, counts.GetValueOrDefault(issue.Id))).ToList();
+        var checks = IssueCatalog.All.Where(issue => !skipped.Contains(issue)).ToList();
+        var counts = writer.Commit(checks, info, JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings), notes);
+        var issues = checks.Select(issue => new IssueCount(issue, counts.GetValueOrDefault(issue.Id))).ToList();
 
         _logger.LogInformation("Analysed {Pages} pages in {Elapsed}: {Flagged} issues across {Types} checks",
             pages, stopwatch.Elapsed, issues.Sum(issue => issue.Count), issues.Count(issue => issue.Count > 0));
-        return new AnalysisSummary(pages, issues, stopwatch.Elapsed, IsPartial: !crawlComplete) { Notes = notes };
+        return new AnalysisSummary(pages, issues, stopwatch.Elapsed, IsPartial: skipped.Count > 0) { Notes = notes };
+    }
+
+    /// <summary>
+    /// Whether the crawl saw every page that could link to a sitemap page, which the orphan check needs. A depth or
+    /// URL limit leaves pages out, and a crawl kept to a folder never reads the links on the rest of the site.
+    /// </summary>
+    private bool SeesEveryLinkingPage(Dictionary<SkipReason, long> limitSkips, CrawlScope scope, List<string> notes, HashSet<IssueDefinition> skipped)
+    {
+        var complete = true;
+        foreach (var (reason, limit) in new[] { (SkipReason.DepthLimit, "depth limit"), (SkipReason.UrlLimit, "URL limit") })
+        {
+            if (limitSkips.GetValueOrDefault(reason) is > 0 and var count)
+            {
+                var left = string.Create(CultureInfo.InvariantCulture, $"{count:N0} internal URL{(count == 1 ? string.Empty : "s")}");
+                Skip(notes, skipped, $"Orphan pages weren't checked: the {limit} kept {left} out of the crawl, and pages linked only from them would look orphaned.",
+                    IssueCatalog.ORPHAN_PAGE);
+                complete = false;
+            }
+        }
+
+        if (scope.StartFolder != "/")
+        {
+            Skip(notes, skipped, $"Orphan pages weren't checked: the crawl stayed in {scope.StartFolder}, so links from the rest of the site weren't read.",
+                IssueCatalog.ORPHAN_PAGE);
+            complete = false;
+        }
+
+        return complete;
+    }
+
+    private void Skip(List<string> notes, HashSet<IssueDefinition> skipped, string note, params IssueDefinition[] issues)
+    {
+        _logger.LogWarning("Skipped {Checks}: {Reason}", string.Join(", ", issues.Select(issue => issue.Id)), note);
+        notes.Add(note);
+        skipped.UnionWith(issues);
     }
 
     private void RecordFailure(Dictionary<string, int> failures, object rule, string url, Exception exception)

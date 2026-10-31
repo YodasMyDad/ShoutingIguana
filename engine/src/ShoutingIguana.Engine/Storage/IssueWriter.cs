@@ -26,7 +26,7 @@ internal sealed class IssueWriter : IDisposable
         _connection = connection;
         _logger = logger;
         _transaction = connection.BeginTransaction();
-        CrawlDatabase.Execute(connection, "DELETE FROM issues; DELETE FROM issue_types; DELETE FROM analysis;", _transaction);
+        CrawlDatabase.Execute(connection, "DELETE FROM issues; DELETE FROM issue_types; DELETE FROM analysis; DELETE FROM analysis_notes;", _transaction);
 
         _insert = connection.CreateCommand();
         _insert.Transaction = _transaction;
@@ -66,9 +66,10 @@ internal sealed class IssueWriter : IDisposable
         _insert.ExecuteNonQuery();
     }
 
-    /// <summary>Records every check that ran with its URL count, plus the analysis itself, then commits.</summary>
+    /// <summary>Records every check that ran with its URL count, plus the analysis itself and its notes, then commits.</summary>
+    /// <param name="checks">The checks that ran; ones the crawl couldn't support are left out.</param>
     /// <returns>Flagged URL counts per issue id.</returns>
-    public Dictionary<string, long> Commit(IReadOnlyList<IssueDefinition> catalog, AnalysisInfo info, string settingsJson)
+    public Dictionary<string, long> Commit(IReadOnlyList<IssueDefinition> checks, AnalysisInfo info, string settingsJson, IReadOnlyList<string> notes)
     {
         Dictionary<string, long> counts = new(StringComparer.Ordinal);
         using (var count = Command("SELECT issue, COUNT(*) FROM issues GROUP BY issue"))
@@ -85,7 +86,7 @@ internal sealed class IssueWriter : IDisposable
                    VALUES ($id, $category, $severity, $title, $description, $fix, $count)
                    """))
         {
-            foreach (var issue in catalog)
+            foreach (var issue in checks)
             {
                 type.Parameters.Clear();
                 type.Parameters.AddWithValue("$id", issue.Id);
@@ -110,6 +111,16 @@ internal sealed class IssueWriter : IDisposable
             analysis.Parameters.AddWithValue("$pages", info.PagesAnalyzed);
             analysis.Parameters.AddWithValue("$durationMs", (long)info.Duration.TotalMilliseconds);
             analysis.ExecuteNonQuery();
+        }
+
+        using (var note = Command("INSERT INTO analysis_notes (note) VALUES ($note)"))
+        {
+            var text = note.Parameters.Add("$note", SqliteType.Text);
+            foreach (var value in notes)
+            {
+                text.Value = value;
+                note.ExecuteNonQuery();
+            }
         }
 
         _transaction.Commit();

@@ -43,6 +43,9 @@ internal sealed class CrawlScope
                (host == _rootHost || host.EndsWith(_subdomainSuffix, StringComparison.Ordinal));
     }
 
+    /// <summary>The folder pages are parsed and followed in: "/" for the whole site.</summary>
+    public string StartFolder => _startFolder;
+
     public bool IsInStartFolder(Uri uri) =>
         _startFolder == "/" || uri.AbsolutePath.StartsWith(_startFolder, StringComparison.Ordinal);
 

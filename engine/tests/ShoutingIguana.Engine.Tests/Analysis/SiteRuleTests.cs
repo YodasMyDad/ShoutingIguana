@@ -101,6 +101,34 @@ public sealed class SiteRuleTests
 
     }
 
+    [Theory]
+    [InlineData(503, "HTTP 503", false)]
+    [InlineData(429, "HTTP 429", false)]
+    [InlineData(403, "HTTP 403", false)]
+    [InlineData(null, "Timed out", false)]
+    [InlineData(200, "Unexpected end of file", false)]
+    [InlineData(404, "HTTP 404", true)]
+    [InlineData(410, "HTTP 410", true)]
+    public void SitemapCoverageNeedsEveryDeclaredSitemapToSayWhatItLists(int? status, string error, bool coverageChecked)
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/", inSitemap: true);
+        var post = site.Ok($"{site.Site}/blog/post");
+        var urls = site.Table();
+        StoredSitemap[] sitemaps =
+        [
+            new($"{site.Site}/page-sitemap.xml", 200, false, 1, null),
+            new($"{site.Site}/post-sitemap.xml", status, false, 0, error)
+        ];
+
+        var hits = new SitemapRules(urls, sitemaps, new CrawlOptions { StartUrl = site.Site }, crawlComplete: true).Finish().ToList();
+
+        // A sitemap that failed for a reason that says nothing about its contents may well list the post.
+        Assert.Equal(coverageChecked, hits.Contains(new IssueHit(IssueCatalog.NOT_IN_SITEMAP, post)));
+        Assert.Equal(coverageChecked ? null : sitemaps[1], SitemapRules.Unreadable(sitemaps));
+        Assert.Contains(hits, hit => hit.Issue == IssueCatalog.SITEMAP_ERROR);
+    }
+
     [Fact]
     public void AFailedGuessAtSitemapXmlMeansNoSitemapNotABrokenOne()
     {

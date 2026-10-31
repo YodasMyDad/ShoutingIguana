@@ -129,7 +129,11 @@ internal static class CrawlSchema
             duration_ms INTEGER NOT NULL
         );
 
-        -- Every check that ran, with how many URLs it flagged (0 = checked and clean).
+        -- What the last analysis couldn't do and why (checks this crawl can't support, rules that failed), in order.
+        CREATE TABLE IF NOT EXISTS analysis_notes (id INTEGER PRIMARY KEY, note TEXT NOT NULL);
+
+        -- Every check that ran, with how many URLs it flagged (0 = checked and clean). Checks the crawl can't
+        -- support, such as orphans on a depth-limited crawl, are left out.
         CREATE TABLE IF NOT EXISTS issue_types (
             id TEXT PRIMARY KEY,
             category TEXT NOT NULL,

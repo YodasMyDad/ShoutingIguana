@@ -111,6 +111,41 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.True(CrawlStatsReader.Read(path).SkipReasons.GetValueOrDefault(SkipReason.UrlLimit) > 0);
     }
 
+    [Theory]
+    [InlineData(1, 0, "depth limit")]
+    [InlineData(0, 300, "URL limit")]
+    public async Task LimitedCrawlsSkipTheOrphanCheckAndSayWhy(int maxDepth, int maxUrls, string reason)
+    {
+        var path = NewDatabasePath();
+        await CrawlAsync(Options() with { MaxDepth = maxDepth, MaxUrls = maxUrls }, path);
+
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+
+        // /plants/trailing/ is in the sitemap and only linked through a redirect the limit kept out of the crawl.
+        Assert.True(analysis.IsPartial);
+        Assert.DoesNotContain(analysis.Issues, issue => issue.Issue == IssueCatalog.ORPHAN_PAGE);
+        Assert.False(IssueReader.ReadCounts(path).ContainsKey(IssueCatalog.ORPHAN_PAGE.Id));
+        var note = Assert.Single(analysis.Notes);
+        Assert.Contains(reason, note);
+        Assert.Equal([note], IssueReader.ReadNotes(path));
+
+        // Sitemap coverage doesn't depend on which pages link where, so it still runs.
+        Assert.Contains(analysis.Issues, issue => issue.Issue == IssueCatalog.NOT_IN_SITEMAP);
+    }
+
+    [Fact]
+    public async Task AFolderScopedCrawlSkipsTheOrphanCheck()
+    {
+        var path = NewDatabasePath();
+        await CrawlAsync(Options() with { StartUrl = new Uri(_server.BaseUri, SyntheticSite.PLANTS_PATH).AbsoluteUri }, path);
+
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+
+        Assert.True(analysis.IsPartial);
+        Assert.DoesNotContain(analysis.Issues, issue => issue.Issue == IssueCatalog.ORPHAN_PAGE);
+        Assert.Contains(SyntheticSite.PLANTS_PATH, Assert.Single(analysis.Notes));
+    }
+
     [Fact]
     public async Task OptionsChangeWhatIsFollowed()
     {
@@ -158,7 +193,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var second = await analyzer.AnalyzeAsync(path);
         Assert.Equal(first.Issues.Sum(issue => issue.Count), second.Issues.Sum(issue => issue.Count));
         Assert.Equal(second.Issues.Sum(issue => issue.Count), Count(path, "SELECT COUNT(*) FROM issues"));
-        Assert.Equal(IssueCatalog.All.Count, Count(path, "SELECT COUNT(*) FROM issue_types"));
+        Assert.Equal(second.Issues.Count, Count(path, "SELECT COUNT(*) FROM issue_types"));
 
         // Stricter thresholds flag more, from the same stored crawl.
         var strict = await analyzer.AnalyzeAsync(path, new AnalysisSettings { TitleMinLength = 10, TitleMaxLength = 20 });
