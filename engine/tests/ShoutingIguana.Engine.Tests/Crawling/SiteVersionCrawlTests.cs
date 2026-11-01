@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using ShoutingIguana.Engine.Analysis;
@@ -11,6 +12,7 @@ using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Fetching;
 using ShoutingIguana.Engine.Tests.Support;
+using Xunit.Abstractions;
 
 namespace ShoutingIguana.Engine.Tests.Crawling;
 
@@ -21,7 +23,7 @@ namespace ShoutingIguana.Engine.Tests.Crawling;
 /// compare the issues with those of the same site whose www version redirects home as it should, so anything a
 /// version changes besides what the test expects shows up.
 /// </summary>
-public sealed class SiteVersionCrawlTests : IAsyncLifetime
+public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLifetime
 {
     private const string BARE = "http://example.com";
     private const string WWW = "http://www.example.com";
@@ -343,8 +345,8 @@ public sealed class SiteVersionCrawlTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Stopped once www has answered, then resumed: www isn't probed again, and no version is stored twice. (The dead
-    /// https:// versions are held back for their one more try at the end, so the resumed crawl asks them again.)
+    /// Stopped once every version has answered (the https:// ones dead, recorded at once), then resumed: www isn't probed
+    /// again, and no version is stored twice.
     /// </summary>
     [Fact]
     public async Task AResumedCrawlDoesNotProbeAgain()
@@ -354,7 +356,9 @@ public sealed class SiteVersionCrawlTests : IAsyncLifetime
         Hold("example.com/a");
         await using (var job = TestCrawls.Start(Options(site), path))
         {
-            await TestCrawls.WaitUntilAsync(path, $"SELECT COUNT(*) FROM urls WHERE url = '{WWW}/' AND state = {(int)UrlState.Done}");
+            await TestCrawls.WaitUntilAsync(path, $"""
+                SELECT COUNT(*) = 3 FROM urls WHERE source = {(int)DiscoverySource.SiteVersion} AND state = {(int)UrlState.Done}
+                """);
             Assert.Equal(CrawlStatus.Stopped, (await job.StopAsync()).Status);
         }
 
@@ -393,6 +397,74 @@ public sealed class SiteVersionCrawlTests : IAsyncLifetime
         Assert.Equal(3, TestCrawls.Count(path, $"""
             SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state <> {(int)UrlState.Skipped} AND source <> {(int)DiscoverySource.SiteVersion}
             """));
+    }
+
+    /// <summary>
+    /// www accepts the connection and never answers, as a port behind a firewall that drops packets does once connected.
+    /// Its robots.txt is fetched as ever, three tries with backoff, but the probe isn't sent after that: it is recorded
+    /// dead with robots.txt's timeout, and nothing is tried again at the end. So the crawl, whose own pages take moments,
+    /// takes one robots.txt cycle, not that plus the probe's own tries plus one more at the end.
+    /// </summary>
+    [Fact]
+    public async Task AVersionThatNeverAnswersCostsOneRobotsTxtCycle()
+    {
+        const int TIMEOUT_SECONDS = 2;
+        var path = _files.NewPath();
+        await using var site = await StartAsync(SiteWith(NeverAnswersAsync));
+        var options = Options(site) with { RequestTimeoutSeconds = TIMEOUT_SECONDS, MaxRetries = 2 };
+
+        var clock = Stopwatch.StartNew();
+        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(options, path)).Status);
+        clock.Stop();
+        output.WriteLine($"Crawl with a version that never answers: {clock.Elapsed.TotalSeconds:0.0} s");
+
+        // Three tries of robots.txt, 1 s and 2 s apart (each with up to 0.25 s of jitter).
+        var robotsCycle = TimeSpan.FromSeconds((options.MaxRetries + 1) * TIMEOUT_SECONDS + 1 + 2 + 0.5);
+        Assert.True(clock.Elapsed < robotsCycle + TimeSpan.FromSeconds(3), $"The crawl took {clock.Elapsed}, a robots.txt cycle {robotsCycle}.");
+        Assert.Equal(3, _requests.Count(request => request == "www.example.com/robots.txt"));
+        Assert.DoesNotContain("www.example.com/", _requests);
+        Assert.Equal([$"{(int)FetchOutcome.Timeout} | yes"], TestCrawls.Rows(path, $"""
+            SELECT r.outcome, CASE WHEN r.error = (SELECT error FROM robots WHERE origin = '{WWW}') THEN 'yes' ELSE r.error END
+            FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url = '{WWW}/'
+            """));
+
+        // Dead, so neither flagged nor skipped, and nothing else reported for it.
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        Assert.Equal(0, analysis.Issues.Single(issue => issue.Issue == IssueCatalog.DUPLICATE_SITE_VERSION).Count);
+        Assert.DoesNotContain(IssueReader.ReadAll(path), row => row.Issue is "internal-unreachable" or "robots-txt-unreachable-other-origin");
+    }
+
+    /// <summary>www's robots.txt answers but its page never does: the probe is asked once, with no retries and no try at the end.</summary>
+    [Fact]
+    public async Task AVersionWhosePageNeverAnswersIsAskedOnce()
+    {
+        const int TIMEOUT_SECONDS = 2;
+        var path = _files.NewPath();
+        await using var site = await StartAsync(SiteWith(context => context.Request.Path.Value == "/robots.txt" ? Status(context, 404) : NeverAnswersAsync(context)));
+        var options = Options(site) with { RequestTimeoutSeconds = TIMEOUT_SECONDS, MaxRetries = 2 };
+
+        var clock = Stopwatch.StartNew();
+        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(options, path)).Status);
+        clock.Stop();
+        output.WriteLine($"Crawl with a version whose page never answers: {clock.Elapsed.TotalSeconds:0.0} s");
+
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(TIMEOUT_SECONDS + 4), $"The crawl took {clock.Elapsed}.");
+        Assert.Single(_requests, request => request == "www.example.com/");
+        Assert.Equal(FetchOutcome.Timeout, (FetchOutcome)TestCrawls.Count(path, $"SELECT r.outcome FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url = '{WWW}/'"));
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        Assert.Equal(0, analysis.Issues.Single(issue => issue.Issue == IssueCatalog.DUPLICATE_SITE_VERSION).Count);
+    }
+
+    private static async Task NeverAnswersAsync(HttpContext context)
+    {
+        try
+        {
+            await Task.Delay(Timeout.Infinite, context.RequestAborted);
+        }
+        catch (OperationCanceledException)
+        {
+            // The crawler gave up waiting.
+        }
     }
 
     private static void AssertSkipped(string path, AnalysisSummary analysis)

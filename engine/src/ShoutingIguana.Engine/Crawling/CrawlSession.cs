@@ -412,6 +412,7 @@ internal sealed class CrawlSession
     /// The site's own URLs that got no response, or were refused because robots.txt couldn't be read, are held back
     /// (unrecorded) for one more try at the end of the crawl, when a site that was briefly down is usually back. URLs
     /// failed without a request ("Not checked") aren't: their origin is gone, and one more try would fail the same way.
+    /// Nor are probes of the site's other versions, which never hold up a crawl: one that got no answer is dead.
     /// </summary>
     private bool Defer(PageRecord record)
     {
@@ -421,8 +422,8 @@ internal sealed class CrawlSession
                               response.Error?.StartsWith(RobotsTxt.UNREACHABLE_ERROR, StringComparison.Ordinal) == true;
         var gotNoResponse = response.Outcome is FetchOutcome.Timeout or FetchOutcome.NetworkError &&
                             response.Error?.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) != true;
-        if (!item.IsInternal || !(gotNoResponse || refusedByRobots) || _retried.ContainsKey(item.Id) ||
-            Interlocked.Increment(ref _deferredTotal) > MAX_DEFERRED)
+        if (!item.IsInternal || item.Source == DiscoverySource.SiteVersion || !(gotNoResponse || refusedByRobots) ||
+            _retried.ContainsKey(item.Id) || Interlocked.Increment(ref _deferredTotal) > MAX_DEFERRED)
         {
             return false;
         }

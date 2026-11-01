@@ -11,6 +11,7 @@ using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Robots;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Fetching;
 using ShoutingIguana.Engine.Tests.Robots;
 using ShoutingIguana.Engine.Tests.Support;
@@ -227,12 +228,10 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
 
         var summary = await CrawlOnFakeClockAsync(Options(), path, new RecordingObserver(), new FakeTimeProvider());
 
-        // Read twice for its rules. A third request, at the end, asks whether the site still answers before the
-        // https:// version, which never did, is written off.
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         Assert.Equal(FetchOutcome.Success, Outcome(path, _server.BaseUri.AbsoluteUri));
         Assert.Equal(FetchOutcome.Success, Outcome(path, $"{_server.BaseUri}about"));
-        Assert.Equal(1 + 1 + 1, robotsRequests);
+        Assert.Equal(2, robotsRequests);
     }
 
     /// <summary>
@@ -265,13 +264,11 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
 
         var summary = await CrawlOnFakeClockAsync(Options(), path, new RecordingObserver(), time);
 
-        // Asked again for its rules once the cool-down is over, and once more at the end, whether the site still answers
-        // before the https:// version, which never did, is written off. Neither comes before the cool-down ends.
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         Assert.Equal(FetchOutcome.Success, Outcome(path, _server.BaseUri.AbsoluteUri));
         Assert.Equal(FetchOutcome.Success, Outcome(path, $"{_server.BaseUri}about"));
         var asked = robotsRequests.ToArray();
-        Assert.Equal(3, asked.Length);
+        Assert.Equal(2, asked.Length);
         Assert.True(asked[1] - asked[0] >= RobotsCache.RETRY_AFTER, $"robots.txt was asked again after {asked[1] - asked[0]}.");
     }
 
@@ -345,14 +342,15 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
         Assert.InRange(observer.FirstAt("site-down") - observer.FirstAt("site-unreachable"),
             RetryingFetcher.GIVE_UP_AFTER - LONG_STEP, RetryingFetcher.GIVE_UP_AFTER + TimeSpan.FromMinutes(2));
 
-        // Nothing it couldn't reach was written off as broken: it's all still to do, for when the site is back, the probe
-        // of the https:// version included.
+        // Nothing it couldn't reach was written off as broken: it's all still to do, for when the site is back. Only the
+        // probe of the https:// version, which never answered, is recorded dead: probes are never held back.
         Assert.Equal(0L, Scalar(path, $"""
             SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id
             WHERE u.is_internal = 1 AND r.outcome IN ({(int)FetchOutcome.Timeout}, {(int)FetchOutcome.NetworkError})
+              AND u.source <> {(int)DiscoverySource.SiteVersion}
             """));
-        Assert.Equal(60L, Scalar(path, "SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state IN (0, 1) AND url LIKE 'http://%/p%'"));
-        Assert.Equal(61L, Scalar(path, "SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state IN (0, 1)"));
+        Assert.Equal(FetchOutcome.NetworkError, Outcome(path, $"https{_server.BaseUri.AbsoluteUri[4..]}"));
+        Assert.Equal(60L, Scalar(path, "SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state IN (0, 1)"));
 
         Volatile.Write(ref goesDownAfterTheHomePage, false);
         Volatile.Write(ref isUp, true);

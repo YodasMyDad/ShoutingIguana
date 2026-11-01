@@ -274,11 +274,12 @@ internal sealed class CrawlWriter : IAsyncDisposable
         }
 
         // Promoted to a full crawl while its status check was in flight, and the check found something to crawl: fetch
-        // it again in full rather than store the check. A site-version probe the site found meanwhile, that redirects, is
-        // fetched again too, so that where it leads is found by the site rather than by a probe.
+        // it again in full rather than store the check. A site-version probe the site found meanwhile is fetched again
+        // too unless it found a page: where a redirect leads must be found by the site rather than by a probe, and a
+        // probe's single try that failed must get the retries the site's own URLs get.
         var entry = _urls[key];
         if ((item.Mode == FetchMode.Check && entry.Mode == FetchMode.Crawl && response.Outcome == FetchOutcome.Success) ||
-            (item.Source == DiscoverySource.SiteVersion && !entry.IsProbe && response.Outcome == FetchOutcome.Redirect))
+            (item.Source == DiscoverySource.SiteVersion && !entry.IsProbe && response.Outcome != FetchOutcome.Success))
         {
             _urls[key] = entry with { State = UrlState.Queued };
             _statements.UpdateUrlState(item.Id, UrlState.Queued);
@@ -628,8 +629,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
     /// A URL only a site-version probe had found, found now by the site itself: linked, listed in a sitemap, or where
     /// the start URL redirects. From here on it is stored as found that way, at that depth (a probe's depth is no
     /// click path), and the analysis judges it as one of the site's own URLs. If the probe already fetched it, it takes
-    /// its slot under the URL limit now. If that fetch found a redirect, it is fetched again, so that where it leads
-    /// is found by the site too and crawled as the site's own.
+    /// its slot under the URL limit now. If that fetch found anything but a page it is fetched again: where a redirect
+    /// leads is then found by the site too and crawled as the site's own, and a probe's single try that failed gets the
+    /// retries the site's own URLs get.
     /// </summary>
     private UrlEntry Adopt(OutLink link, UrlEntry entry, int depth, DiscoverySource source, int? foundOnId)
     {
@@ -642,9 +644,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
             SkipQueuedIfAtUrlLimit();
         }
 
-        if (entry.State == UrlState.Done && _statements.ReadOutcome(entry.Id) is { Outcome: FetchOutcome.Redirect } redirect)
+        if (entry.State == UrlState.Done && _statements.ReadOutcome(entry.Id) is { Outcome: not FetchOutcome.Success } stored)
         {
-            adopted = Refetch(adopted, adopted.Mode, link.IsInternal, redirect);
+            adopted = Refetch(adopted, adopted.Mode, link.IsInternal, stored);
             _urls[link.Key] = adopted;
         }
 

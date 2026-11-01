@@ -33,15 +33,27 @@ internal sealed class PageProcessor(
     private int _forbiddenReported;
     private int _startLeftReported;
 
+    /// <summary>
+    /// A probe of another version of the site (or where one redirects) must never hold up the crawl, so it gets a single
+    /// attempt. Where its origin's robots.txt timed out it isn't sent at all: it would only wait out another timeout, so it
+    /// is stored with robots.txt's failure, as a version that doesn't answer. One whose robots.txt failed at once (refused,
+    /// reset, no TLS) is still asked, since that costs nothing, and a server can drop robots.txt and serve its pages.
+    /// </summary>
     /// <param name="isRetry">The URL's one more try at the end of the crawl: a single attempt, as it had its retries.</param>
     public async Task<PageRecord> ProcessAsync(FrontierItem item, CancellationToken cancellationToken, bool isRetry = false)
     {
         var uri = new Uri(item.Url);
         var fetchedAt = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
+        var isProbe = item.Source == DiscoverySource.SiteVersion;
 
         if (options.RespectRobotsTxt)
         {
             var rules = await robots.GetAsync(uri).WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (isProbe && rules.NoAnswer is { Outcome: FetchOutcome.Timeout } noAnswer)
+            {
+                return Failed(item, fetchedAt, noAnswer.Outcome, noAnswer.Error);
+            }
+
             if (!rules.IsAllowed(uri.PathAndQuery))
             {
                 // Refused because robots.txt couldn't be read is stored apart from refused by a rule.
@@ -51,7 +63,7 @@ internal sealed class PageProcessor(
         }
 
         var body = item.Mode == FetchMode.Crawl ? FetchBody.Html : FetchBody.None;
-        var response = await fetcher.FetchAsync(uri, body, cancellationToken, singleAttempt: isRetry).ConfigureAwait(false);
+        var response = await fetcher.FetchAsync(uri, body, cancellationToken, singleAttempt: isRetry || isProbe).ConfigureAwait(false);
         if (item.IsInternal)
         {
             WatchForBlocking(uri, response);

@@ -307,6 +307,41 @@ public sealed class CrawlWriterTests : IAsyncLifetime
         ], TestCrawls.Rows(path, URL_ROWS));
     }
 
+    /// <summary>
+    /// A probe gets a single try, which failed here. Once the site links to it, it is one of the site's own URLs, so it is
+    /// fetched again with the retries those get, whether the probe's failure was already stored or still on its way.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AProbeThatFailedIsFetchedAgainOnceTheSiteLinksToIt(bool probeAnsweredFirst)
+    {
+        var path = _files.NewPath();
+        var start = new Uri("https://example.com/");
+        var (options, link) = Site(start);
+
+        await using (var writer = CrawlWriter.Open(path, options, resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+            await SeedAsync(writer, link, start, ["https://www.example.com/"]);
+            var claim = await writer.ClaimAsync(10, 10, CancellationToken.None);
+            var probe = claim.Internal.Single(item => item.Source == DiscoverySource.SiteVersion);
+            if (probeAnsweredFirst)
+            {
+                await RecordAsync(writer, probe, FetchOutcome.NetworkError);
+            }
+
+            await RecordAsync(writer, claim.Internal.Single(item => item.Source == DiscoverySource.Seed), FetchOutcome.Success,
+                link("https://www.example.com/", LinkKind.Hyperlink));
+            if (!probeAnsweredFirst)
+            {
+                await RecordAsync(writer, probe, FetchOutcome.NetworkError);
+            }
+        }
+
+        Assert.Contains(Row("https://www.example.com/", FetchMode.Crawl, 1, UrlState.Queued, SkipReason.None, DiscoverySource.Link), TestCrawls.Rows(path, URL_ROWS));
+        Assert.Equal(0, TestCrawls.Count(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url = 'https://www.example.com/'"));
+    }
+
     /// <summary>Resuming remembers which URLs only a probe found, so the site linking to one afterwards still makes it the site's own.</summary>
     [Fact]
     public async Task AResumedCrawlStillKnowsItsProbes()
