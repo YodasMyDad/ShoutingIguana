@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "si-spike",
+  "version": "0.0.0",
+  "identifier": "uk.co.aptitude.si-spike",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:51873"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Shouting Iguana spike",
+        "width": 1536,
+        "height": 864
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:*; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["icons/icon.ico", "icons/icon.png"],
+    "externalBin": ["binaries/spike-sidecar"]
+  }
+}

@@ -1,0 +1,10 @@
+# Throwaway stack spike for step 3. Nothing built here is kept.
+node_modules/
+dist/
+target/
+bin/
+obj/
+results/
+src-tauri/binaries/
+src-tauri/gen/
+*.log

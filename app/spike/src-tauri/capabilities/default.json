@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The webview gets core IPC and events only. It cannot spawn processes: Rust owns the sidecar.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

@@ -28,12 +28,22 @@ Built in stages:
   - `--data-dir` is where new crawls are saved. It defaults to `Documents/Shouting Iguana`.
   - `--state-dir` holds `library.json`, the user's defaults and the logs. It defaults to
     `<local app data>/ShoutingIguana`.
+  The shell also passes `--stdin-lifeline`, described under Shutdown.
 - **Environment.**
-  - `SI_SIDECAR_TOKEN` is the bearer token. Without it, the sidecar makes one up and includes it in the ready line,
-    for development only.
-  - `SI_SIDECAR_ORIGINS` is a comma-separated list of the origins allowed to call the API: the app's webview
-    origins, as measured in [the spike](v2-ui-spike.md).
-  - `SI_PARENT_PID` is the shell's process. When it ends, the sidecar shuts down as below.
+  - `SI_SIDECAR_TOKEN` is the bearer token: 32 random bytes as hex, made by the shell for each launch. The sidecar
+    removes it from its own environment after reading it, so processes it starts don't inherit it. Without it, the
+    sidecar makes one up and includes it in the ready line, for development only.
+  - `SI_SIDECAR_ORIGINS` is a comma-separated list of the origins allowed to call the API. The shell passes exactly
+    its own webview's origin, plus the dev server's in debug builds. [The spike](v2-ui-spike.md) measured these:
+
+    | Build | Origin |
+    | --- | --- |
+    | Windows release | `http://tauri.localhost` |
+    | macOS and Linux release | `tauri://localhost` (from Tauri's documentation) |
+    | `tauri dev` | `http://localhost:<dev server port>` |
+
+  - `SI_PARENT_PID` is the shell's process. When it ends, the sidecar shuts down as below. It is the second guard,
+    after stdin.
 - **Ready line.** The sidecar binds `127.0.0.1` on a free port. When it's ready to serve, it writes exactly one line
   to stdout:
 
@@ -43,7 +53,15 @@ Built in stages:
 
   `"token"` is added only when the sidecar made one up. Nothing else ever goes to stdout: logs go to stderr and to
   `<state-dir>/logs`.
-- **Shutdown.** On `POST /api/shutdown`, Ctrl+C, SIGTERM, or when the parent process ends:
+- **Shutdown.** The shell can't rely on killing the sidecar: `tauri-plugin-shell` leaves a sidecar it started from
+  Rust running after a normal exit, and after a hard kill of the shell. So stdin is the lifeline. With
+  `--stdin-lifeline`, a `shutdown` line on stdin, or stdin reaching its end because the shell died, shuts the sidecar
+  down. It is opt-in, so a sidecar started any other way with no stdin doesn't stop at once. On Windows the shell
+  also puts the sidecar in a job object that kills it when the shell's last handle closes, as a backstop for a
+  sidecar that hangs.
+
+  The sidecar shuts down on any of: a `shutdown` line or the end of stdin (with the lifeline), `POST /api/shutdown`,
+  Ctrl+C, SIGTERM, or the parent process ending. Then:
   - every running crawl is stopped, and its file stays resumable;
   - every running analysis is cancelled, and stores nothing;
   - the process exits with code 0.
@@ -52,11 +70,23 @@ Built in stages:
 
 - **Token.** Every request needs `Authorization: Bearer <token>`, compared in constant time; otherwise 401. CORS
   preflights (`OPTIONS`) are the exception: they carry no credentials, and are answered only for allowed origins.
-- **Host.** `Host` must be `127.0.0.1:<port>` or `localhost:<port>`; otherwise 400. This defeats DNS rebinding.
+- **Host.** `Host` must be `127.0.0.1:<port>` or `localhost:<port>`, with the bound port; otherwise 421. This
+  defeats DNS rebinding.
 - **Origin.** When an `Origin` is sent, it must be on the allowlist; otherwise 403.
-  - CORS headers go only to allowed origins: `Access-Control-Allow-Headers: Authorization, Content-Type`, and the
-    methods in use.
+- **CORS.** Every call carries `Authorization`, so WebView2 sends a preflight before each one.
+  - A preflight from an allowed origin gets `204` with:
+    - `Access-Control-Allow-Origin: <the exact origin>`;
+    - `Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS`;
+    - `Access-Control-Allow-Headers: authorization, content-type, last-event-id`;
+    - `Access-Control-Max-Age: 7200`, Chromium's cap;
+    - `Vary: Origin`.
+  - If the preflight asks with `Access-Control-Request-Private-Network: true`, the reply adds
+    `Access-Control-Allow-Private-Network: true`.
+  - Real responses repeat `Access-Control-Allow-Origin` and `Vary: Origin`, and carry `Cache-Control: no-store`.
   - No cookies and no credentials mode.
+  - Chromium caches a preflight per URL, so query strings that change every call (paging) cost a preflight each. The
+    grid queries (E3) are therefore `POST`s with a JSON body to one fixed URL per grid. The UI never sets
+    `cache: 'no-store'` on a request, because that turns the preflight cache off.
 - **Bodies.** A request body is at most 1 MB.
 - **Paths from the UI** (open, add to library) must be absolute and end in `.sicrawl`. The file is checked to be a
   crawl before it's added.
@@ -210,7 +240,10 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 
 - **First.** A `hello` event, `{ live: [crawlIds] }`, followed by the latest `progress` for each live crawl. A
   reconnecting UI is up to date at once.
-- **Replay.** None (`Last-Event-ID` is ignored). Alerts can be fetched with `GET /api/crawls/{id}/alerts`.
+- **Replay.** None. Events carry no ids, and `Last-Event-ID` is ignored. Alerts can be fetched with
+  `GET /api/crawls/{id}/alerts`.
+- **One stream.** Kestrel without TLS speaks HTTP/1.1, and Chromium allows 6 connections per host and port. An open
+  stream holds one for good, so every live event shares this one stream.
 - **Keep-alive.** A comment line every 15 s.
 - **Slow clients.** Each client has a bounded queue. Progress is merged per crawl when a client falls behind; other
   events are never dropped. A client that stays 1,000 events behind is disconnected, and reconnects.
@@ -254,7 +287,8 @@ they're null, and the UI shows the notes.
 | `GET /api/crawls/{id}/stats` | `CrawlStatsReader.Read` |
 | `GET /api/crawls/{id}/issues/{checkId}?limit=200&offset=0` | `{ rows: [{ url, detail, relatedUrl }], total }` |
 
-E3 replaces the issues endpoint with keyset paging and grouping, and adds:
+E3 replaces the issues endpoint with keyset paging and grouping. Its grid queries are `POST`s to one fixed URL
+per grid (see CORS above). E3 adds:
 
 - `/urls`;
 - `/urls/{urlId}`, the inspector;
