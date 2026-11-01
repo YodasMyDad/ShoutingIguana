@@ -154,7 +154,10 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   endpoints aren't audited as pages. Site-wide settings (HTTPS, security headers, robots.txt, sitemap files) are
   reported once, on the home page, rather than on every URL.
 - **Coverage.** A check the crawl can't support is skipped, not reported clean. Skipped checks are left out of
-  `issue_types`, the summary is partial, and the analysis notes (`analysis_notes`, `AnalysisSummary.Notes`) say why.
+  `issue_types` and the analysis is partial (`analysis.is_partial`). Each skipped check is stored in `skipped_checks`
+  with why: a stable code (`no-sitemap`, `depth-limit`, ... in `SkippedCheckReasons`) and a sentence to show beside
+  it ("No sitemap could be read."), the first reason that applied. The analysis notes (`analysis_notes`,
+  `AnalysisSummary.Notes`) say it for the analysis as a whole.
   - The orphan check needs every page that could link to a sitemap page, and a sitemap to compare with. So a
     stopped, depth- or URL-limited, or folder-scoped crawl skips it, as does one with sitemaps off or none read.
   - Pages missing from the sitemaps need every sitemap read. So that check is skipped while a declared sitemap
@@ -194,6 +197,21 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   description lengths count full-width (CJK) characters and emoji as two, as they take about twice the room.
 - **Atomic.** The issues are replaced in one transaction, so a failed or cancelled analysis keeps the
   previous results.
+- **URL summary.** Each analysis rebuilds `url_summary`, the URL grids' table: one row per URL with what the analysis
+  judged and the crawl's numbers the grids sort and filter on (see [Crawl file](#crawl-file-sicrawl)). It comes from
+  the same URL table the checks use, so the grid and the checks never disagree, and it's written in one streamed pass
+  after the issues: about 0.7 s and 14 MB (130 bytes per URL, indexes included) on the 100k crawl.
+  `UrlSummaryReader` reads it. A crawl analysed by an earlier engine has none (`IsAvailable` is false) until it's
+  analysed again.
+- **Out of date.** `AnalysisFreshness.Check` (or `CrawlFileSummary.OutOfDate`) says why an analysis no longer stands:
+  - `CrawlChanged`: the crawl row was stamped again (`updated_at`) since the stamp the analysis kept, because the
+    crawl was continued. Exact, whatever the clocks did.
+  - `EngineChanged`: the analysis ran with another `AnalysisFreshness.VERSION`, or with other checks (the catalog's
+    ids, categories and severities, hashed). Bump `VERSION` with any change to what analysing the same crawl stores: a
+    rule that judges differently, a default threshold, a column of the URL summary. Every analysis by an engine from
+    before the summary is out of date this way.
+  - `SettingsChanged`: the stored settings differ from the ones an analysis would run with now. A threshold the
+    analysing engine didn't store counts as different.
 
 Categories: response codes, redirects, links, indexability, canonicals, sitemaps, titles, meta descriptions,
 headings, content, images, hreflang, structured data, security, URLs, performance, HTML.
@@ -220,10 +238,52 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `robots`, `sitemaps`, `sitemap_urls` | robots.txt per origin, sitemaps read (under the URL they were found at, which may redirect elsewhere; `is_probe` marks a guess at `/sitemap.xml` when nothing declared one; the first one left unread, past 1,000 sitemaps or nested more than 3 deep, has an error starting "Not read"), and which URLs each listed |
 | `issues` | One row per flagged URL and issue: a short detail, and the other URL involved (broken target, duplicate, canonical) |
 | `issue_types` | Every check that ran: its title, category, severity, description, fix, and how many URLs it flagged |
-| `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, and what it couldn't do and why |
+| `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, whether it was partial, what it ran against (the crawl's `updated_at`, the analysis version, the checks' fingerprint), and what it couldn't do and why |
+| `skipped_checks` | Each check the last analysis skipped, with a reason code and a sentence |
 | `effective_indexability` | Indexability as analysed, for URLs where it differs from the crawl's (an instant meta refresh, a canonical leading back to the page) |
+| `url_summary` | One row per URL for the grids, rebuilt by each analysis: indexable or not and why, where redirects end and the status there, the type (page, image, script, stylesheet, font, media, PDF, other), in a sitemap, inlinks (all, followed, nofollow, linking pages), outlinks, issues by severity, and copies of the URL's depth, status, size, time and word count |
 
 URLs that only appear in sitemaps keep depth `1000000` (`CrawlDepth.UNLINKED`), which is how orphan pages show up.
+
+The analysis tables are created when a crawl is first analysed, so a crawl file from an earlier engine opens as it
+always did and gets what it lacks on its next analysis. The crawl's own schema version doesn't change.
+
+### URL summary
+
+What its columns mean:
+
+- **Null is unknown**: a URL the crawl never fetched, or never asked for because its host had stopped answering.
+- **Indexability** is the analysis's (`effective_indexability` over the crawl's): `indexable` is 1 when the URL
+  answered 2xx and nothing keeps it out of search, otherwise `indexability_reason` says why.
+- **Inlinks** are hyperlinks to the URL on the pages audited, each one counted, a page's links to itself left out.
+  Nofollow ones are marked rel=nofollow, or are on a page whose robots directives say nofollow. `linking_pages`
+  counts the pages.
+  Nothing is credited through redirects: these are the links as found. `outlinks` is every hyperlink on the page.
+- **Type** is by the content type of a successful response, otherwise by the extension, as the checks tell files from
+  pages.
+
+Nine indexes serve the grids' sorts and selective filters: status, indexability reason, type, depth, linking pages,
+issues, response time, size and word count. Every index ends with the URL id, which keyset paging needs. The rest
+are cheap to scan in a table this narrow.
+
+Measured on the 100k crawl's summary, and on 1M rows made by copying it nine times, at p95, for the first page of
+100 rows and for a page half way down (with SQLite 3.49; the engine ships 3.53):
+
+| Query | 100k | 1M |
+| --- | --- | --- |
+| Sorted by an indexed column, a common filter kept off its index (slowest pages, thinnest pages, most issues) | under 1 ms | under 3 ms |
+| A selective filter's index, then sorted (4xx by linking pages, status 500 by response time) | about 1 ms | 6–22 ms |
+| Sorted by a column without an index (followed inlinks, outlinks) | 13–24 ms | 100–210 ms |
+| Counting the rows a filter matches | up to 15 ms | up to 130 ms |
+| Overview breakdowns (indexability, depth, status, response times) | 21–40 ms | 200–390 ms |
+| Left to the planner: a common value's index, then sorted (slowest internal pages) | 12–25 ms | 110–330 ms |
+| Left to the planner: a rare match found by walking another index (over 500 ms, by size) | 110–220 ms | 1.2–2.0 s |
+
+This SQLite has no STAT4 histograms, so its planner can't tell a common value from a rare one, and stats from
+`ANALYZE` didn't change that. So the grids' readers count the matching rows first (the grid shows that count anyway)
+and choose. When few rows match, they sort them, keeping the sort's index out of the plan (`ORDER BY +size_bytes`).
+Otherwise they walk the sort's index, keeping a common value's index out (`+resource_type = 0`). Both brought the last
+two rows under 1 ms.
 
 ## Synthetic site and benchmark
 

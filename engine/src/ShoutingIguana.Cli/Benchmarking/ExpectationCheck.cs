@@ -1,3 +1,4 @@
+using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage.Models;
@@ -20,6 +21,44 @@ internal static class ExpectationCheck
         Check(mismatches, "Nofollow-only URLs", expected.NofollowOnly, Get(stats.SkipReasons, SkipReason.NoFollow));
         Check(mismatches, "Noindex pages", expected.Noindex, Get(stats.NonIndexableReasons, IndexabilityReason.Noindex));
         Check(mismatches, "Canonicalised pages", expected.Canonicalised, Get(stats.NonIndexableReasons, IndexabilityReason.Canonicalised));
+        return mismatches;
+    }
+
+    /// <summary>
+    /// The URL summary the grids read agrees with the stats, which count from the crawl's own tables: a row for every URL,
+    /// and the same indexability, judged as the analysis judged it.
+    /// </summary>
+    public static List<string> CompareSummary(IEnumerable<UrlSummary> rows, CrawlStats stats)
+    {
+        long count = 0, indexablePages = 0;
+        Dictionary<IndexabilityReason, long> nonIndexable = [];
+        foreach (var row in rows)
+        {
+            count++;
+            if (!row.IsInternal)
+            {
+                continue;
+            }
+
+            if (row is { IsIndexable: true, ResourceType: ResourceType.Page, WordCount: not null })
+            {
+                indexablePages++;
+            }
+
+            if (row.IndexabilityReason is { } reason and not IndexabilityReason.None)
+            {
+                nonIndexable[reason] = nonIndexable.GetValueOrDefault(reason) + 1;
+            }
+        }
+
+        List<string> mismatches = [];
+        Check(mismatches, "URL summary rows", stats.UrlCount, count);
+        Check(mismatches, "Indexable pages in the URL summary", stats.IndexablePageCount, indexablePages);
+        foreach (var reason in stats.NonIndexableReasons.Keys.Union(nonIndexable.Keys).Where(reason => reason != IndexabilityReason.None).Order())
+        {
+            Check(mismatches, $"{reason} URLs in the URL summary", Get(stats.NonIndexableReasons, reason), nonIndexable.GetValueOrDefault(reason));
+        }
+
         return mismatches;
     }
 

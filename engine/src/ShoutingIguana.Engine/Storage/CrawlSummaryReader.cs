@@ -38,16 +38,17 @@ public static class CrawlSummaryReader
         {
             var summary = ReadCrawlRow(connection);
             cancellationToken.ThrowIfCancellationRequested();
-            var analyzedAt = AnalyzedAt(connection);
+            var analysis = IssueReader.ReadAnalysis(connection, transaction: null);
             cancellationToken.ThrowIfCancellationRequested();
-            var flagged = analyzedAt is null ? null : FlaggedChecks(connection);
+            var flagged = analysis is null ? null : FlaggedChecks(connection);
             cancellationToken.ThrowIfCancellationRequested();
             var (fetched, pages) = withCounts ? Counts(connection) : (null, null);
             return summary with
             {
                 FetchedUrlCount = fetched,
                 PageCount = pages,
-                AnalyzedAt = analyzedAt,
+                AnalyzedAt = analysis?.AnalyzedAt,
+                Analysis = analysis,
                 FlaggedChecks = flagged
             };
         }
@@ -86,13 +87,6 @@ public static class CrawlSummaryReader
         using var reader = command.ExecuteReader();
         return reader.Read() ? (reader.GetInt64(0), reader.GetInt64(1)) : (0, 0);
     }
-
-    /// <summary>A first analysis that was cancelled or failed leaves its tables behind without a row.</summary>
-    private static DateTimeOffset? AnalyzedAt(SqliteConnection connection) =>
-        CrawlDatabase.Scalar(connection, "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'analysis'") is not null &&
-        CrawlDatabase.Scalar(connection, "SELECT analyzed_at FROM analysis WHERE id = 1") is long analyzedAt
-            ? DateTimeOffset.FromUnixTimeMilliseconds(analyzedAt)
-            : null;
 
     private static Dictionary<IssueSeverity, long> FlaggedChecks(SqliteConnection connection)
     {

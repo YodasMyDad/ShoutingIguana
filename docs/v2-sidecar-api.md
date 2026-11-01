@@ -18,7 +18,9 @@ Built in stages:
 
 - **E1** is marked below. It is the process, security, library, crawl control, live events, analysis, and the
   readers that exist today.
-- **E2–E6** add the grids, export, search and the favicon. They come from the brief's
+- **E2** is marked below too: the URL summary the grids read, and the analysis's own state (partial or not, why each
+  check was skipped, whether it's out of date).
+- **E3–E6** add the grids, export, search and the favicon. They come from the brief's
   [engine work the UI needs](v2-ui-brief.md#engine-work-the-ui-needs) and the handoff's
   [what's missing](v2-rebuild.md#whats-missing).
 
@@ -150,6 +152,7 @@ Built in stages:
     | `not-analysable` | 409 | The engine refuses: running or interrupted |
     | `file-error` | 400 | IO or permissions |
     | `not-analyzed` | 404 | The crawl has never been analysed |
+    | `needs-analysis` | 409 | A grid needs the URL summary, which an earlier engine's analysis doesn't have (E3) |
     | `not-found`, `check-not-found` | 404 | No such route, or no check with this id |
     | `bad-request` | 400 | Malformed JSON, or a property the API doesn't know |
     | `unauthorized` | 401 | The token is missing or wrong |
@@ -235,8 +238,14 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 
 - **`issues`** counts checks with at least one issue, by severity: the Issues screen's rows, not issue rows. It is
   null before the first analysis.
-- **`outOfDate`** is true when the crawl changed after its last analysis. E2 makes it exact; E1 compares the crawl's
-  `updated_at` with `analyzed_at`.
+- **`outOfDate`** (E2) is true when the last analysis no longer stands, and false before the first one. That's when:
+  - the crawl changed after it: the crawl row's `updated_at` isn't the one the analysis kept, because the crawl was
+    continued, here or elsewhere, or is running here;
+  - this engine would judge the crawl differently: an engine with another analysis version or other checks ran it,
+    as every engine from before E2 did;
+  - or the analysis ran with other thresholds than the sidecar's.
+
+  `GET /api/crawls/{id}/analysis` gives the reasons.
 - **Caching.** Each file's summary is read once and kept until the file's size or modified time changes, so the list
   stays cheap with many crawls. The cache is persisted in the state folder (`summaries.json`, keyed by the file's
   stamp and the engine version), so a restart doesn't re-read every crawl. A read is given a short time limit, so one
@@ -326,12 +335,34 @@ crawl. E4 persists them in the crawl file.
 | `GET /api/crawls/{id}/analysis` | The last analysis, below. 404 `not-analyzed` if it never ran |
 
 ```json
-{"analyzedAt":"…","engineVersion":"…","pagesAnalyzed":265,"durationMs":7012,"isPartial":null,"notes":["…"],
- "counts":[{"checkId":"title-too-long","count":12}],"skipped":[{"checkId":"orphan-page","reason":null}]}
+{"analyzedAt":"…","engineVersion":"…","pagesAnalyzed":265,"durationMs":7012,"isPartial":true,"outOfDate":false,
+ "outOfDateReasons":[],"notes":["…"],"counts":[{"checkId":"title-too-long","count":12}],
+ "skipped":[{"checkId":"orphan-page","reason":{"code":"no-sitemap","text":"No sitemap could be read."}}]}
 ```
 
-`skipped` is every catalog check missing from the counts. E2 stores `isPartial` and each skip's reason; until then
-they're null, and the UI shows the notes.
+- **`isPartial`** (E2) is true when a check was skipped or a rule failed on some pages; the notes say which.
+- **`skipped`** is every catalog check missing from the counts. Its `reason` (E2) has a stable `code` to key on, and
+  a `text` to show beside the check ("No sitemap could be read."). A check skipped for several reasons gets the
+  first; the notes give them all.
+- **`outOfDate`** and **`outOfDateReasons`** (E2) are as the library item's: `crawlChanged`, `engineChanged`,
+  `settingsChanged`. The UI offers to analyse again.
+- **An earlier engine's analysis** never fails to read. Its `isPartial` and every `reason` are null, as it didn't
+  store them, so the UI shows the notes. It's out of date with `engineChanged`, and analysing it again mends it.
+
+| Skip reason | The check was skipped because |
+| --- | --- |
+| `sitemaps-off` | The crawl was told not to read sitemaps |
+| `crawl-unfinished` | The crawl was stopped before it finished |
+| `sitemaps-unfinished` | The crawl finished, but not every sitemap was read |
+| `no-sitemap` | No sitemap could be read |
+| `sitemap-unreadable` | A declared sitemap failed for a reason that says nothing about what it lists (a 5xx, a timeout, bad XML) |
+| `sitemaps-not-read` | Sitemaps were left unread at the crawler's limits |
+| `depth-limit`, `url-limit` | The limit kept internal URLs out of the crawl, so pages linked only from them would look orphaned |
+| `start-folder` | The crawl stayed in its start folder, so links from the rest of the site weren't read |
+| `external-links-off` | The crawl was told not to check links to other sites |
+| `resources-off` | The crawl was told not to fetch images and other files |
+| `site-versions-unchecked` | The site's other versions (www or not, http or https) weren't all checked |
+| `newer-than-analysis` | The check is newer than the engine that ran the analysis |
 
 ### Data (E1: the readers that exist today)
 
@@ -341,7 +372,10 @@ they're null, and the UI shows the notes.
 | `GET /api/crawls/{id}/issues/{checkId}?limit=200&offset=0` | `{ rows: [{ url, detail, relatedUrl }], total }`. `total` is null for a check that was skipped, never 0 |
 
 E3 replaces the issues endpoint with keyset paging and grouping. Its grid queries are `POST`s to one fixed URL
-per grid (see CORS above). E3 adds:
+per grid (see CORS above). The URL grids read the URL summary each analysis builds (E2, `url_summary` in
+[the engine's README](../engine/README.md#url-summary)): one row per URL, with indexes for the common sorts and
+selective filters. A crawl without one, analysed by an earlier engine, gets `needs-analysis` rather than failing, and
+the UI offers to analyse it. E3 adds:
 
 - `/urls`;
 - `/urls/{urlId}`, the inspector;
@@ -362,3 +396,19 @@ Each has its own tests:
 - A cheap crawl summary reader in `Storage/`: start URL, status, timestamps, URL and page counts.
 - The default file name, moved from the CLI's `CrawlCommand` into the engine.
 - One helper for resume changes and missing secrets, used by the CLI and the sidecar.
+
+## Engine changes E2 made
+
+Each has its own tests:
+
+- **The URL summary.** `url_summary`, rebuilt by every analysis, and `UrlSummaryReader`: `IsAvailable` and
+  `ReadAll` (rows as `UrlSummary`). Its indexability is the checks' own, which the end-to-end tests prove on the
+  synthetic site.
+- **The analysis's state.** `AnalysisInfo` gains `IsPartial`, `Settings`, `CrawlUpdatedAt`, `AnalysisVersion`,
+  `ChecksFingerprint` and `HasUrlSummary`. `IssueReader.ReadSkippedChecks` gives each skipped check's reason
+  (`SkippedCheck`, codes in `SkippedCheckReasons`), and `AnalysisSummary.Skipped` the same from `AnalyzeAsync`.
+- **Out of date.** `AnalysisFreshness.Check`, and `CrawlFileSummary.OutOfDate` on the library's cached summary
+  (which now carries the `Analysis`). The sidecar's analysis settings are `CrawlManager.AnalysisSettings`: the
+  engine's defaults until Settings can change them.
+- **Files from earlier engines** read as before. They get the new tables and columns on their next analysis; the
+  crawl's own schema version is unchanged.

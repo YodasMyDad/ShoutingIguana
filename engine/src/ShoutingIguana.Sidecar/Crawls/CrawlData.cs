@@ -19,12 +19,18 @@ internal sealed class CrawlData(CrawlManager crawls)
         return CrawlOptionsDto.From(EngineErrors.Read(() => CrawlDatabase.ReadOptions(path)));
     }
 
-    /// <summary>The last analysis, its counts and notes all from that one analysis, even if another finishes meanwhile.</summary>
+    /// <summary>
+    /// The last analysis, whether it still stands, and every check's count or why it was skipped, all from one snapshot of
+    /// the file, even if another analysis finishes or the crawl is resumed meanwhile. An analysis by an engine from before
+    /// the summary is out of date (the engine changed), with no reasons for its skips: its notes say.
+    /// </summary>
     public AnalysisDto Analysis(string id)
     {
         var path = crawls.PathOf(id);
         var results = EngineErrors.Read(() => IssueReader.ReadResults(path)) ?? throw Problems.NotAnalyzed();
-        var (analysis, counts, notes) = results;
+        var (analysis, counts, notes) = (results.Analysis, results.Counts, results.Notes);
+        var reasons = results.Skipped.ToDictionary(skip => skip.CheckId, StringComparer.Ordinal);
+        var outOfDate = results.OutOfDate(crawls.AnalysisSettings);
 
         // In catalog order. A check from a newer engine, which this one doesn't know, still counts, after the rest.
         List<CheckCountDto> ran = [.. IssueCatalog.All.Where(check => counts.ContainsKey(check.Id)).Select(check => new CheckCountDto(check.Id, counts[check.Id]))];
@@ -36,10 +42,15 @@ internal sealed class CrawlData(CrawlManager crawls)
             analysis.EngineVersion,
             analysis.PagesAnalyzed,
             (long)analysis.Duration.TotalMilliseconds,
-            IsPartial: null,
+            analysis.IsPartial,
+            outOfDate.Count > 0,
+            outOfDate,
             notes,
             ran,
-            [.. IssueCatalog.All.Where(check => !counts.ContainsKey(check.Id)).Select(check => new SkippedCheckDto(check.Id, Reason: null))]);
+            [
+                .. IssueCatalog.All.Where(check => !counts.ContainsKey(check.Id)).Select(check => new SkippedCheckDto(check.Id,
+                    reasons.TryGetValue(check.Id, out var skip) ? new SkipReasonDto(skip.Reason, skip.Text) : null))
+            ]);
     }
 
     public CrawlStatsDto Stats(string id)

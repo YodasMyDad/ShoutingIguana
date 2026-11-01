@@ -50,6 +50,12 @@ internal sealed class CrawlManager(
     /// <summary>Tests only: starts a crawl in place of the engine.</summary>
     internal Func<CrawlRequest, ICrawlObserver, CrawlJob>? StartJob { get; set; }
 
+    /// <summary>
+    /// The thresholds every analysis here runs with, and so what an analysis must have used to be up to date. The
+    /// engine's defaults until Settings can change them.
+    /// </summary>
+    public AnalysisSettings AnalysisSettings { get; } = new();
+
     /// <summary>Every crawl in the library, newest first.</summary>
     public IReadOnlyList<CrawlListItem> List()
     {
@@ -576,7 +582,7 @@ internal sealed class CrawlManager(
         string? error = null;
         try
         {
-            var summary = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(crawl.Path, cancellationToken: cancellation.Token).ConfigureAwait(false);
+            var summary = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(crawl.Path, AnalysisSettings, cancellation.Token).ConfigureAwait(false);
             _logger.LogInformation("Analysed {Pages} pages of {Path} in {Duration}", summary.PagesAnalyzed, crawl.Path, summary.Duration);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -723,7 +729,9 @@ internal sealed class CrawlManager(
                     flagged.GetValueOrDefault(IssueSeverity.Notice))
                 : null,
             AnalyzedAt = analyzedAt?.UtcDateTime,
-            OutOfDate = analyzedAt is not null && (crawling || summary!.UpdatedAt > analyzedAt),
+
+            // A crawl running here changes its file as it goes; otherwise the file says whether its analysis still stands.
+            OutOfDate = analyzedAt is not null && (crawling || summary!.OutOfDate(AnalysisSettings).Count > 0),
             SizeBytes = cached.Stamp?.SizeBytes ?? 0,
 
             // A crawl starting here may not have created its file yet.

@@ -9,6 +9,7 @@ using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Robots;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
@@ -133,6 +134,12 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
         Assert.Equal(30, failed + notChecked);
         Assert.StartsWith($"{failed} broken URL", Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.BROKEN_EXTERNAL_LINKS.Id, 10)).Detail);
         Assert.Contains(analysis.Notes, note => note.StartsWith($"{notChecked} URLs weren't checked", StringComparison.Ordinal));
+
+        // The URLs grid shows them as the analysis counts them: unknown, not unreachable.
+        var partner = UrlSummaryReader.ReadAll(path).Where(row => row is { IsInternal: false, Inlinks: > 0 }).ToList();
+        Assert.Equal(30, partner.Count);
+        Assert.Equal(notChecked, partner.Count(row => row is { IndexabilityReason: null, IsIndexable: null, ResponseMs: null, FinalStatusCode: null }));
+        Assert.Equal(failed, partner.Count(row => row.IndexabilityReason == IndexabilityReason.Unreachable));
     }
 
     [Fact]

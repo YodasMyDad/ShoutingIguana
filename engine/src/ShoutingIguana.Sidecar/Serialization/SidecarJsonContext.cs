@@ -23,6 +23,7 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<CrawlStatus>),
         typeof(CamelCaseEnumConverter<IssueCategory>),
         typeof(CamelCaseEnumConverter<IssueSeverity>),
+        typeof(CamelCaseEnumConverter<OutOfDateReason>),
         typeof(CamelCaseEnumConverter<UserAgentPreset>)
     ])]
 [JsonSerializable(typeof(ReadyEvent))]

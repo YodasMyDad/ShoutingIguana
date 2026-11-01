@@ -1,4 +1,8 @@
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Storage;
@@ -27,6 +31,17 @@ public static class IssueReader
         return ReadAnalysis(connection, transaction: null);
     }
 
+    /// <summary>
+    /// The checks the last analysis skipped, each with why, in catalog order. Empty before the first analysis, and for
+    /// an analysis by an engine that didn't store reasons (its notes say why instead). A check the analysis didn't know,
+    /// being newer than the engine that ran it, is listed as <see cref="SkippedCheckReasons.NEWER_THAN_ANALYSIS"/>.
+    /// </summary>
+    public static IReadOnlyList<SkippedCheck> ReadSkippedChecks(string databasePath)
+    {
+        using var connection = CrawlDatabase.OpenReader(databasePath);
+        return ReadAnalysis(connection, transaction: null) is { } analysis ? ReadSkippedChecks(connection, transaction: null, analysis) : [];
+    }
+
     /// <summary>Flagged URL counts per issue id. Checks that ran and found nothing are included with 0.</summary>
     public static IReadOnlyDictionary<string, long> ReadCounts(string databasePath)
     {
@@ -42,8 +57,9 @@ public static class IssueReader
     }
 
     /// <summary>
-    /// The last analysis with its counts and notes, all from that one analysis even if another finishes meanwhile. Null
-    /// when the crawl has never been analysed.
+    /// The last analysis with its counts, notes and skip reasons, and the crawl's stamp that says whether it still stands,
+    /// all from one snapshot even if another analysis finishes, or the crawl is resumed, meanwhile. Null when the crawl
+    /// has never been analysed.
     /// </summary>
     public static AnalysisResults? ReadResults(string databasePath)
     {
@@ -55,7 +71,12 @@ public static class IssueReader
         }
 
         SnapshotTaken?.Invoke(databasePath);
-        return new AnalysisResults(analysis, ReadCounts(connection, snapshot), ReadNotes(connection, snapshot));
+        return new AnalysisResults(
+            analysis,
+            ReadCrawlUpdatedAt(connection, snapshot),
+            ReadCounts(connection, snapshot),
+            ReadNotes(connection, snapshot),
+            ReadSkippedChecks(connection, snapshot, analysis));
     }
 
     /// <summary>One page of the URLs flagged with an issue, in crawl order.</summary>
@@ -106,24 +127,6 @@ public static class IssueReader
         {
             yield return row;
         }
-    }
-
-    private static AnalysisInfo? ReadAnalysis(SqliteConnection connection, SqliteTransaction? transaction)
-    {
-        if (!HasAnalysis(connection, transaction))
-        {
-            return null;
-        }
-
-        using var command = Command(connection, transaction, "SELECT analyzed_at, engine_version, pages, duration_ms FROM analysis WHERE id = 1");
-        using var reader = command.ExecuteReader();
-        return reader.Read()
-            ? new AnalysisInfo(
-                DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)),
-                reader.GetString(1),
-                reader.GetInt64(2),
-                TimeSpan.FromMilliseconds(reader.GetInt64(3)))
-            : null;
     }
 
     private static Dictionary<string, long> ReadCounts(SqliteConnection connection, SqliteTransaction? transaction)
@@ -184,14 +187,117 @@ public static class IssueReader
         }
     }
 
-    private static bool HasAnalysis(SqliteConnection connection, SqliteTransaction? transaction) => HasTable(connection, transaction, "analysis");
+    /// <summary>
+    /// The analysis row, with what it was run against where the engine that ran it stored that. A first analysis that was
+    /// cancelled or failed leaves its tables behind without a row, which is no analysis.
+    /// </summary>
+    internal static AnalysisInfo? ReadAnalysis(SqliteConnection connection, SqliteTransaction? transaction)
+    {
+        if (!HasAnalysis(connection, transaction))
+        {
+            return null;
+        }
+
+        // By name: a file analysed by an earlier engine lacks the columns added since, which then read as null.
+        using var command = Command(connection, transaction, "SELECT * FROM analysis WHERE id = 1");
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+        {
+            return null;
+        }
+
+        var columns = Enumerable.Range(0, reader.FieldCount).ToDictionary(reader.GetName, StringComparer.OrdinalIgnoreCase);
+        long? Number(string name) => columns.TryGetValue(name, out var ordinal) && !reader.IsDBNull(ordinal) ? reader.GetInt64(ordinal) : null;
+        string? Text(string name) => columns.TryGetValue(name, out var ordinal) && !reader.IsDBNull(ordinal) ? reader.GetString(ordinal) : null;
+
+        return new AnalysisInfo(
+            DateTimeOffset.FromUnixTimeMilliseconds(Number("analyzed_at")!.Value),
+            Text("engine_version")!,
+            Number("pages")!.Value,
+            TimeSpan.FromMilliseconds(Number("duration_ms")!.Value))
+        {
+            IsPartial = Number("is_partial") is { } partial ? partial != 0 : null,
+            Settings = ReadSettings(Text("settings_json")),
+            CrawlUpdatedAt = Number("crawl_updated_at") is { } updatedAt ? DateTimeOffset.FromUnixTimeMilliseconds(updatedAt) : null,
+            AnalysisVersion = Number("analysis_version") is { } version ? (int)version : null,
+            ChecksFingerprint = Text("checks_fingerprint")
+        };
+    }
 
     /// <summary>Files analysed by an older engine may lack tables added since.</summary>
-    private static bool HasTable(SqliteConnection connection, SqliteTransaction? transaction, string name)
+    internal static bool HasTable(SqliteConnection connection, SqliteTransaction? transaction, string name)
     {
         using var command = Command(connection, transaction, "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = $name");
         command.Parameters.AddWithValue("$name", name);
         return command.ExecuteScalar() is not null;
+    }
+
+    private static bool HasAnalysis(SqliteConnection connection, SqliteTransaction? transaction) => HasTable(connection, transaction, "analysis");
+
+    /// <summary>The crawl's stamp: when its status last changed (<see cref="CrawlFileSummary.UpdatedAt"/>).</summary>
+    private static DateTimeOffset ReadCrawlUpdatedAt(SqliteConnection connection, SqliteTransaction? transaction)
+    {
+        using var command = Command(connection, transaction, "SELECT updated_at FROM crawl WHERE id = 1");
+        return command.ExecuteScalar() is long updatedAt
+            ? DateTimeOffset.FromUnixTimeMilliseconds(updatedAt)
+            : throw new InvalidOperationException("This file is not a crawl database.");
+    }
+
+    /// <summary>
+    /// What <see cref="ReadSkippedChecks(string)"/> returns, for the analysis read through the same connection and
+    /// transaction. An analysis by an engine from before the reasons stored none, and a skipped_checks table left by a
+    /// later engine's earlier analysis isn't its own.
+    /// </summary>
+    private static List<SkippedCheck> ReadSkippedChecks(SqliteConnection connection, SqliteTransaction? transaction, AnalysisInfo analysis)
+    {
+        if (analysis.AnalysisVersion is null)
+        {
+            return [];
+        }
+
+        Dictionary<string, SkippedCheck> stored = new(StringComparer.Ordinal);
+        HashSet<string> ran = new(StringComparer.Ordinal);
+        using (var command = Command(connection, transaction, "SELECT check_id, reason, text FROM skipped_checks; SELECT id FROM issue_types;"))
+        {
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                stored[reader.GetString(0)] = new SkippedCheck(reader.GetString(0), reader.GetString(1), reader.GetString(2));
+            }
+
+            reader.NextResult();
+            while (reader.Read())
+            {
+                ran.Add(reader.GetString(0));
+            }
+        }
+
+        // An analysis that knew a check either ran it or stored why not; a newer engine's checks follow the catalog's.
+        List<SkippedCheck> skipped =
+        [
+            .. IssueCatalog.All.Where(check => !ran.Contains(check.Id)).Select(check => stored.GetValueOrDefault(check.Id) ??
+                new SkippedCheck(check.Id, SkippedCheckReasons.NEWER_THAN_ANALYSIS, "This check is newer than the analysis. Analyse the crawl again to run it."))
+        ];
+        skipped.AddRange(stored.Values.Where(check => IssueCatalog.Find(check.CheckId) is null).OrderBy(check => check.CheckId, StringComparer.Ordinal));
+        return skipped;
+    }
+
+    /// <summary>The settings as stored; settings that can't be read (edited by hand, say) are none, so they differ from any.</summary>
+    private static AnalysisSettings? ReadSettings(string? json)
+    {
+        if (json is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize(json, EngineJsonContext.Default.AnalysisSettings);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static SqliteCommand Command(SqliteConnection connection, SqliteTransaction? transaction, string sql)

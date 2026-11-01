@@ -6,8 +6,8 @@ namespace ShoutingIguana.Engine.Analysis;
 
 /// <summary>
 /// The status of every URL in the crawl, in arrays indexed by URL id, so link checks are lookups rather than joins
-/// over millions of link rows. It also counts, during the page pass, how many pages link to each URL. Roughly 60
-/// bytes per URL.
+/// over millions of link rows. It also counts, during the page pass, the links and the pages that link to each URL.
+/// Roughly 70 bytes per URL.
 /// <para>
 /// Statuses are what search engines make of each URL, which the crawl can't always know when it fetches a page.
 /// Google treats an instant meta refresh as a permanent redirect, so such a page becomes a redirect here. A canonical
@@ -23,6 +23,9 @@ internal sealed class UrlTable
     private readonly UrlStatus[] _statuses;
     private readonly int[] _followedInlinks;
     private readonly int[] _nofollowInlinks;
+    private readonly int[] _inlinks;
+    private readonly int[] _nofollowLinks;
+    private readonly int[] _linkingPages;
     private readonly HashSet<int> _pageTargets = [];
     private readonly List<(int UrlId, IndexabilityReason Reason)> _indexabilityChanges = [];
 
@@ -34,6 +37,9 @@ internal sealed class UrlTable
         _statuses = statuses;
         _followedInlinks = new int[statuses.Length];
         _nofollowInlinks = new int[statuses.Length];
+        _inlinks = new int[statuses.Length];
+        _nofollowLinks = new int[statuses.Length];
+        _linkingPages = new int[statuses.Length];
         StartId = startId;
 
         // Refreshes first: a canonical can lead back to its page through one.
@@ -82,13 +88,40 @@ internal sealed class UrlTable
     /// <summary>Pages whose only links to this URL are nofollow.</summary>
     public int NofollowInlinks(int id) => _nofollowInlinks[id];
 
-    /// <summary>Adds a page's hyperlinks to the inlink counts, once per target page.</summary>
+    /// <summary>
+    /// Hyperlinks to this URL on the pages audited, each one counted, not counting a page's links to itself. Unlike the
+    /// counts above, nothing is credited through redirects: these are the links as found.
+    /// </summary>
+    public int Inlinks(int id) => _inlinks[id];
+
+    /// <summary>
+    /// Of <see cref="Inlinks"/>, the ones search engines don't follow: marked rel=nofollow, or on a page whose robots
+    /// directives say nofollow, as the crawler judges it.
+    /// </summary>
+    public int NofollowLinks(int id) => _nofollowLinks[id];
+
+    /// <summary>The pages behind <see cref="Inlinks"/>: each page that links to this URL, once.</summary>
+    public int LinkingPages(int id) => _linkingPages[id];
+
+    /// <summary>Adds a page's hyperlinks to the inlink counts: every link, and every page it links to once.</summary>
     public void CountInlinks(AnalyzedPage page)
     {
         _pageTargets.Clear();
+        var pageNoFollow = page.Facts.Robots.NoFollow;
         foreach (var link in page.Links)
         {
-            if (link.Kind == LinkKind.Hyperlink && link.ToId != page.UrlId && !link.Flags.HasFlag(LinkFlags.NoFollow))
+            if (link.Kind != LinkKind.Hyperlink || link.ToId == page.UrlId)
+            {
+                continue;
+            }
+
+            _inlinks[link.ToId]++;
+            if (pageNoFollow || link.Flags.HasFlag(LinkFlags.NoFollow))
+            {
+                _nofollowLinks[link.ToId]++;
+            }
+
+            if (!link.Flags.HasFlag(LinkFlags.NoFollow))
             {
                 _pageTargets.Add(link.ToId);
             }
@@ -106,6 +139,12 @@ internal sealed class UrlTable
             {
                 _nofollowInlinks[link.ToId]++;
             }
+        }
+
+        // Every target is in the set by now, followed or not.
+        foreach (var target in _pageTargets)
+        {
+            _linkingPages[target]++;
         }
     }
 

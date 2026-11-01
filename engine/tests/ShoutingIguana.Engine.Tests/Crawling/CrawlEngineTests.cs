@@ -10,6 +10,7 @@ using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Analysis;
+using ShoutingIguana.Engine.Tests.Storage;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
 
@@ -122,6 +123,16 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var ran = IssueCatalog.All.Where(issue => !expected.SkippedChecks.Contains(issue.Id)).ToList();
         Assert.Equal(ran.Select(issue => issue.Id).Order(StringComparer.Ordinal), counts.Keys.Order(StringComparer.Ordinal));
         Assert.All(ran, issue => Assert.Equal((issue.Id, flaggedPerIssue.GetValueOrDefault(issue.Id)), (issue.Id, counts.GetValueOrDefault(issue.Id))));
+
+        // The analysis's own state is stored with it: partial or not, and why each skipped check was skipped.
+        var stored = IssueReader.ReadAnalysis(path)!;
+        Assert.Equal(analysis.IsPartial, stored.IsPartial);
+        Assert.Equal(analysis.Skipped, IssueReader.ReadSkippedChecks(path));
+        Assert.Equal(expected.SkippedChecks.Order(StringComparer.Ordinal), analysis.Skipped.Select(skip => skip.CheckId).Order(StringComparer.Ordinal));
+        Assert.Empty(CrawlSummaryReader.Read(path).OutOfDate(new AnalysisSettings()));
+
+        // The URLs grid shows what the checks judged.
+        UrlSummaryAgreement.AssertAgreesWithTheChecks(path, expected, stats);
     }
 
     [Fact]

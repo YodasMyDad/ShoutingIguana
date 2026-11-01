@@ -31,7 +31,10 @@ internal sealed record CrawlListItem
 
     public DateTime? AnalyzedAt { get; init; }
 
-    /// <summary>The crawl changed after its last analysis.</summary>
+    /// <summary>
+    /// The last analysis no longer stands: the crawl changed after it, this engine would judge it differently, or its
+    /// settings differ. False before the first analysis.
+    /// </summary>
     public bool OutOfDate { get; init; }
 
     public long SizeBytes { get; init; }

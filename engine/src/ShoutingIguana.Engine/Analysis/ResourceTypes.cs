@@ -1,3 +1,5 @@
+using ShoutingIguana.Engine.Analysis.Models;
+
 namespace ShoutingIguana.Engine.Analysis;
 
 /// <summary>
@@ -7,44 +9,69 @@ namespace ShoutingIguana.Engine.Analysis;
 /// </summary>
 internal static class ResourceTypes
 {
-    private static readonly HashSet<string> EXTENSIONS = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, ResourceType> EXTENSIONS = new(StringComparer.OrdinalIgnoreCase)
     {
-        "jpg", "jpeg", "png", "gif", "webp", "avif", "svg", "bmp", "ico", "tif", "tiff", "heic", "heif", "jxl",
-        "mp4", "m4v", "webm", "mov", "avi", "mkv", "ogv", "mp3", "m4a", "wav", "ogg", "oga", "opus", "aac", "flac",
-        "woff", "woff2", "ttf", "otf", "eot", "css", "js", "mjs"
+        ["jpg"] = ResourceType.Image, ["jpeg"] = ResourceType.Image, ["png"] = ResourceType.Image, ["gif"] = ResourceType.Image,
+        ["webp"] = ResourceType.Image, ["avif"] = ResourceType.Image, ["svg"] = ResourceType.Image, ["bmp"] = ResourceType.Image,
+        ["ico"] = ResourceType.Image, ["tif"] = ResourceType.Image, ["tiff"] = ResourceType.Image, ["heic"] = ResourceType.Image,
+        ["heif"] = ResourceType.Image, ["jxl"] = ResourceType.Image,
+        ["mp4"] = ResourceType.Media, ["m4v"] = ResourceType.Media, ["webm"] = ResourceType.Media, ["mov"] = ResourceType.Media,
+        ["avi"] = ResourceType.Media, ["mkv"] = ResourceType.Media, ["ogv"] = ResourceType.Media, ["mp3"] = ResourceType.Media,
+        ["m4a"] = ResourceType.Media, ["wav"] = ResourceType.Media, ["ogg"] = ResourceType.Media, ["oga"] = ResourceType.Media,
+        ["opus"] = ResourceType.Media, ["aac"] = ResourceType.Media, ["flac"] = ResourceType.Media,
+        ["woff"] = ResourceType.Font, ["woff2"] = ResourceType.Font, ["ttf"] = ResourceType.Font, ["otf"] = ResourceType.Font,
+        ["eot"] = ResourceType.Font,
+        ["css"] = ResourceType.Stylesheet,
+        ["js"] = ResourceType.Script, ["mjs"] = ResourceType.Script,
+        ["pdf"] = ResourceType.Pdf
     };
 
-    private static readonly string[] MEDIA_TYPE_PREFIXES = ["image/", "video/", "audio/", "font/"];
+    private static readonly (string Prefix, ResourceType Type)[] MEDIA_TYPE_PREFIXES =
+        [("image/", ResourceType.Image), ("video/", ResourceType.Media), ("audio/", ResourceType.Media), ("font/", ResourceType.Font)];
 
-    private static readonly HashSet<string> MEDIA_TYPES = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, ResourceType> MEDIA_TYPES = new(StringComparer.OrdinalIgnoreCase)
     {
-        "text/css", "text/javascript", "application/javascript", "application/x-javascript", "application/ecmascript",
-        "application/font-woff", "application/x-font-woff", "application/x-font-ttf", "application/x-font-otf",
-        "application/vnd.ms-fontobject"
+        ["text/css"] = ResourceType.Stylesheet,
+        ["text/javascript"] = ResourceType.Script, ["application/javascript"] = ResourceType.Script,
+        ["application/x-javascript"] = ResourceType.Script, ["application/ecmascript"] = ResourceType.Script,
+        ["application/font-woff"] = ResourceType.Font, ["application/x-font-woff"] = ResourceType.Font,
+        ["application/x-font-ttf"] = ResourceType.Font, ["application/x-font-otf"] = ResourceType.Font,
+        ["application/vnd.ms-fontobject"] = ResourceType.Font,
+        ["text/html"] = ResourceType.Page, ["application/xhtml+xml"] = ResourceType.Page,
+        ["application/pdf"] = ResourceType.Pdf
     };
 
     /// <param name="contentType">The response's Content-Type when the URL was fetched successfully, otherwise null.</param>
     public static bool IsResource(string url, string? contentType) =>
-        contentType is null ? HasResourceExtension(url) : IsResourceMediaType(contentType);
+        Classify(url, contentType) is ResourceType.Image or ResourceType.Script or ResourceType.Stylesheet or ResourceType.Font or ResourceType.Media;
 
-    private static bool IsResourceMediaType(string contentType)
+    /// <summary>What the URL is: by its content type when it was fetched successfully, otherwise by its extension.</summary>
+    /// <param name="contentType">The response's Content-Type when the URL was fetched successfully, otherwise null.</param>
+    public static ResourceType Classify(string url, string? contentType) =>
+        contentType is null ? OfUrl(url) : OfContentType(contentType);
+
+    /// <summary>What a successful response with this Content-Type is.</summary>
+    public static ResourceType OfContentType(string contentType)
     {
         var mediaType = contentType.AsSpan();
         var parameters = mediaType.IndexOf(';');
         mediaType = (parameters < 0 ? mediaType : mediaType[..parameters]).Trim();
-        foreach (var prefix in MEDIA_TYPE_PREFIXES)
+        foreach (var (prefix, type) in MEDIA_TYPE_PREFIXES)
         {
             if (mediaType.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
-                return true;
+                return type;
             }
         }
 
-        return MEDIA_TYPES.GetAlternateLookup<ReadOnlySpan<char>>().Contains(mediaType);
+        return MEDIA_TYPES.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(mediaType, out var known) ? known : ResourceType.Other;
     }
 
-    /// <summary>The extension of the path's last segment; the query doesn't count (/download?file=a.jpg is a page).</summary>
-    private static bool HasResourceExtension(string url)
+    /// <summary>
+    /// What a URL without a successful response probably is, by the extension of its path's last segment; the query
+    /// doesn't count (/download?file=a.jpg is a page).
+    /// </summary>
+    public static ResourceType OfUrl(string url)
     {
         var path = url.AsSpan();
         var end = path.IndexOfAny('?', '#');
@@ -55,6 +82,8 @@ internal static class ResourceTypes
 
         var segment = path[(path.LastIndexOf('/') + 1)..];
         var dot = segment.LastIndexOf('.');
-        return dot >= 0 && EXTENSIONS.GetAlternateLookup<ReadOnlySpan<char>>().Contains(segment[(dot + 1)..]);
+        return dot >= 0 && EXTENSIONS.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(segment[(dot + 1)..], out var type)
+            ? type
+            : ResourceType.Page;
     }
 }

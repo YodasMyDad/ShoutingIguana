@@ -64,15 +64,19 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         var alerts = (await _sidecar.GetJsonAsync($"api/crawls/{id}/alerts")).AsArray();
         Assert.Contains(alerts, alert => (string?)alert!["code"] == "blocked");
 
-        // Every check either ran, with a count, or is listed as skipped: never both, never neither.
+        // Every check either ran, with a count, or is listed as skipped with why: never both, never neither.
         var analysis = await _sidecar.GetJsonAsync($"api/crawls/{id}/analysis");
         var counts = IssueReader.ReadCounts(path);
         Assert.Equal(IssueCatalog.All.Where(check => counts.ContainsKey(check.Id)).Select(check => check.Id),
             analysis["counts"]!.AsArray().Select(count => (string?)count!["checkId"]));
         Assert.All(analysis["counts"]!.AsArray(), count => Assert.Equal(counts[(string)count!["checkId"]!], (long?)count["count"]));
-        Assert.Equal(IssueCatalog.All.Where(check => !counts.ContainsKey(check.Id)).Select(check => check.Id),
-            analysis["skipped"]!.AsArray().Select(skip => (string?)skip!["checkId"]));
-        Assert.Null(analysis["isPartial"]);
+        var skipped = IssueReader.ReadSkippedChecks(path);
+        Assert.Equal(IssueCatalog.All.Where(check => !counts.ContainsKey(check.Id)).Select(check => check.Id), skipped.Select(skip => skip.CheckId));
+        Assert.Equal(skipped.Select(skip => (skip.CheckId, skip.Reason, skip.Text)), analysis["skipped"]!.AsArray()
+            .Select(skip => ((string)skip!["checkId"]!, (string)skip["reason"]!["code"]!, (string)skip["reason"]!["text"]!)));
+        Assert.Equal(skipped.Count > 0, (bool?)analysis["isPartial"]);
+        Assert.False((bool?)analysis["outOfDate"]);
+        Assert.Empty(analysis["outOfDateReasons"]!.AsArray());
         Assert.Equal(IssueReader.ReadAnalysis(path)!.PagesAnalyzed, (long?)analysis["pagesAnalyzed"]);
         Assert.NotNull(analysis["notes"]);
 
@@ -254,12 +258,16 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         TestSidecar.AssertProblem(await _sidecar.SendAsync(HttpMethod.Get, $"api/crawls/{id}/analysis"), HttpStatusCode.NotFound, "not-analyzed");
         TestSidecar.AssertProblem(await _sidecar.PostAsync("api/crawls/0123456789abcdef/analyze/cancel"), HttpStatusCode.NotFound, "crawl-not-found");
 
-        // A URL-limited crawl can't support the orphan check: it's skipped, not counted as clean.
+        // A URL-limited crawl can't support the orphan check: it's skipped, not counted as clean, and says why.
         Assert.Equal(HttpStatusCode.Accepted, (await _sidecar.PostAsync($"api/crawls/{id}/analyze")).Status);
         await events.CrawlStatusAsync(id, "analyzing");
         await events.CrawlStatusAsync(id, "completed");
         var analysis = await _sidecar.GetJsonAsync($"api/crawls/{id}/analysis");
-        Assert.Contains(analysis["skipped"]!.AsArray(), skip => (string?)skip!["checkId"] == IssueCatalog.ORPHAN_PAGE.Id && skip["reason"] is null);
+        var orphanSkip = analysis["skipped"]!.AsArray().Single(skip => (string?)skip!["checkId"] == IssueCatalog.ORPHAN_PAGE.Id)!;
+        Assert.Equal(SkippedCheckReasons.URL_LIMIT, (string?)orphanSkip["reason"]!["code"]);
+        Assert.Matches(@"^The URL limit kept \d+ internal URLs? out of the crawl", (string?)orphanSkip["reason"]!["text"]);
+        Assert.True((bool?)analysis["isPartial"]);
+        Assert.False((bool?)analysis["outOfDate"]);
         Assert.DoesNotContain(analysis["counts"]!.AsArray(), count => (string?)count!["checkId"] == IssueCatalog.ORPHAN_PAGE.Id);
         Assert.NotEmpty(analysis["notes"]!.AsArray());
         var orphans = await _sidecar.GetJsonAsync($"api/crawls/{id}/issues/{IssueCatalog.ORPHAN_PAGE.Id}");
