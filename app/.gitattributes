@@ -1,0 +1,5 @@
+# Prettier and the shell scripts expect LF, so keep it on Windows checkouts too (core.autocrlf would write CRLF).
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary
