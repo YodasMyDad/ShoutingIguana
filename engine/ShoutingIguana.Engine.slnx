@@ -2,10 +2,12 @@
   <Folder Name="/src/">
     <Project Path="src/ShoutingIguana.Cli/ShoutingIguana.Cli.csproj" />
     <Project Path="src/ShoutingIguana.Engine/ShoutingIguana.Engine.csproj" />
+    <Project Path="src/ShoutingIguana.Sidecar/ShoutingIguana.Sidecar.csproj" />
     <Project Path="src/ShoutingIguana.TestSite/ShoutingIguana.TestSite.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ShoutingIguana.Cli.Tests/ShoutingIguana.Cli.Tests.csproj" />
     <Project Path="tests/ShoutingIguana.Engine.Tests/ShoutingIguana.Engine.Tests.csproj" />
+    <Project Path="tests/ShoutingIguana.Sidecar.Tests/ShoutingIguana.Sidecar.Tests.csproj" />
   </Folder>
 </Solution>

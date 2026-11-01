@@ -69,6 +69,23 @@ public sealed class IssueCatalogTests
         Assert.Null(IssueCatalog.Find("no-such-issue"));
     }
 
+    /// <summary>Hosts show the titles as they are, so every category needs a plain name of its own, never its identifier.</summary>
+    [Fact]
+    public void EveryCategoryHasItsOwnPlainTitle()
+    {
+        var titles = Enum.GetValues<IssueCategory>().Select(category => category.DisplayName()).ToList();
+
+        Assert.All(titles, title =>
+        {
+            Assert.Matches(new Regex("^[A-Z][A-Za-z]*( [a-z]+)*$"), title);
+            Assert.DoesNotMatch(new Regex("[a-z][A-Z]"), title);
+        });
+        Assert.Equal(titles.Count, titles.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal("Meta descriptions", IssueCategory.MetaDescriptions.DisplayName());
+        Assert.Equal("URLs", IssueCategory.Urls.DisplayName());
+        Assert.Throws<ArgumentOutOfRangeException>(() => ((IssueCategory)200).DisplayName());
+    }
+
     [Fact]
     public void DefaultSettingsAreValidAndBadOnesAreRejected()
     {

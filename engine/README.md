@@ -10,9 +10,11 @@ Analytics / Ads integrations later.
 | --- | --- |
 | `src/ShoutingIguana.Engine` | Crawler library: fetching, robots.txt, sitemaps, parsing, storage, SEO analysis |
 | `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `stats`, `testsite`, `bench` |
+| `src/ShoutingIguana.Sidecar` | `si-sidecar`: the engine as a localhost HTTP API for the desktop app (see [Sidecar](#sidecar)) |
 | `src/ShoutingIguana.TestSite` | Deterministic synthetic shop with planted SEO issues, for tests and benchmarks |
 | `tests/ShoutingIguana.Engine.Tests` | xUnit: unit tests plus end-to-end crawls and analyses of the synthetic site |
 | `tests/ShoutingIguana.Cli.Tests` | xUnit: the `si` commands run in-process against the synthetic site, exit codes and output included |
+| `tests/ShoutingIguana.Sidecar.Tests` | xUnit: the API hosted in-process against the synthetic site, plus the real `si-sidecar` process |
 
 ## Build, test, run
 
@@ -43,6 +45,38 @@ Exit codes, for scripts and schedulers:
 | 2 | Bad arguments, or a file that can't be used |
 | 3 | The crawl stopped itself because the site stopped answering; continue it with `--resume` |
 | 130 | Stopped with Ctrl+C |
+
+## Sidecar
+
+`si-sidecar` serves the engine to the desktop app over HTTP on `127.0.0.1`. The Tauri shell starts it, reads the one
+line it writes to stdout, and calls it with a bearer token. The contract (endpoints, events, errors and security) is
+[`docs/v2-sidecar-api.md`](../docs/v2-sidecar-api.md).
+
+```bash
+dotnet run --project src/ShoutingIguana.Sidecar -- --data-dir ./crawls --state-dir ./si-state
+# {"event":"ready","port":53123,"version":"2.0.0-alpha.1","token":"<made up, as no SI_SIDECAR_TOKEN was set>"}
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
+```
+
+| Flag | Default | Does |
+| --- | --- | --- |
+| `--data-dir <folder>` | `Documents/Shouting Iguana` | Where new crawls are saved. The library lists the `.sicrawl` files at its top level, plus files opened from elsewhere |
+| `--state-dir <folder>` | `<local app data>/ShoutingIguana` | Holds `library.json`, `defaults.json` and `logs/` |
+| `--port <number>` | `0`, a free port | A fixed port, for development. The ready line gives the port either way |
+| `--stdin-lifeline` | Off | Shut down on a `shutdown` line on stdin, or when stdin ends because the shell has gone |
+
+| Variable | Is |
+| --- | --- |
+| `SI_SIDECAR_TOKEN` | The bearer token. The shell makes 32 random bytes as hex for each launch. The sidecar removes it from its environment once read. Without it, the sidecar makes one up and adds it to the ready line, for development only |
+| `SI_SIDECAR_ORIGINS` | Comma-separated origins allowed to call the API from a webview: `http://tauri.localhost` (Windows), `tauri://localhost` (macOS, Linux), `http://localhost:<port>` (`tauri dev`). None by default |
+| `SI_PARENT_PID` | The shell's process. When it ends, the sidecar shuts down |
+
+- Every request needs the token (401), a `Host` of `127.0.0.1:<port>` or `localhost:<port>` (421), and an allowed
+  `Origin` if it sends one (403). Bodies are capped at 1 MB.
+- Logs go to stderr and to `<state-dir>/logs/sidecar-<date>.log` (14 days kept), never to stdout.
+- A shutdown (`POST /api/shutdown`, Ctrl+C, SIGTERM, the stdin lifeline or the parent ending) stops every crawl,
+  leaving it resumable, cancels every analysis, which then stores nothing, and exits 0. It exits 2 for arguments it
+  can't use, and 1 when it can't start (a port already taken, a state folder it can't create).
 
 ## How a crawl works
 

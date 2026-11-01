@@ -32,5 +32,28 @@ internal sealed class CrawlFileLock : IDisposable
         }
     }
 
+    /// <summary>
+    /// Whether a crawl or an analysis holds the lock, in this process or another. It asks for the lock as
+    /// <see cref="Acquire"/> does and lets go at once, so a writer starting in that instant is refused as if one were
+    /// running. A lock file that doesn't exist isn't held: writers create it before they lock it, and this never does.
+    /// </summary>
+    public static bool IsHeld(string databasePath)
+    {
+        try
+        {
+            using var probe = new FileStream(databasePath + "-lock", FileMode.Open, FileAccess.ReadWrite, FileShare.None, bufferSize: 1);
+            return false;
+        }
+        catch (IOException exception) when (exception.GetType() == typeof(IOException))
+        {
+            // A sharing violation: someone holds it. Its subclasses (not found, path too long...) mean nobody does.
+            return true;
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return false;
+        }
+    }
+
     public void Dispose() => _file.Dispose();
 }

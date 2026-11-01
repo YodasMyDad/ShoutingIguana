@@ -28,7 +28,8 @@ Built in stages:
   - `--data-dir` is where new crawls are saved. It defaults to `Documents/Shouting Iguana`.
   - `--state-dir` holds `library.json`, the user's defaults and the logs. It defaults to
     `<local app data>/ShoutingIguana`.
-  The shell also passes `--stdin-lifeline`, described under Shutdown.
+  The shell also passes `--stdin-lifeline`, described under Shutdown. `--port` fixes the port, for development; it
+  defaults to 0, a free port.
 - **Environment.**
   - `SI_SIDECAR_TOKEN` is the bearer token: 32 random bytes as hex, made by the shell for each launch. The sidecar
     removes it from its own environment after reading it, so processes it starts don't inherit it. Without it, the
@@ -121,7 +122,16 @@ Built in stages:
     | `crawl-busy` | 409 | Running here or elsewhere, or an analysis is running |
     | `not-analysable` | 409 | The engine refuses: running or interrupted |
     | `file-error` | 400 | IO or permissions |
+    | `not-analyzed` | 404 | The crawl has never been analysed |
+    | `not-found`, `check-not-found` | 404 | No such route, or no check with this id |
+    | `bad-request` | 400 | Malformed JSON, or a property the API doesn't know |
+    | `unauthorized` | 401 | The token is missing or wrong |
+    | `origin-not-allowed` | 403 | An `Origin` not on the allowlist |
+    | `body-too-large` | 413 | A body over 1 MB |
+    | `bad-host` | 421 | A `Host` other than `127.0.0.1` or `localhost` with the bound port |
     | `internal` | 500 | Anything else: the title is generic, and the detail is the exception message, never a stack trace |
+
+  - An option value of the wrong type is a field error under `invalid-options`, not a 400.
 
   - The expected exceptions are the CLI's set (`CommandErrors`): `InvalidOperationException`, `SqliteException`,
     `IOException`, `UnauthorizedAccessException`, and `ArgumentException` for a path. Their messages are already
@@ -177,6 +187,8 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 ```
 
 - **`site`** is the host without a leading `www.`. The UI groups crawls by it.
+- **`urlCount`** is the URLs fetched. URLs found but not fetched aren't counted. **`pageCount`** is the pages, as in
+  `si stats`.
 - **`status`** is one of:
 
   | Status | Meaning |
@@ -199,6 +211,7 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 
 | Method and path | Does |
 | --- | --- |
+| `GET /api/crawls/{id}` | One crawl's item |
 | `POST /api/crawls/open` | Body `{ path }`. Adds a crawl file from anywhere and returns its item. Gives `not-a-crawl` for anything else |
 | `DELETE /api/crawls/{id}` | Removes the crawl from the library, not from disk. Gives `crawl-busy` while live. Undone by `POST /api/crawls/{id}/restore` |
 | `POST /api/crawls/{id}/delete-file` | Deletes the file, with its `-wal`, `-shm` and `-lock`. The UI sends it only after a confirmation that names the crawl. Refused while live or in use |
@@ -207,6 +220,7 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 
 `POST /api/crawls` takes `{ options, analyzeWhenDone = true }`:
 
+- Every options field is optional: one left out takes the engine's default.
 - It validates the options and gives `invalid-options` with field errors on failure.
 - It creates `<host>-yyyyMMdd-HHmmss.sicrawl` in the data folder, using the CLI's naming, which moves into the
   engine.
@@ -222,7 +236,8 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 | `POST /api/crawls/{id}/stop` | 202. The status goes to `stopping`, then `stopped` |
 | `GET /api/crawls/{id}/options` | The stored options, from `CrawlDatabase.ReadOptions`: header names with empty values, and `hasRedactedProxyCredentials` |
 
-`POST /api/crawls/{id}/continue` resumes a stopped or interrupted crawl from its file.
+`POST /api/crawls/{id}/continue` resumes a crawl from its file: any crawl that isn't live and whose file isn't in
+use, as `si crawl --resume` allows. It's analysed when it completes.
 
 - **Body.** `{ concurrency?, maxRequestsPerSecond?, requestTimeoutSeconds?, extraHeaders?, proxyUrl?,
   skipMissingHeaders = false }`.
@@ -252,7 +267,7 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 | --- | --- | --- |
 | `progress` | `{ crawlId, status, elapsedMs, discovered, queued, inFlight, fetched, htmlPages, redirects, errors, blocked, robotsDisallowed, skipped, bytesDownloaded, pagesPerSecond }` | Every 500 ms per live crawl (the engine's pace). The UI batches to 4 renders a second |
 | `alert` | `{ crawlId, level, code, message, at }` | Each `CrawlNotice` (see below) |
-| `crawl` | `{ crawlId, status, error? }` | Every status change: started, paused, resumed, stopping, stopped, completed, failed, analyzing, analyzed |
+| `crawl` | `{ crawlId, status, error? }` | Every status change, with the library's statuses. An analysis shows as `analyzing`, then back to `completed` or `stopped` with a `library` event, and `error` if it failed |
 | `library` | `{}` | The library changed. The UI fetches `/api/crawls` again |
 | `analysis` | `{ crawlId, phase, done, total }` | E4 |
 
@@ -261,14 +276,14 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
   `robots-unreachable`, `site-unreachable`, `site-down`, `sitemaps`, `sitemaps-not-read`, `sitemaps-failed`.
 - **`message`** is engine text and may include text from the site.
 
-`GET /api/crawls/{id}/alerts` returns the alerts since the sidecar started, oldest first. E4 persists them in the
-crawl file.
+`GET /api/crawls/{id}/alerts` returns the alerts since the sidecar started, oldest first, up to the last 1,000 per
+crawl. E4 persists them in the crawl file.
 
 ### Analysis (E1)
 
 | Method and path | Does |
 | --- | --- |
-| `POST /api/crawls/{id}/analyze` | 202, with progress through events. Gives `not-analysable` while running or interrupted, in the engine's words, and `crawl-busy` while an analysis already runs |
+| `POST /api/crawls/{id}/analyze` | 202, with progress through events. Gives `not-analysable` while running or interrupted, in the sidecar's words (the engine's mention the CLI), and `crawl-busy` while an analysis already runs |
 | `POST /api/crawls/{id}/analyze/cancel` | 202. Nothing is stored |
 | `GET /api/crawls/{id}/analysis` | The last analysis, below. 404 `not-analyzed` if it never ran |
 
@@ -285,7 +300,7 @@ they're null, and the UI shows the notes.
 | Method and path | Returns |
 | --- | --- |
 | `GET /api/crawls/{id}/stats` | `CrawlStatsReader.Read` |
-| `GET /api/crawls/{id}/issues/{checkId}?limit=200&offset=0` | `{ rows: [{ url, detail, relatedUrl }], total }` |
+| `GET /api/crawls/{id}/issues/{checkId}?limit=200&offset=0` | `{ rows: [{ url, detail, relatedUrl }], total }`. `total` is null for a check that was skipped, never 0 |
 
 E3 replaces the issues endpoint with keyset paging and grouping. Its grid queries are `POST`s to one fixed URL
 per grid (see CORS above). E3 adds:

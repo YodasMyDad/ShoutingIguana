@@ -1,4 +1,3 @@
-using ShoutingIguana.Cli.Commands;
 using ShoutingIguana.Cli.Output;
 
 namespace ShoutingIguana.Cli.Tests.Output;
@@ -39,18 +38,5 @@ public sealed class OutputTests
         csv.WriteRow("plain", "a,b", "say \"hi\"", "=HYPERLINK(\"http://x\")", "-1", null);
 
         Assert.Equal("plain,\"a,b\",\"say \"\"hi\"\"\",\"'=HYPERLINK(\"\"http://x\"\")\",'-1,\r\n", text.ToString());
-    }
-
-    [Theory]
-    [InlineData("https://www.example.com/shop", "www.example.com-")]
-    [InlineData("http://[::1]:8080/", "1-")]
-    [InlineData("https://xn--bcher-kva.example/", "xn--bcher-kva.example-")]
-    public void DefaultCrawlFileNamesAreValidOnEveryFileSystem(string startUrl, string prefix)
-    {
-        var name = CrawlCommand.DefaultDatabasePath(startUrl);
-
-        Assert.StartsWith(prefix, name);
-        Assert.EndsWith(".sicrawl", name);
-        Assert.DoesNotContain(name, character => character is ':' or '[' or ']' or '/' or '\\' || char.IsControl(character));
     }
 }

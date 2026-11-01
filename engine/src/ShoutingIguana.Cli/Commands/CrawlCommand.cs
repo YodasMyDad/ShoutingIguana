@@ -1,11 +1,9 @@
 using System.CommandLine;
-using System.Globalization;
 using ShoutingIguana.Cli.Output;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage;
-using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Cli.Commands;
 
@@ -81,15 +79,22 @@ internal static class CrawlCommand
                                 "When resuming you can change --concurrency, --rate, --timeout, --header and --proxy.");
                 }
 
-                var stored = CrawlDatabase.ReadOptions(databasePath);
-                var proxyUrl = parse.GetValue(proxy) ?? stored.ProxyUrl;
-                if (parse.GetValue(proxy) is null && stored.HasRedactedProxyCredentials)
+                var plan = CrawlDatabase.ReadOptions(databasePath).PlanResume(new ResumeChanges
+                {
+                    Concurrency = parse.GetValue(concurrency),
+                    MaxRequestsPerSecond = parse.GetValue(rate),
+                    RequestTimeoutSeconds = parse.GetValue(timeout),
+                    ExtraHeaders = extraHeaders,
+                    ProxyUrl = parse.GetValue(proxy)
+                });
+
+                if (plan.MissingProxyCredentials)
                 {
                     return Fail("This crawl used a proxy with a user name and password, which crawl files don't store. Pass --proxy again.");
                 }
 
                 // Header values aren't stored either: warn about any that weren't given again, rather than send them empty.
-                var notResent = stored.ExtraHeaders.Keys.Where(name => !extraHeaders.ContainsKey(name)).ToList();
+                var notResent = plan.MissingHeaders;
                 if (notResent.Count > 0)
                 {
                     Console.Error.WriteLine($"Warning: this crawl was started with the header{(notResent.Count == 1 ? string.Empty : "s")} " +
@@ -97,14 +102,7 @@ internal static class CrawlCommand
                                             "again with --header to keep sending them.");
                 }
 
-                options = stored with
-                {
-                    Concurrency = parse.GetValue(concurrency) ?? stored.Concurrency,
-                    MaxRequestsPerSecond = parse.GetValue(rate) ?? stored.MaxRequestsPerSecond,
-                    RequestTimeoutSeconds = parse.GetValue(timeout) ?? stored.RequestTimeoutSeconds,
-                    ExtraHeaders = extraHeaders,
-                    ProxyUrl = proxyUrl
-                };
+                options = plan.Options;
             }
             else
             {
@@ -137,7 +135,7 @@ internal static class CrawlCommand
                     FollowNofollow = parse.GetValue(followNofollow),
                     StoreHtml = parse.GetValue(storeHtml)
                 };
-                databasePath ??= DefaultDatabasePath(startUrl);
+                databasePath ??= CrawlDatabase.DefaultDatabasePath(startUrl);
             }
 
             var errors = options.Validate();
@@ -197,14 +195,6 @@ internal static class CrawlCommand
         }
 
         return true;
-    }
-
-    /// <summary>host-timestamp.sicrawl, with characters no file system allows in a name (an IPv6 host's colons) replaced.</summary>
-    internal static string DefaultDatabasePath(string startUrl)
-    {
-        var host = UrlNormalizer.TryNormalize(startUrl, out var normalized) ? new Uri(normalized).Host : "crawl";
-        var name = string.Concat(host.Select(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '-')).Trim('-');
-        return $"{(name.Length == 0 ? "crawl" : name)}-{DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}.sicrawl";
     }
 
     private static int Fail(string message)

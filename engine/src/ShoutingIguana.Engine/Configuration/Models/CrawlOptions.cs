@@ -1,4 +1,5 @@
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Configuration.Models;
@@ -85,83 +86,129 @@ public sealed record CrawlOptions
     public bool HasRedactedProxyCredentials =>
         ProxyUrl is not null && Uri.TryCreate(ProxyUrl, UriKind.Absolute, out var proxy) && proxy.UserInfo == REDACTED;
 
-    public IReadOnlyList<string> Validate()
+    /// <summary>
+    /// Applies what may change when this stored crawl is resumed. The changes can't touch anything else: a resumed crawl
+    /// keeps the scope and rules it started with. Also says which secrets weren't given again, since crawl files don't
+    /// store them (see <see cref="WithoutSecrets"/>).
+    /// </summary>
+    public ResumePlan PlanResume(ResumeChanges changes)
     {
-        List<string> errors = [];
+        // Header names match whatever their case, as HTTP header names do.
+        var given = new HashSet<string>(changes.ExtraHeaders.Keys, StringComparer.OrdinalIgnoreCase);
+        var options = this with
+        {
+            Concurrency = changes.Concurrency ?? Concurrency,
+            MaxRequestsPerSecond = changes.MaxRequestsPerSecond ?? MaxRequestsPerSecond,
+            RequestTimeoutSeconds = changes.RequestTimeoutSeconds ?? RequestTimeoutSeconds,
+            ExtraHeaders = changes.ExtraHeaders,
+            ProxyUrl = changes.ProxyUrl ?? ProxyUrl
+        };
 
+        return new ResumePlan(
+            options,
+            [.. ExtraHeaders.Keys.Where(name => !given.Contains(name))],
+            changes.ProxyUrl is null && HasRedactedProxyCredentials);
+    }
+
+    /// <summary>Every problem with these options, one sentence each, in the order <see cref="ValidateFields"/> gives them.</summary>
+    public IReadOnlyList<string> Validate() => [.. Problems().Select(problem => problem.Message)];
+
+    /// <summary>
+    /// Every problem with these options, keyed by the JSON name of the property it is about (<c>startUrl</c>,
+    /// <c>extraHeaders</c>...), so a form can show each one beside its field. Valid options give an empty dictionary.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> ValidateFields() =>
+        Problems()
+            .GroupBy(problem => problem.Field, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, IReadOnlyList<string> (group) => [.. group.Select(problem => problem.Message)], StringComparer.Ordinal);
+
+    private IEnumerable<(string Field, string Message)> Problems()
+    {
         if (!UrlNormalizer.TryNormalize(StartUrl, out _))
         {
-            errors.Add("Start URL must be an absolute http or https URL.");
+            yield return (Field(nameof(StartUrl)), "Start URL must be an absolute http or https URL.");
         }
 
         if (MaxUrls < 0)
         {
-            errors.Add("Max URLs cannot be negative.");
+            yield return (Field(nameof(MaxUrls)), "Max URLs cannot be negative.");
         }
 
         if (MaxDepth < 0)
         {
-            errors.Add("Max depth cannot be negative.");
+            yield return (Field(nameof(MaxDepth)), "Max depth cannot be negative.");
         }
 
         if (Concurrency is < 1 or > 100)
         {
-            errors.Add("Concurrency must be between 1 and 100.");
+            yield return (Field(nameof(Concurrency)), "Concurrency must be between 1 and 100.");
         }
 
         if (ExternalConcurrency is < 1 or > 50)
         {
-            errors.Add("External concurrency must be between 1 and 50.");
+            yield return (Field(nameof(ExternalConcurrency)), "External concurrency must be between 1 and 50.");
         }
 
         if (MaxRequestsPerSecond < 0)
         {
-            errors.Add("Max requests per second cannot be negative.");
+            yield return (Field(nameof(MaxRequestsPerSecond)), "Max requests per second cannot be negative.");
         }
 
         if (UserAgent == UserAgentPreset.Custom && string.IsNullOrWhiteSpace(CustomUserAgent))
         {
-            errors.Add("A custom user agent needs a value.");
+            yield return (Field(nameof(CustomUserAgent)), "A custom user agent needs a value.");
+        }
+        else if (UserAgent == UserAgentPreset.Custom && !IsFieldValue(CustomUserAgent))
+        {
+            // Sent as it is with every request, as the headers are, so it can't break or add to them either.
+            yield return (Field(nameof(CustomUserAgent)), "A custom user agent must be printable ASCII on one line.");
+        }
+
+        if (!IsFieldValue(AcceptLanguage))
+        {
+            yield return (Field(nameof(AcceptLanguage)), "Accept-Language must be printable ASCII on one line.");
         }
 
         if (RequestTimeoutSeconds is < 1 or > 300)
         {
-            errors.Add("Request timeout must be between 1 and 300 seconds.");
+            yield return (Field(nameof(RequestTimeoutSeconds)), "Request timeout must be between 1 and 300 seconds.");
         }
 
         if (MaxRetries is < 0 or > 10)
         {
-            errors.Add("Max retries must be between 0 and 10.");
+            yield return (Field(nameof(MaxRetries)), "Max retries must be between 0 and 10.");
         }
 
         if (MaxHtmlBytes is < 64 * 1024 or > 100 * 1024 * 1024)
         {
-            errors.Add("Max HTML size must be between 64 KB and 100 MB.");
+            yield return (Field(nameof(MaxHtmlBytes)), "Max HTML size must be between 64 KB and 100 MB.");
         }
 
         if (ProxyUrl is not null && !Uri.TryCreate(ProxyUrl, UriKind.Absolute, out _))
         {
-            errors.Add("Proxy must be an absolute URL.");
+            yield return (Field(nameof(ProxyUrl)), "Proxy must be an absolute URL.");
         }
 
         foreach (var (name, value) in ExtraHeaders)
         {
             if (!IsToken(name) || !IsFieldValue(value))
             {
-                errors.Add($"Header '{name}' is not valid.");
+                yield return (Field(nameof(ExtraHeaders)), $"Header '{name}' is not valid.");
             }
             else if (CLIENT_HEADERS.Contains(name) || !IsRequestHeader(name, value))
             {
-                errors.Add($"Header '{name}' is set by the crawler's HTTP client and can't be overridden.");
+                yield return (Field(nameof(ExtraHeaders)), $"Header '{name}' is set by the crawler's HTTP client and can't be overridden.");
             }
         }
 
-        errors.AddRange(ExtraSitemaps
-            .Where(sitemap => !UrlNormalizer.TryNormalize(sitemap, out _))
-            .Select(sitemap => $"Sitemap '{sitemap}' is not an absolute http or https URL."));
-
-        return errors;
+        foreach (var sitemap in ExtraSitemaps.Where(sitemap => !UrlNormalizer.TryNormalize(sitemap, out _)))
+        {
+            yield return (Field(nameof(ExtraSitemaps)), $"Sitemap '{sitemap}' is not an absolute http or https URL.");
+        }
     }
+
+    /// <summary>A property's name as JSON spells it, which is how hosts name the fields of these options.</summary>
+    private static string Field(string propertyName) => JsonNamingPolicy.CamelCase.ConvertName(propertyName);
 
     /// <summary>An RFC 9110 token. Anything else (a space, a colon, non-ASCII) makes HttpClient throw on every request.</summary>
     private static bool IsToken(string name) =>

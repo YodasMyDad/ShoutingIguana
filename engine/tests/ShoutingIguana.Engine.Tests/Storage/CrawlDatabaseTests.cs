@@ -110,6 +110,62 @@ public sealed class CrawlDatabaseTests : IDisposable
         Assert.Equal(1L, TestCrawls.Count(path, "SELECT COUNT(*) FROM analysis"));
     }
 
+    [Theory]
+    [InlineData("https://www.example.com/shop", "www.example.com-")]
+    [InlineData("http://[::1]:8080/", "1-")]
+    [InlineData("https://xn--bcher-kva.example/", "xn--bcher-kva.example-")]
+    public void DefaultCrawlFileNamesAreValidOnEveryFileSystem(string startUrl, string prefix)
+    {
+        var name = CrawlDatabase.DefaultDatabasePath(startUrl);
+
+        Assert.StartsWith(prefix, name);
+        Assert.EndsWith(".sicrawl", name);
+        Assert.DoesNotContain(name, character => character is ':' or '[' or ']' or '/' or '\\' || char.IsControl(character));
+    }
+
+    [Fact]
+    public void DefaultCrawlFileNamesCarryTheHostAndTheLocalTime()
+    {
+        Assert.Equal("www.example.com-20261101-091505.sicrawl",
+            CrawlDatabase.DefaultDatabasePath("https://www.example.com/shop", new DateTime(2026, 11, 1, 9, 15, 5, DateTimeKind.Local)));
+        Assert.Equal("crawl-20261101-091505.sicrawl", CrawlDatabase.DefaultDatabasePath("not a url", new DateTime(2026, 11, 1, 9, 15, 5)));
+    }
+
+    /// <summary>
+    /// A crawl or an analysis writing to the file holds its lock, and the probe sees both. It never takes the lock from
+    /// a writer or keeps it, and never leaves a lock file where there was none.
+    /// </summary>
+    [Fact]
+    public async Task TheLockProbeSeesEveryWriter()
+    {
+        var path = _files.NewPath();
+        Assert.False(CrawlDatabase.IsInUse(path));
+        Assert.False(File.Exists(path + "-lock"));
+
+        var crawl = CrawlWriter.Open(path, NOWHERE, resume: false, new CrawlCounters(), NullLogger.Instance);
+        Assert.True(CrawlDatabase.IsInUse(path));
+        Assert.True(CrawlDatabase.IsInUse(path));
+        Assert.Throws<InvalidOperationException>(() => CrawlFileLock.Acquire(path));
+        await crawl.DisposeAsync();
+        Assert.False(CrawlDatabase.IsInUse(path));
+
+        // Stopped by a crash: the file says running, and nothing holds it.
+        Assert.Equal(CrawlStatus.Running, CrawlSummaryReader.Read(path).Status);
+
+        using (var connection = CrawlDatabase.OpenWriter(path))
+        {
+            CrawlDatabase.Execute(connection, $"UPDATE crawl SET status = {(int)CrawlStatus.Completed}");
+        }
+
+        using (IssueWriter.Open(path, NullLogger.Instance))
+        {
+            Assert.True(CrawlDatabase.IsInUse(path));
+        }
+
+        Assert.False(CrawlDatabase.IsInUse(path));
+        CrawlFileLock.Acquire(path).Dispose();
+    }
+
     private static SqliteConnection Raw(string path)
     {
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());

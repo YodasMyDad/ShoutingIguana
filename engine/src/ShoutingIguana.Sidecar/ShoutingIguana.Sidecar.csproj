@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <AssemblyName>si-sidecar</AssemblyName>
+        <RootNamespace>ShoutingIguana.Sidecar</RootNamespace>
+        <!-- A desktop app's companion: workstation GC keeps the footprint small, as for the CLI. -->
+        <ServerGarbageCollection>false</ServerGarbageCollection>
+        <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Serilog" />
+        <PackageReference Include="Serilog.Extensions.Logging" />
+        <PackageReference Include="Serilog.Sinks.File" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ShoutingIguana.Engine\ShoutingIguana.Engine.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="ShoutingIguana.Sidecar.Tests" />
+    </ItemGroup>
+
+</Project>

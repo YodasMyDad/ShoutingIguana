@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Serialization;
+using ShoutingIguana.Engine.Urls;
 using SQLitePCL;
 
 namespace ShoutingIguana.Engine.Storage;
@@ -48,6 +49,26 @@ public static class CrawlDatabase
                    ?? throw new InvalidOperationException($"'{path}' is not a crawl database.");
         return JsonSerializer.Deserialize(json, EngineJsonContext.Default.CrawlOptions)
                ?? throw new InvalidOperationException($"'{path}' has unreadable crawl options.");
+    }
+
+    /// <summary>
+    /// Whether a crawl or an analysis is writing to the file, in this process or another. A file that says it is running
+    /// while nothing holds it was interrupted, and can be resumed. Only a snapshot: the answer can change at once.
+    /// </summary>
+    public static bool IsInUse(string path) => CrawlFileLock.IsHeld(path);
+
+    /// <summary>The CLI's name for a new crawl's file, <c>host-yyyyMMdd-HHmmss.sicrawl</c>, stamped with the local time now.</summary>
+    public static string DefaultDatabasePath(string startUrl) => DefaultDatabasePath(startUrl, DateTime.Now);
+
+    /// <summary>
+    /// <c>host-yyyyMMdd-HHmmss.sicrawl</c> for a crawl starting at <paramref name="timestamp"/>, with the characters no
+    /// file system allows in a name (an IPv6 host's colons) replaced. A relative path: hosts put it in their own folder.
+    /// </summary>
+    public static string DefaultDatabasePath(string startUrl, DateTime timestamp)
+    {
+        var host = UrlNormalizer.TryNormalize(startUrl, out var normalized) ? new Uri(normalized).Host : "crawl";
+        var name = string.Concat(host.Select(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '-')).Trim('-');
+        return $"{(name.Length == 0 ? "crawl" : name)}-{timestamp.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}.sicrawl";
     }
 
     /// <param name="allowNew">Accept an empty file, which the caller turns into a crawl.</param>
