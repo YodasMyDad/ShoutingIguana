@@ -12,14 +12,18 @@ internal sealed record CrawlListItem
 
     public string? StartUrl { get; init; }
     public required CrawlListStatus Status { get; init; }
+
+    /// <summary>Why the file couldn't be read, in words for the UI: given only when the status is unreadable.</summary>
+    public string? Error { get; init; }
+
     public DateTime? StartedAt { get; init; }
     public DateTime? FinishedAt { get; init; }
     public DateTime? UpdatedAt { get; init; }
 
-    /// <summary>URLs fetched, whatever the answer; live, the crawl's progress.</summary>
-    public long UrlCount { get; init; }
+    /// <summary>URLs with a stored outcome, as <c>si stats</c> and a crawl's progress count them; live, the crawl's progress.</summary>
+    public long FetchedUrlCount { get; init; }
 
-    /// <summary>Internal HTML pages fetched successfully.</summary>
+    /// <summary>Internal HTML pages fetched and parsed.</summary>
     public long PageCount { get; init; }
 
     /// <summary>Null before the first analysis.</summary>

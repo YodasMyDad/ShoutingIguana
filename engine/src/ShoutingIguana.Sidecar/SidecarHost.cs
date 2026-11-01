@@ -16,7 +16,7 @@ namespace ShoutingIguana.Sidecar;
 
 /// <summary>
 /// The sidecar's web host on 127.0.0.1. The program runs one; tests start as many as they like in-process, each on a free
-/// port with its own folders.
+/// port with its own folders. One state folder serves one sidecar at a time.
 /// </summary>
 internal sealed class SidecarHost : IAsyncDisposable
 {
@@ -24,12 +24,14 @@ internal sealed class SidecarHost : IAsyncDisposable
     public const long MAX_BODY_BYTES = 1024 * 1024;
 
     private readonly WebApplication _app;
+    private readonly StateFolderLock _stateLock;
     private readonly Lock _sync = new();
     private Task? _stopped;
 
-    private SidecarHost(WebApplication app, int port, string token, bool tokenGenerated)
+    private SidecarHost(WebApplication app, StateFolderLock stateLock, int port, string token, bool tokenGenerated)
     {
         _app = app;
+        _stateLock = stateLock;
         Port = port;
         Token = token;
         TokenGenerated = tokenGenerated;
@@ -39,7 +41,7 @@ internal sealed class SidecarHost : IAsyncDisposable
 
     public string Token { get; }
 
-    /// <summary>The sidecar made its token up, so the ready line gives it.</summary>
+    /// <summary>The sidecar made its token up (development only), so the ready line gives it.</summary>
     public bool TokenGenerated { get; }
 
     public IServiceProvider Services => _app.Services;
@@ -48,79 +50,45 @@ internal sealed class SidecarHost : IAsyncDisposable
     public string ReadyLine =>
         JsonSerializer.Serialize(new ReadyEvent("ready", Port, SidecarInfo.Version, TokenGenerated ? Token : null), SidecarJsonContext.Default.ReadyEvent);
 
+    /// <exception cref="StateFolderInUseException">Another sidecar is using the state folder.</exception>
+    /// <exception cref="IOException">The port is taken, or the server would listen anywhere but 127.0.0.1.</exception>
+    /// <exception cref="OperationCanceledException">Shutdown was asked for (Ctrl+C, SIGTERM) before the sidecar was serving.</exception>
     public static async Task<SidecarHost> StartAsync(SidecarOptions options, CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(options.StateDirectory);
-        var token = options.Token ?? SidecarSecurity.CreateToken();
-        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
-        {
-            Args = [],
-            ApplicationName = "si-sidecar",
-            EnvironmentName = Environments.Production,
-            ContentRootPath = AppContext.BaseDirectory
-        });
+        var token = options.Token ?? (options.Development
+            ? SidecarSecurity.CreateToken()
+            : throw new InvalidOperationException("A sidecar needs a token, unless it runs for development."));
 
-        // Only what is set here: no settings files, and no environment variable can add an endpoint or change a limit.
-        builder.Configuration.Sources.Clear();
-        SidecarLogging.Configure(builder.Logging, options);
-        builder.Services.Configure<HostOptions>(host => host.ShutdownTimeout = options.ShutdownTimeout);
-        builder.Services.Configure<ConsoleLifetimeOptions>(console => console.SuppressStatusMessages = true);
-
-        ListenOptions? endpoint = null;
-        builder.WebHost.ConfigureKestrel(kestrel =>
-        {
-            kestrel.AddServerHeader = false;
-            kestrel.Limits.MaxRequestBodySize = MAX_BODY_BYTES;
-            kestrel.Listen(IPAddress.Loopback, options.Port, listen => endpoint = listen);
-        });
-
-        builder.Services.AddSingleton(options);
-        builder.Services.AddSingleton(new SidecarSecurity(token, options.AllowedOrigins));
-        builder.Services.AddSingleton(new AlertLog());
-        builder.Services.AddSingleton<EventHub>();
-        builder.Services.AddSingleton<CrawlSummaryCache>();
-        builder.Services.AddSingleton<CrawlLibrary>();
-        builder.Services.AddSingleton<DefaultsStore>();
-        builder.Services.AddSingleton<CrawlManager>();
-        builder.Services.AddSingleton<CrawlData>();
-
-        // Hosted services registered here stop after the web server, once no request can start anything new.
-        builder.Services.AddHostedService<CrawlShutdown>();
-        if (options.ParentProcessId is { } parent)
-        {
-            builder.Services.AddHostedService(services => new ParentProcessWatcher(parent,
-                services.GetRequiredService<IHostApplicationLifetime>(), services.GetRequiredService<ILogger<ParentProcessWatcher>>()));
-        }
-
-        if (options.StdinLifeline)
-        {
-            builder.Services.AddHostedService(services => new StdinLifeline(Console.In,
-                services.GetRequiredService<IHostApplicationLifetime>(), services.GetRequiredService<ILogger<StdinLifeline>>()));
-        }
-
-        var app = builder.Build();
-        app.UseMiddleware<ProblemMiddleware>();
-        app.UseMiddleware<RequestGuard>();
-        AppEndpoints.Map(app);
-        OptionsEndpoints.Map(app);
-        LibraryEndpoints.Map(app);
-        CrawlEndpoints.Map(app);
-        AnalysisEndpoints.Map(app);
-
+        var stateLock = StateFolderLock.Acquire(options.StateDirectory);
+        WebApplication? app = null;
         try
         {
+            app = Build(options, token, out var endpoint);
             await app.StartAsync(cancellationToken).ConfigureAwait(false);
+
+            // The one endpoint the code configured, bound now (its port is the real one even when 0 was asked for). Nothing
+            // the environment set can have added or moved it: PreferHostingUrls is off, so ASPNETCORE_URLS is ignored.
+            var bound = (IPEndPoint)endpoint.EndPoint;
+            if (!IPAddress.IsLoopback(bound.Address) || !bound.Address.Equals(IPAddress.Loopback))
+            {
+                throw new IOException($"The engine would have listened on {bound}, not on 127.0.0.1.");
+            }
+
+            var host = new SidecarHost(app, stateLock, bound.Port, token, options.Token is null);
+            app.Logger.LogInformation("Shouting Iguana sidecar {Version} listening on 127.0.0.1:{Port}; data in {DataDirectory}, state in {StateDirectory}",
+                SidecarInfo.Version, host.Port, options.DataDirectory, options.StateDirectory);
+            return host;
         }
         catch
         {
-            await app.DisposeAsync().ConfigureAwait(false);
+            if (app is not null)
+            {
+                await app.DisposeAsync().ConfigureAwait(false);
+            }
+
+            stateLock.Dispose();
             throw;
         }
-
-        var host = new SidecarHost(app, ((IPEndPoint)endpoint!.EndPoint).Port, token, options.Token is null);
-        app.Logger.LogInformation("Shouting Iguana sidecar {Version} listening on 127.0.0.1:{Port}; data in {DataDirectory}, state in {StateDirectory}",
-            SidecarInfo.Version, host.Port, options.DataDirectory, options.StateDirectory);
-        return host;
     }
 
     /// <summary>Completes once the sidecar has shut down: the shutdown call, Ctrl+C, SIGTERM or the parent ending.</summary>
@@ -149,5 +117,69 @@ internal sealed class SidecarHost : IAsyncDisposable
     {
         await StopAsync().ConfigureAwait(false);
         await _app.DisposeAsync().ConfigureAwait(false);
+        _stateLock.Dispose();
+    }
+
+    private static WebApplication Build(SidecarOptions options, string token, out ListenOptions endpoint)
+    {
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
+        {
+            Args = [],
+            ApplicationName = "si-sidecar",
+            EnvironmentName = Environments.Production,
+            ContentRootPath = AppContext.BaseDirectory
+        });
+
+        // Only what is set here: no settings files. Clearing the sources doesn't unset the host options already read from
+        // ASPNETCORE_* (the reason the old "no environment variable can add an endpoint" was wrong), so PreferHostingUrls
+        // is forced off: the one Listen endpoint below is then the only one, and ASPNETCORE_URLS is ignored.
+        builder.Configuration.Sources.Clear();
+        builder.Configuration.AddInMemoryCollection([new(WebHostDefaults.PreferHostingUrlsKey, "false")]);
+        SidecarLogging.Configure(builder.Logging, options);
+        builder.Services.Configure<HostOptions>(host => host.ShutdownTimeout = options.ShutdownTimeout);
+        builder.Services.Configure<ConsoleLifetimeOptions>(console => console.SuppressStatusMessages = true);
+
+        ListenOptions? bound = null;
+        builder.WebHost.ConfigureKestrel(kestrel =>
+        {
+            kestrel.AddServerHeader = false;
+            kestrel.Limits.MaxRequestBodySize = MAX_BODY_BYTES;
+            kestrel.Listen(IPAddress.Loopback, options.Port, listen => bound = listen);
+        });
+
+        builder.Services.AddSingleton(options);
+        builder.Services.AddSingleton(new SidecarSecurity(token, options.AllowedOrigins));
+        builder.Services.AddSingleton(new AlertLog());
+        builder.Services.AddSingleton<EventHub>();
+        builder.Services.AddSingleton<CrawlSummaryCache>();
+        builder.Services.AddSingleton<CrawlLibrary>();
+        builder.Services.AddSingleton<DefaultsStore>();
+        builder.Services.AddSingleton<CrawlManager>();
+        builder.Services.AddSingleton<CrawlData>();
+
+        // Crawls are told to stop as soon as shutdown begins, before the web server waits for requests in flight.
+        builder.Services.AddHostedService<CrawlShutdown>();
+        if (options.ParentProcessId is { } parent)
+        {
+            builder.Services.AddHostedService(services => new ParentProcessWatcher(parent,
+                services.GetRequiredService<IHostApplicationLifetime>(), services.GetRequiredService<ILogger<ParentProcessWatcher>>()));
+        }
+
+        if (options.StdinLifeline)
+        {
+            builder.Services.AddHostedService(services => new StdinLifeline(Console.In,
+                services.GetRequiredService<IHostApplicationLifetime>(), services.GetRequiredService<ILogger<StdinLifeline>>()));
+        }
+
+        var app = builder.Build();
+        app.UseMiddleware<ProblemMiddleware>();
+        app.UseMiddleware<RequestGuard>();
+        AppEndpoints.Map(app);
+        OptionsEndpoints.Map(app);
+        LibraryEndpoints.Map(app);
+        CrawlEndpoints.Map(app);
+        AnalysisEndpoints.Map(app);
+        endpoint = bound!;
+        return app;
     }
 }

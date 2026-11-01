@@ -20,5 +20,11 @@ internal enum CrawlListStatus
     Failed,
 
     /// <summary>Another process is writing to it: a crawl, or an analysis.</summary>
-    InUse
+    InUse,
+
+    /// <summary>
+    /// The file couldn't be read, though it may be a crawl: reading it took too long, it is damaged, or another program
+    /// had it locked. The item's error says which.
+    /// </summary>
+    Unreadable
 }

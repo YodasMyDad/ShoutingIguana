@@ -26,14 +26,18 @@ Built in stages:
 
 - **Start.** The Tauri shell starts `si-sidecar --data-dir <folder> --state-dir <folder>`.
   - `--data-dir` is where new crawls are saved. It defaults to `Documents/Shouting Iguana`.
-  - `--state-dir` holds `library.json`, the user's defaults and the logs. It defaults to
-    `<local app data>/ShoutingIguana`.
+  - `--state-dir` holds `library.json`, the user's defaults, the cached summaries and the logs. It defaults to
+    `<local app data>/ShoutingIguana`. **One sidecar uses a state folder at a time:** the sidecar holds an exclusive
+    lock (`sidecar.lock`) on it for its lifetime, and a second sidecar on the same folder writes a line to stderr and
+    exits with code 3, rather than two of them writing the same library and defaults and each missing the other's
+    changes. The operating system drops the lock when the process ends, so a crash never leaves the folder locked.
   The shell also passes `--stdin-lifeline`, described under Shutdown. `--port` fixes the port, for development; it
   defaults to 0, a free port.
 - **Environment.**
-  - `SI_SIDECAR_TOKEN` is the bearer token: 32 random bytes as hex, made by the shell for each launch. The sidecar
-    removes it from its own environment after reading it, so processes it starts don't inherit it. Without it, the
-    sidecar makes one up and includes it in the ready line, for development only.
+  - `SI_SIDECAR_TOKEN` is the bearer token: at least 32 characters, 32 random bytes as hex as the shell makes it for
+    each launch. The sidecar removes it from its own environment after reading it, so processes it starts don't inherit
+    it. A sidecar refuses to start without it (exit code 2), unless it is started in development mode with `--dev`:
+    then, and only then, it makes a token up and includes it in the ready line for the dev UI to read from stdout.
   - `SI_SIDECAR_ORIGINS` is a comma-separated list of the origins allowed to call the API. The shell passes exactly
     its own webview's origin, plus the dev server's in debug builds. [The spike](v2-ui-spike.md) measured these:
 
@@ -52,8 +56,8 @@ Built in stages:
   {"event":"ready","port":53123,"version":"2.0.0-alpha.1"}
   ```
 
-  `"token"` is added only when the sidecar made one up. Nothing else ever goes to stdout: logs go to stderr and to
-  `<state-dir>/logs`.
+  `"token"` is added only when the sidecar made one up, which happens only in development mode (`--dev`). Nothing else
+  ever goes to stdout: logs go to stderr and to `<state-dir>/logs`.
 - **Shutdown.** The shell can't rely on killing the sidecar: `tauri-plugin-shell` leaves a sidecar it started from
   Rust running after a normal exit, and after a hard kill of the shell. So stdin is the lifeline. With
   `--stdin-lifeline`, a `shutdown` line on stdin, or stdin reaching its end because the shell died, shuts the sidecar
@@ -62,17 +66,34 @@ Built in stages:
   sidecar that hangs.
 
   The sidecar shuts down on any of: a `shutdown` line or the end of stdin (with the lifeline), `POST /api/shutdown`,
-  Ctrl+C, SIGTERM, or the parent process ending. Then:
-  - every running crawl is stopped, and its file stays resumable;
-  - every running analysis is cancelled, and stores nothing;
-  - the process exits with code 0.
+  Ctrl+C, SIGTERM, or the parent process ending. Then, **in this order**:
+  - every running crawl is told to stop, and every running analysis is cancelled, as the very first step of shutting
+    down — before the web server drains the requests in flight, so a slow request can't let a crawl fetch on after
+    shutdown was asked;
+  - each stopped crawl's file stays resumable, and each cancelled analysis stores nothing;
+  - the sidecar waits for the crawls to close their files and the requests in flight to finish, then exits with code 0.
+  - **How long it can take.** The wait is bounded (30 seconds). Stopping a crawl cancels its requests at once, so the
+    wait is for each crawl to close its file and for requests in flight to finish; past the bound the sidecar exits
+    anyway, leaving any crawl that hadn't closed marked interrupted and still resumable. The desktop shell should allow
+    at least this long after asking the sidecar to shut down before killing it.
+  - Ctrl+C or SIGTERM arriving while the sidecar is still starting up exits cleanly (code 0) without serving.
+
+  **Exit codes:** 0 after a clean shutdown; 1 if it couldn't start (a port taken, a state folder it can't create);
+  2 for arguments it can't use, or no token without `--dev`; 3 when another sidecar is using the state folder.
 
 ## Security (E1)
 
 - **Token.** Every request needs `Authorization: Bearer <token>`, compared in constant time; otherwise 401. CORS
-  preflights (`OPTIONS`) are the exception: they carry no credentials, and are answered only for allowed origins.
-- **Host.** `Host` must be `127.0.0.1:<port>` or `localhost:<port>`, with the bound port; otherwise 421. This
-  defeats DNS rebinding.
+  preflights (`OPTIONS`) are the exception: they carry no credentials, and are answered only for allowed origins. The
+  token is at least 32 characters. The shell always sets one; a sidecar makes its own only in development mode
+  (`--dev`), and refuses to start otherwise.
+- **Host.** `Host` must be `127.0.0.1:<port>` or `localhost:<port>`, with the bound port; otherwise 421. This defeats
+  DNS rebinding. The UI only ever uses `127.0.0.1`; `localhost` is accepted on purpose, for tools and people trying the
+  API by hand, and is safe because a browser resolves `localhost` to the loopback address itself (so it can't be a
+  rebound name) and a page that calls it is cross-origin, so its `Origin` is still checked. `[::1]` is not accepted:
+  the sidecar listens only on the IPv4 loopback.
+- **Loopback only.** The sidecar binds `127.0.0.1` and refuses to start if anything (an `ASPNETCORE_*` environment
+  variable, say) would have moved the listener to another address; the ready line always names the port it truly bound.
 - **Origin.** When an `Origin` is sent, it must be on the allowlist; otherwise 403.
 - **CORS.** Every call carries `Authorization`, so WebView2 sends a preflight before each one.
   - A preflight from an allowed origin gets `204` with:
@@ -90,7 +111,11 @@ Built in stages:
     `cache: 'no-store'` on a request, because that turns the preflight cache off.
 - **Bodies.** A request body is at most 1 MB.
 - **Paths from the UI** (open, add to library) must be absolute and end in `.sicrawl`. The file is checked to be a
-  crawl before it's added.
+  crawl before it's added. A path to another computer is refused with `file-error` ("copy the crawl to this computer
+  first"): on Windows, a UNC path (`\\server\share\…`) or a device path (`\\?\…`, `\\.\…`), since opening one would
+  make the sidecar authenticate to that server. A mapped drive letter is the user's own choice and stays allowed. A
+  crawl's id is the hash of its path with links resolved (see **Crawl ids**), so the same file reached two ways is one
+  crawl, not two.
 - **Crawled text** (titles, anchor text, alert messages, details) comes back exactly as stored. The UI renders it as
   text, never as HTML.
 
@@ -101,8 +126,10 @@ Built in stages:
   - Enums as camelCase strings (`"running"`, `"error"`).
   - Times in ISO 8601 UTC, durations in milliseconds (`elapsedMs`), sizes in bytes.
   - Spellings follow the engine (`analyze`, `analyzedAt`). The UI's text uses UK English.
-- **Crawl ids.** 16 hex characters of the SHA-256 of the file's full path (case-folded on Windows and macOS). An id
-  is stable while the file stays where it is.
+- **Crawl ids.** 16 hex characters of the SHA-256 of the file's full path with links resolved (symbolic links, and
+  junctions on Windows), case-folded on Windows and macOS. Case folding follows the operating system, not the volume,
+  so on a folder set to tell case apart (rare) two names differing only in case would share an id. An id is stable
+  while the file stays where it is.
 - **Errors.** `application/problem+json`:
 
   ```json
@@ -117,9 +144,9 @@ Built in stages:
     | --- | --- | --- |
     | `invalid-options` | 422 | Validation failed |
     | `needs-secrets` | 422 | A secret must be given again |
-    | `not-a-crawl` | 400 | The file isn't a crawl. SQLite error 26 means this, as in the CLI |
+    | `not-a-crawl` | 400 | The file isn't a crawl: SQLite error 26 (as in the CLI), the wrong schema, or a view or trigger the engine never writes |
     | `crawl-not-found` | 404 | No crawl has this id |
-    | `crawl-busy` | 409 | Running here or elsewhere, or an analysis is running |
+    | `crawl-busy` | 409 | Running here or elsewhere, an analysis is running, or another program holds the file's SQLite lock |
     | `not-analysable` | 409 | The engine refuses: running or interrupted |
     | `file-error` | 400 | IO or permissions |
     | `not-analyzed` | 404 | The crawl has never been analysed |
@@ -161,7 +188,7 @@ Both come from `IssueCatalog`. The engine gets public category titles, so the UI
 | --- | --- |
 | `GET /api/crawl-options/defaults` | `{ options, speedPresets }`: the user's saved defaults, or the engine's |
 | `PUT /api/crawl-options/defaults` | Saves "my defaults". The start URL, header values and proxy credentials are never saved: the UI keeps secrets in the OS credential store, with the user's consent |
-| `POST /api/crawl-options/validate` | `{ errors: { <field>: [messages] } }`, always 200. Field names are the JSON names of `CrawlOptions` properties. The engine gets a field-keyed `Validate`, and the CLI keeps its list of messages |
+| `POST /api/crawl-options/validate` | `{ errors: { <field>: [messages] } }`, 200. Field names are the JSON names of `CrawlOptions` properties; a value of the wrong type is a message for its field too. A body that isn't JSON, or a property the options don't have, is a `bad-request` (400), as on every other call. The engine gets a field-keyed `Validate`, and the CLI keeps its list of messages |
 
 The options DTO has every public `CrawlOptions` property. `extraHeaders` is an object of name to value, and
 `trustedCertificate` is never exposed.
@@ -182,13 +209,17 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 ```json
 {"id":"…","path":"C:\\…\\example.com-20261101-101500.sicrawl","fileName":"…","site":"example.com",
  "startUrl":"https://www.example.com/","status":"completed","startedAt":"…","finishedAt":"…","updatedAt":"…",
- "urlCount":4521,"pageCount":265,"issues":{"error":3,"warning":12,"notice":7},"analyzedAt":"…",
+ "fetchedUrlCount":4521,"pageCount":265,"issues":{"error":3,"warning":12,"notice":7},"analyzedAt":"…",
  "outOfDate":false,"sizeBytes":18276352,"missing":false}
 ```
 
 - **`site`** is the host without a leading `www.`. The UI groups crawls by it.
-- **`urlCount`** is the URLs fetched. URLs found but not fetched aren't counted. **`pageCount`** is the pages, as in
-  `si stats`.
+- **`fetchedUrlCount`** is the URLs with a stored outcome: those the crawl requested, and those robots.txt kept it from
+  requesting (stored as disallowed). URLs it only found (a nofollow link, past a limit) aren't counted. It matches
+  `si stats`'s fetched count and a running crawl's `fetched` progress. (The full count of every URL in the file, fetched
+  or not, is `/stats`'s `urlCount`.) **`pageCount`** is the pages — internal URLs that returned HTML the crawler
+  parsed — as in `si stats`, and the same definition a running crawl's `htmlPages` uses, so the count doesn't shift
+  when a crawl ends.
 - **`status`** is one of:
 
   | Status | Meaning |
@@ -200,14 +231,18 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
   | `completed` | Finished |
   | `failed` | Failed |
   | `inUse` | Running in another process |
+  | `unreadable` | The file couldn't be read (a lock held by another program, a damaged file, or a read that timed out) but may be a crawl. `error` says why in plain words. A lock or timeout is retried on a later list; a file that isn't a crawl at all (SQLite error 26, the wrong schema, or a view or trigger the engine never writes) is left out of the list entirely |
 
 - **`issues`** counts checks with at least one issue, by severity: the Issues screen's rows, not issue rows. It is
   null before the first analysis.
 - **`outOfDate`** is true when the crawl changed after its last analysis. E2 makes it exact; E1 compares the crawl's
   `updated_at` with `analyzed_at`.
-- **Caching.** Each file's summary is read once and kept until the file's size or modified time changes, so the
-  list stays cheap with many crawls. The engine gets a cheap summary reader; `CrawlStatsReader.Read` counts every
-  link, which is too slow for a list.
+- **Caching.** Each file's summary is read once and kept until the file's size or modified time changes, so the list
+  stays cheap with many crawls. The cache is persisted in the state folder (`summaries.json`, keyed by the file's
+  stamp and the engine version), so a restart doesn't re-read every crawl. A read is given a short time limit, so one
+  file crafted to be slow can't stall the list. A read that fails for a passing reason (a lock another program holds)
+  is retried on a later list rather than remembered until the file changes, and opening a crawl reads it afresh. The
+  engine gets a cheap summary reader; `CrawlStatsReader.Read` counts every link, which is too slow for a list.
 
 | Method and path | Does |
 | --- | --- |
@@ -247,7 +282,10 @@ use, as `si crawl --resume` allows. It's analysed when it completes.
   - the proxy had credentials and no `proxyUrl` was given; or
   - stored header names weren't given values and `skipMissingHeaders` is false.
 
-  The UI then asks for the missing secrets.
+  The UI then asks for the missing secrets. The redacted values `GET /options` returns don't count as given: a header
+  with an empty value (which isn't sent at all), and a proxy whose user name is the redaction marker `***`. So a form
+  pre-filled from `GET /options` and posted straight back still gets `needs-secrets`, not a crawl resumed with empty or
+  redacted credentials.
 
 ### Live events (E1)
 
@@ -265,7 +303,7 @@ use, as `si crawl --resume` allows. It's analysed when it completes.
 
 | Event | Data | When |
 | --- | --- | --- |
-| `progress` | `{ crawlId, status, elapsedMs, discovered, queued, inFlight, fetched, htmlPages, redirects, errors, blocked, robotsDisallowed, skipped, bytesDownloaded, pagesPerSecond }` | Every 500 ms per live crawl (the engine's pace). The UI batches to 4 renders a second |
+| `progress` | `{ crawlId, status, elapsedMs, discovered, queued, inFlight, fetched, htmlPages, redirects, errors, blocked, robotsDisallowed, skipped, bytesDownloaded, urlsPerSecond }` | Every 500 ms per live crawl (the engine's pace). The UI batches to 4 renders a second. `urlsPerSecond` is the rate of every URL fetched, pages and the rest alike |
 | `alert` | `{ crawlId, level, code, message, at }` | Each `CrawlNotice` (see below) |
 | `crawl` | `{ crawlId, status, error? }` | Every status change, with the library's statuses. An analysis shows as `analyzing`, then back to `completed` or `stopped` with a `library` event, and `error` if it failed |
 | `library` | `{}` | The library changed. The UI fetches `/api/crawls` again |

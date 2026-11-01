@@ -40,13 +40,38 @@ public sealed class ResumePlanTests
             Concurrency = 8,
             MaxRequestsPerSecond = 0,
             RequestTimeoutSeconds = 15,
-            ExtraHeaders = changes.ExtraHeaders,
+            ExtraHeaders = plan.Options.ExtraHeaders,
             ProxyUrl = changes.ProxyUrl
         }, plan.Options);
+
+        // The headers given again, with their values, matched to their stored names whatever the case; a new one added.
+        Assert.Equal(new Dictionary<string, string> { ["x-crawler-key"] = "again", ["X-New"] = "1" }, plan.Options.ExtraHeaders);
 
         // A header given again matches its stored name whatever the case; a new one may be added.
         Assert.Equal(["X-Team"], plan.MissingHeaders);
         Assert.False(plan.MissingProxyCredentials);
+    }
+
+    /// <summary>
+    /// A continue form filled in from the stored options gives the secrets back as the file keeps them: a header with no
+    /// value (never sent), and a proxy whose user name is the redaction marker. Neither counts as given.
+    /// </summary>
+    [Fact]
+    public void TheRedactedSecretsAFormWouldSendBackDoNotCountAsGiven()
+    {
+        var changes = new ResumeChanges
+        {
+            // As GET /options returns them: header names with empty values, the proxy with its user name redacted.
+            ExtraHeaders = new Dictionary<string, string> { ["X-Crawler-Key"] = "", ["X-Team"] = "  " },
+            ProxyUrl = $"http://{CrawlOptions.REDACTED}@proxy.example:8080/"
+        };
+
+        var plan = STORED.PlanResume(changes);
+
+        Assert.Empty(plan.Options.ExtraHeaders);
+        Assert.Equal(["X-Crawler-Key", "X-Team"], plan.MissingHeaders);
+        Assert.True(plan.MissingProxyCredentials);
+        Assert.Equal(STORED.ProxyUrl, plan.Options.ProxyUrl);
     }
 
     [Fact]

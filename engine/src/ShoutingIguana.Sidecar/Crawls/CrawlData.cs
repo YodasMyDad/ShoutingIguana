@@ -19,12 +19,12 @@ internal sealed class CrawlData(CrawlManager crawls)
         return CrawlOptionsDto.From(EngineErrors.Read(() => CrawlDatabase.ReadOptions(path)));
     }
 
+    /// <summary>The last analysis, its counts and notes all from that one analysis, even if another finishes meanwhile.</summary>
     public AnalysisDto Analysis(string id)
     {
         var path = crawls.PathOf(id);
-        var analysis = EngineErrors.Read(() => IssueReader.ReadAnalysis(path)) ?? throw Problems.NotAnalyzed();
-        var counts = EngineErrors.Read(() => IssueReader.ReadCounts(path));
-        var notes = EngineErrors.Read(() => IssueReader.ReadNotes(path));
+        var results = EngineErrors.Read(() => IssueReader.ReadResults(path)) ?? throw Problems.NotAnalyzed();
+        var (analysis, counts, notes) = results;
 
         // In catalog order. A check from a newer engine, which this one doesn't know, still counts, after the rest.
         List<CheckCountDto> ran = [.. IssueCatalog.All.Where(check => counts.ContainsKey(check.Id)).Select(check => new CheckCountDto(check.Id, counts[check.Id]))];
@@ -54,19 +54,13 @@ internal sealed class CrawlData(CrawlManager crawls)
         var path = crawls.PathOf(id);
         var limit = Number(query, "limit", DEFAULT_LIMIT, 1, MAX_LIMIT, $"limit must be a whole number from 1 to {MAX_LIMIT:N0}.");
         var offset = Number(query, "offset", 0, 0, int.MaxValue, "offset must be a whole number, 0 or more.");
-        if (EngineErrors.Read(() => IssueReader.ReadAnalysis(path)) is null)
-        {
-            throw Problems.NotAnalyzed();
-        }
-
-        var counts = EngineErrors.Read(() => IssueReader.ReadCounts(path));
-        if (!counts.TryGetValue(checkId, out var total))
+        var page = EngineErrors.Read(() => IssueReader.ReadIssuePage(path, checkId, limit, offset)) ?? throw Problems.NotAnalyzed();
+        if (page.Total is not { } total)
         {
             return IssueCatalog.Find(checkId) is null ? throw Problems.CheckNotFound(checkId) : new IssuesPageDto([], null);
         }
 
-        var rows = EngineErrors.Read(() => IssueReader.ReadIssues(path, checkId, limit, offset));
-        return new IssuesPageDto([.. rows.Select(row => new IssueRowDto(row.Url, row.Detail, row.RelatedUrl))], total);
+        return new IssuesPageDto([.. page.Rows.Select(row => new IssueRowDto(row.Url, row.Detail, row.RelatedUrl))], total);
     }
 
     private static int Number(IQueryCollection query, string name, int fallback, int min, int max, string message)

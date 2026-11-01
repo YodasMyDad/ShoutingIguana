@@ -1,35 +1,60 @@
-using System.Globalization;
 using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Crawling.Models;
-using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Storage.Models;
+using SQLitePCL;
 
 namespace ShoutingIguana.Engine.Storage;
 
 /// <summary>
 /// The few numbers a list of crawls shows, cheap enough to read for every crawl in it: the crawl row, two counts and
 /// the last analysis. It never touches the links, which <see cref="CrawlStatsReader.Read"/> counts. Safe to run while
-/// the crawl is still writing.
+/// the crawl is still writing. A read can be given a time limit through its cancellation token: crawl files are shared,
+/// and one crafted to be slow to count must not hold up a list.
 /// </summary>
 public static class CrawlSummaryReader
 {
     /// <exception cref="InvalidOperationException">The file isn't a crawl, or was written with another schema.</exception>
-    public static CrawlFileSummary Read(string databasePath)
+    /// <exception cref="OperationCanceledException">The token was cancelled before the read finished; the query stops at once.</exception>
+    public static CrawlFileSummary Read(string databasePath, CancellationToken cancellationToken = default) =>
+        Read(databasePath, withCounts: true, cancellationToken);
+
+    /// <summary>
+    /// The summary without its counts, which take a pass over every response: for a crawl that is still running, whose
+    /// live progress has them, or when only its status and start URL are needed. Two lookups, however big the crawl.
+    /// </summary>
+    /// <inheritdoc cref="Read(string, CancellationToken)"/>
+    public static CrawlFileSummary ReadWithoutCounts(string databasePath, CancellationToken cancellationToken = default) =>
+        Read(databasePath, withCounts: false, cancellationToken);
+
+    private static CrawlFileSummary Read(string databasePath, bool withCounts, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         using var connection = CrawlDatabase.OpenReader(databasePath);
-        var summary = ReadCrawlRow(connection);
-        var analyzedAt = AnalyzedAt(connection);
-        return summary with
+
+        // Declared after the connection, so it is disposed first: an interrupt never reaches a closed connection.
+        using var interrupt = cancellationToken.Register(() => raw.sqlite3_interrupt(connection.Handle!));
+        try
         {
-            FetchedUrlCount = Count(connection, "SELECT COUNT(*) FROM responses"),
-            PageCount = Count(connection, $"""
-                SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id
-                WHERE u.is_internal = 1 AND r.is_html = 1 AND r.outcome = {(int)FetchOutcome.Success} AND r.word_count IS NOT NULL
-                """),
-            AnalyzedAt = analyzedAt,
-            FlaggedChecks = analyzedAt is null ? null : FlaggedChecks(connection)
-        };
+            var summary = ReadCrawlRow(connection);
+            cancellationToken.ThrowIfCancellationRequested();
+            var analyzedAt = AnalyzedAt(connection);
+            cancellationToken.ThrowIfCancellationRequested();
+            var flagged = analyzedAt is null ? null : FlaggedChecks(connection);
+            cancellationToken.ThrowIfCancellationRequested();
+            var (fetched, pages) = withCounts ? Counts(connection) : (null, null);
+            return summary with
+            {
+                FetchedUrlCount = fetched,
+                PageCount = pages,
+                AnalyzedAt = analyzedAt,
+                FlaggedChecks = flagged
+            };
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == raw.SQLITE_INTERRUPT && cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException("Reading the crawl's summary took too long.", exception, cancellationToken);
+        }
     }
 
     private static CrawlFileSummary ReadCrawlRow(SqliteConnection connection)
@@ -48,6 +73,18 @@ public static class CrawlSummaryReader
                 EngineVersion = crawl.GetString(5)
             }
             : throw new InvalidOperationException("This file is not a crawl database.");
+    }
+
+    /// <summary>The URLs fetched and the pages among them, in one pass over the responses.</summary>
+    private static (long? Fetched, long? Pages) Counts(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT COUNT(*), COALESCE(SUM({CrawlSchema.PAGE}), 0)
+            FROM responses r LEFT JOIN urls u ON u.id = r.url_id
+            """;
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? (reader.GetInt64(0), reader.GetInt64(1)) : (0, 0);
     }
 
     /// <summary>A first analysis that was cancelled or failed leaves its tables behind without a row.</summary>
@@ -74,7 +111,4 @@ public static class CrawlSummaryReader
 
         return checks;
     }
-
-    private static long Count(SqliteConnection connection, string sql) =>
-        Convert.ToInt64(CrawlDatabase.Scalar(connection, sql) ?? 0L, CultureInfo.InvariantCulture);
 }

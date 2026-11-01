@@ -9,7 +9,7 @@ namespace ShoutingIguana.Sidecar.Tests.Support;
 /// <summary>A sidecar hosted in-process on a free port, with its own data and state folders under a temporary root.</summary>
 internal sealed class TestSidecar : IAsyncDisposable
 {
-    public const string TOKEN = "test-token-0123456789abcdef";
+    public const string TOKEN = "test-token-0123456789abcdef0123456789abcdef";
     public const string ORIGIN = "http://tauri.localhost";
 
     private readonly bool _ownsRoot;
@@ -96,7 +96,10 @@ internal sealed class TestSidecar : IAsyncDisposable
         }
     }
 
-    /// <summary>Deletes a root, retrying while a file is still closing.</summary>
+    /// <summary>
+    /// Deletes a root, retrying while a file is still closing. Windows refuses a file another handle still holds with a
+    /// sharing violation, and one that is being deleted with access denied.
+    /// </summary>
     public static void DeleteRoot(string root)
     {
         for (var attempt = 0; Directory.Exists(root); attempt++)
@@ -105,7 +108,7 @@ internal sealed class TestSidecar : IAsyncDisposable
             {
                 Directory.Delete(root, recursive: true);
             }
-            catch (IOException) when (attempt < 20)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException && attempt < 20)
             {
                 Thread.Sleep(100);
             }

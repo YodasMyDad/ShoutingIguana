@@ -24,13 +24,17 @@ public sealed record CrawlFileSummary
     public required string EngineVersion { get; init; }
 
     /// <summary>
-    /// URLs the crawl requested, whatever the answer, as <see cref="Crawling.Models.CrawlProgress.Fetched"/> counts them.
-    /// URLs it only found (a nofollow link, past a limit) aren't among them.
+    /// URLs with a stored outcome, whatever it was, as <see cref="Crawling.Models.CrawlProgress.Fetched"/> counts them:
+    /// those the crawl requested, and those robots.txt kept it from requesting, which are stored as disallowed. URLs it
+    /// only found (a nofollow link, past a limit) aren't among them. Null when read without counts.
     /// </summary>
-    public long FetchedUrlCount { get; init; }
+    public long? FetchedUrlCount { get; init; }
 
-    /// <summary>Internal HTML pages fetched successfully, as <see cref="CrawlStats.HtmlPageCount"/> counts them.</summary>
-    public long PageCount { get; init; }
+    /// <summary>
+    /// Internal HTML pages fetched and parsed, as <see cref="CrawlStats.HtmlPageCount"/> and a crawl's live progress count
+    /// them: a URL that was only status-checked isn't one. Null when read without counts.
+    /// </summary>
+    public long? PageCount { get; init; }
 
     /// <summary>When the last analysis ran, or null when the crawl has never been analysed.</summary>
     public DateTimeOffset? AnalyzedAt { get; init; }

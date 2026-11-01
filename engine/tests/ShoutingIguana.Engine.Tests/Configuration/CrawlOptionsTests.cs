@@ -37,6 +37,31 @@ public sealed class CrawlOptionsTests
     public void RejectsAMissingValueFromDeserializedOptions() =>
         Assert.Equal(["Header 'X-Token' is not valid."], WithHeader("X-Token", null!).Validate());
 
+    /// <summary>
+    /// A user name or password in the start URL or a sitemap is refused: the crawler never sends it, and the URL is
+    /// stored, listed and logged as it is, so it would leak. The message never repeats the password back.
+    /// </summary>
+    [Fact]
+    public void RejectsCredentialsInTheStartUrlOrSitemaps()
+    {
+        var start = new CrawlOptions { StartUrl = "https://user:pa55word@example.com/" }.ValidateFields();
+        Assert.Single(start["startUrl"]);
+        Assert.Contains("user name or password", start["startUrl"][0]);
+        Assert.Contains("Authorization header", start["startUrl"][0]);
+        Assert.DoesNotContain("pa55word", start["startUrl"][0]);
+
+        var sitemap = new CrawlOptions
+        {
+            StartUrl = "https://example.com/",
+            ExtraSitemaps = ["https://user:pa55word@example.com/sitemap.xml"]
+        }.ValidateFields();
+        Assert.Contains("user name or password", Assert.Single(sitemap["extraSitemaps"]));
+        Assert.DoesNotContain("pa55word", sitemap["extraSitemaps"][0]);
+
+        // A proxy may carry credentials, so it is left alone.
+        Assert.Empty(new CrawlOptions { StartUrl = "https://example.com/", ProxyUrl = "http://user:pw@proxy:8080/" }.Validate());
+    }
+
     [Theory]
     [InlineData("X-Api-Key", "s3cret")]
     [InlineData("Accept-Language", "de-DE,de;q=0.9")]
@@ -102,8 +127,26 @@ public sealed class CrawlOptionsTests
             ["extraSitemaps"] = ["Sitemap 'sitemap.xml' is not an absolute http or https URL."]
         }, fields);
 
-        // The CLI's list is the same messages in the same order, and every key is a property as JSON spells it.
-        Assert.Equal(fields.SelectMany(field => field.Value), options.Validate());
+        // The CLI's flat list is the same messages, in the order the checks run: an explicit list, so a reordering is
+        // caught here and not only in the grouped form above (both come from the same source).
+        Assert.Equal(
+        [
+            "Start URL must be an absolute http or https URL.",
+            "Max URLs cannot be negative.",
+            "Max depth cannot be negative.",
+            "Concurrency must be between 1 and 100.",
+            "External concurrency must be between 1 and 50.",
+            "Max requests per second cannot be negative.",
+            "A custom user agent needs a value.",
+            "Accept-Language must be printable ASCII on one line.",
+            "Request timeout must be between 1 and 300 seconds.",
+            "Max retries must be between 0 and 10.",
+            "Max HTML size must be between 64 KB and 100 MB.",
+            "Proxy must be an absolute URL.",
+            "Header 'Bad Name' is not valid.",
+            "Header 'Host' is set by the crawler's HTTP client and can't be overridden.",
+            "Sitemap 'sitemap.xml' is not an absolute http or https URL."
+        ], options.Validate());
         var properties = typeof(CrawlOptions).GetProperties().Select(property => JsonNamingPolicy.CamelCase.ConvertName(property.Name)).ToList();
         Assert.All(fields.Keys, field => Assert.Contains(field, properties));
         Assert.Empty(new CrawlOptions { StartUrl = "https://example.com/" }.ValidateFields());

@@ -9,7 +9,8 @@ namespace ShoutingIguana.Sidecar.Library;
 /// <summary>
 /// Which crawls the library lists: the crawl files at the top of the data folder, plus files opened from elsewhere,
 /// minus those removed from the library (not from disk). What it adds and removes is kept in <c>library.json</c> in
-/// the state folder; the crawl files themselves are never written here.
+/// the state folder; the crawl files themselves are never written here. A change counts once it is saved: one that
+/// can't be saved is refused, and the library stays as it was.
 /// </summary>
 internal sealed class CrawlLibrary
 {
@@ -28,11 +29,16 @@ internal sealed class CrawlLibrary
     private readonly string _dataDirectory;
     private readonly string _file;
     private readonly ILogger<CrawlLibrary> _logger;
-    private readonly Dictionary<string, OpenedCrawl> _opened = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _removed = new(StringComparer.Ordinal);
+
+    // Replaced, never changed in place, and only once the change is saved.
+    private Dictionary<string, OpenedCrawl> _opened = new(StringComparer.Ordinal);
+    private Dictionary<string, string> _removed = new(StringComparer.Ordinal);
 
     // Every crawl path seen, by id, removed ones included: they can still be restored or deleted.
     private readonly Dictionary<string, string> _known = new(StringComparer.Ordinal);
+
+    // Each path's id, worked out once: it follows links, which takes a look at every folder along the path.
+    private readonly Dictionary<string, string> _ids = new(CrawlIds.PATHS);
 
     public CrawlLibrary(SidecarOptions options, ILogger<CrawlLibrary> logger)
     {
@@ -44,6 +50,21 @@ internal sealed class CrawlLibrary
 
     public static bool IsCrawlFileName(string path) => path.EndsWith(EXTENSION, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>A crawl file's id (<see cref="CrawlIds.For"/>).</summary>
+    public string IdOf(string path)
+    {
+        lock (_sync)
+        {
+            if (!_ids.TryGetValue(path, out var id))
+            {
+                id = CrawlIds.For(path);
+                _ids[path] = id;
+            }
+
+            return id;
+        }
+    }
+
     /// <summary>The crawls in the library, by id: the data folder's first, then those opened from elsewhere.</summary>
     public IReadOnlyList<(string Id, string Path)> List()
     {
@@ -54,7 +75,7 @@ internal sealed class CrawlLibrary
             List<(string Id, string Path)> crawls = [];
             foreach (var path in scanned.Concat(_opened.Values.Select(opened => opened.Path)))
             {
-                var id = CrawlIds.For(path);
+                var id = IdOf(path);
                 _known.TryAdd(id, path);
                 if (!_removed.ContainsKey(id) && listed.Add(id))
                 {
@@ -111,66 +132,89 @@ internal sealed class CrawlLibrary
     }
 
     /// <summary>Adds a crawl file the user opened, or brings one back that was removed.</summary>
+    /// <exception cref="ProblemException">file-error: the library couldn't be saved, so nothing changed.</exception>
     public string Add(string path, string startUrl)
     {
-        var id = CrawlIds.For(path);
+        var id = IdOf(path);
         lock (_sync)
         {
-            _known[id] = path;
-            var changed = _removed.Remove(id);
-            if (!IsInDataFolder(path))
+            Commit((opened, removed) =>
             {
-                _opened[id] = new OpenedCrawl(path, startUrl);
-                changed = true;
-            }
+                var changed = removed.Remove(id);
+                if (!IsInDataFolder(path))
+                {
+                    opened[id] = new OpenedCrawl(path, startUrl);
+                    changed = true;
+                }
 
-            if (changed)
-            {
-                Save();
-            }
+                return changed;
+            });
+            _known[id] = path;
         }
 
         return id;
     }
 
     /// <summary>Takes a crawl out of the library. The file stays where it is, and <see cref="Restore"/> brings it back.</summary>
+    /// <exception cref="ProblemException">file-error: the library couldn't be saved, so nothing changed.</exception>
     public void Remove(string id)
     {
         lock (_sync)
         {
-            if (_known.TryGetValue(id, out var path) && _removed.TryAdd(id, path))
+            if (_known.TryGetValue(id, out var path))
             {
-                Save();
+                Commit((_, removed) => removed.TryAdd(id, path));
             }
         }
     }
 
+    /// <exception cref="ProblemException">file-error: the library couldn't be saved, so nothing changed.</exception>
     public void Restore(string id)
     {
         lock (_sync)
         {
-            if (_removed.Remove(id))
-            {
-                Save();
-            }
+            Commit((_, removed) => removed.Remove(id));
         }
     }
 
     /// <summary>Forgets a crawl whose file was deleted.</summary>
+    /// <exception cref="ProblemException">file-error: the library couldn't be saved; the crawl is listed as missing.</exception>
     public void Forget(string id)
     {
         lock (_sync)
         {
             _known.Remove(id);
-            if (_opened.Remove(id) | _removed.Remove(id))
-            {
-                Save();
-            }
+            Commit((opened, removed) => opened.Remove(id) | removed.Remove(id));
         }
     }
 
     private bool IsInDataFolder(string path) =>
         CrawlIds.PATHS.Equals(Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(path) ?? string.Empty), _dataDirectory);
+
+    /// <summary>
+    /// Makes a change to copies of what is saved and saves them; only then do they replace what the library holds. A
+    /// change that doesn't change anything isn't saved.
+    /// </summary>
+    private void Commit(Func<Dictionary<string, OpenedCrawl>, Dictionary<string, string>, bool> change)
+    {
+        Dictionary<string, OpenedCrawl> opened = new(_opened, StringComparer.Ordinal);
+        Dictionary<string, string> removed = new(_removed, StringComparer.Ordinal);
+        if (!change(opened, removed))
+        {
+            return;
+        }
+
+        try
+        {
+            StateFile.Write(_file, JsonSerializer.Serialize(new LibraryFile([.. opened.Values], [.. removed.Values]), SidecarJsonContext.Default.LibraryFile));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw Problems.FileError("The library couldn't be saved.", exception.Message);
+        }
+
+        (_opened, _removed) = (opened, removed);
+    }
 
     private List<string> Scan()
     {
@@ -197,14 +241,14 @@ internal sealed class CrawlLibrary
             var library = JsonSerializer.Deserialize(File.ReadAllText(_file), SidecarJsonContext.Default.LibraryFile);
             foreach (var opened in library?.Opened ?? [])
             {
-                var id = CrawlIds.For(opened.Path);
+                var id = IdOf(opened.Path);
                 _opened[id] = opened;
                 _known[id] = opened.Path;
             }
 
             foreach (var path in library?.Removed ?? [])
             {
-                var id = CrawlIds.For(path);
+                var id = IdOf(path);
                 _removed[id] = path;
                 _known.TryAdd(id, path);
             }
@@ -213,23 +257,6 @@ internal sealed class CrawlLibrary
         {
             // The crawls themselves are untouched: the library starts again from the data folder.
             _logger.LogWarning(exception, "Could not read {LibraryFile}; starting with the data folder's crawls only", _file);
-        }
-    }
-
-    /// <summary>Written beside the file and moved over it, so a crash never leaves half a library.</summary>
-    private void Save()
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(_file)!);
-            var temporary = _file + ".tmp";
-            File.WriteAllText(temporary, JsonSerializer.Serialize(new LibraryFile([.. _opened.Values], [.. _removed.Values]),
-                SidecarJsonContext.Default.LibraryFile));
-            File.Move(temporary, _file, overwrite: true);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            throw Problems.FileError("The library couldn't be saved.", exception.Message);
         }
     }
 }

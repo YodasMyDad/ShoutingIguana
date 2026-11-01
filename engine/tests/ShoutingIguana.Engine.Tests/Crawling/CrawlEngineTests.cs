@@ -294,6 +294,54 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// A snapshot read of the analysis sees one analysis whole, even if another finishes between its parts: the analysis
+    /// row, its counts and its notes come from one consistent view. Forced by changing a count from another connection
+    /// just after the read has begun; the read must still return the counts as they were when it started.
+    /// </summary>
+    [Fact]
+    public async Task AnAnalysisIsReadAsOneConsistentSnapshot()
+    {
+        var path = NewDatabasePath();
+        await CrawlAsync(Options() with { MaxUrls = 60 }, path);
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+
+        var before = IssueReader.ReadCounts(path);
+        var bumped = before.First(count => count.Value > 0).Key;
+
+        // Keep the file in WAL mode so a writer and the snapshot read can run at once (the analysis folds it back to a
+        // rollback journal when it closes, and there a reader and writer can't coexist).
+        using var keepWal = CrawlDatabase.OpenWriter(path);
+
+        var acted = 0;
+        IssueReader.SnapshotTaken = _ =>
+        {
+            // Once the read has pinned its snapshot (it has read the analysis row), another connection changes a count.
+            if (Interlocked.Exchange(ref acted, 1) == 1)
+            {
+                return;
+            }
+
+            using var writer = CrawlDatabase.OpenWriter(path);
+            CrawlDatabase.Execute(writer, $"UPDATE issue_types SET url_count = url_count + 1000 WHERE id = '{bumped}'");
+        };
+
+        try
+        {
+            var results = IssueReader.ReadResults(path)!;
+
+            // The snapshot read returns the counts as they were when it began, not the change made part-way through.
+            Assert.Equal(before[bumped], results.Counts[bumped]);
+        }
+        finally
+        {
+            IssueReader.SnapshotTaken = null;
+        }
+
+        // The change did land, so a fresh read sees it: the snapshot isolated the read, it didn't lose the write.
+        Assert.Equal(before[bumped] + 1000, IssueReader.ReadCounts(path)[bumped]);
+    }
+
+    /// <summary>
     /// Cancels a re-analysis with stricter settings at a range of moments. Whenever it's cancelled, the file must still
     /// hold the complete previous results: never a mix, never nothing.
     /// </summary>

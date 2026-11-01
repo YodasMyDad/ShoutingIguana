@@ -31,7 +31,14 @@ internal static class SidecarLogging
                 console.SingleLine = true;
                 console.TimestampFormat = "HH:mm:ss ";
             });
-            logging.Services.Configure<ConsoleLoggerOptions>(console => console.LogToStandardErrorThreshold = LogLevel.Trace);
+            logging.Services.Configure<ConsoleLoggerOptions>(console =>
+            {
+                console.LogToStandardErrorThreshold = LogLevel.Trace;
+
+                // A shell that stops reading stderr must not block whoever logs: past the queue, lines are dropped
+                // from stderr only. The file log still gets every one.
+                console.QueueFullMode = ConsoleLoggerQueueFullMode.DropWrite;
+            });
         }
 
         if (options.FileLogging)

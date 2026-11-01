@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
@@ -19,7 +20,9 @@ namespace ShoutingIguana.Sidecar.Crawls;
 /// <summary>
 /// The crawls and analyses this process runs, and the library's view of every crawl. A crawl file has one writer at a
 /// time: a crawl here, an analysis here, or something in another process (its lock says so). Every change of status
-/// is published as a <c>crawl</c> event, and every change to what the library lists as a <c>library</c> event.
+/// is published as a <c>crawl</c> event, and every change to what the library lists as a <c>library</c> event. A crawl's
+/// events are published under the same lock as the change they announce, so streams hear of the changes in the order
+/// they happened.
 /// </summary>
 internal sealed class CrawlManager(
     SidecarOptions options,
@@ -33,12 +36,19 @@ internal sealed class CrawlManager(
     private const string ANALYSING_HERE = "This crawl is being analysed. Wait for that to finish, or cancel it.";
     private const string IN_USE_ELSEWHERE = "Another program is writing to this crawl. Try again once it has finished.";
     private const string SHUTTING_DOWN = "The engine is shutting down.";
+    private const string NETWORK_PATH = "Crawls on another computer can't be opened. Copy the crawl to this computer first.";
 
     private readonly Lock _sync = new();
     private readonly Dictionary<string, LiveCrawl> _crawls = new(StringComparer.Ordinal);
     private readonly CrawlEngine _engine = new(loggerFactory);
     private readonly ILogger<CrawlManager> _logger = loggerFactory.CreateLogger<CrawlManager>();
     private bool _stopping;
+
+    /// <summary>Tests only: sees each crawl and progress event just before it is published, under the manager's lock.</summary>
+    internal Action<object>? Publishing { get; set; }
+
+    /// <summary>Tests only: starts a crawl in place of the engine.</summary>
+    internal Func<CrawlRequest, ICrawlObserver, CrawlJob>? StartJob { get; set; }
 
     /// <summary>Every crawl in the library, newest first.</summary>
     public IReadOnlyList<CrawlListItem> List()
@@ -51,19 +61,23 @@ internal sealed class CrawlManager(
             crawls.AddRange([.. _crawls.Values.Where(live => !listed.Contains(live.Id)).Select(live => (live.Id, live.Path))]);
         }
 
-        return
+        List<CrawlListItem> items =
         [
             .. crawls.Select(crawl => Item(crawl.Id, crawl.Path))
                 .OfType<CrawlListItem>()
                 .OrderByDescending(item => item.StartedAt ?? DateTime.MinValue)
                 .ThenBy(item => item.Path, StringComparer.Ordinal)
         ];
+        summaries.Save();
+        return items;
     }
 
     public CrawlListItem Get(string id)
     {
         var path = PathOf(id);
-        return Item(id, path) ?? throw EngineErrors.ForRead(summaries.Get(id, path).Error ?? new InvalidOperationException(EngineErrors.NOT_A_CRAWL));
+        var item = Item(id, path) ?? throw EngineErrors.ForRead(summaries.Get(id, path).Error ?? new InvalidOperationException(EngineErrors.NOT_A_CRAWL));
+        summaries.Save();
+        return item;
     }
 
     /// <summary>The file of a crawl the library knows, live ones included.</summary>
@@ -85,11 +99,21 @@ internal sealed class CrawlManager(
         return library.Find(id) ?? throw Problems.CrawlNotFound();
     }
 
+    /// <summary>
+    /// Adds a crawl file from anywhere on this computer, once it is checked to be a crawl. It is read afresh, so a file
+    /// that couldn't be read before (another program had it locked) is tried again.
+    /// </summary>
     public CrawlListItem Open(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
         {
             throw Problems.BadRequest("Give the full path of a .sicrawl file.");
+        }
+
+        // Before anything touches the path: looking at a file on another computer authenticates to it.
+        if (CrawlPaths.IsUncOrDevicePath(path))
+        {
+            throw Problems.FileError(NETWORK_PATH);
         }
 
         if (!CrawlLibrary.IsCrawlFileName(path))
@@ -98,13 +122,25 @@ internal sealed class CrawlManager(
         }
 
         var fullPath = Path.GetFullPath(path);
+        if (CrawlPaths.IsNetworkPath(CrawlPaths.Resolve(fullPath)))
+        {
+            throw Problems.FileError(NETWORK_PATH);
+        }
+
         if (!File.Exists(fullPath))
         {
             throw Problems.FileError($"There's no crawl file at {fullPath}.");
         }
 
-        var summary = EngineErrors.Read(() => CrawlSummaryReader.Read(fullPath));
-        var id = library.Add(fullPath, summary.StartUrl);
+        var id = library.IdOf(fullPath);
+        summaries.Invalidate(id);
+        var cached = summaries.Get(id, fullPath);
+        if (cached.Summary is not { } summary)
+        {
+            throw EngineErrors.ForRead(cached.Error ?? new InvalidOperationException(EngineErrors.NOT_A_CRAWL));
+        }
+
+        library.Add(fullPath, summary.StartUrl);
         events.PublishLibrary();
         return Get(id);
     }
@@ -117,9 +153,8 @@ internal sealed class CrawlManager(
         {
             ThrowIfLive(id);
             library.Remove(id);
+            events.PublishLibrary();
         }
-
-        events.PublishLibrary();
     }
 
     public CrawlListItem Restore(string id)
@@ -131,8 +166,8 @@ internal sealed class CrawlManager(
     }
 
     /// <summary>
-    /// Deletes the crawl file with its write-ahead log, shared memory and lock files. The log goes first: a log left
-    /// beside a new file of the same name would be read into it.
+    /// Deletes the crawl file with what SQLite keeps beside it, through the engine, which holds the crawl's lock while it
+    /// does: nothing can start writing to it meanwhile, here or elsewhere.
     /// </summary>
     public void DeleteFile(string id)
     {
@@ -140,30 +175,32 @@ internal sealed class CrawlManager(
         lock (_sync)
         {
             ThrowIfLive(id);
-            if (IsInUse(path))
-            {
-                throw Problems.CrawlBusy(IN_USE_ELSEWHERE);
-            }
-
             try
             {
-                foreach (var file in new[] { path + "-wal", path + "-shm", path, path + "-lock" })
-                {
-                    File.Delete(file);
-                }
+                CrawlDatabase.Delete(path);
+            }
+            catch (CrawlFileInUseException)
+            {
+                throw Problems.CrawlBusy(IN_USE_ELSEWHERE);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
                 throw Problems.FileError("The crawl file couldn't be deleted. It may be open in another program.", exception.Message);
             }
 
-            library.Forget(id);
-            summaries.Invalidate(id);
-            alerts.Forget(id);
+            _logger.LogInformation("Deleted the crawl file {Path}", path);
+            try
+            {
+                library.Forget(id);
+            }
+            finally
+            {
+                // The file has gone whether or not the library could be saved.
+                summaries.Invalidate(id);
+                alerts.Forget(id);
+                events.PublishLibrary();
+            }
         }
-
-        _logger.LogInformation("Deleted the crawl file {Path}", path);
-        events.PublishLibrary();
     }
 
     /// <summary>Creates <c>host-yyyyMMdd-HHmmss.sicrawl</c> in the data folder and starts crawling into it.</summary>
@@ -190,7 +227,7 @@ internal sealed class CrawlManager(
         {
             ThrowIfStopping();
             var path = FreePath(CrawlDatabase.DefaultDatabasePath(crawlOptions.StartUrl));
-            crawl = new LiveCrawl(CrawlIds.For(path), path, crawlOptions.StartUrl) { AnalyzeWhenDone = analyzeWhenDone };
+            crawl = new LiveCrawl(library.IdOf(path), path, crawlOptions.StartUrl) { AnalyzeWhenDone = analyzeWhenDone };
             _crawls[crawl.Id] = crawl;
             library.Created(crawl.Id, path);
             crawl.Lifetime = Task.Run(() => RunAsync(crawl, new CrawlRequest(crawlOptions, path)));
@@ -265,7 +302,7 @@ internal sealed class CrawlManager(
 
     public void Resume(string id) => SetPaused(id, paused: false);
 
-    /// <summary>Stops a live crawl once its in-flight requests settle. Its file stays resumable.</summary>
+    /// <summary>Stops a live crawl: its requests are cancelled and its file closed. The file stays resumable.</summary>
     public void Stop(string id)
     {
         PathOf(id);
@@ -285,9 +322,8 @@ internal sealed class CrawlManager(
             crawl.State = LiveCrawlState.Stopping;
             crawl.StopRequested = true;
             job = crawl.Job;
+            PublishCrawl(new CrawlEventDto(id, CrawlListStatus.Stopping), crawlEnded: false);
         }
-
-        events.PublishCrawl(new CrawlEventDto(id, CrawlListStatus.Stopping), crawlEnded: false);
 
         // A crawl still opening its file is stopped as soon as it is open.
         _ = job?.StopAsync();
@@ -313,8 +349,9 @@ internal sealed class CrawlManager(
             throw Problems.FileError($"The crawl file {path} isn't there any more.");
         }
 
-        // The engine checks this again once it holds the file: these say why in the UI's words, before a 202.
-        var summary = EngineErrors.Read(() => CrawlSummaryReader.Read(path));
+        // The engine checks this again once it holds the file: these say why in the UI's words, before a 202. Only the
+        // status and start URL are needed, which take two lookups however big the crawl.
+        var summary = EngineErrors.Read(() => CrawlSummaryReader.ReadWithoutCounts(path));
         var inUse = IsInUse(path);
         if (summary.Status is CrawlStatus.Running or CrawlStatus.Paused)
         {
@@ -335,6 +372,7 @@ internal sealed class CrawlManager(
             ThrowIfLive(id);
             var crawl = new LiveCrawl(id, path, summary.StartUrl) { State = LiveCrawlState.Analyzing, Analysis = new CancellationTokenSource() };
             _crawls[id] = crawl;
+            PublishCrawl(new CrawlEventDto(id, CrawlListStatus.Analyzing), crawlEnded: false);
             crawl.Lifetime = Task.Run(async () =>
             {
                 try
@@ -427,23 +465,10 @@ internal sealed class CrawlManager(
 
     internal void OnProgress(LiveCrawl crawl, CrawlProgress progress)
     {
-        CrawlListStatus status;
         lock (_sync)
         {
-            // Progress that arrives once the crawl has ended here (a pause racing its end) would bring it back to life
-            // for streams that connect later.
-            if (!_crawls.TryGetValue(crawl.Id, out var live) || !ReferenceEquals(live, crawl) || crawl.State is LiveCrawlState.Analyzing)
-            {
-                return;
-            }
-
-            crawl.Progress = progress;
-            status = crawl.State is LiveCrawlState.Stopping && progress.Status is CrawlStatus.Running or CrawlStatus.Paused
-                ? CrawlListStatus.Stopping
-                : StatusOf(progress.Status);
+            PublishProgress(crawl, progress);
         }
-
-        events.PublishProgress(ProgressEventDto.From(crawl.Id, status, progress));
     }
 
     internal void OnNotice(LiveCrawl crawl, CrawlNotice notice)
@@ -459,16 +484,14 @@ internal sealed class CrawlManager(
         CrawlJob job;
         try
         {
-            job = _engine.Start(request, new SidecarCrawlObserver(this, crawl));
+            job = (StartJob ?? _engine.Start)(request, new SidecarCrawlObserver(this, crawl));
         }
         catch (Exception exception)
         {
-            lock (_sync)
-            {
-                _crawls.Remove(crawl.Id);
-            }
-
-            crawl.Started.SetException(StartProblem(exception, request));
+            // A stop may have been announced while the file was opening: whoever heard it hears how it ended too.
+            var problem = StartProblem(exception, request);
+            End(crawl, problem.Problem.Title);
+            crawl.Started.SetException(problem);
             return;
         }
 
@@ -482,10 +505,7 @@ internal sealed class CrawlManager(
             // waiting for the crawl to start hears of it.
             _logger.LogError(exception, "Following the crawl of {Path} failed", crawl.Path);
             crawl.Started.TrySetException(new ProblemException(Problems.Internal(exception), exception));
-            lock (_sync)
-            {
-                _crawls.Remove(crawl.Id);
-            }
+            End(crawl, $"The crawl failed: {exception.Message}");
         }
     }
 
@@ -497,12 +517,12 @@ internal sealed class CrawlManager(
             crawl.Job = job;
             stopNow = crawl.StopRequested;
             crawl.State = stopNow ? LiveCrawlState.Stopping : LiveCrawlState.Running;
+            crawl.Started.TrySetResult();
+            PublishCrawl(new CrawlEventDto(crawl.Id, stopNow ? CrawlListStatus.Stopping : CrawlListStatus.Running), crawlEnded: false);
+            PublishProgress(crawl, job.Progress);
         }
 
         _logger.LogInformation("{Action} {StartUrl} into {Path}", request.Resume ? "Continuing" : "Crawling", crawl.StartUrl, crawl.Path);
-        crawl.Started.TrySetResult();
-        events.PublishCrawl(new CrawlEventDto(crawl.Id, stopNow ? CrawlListStatus.Stopping : CrawlListStatus.Running), crawlEnded: false);
-        OnProgress(crawl, job.Progress);
         if (stopNow)
         {
             _ = job.StopAsync();
@@ -529,10 +549,13 @@ internal sealed class CrawlManager(
         {
             analyse = summary.Status is CrawlStatus.Completed && crawl.AnalyzeWhenDone && !_stopping;
             crawl.Job = null;
+            PublishCrawl(new CrawlEventDto(crawl.Id, StatusOf(summary.Status), summary.Error), crawlEnded: true);
+            events.PublishLibrary();
             if (analyse)
             {
                 crawl.State = LiveCrawlState.Analyzing;
                 crawl.Analysis = new CancellationTokenSource();
+                PublishCrawl(new CrawlEventDto(crawl.Id, CrawlListStatus.Analyzing), crawlEnded: false);
             }
             else
             {
@@ -541,8 +564,6 @@ internal sealed class CrawlManager(
         }
 
         _logger.LogInformation("The crawl of {Path} {Status}: {Fetched} URLs fetched", crawl.Path, summary.Status, summary.Progress.Fetched);
-        events.PublishCrawl(new CrawlEventDto(crawl.Id, StatusOf(summary.Status), summary.Error), crawlEnded: true);
-        events.PublishLibrary();
         if (analyse)
         {
             await AnalyzeAsync(crawl).ConfigureAwait(false);
@@ -555,7 +576,6 @@ internal sealed class CrawlManager(
         string? error = null;
         try
         {
-            events.PublishCrawl(new CrawlEventDto(crawl.Id, CrawlListStatus.Analyzing), crawlEnded: false);
             var summary = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(crawl.Path, cancellationToken: cancellation.Token).ConfigureAwait(false);
             _logger.LogInformation("Analysed {Pages} pages of {Path} in {Duration}", summary.PagesAnalyzed, crawl.Path, summary.Duration);
         }
@@ -573,30 +593,37 @@ internal sealed class CrawlManager(
             _logger.LogError(exception, "The analysis of {Path} failed", crawl.Path);
             error = $"The analysis failed: {exception.Message}";
         }
-        finally
+
+        // Back to what the file says (completed, or stopped), with the new results.
+        End(crawl, error);
+    }
+
+    /// <summary>
+    /// The crawl is no longer live here: announced with what its file says now, then the library changes. The file is
+    /// read first, outside the lock; the crawl leaves the live ones and its events go out together, under it.
+    /// </summary>
+    private void End(LiveCrawl crawl, string? error)
+    {
+        summaries.Invalidate(crawl.Id);
+        var status = FileStatus(crawl.Id, crawl.Path);
+        lock (_sync)
         {
-            lock (_sync)
+            if (_crawls.TryGetValue(crawl.Id, out var live) && ReferenceEquals(live, crawl))
             {
                 _crawls.Remove(crawl.Id);
             }
 
-            summaries.Invalidate(crawl.Id);
+            PublishCrawl(new CrawlEventDto(crawl.Id, status, error), crawlEnded: true);
+            events.PublishLibrary();
         }
-
-        // Back to what the file says (completed, or stopped), with the new results.
-        var status = Item(crawl.Id, crawl.Path)?.Status ?? CrawlListStatus.Completed;
-        events.PublishCrawl(new CrawlEventDto(crawl.Id, status, error), crawlEnded: true);
-        events.PublishLibrary();
     }
 
     private void SetPaused(string id, bool paused)
     {
         PathOf(id);
-        LiveCrawl? crawl;
-        CrawlJob job;
         lock (_sync)
         {
-            if (!_crawls.TryGetValue(id, out crawl) || crawl is not { State: LiveCrawlState.Running or LiveCrawlState.Paused, Job: { } live })
+            if (!_crawls.TryGetValue(id, out var crawl) || crawl is not { State: LiveCrawlState.Running or LiveCrawlState.Paused, Job: { } job })
             {
                 throw Problems.CrawlBusy("This crawl isn't running here.");
             }
@@ -606,8 +633,8 @@ internal sealed class CrawlManager(
                 return;
             }
 
-            // Under the lock, so a pause and a resume arriving together leave the crawl as its state says.
-            job = live;
+            // Under the lock, so a pause and a resume arriving together leave the crawl as its state says, and their
+            // events go out in that order.
             crawl.State = paused ? LiveCrawlState.Paused : LiveCrawlState.Running;
             if (paused)
             {
@@ -617,15 +644,44 @@ internal sealed class CrawlManager(
             {
                 job.Resume();
             }
+
+            PublishCrawl(new CrawlEventDto(id, paused ? CrawlListStatus.Paused : CrawlListStatus.Running), crawlEnded: false);
+            PublishProgress(crawl, job.Progress);
+        }
+    }
+
+    /// <summary>Publishes a crawl event. Called under the lock, with the change it announces.</summary>
+    private void PublishCrawl(CrawlEventDto crawl, bool crawlEnded)
+    {
+        Debug.Assert(_sync.IsHeldByCurrentThread);
+        Publishing?.Invoke(crawl);
+        events.PublishCrawl(crawl, crawlEnded);
+    }
+
+    /// <summary>
+    /// Publishes a live crawl's progress. Called under the lock: progress that arrives once the crawl has ended here (a
+    /// pause racing its end) would bring it back to life for streams that connect later, so it is dropped.
+    /// </summary>
+    private void PublishProgress(LiveCrawl crawl, CrawlProgress progress)
+    {
+        Debug.Assert(_sync.IsHeldByCurrentThread);
+        if (!_crawls.TryGetValue(crawl.Id, out var live) || !ReferenceEquals(live, crawl) || crawl.State is LiveCrawlState.Analyzing)
+        {
+            return;
         }
 
-        events.PublishCrawl(new CrawlEventDto(id, paused ? CrawlListStatus.Paused : CrawlListStatus.Running), crawlEnded: false);
-        OnProgress(crawl, job.Progress);
+        crawl.Progress = progress;
+        var status = crawl.State is LiveCrawlState.Stopping && progress.Status is CrawlStatus.Running or CrawlStatus.Paused
+            ? CrawlListStatus.Stopping
+            : StatusOf(progress.Status);
+        var dto = ProgressEventDto.From(crawl.Id, status, progress);
+        Publishing?.Invoke(dto);
+        events.PublishProgress(dto);
     }
 
     /// <summary>
     /// The library's view of one crawl: live state from here, the rest from the file's cached summary. Null for a file
-    /// that isn't a crawl this engine can read.
+    /// that isn't a crawl this engine reads; a file that may be one but couldn't be read is listed as unreadable.
     /// </summary>
     private CrawlListItem? Item(string id, string path)
     {
@@ -635,13 +691,16 @@ internal sealed class CrawlManager(
             live = _crawls.TryGetValue(id, out var crawl) ? (crawl.State, crawl.Progress, crawl.StartUrl) : null;
         }
 
-        var cached = summaries.Get(id, path);
-        var summary = cached.Summary;
-        if (live is null && summary is null && cached.Exists)
+        var cached = live is { } state
+            ? summaries.GetWhileLive(id, path, analysing: state.State is LiveCrawlState.Analyzing)
+            : summaries.Get(id, path);
+        if (live is null && cached.IsNotACrawl)
         {
             return null;
         }
 
+        var summary = cached.Summary;
+        var unreadable = live is null && cached.IsUnreadable;
         var crawling = live is { State: not LiveCrawlState.Analyzing };
         var startUrl = summary?.StartUrl ?? live?.StartUrl ?? library.OpenedStartUrl(id);
         var analyzedAt = summary?.AnalyzedAt;
@@ -652,11 +711,12 @@ internal sealed class CrawlManager(
             FileName = Path.GetFileName(path),
             Site = SiteOf(startUrl),
             StartUrl = startUrl,
-            Status = live is { } state ? StatusOf(state.State) : StoredStatus(summary, cached.Exists, path),
+            Status = live is { } now ? StatusOf(now.State) : unreadable ? CrawlListStatus.Unreadable : StoredStatus(summary, cached.Exists, path),
+            Error = unreadable ? EngineErrors.UnreadableMessage(cached.Error!) : null,
             StartedAt = summary?.StartedAt.UtcDateTime,
             FinishedAt = crawling ? null : summary?.FinishedAt?.UtcDateTime,
             UpdatedAt = summary?.UpdatedAt.UtcDateTime,
-            UrlCount = (crawling ? live?.Progress?.Fetched : null) ?? summary?.FetchedUrlCount ?? 0,
+            FetchedUrlCount = (crawling ? live?.Progress?.Fetched : null) ?? summary?.FetchedUrlCount ?? 0,
             PageCount = (crawling ? live?.Progress?.HtmlPages : null) ?? summary?.PageCount ?? 0,
             Issues = summary?.FlaggedChecks is { } flagged
                 ? new IssueCountsDto(flagged.GetValueOrDefault(IssueSeverity.Error), flagged.GetValueOrDefault(IssueSeverity.Warning),
@@ -669,6 +729,13 @@ internal sealed class CrawlManager(
             // A crawl starting here may not have created its file yet.
             Missing = live is null && !cached.Exists
         };
+    }
+
+    /// <summary>What a crawl's file says it is, whatever this process is doing with it.</summary>
+    private CrawlListStatus FileStatus(string id, string path)
+    {
+        var cached = summaries.Get(id, path);
+        return cached.IsUnreadable ? CrawlListStatus.Unreadable : StoredStatus(cached.Summary, cached.Exists, path);
     }
 
     /// <summary>
@@ -699,7 +766,7 @@ internal sealed class CrawlManager(
         }
         catch (Exception exception) when (EngineErrors.IsExpected(exception))
         {
-            // A lock file this user can't open belongs to nobody who could be writing with us.
+            // A path the system can't use at all (too long) belongs to nobody who could be writing with us.
             return false;
         }
     }
@@ -764,8 +831,10 @@ internal sealed class CrawlManager(
     }
 
     /// <summary>
-    /// Why the engine couldn't open a crawl. The lock was free a moment ago, so a refusal now means another process took
-    /// the file in between; for a crawl being continued, anything else means the file isn't the crawl it was.
+    /// Why the engine couldn't open a crawl. The engine says when another crawl or analysis holds the file (the lock was
+    /// free a moment ago, so one took it in between); another program's SQLite lock is busy too. For a crawl being
+    /// continued, anything else means the file isn't the crawl it was; for a new one, another program made a file of that
+    /// name in the same second.
     /// </summary>
     private ProblemException StartProblem(Exception exception, CrawlRequest request)
     {
@@ -781,8 +850,11 @@ internal sealed class CrawlManager(
         }
 
         _logger.LogWarning("Could not open {Path}: {Error}", request.DatabasePath, exception.Message);
-        return exception is InvalidOperationException && (!request.Resume || IsInUse(request.DatabasePath))
-            ? Problems.CrawlBusy(exception.Message)
-            : EngineErrors.ForRead(exception);
+        return exception switch
+        {
+            CrawlFileInUseException => Problems.CrawlBusy(IN_USE_ELSEWHERE),
+            InvalidOperationException when !request.Resume => Problems.CrawlBusy(exception.Message),
+            _ => EngineErrors.ForRead(exception)
+        };
     }
 }

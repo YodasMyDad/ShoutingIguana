@@ -52,6 +52,10 @@ public sealed class SecurityTests : IAsyncLifetime
         }
 
         TestSidecar.AssertProblem(await _sidecar.SendAsync(HttpMethod.Get, "api/nothing-here"), HttpStatusCode.NotFound, "not-found");
+
+        // A path that looks like a file gets the same problem: the fallback catches every unmatched path, not only
+        // extension-less ones (the default pattern skips file-like paths, which would leave an empty 404).
+        TestSidecar.AssertProblem(await _sidecar.SendAsync(HttpMethod.Get, "api/foo.json"), HttpStatusCode.NotFound, "not-found");
     }
 
     [Theory]

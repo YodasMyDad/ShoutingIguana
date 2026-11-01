@@ -14,6 +14,7 @@ namespace ShoutingIguana.Sidecar.Tests;
 public sealed class LibraryTests : IAsyncLifetime
 {
     private readonly string _elsewhere = Path.Combine(Path.GetTempPath(), $"si-elsewhere-{Guid.NewGuid():N}");
+    private readonly string _root = TestSidecar.NewRoot();
     private SyntheticSiteServer _site = null!;
     private TestSidecar _sidecar = null!;
 
@@ -21,13 +22,14 @@ public sealed class LibraryTests : IAsyncLifetime
     {
         Directory.CreateDirectory(_elsewhere);
         _site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
-        _sidecar = await TestSidecar.StartAsync();
+        _sidecar = await TestSidecar.StartAsync(_root);
     }
 
     public async Task DisposeAsync()
     {
         await _sidecar.DisposeAsync();
         await _site.DisposeAsync();
+        TestSidecar.DeleteRoot(_root);
         TestSidecar.DeleteRoot(_elsewhere);
     }
 
@@ -49,7 +51,7 @@ public sealed class LibraryTests : IAsyncLifetime
         Assert.Equal("127.0.0.1", (string?)a["site"]);
         Assert.Equal(_site.BaseUri.AbsoluteUri, (string?)a["startUrl"]);
         Assert.Equal("completed", (string?)a["status"]);
-        Assert.Equal(stats.Outcomes.Values.Sum(), (long?)a["urlCount"]);
+        Assert.Equal(stats.Outcomes.Values.Sum(), (long?)a["fetchedUrlCount"]);
         Assert.Equal(stats.HtmlPageCount, (long?)a["pageCount"]);
         Assert.Equal(new FileInfo(inData).Length, (long?)a["sizeBytes"]);
         Assert.NotNull(a["startedAt"]);
@@ -138,7 +140,14 @@ public sealed class LibraryTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.NoContent, (await _sidecar.PostAsync($"api/crawls/{id}/delete-file")).Status);
 
-        Assert.All(new[] { path, path + "-wal", path + "-shm", path + "-lock" }, file => Assert.False(File.Exists(file), file));
+        // The crawl and what SQLite keeps beside it go. The lock file stays on Linux and macOS, where deleting it would
+        // revive the two-writers race; on Windows it is held delete-on-close, so it goes with the delete.
+        Assert.All(new[] { path, path + "-wal", path + "-shm" }, file => Assert.False(File.Exists(file), file));
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.False(File.Exists(path + "-lock"));
+        }
+
         Assert.Empty(await ListAsync());
         TestSidecar.AssertProblem(await _sidecar.SendAsync(HttpMethod.Get, $"api/crawls/{id}"), HttpStatusCode.NotFound, "crawl-not-found");
     }
@@ -215,6 +224,100 @@ public sealed class LibraryTests : IAsyncLifetime
         TestSidecar.AssertProblem(await _sidecar.PostAsync("api/crawls/open", new JsonObject()), HttpStatusCode.BadRequest, "bad-request");
         TestSidecar.AssertProblem(await _sidecar.PostAsync("api/crawls/open", JsonValue.Create("not an object")), HttpStatusCode.BadRequest, "bad-request");
         Assert.Empty(await ListAsync());
+    }
+
+    /// <summary>A path to another computer is refused before anything opens it: opening one would authenticate to it.</summary>
+    [Fact]
+    public async Task NetworkAndDevicePathsAreRefused()
+    {
+        TestSidecar.AssertProblem(await Open(@"\\server\share\crawl.sicrawl"), HttpStatusCode.BadRequest, "file-error");
+        TestSidecar.AssertProblem(await Open(@"\\?\UNC\server\share\crawl.sicrawl"), HttpStatusCode.BadRequest, "file-error");
+        TestSidecar.AssertProblem(await Open(@"\\.\pipe\crawl.sicrawl"), HttpStatusCode.BadRequest, "file-error");
+        var refused = TestSidecar.AssertProblem(await Open(@"\\nas\backups\crawl.sicrawl"), HttpStatusCode.BadRequest, "file-error");
+        Assert.Contains("another computer", (string?)refused["title"]);
+        Assert.Empty(await ListAsync());
+    }
+
+    /// <summary>
+    /// A momentary read error (another program's lock) isn't remembered until the file changes: the crawl is listed as
+    /// unreadable, not dropped and not hung, and shows up again once the lock is gone, without the file having changed.
+    /// Windows only: there a shared handle blocks SQLite; .NET's FileShare maps to a lock SQLite ignores on Unix.
+    /// </summary>
+    [Fact]
+    public async Task ATransientReadErrorIsNotCachedUntilTheFileChanges()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "locked.sicrawl"));
+        var id = CrawlIds.For(path);
+
+        using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            var item = (await ListAsync()).Single();
+            Assert.Equal(id, (string?)item["id"]);
+            Assert.Equal("unreadable", (string?)item["status"]);
+            Assert.False(string.IsNullOrEmpty((string?)item["error"]));
+        }
+
+        // Once the lock is gone it reads normally, without the file having had to change.
+        Assert.Equal("completed", (string?)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["status"]);
+    }
+
+    /// <summary>The summary cache is kept in the state folder, keyed by the file's stamp, so a new sidecar doesn't re-read every crawl.</summary>
+    [Fact]
+    public async Task SummariesAreKeptInTheStateFolderAcrossRestarts()
+    {
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "kept.sicrawl"), analyse: true);
+        var id = CrawlIds.For(path);
+        Assert.Equal("completed", (string?)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["status"]);
+        await _sidecar.DisposeAsync();
+
+        // Kept on disk, under this engine's version and this crawl's id.
+        var cache = await File.ReadAllTextAsync(Path.Combine(_root, "state", "summaries.json"));
+        Assert.Contains(id, cache);
+        Assert.Contains(Engine.EngineInfo.Version, cache);
+
+        // A fresh sidecar on the same folder shows the crawl at once; the stamp is unchanged, so the summary is reused.
+        _sidecar = await TestSidecar.StartAsync(_root);
+        var item = await _sidecar.GetJsonAsync($"api/crawls/{id}");
+        Assert.Equal("completed", (string?)item["status"]);
+        Assert.NotNull(item["analyzedAt"]);
+    }
+
+    /// <summary>
+    /// A library change takes effect only once it is saved: a save that fails leaves the library as it was, so a retry
+    /// really retries rather than returning success for a change that was never written.
+    /// </summary>
+    [Fact]
+    public async Task AChangeThatCantBeSavedIsNotKept()
+    {
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_elsewhere, "unsavable.sicrawl"));
+
+        // Make the library file unwritable by putting a directory where it belongs: the move over it fails.
+        var libraryFile = Path.Combine(_root, "state", "library.json");
+        if (File.Exists(libraryFile))
+        {
+            File.Delete(libraryFile);
+        }
+
+        Directory.CreateDirectory(libraryFile);
+        try
+        {
+            // Opening from elsewhere must save the library; the save fails, so the open fails and nothing is listed.
+            TestSidecar.AssertProblem(await Open(path), HttpStatusCode.BadRequest, "file-error");
+            Assert.Empty(await ListAsync());
+        }
+        finally
+        {
+            Directory.Delete(libraryFile);
+        }
+
+        // With the obstruction gone, opening the same crawl works and it is listed: the earlier failure left no trace.
+        Assert.Equal(HttpStatusCode.OK, (await Open(path)).Status);
+        Assert.Single(await ListAsync());
     }
 
     private Task<(HttpStatusCode Status, JsonNode? Body)> Open(string path) => _sidecar.PostAsync("api/crawls/open", new JsonObject { ["path"] = path });

@@ -19,6 +19,9 @@ internal sealed class SidecarSecurity(string token, IReadOnlyList<string> allowe
     /// <summary>
     /// A browser fills in the Host header from the address it was given, so a page that rebinds its own name to
     /// 127.0.0.1 still says its own name. Only the loopback names, on the port this connection came in on, are accepted.
+    /// The UI uses 127.0.0.1. <c>localhost</c> is accepted on purpose, for tools and people trying the API by hand: it
+    /// can't be a rebound name (browsers resolve it to the loopback address themselves, as RFC 6761 asks), and a page
+    /// that calls it is cross-origin, so its Origin is checked. <c>[::1]</c> isn't: the sidecar doesn't listen there.
     /// </summary>
     public static bool IsAllowedHost(HostString host, int localPort) =>
         host.Port == localPort && (host.Host == "127.0.0.1" || string.Equals(host.Host, "localhost", StringComparison.OrdinalIgnoreCase));

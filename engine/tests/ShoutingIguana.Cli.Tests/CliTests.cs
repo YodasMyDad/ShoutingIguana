@@ -187,6 +187,22 @@ public sealed class CliTests : IAsyncLifetime
         Assert.Equal($"http://{CrawlOptions.REDACTED}@127.0.0.1:{_server.BaseUri.Port}/", CrawlDatabase.ReadOptions(crawl).ProxyUrl);
         Assert.True((await File.ReadAllBytesAsync(crawl)).AsSpan().IndexOf("pa55word"u8) < 0);
         AssertFails(await RunAsync("crawl", "--resume", "--db", crawl, "-q", "--no-analyze"), "Pass --proxy again");
+
+        // Giving back the redacted proxy the file stored (as it reads it out) isn't giving the password: still asked for.
+        AssertFails(await RunAsync("crawl", "--resume", "--db", crawl, "--proxy", $"http://{CrawlOptions.REDACTED}@127.0.0.1:{_server.BaseUri.Port}/",
+            "-q", "--no-analyze"), "Pass --proxy again");
+    }
+
+    /// <summary>Credentials in the start URL are refused: the crawler never sends them, and the URL is stored and logged as it is.</summary>
+    [Fact]
+    public async Task CredentialsInTheStartUrlAreRefused()
+    {
+        var result = await RunAsync("crawl", "https://user:pa55word@example.com/", "--db", Path.Combine(_folder, "creds.sicrawl"), "-q", "--no-analyze");
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("user name or password", result.Error);
+        Assert.Contains("Authorization header", result.Error);
+        Assert.DoesNotContain("pa55word", result.Error);
     }
 
     [Fact]

@@ -67,7 +67,7 @@ internal sealed class WriterStatements : IDisposable
             "$descriptionCount", "$h1", "$h1Count", "$canonical", "$noindex", "$nofollow", "$indexability",
             "$indexabilityReason", "$words", "$contentHash", "$simhash", "$language", "$outlinks");
         _readOutcome = Prepare(connection,
-            "SELECT outcome, is_html, CASE WHEN body_bytes IS NOT NULL THEN COALESCE(size_bytes, 0) ELSE 0 END FROM responses WHERE url_id = $id", "$id");
+            "SELECT outcome, is_html = 1 AND outcome = 0 AND word_count IS NOT NULL, CASE WHEN body_bytes IS NOT NULL THEN COALESCE(size_bytes, 0) ELSE 0 END FROM responses WHERE url_id = $id", "$id");
         _deleteResponse = Prepare(connection, """
             DELETE FROM responses WHERE url_id = $id;
             DELETE FROM response_details WHERE url_id = $id;
@@ -161,8 +161,11 @@ internal sealed class WriterStatements : IDisposable
             row.IsNoindex, row.IsNofollow, (int)row.Indexability, (int)row.IndexabilityReason, row.WordCount,
             AsSigned(row.ContentHash), AsSigned(row.SimHash), row.Language, outlinkCount);
 
-    /// <summary>What the stored response of a URL was, or null when it has none.</summary>
-    public (FetchOutcome Outcome, bool IsHtml, long Bytes)? ReadOutcome(int urlId)
+    /// <summary>
+    /// What the stored response of a URL was, or null when it has none. IsPage is <see cref="CrawlSchema.PAGE"/> but for
+    /// being internal, which the caller knows: whether the live count of pages counted it.
+    /// </summary>
+    public (FetchOutcome Outcome, bool IsPage, long Bytes)? ReadOutcome(int urlId)
     {
         _readOutcome.Parameters[0].Value = urlId;
         using var reader = _readOutcome.ExecuteReader();

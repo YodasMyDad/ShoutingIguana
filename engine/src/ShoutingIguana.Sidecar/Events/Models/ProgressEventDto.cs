@@ -3,7 +3,10 @@ using ShoutingIguana.Sidecar.Api.Models;
 
 namespace ShoutingIguana.Sidecar.Events.Models;
 
-/// <summary>A live crawl's numbers, twice a second (the engine's pace). Counts include earlier runs of a continued crawl.</summary>
+/// <summary>
+/// A live crawl's numbers, twice a second (the engine's pace). Counts include earlier runs of a continued crawl. The rate
+/// is of every URL fetched, pages and the rest alike (the engine calls it PagesPerSecond).
+/// </summary>
 internal sealed record ProgressEventDto(
     string CrawlId,
     CrawlListStatus Status,
@@ -19,7 +22,7 @@ internal sealed record ProgressEventDto(
     long RobotsDisallowed,
     long Skipped,
     long BytesDownloaded,
-    double PagesPerSecond)
+    double UrlsPerSecond)
 {
     public static ProgressEventDto From(string crawlId, CrawlListStatus status, CrawlProgress progress) => new(
         crawlId,

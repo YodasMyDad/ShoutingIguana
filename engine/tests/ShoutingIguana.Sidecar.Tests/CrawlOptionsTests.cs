@@ -95,6 +95,29 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
             HttpStatusCode.BadRequest, "bad-request");
     }
 
+    /// <summary>
+    /// A property the body's own shape doesn't have is a bad request, even when its name is an option's: a top-level
+    /// option on the start wrapper, or an option the continue body doesn't take. A wrong-typed value of a real option
+    /// stays a field error. The old reader keyed any such name as an option, giving `invalid-options` by mistake.
+    /// </summary>
+    [Fact]
+    public async Task APropertyTheBodyDoesntHaveIsABadRequestEvenWhenItsNameIsAnOption()
+    {
+        // `concurrency` isn't a field of the start wrapper (it belongs under `options`), so it is unknown here.
+        TestSidecar.AssertProblem(await _sidecar.PostAsync("api/crawls", JsonNode.Parse("""{"concurrency":4}""")),
+            HttpStatusCode.BadRequest, "bad-request");
+
+        // `startUrl` isn't a field of the continue body, so it is unknown there, not a start-URL field error.
+        TestSidecar.AssertProblem(await _sidecar.PostAsync("api/crawls/0123456789abcdef/continue", JsonNode.Parse("""{"startUrl":"https://x/"}""")),
+            HttpStatusCode.BadRequest, "bad-request");
+
+        // A real nested option with the wrong type is still a field error under invalid-options.
+        var mistyped = TestSidecar.AssertProblem(
+            await _sidecar.PostAsync("api/crawls", JsonNode.Parse("""{"options":{"startUrl":"https://x/","concurrency":"many"}}""")),
+            HttpStatusCode.UnprocessableEntity, "invalid-options");
+        Assert.Equal(["concurrency"], mistyped["errors"]!.AsObject().Select(field => field.Key));
+    }
+
     /// <summary>The DTO carries every public option, so a new engine option can't be silently left out of the API.</summary>
     [Fact]
     public void TheOptionsDtoCarriesEveryPublicOption()

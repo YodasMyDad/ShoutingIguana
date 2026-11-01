@@ -8,6 +8,13 @@ internal static class CrawlSchema
 {
     public const int VERSION = 2;
 
+    /// <summary>
+    /// A page, as every count of pages goes by (si stats, the library, a crawl's live progress): an internal URL that
+    /// answered with HTML the crawler read and parsed. A URL that was only status-checked has no word count, so it isn't
+    /// one. SQL over <c>responses r</c> joined to <c>urls u</c>; outcome 0 is a success.
+    /// </summary>
+    public const string PAGE = "u.is_internal = 1 AND r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL";
+
     public const string CREATE = """
         CREATE TABLE crawl (
             id INTEGER PRIMARY KEY CHECK (id = 1),

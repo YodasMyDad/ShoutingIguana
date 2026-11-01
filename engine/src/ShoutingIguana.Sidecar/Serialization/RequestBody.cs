@@ -8,8 +8,6 @@ namespace ShoutingIguana.Sidecar.Serialization;
 /// <summary>Reads JSON request bodies. Kestrel has already capped them at 1 MB.</summary>
 internal static class RequestBody
 {
-    private const string OPTIONS_PREFIX = "options.";
-
     public static async Task<T> ReadAsync<T>(HttpRequest request, JsonTypeInfo<T> type) where T : class =>
         await DeserializeAsync(request, type, optionFieldErrors: false).ConfigureAwait(false)
         ?? throw Problems.BadRequest("This call needs a JSON body.");
@@ -34,7 +32,7 @@ internal static class RequestBody
         }
         catch (JsonException exception)
         {
-            if (optionFieldErrors && OptionField(exception.Path) is { } field)
+            if (optionFieldErrors && OptionField(type, exception.Path) is { } field)
             {
                 throw Problems.InvalidOptions(new Dictionary<string, IReadOnlyList<string>> { [field] = ["This value isn't valid here."] });
             }
@@ -43,22 +41,39 @@ internal static class RequestBody
         }
     }
 
-    /// <summary><c>$.options.concurrency</c> or <c>$.extraHeaders['X-Key']</c> names the option it is in, if it is in one.</summary>
-    private static string? OptionField(string? path)
+    /// <summary>
+    /// The option a bad value is in: <c>$.options.concurrency</c> or <c>$.extraHeaders['X-Key']</c> names one, if every
+    /// property along the path is one the body's type has. A property it doesn't have is a bad request, even when its
+    /// name is an option's (<c>startUrl</c> when continuing, <c>concurrency</c> beside <c>options</c>).
+    /// </summary>
+    private static string? OptionField(JsonTypeInfo type, string? path)
     {
         if (path is null || !path.StartsWith("$.", StringComparison.Ordinal))
         {
             return null;
         }
 
-        var rest = path[2..];
-        if (rest.StartsWith(OPTIONS_PREFIX, StringComparison.Ordinal))
+        string? field = null;
+        JsonTypeInfo? current = type;
+        foreach (var segment in path[2..].Split('.'))
         {
-            rest = rest[OPTIONS_PREFIX.Length..];
+            // A dictionary's key or a list's index ends the names: what follows is inside that option's value.
+            var bracket = segment.IndexOf('[');
+            var name = bracket < 0 ? segment : segment[..bracket];
+            if (current?.Properties.FirstOrDefault(property => property.Name == name) is not { } property)
+            {
+                return null;
+            }
+
+            field = OptionFields.IsField(name) ? name : field;
+            if (bracket >= 0)
+            {
+                break;
+            }
+
+            current = current.Options.TryGetTypeInfo(property.PropertyType, out var next) ? next : null;
         }
 
-        var end = rest.IndexOfAny(['.', '[']);
-        var field = end < 0 ? rest : rest[..end];
-        return OptionFields.IsField(field) ? field : null;
+        return field;
     }
 }

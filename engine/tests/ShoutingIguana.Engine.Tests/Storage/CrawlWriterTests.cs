@@ -49,6 +49,13 @@ public sealed class CrawlWriterTests : IAsyncLifetime
 
         Assert.Equal(CrawlStatus.Failed, summary.Status);
         Assert.Contains("injected write failure", summary.Error);
+
+        // The injected trigger goes before a reader confirms the stored status: readers refuse a file with any trigger.
+        using (var connection = CrawlDatabase.OpenWriter(path))
+        {
+            CrawlDatabase.Execute(connection, "DROP TRIGGER reject_responses");
+        }
+
         Assert.Equal(CrawlStatus.Failed, CrawlStatsReader.Read(path).Status);
 
         // The lock went with the writer, so another one can open the file at once, on every OS (and the crawl can be
@@ -82,6 +89,13 @@ public sealed class CrawlWriterTests : IAsyncLifetime
 
         Assert.Equal(CrawlStatus.Failed, summary.Status);
         Assert.Contains("injected write failure", summary.Error);
+
+        // The injected trigger goes before a reader confirms the stored status: readers refuse a file with any trigger.
+        using (var connection = CrawlDatabase.OpenWriter(path))
+        {
+            CrawlDatabase.Execute(connection, "DROP TRIGGER reject_completion");
+        }
+
         Assert.Equal(CrawlStatus.Failed, CrawlStatsReader.Read(path).Status);
     }
 
@@ -95,7 +109,7 @@ public sealed class CrawlWriterTests : IAsyncLifetime
         // A resume that has opened the file but not written anything yet: the window a status check alone left open.
         await using (CrawlWriter.Open(path, Options(), resume: true, new CrawlCounters(), NullLogger.Instance))
         {
-            await Assert.ThrowsAsync<InvalidOperationException>(() => analyzer.AnalyzeAsync(path));
+            await Assert.ThrowsAsync<CrawlFileInUseException>(() => analyzer.AnalyzeAsync(path));
         }
 
         Assert.Equal(CrawlStatus.Running, CrawlStatsReader.Read(path).Status);
@@ -111,7 +125,7 @@ public sealed class CrawlWriterTests : IAsyncLifetime
         // A crash leaves a crawl marked Running, so only a lock can tell a second resume that the first is still going.
         await using (CrawlWriter.Open(path, Options(), resume: true, new CrawlCounters(), NullLogger.Instance))
         {
-            Assert.Throws<InvalidOperationException>(() => TestCrawls.Start(Options(), path, resume: true));
+            Assert.Throws<CrawlFileInUseException>(() => TestCrawls.Start(Options(), path, resume: true));
         }
 
         // While an analysis writes, a crawl can't start either, and is told so rather than failing after SQLite's timeouts.
@@ -123,7 +137,7 @@ public sealed class CrawlWriterTests : IAsyncLifetime
         using (IssueWriter.Open(path, NullLogger.Instance))
         {
             var stopwatch = Stopwatch.StartNew();
-            Assert.Throws<InvalidOperationException>(() => TestCrawls.Start(Options(), path, resume: true));
+            Assert.Throws<CrawlFileInUseException>(() => TestCrawls.Start(Options(), path, resume: true));
             Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), $"Refusing took {stopwatch.Elapsed}");
         }
 

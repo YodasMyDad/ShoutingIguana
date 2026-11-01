@@ -15,6 +15,9 @@ public sealed record CrawlOptions
     /// <summary>The characters RFC 9110 allows in a header name besides letters and digits.</summary>
     private const string TOKEN_PUNCTUATION = "!#$%&'*+-.^_`|~";
 
+    /// <summary>Crawl files keep URLs as they are given, and people share them, so credentials go in a header, whose value isn't kept.</summary>
+    private const string CREDENTIALS_ADVICE = "They would be stored in the crawl file: send credentials in an Authorization header instead.";
+
     /// <summary>Request headers the HTTP client manages itself. Overriding one would break or reroute every request.</summary>
     private static readonly HashSet<string> CLIENT_HEADERS = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -83,31 +86,38 @@ public sealed record CrawlOptions
     };
 
     /// <summary>True when the proxy's credentials were removed by <see cref="WithoutSecrets"/>.</summary>
-    public bool HasRedactedProxyCredentials =>
-        ProxyUrl is not null && Uri.TryCreate(ProxyUrl, UriKind.Absolute, out var proxy) && proxy.UserInfo == REDACTED;
+    public bool HasRedactedProxyCredentials => ProxyUrl is not null && IsRedactedProxy(ProxyUrl);
 
     /// <summary>
     /// Applies what may change when this stored crawl is resumed. The changes can't touch anything else: a resumed crawl
     /// keeps the scope and rules it started with. Also says which secrets weren't given again, since crawl files don't
-    /// store them (see <see cref="WithoutSecrets"/>).
+    /// store them (see <see cref="WithoutSecrets"/>). What a crawl file keeps in their place, given back (a form filled
+    /// in from the stored options would), doesn't count as given: a header without a value, which isn't sent at all, and
+    /// a proxy whose user name is <see cref="REDACTED"/>.
     /// </summary>
     public ResumePlan PlanResume(ResumeChanges changes)
     {
         // Header names match whatever their case, as HTTP header names do.
-        var given = new HashSet<string>(changes.ExtraHeaders.Keys, StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> headers = new(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, value) in changes.ExtraHeaders.Where(header => !string.IsNullOrWhiteSpace(header.Value)))
+        {
+            headers[name] = value;
+        }
+
+        var proxyUrl = changes.ProxyUrl is { } given && !IsRedactedProxy(given) ? given : null;
         var options = this with
         {
             Concurrency = changes.Concurrency ?? Concurrency,
             MaxRequestsPerSecond = changes.MaxRequestsPerSecond ?? MaxRequestsPerSecond,
             RequestTimeoutSeconds = changes.RequestTimeoutSeconds ?? RequestTimeoutSeconds,
-            ExtraHeaders = changes.ExtraHeaders,
-            ProxyUrl = changes.ProxyUrl ?? ProxyUrl
+            ExtraHeaders = headers,
+            ProxyUrl = proxyUrl ?? ProxyUrl
         };
 
         return new ResumePlan(
             options,
-            [.. ExtraHeaders.Keys.Where(name => !given.Contains(name))],
-            changes.ProxyUrl is null && HasRedactedProxyCredentials);
+            [.. ExtraHeaders.Keys.Where(name => !headers.ContainsKey(name))],
+            proxyUrl is null && HasRedactedProxyCredentials);
     }
 
     /// <summary>Every problem with these options, one sentence each, in the order <see cref="ValidateFields"/> gives them.</summary>
@@ -127,6 +137,11 @@ public sealed record CrawlOptions
         if (!UrlNormalizer.TryNormalize(StartUrl, out _))
         {
             yield return (Field(nameof(StartUrl)), "Start URL must be an absolute http or https URL.");
+        }
+        else if (HasUserInfo(StartUrl))
+        {
+            // The crawler never sends them, and the start URL is stored, listed and logged as it is.
+            yield return (Field(nameof(StartUrl)), $"Start URL can't include a user name or password. {CREDENTIALS_ADVICE}");
         }
 
         if (MaxUrls < 0)
@@ -201,11 +216,30 @@ public sealed record CrawlOptions
             }
         }
 
-        foreach (var sitemap in ExtraSitemaps.Where(sitemap => !UrlNormalizer.TryNormalize(sitemap, out _)))
+        foreach (var sitemap in ExtraSitemaps)
         {
-            yield return (Field(nameof(ExtraSitemaps)), $"Sitemap '{sitemap}' is not an absolute http or https URL.");
+            if (!UrlNormalizer.TryNormalize(sitemap, out _))
+            {
+                yield return (Field(nameof(ExtraSitemaps)), $"Sitemap '{sitemap}' is not an absolute http or https URL.");
+            }
+            else if (HasUserInfo(sitemap))
+            {
+                yield return (Field(nameof(ExtraSitemaps)), $"Sitemap '{WithoutUserInfo(sitemap)}' can't include a user name or password. {CREDENTIALS_ADVICE}");
+            }
         }
     }
+
+    /// <summary>A user name or password in a URL (<c>https://user:password@host/</c>), which the crawler never uses.</summary>
+    private static bool HasUserInfo(string url) => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.UserInfo.Length > 0;
+
+    /// <summary>The URL to show in a message, so a password given by mistake isn't repeated back.</summary>
+    private static string WithoutUserInfo(string url) =>
+        new UriBuilder(new Uri(url, UriKind.Absolute)) { UserName = string.Empty, Password = string.Empty }.Uri.AbsoluteUri;
+
+    /// <summary>The stand-in <see cref="WithoutSecrets"/> leaves for a proxy's credentials, whatever its password part holds.</summary>
+    private static bool IsRedactedProxy(string proxyUrl) =>
+        Uri.TryCreate(proxyUrl, UriKind.Absolute, out var proxy) &&
+        Uri.UnescapeDataString(proxy.UserInfo.Split(':')[0]) == REDACTED;
 
     /// <summary>A property's name as JSON spells it, which is how hosts name the fields of these options.</summary>
     private static string Field(string propertyName) => JsonNamingPolicy.CamelCase.ConvertName(propertyName);

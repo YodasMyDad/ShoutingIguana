@@ -62,10 +62,7 @@ internal sealed class DefaultsStore(SidecarOptions options, ILogger<DefaultsStor
         {
             try
             {
-                Directory.CreateDirectory(options.StateDirectory);
-                var temporary = _file + ".tmp";
-                File.WriteAllText(temporary, JsonSerializer.Serialize(saved, SidecarJsonContext.Default.CrawlOptionsDto));
-                File.Move(temporary, _file, overwrite: true);
+                StateFile.Write(_file, JsonSerializer.Serialize(saved, SidecarJsonContext.Default.CrawlOptionsDto));
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {

@@ -12,6 +12,9 @@ public sealed class ExecutableTests : IDisposable
 {
     private static readonly TimeSpan TIMEOUT = TimeSpan.FromSeconds(60);
 
+    /// <summary>As the shell makes them, for each launch: 32 random bytes as hex.</summary>
+    private const string SHELL_TOKEN = "8c1f4a2e9b7d6c5a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a";
+
     private readonly string _root = TestSidecar.NewRoot();
     private readonly List<Process> _processes = [];
 
@@ -34,7 +37,7 @@ public sealed class ExecutableTests : IDisposable
     [Fact]
     public async Task WritesOneReadyLineServesWithTheTokenItMadeUpAndExitsCleanly()
     {
-        var (process, ready) = await StartAsync("one");
+        var (process, ready) = await StartAsync("one", ["--dev"], token: null);
 
         Assert.Equal("ready", (string?)ready["event"]);
         Assert.Equal(EngineInfo.Version, (string?)ready["version"]);
@@ -120,22 +123,88 @@ public sealed class ExecutableTests : IDisposable
         Assert.Contains("Unknown option '--verbose'", await process.StandardError.ReadToEndAsync());
     }
 
+    /// <summary>Only a sidecar started for development makes its own token; the shell's must be long enough not to guess.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("0123456789abcdef")]
+    public async Task RefusesToStartWithoutAGoodTokenUnlessForDevelopment(string? token)
+    {
+        var process = Process.Start(StartInfo("no-token", [], token))!;
+        _processes.Add(process);
+
+        Assert.Equal(2, await ExitCodeAsync(process));
+        Assert.Equal(string.Empty, await process.StandardOutput.ReadToEndAsync());
+        Assert.Contains("SI_SIDECAR_TOKEN", await process.StandardError.ReadToEndAsync());
+    }
+
+    /// <summary>
+    /// Two sidecars on one state folder would write the same library and defaults. The second exits with its own code and
+    /// says why on stderr; the first carries on.
+    /// </summary>
+    [Fact]
+    public async Task ASecondSidecarOnTheSameStateFolderExitsWithCode3()
+    {
+        var (_, ready) = await StartAsync("shared");
+
+        var second = Process.Start(StartInfo("shared", []))!;
+        _processes.Add(second);
+
+        Assert.Equal(3, await ExitCodeAsync(second));
+        Assert.Equal(string.Empty, await second.StandardOutput.ReadToEndAsync());
+        Assert.Contains("already using", await second.StandardError.ReadToEndAsync());
+        (await AssertServesAsync(ready)).Dispose();
+    }
+
+    /// <summary>
+    /// ASP.NET Core reads ASPNETCORE_* before the sidecar sets anything. A developer's environment (or anything that can
+    /// set one) must still not move the listener off 127.0.0.1, and the ready line names the port it really uses.
+    /// </summary>
+    [Fact]
+    public async Task TheEnvironmentCantMoveTheListenerOffTheLoopbackAddress()
+    {
+        var elsewhere = FreePort();
+        var (_, ready) = await StartAsync("environment", environment: new Dictionary<string, string>
+        {
+            ["ASPNETCORE_URLS"] = $"http://127.0.0.2:{elsewhere}",
+            ["ASPNETCORE_PREFERHOSTINGURLS"] = "true",
+            ["ASPNETCORE_HTTP_PORTS"] = elsewhere.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        });
+
+        Assert.True((int)ready["port"]! > 0);
+        (await AssertServesAsync(ready)).Dispose();
+        using var other = new System.Net.Sockets.TcpClient();
+        await Assert.ThrowsAnyAsync<System.Net.Sockets.SocketException>(() => other.ConnectAsync("127.0.0.2", elsewhere).WaitAsync(TIMEOUT));
+    }
+
+    private static int FreePort()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
+    }
+
     /// <summary>A client for the sidecar that wrote this ready line, once it has answered a health check.</summary>
     private static async Task<HttpClient> AssertServesAsync(JsonNode ready)
     {
         var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{(int)ready["port"]!}/") };
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", (string)ready["token"]!);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", (string?)ready["token"] ?? SHELL_TOKEN);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("api/health")).StatusCode);
         return client;
     }
 
-    private async Task<(Process Process, JsonNode Ready)> StartAsync(string name, string[]? extra = null, int? parentProcessId = null)
+    /// <param name="token">What the shell sets in SI_SIDECAR_TOKEN; null sets nothing, as only development does.</param>
+    private async Task<(Process Process, JsonNode Ready)> StartAsync(string name, string[]? extra = null, int? parentProcessId = null,
+        string? token = SHELL_TOKEN, IReadOnlyDictionary<string, string>? environment = null)
     {
-        var start = StartInfo(name, extra ?? []);
+        var start = StartInfo(name, extra ?? [], token);
         if (parentProcessId is { } parent)
         {
             start.Environment["SI_PARENT_PID"] = parent.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            start.Environment["SI_SIDECAR_TOKEN"] = "a-token-from-the-shell";
+        }
+
+        foreach (var (variable, value) in environment ?? new Dictionary<string, string>())
+        {
+            start.Environment[variable] = value;
         }
 
         var process = Process.Start(start)!;
@@ -148,7 +217,7 @@ public sealed class ExecutableTests : IDisposable
         return (process, JsonNode.Parse(line)!);
     }
 
-    private ProcessStartInfo StartInfo(string name, string[] extra)
+    private ProcessStartInfo StartInfo(string name, string[] extra, string? token = SHELL_TOKEN)
     {
         var start = new ProcessStartInfo(DotnetHost())
         {
@@ -165,6 +234,11 @@ public sealed class ExecutableTests : IDisposable
 
         start.Environment.Remove("SI_SIDECAR_TOKEN");
         start.Environment.Remove("SI_PARENT_PID");
+        if (token is not null)
+        {
+            start.Environment["SI_SIDECAR_TOKEN"] = token;
+        }
+
         start.Environment["SI_SIDECAR_ORIGINS"] = TestSidecar.ORIGIN;
         return start;
     }

@@ -3,17 +3,24 @@ namespace ShoutingIguana.Sidecar.Models;
 /// <summary>How a sidecar runs: from its command line and environment, or set by tests that host it in-process.</summary>
 internal sealed record SidecarOptions
 {
-    /// <summary>The longest a crawl's in-flight request can take (the engine's maximum timeout), plus time to close its file.</summary>
-    public static readonly TimeSpan DEFAULT_SHUTDOWN_TIMEOUT = TimeSpan.FromSeconds(300 + 30);
+    /// <summary>
+    /// The longest a shutdown waits. Stopping a crawl cancels its requests at once, so what it waits for is each crawl
+    /// closing its file (a second or two) and requests still in flight; past this, the sidecar exits anyway, and a crawl
+    /// that hadn't closed is left interrupted, still resumable.
+    /// </summary>
+    public static readonly TimeSpan DEFAULT_SHUTDOWN_TIMEOUT = TimeSpan.FromSeconds(30);
 
     /// <summary>Where new crawls are saved, and whose top level the library lists.</summary>
     public required string DataDirectory { get; init; }
 
-    /// <summary>Holds <c>library.json</c>, the user's defaults and the logs.</summary>
+    /// <summary>Holds <c>library.json</c>, the user's defaults and the logs. One sidecar at a time uses it.</summary>
     public required string StateDirectory { get; init; }
 
-    /// <summary>The bearer token every request must carry. Null makes one up, which the ready line then gives.</summary>
+    /// <summary>The bearer token every request must carry. Null makes one up, which the ready line then gives: development only.</summary>
     public string? Token { get; init; }
+
+    /// <summary>Development: a sidecar started without a token makes one up. Never set by the shell.</summary>
+    public bool Development { get; init; }
 
     /// <summary>Origins (the app's webviews) allowed to call the API from a browser.</summary>
     public IReadOnlyList<string> AllowedOrigins { get; init; } = [];
@@ -42,4 +49,10 @@ internal sealed record SidecarOptions
 
     /// <summary>How long a shutdown waits for crawls to stop cleanly.</summary>
     public TimeSpan ShutdownTimeout { get; init; } = DEFAULT_SHUTDOWN_TIMEOUT;
+
+    /// <summary>
+    /// The longest the library spends reading one file's summary. A legitimate crawl of millions of URLs takes well
+    /// under a second; a file crafted to be slow is listed as unreadable instead of holding up the list.
+    /// </summary>
+    public TimeSpan SummaryTimeLimit { get; init; } = TimeSpan.FromSeconds(10);
 }

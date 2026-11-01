@@ -46,6 +46,7 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(ProgressEventDto))]
 [JsonSerializable(typeof(CrawlEventDto))]
 [JsonSerializable(typeof(LibraryFile))]
+[JsonSerializable(typeof(SummaryCacheFile))]
 internal sealed partial class SidecarJsonContext : JsonSerializerContext
 {
 }

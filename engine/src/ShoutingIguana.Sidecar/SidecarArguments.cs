@@ -10,23 +10,32 @@ internal static class SidecarArguments
     public const string ORIGINS_VARIABLE = "SI_SIDECAR_ORIGINS";
     public const string PARENT_VARIABLE = "SI_PARENT_PID";
 
+    /// <summary>The shortest token accepted. The shell's are 64 hex characters (32 random bytes).</summary>
+    public const int MIN_TOKEN_LENGTH = 32;
+
     public const string USAGE = """
         si-sidecar: the Shouting Iguana engine as a localhost API for the desktop app.
 
         Options:
           --data-dir <folder>   Where new crawls are saved (default: Documents/Shouting Iguana).
           --state-dir <folder>  The library, the user's defaults and the logs (default: <local app data>/ShoutingIguana).
+                                One sidecar at a time may use it.
           --port <number>       Port on 127.0.0.1 (default 0: a free port, given in the ready line).
           --stdin-lifeline      Shut down on a "shutdown" line on stdin, or when stdin ends (the shell has gone).
+          --dev                 Development only: without SI_SIDECAR_TOKEN, make a token up and give it in the ready line.
 
         Environment:
-          SI_SIDECAR_TOKEN      Bearer token for every request, removed from the environment once read. Without it,
-                                one is made up and given in the ready line.
+          SI_SIDECAR_TOKEN      Bearer token for every request, at least 32 characters, removed from the environment
+                                once read. Required, unless --dev is given.
           SI_SIDECAR_ORIGINS    Comma-separated origins allowed to call the API from a browser.
           SI_PARENT_PID         The shell's process id: when it ends, the sidecar shuts down.
+
+        Exit codes: 0 after a clean shutdown, 1 if it couldn't start, 2 for arguments it can't use, 3 when another
+        sidecar is using the state folder.
         """;
 
     private const string STDIN_LIFELINE = "--stdin-lifeline";
+    private const string DEVELOPMENT = "--dev";
 
     public static bool IsHelp(IReadOnlyList<string> args) => args.Any(arg => arg is "--help" or "-h" or "-?");
 
@@ -38,19 +47,21 @@ internal static class SidecarArguments
         string? dataDirectory = null, stateDirectory = null;
         var port = 0;
         var stdinLifeline = false;
+        var development = false;
 
         for (var index = 0; index < args.Count; index++)
         {
-            if (args[index] == STDIN_LIFELINE)
+            if (args[index] is STDIN_LIFELINE or DEVELOPMENT)
             {
-                stdinLifeline = true;
+                stdinLifeline |= args[index] == STDIN_LIFELINE;
+                development |= args[index] == DEVELOPMENT;
                 continue;
             }
 
             var (name, value) = Split(args[index]);
             if (name is not ("--data-dir" or "--state-dir" or "--port"))
             {
-                error = $"Unknown option '{args[index]}'. Use --data-dir, --state-dir, --port or {STDIN_LIFELINE} (--help lists them).";
+                error = $"Unknown option '{args[index]}'. Use --data-dir, --state-dir, --port, {STDIN_LIFELINE} or {DEVELOPMENT} (--help lists them).";
                 return false;
             }
 
@@ -86,7 +97,7 @@ internal static class SidecarArguments
 
         if (!TryReadParent(environment(PARENT_VARIABLE), out var parent, out error) ||
             !TryReadOrigins(environment(ORIGINS_VARIABLE), out var origins, out error) ||
-            !TryReadToken(environment(TOKEN_VARIABLE), out var token, out error) ||
+            !TryReadToken(environment(TOKEN_VARIABLE), development, out var token, out error) ||
             !TryFullPath(dataDirectory ?? DefaultDataDirectory(), "--data-dir", out var data, out error) ||
             !TryFullPath(stateDirectory ?? DefaultStateDirectory(), "--state-dir", out var state, out error))
         {
@@ -98,6 +109,7 @@ internal static class SidecarArguments
             DataDirectory = data,
             StateDirectory = state,
             Token = token,
+            Development = development,
             AllowedOrigins = origins,
             ParentProcessId = parent,
             Port = port,
@@ -154,13 +166,20 @@ internal static class SidecarArguments
         return true;
     }
 
-    /// <summary>The token travels in a header, so it must be printable ASCII without spaces.</summary>
-    private static bool TryReadToken(string? value, out string? token, out string error)
+    /// <summary>
+    /// The token travels in a header, so it must be printable ASCII without spaces, and long enough not to be guessed.
+    /// Only a sidecar started for development may go without one: it makes one up.
+    /// </summary>
+    private static bool TryReadToken(string? value, bool development, out string? token, out string error)
     {
         token = string.IsNullOrWhiteSpace(value) ? null : value;
-        error = token is not null && !token.All(character => character is > ' ' and <= '~')
-            ? $"{TOKEN_VARIABLE} must be printable ASCII without spaces."
-            : string.Empty;
+        error = token switch
+        {
+            null when !development => $"{TOKEN_VARIABLE} must be set: the shell makes one for each launch. For development, {DEVELOPMENT} makes one up.",
+            { Length: < MIN_TOKEN_LENGTH } => $"{TOKEN_VARIABLE} must be at least {MIN_TOKEN_LENGTH} characters.",
+            not null when !token.All(character => character is > ' ' and <= '~') => $"{TOKEN_VARIABLE} must be printable ASCII without spaces.",
+            _ => string.Empty
+        };
         return error.Length == 0;
     }
 

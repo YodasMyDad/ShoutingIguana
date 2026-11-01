@@ -21,7 +21,8 @@ internal static class OptionsEndpoints
             return TypedResults.Json(new DefaultsDto(defaults.Save(options), SpeedPresets.ALL), SidecarJsonContext.Default.DefaultsDto);
         });
 
-        // Always 200: the answer is the messages, keyed by field. A value of the wrong type is one of them.
+        // 200 with the messages, keyed by field: a value of the wrong type is one of them. A body that isn't JSON, or a
+        // property the options don't have, is a bad request (400), as on every other call.
         api.MapPost("/api/crawl-options/validate", async (HttpRequest request) =>
         {
             IReadOnlyDictionary<string, IReadOnlyList<string>> errors;

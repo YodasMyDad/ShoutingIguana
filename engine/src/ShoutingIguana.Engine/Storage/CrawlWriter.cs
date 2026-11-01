@@ -328,10 +328,16 @@ internal sealed class CrawlWriter : IAsyncDisposable
         _statements.UpdateUrlState(item.Id, UrlState.Done);
         _urls[key] = _urls[key] with { State = UrlState.Done };
 
-        var isSitePage = item.IsInternal && response.IsHtml && response.Outcome == FetchOutcome.Success;
-        _counters.OnRecorded(response.Outcome, isSitePage, DownloadedBytes(response.SizeBytes, response.BodyBytes));
+        _counters.OnRecorded(response.Outcome, IsPage(item.IsInternal, response), DownloadedBytes(response.SizeBytes, response.BodyBytes));
         PropagateDepths();
     }
+
+    /// <summary>
+    /// A page, as <see cref="CrawlSchema.PAGE"/> defines one for every stored count, so the live count ends where the
+    /// stored one is: internal, HTML, fetched and parsed. A URL only status-checked has no word count.
+    /// </summary>
+    private static bool IsPage(bool isInternal, ResponseRow response) =>
+        isInternal && response is { IsHtml: true, Outcome: FetchOutcome.Success, WordCount: not null };
 
     /// <summary>
     /// The bytes of a body the crawler read. A size it was only told, by the Content-Length of a URL it checked
@@ -616,11 +622,11 @@ internal sealed class CrawlWriter : IAsyncDisposable
             : SetMode(entry, FetchMode.Crawl);
 
     /// <summary>Drops what a recorded URL's fetch stored and queues it again, to be fetched in <paramref name="mode"/>.</summary>
-    private UrlEntry Refetch(UrlEntry entry, FetchMode mode, bool isInternal, (FetchOutcome Outcome, bool IsHtml, long Bytes) stored)
+    private UrlEntry Refetch(UrlEntry entry, FetchMode mode, bool isInternal, (FetchOutcome Outcome, bool IsPage, long Bytes) stored)
     {
         _statements.DeleteResponse(entry.Id);
         _statements.RequeueUrl(entry.Id, mode, entry.Depth);
-        _counters.OnResponseRemoved(stored.Outcome, isInternal && stored.IsHtml, stored.Bytes);
+        _counters.OnResponseRemoved(stored.Outcome, isInternal && stored.IsPage, stored.Bytes);
         NoteRefetch(entry.Id, isInternal);
         return entry with { State = UrlState.Queued, Mode = mode };
     }
@@ -812,9 +818,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
         using (var command = _connection.CreateCommand())
         {
-            command.CommandText = """
+            command.CommandText = $"""
                 SELECT r.outcome, COUNT(*),
-                       SUM(CASE WHEN r.is_html = 1 AND r.outcome = 0 AND u.is_internal = 1 THEN 1 ELSE 0 END),
+                       SUM(CASE WHEN {CrawlSchema.PAGE} THEN 1 ELSE 0 END),
                        COALESCE(SUM(CASE WHEN r.body_bytes IS NOT NULL THEN r.size_bytes END), 0)
                 FROM responses r JOIN urls u ON u.id = r.url_id
                 GROUP BY r.outcome

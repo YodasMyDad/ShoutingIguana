@@ -36,6 +36,10 @@ dotnet run --project src/ShoutingIguana.Cli -c Release -- bench --pages 100000
 allowlisting; they are only sent to the site being crawled, and never over plain HTTP when it starts on HTTPS),
 proxy, depth and URL limits, robots.txt, subdomains, start-folder scope, nofollow, stored HTML, and `--no-analyze`.
 
+The start URL and any `--sitemap` can't carry a user name or password (`https://user:pass@host/`): the crawler never
+sends them, and the URL is stored in the crawl file, listed and logged as it is, so they would leak. Send credentials
+in an `Authorization` header (`--header`), whose value a crawl file doesn't keep. A `--proxy` may carry credentials.
+
 Exit codes, for scripts and schedulers:
 
 | Code | Meaning |
@@ -61,13 +65,14 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
 | Flag | Default | Does |
 | --- | --- | --- |
 | `--data-dir <folder>` | `Documents/Shouting Iguana` | Where new crawls are saved. The library lists the `.sicrawl` files at its top level, plus files opened from elsewhere |
-| `--state-dir <folder>` | `<local app data>/ShoutingIguana` | Holds `library.json`, `defaults.json` and `logs/` |
+| `--state-dir <folder>` | `<local app data>/ShoutingIguana` | Holds `library.json`, `defaults.json`, `summaries.json` and `logs/`. One sidecar at a time may use it |
 | `--port <number>` | `0`, a free port | A fixed port, for development. The ready line gives the port either way |
 | `--stdin-lifeline` | Off | Shut down on a `shutdown` line on stdin, or when stdin ends because the shell has gone |
+| `--dev` | Off | Development only: without `SI_SIDECAR_TOKEN`, make a token up and give it in the ready line |
 
 | Variable | Is |
 | --- | --- |
-| `SI_SIDECAR_TOKEN` | The bearer token. The shell makes 32 random bytes as hex for each launch. The sidecar removes it from its environment once read. Without it, the sidecar makes one up and adds it to the ready line, for development only |
+| `SI_SIDECAR_TOKEN` | The bearer token, at least 32 characters. The shell makes 32 random bytes as hex for each launch. The sidecar removes it from its environment once read. Required, unless `--dev` is given, when the sidecar makes one up and adds it to the ready line |
 | `SI_SIDECAR_ORIGINS` | Comma-separated origins allowed to call the API from a webview: `http://tauri.localhost` (Windows), `tauri://localhost` (macOS, Linux), `http://localhost:<port>` (`tauri dev`). None by default |
 | `SI_PARENT_PID` | The shell's process. When it ends, the sidecar shuts down |
 
@@ -76,7 +81,8 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
 - Logs go to stderr and to `<state-dir>/logs/sidecar-<date>.log` (14 days kept), never to stdout.
 - A shutdown (`POST /api/shutdown`, Ctrl+C, SIGTERM, the stdin lifeline or the parent ending) stops every crawl,
   leaving it resumable, cancels every analysis, which then stores nothing, and exits 0. It exits 2 for arguments it
-  can't use, and 1 when it can't start (a port already taken, a state folder it can't create).
+  can't use, 1 when it can't start (a port already taken, a state folder it can't create), and 3 when another sidecar
+  is already using the state folder.
 
 ## How a crawl works
 

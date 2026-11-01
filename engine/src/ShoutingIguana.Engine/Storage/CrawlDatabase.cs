@@ -16,6 +16,22 @@ namespace ShoutingIguana.Engine.Storage;
 /// </summary>
 public static class CrawlDatabase
 {
+    /// <summary>
+    /// How long opening a crawl file, and anything a reader does, waits for a lock another program holds (a SQLite
+    /// browser writing, a backup) before giving up: a couple of seconds, not Microsoft.Data.Sqlite's 30 s of retries.
+    /// </summary>
+    private const int OPEN_TIMEOUT_SECONDS = 2;
+
+    private const int OPEN_BUSY_TIMEOUT_MS = 1000;
+
+    /// <summary>Once a writer has its file open, its writes wait for another program's lock as long as SQLite's defaults allow.</summary>
+    private const int WRITE_BUSY_TIMEOUT_MS = 5000;
+
+    private const int WRITE_TIMEOUT_SECONDS = 30;
+
+    /// <summary>What SQLite keeps beside a database: its write-ahead log, a rollback journal, and the log's shared memory.</summary>
+    private static readonly string[] COMPANIONS = ["-wal", "-journal", "-shm"];
+
     /// <exception cref="InvalidOperationException">The file isn't a crawl, or was written with another schema.</exception>
     public static SqliteConnection OpenReader(string path)
     {
@@ -27,8 +43,17 @@ public static class CrawlDatabase
         var connection = Connect(path, SqliteOpenMode.ReadWrite);
         try
         {
-            Execute(connection, "PRAGMA busy_timeout = 5000; PRAGMA query_only = ON;");
+            Execute(connection, "PRAGMA query_only = ON;");
             CheckSchema(connection, path, allowNew: false);
+
+            // Readers run over files from anywhere, people share them, and this is where a crafted one would do its harm:
+            // a view or a trigger it hides (the engine creates neither), such as a view that never ends when counted. The
+            // writer paths don't need this: a crafted file is read before it is ever written to, and refused here first.
+            if (Convert.ToInt64(Scalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type IN ('view', 'trigger')"), CultureInfo.InvariantCulture) > 0)
+            {
+                throw new InvalidOperationException($"'{path}' is not a crawl database: it has views or triggers, which Shouting Iguana never creates.");
+            }
+
             return connection;
         }
         catch
@@ -53,9 +78,51 @@ public static class CrawlDatabase
 
     /// <summary>
     /// Whether a crawl or an analysis is writing to the file, in this process or another. A file that says it is running
-    /// while nothing holds it was interrupted, and can be resumed. Only a snapshot: the answer can change at once.
+    /// while nothing holds it was interrupted, and can be resumed. Only a snapshot: the answer can change at once. Asking
+    /// never makes a writer in this process give up, and a writer elsewhere waits out the instant it takes.
     /// </summary>
+    /// <exception cref="IOException">The path can't be used at all, e.g. it is too long.</exception>
     public static bool IsInUse(string path) => CrawlFileLock.IsHeld(path);
+
+    /// <summary>
+    /// Deletes a crawl file and what SQLite keeps beside it, holding the crawl's lock throughout, so no crawl or analysis
+    /// can start on it meanwhile. The file is renamed first, which fails while another program has it open (on Windows):
+    /// then nothing has been deleted. Its log goes before it, since a log left beside a new file of the same name would be
+    /// read into that file. On Linux and macOS the lock file stays, as it does after every crawl: deleting it would let
+    /// two writers lock two different files.
+    /// </summary>
+    /// <exception cref="CrawlFileInUseException">A crawl or an analysis is writing to the file.</exception>
+    /// <exception cref="IOException">Another program has the file open, or it can't be deleted.</exception>
+    /// <exception cref="UnauthorizedAccessException">This user may not delete it.</exception>
+    public static void Delete(string path)
+    {
+        using var fileLock = CrawlFileLock.Acquire(path);
+        string? renamed = null;
+        if (File.Exists(path))
+        {
+            renamed = $"{path}.{Guid.NewGuid():N}.deleting";
+            File.Move(path, renamed);
+        }
+
+        try
+        {
+            foreach (var companion in COMPANIONS)
+            {
+                File.Delete(path + companion);
+            }
+        }
+        catch when (renamed is not null)
+        {
+            // Nothing is lost: the file goes back beside whatever of its companions is left.
+            File.Move(renamed, path);
+            throw;
+        }
+
+        if (renamed is not null)
+        {
+            File.Delete(renamed);
+        }
+    }
 
     /// <summary>The CLI's name for a new crawl's file, <c>host-yyyyMMdd-HHmmss.sicrawl</c>, stamped with the local time now.</summary>
     public static string DefaultDatabasePath(string startUrl) => DefaultDatabasePath(startUrl, DateTime.Now);
@@ -85,8 +152,11 @@ public static class CrawlDatabase
                 PRAGMA synchronous = NORMAL;
                 PRAGMA temp_store = MEMORY;
                 PRAGMA cache_size = -32768;
-                PRAGMA busy_timeout = 5000;
                 """);
+
+            // Open: from here on, the writes wait for another program's lock as long as they always have.
+            Execute(connection, $"PRAGMA busy_timeout = {WRITE_BUSY_TIMEOUT_MS};");
+            connection.DefaultTimeout = WRITE_TIMEOUT_SECONDS;
             return connection;
         }
         catch
@@ -207,11 +277,24 @@ public static class CrawlDatabase
         {
             DataSource = path,
             Mode = mode,
-            Pooling = false
+            Pooling = false,
+            DefaultTimeout = OPEN_TIMEOUT_SECONDS
         }.ToString();
 
         var connection = new SqliteConnection(connectionString);
         connection.Open();
-        return connection;
+        try
+        {
+            // Before anything reads the file. Crawl files are shared, so a crafted one may name functions or virtual tables
+            // in its schema (a view, a default, a generated column): with the schema untrusted, those can't run. And a file
+            // another program has locked is refused in seconds.
+            Execute(connection, $"PRAGMA trusted_schema = OFF; PRAGMA busy_timeout = {OPEN_BUSY_TIMEOUT_MS};");
+            return connection;
+        }
+        catch
+        {
+            connection.Dispose();
+            throw;
+        }
     }
 }

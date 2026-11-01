@@ -34,6 +34,7 @@ internal static class AppEndpoints
 
         api.MapGet("/api/checks", () => TypedResults.Json(CHECKS, SidecarJsonContext.Default.ChecksDto));
 
-        api.MapFallback((HttpContext context) => ProblemWriter.WriteAsync(context, Problems.NotFound()));
+        // Every path, those that look like files included (/api/foo.json): the default pattern leaves those out.
+        api.MapFallback("{*path}", (HttpContext context) => ProblemWriter.WriteAsync(context, Problems.NotFound()));
     }
 }

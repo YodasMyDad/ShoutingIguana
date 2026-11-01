@@ -48,6 +48,9 @@ public sealed class CrawlSummaryReaderTests : IAsyncLifetime
         Assert.Equal(stats.Outcomes.Values.Sum(), crawled.FetchedUrlCount);
         Assert.True(crawled.PageCount is > 60 && crawled.FetchedUrlCount > crawled.PageCount && crawled.FetchedUrlCount < stats.UrlCount,
             $"{crawled.FetchedUrlCount} of {stats.UrlCount} URLs fetched, {crawled.PageCount} pages");
+
+        // Live and stored count a page the same way, so the library's page count doesn't shift when a crawl ends.
+        Assert.Equal(crawl.Progress.HtmlPages, crawled.PageCount);
         Assert.Null(crawled.AnalyzedAt);
         Assert.Null(crawled.FlaggedChecks);
 

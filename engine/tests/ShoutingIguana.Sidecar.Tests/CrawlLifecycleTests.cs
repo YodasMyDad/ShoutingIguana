@@ -1,9 +1,13 @@
 using System.Net;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Sidecar.Crawls;
+using ShoutingIguana.Sidecar.Events.Models;
+using ShoutingIguana.Sidecar.Hosting;
 using ShoutingIguana.Sidecar.Tests.Support;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
@@ -44,7 +48,8 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         await events.CrawlStatusAsync(id, "running");
         var progress = await events.NextAsync("progress", data => (string?)data["crawlId"] == id);
         Assert.NotNull(progress["elapsedMs"]);
-        Assert.NotNull(progress["pagesPerSecond"]);
+        Assert.NotNull(progress["urlsPerSecond"]);
+        Assert.Null(progress["pagesPerSecond"]);
         await events.CrawlStatusAsync(id, "completed");
         await events.CrawlStatusAsync(id, "analyzing");
         var analysed = await events.CrawlStatusAsync(id, "completed");
@@ -74,7 +79,7 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         var item = await _sidecar.GetJsonAsync($"api/crawls/{id}");
         var stats = CrawlStatsReader.Read(path);
         Assert.Equal("completed", (string?)item["status"]);
-        Assert.Equal(stats.Outcomes.Values.Sum(), (long?)item["urlCount"]);
+        Assert.Equal(stats.Outcomes.Values.Sum(), (long?)item["fetchedUrlCount"]);
         Assert.Equal(stats.HtmlPageCount, (long?)item["pageCount"]);
         Assert.NotNull(item["issues"]);
         Assert.False((bool?)item["outOfDate"]);
@@ -168,6 +173,12 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         Assert.Equal(["X-Crawler-Key"], needs["missingHeaders"]!.AsArray().Select(name => (string?)name));
         Assert.False((bool?)needs["proxyCredentials"]);
 
+        // Posting back the empty-valued header GET /options returns isn't giving it a value: still asked for.
+        var roundTripped = TestSidecar.AssertProblem(
+            await _sidecar.PostAsync($"api/crawls/{id}/continue", new JsonObject { ["extraHeaders"] = stored["extraHeaders"]!.DeepClone() }),
+            HttpStatusCode.UnprocessableEntity, "needs-secrets");
+        Assert.Equal(["X-Crawler-Key"], roundTripped["missingHeaders"]!.AsArray().Select(name => (string?)name));
+
         // What may change is validated as a new crawl's options are, keyed by field.
         var invalid = TestSidecar.AssertProblem(await _sidecar.PostAsync($"api/crawls/{id}/continue",
             new JsonObject { ["concurrency"] = 0, ["skipMissingHeaders"] = true }), HttpStatusCode.UnprocessableEntity, "invalid-options");
@@ -207,6 +218,15 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
             HttpStatusCode.UnprocessableEntity, "needs-secrets");
         Assert.True((bool?)needs["proxyCredentials"]);
         Assert.Empty(needs["missingHeaders"]!.AsArray());
+
+        // A UI that pre-fills the form from GET /options and posts it back gives the proxy as the file keeps it: the user
+        // name redacted. That isn't the password, so it is still asked for, not resumed with the redaction marker.
+        var storedProxy = (string?)(await _sidecar.GetJsonAsync($"api/crawls/{id}/options"))["proxyUrl"];
+        Assert.Contains(CrawlOptions.REDACTED, storedProxy);
+        var roundTripped = TestSidecar.AssertProblem(
+            await _sidecar.PostAsync($"api/crawls/{id}/continue", new JsonObject { ["skipMissingHeaders"] = true, ["proxyUrl"] = storedProxy }),
+            HttpStatusCode.UnprocessableEntity, "needs-secrets");
+        Assert.True((bool?)roundTripped["proxyCredentials"]);
     }
 
     [Fact]
@@ -297,6 +317,141 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         finally
         {
             await sidecar.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// Shutdown tells crawls to stop as soon as it begins, before the web server drains the requests in flight, so a slow
+    /// request can't let a crawl fetch on after shutdown was asked. Proven by the stop running in StoppingAsync: nothing
+    /// new may start once it has, and the crawl is left stopped and resumable.
+    /// </summary>
+    [Fact]
+    public async Task ShutdownStopsCrawlsBeforeDrainingRequests()
+    {
+        await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
+        var started = await StartAsync(SlowCrawl());
+        var id = (string)started["id"]!;
+        var path = (string)started["path"]!;
+        await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["fetched"] >= 1);
+
+        // StoppingAsync runs before any hosted service (the web server included) stops: the engine's own fix point.
+        var shutdown = new CrawlShutdown(_sidecar.Host.Services.GetRequiredService<CrawlManager>());
+        await shutdown.StoppingAsync(CancellationToken.None);
+
+        // From here nothing new starts, because the crawls were already told to stop.
+        TestSidecar.AssertProblem(await _sidecar.PostAsync("api/crawls", new JsonObject { ["options"] = SlowCrawl() }),
+            HttpStatusCode.Conflict, "crawl-busy");
+
+        await shutdown.StopAsync(CancellationToken.None);
+        Assert.Equal(CrawlStatus.Stopped, CrawlSummaryReader.Read(path).Status);
+        Assert.False(CrawlDatabase.IsInUse(path));
+    }
+
+    /// <summary>
+    /// A crawl's events reach the stream in the order the manager made the changes, because each change and the event that
+    /// announces it happen under one lock. Forced here: while an event is being published, another thread's call that
+    /// needs that lock can't run until the publish is done.
+    /// </summary>
+    [Fact]
+    public async Task EventsArePublishedUnderTheLockSoTheyKeepTheirOrder()
+    {
+        var manager = _sidecar.Host.Services.GetRequiredService<CrawlManager>();
+        var acted = 0;
+        Task? probe = null;
+        var reachedLock = new ManualResetEventSlim();
+        var raced = false;
+        manager.Publishing = evt =>
+        {
+            // The crawl id comes from the event itself, so the very first event (the crawl's own, published as it starts)
+            // is the one probed, whatever its kind.
+            var crawlId = evt switch
+            {
+                CrawlEventDto crawlEvent => crawlEvent.CrawlId,
+                ProgressEventDto progress => progress.CrawlId,
+                _ => null
+            };
+            if (crawlId is null || Interlocked.Exchange(ref acted, 1) == 1)
+            {
+                return;
+            }
+
+            // Another thread calls into the manager, which takes the same lock to read _crawls; it can't finish while we
+            // hold it. Were the event published outside the lock, this call would run straight through.
+            probe = Task.Run(() =>
+            {
+                reachedLock.Set();
+                manager.PathOf(crawlId);
+            });
+            reachedLock.Wait();
+            raced = probe.Wait(TimeSpan.FromMilliseconds(500));
+        };
+
+        try
+        {
+            await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["maxUrls"] = 5 });
+            using var timeout = new CancellationTokenSource(EventStreamReader.TIMEOUT);
+            while (Volatile.Read(ref acted) == 0)
+            {
+                await Task.Delay(20, timeout.Token);
+            }
+
+            await (probe ?? Task.CompletedTask);
+            Assert.False(raced, "A manager call ran while an event was being published: publishing isn't under the lock.");
+        }
+        finally
+        {
+            manager.Publishing = null;
+        }
+    }
+
+    /// <summary>
+    /// A stop during a continue's start, then a start that fails, still ends: the crawl's stored status and a library
+    /// change are published, so the UI leaves "stopping" instead of waiting for ever.
+    /// </summary>
+    [Fact]
+    public async Task AStopThenAFailedStartStillEnds()
+    {
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "continue-fails.sicrawl"), maxUrls: 5);
+        var id = Library.CrawlIds.For(path);
+        TestCrawlFiles.SetStoredStatus(path, CrawlStatus.Stopped);
+
+        var manager = _sidecar.Host.Services.GetRequiredService<CrawlManager>();
+        using var release = new ManualResetEventSlim();
+        manager.StartJob = (_, _) =>
+        {
+            release.Wait(EventStreamReader.TIMEOUT);
+            throw new CrawlFileInUseException("database is locked");
+        };
+
+        try
+        {
+            await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
+            var continuing = _sidecar.PostAsync($"api/crawls/{id}/continue");
+
+            // The crawl is opening (its start is blocked): the library shows it running. Stop it while it starts.
+            await WaitForStatusAsync(id, "running");
+            Assert.Equal(HttpStatusCode.Accepted, (await _sidecar.PostAsync($"api/crawls/{id}/stop")).Status);
+            await events.CrawlStatusAsync(id, "stopping");
+
+            // Now let the start fail: the crawl ends, with its stored status and a library event, not stuck on stopping.
+            release.Set();
+            await events.CrawlStatusAsync(id, "stopped");
+            await events.NextAsync("library");
+            TestSidecar.AssertProblem(await continuing, HttpStatusCode.Conflict, "crawl-busy");
+            Assert.Equal("stopped", (string?)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["status"]);
+        }
+        finally
+        {
+            manager.StartJob = null;
+        }
+    }
+
+    private async Task WaitForStatusAsync(string id, string status)
+    {
+        using var timeout = new CancellationTokenSource(EventStreamReader.TIMEOUT);
+        while ((string?)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["status"] != status)
+        {
+            await Task.Delay(20, timeout.Token);
         }
     }
 

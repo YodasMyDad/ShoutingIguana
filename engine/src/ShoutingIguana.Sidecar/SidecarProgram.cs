@@ -1,3 +1,4 @@
+using ShoutingIguana.Sidecar.Hosting;
 using ShoutingIguana.Sidecar.Models;
 
 namespace ShoutingIguana.Sidecar;
@@ -8,8 +9,11 @@ namespace ShoutingIguana.Sidecar;
 /// </summary>
 internal static class SidecarProgram
 {
-    public const int BAD_ARGUMENTS = 2;
     public const int FAILED = 1;
+    public const int BAD_ARGUMENTS = 2;
+
+    /// <summary>Another sidecar is using the state folder: the shell is already running one, or a stale one hasn't exited.</summary>
+    public const int STATE_IN_USE = 3;
 
     public static async Task<int> RunAsync(string[] args)
     {
@@ -25,22 +29,39 @@ internal static class SidecarProgram
             return BAD_ARGUMENTS;
         }
 
+        return await RunAsync(options, Console.Out, Console.Error).ConfigureAwait(false);
+    }
+
+    /// <summary>Starts the sidecar, writes the ready line once it serves, and returns the exit code once it has shut down.</summary>
+    /// <param name="cancellationToken">Cancelling it before the sidecar is serving is a shutdown asked for while starting.</param>
+    internal static async Task<int> RunAsync(SidecarOptions options, TextWriter output, TextWriter error, CancellationToken cancellationToken = default)
+    {
         SidecarHost host;
         try
         {
-            host = await SidecarHost.StartAsync(options).ConfigureAwait(false);
+            host = await SidecarHost.StartAsync(options, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Ctrl+C or SIGTERM while starting: as clean an exit as after any other shutdown, and nothing was served.
+            return 0;
+        }
+        catch (StateFolderInUseException exception)
+        {
+            await error.WriteLineAsync(exception.Message).ConfigureAwait(false);
+            return STATE_IN_USE;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             // A port already taken, a state folder that can't be created: say so in a line, as the CLI does.
-            await Console.Error.WriteLineAsync($"The sidecar couldn't start: {exception.Message}").ConfigureAwait(false);
+            await error.WriteLineAsync($"The sidecar couldn't start: {exception.Message}").ConfigureAwait(false);
             return FAILED;
         }
 
         await using (host.ConfigureAwait(false))
         {
-            await Console.Out.WriteLineAsync(host.ReadyLine).ConfigureAwait(false);
-            await Console.Out.FlushAsync().ConfigureAwait(false);
+            await output.WriteLineAsync(host.ReadyLine).ConfigureAwait(false);
+            await output.FlushAsync(CancellationToken.None).ConfigureAwait(false);
             await host.WaitForShutdownAsync().ConfigureAwait(false);
         }
 
