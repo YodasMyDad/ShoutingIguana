@@ -25,6 +25,7 @@ internal sealed class WriterStatements : IDisposable
     private readonly SqliteCommand _upsertHtml;
     private readonly SqliteCommand _claim;
     private readonly SqliteCommand _skipQueuedInternal;
+    private readonly SqliteCommand _updateUrlSource;
     private readonly SqliteCommand _readLinkTargets;
     private readonly SqliteCommand _upsertRobots;
     private readonly SqliteCommand _registerSitemap;
@@ -84,13 +85,18 @@ internal sealed class WriterStatements : IDisposable
                 WHERE state = 0 AND is_internal = $internal AND depth >= $fromDepth AND depth < $toDepth
                 ORDER BY depth, id
                 LIMIT $limit)
-            RETURNING id, url, depth, fetch_mode
+            RETURNING id, url, depth, fetch_mode, source
             """, "$internal", "$limit", "$fromDepth", "$toDepth");
+
+        // Site-version probes aren't held to the URL limit.
         _skipQueuedInternal = Prepare(connection, $"""
             UPDATE urls SET state = 3, skip_reason = {(int)SkipReason.UrlLimit}
-            WHERE state = 0 AND is_internal = 1
+            WHERE state = 0 AND is_internal = 1 AND source <> {(int)DiscoverySource.SiteVersion}
             RETURNING id, url
             """);
+        _updateUrlSource = Prepare(connection,
+            "UPDATE urls SET source = $source, found_on_id = $foundOn, found_via = $via, depth = $depth WHERE id = $id",
+            "$source", "$foundOn", "$via", "$depth", "$id");
         _readLinkTargets = Prepare(connection, """
             SELECT l.kind, u.url, u.is_internal FROM links l JOIN urls u ON u.id = l.to_id WHERE l.from_id = $id
             """, "$id");
@@ -128,7 +134,7 @@ internal sealed class WriterStatements : IDisposable
     public void InsertUrl(int id, OutLink link, FetchMode mode, int depth, UrlState state, SkipReason skip,
         DiscoverySource source, int? foundOnId) =>
         Run(_insertUrl, id, link.Url, link.IsInternal, (int)mode, depth, (int)state, (int)skip, (int)source,
-            foundOnId, source == DiscoverySource.Link ? (int)link.Kind : null);
+            foundOnId, foundOnId is null ? null : (int)link.Kind);
 
     public void UpdateUrlState(int id, UrlState state) => Run(_updateUrlState, (int)state, id);
 
@@ -137,6 +143,10 @@ internal sealed class WriterStatements : IDisposable
     public void UpdateUrlMode(int id, FetchMode mode) => Run(_updateUrlMode, (int)mode, id);
 
     public void UpdateUrlSkip(int id, SkipReason skip, FetchMode mode) => Run(_updateUrlSkip, (int)skip, (int)mode, id);
+
+    /// <summary>A site-version probe the site turned out to link to, list or redirect to: stored as found that way, at that depth.</summary>
+    public void UpdateUrlSource(int id, DiscoverySource source, int? foundOnId, LinkKind kind, int depth) =>
+        Run(_updateUrlSource, (int)source, foundOnId, foundOnId is null ? null : (int)kind, depth, id);
 
     public void RequeueUrl(int id, FetchMode mode, int depth) => Run(_requeueUrl, (int)mode, depth, id);
 
@@ -178,7 +188,8 @@ internal sealed class WriterStatements : IDisposable
         using var reader = _claim.ExecuteReader();
         while (reader.Read())
         {
-            items.Add(new FrontierItem(reader.GetInt32(0), reader.GetString(1), reader.GetInt32(2), (FetchMode)reader.GetInt32(3), isInternal));
+            items.Add(new FrontierItem(reader.GetInt32(0), reader.GetString(1), reader.GetInt32(2), (FetchMode)reader.GetInt32(3), isInternal,
+                (DiscoverySource)reader.GetInt32(4)));
         }
 
         return items;

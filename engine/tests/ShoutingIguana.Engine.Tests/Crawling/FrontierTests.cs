@@ -85,8 +85,9 @@ public sealed class FrontierTests : IAsyncLifetime
             Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
         }
 
+        // The probe of the https:// version is claimed with the start URL, at its depth.
         const string DEPTHS = "SELECT url, depth FROM urls";
-        List<string> expected = [$"{origin}/ | 0", $"{origin}/a | 1", $"{origin}/b | 1", $"{origin}/c | 2", $"{origin}/d | 2", $"{origin}/e | 3"];
+        List<string> expected = [$"{origin}/ | 0", $"{origin}/a | 1", $"{origin}/b | 1", $"{origin}/c | 2", $"{origin}/d | 2", $"{origin}/e | 3", $"https{origin[4..]}/ | 0"];
         Assert.Equal(expected, TestCrawls.Rows(unhindered, DEPTHS));
         Assert.Equal(expected, TestCrawls.Rows(shortcutLast, DEPTHS));
         Assert.Equal(expected, TestCrawls.Rows(shortcutWhileLoading, DEPTHS));
@@ -119,10 +120,13 @@ public sealed class FrontierTests : IAsyncLifetime
         var path = await CrawlSitemapsFirstAsync(Options() with { MaxUrls = LIMIT });
 
         // Breadth-first from the home page: everything it links, then pages two clicks away, and no page that only
-        // a sitemap lists, although the sitemaps were read first.
-        var fetched = $"is_internal = 1 AND state = {(int)UrlState.Done}";
+        // a sitemap lists, although the sitemaps were read first. The probe of the https:// version is fetched as well,
+        // without taking a slot.
+        var site = $"is_internal = 1 AND source <> {(int)DiscoverySource.SiteVersion}";
+        var fetched = $"{site} AND state = {(int)UrlState.Done}";
         Assert.Equal(LIMIT, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE {fetched}"));
-        Assert.Equal(LIMIT, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state <> {(int)UrlState.Skipped}"));
+        Assert.Equal(LIMIT, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE {site} AND state <> {(int)UrlState.Skipped}"));
+        Assert.Equal(1, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE source = {(int)DiscoverySource.SiteVersion} AND state = {(int)UrlState.Done}"));
         Assert.Equal(2, TestCrawls.Count(path, $"SELECT MAX(depth) FROM urls WHERE {fetched}"));
         Assert.Equal(0, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND depth <= 1 AND state <> {(int)UrlState.Done}"));
         Assert.True(CrawlStatsReader.Read(path).SkipReasons.GetValueOrDefault(SkipReason.UrlLimit) > 0);
@@ -165,11 +169,16 @@ public sealed class FrontierTests : IAsyncLifetime
             Assert.Equal(TestCrawls.Rows(sitemapFirst, table), TestCrawls.Rows(linksFirst, table));
         }
 
-        // Both crawl every page in full, each at the depth of its shortest link, followed or not.
+        // Both crawl every page in full, each at the depth of its shortest link, followed or not. The https:// version is
+        // only probed, a status check.
         string Row(string path, int depth) => $"{origin}{path} | 1 | {(int)FetchMode.Crawl} | {depth} | {(int)UrlState.Done} | {(int)SkipReason.None}";
-        List<string> expected = [Row("/", 0), Row("/about", 1), Row("/de/", 1), Row("/embed", 1), Row("/embed-held", 1), Row("/private", 1), Row("/sitemap-only", CrawlDepth.UNLINKED)];
+        var probe = $"https{origin[4..]}/ | 1 | {(int)FetchMode.Check} | 0 | {(int)UrlState.Done} | {(int)SkipReason.None}";
+        List<string> expected = [Row("/", 0), Row("/about", 1), Row("/de/", 1), Row("/embed", 1), Row("/embed-held", 1), Row("/private", 1), Row("/sitemap-only", CrawlDepth.UNLINKED), probe];
         Assert.Equal(expected.Order(StringComparer.Ordinal), TestCrawls.Rows(linksFirst, CrawlTables.URLS));
-        Assert.Equal(0, TestCrawls.Count(linksFirst, "SELECT COUNT(*) FROM responses WHERE word_count IS NULL"));
+        Assert.Equal(0, TestCrawls.Count(linksFirst, $"""
+            SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id
+            WHERE r.word_count IS NULL AND u.source <> {(int)DiscoverySource.SiteVersion}
+            """));
     }
 
     private CrawlOptions Options() => new() { StartUrl = _synthetic.BaseUri.AbsoluteUri, Concurrency = 8 };

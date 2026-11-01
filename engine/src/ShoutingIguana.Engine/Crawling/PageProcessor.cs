@@ -159,12 +159,13 @@ internal sealed class PageProcessor(
             is { Url: { } target } && target != url;
 
     /// <summary>
-    /// Redirects keep their depth, so depth 0 is the start URL and its redirects. One that leads off the site leaves
-    /// nothing else to crawl, which looks like a broken crawl unless it's said.
+    /// Redirects keep their depth, so depth 0 is the start URL and its redirects, and the site-version probes, which aren't
+    /// the start. One that leads off the site leaves nothing else to crawl, which looks like a broken crawl unless it's said.
     /// </summary>
     private void WarnIfTheStartLeavesTheSite(FrontierItem item, OutLink target)
     {
-        if (item is { Depth: 0, IsInternal: true } && !target.IsInternal && Interlocked.Exchange(ref _startLeftReported, 1) == 0)
+        if (item is { Depth: 0, IsInternal: true, Source: not DiscoverySource.SiteVersion } && !target.IsInternal &&
+            Interlocked.Exchange(ref _startLeftReported, 1) == 0)
         {
             observer.OnNotice(new CrawlNotice(
                 CrawlNoticeLevel.Warning,

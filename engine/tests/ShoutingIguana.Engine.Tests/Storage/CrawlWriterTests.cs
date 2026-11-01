@@ -225,5 +225,162 @@ public sealed class CrawlWriterTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// A site-version probe's redirect changes nothing the site itself led to: a page the site only status-checks (an
+    /// iframe) isn't promoted to a full crawl, and another probe stays a probe. A URL only a probe leads to is
+    /// status-checked as a probe too, never crawled, so a version that answers can't get the site crawled twice.
+    /// </summary>
+    [Fact]
+    public async Task AProbesRedirectChangesNothingTheSiteLedTo()
+    {
+        var path = _files.NewPath();
+        var start = new Uri("https://example.com/shop/");
+        var (options, link) = Site(start);
+
+        await using (var writer = CrawlWriter.Open(path, options, resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+            await SeedAsync(writer, link, start, SiteVersions.Of(start));
+            var claim = await writer.ClaimAsync(10, 10, CancellationToken.None);
+            FrontierItem Item(string url) => claim.Internal.Single(item => item.Url == url);
+
+            await RecordAsync(writer, Item("https://example.com/shop/"), FetchOutcome.Success, link("https://example.com/shop/embed", LinkKind.Iframe));
+            await RecordAsync(writer, Item("https://www.example.com/shop/"), FetchOutcome.Redirect, link("https://example.com/shop/embed", LinkKind.Redirect));
+            await RecordAsync(writer, Item("http://example.com/shop/"), FetchOutcome.Redirect, link("https://www.example.com/shop/", LinkKind.Redirect));
+            await RecordAsync(writer, Item("http://www.example.com/shop/"), FetchOutcome.Redirect, link("http://www.example.com/landing", LinkKind.Redirect));
+        }
+
+        Assert.Equal(
+        [
+            Row("http://example.com/shop/", FetchMode.Check, 0, UrlState.Done, SkipReason.None, DiscoverySource.SiteVersion),
+            Row("http://www.example.com/landing", FetchMode.Check, 0, UrlState.Queued, SkipReason.None, DiscoverySource.SiteVersion),
+            Row("http://www.example.com/shop/", FetchMode.Check, 0, UrlState.Done, SkipReason.None, DiscoverySource.SiteVersion),
+            Row("https://example.com/shop/", FetchMode.Crawl, 0, UrlState.Done, SkipReason.None, DiscoverySource.Seed),
+            Row("https://example.com/shop/embed", FetchMode.Check, 1, UrlState.Queued, SkipReason.None, DiscoverySource.Link),
+            Row("https://www.example.com/shop/", FetchMode.Check, 0, UrlState.Done, SkipReason.None, DiscoverySource.SiteVersion)
+        ], TestCrawls.Rows(path, URL_ROWS));
+        Assert.Equal([$"http://www.example.com/shop/ | {(int)LinkKind.Redirect}"], TestCrawls.Rows(path,
+            "SELECT f.url, u.found_via FROM urls u JOIN urls f ON f.id = u.found_on_id WHERE u.url = 'http://www.example.com/landing'"));
+    }
+
+    /// <summary>
+    /// The site links to its www version, which the probe has fetched or is fetching. From then on it's the site's own:
+    /// found by that link, at that depth, crawled in full, and counted under the URL limit, once. With a limit of two (the
+    /// home page and www), the home page's other links are over it.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AProbeTheSiteLinksToBecomesTheSitesOwnAndTakesASlot(bool probeAnsweredFirst)
+    {
+        var path = _files.NewPath();
+        var start = new Uri("https://example.com/");
+        var (options, link) = Site(start);
+
+        await using (var writer = CrawlWriter.Open(path, options with { MaxUrls = 2 }, resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+            await SeedAsync(writer, link, start, ["https://www.example.com/"]);
+            var claim = await writer.ClaimAsync(10, 10, CancellationToken.None);
+            Assert.Equal(2, claim.Internal.Count);
+            var probe = claim.Internal.Single(item => item.Source == DiscoverySource.SiteVersion);
+            if (probeAnsweredFirst)
+            {
+                await RecordAsync(writer, probe, FetchOutcome.Success);
+            }
+
+            await RecordAsync(writer, claim.Internal.Single(item => item.Source == DiscoverySource.Seed), FetchOutcome.Success,
+                link("https://www.example.com/", LinkKind.Hyperlink), link("https://example.com/p1", LinkKind.Hyperlink), link("https://example.com/p2", LinkKind.Hyperlink));
+            if (!probeAnsweredFirst)
+            {
+                await RecordAsync(writer, probe, FetchOutcome.Success);
+            }
+
+            // Fetched again in full, without taking a second slot.
+            Assert.Equal(["https://www.example.com/"], (await writer.ClaimAsync(10, 10, CancellationToken.None)).Internal.Select(item => item.Url));
+        }
+
+        Assert.Equal(
+        [
+            Row("https://example.com/", FetchMode.Crawl, 0, UrlState.Done, SkipReason.None, DiscoverySource.Seed),
+            Row("https://example.com/p1", FetchMode.Crawl, 1, UrlState.Skipped, SkipReason.UrlLimit, DiscoverySource.Link),
+            Row("https://example.com/p2", FetchMode.Crawl, 1, UrlState.Skipped, SkipReason.UrlLimit, DiscoverySource.Link),
+            Row("https://www.example.com/", FetchMode.Crawl, 1, UrlState.Fetching, SkipReason.None, DiscoverySource.Link)
+        ], TestCrawls.Rows(path, URL_ROWS));
+    }
+
+    /// <summary>Resuming remembers which URLs only a probe found, so the site linking to one afterwards still makes it the site's own.</summary>
+    [Fact]
+    public async Task AResumedCrawlStillKnowsItsProbes()
+    {
+        var path = _files.NewPath();
+        var start = new Uri("https://example.com/");
+        var (options, link) = Site(start);
+        await using (var writer = CrawlWriter.Open(path, options, resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+            await SeedAsync(writer, link, start, ["https://www.example.com/"]);
+            var claim = await writer.ClaimAsync(10, 10, CancellationToken.None);
+            await RecordAsync(writer, claim.Internal.Single(item => item.Source == DiscoverySource.SiteVersion), FetchOutcome.Success);
+        }
+
+        await using (var writer = CrawlWriter.Open(path, options, resume: true, new CrawlCounters(), NullLogger.Instance))
+        {
+            var home = Assert.Single((await writer.ClaimAsync(10, 10, CancellationToken.None)).Internal);
+            await RecordAsync(writer, home, FetchOutcome.Success, link("https://www.example.com/", LinkKind.Hyperlink));
+        }
+
+        Assert.Contains(Row("https://www.example.com/", FetchMode.Crawl, 1, UrlState.Queued, SkipReason.None, DiscoverySource.Link), TestCrawls.Rows(path, URL_ROWS));
+    }
+
+    /// <summary>A probe that redirects to another site leaves it unchecked when the crawl leaves other sites unchecked.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AProbeLeadingToAnotherSiteIsCheckedOnlyIfOtherSitesAre(bool checkExternalLinks)
+    {
+        var path = _files.NewPath();
+        var start = new Uri("https://example.com/");
+        var (options, link) = Site(start);
+        await using (var writer = CrawlWriter.Open(path, options with { CheckExternalLinks = checkExternalLinks }, resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+            await SeedAsync(writer, link, start, ["https://www.example.com/"]);
+            var claim = await writer.ClaimAsync(10, 10, CancellationToken.None);
+            await RecordAsync(writer, claim.Internal.Single(item => item.Source == DiscoverySource.SiteVersion), FetchOutcome.Redirect,
+                link("https://parked.example/", LinkKind.Redirect));
+        }
+
+        Assert.Contains(checkExternalLinks
+                ? Row("https://parked.example/", FetchMode.Check, 0, UrlState.Queued, SkipReason.None, DiscoverySource.SiteVersion)
+                : Row("https://parked.example/", FetchMode.Check, 0, UrlState.Skipped, SkipReason.ExternalsDisabled, DiscoverySource.SiteVersion),
+            TestCrawls.Rows(path, URL_ROWS));
+    }
+
+    private const string URL_ROWS = "SELECT url, fetch_mode, depth, state, skip_reason, source FROM urls";
+
+    private static string Row(string url, FetchMode mode, int depth, UrlState state, SkipReason skip, DiscoverySource source) =>
+        $"{url} | {(int)mode} | {depth} | {(int)state} | {(int)skip} | {(int)source}";
+
+    /// <summary>Crawl options for a site at <paramref name="start"/> kept to its folder, and a maker of its links.</summary>
+    private static (CrawlOptions Options, Func<string, LinkKind, OutLink> Link) Site(Uri start)
+    {
+        var links = new OutLinkFactory(new CrawlScope(start, includeSubdomains: false, stayInStartFolder: true));
+        return (new CrawlOptions { StartUrl = start.AbsoluteUri, Concurrency = 4, StayInStartFolder = true },
+            (target, kind) => links.Create(new Uri(target), kind, LinkFlags.None, LinkPosition.Content, null));
+    }
+
+    /// <summary>The start URL, then the site-version probes, as a crawl seeds them.</summary>
+    private static async Task SeedAsync(CrawlWriter writer, Func<string, LinkKind, OutLink> link, Uri start, IEnumerable<string> versions)
+    {
+        await writer.DiscoverAsync([link(start.AbsoluteUri, LinkKind.Hyperlink)], DiscoverySource.Seed, null, CancellationToken.None);
+        await writer.DiscoverAsync([.. versions.Select(url => link(url, LinkKind.Hyperlink))], DiscoverySource.SiteVersion, null, CancellationToken.None);
+    }
+
+    private static ValueTask RecordAsync(CrawlWriter writer, FrontierItem item, FetchOutcome outcome, params OutLink[] links)
+    {
+        var response = new ResponseRow
+        {
+            UrlId = item.Id, FetchedAt = 0, Outcome = outcome, StatusCode = outcome == FetchOutcome.Redirect ? 301 : 200, IsHtml = outcome == FetchOutcome.Success
+        };
+        return writer.RecordAsync(new PageRecord(item, response, links, false, null, null), CancellationToken.None);
+    }
+
     private CrawlOptions Options() => new() { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 4 };
 }

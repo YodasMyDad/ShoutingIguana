@@ -28,7 +28,7 @@ public sealed class IssueCatalogTests
         "hreflang-missing-x-default", "hreflang-outside-head", "structured-data-invalid", "structured-data-missing-required",
         "no-https", "http-page", "mixed-content", "security-headers-missing", "url-uppercase", "url-underscores", "url-too-long",
         "slow-response", "large-page", "viewport-missing", "lang-missing", "charset-missing", "open-graph-missing",
-        "sitemap-url-other-host", "noindex-with-canonical", "robots-txt-unreachable-other-origin"
+        "sitemap-url-other-host", "noindex-with-canonical", "robots-txt-unreachable-other-origin", "duplicate-site-version"
     ];
 
     [Fact]

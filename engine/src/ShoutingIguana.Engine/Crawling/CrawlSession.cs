@@ -257,10 +257,20 @@ internal sealed class CrawlSession
         }
     }
 
-    private ValueTask SeedAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// The start URL, then the same path on the site's other versions (bare domain or www, http or https), so the analysis
+    /// can tell whether they redirect to the site. They are claimed right behind the start URL, so even a crawl stopped
+    /// early has the answer. On a resume, URLs already known are left as they are.
+    /// </summary>
+    private async ValueTask SeedAsync(CancellationToken cancellationToken)
     {
         var seed = _links.Create(_startUri, LinkKind.Hyperlink, LinkFlags.None, LinkPosition.Content, null);
-        return _writer.DiscoverAsync([seed], DiscoverySource.Seed, null, cancellationToken);
+        await _writer.DiscoverAsync([seed], DiscoverySource.Seed, null, cancellationToken).ConfigureAwait(false);
+
+        var versions = SiteVersions.Of(_startUri)
+            .Select(url => _links.Create(new Uri(url), LinkKind.Hyperlink, LinkFlags.None, LinkPosition.Content, null))
+            .ToList();
+        await _writer.DiscoverAsync(versions, DiscoverySource.SiteVersion, null, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task DiscoverSitemapsAsync(CancellationToken cancellationToken)

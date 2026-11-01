@@ -327,11 +327,14 @@ public sealed partial class SyntheticSite
         }
 
         // Site-wide findings go on the home page: plain HTTP, or over HTTPS the missing Strict-Transport-Security header
-        // and the plain-HTTP robots.txt that doesn't answer.
+        // and the plain-HTTP robots.txt that doesn't answer. The HTTPS site's plain-HTTP side serves the home page rather
+        // than redirect, a duplicate version of the site. Over plain HTTP, the https:// version doesn't answer, as on a
+        // site without TLS, which is no duplicate.
         Flag(IsHttps ? "security-headers-missing" : "no-https", "/");
         if (IsHttps)
         {
             Flag("robots-txt-unreachable-other-origin", "/");
+            Flag("duplicate-site-version", "http" + _base["https".Length..] + "/");
         }
 
         if (_options.Sitemaps)
