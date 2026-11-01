@@ -20,7 +20,10 @@ Built in stages:
   readers that exist today.
 - **E2** is marked below too: the URL summary the grids read, and the analysis's own state (partial or not, why each
   check was skipped, whether it's out of date).
-- **E3–E6** add the grids, export, search and the favicon. They come from the brief's
+- **E4** is marked below as well: the live data the crawl screens need. Progress by status class and code, with the
+  crawl's phase and what it waits on; the history the "found and crawled" chart draws; the analysis's progress; and
+  alerts kept in the crawl file.
+- **E3, E5 and E6** add the grids, export, search and the favicon. They come from the brief's
   [engine work the UI needs](v2-ui-brief.md#engine-work-the-ui-needs) and the handoff's
   [what's missing](v2-rebuild.md#whats-missing).
 
@@ -301,31 +304,128 @@ use, as `si crawl --resume` allows. It's analysed when it completes.
 
 `GET /api/events` is a `text/event-stream`. The UI reads it with `fetch`, since `EventSource` can't send the token.
 
-- **First.** A `hello` event, `{ live: [crawlIds] }`, followed by the latest `progress` for each live crawl. A
-  reconnecting UI is up to date at once.
+- **First.** A `hello` event, `{ live: [crawlIds] }`, followed by the latest `progress` for each live crawl, then the
+  latest `analysis` of each crawl being analysed. A reconnecting UI is up to date at once.
 - **Replay.** None. Events carry no ids, and `Last-Event-ID` is ignored. Alerts can be fetched with
-  `GET /api/crawls/{id}/alerts`.
+  `GET /api/crawls/{id}/alerts`, which reads them from the crawl file; each alert's own `id` tells the UI one it already
+  has.
 - **One stream.** Kestrel without TLS speaks HTTP/1.1, and Chromium allows 6 connections per host and port. An open
   stream holds one for good, so every live event shares this one stream.
 - **Keep-alive.** A comment line every 15 s.
 - **Slow clients.** Each client has a bounded queue. Progress is merged per crawl when a client falls behind; other
-  events are never dropped. A client that stays 1,000 events behind is disconnected, and reconnects.
+  events, `analysis` included, are never dropped. A client that stays 1,000 events behind is disconnected, and
+  reconnects.
 
 | Event | Data | When |
 | --- | --- | --- |
-| `progress` | `{ crawlId, status, elapsedMs, discovered, queued, inFlight, fetched, htmlPages, redirects, errors, blocked, robotsDisallowed, skipped, bytesDownloaded, urlsPerSecond }` | Every 500 ms per live crawl (the engine's pace). The UI batches to 4 renders a second. `urlsPerSecond` is the rate of every URL fetched, pages and the rest alike |
-| `alert` | `{ crawlId, level, code, message, at }` | Each `CrawlNotice` (see below) |
+| `progress` | `{ crawlId, status, elapsedMs, discovered, queued, inFlight, fetched, htmlPages, redirects, errors, blocked, robotsDisallowed, skipped, bytesDownloaded, urlsPerSecond, at, phase, internalFound, internalFetched, statusClasses, statusCodes, noResponse, waits }` | Every 500 ms per live crawl (the engine's pace). The UI batches to 4 renders a second. `urlsPerSecond` is the rate of every URL fetched, pages and the rest alike. The fields from `at` on are E4's, below |
+| `alert` | `{ crawlId, id, level, code, message, at, data }` | Each `CrawlNotice` (see below) |
 | `crawl` | `{ crawlId, status, error?, errorType? }` | Every status change, with the library's statuses. An analysis shows as `analyzing`, then back to `completed` or `stopped` with a `library` event, and `error` if it failed. `errorType` is the problem type when the UI can act on it: `crawl-busy` when the analysis found the file busy (someone reading it, another program writing to it), within seconds, so trying again can work |
 | `library` | `{}` | The library changed. The UI fetches `/api/crawls` again |
-| `analysis` | `{ crawlId, phase, done, total }` | E4 |
+| `analysis` | `{ crawlId, phase, done, total }` | E4. While an analysis runs: each phase as it starts (`done` 0) and as it ends (`done` equal to `total`), and at most every 250 ms between. All of them come after the crawl's `analyzing` event and before the one that ends it |
 
+#### Progress (E4)
+
+Counters only: the engine keeps running totals as it stores each response, and reads a handful of gates when it
+reports, so a progress event costs the same at a million URLs as at ten.
+
+- **`at`** is when the numbers were taken: the time the history keeps them under.
+- **`phase`** is what the crawl is doing as a whole. Whether it's paused is its `status`.
+
+  | Phase | The crawl is |
+  | --- | --- |
+  | `starting` | Queuing the start URL, for a moment. Continuing a crawl reads every URL into memory before its first progress, while the library shows it `running` |
+  | `readingRobotsTxt` | Waiting for robots.txt, and fetching nothing else: as the start URL does before the first fetch |
+  | `crawling` | Fetching |
+  | `readingSitemaps` | Waiting for the sitemaps still being read, as nothing else is left to fetch. What only they list comes next |
+  | `retrying` | Trying the site's URLs that got no response once more, with what they lead to, after robots.txt's two-minute cool-down where it couldn't be read. It lasts to the end |
+  | `finishing` | Done fetching: the last requests settle and the file closes. The last event, with the final status, has this phase |
+
+- **`statusClasses`** is `{ "2xx", "3xx", "4xx", "5xx", other, noResponse, blocked }`: every URL fetched, once, so they
+  add up to `fetched`. A firewall or bot challenge is `blocked` whatever its status; the rest go by status code, and
+  `other` is a status outside 200–599 (LinkedIn's 999). `noResponse` is a URL with no status recorded.
+- **`statusCodes`** is `{ "200": 2693, "301": 8, "404": 8 }`: the URLs with a status that weren't blocked, by code, so
+  each class's codes add up to it. A block page's 403 is the firewall's, not the site's: "403 × 2" under 4xx is two
+  genuine 403s.
+- **`noResponse`** is `{ robotsDisallowed, timeout, networkError, notChecked, processingError }`, which add up to
+  `statusClasses.noResponse`. `robotsDisallowed` is the same count as the top-level field (refused by a rule, or because
+  robots.txt couldn't be read). `notChecked` is URLs never asked, their host having stopped answering: unknown, not
+  broken, so the UI shouldn't call them errors. `networkError` doesn't include them.
+- **`internalFound`** and **`internalFetched`** are the site's own URLs (internal, not the crawler's probes of its other
+  versions) the crawl means to fetch, queued, in flight or fetched, and those it has fetched. URLs it skipped (nofollow,
+  a limit) aren't counted. A URL limit counts these, so a crawl with one heads for the smaller of `internalFound` and
+  the limit, and the UI can give an ETA from `internalFetched`'s rate. Without a limit, more can turn up until the queue
+  is empty.
+- **`waits`** lists what holds part of the crawl up now, often nothing: `[{ reason, host?, urls?, durationMs? }]`.
+
+  | Reason | Means | Fields |
+  | --- | --- | --- |
+  | `robotsTxt` | URLs wait for their origin's robots.txt, which comes before a host's first fetch | `urls`: how many |
+  | `crawlDelay` | The site's robots.txt asks for a Crawl-delay, which spaces every request to that host. Only with `respectCrawlDelay` on, and when it is longer than the crawl's own rate | `host`, `durationMs`: the delay |
+  | `backoff` | The site answered 429, 503 or a block page, or keeps failing, so requests are spaced further apart. It halves every half second, so it comes and goes | `host`, `durationMs`: the extra spacing now |
+  | `heldBack` | Requests to the host are held: it sent Retry-After, or it stopped answering and is asked again a minute after each try | `host`, `durationMs`: until they may go again |
+  | `siteDown` | An origin of the site has stopped answering and is waited out. The crawl stops after 10 minutes of it, resumable | `host` (the origin, with scheme and port), `durationMs`: how long so far |
+  | `robotsTxtCoolDown` | In `retrying`: robots.txt couldn't be read, so the URLs it refused wait for it to be asked again | `durationMs`: until it is |
+
+  `host` is the site's host as its requests share one budget: `example.com` and `www.example.com` are one.
+
+#### Alerts (E4)
+
+An alert is a `CrawlNotice`, kept in the crawl file as the engine raises it (the `notices` table in
+[the engine's README](../engine/README.md#crawl-file-sicrawl)), so any program that opens the crawl can show it.
+
+- **`id`** numbers the crawl's alerts from 1, across every run of it: the same on the live event and in the file.
+- **`at`** is when it was raised, to the millisecond.
 - **`level`** is `info`, `warning` or `error`.
-- **`code`** is stable; key UI text and actions on it: `blocked`, `mostly-forbidden`, `start-redirects-away`,
-  `robots-unreachable`, `site-unreachable`, `site-down`, `sitemaps`, `sitemaps-not-read`, `sitemaps-failed`.
+- **`code`** is stable; key UI text and actions on it. Each says once what it's about: `blocked` once per host, and
+  `robots-unreachable` once per origin, in each run, so a crawl continued while it's still blocked says so again.
 - **`message`** is engine text and may include text from the site.
+- **`data`** is what the alert is about, for the UI to offer its action. Fields that don't apply are left out; it's null
+  for an alert without facts.
 
-`GET /api/crawls/{id}/alerts` returns the alerts since the sidecar started, oldest first, up to the last 1,000 per
-crawl. E4 persists them in the crawl file.
+  | Code | Level | `data` | What the UI can offer |
+  | --- | --- | --- | --- |
+  | `blocked` | warning | `host`, `reason` (the firewall or challenge, "Cloudflare challenge"), `count`: the host's responses blocked, 1 on the live event (the one that raised it) and so far when read with `GET /alerts` | Continue more slowly, add headers, another user agent |
+  | `mostly-forbidden` | warning | `host`, `count` (the 403s), `sampled` (of the site's first 20 URLs) | As for `blocked` |
+  | `start-redirects-away` | warning | `url`: where the start URL leads | Crawl from there instead |
+  | `robots-unreachable` | warning | `origin`, `reason` (`HTTP 503`, or the error), `durationMs`: how long until it's asked again | Crawl again with robots.txt ignored |
+  | `site-unreachable` | warning | `origin`, `reason` (the last error), `durationMs`: the pause between tries | Wait, or stop and continue later |
+  | `site-down` | error | `origin`, `durationMs`: how long it hadn't answered | Continue once the site is back |
+  | `sitemaps` | info | `count` (sitemaps read), `urlCount` (URLs they list) | Open Sitemaps |
+  | `sitemaps-not-read` | warning | `url` (the sitemap left out), `reason` | Open Sitemaps |
+  | `sitemaps-failed` | warning | `reason` | Details |
+
+`GET /api/crawls/{id}/alerts` returns a crawl's alerts from its file, oldest first, up to the last 1,000: every run's,
+for any crawl, whoever ran it. The engine stores each within a second or so; for a crawl live here, the sidecar adds the
+few it hasn't stored yet. A crawl file from before E4 has none until it's continued, which adds the table, and reads
+as `[]`.
+
+### History (E4)
+
+`GET /api/crawls/{id}/history` is a crawl's progress since it started, for the "found and crawled" chart. A UI that
+opens mid-crawl draws it, then adds each `progress` event at its `at`.
+
+```json
+{"crawlId":"…","startedAt":"2026-11-01T14:13:02.114Z","liveFrom":"2026-11-01T14:13:02.114Z",
+ "points":[{"at":"…","fetched":499,"htmlPages":420,"internalFetched":480,"errors":3,"blocked":0,
+            "elapsedMs":240000,"discovered":5384,"queued":3384,"skipped":1501}]}
+```
+
+- **`startedAt`** is when the crawl first started: the chart's zero.
+- **`points`**, oldest first, end at the latest. A crawl live here has this run's points as the sidecar took them, one
+  per `progress` event: at most 600 evenly spread, every half second at first, then every second, two seconds and so
+  on, and the latest. Memory stays flat however long it runs.
+- **`liveFrom`** is where the points taken live begin: the start of the run this sidecar is watching. Before it, and
+  for a crawl not live here (`liveFrom` null), the points are counted back from the crawl file: a zero at `startedAt`,
+  then at most 600 evenly spread over the seconds anything was fetched in, and the last.
+- **What the file can't say.** It keeps when each URL was fetched, so its points have `fetched`, `htmlPages`,
+  `internalFetched`, `errors` and `blocked`. It doesn't keep when each URL was found, so they leave out `discovered`,
+  `queued` and `skipped`, and `elapsedMs`. Nor does it keep when each run began and ended: a stretch where nothing was
+  fetched can be a pause, a stop between sessions, or a site that wasn't answering. A URL fetched twice (a status check
+  made a full fetch) counts from its last fetch.
+- **Cost.** A live crawl's own points cost nothing to serve. Counting back from the file reads every response's time
+  once, about 70 ms on the 100k benchmark crawl and growing with its URLs; for a live crawl that continued an earlier
+  one, that's done once and kept.
 
 ### Analysis (E1)
 
@@ -441,3 +541,37 @@ Each has a test that fails without it. `AnalysisFreshness.VERSION` is 2, so ever
   crawl gives up within seconds with `crawl-busy` (`errorType` on the `crawl` event for an analysis).
 - **One snapshot.** `GET /api/crawls/{id}/analysis` reads the analysis, its counts, notes, skip reasons and the
   crawl's stamp in one transaction (`IssueReader.ReadResults`).
+
+## Engine changes E4 made
+
+Each has a test that fails without it.
+
+- **Richer progress.** `CrawlProgress` gains `Phase` (`CrawlPhase`), `StatusClasses`, `StatusCodes`, `NoResponse`,
+  `InternalFound`, `InternalFetched` and `Waits` (`CrawlWait`). The writer counts as it stores each response, by outcome
+  and status code (one slot per code, so counting never allocates), and a resumed crawl restores the counts grouped the
+  same way. The site's own URLs are counted through every way one changes: found, skipped for a limit, queued again, a
+  probe adopted, a response dropped to fetch the URL again. Every end-to-end crawl, resumed ones included, checks its
+  last progress against SQL over the file.
+- **Phases and waits.** The dispatcher sets the phase as it goes; `readingRobotsTxt` is worked out from two counters
+  (URLs waiting for robots.txt, URLs being fetched). The waits read the site's host gates (`HostGate.ReadState`), a
+  handful whatever the crawl's size, the outages when there are any, and robots.txt's cool-down only while retrying.
+- **Alerts kept with the crawl.** `CrawlNotice` gains `Id`, `At` and `Data` (`CrawlNoticeData`). Each notice is stamped,
+  numbered and queued for the writer, which stores it with its next batch and stores what's left as it closes, so a
+  notice is never lost to a full channel and never waits on SQLite. The `notices` table is created
+  `IF NOT EXISTS` whenever the writer opens a file, so the crawl's schema version is unchanged, and
+  `CrawlNoticeReader.Read` finds none in a file that never had it. A continued crawl numbers on from the last id.
+- **History.** `CrawlHistoryReader.Read(path, before)` counts a crawl's fetching back from its file, a second at a time,
+  downsampled by `DownsampledSeries<T>`, which the sidecar's live history uses too.
+- **Analysis progress.** `CrawlAnalyzer.AnalyzeAsync(path, settings, progress, cancellationToken)` reports
+  `AnalysisProgress(Phase, Done, Total)`: `reading` (URLs), `pageRules` (pages, counted ahead from the URL table),
+  `siteRules` (the cross-page rules, 9), `urlSummary` (rows), then `writing` (1, ending once the file is closed). It
+  reports on the analysis's own thread, in order: the sidecar reports straight from it, as `Progress<T>` would hand each
+  report to the thread pool, which can reorder them. The overload without it is unchanged.
+
+**Paused isn't stored, on purpose.** A pause lives only in the process running the crawl, and the file says `running`
+throughout, as it always has. Storing it would add one thing: another program looking at the file while it's paused
+here could say "paused" rather than "in use". Everything else stays as it is. Once the process ends, a crawl is either
+stopped (quitting stops it, as the IA has it) or interrupted (a crash), and both resume the same way; a stored pause
+would only make "Continue" ask whether to start paused, which nobody wants. It would cost a write, and a new stamp on
+the crawl, at every pause and resume. The engine still reads a stored `paused` status as running or interrupted, as
+it does today.

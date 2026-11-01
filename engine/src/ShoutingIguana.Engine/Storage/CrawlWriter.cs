@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Data.Sqlite;
@@ -6,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing;
 using ShoutingIguana.Engine.Parsing.Models;
@@ -44,9 +47,13 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
     // Internal URLs queued again for a full fetch: counted against the URL limit when first claimed, not again.
     private readonly HashSet<int> _refetches = [];
+
+    // Raised on any thread, stored by the loop: they wait here, not in the channel, so a full channel can't lose one.
+    private readonly ConcurrentQueue<CrawlNotice> _notices = new();
     private SqliteTransaction? _transaction;
     private Task _loop = Task.CompletedTask;
     private int _nextUrlId = 1;
+    private long _lastNoticeId;
     private int _inFlight;
 
     // Internal URLs in flight that were claimed with a link depth, as opposed to sitemap-only ones.
@@ -90,6 +97,8 @@ internal sealed class CrawlWriter : IAsyncDisposable
                 throw new InvalidOperationException($"'{databasePath}' already holds a crawl. Resume it or choose a new file.");
             }
 
+            // A file from before notices were kept gets their table now, as it is continued.
+            CrawlDatabase.Execute(connection, CrawlSchema.NOTICES);
             var writer = new CrawlWriter(connection, fileLock, options, counters, logger);
             if (created)
             {
@@ -148,6 +157,18 @@ internal sealed class CrawlWriter : IAsyncDisposable
         _commands.Writer.WriteAsync(new UpdateCrawlStatusCommand(status, isFinished), cancellationToken);
 
     /// <summary>
+    /// Gives the notice the crawl's next id and stores it with the crawl, within a second or so, from any thread, without
+    /// waiting: a busy writer stores it at its next commit, and closing stores whatever is left. Returns it with its id.
+    /// </summary>
+    public CrawlNotice RecordNotice(CrawlNotice notice)
+    {
+        var recorded = notice with { Id = Interlocked.Increment(ref _lastNoticeId) };
+        _notices.Enqueue(recorded);
+        _commands.Writer.TryWrite(StoreNoticesCommand.Instance);
+        return recorded;
+    }
+
+    /// <summary>
     /// Stops accepting commands, drains and commits what is queued, then folds the WAL into the file. Never throws: a
     /// failed loop has already surfaced its error through <see cref="Completion"/>, and the file is closed either way.
     /// </summary>
@@ -157,6 +178,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         try
         {
             await _loop.ConfigureAwait(false);
+            StoreLastNotices();
         }
         catch (Exception exception) when (_loop.IsFaulted)
         {
@@ -194,6 +216,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
                     if (++commandsInTransaction >= MAX_COMMANDS_PER_TRANSACTION || transactionAge.Elapsed >= MAX_TRANSACTION_AGE)
                     {
+                        StoreNotices();
                         CommitTransaction();
                         commandsInTransaction = 0;
                     }
@@ -201,6 +224,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
                 if (_transaction is not null)
                 {
+                    StoreNotices();
                     CommitTransaction();
                     commandsInTransaction = 0;
                 }
@@ -250,6 +274,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
                     break;
                 case UpdateCrawlStatusCommand status:
                     _statements.UpdateCrawlStatus(status.Status, status.IsFinished, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                    break;
+                case StoreNoticesCommand:
+                    // Stored with the batch, before it commits.
                     break;
                 default:
                     throw new InvalidOperationException($"Unknown writer command {command.GetType().Name}.");
@@ -328,7 +355,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
         _statements.UpdateUrlState(item.Id, UrlState.Done);
         _urls[key] = _urls[key] with { State = UrlState.Done };
 
-        _counters.OnRecorded(response.Outcome, IsPage(item.IsInternal, response), DownloadedBytes(response.SizeBytes, response.BodyBytes));
+        // A probe the site has since found was adopted meanwhile, so the response is one of the site's.
+        _counters.OnRecorded(new RecordedResponse(response.Outcome, response.StatusCode, IsPage(item.IsInternal, response),
+            IsSiteUrl: item.IsInternal && !entry.IsProbe, IsNotChecked(response), DownloadedBytes(response.SizeBytes, response.BodyBytes)));
         PropagateDepths();
     }
 
@@ -338,6 +367,10 @@ internal sealed class CrawlWriter : IAsyncDisposable
     /// </summary>
     private static bool IsPage(bool isInternal, ResponseRow response) =>
         isInternal && response is { IsHtml: true, Outcome: FetchOutcome.Success, WordCount: not null };
+
+    /// <summary>Failed without a request, its host having stopped answering, as <see cref="AnalysisReader.NOT_CHECKED"/> reads it back.</summary>
+    private static bool IsNotChecked(ResponseRow response) =>
+        response.Outcome == FetchOutcome.NetworkError && response.Error?.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) == true;
 
     /// <summary>
     /// The bytes of a body the crawler read. A size it was only told, by the Content-Length of a URL it checked
@@ -548,7 +581,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
             if (entry.Skip is SkipReason.NoFollow or SkipReason.NotFollowedByOption or SkipReason.ResourcesDisabled or SkipReason.DepthLimit)
             {
                 var skip = Accept(link.IsInternal, mode, entry.Depth, exemptFromDepthLimit);
-                updated = skip == SkipReason.None ? Requeue(entry, mode)
+                updated = skip == SkipReason.None ? Requeue(entry, mode, isSiteUrl: link.IsInternal)
                     : skip > entry.Skip ? SetSkip(entry, skip, mode)
                     : entry;
             }
@@ -578,7 +611,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         {
             // Only a followed page link is ever too deep, and it still leads here, now by a shorter path.
             var skip = Accept(isInternal, FetchMode.Crawl, depth, exemptFromDepthLimit: false);
-            updated = skip == SkipReason.None ? Requeue(updated, FetchMode.Crawl)
+            updated = skip == SkipReason.None ? Requeue(updated, FetchMode.Crawl, isSiteUrl: isInternal && !updated.IsProbe)
                 : skip > updated.Skip ? SetSkip(updated, skip, FetchMode.Crawl)
                 : updated;
         }
@@ -618,15 +651,17 @@ internal sealed class CrawlWriter : IAsyncDisposable
     /// </summary>
     private UrlEntry PromoteChecked(UrlEntry entry, bool isInternal) =>
         _statements.ReadOutcome(entry.Id) is { Outcome: FetchOutcome.Success } check
-            ? Refetch(entry, FetchMode.Crawl, isInternal, check)
+            ? Refetch(entry, FetchMode.Crawl, isInternal, check, wasSiteUrl: isInternal)
             : SetMode(entry, FetchMode.Crawl);
 
     /// <summary>Drops what a recorded URL's fetch stored and queues it again, to be fetched in <paramref name="mode"/>.</summary>
-    private UrlEntry Refetch(UrlEntry entry, FetchMode mode, bool isInternal, (FetchOutcome Outcome, bool IsPage, long Bytes) stored)
+    /// <param name="wasSiteUrl">The response was counted as one of the site's own URLs, rather than a probe's.</param>
+    private UrlEntry Refetch(UrlEntry entry, FetchMode mode, bool isInternal, StoredOutcome stored, bool wasSiteUrl)
     {
         _statements.DeleteResponse(entry.Id);
         _statements.RequeueUrl(entry.Id, mode, entry.Depth);
-        _counters.OnResponseRemoved(stored.Outcome, isInternal && stored.IsPage, stored.Bytes);
+        _counters.OnResponseRemoved(new RecordedResponse(stored.Outcome, stored.StatusCode, isInternal && stored.IsPage, wasSiteUrl,
+            stored.IsNotChecked, stored.Bytes));
         NoteRefetch(entry.Id, isInternal);
         return entry with { State = UrlState.Queued, Mode = mode };
     }
@@ -644,15 +679,24 @@ internal sealed class CrawlWriter : IAsyncDisposable
         _statements.UpdateUrlSource(entry.Id, source, foundOnId, link.Kind, depth);
         var adopted = entry with { Depth = depth, IsProbe = false };
         _urls[link.Key] = adopted;
+
+        // A probe's answer that is kept counts as the site's from now on; one fetched again is counted when it's back.
+        var stored = entry.State == UrlState.Done ? _statements.ReadOutcome(entry.Id) : null;
+        var refetch = stored is { Outcome: not FetchOutcome.Success };
+        if (link.IsInternal)
+        {
+            _counters.OnAdopted(found: entry.State != UrlState.Skipped, fetched: stored is not null && !refetch);
+        }
+
         if (link.IsInternal && entry.State is UrlState.Fetching or UrlState.Done)
         {
             _claimedInternal++;
             SkipQueuedIfAtUrlLimit();
         }
 
-        if (entry.State == UrlState.Done && _statements.ReadOutcome(entry.Id) is { Outcome: not FetchOutcome.Success } stored)
+        if (refetch)
         {
-            adopted = Refetch(adopted, adopted.Mode, link.IsInternal, stored);
+            adopted = Refetch(adopted, adopted.Mode, link.IsInternal, stored!.Value, wasSiteUrl: false);
             _urls[link.Key] = adopted;
         }
 
@@ -667,10 +711,11 @@ internal sealed class CrawlWriter : IAsyncDisposable
         }
     }
 
-    private UrlEntry Requeue(UrlEntry entry, FetchMode mode)
+    /// <param name="isSiteUrl">One of the site's own URLs: internal, and not a probe of its other versions.</param>
+    private UrlEntry Requeue(UrlEntry entry, FetchMode mode, bool isSiteUrl)
     {
         _statements.RequeueUrl(entry.Id, mode, entry.Depth);
-        _counters.OnUrlRequeued();
+        _counters.OnUrlRequeued(isSiteUrl);
         return entry with { State = UrlState.Queued, Skip = SkipReason.None, Mode = mode };
     }
 
@@ -703,7 +748,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         var id = _nextUrlId++;
         _statements.InsertUrl(id, link, mode, depth, state, skip, source, foundOnId);
         _urls[link.Key] = new UrlEntry(id, depth, state, skip, mode, isProbe);
-        _counters.OnUrlAdded(state == UrlState.Queued);
+        _counters.OnUrlAdded(state == UrlState.Queued, isSiteUrl: link.IsInternal && !isProbe);
         return id;
     }
 
@@ -781,9 +826,11 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
         _statements.SetTransaction(null);
         SitemapsDone = Convert.ToInt64(CrawlDatabase.Scalar(_connection, "SELECT sitemaps_done FROM crawl WHERE id = 1")) == 1;
+        _lastNoticeId = Convert.ToInt64(CrawlDatabase.Scalar(_connection, "SELECT COALESCE(MAX(id), 0) FROM notices"), CultureInfo.InvariantCulture);
 
         long queued = 0;
         long skipped = 0;
+        long siteUrlsFound = 0;
         using (var command = _connection.CreateCommand())
         {
             command.CommandText = "SELECT id, url, depth, state, skip_reason, fetch_mode, is_internal, source FROM urls";
@@ -801,11 +848,13 @@ internal sealed class CrawlWriter : IAsyncDisposable
                     continue;
                 }
 
+                var isSiteUrl = reader.GetBoolean(6) && !entry.IsProbe;
+                siteUrlsFound += isSiteUrl ? 1 : 0;
                 if (entry.State == UrlState.Queued)
                 {
                     queued++;
                 }
-                else if (reader.GetBoolean(6) && !entry.IsProbe)
+                else if (isSiteUrl)
                 {
                     // Fetched already, so it took one of the URL limit's slots. A site-version probe takes none.
                     _claimedInternal++;
@@ -813,26 +862,63 @@ internal sealed class CrawlWriter : IAsyncDisposable
             }
         }
 
-        _counters.RestoreUrls(_urls.Count, queued, skipped);
+        _counters.RestoreUrls(_urls.Count, queued, skipped, siteUrlsFound);
         SkipQueuedIfAtUrlLimit();
 
+        // Grouped as the live counts are kept: by outcome and status code.
         using (var command = _connection.CreateCommand())
         {
             command.CommandText = $"""
-                SELECT r.outcome, COUNT(*),
+                SELECT r.outcome, r.status_code, COUNT(*),
                        SUM(CASE WHEN {CrawlSchema.PAGE} THEN 1 ELSE 0 END),
-                       COALESCE(SUM(CASE WHEN r.body_bytes IS NOT NULL THEN r.size_bytes END), 0)
+                       COALESCE(SUM(CASE WHEN r.body_bytes IS NOT NULL THEN r.size_bytes END), 0),
+                       SUM(u.is_internal = 1 AND u.source <> {(int)DiscoverySource.SiteVersion}),
+                       SUM(r.outcome = {(int)FetchOutcome.NetworkError} AND {AnalysisReader.NOT_CHECKED})
                 FROM responses r JOIN urls u ON u.id = r.url_id
-                GROUP BY r.outcome
+                GROUP BY r.outcome, r.status_code
                 """;
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                _counters.AddResponses((FetchOutcome)reader.GetInt32(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetInt64(3));
+                _counters.AddResponses((FetchOutcome)reader.GetInt32(0), reader.IsDBNull(1) ? null : reader.GetInt32(1), reader.GetInt64(2),
+                    reader.GetInt64(3), reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6));
             }
         }
 
         _logger.LogInformation("Resuming crawl with {Known} known URLs, {Queued} still queued", _urls.Count, queued);
+    }
+
+    /// <summary>Stores the notices raised since the last batch, in the batch about to commit.</summary>
+    private void StoreNotices()
+    {
+        while (_notices.TryDequeue(out var notice))
+        {
+            _statements.InsertNotice(notice);
+        }
+    }
+
+    /// <summary>
+    /// The loop has ended, so notices raised as it closed are stored on their own. Never throws: whatever stops this (a
+    /// full disk) has its own error already, and the crawl's state is stored either way.
+    /// </summary>
+    private void StoreLastNotices()
+    {
+        if (_notices.IsEmpty)
+        {
+            return;
+        }
+
+        try
+        {
+            BeginTransaction();
+            StoreNotices();
+            CommitTransaction();
+        }
+        catch (SqliteException exception)
+        {
+            _logger.LogWarning(exception, "Could not store the crawl's last notices");
+            RollBackTransaction();
+        }
     }
 
     private void BeginTransaction()

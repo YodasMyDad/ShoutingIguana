@@ -84,6 +84,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var summary = await CrawlAsync(options, path);
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         AssertDownloadedIsWhatWasRead(summary, path);
+        ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
         await AssertMatchesThePlantsAsync(server, path);
         return path;
     }
@@ -194,6 +195,10 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         Assert.Equal(40, Count(path, $"SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state <> 3 AND {NOT_A_PROBE}"));
+
+        // What a UI's estimate goes by: the site's URLs the crawl meant to fetch, which the limit made 40, and fetched.
+        Assert.Equal((40, 40), (summary.Progress.InternalFound, summary.Progress.InternalFetched));
+        ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
         Assert.True(CrawlStatsReader.Read(path).SkipReasons.GetValueOrDefault(SkipReason.UrlLimit) > 0);
         AssertTheVersionWasProbedOutsideTheLimit(path);
     }
@@ -262,6 +267,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var resumed = await CrawlAsync(resumedOptions, path, resume: true);
         Assert.Equal(CrawlStatus.Completed, resumed.Status);
         AssertDownloadedIsWhatWasRead(resumed, path);
+        ProgressAgreement.AssertMatchesTheFile(resumed.Progress, path);
         await AssertMatchesThePlantsAsync(_server, path);
 
         // The same URLs, in the same states, and the same links as a crawl that was never interrupted.
@@ -278,9 +284,11 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var path = NewDatabasePath();
         await StopAfterAsync(Options() with { MaxUrls = 120, MaxRequestsPerSecond = 200 }, path, 40);
 
-        await CrawlAsync(CrawlDatabase.ReadOptions(path) with { MaxRequestsPerSecond = 0 }, path, resume: true);
+        var resumed = await CrawlAsync(CrawlDatabase.ReadOptions(path) with { MaxRequestsPerSecond = 0 }, path, resume: true);
 
         Assert.Equal(120, Count(path, $"SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state <> 3 AND {NOT_A_PROBE}"));
+        Assert.Equal((120, 120), (resumed.Progress.InternalFound, resumed.Progress.InternalFetched));
+        ProgressAgreement.AssertMatchesTheFile(resumed.Progress, path);
         Assert.True(CrawlStatsReader.Read(path).SkipReasons.GetValueOrDefault(SkipReason.UrlLimit) > 0);
         AssertTheVersionWasProbedOutsideTheLimit(path);
     }

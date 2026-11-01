@@ -1,5 +1,8 @@
+using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Events;
 using ShoutingIguana.Sidecar.Events.Models;
+using ShoutingIguana.Sidecar.Models;
 
 namespace ShoutingIguana.Sidecar.Tests;
 
@@ -67,6 +70,28 @@ public sealed class EventClientTests
         var waiting = client.WaitAsync(TimeSpan.FromMinutes(1), CancellationToken.None);
         client.Enqueue(new SidecarEvent("library", "{}"));
         Assert.True(await waiting.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    /// <summary>
+    /// An analysis's progress is never merged, so a stream hears each phase start and end; one that connects during it
+    /// hears how far it has got, and once it has ended, nothing.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisIsHeardPhaseByPhaseAndFromWhereItIsByAStreamThatConnectsLate()
+    {
+        var hub = new EventHub(new SidecarOptions { DataDirectory = "data", StateDirectory = "state" });
+        var early = hub.Connect();
+        hub.PublishAnalysis(new AnalysisEventDto("a", AnalysisPhase.Reading, 0, 100));
+        hub.PublishAnalysis(new AnalysisEventDto("a", AnalysisPhase.Reading, 100, 100));
+        hub.PublishAnalysis(new AnalysisEventDto("a", AnalysisPhase.PageRules, 3, 60));
+        Assert.Equal(["hello", "analysis", "analysis", "analysis"], early.TakeAll()!.Select(sent => sent.Name));
+
+        var during = hub.Connect().TakeAll()!;
+        Assert.Equal(["hello", "analysis"], during.Select(sent => sent.Name));
+        Assert.Equal("""{"crawlId":"a","phase":"pageRules","done":3,"total":60}""", during[1].Data);
+
+        hub.PublishCrawl(new CrawlEventDto("a", CrawlListStatus.Completed), crawlEnded: true);
+        Assert.Equal(["hello"], hub.Connect().TakeAll()!.Select(sent => sent.Name));
     }
 
     private static SidecarEvent Progress(string crawlId, int fetched) => new("progress", $"{crawlId} {fetched}", crawlId);

@@ -121,7 +121,10 @@ internal sealed class RetryingFetcher(
             observer.OnNotice(new CrawlNotice(
                 CrawlNoticeLevel.Warning,
                 "site-unreachable",
-                $"{uri.GetLeftPart(UriPartial.Authority)} stopped answering: {HostGate.UNREACHABLE_AFTER_URLS} URLs in a row got no response ({last.Error}), and neither did its robots.txt. The crawler waits {UNREACHABLE_PAUSE.TotalMinutes:0} minute between tries until it answers again, and retries the URLs that failed at the end of the crawl. If it doesn't answer for {GIVE_UP_AFTER.TotalMinutes:0} minutes, the crawl stops, to be resumed once the site is back."));
+                $"{uri.GetLeftPart(UriPartial.Authority)} stopped answering: {HostGate.UNREACHABLE_AFTER_URLS} URLs in a row got no response ({last.Error}), and neither did its robots.txt. The crawler waits {UNREACHABLE_PAUSE.TotalMinutes:0} minute between tries until it answers again, and retries the URLs that failed at the end of the crawl. If it doesn't answer for {GIVE_UP_AFTER.TotalMinutes:0} minutes, the crawl stops, to be resumed once the site is back.")
+            {
+                Data = new CrawlNoticeData(Origin: uri.GetLeftPart(UriPartial.Authority), Reason: last.Error, Duration: UNREACHABLE_PAUSE)
+            });
         }
     }
 

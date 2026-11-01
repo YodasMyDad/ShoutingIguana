@@ -80,6 +80,24 @@ internal sealed class UrlTable
     /// <summary>Highest URL id plus one.</summary>
     public int Length => _statuses.Length;
 
+    /// <summary>
+    /// The pages the page pass reads, as <c>AnalysisReader.ReadPages</c> chooses them: the site's HTML pages whose body was
+    /// parsed, a page that moves on with an instant meta refresh included. A count for the analysis's progress.
+    /// </summary>
+    public int PagesToAudit()
+    {
+        var pages = 0;
+        for (var id = 1; id < _statuses.Length; id++)
+        {
+            if (_statuses[id] is { IsInternal: true, IsHtml: true, IsParsed: true } status && (status.Outcome == FetchOutcome.Success || status.IsMetaRefresh))
+            {
+                pages++;
+            }
+        }
+
+        return pages;
+    }
+
     public ref readonly UrlStatus this[int id] => ref _statuses[id];
 
     /// <summary>Pages with a followed link to this URL, not counting the URL itself.</summary>

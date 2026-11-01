@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
+using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Storage;
@@ -33,6 +35,7 @@ internal sealed class WriterStatements : IDisposable
     private readonly SqliteCommand _insertSitemapUrl;
     private readonly SqliteCommand _updateCrawlStatus;
     private readonly SqliteCommand _markSitemapsDone;
+    private readonly SqliteCommand _insertNotice;
 
     public WriterStatements(SqliteConnection connection)
     {
@@ -66,8 +69,12 @@ internal sealed class WriterStatements : IDisposable
             "$httpVersion", "$redirect", "$block", "$error", "$isHtml", "$title", "$titleCount", "$description",
             "$descriptionCount", "$h1", "$h1Count", "$canonical", "$noindex", "$nofollow", "$indexability",
             "$indexabilityReason", "$words", "$contentHash", "$simhash", "$language", "$outlinks");
-        _readOutcome = Prepare(connection,
-            "SELECT outcome, is_html = 1 AND outcome = 0 AND word_count IS NOT NULL, CASE WHEN body_bytes IS NOT NULL THEN COALESCE(size_bytes, 0) ELSE 0 END FROM responses WHERE url_id = $id", "$id");
+        _readOutcome = Prepare(connection, $"""
+            SELECT r.outcome, r.is_html = 1 AND r.outcome = 0 AND r.word_count IS NOT NULL,
+                   CASE WHEN r.body_bytes IS NOT NULL THEN COALESCE(r.size_bytes, 0) ELSE 0 END, r.status_code,
+                   r.outcome = {(int)FetchOutcome.NetworkError} AND {AnalysisReader.NOT_CHECKED}
+            FROM responses r WHERE r.url_id = $id
+            """, "$id");
         _deleteResponse = Prepare(connection, """
             DELETE FROM responses WHERE url_id = $id;
             DELETE FROM response_details WHERE url_id = $id;
@@ -123,6 +130,9 @@ internal sealed class WriterStatements : IDisposable
             WHERE id = 1
             """, "$status", "$now", "$finished");
         _markSitemapsDone = Prepare(connection, "UPDATE crawl SET sitemaps_done = 1 WHERE id = 1");
+        _insertNotice = Prepare(connection, """
+            INSERT INTO notices (id, at, level, code, message, data) VALUES ($id, $at, $level, $code, $message, $data)
+            """, "$id", "$at", "$level", "$code", "$message", "$data");
     }
 
     public void SetTransaction(SqliteTransaction? transaction)
@@ -167,12 +177,20 @@ internal sealed class WriterStatements : IDisposable
     /// What the stored response of a URL was, or null when it has none. IsPage is <see cref="CrawlSchema.PAGE"/> but for
     /// being internal, which the caller knows: whether the live count of pages counted it.
     /// </summary>
-    public (FetchOutcome Outcome, bool IsPage, long Bytes)? ReadOutcome(int urlId)
+    public StoredOutcome? ReadOutcome(int urlId)
     {
         _readOutcome.Parameters[0].Value = urlId;
         using var reader = _readOutcome.ExecuteReader();
-        return reader.Read() ? ((FetchOutcome)reader.GetInt32(0), reader.GetBoolean(1), reader.GetInt64(2)) : null;
+        return reader.Read()
+            ? new StoredOutcome((FetchOutcome)reader.GetInt32(0), reader.IsDBNull(3) ? null : reader.GetInt32(3), reader.GetBoolean(1),
+                reader.GetBoolean(4), reader.GetInt64(2))
+            : null;
     }
+
+    /// <summary>Stores a notice under the id the writer gave it, with its data as JSON.</summary>
+    public void InsertNotice(CrawlNotice notice) =>
+        Run(_insertNotice, notice.Id, notice.At.ToUnixTimeMilliseconds(), notice.Level.ToString().ToLowerInvariant(), notice.Code,
+            notice.Message, notice.Data is { } data ? JsonSerializer.Serialize(data, EngineJsonContext.Default.CrawlNoticeData) : null);
 
     /// <summary>Removes everything a fetch of the URL stored, before it is fetched again.</summary>
     public void DeleteResponse(int urlId) => Run(_deleteResponse, urlId);

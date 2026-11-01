@@ -1,0 +1,225 @@
+using System.Globalization;
+using System.Net;
+using System.Text.Json.Nodes;
+using Microsoft.Data.Sqlite;
+using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Sidecar.Tests.Support;
+using ShoutingIguana.TestSite;
+using ShoutingIguana.TestSite.Models;
+
+namespace ShoutingIguana.Sidecar.Tests;
+
+/// <summary>
+/// What the crawl screens watch, through the API: progress by status class and code with its phase and waits, the
+/// analysis's progress, the chart's history since the start, and alerts kept with the crawl, against a 60-page synthetic site.
+/// </summary>
+public sealed class LiveDataTests : IAsyncLifetime
+{
+    private static readonly string[] PHASES = ["starting", "readingRobotsTxt", "crawling", "readingSitemaps", "retrying", "finishing"];
+
+    private SyntheticSiteServer _site = null!;
+    private TestSidecar _sidecar = null!;
+
+    public async Task InitializeAsync()
+    {
+        _site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
+        _sidecar = await TestSidecar.StartAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _sidecar.DisposeAsync();
+        await _site.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ACrawlsProgressAndAnalysisComeLiveAndItsAlertsAndHistoryStayWithIt()
+    {
+        await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
+        var started = await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["concurrency"] = 8 });
+        var id = (string)started["id"]!;
+        var path = (string)started["path"]!;
+
+        var progress = await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["fetched"] >= 1);
+        AssertProgressAddsUp(progress);
+        Assert.NotNull(progress["at"]);
+        Assert.NotNull(progress["waits"]!.AsArray());
+
+        await events.CrawlStatusAsync(id, "completed");
+        await events.CrawlStatusAsync(id, "analyzing");
+        await events.CrawlStatusAsync(id, "completed");
+
+        // The crawl's last numbers are the file's: by class, by code, and the site's own URLs.
+        List<SseEvent> seen = [.. events.Seen()];
+        var last = seen.Last(sent => sent.Name == "progress" && (string?)sent.Data["crawlId"] == id).Data;
+        AssertProgressAddsUp(last);
+        Assert.Equal("completed", (string?)last["status"]);
+        Assert.Equal("finishing", (string?)last["phase"]);
+        Assert.Equal(Count(path, "SELECT COUNT(*) FROM responses"), (long?)last["fetched"]);
+        Assert.Equal(Count(path, $"SELECT COUNT(*) FROM responses WHERE status_code = 200 AND outcome <> {(int)FetchOutcome.Blocked}"),
+            (long?)last["statusCodes"]!["200"]);
+        Assert.Equal(Count(path, $"SELECT COUNT(*) FROM responses WHERE outcome = {(int)FetchOutcome.Blocked}"), (long?)last["statusClasses"]!["blocked"]);
+        Assert.Equal(Count(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.is_internal = 1 AND u.source <> 3"),
+            (long?)last["internalFetched"]);
+
+        // The analysis, phase by phase in order, each to its end, all between "analyzing" and the crawl's return to "completed".
+        var analyzing = seen.FindLastIndex(sent => sent.Name == "crawl" && (string?)sent.Data["crawlId"] == id && (string?)sent.Data["status"] == "analyzing");
+        var analysed = seen.FindLastIndex(sent => sent.Name == "crawl" && (string?)sent.Data["crawlId"] == id && (string?)sent.Data["status"] == "completed");
+        var analysis = seen.Select((sent, index) => (sent, index)).Where(item => item.sent.Name == "analysis").ToList();
+        Assert.NotEmpty(analysis);
+        Assert.All(analysis, item => Assert.InRange(item.index, analyzing + 1, analysed - 1));
+        string[] phases = ["reading", "pageRules", "siteRules", "urlSummary", "writing"];
+        Assert.Equal(phases, analysis.Select(item => (string)item.sent.Data["phase"]!).Distinct());
+        foreach (var phase in phases)
+        {
+            var ofPhase = analysis.Select(item => item.sent.Data).Where(data => (string?)data["phase"] == phase).ToList();
+            Assert.Equal(0, (long?)ofPhase[0]["done"]);
+            Assert.Equal((long?)ofPhase[^1]["total"], (long?)ofPhase[^1]["done"]);
+        }
+
+        Assert.Equal(IssueReader.ReadAnalysis(path)!.PagesAnalyzed, (long?)analysis.Last(item => (string?)item.sent.Data["phase"] == "pageRules").sent.Data["total"]);
+
+        // The firewall block's alert, live and from the file under the same id: which host, and how many it blocked.
+        var live = seen.First(sent => sent.Name == "alert" && (string?)sent.Data["code"] == "blocked").Data;
+        var alerts = (await _sidecar.GetJsonAsync($"api/crawls/{id}/alerts")).AsArray();
+        var stored = alerts.Single(alert => (string?)alert!["code"] == "blocked")!;
+        Assert.Equal((long?)live["id"], (long?)stored["id"]);
+        Assert.Equal((string?)live["at"], (string?)stored["at"]);
+        Assert.Equal("127.0.0.1", (string?)stored["data"]!["host"]);
+        Assert.False(string.IsNullOrEmpty((string?)stored["data"]!["reason"]));
+        Assert.Equal(1, (long?)live["data"]!["count"]);
+        Assert.Equal(Count(path, $"SELECT COUNT(*) FROM responses WHERE outcome = {(int)FetchOutcome.Blocked}"), (long?)stored["data"]!["count"]);
+        Assert.Equal(alerts.Select(alert => (long?)alert!["id"]).Order(), alerts.Select(alert => (long?)alert!["id"]));
+
+        // No longer live here: the history is counted back from the file, from a zero at the start.
+        var history = await _sidecar.GetJsonAsync($"api/crawls/{id}/history");
+        Assert.Null(history["liveFrom"]);
+        var points = history["points"]!.AsArray();
+        Assert.Equal(0, (long?)points[0]!["fetched"]);
+        Assert.Equal((string?)history["startedAt"], (string?)points[0]!["at"]);
+        Assert.Equal(Count(path, "SELECT COUNT(*) FROM responses"), (long?)points[^1]!["fetched"]);
+        Assert.All(points, point => Assert.Null(point!["discovered"]));
+    }
+
+    /// <summary>
+    /// A UI that opens while the crawl runs gets its history since the start; one that opens on a crawl continued later
+    /// gets the earlier run counted back from the file, then this run as the sidecar watched it.
+    /// </summary>
+    [Fact]
+    public async Task AUiThatOpensMidCrawlGetsItsHistorySinceTheStart()
+    {
+        await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
+        var started = await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["maxRequestsPerSecond"] = 20, ["concurrency"] = 2 });
+        var id = (string)started["id"]!;
+        var path = (string)started["path"]!;
+        await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["fetched"] >= 5);
+
+        var history = await _sidecar.GetJsonAsync($"api/crawls/{id}/history");
+        Assert.Equal((string?)history["startedAt"], (string?)history["liveFrom"]);
+        var points = history["points"]!.AsArray();
+        Assert.True(points.Count >= 2, history.ToJsonString());
+        Assert.All(points, point =>
+        {
+            Assert.NotNull(point!["discovered"]);
+            Assert.NotNull(point["queued"]);
+            Assert.NotNull(point["elapsedMs"]);
+        });
+        AssertRises(points);
+
+        Assert.Equal(HttpStatusCode.Accepted, (await _sidecar.PostAsync($"api/crawls/{id}/stop")).Status);
+        await events.CrawlStatusAsync(id, "stopped");
+        var firstRun = Count(path, "SELECT COUNT(*) FROM responses");
+
+        var continued = await _sidecar.PostAsync($"api/crawls/{id}/continue", new JsonObject { ["maxRequestsPerSecond"] = 20 });
+        Assert.Equal(HttpStatusCode.OK, continued.Status);
+        await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["fetched"] >= firstRun + 3);
+
+        // Before this run, the file's counts: fetched, but not found or queued, which it doesn't keep the time of.
+        history = await _sidecar.GetJsonAsync($"api/crawls/{id}/history");
+        var liveFrom = DateTime.Parse((string)history["liveFrom"]!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        Assert.True(liveFrom > DateTime.Parse((string)history["startedAt"]!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
+        points = history["points"]!.AsArray();
+        var earlier = points.Where(point => At(point!) < liveFrom).ToList();
+        var later = points.Where(point => At(point!) >= liveFrom).ToList();
+        Assert.True(earlier.Count >= 2 && later.Count >= 1, history.ToJsonString());
+        Assert.All(earlier, point => Assert.Null(point!["discovered"]));
+        Assert.All(later, point => Assert.NotNull(point!["discovered"]));
+        Assert.InRange((long)earlier[^1]!["fetched"]!, 1, firstRun);
+        AssertRises(points);
+
+        Assert.Equal(HttpStatusCode.Accepted, (await _sidecar.PostAsync($"api/crawls/{id}/stop")).Status);
+        await events.CrawlStatusAsync(id, "stopped");
+    }
+
+    /// <summary>A crawl made by another program (the CLI) has its alerts in its file; one from before they were kept has none.</summary>
+    [Fact]
+    public async Task AlertsAreReadFromTheFileForACrawlThisSidecarDidntRun()
+    {
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "by-the-cli.sicrawl"),
+            options: new Engine.Configuration.Models.CrawlOptions { StartUrl = _site.BaseUri.AbsoluteUri });
+        var id = Library.CrawlIds.For(path);
+
+        var alerts = (await _sidecar.GetJsonAsync($"api/crawls/{id}/alerts")).AsArray();
+        var blocked = alerts.Single(alert => (string?)alert!["code"] == "blocked")!;
+        Assert.Equal(id, (string?)blocked["crawlId"]);
+        Assert.Equal("warning", (string?)blocked["level"]);
+        Assert.Equal(Count(path, $"SELECT COUNT(*) FROM responses WHERE outcome = {(int)FetchOutcome.Blocked}"), (long?)blocked["data"]!["count"]);
+        Assert.Contains(alerts, alert => (string?)alert!["code"] == "sitemaps" && (long?)alert["data"]!["urlCount"] > 0);
+        Assert.Equal(CrawlNoticeReader.Read(path).Select(notice => notice.Id), alerts.Select(alert => (long)alert!["id"]!));
+
+        Execute(path, "DROP TABLE notices");
+        Assert.Empty((await _sidecar.GetJsonAsync($"api/crawls/{id}/alerts")).AsArray());
+    }
+
+    /// <summary>Every URL fetched is in one class, and each class's codes add up to it.</summary>
+    private static void AssertProgressAddsUp(JsonNode progress)
+    {
+        Assert.Contains((string?)progress["phase"], PHASES);
+        var classes = progress["statusClasses"]!.AsObject();
+        Assert.Equal(["2xx", "3xx", "4xx", "5xx", "other", "noResponse", "blocked"], classes.Select(entry => entry.Key));
+        Assert.Equal((long?)progress["fetched"], classes.Sum(entry => (long)entry.Value!));
+        var codes = progress["statusCodes"]!.AsObject().Select(entry => (Code: int.Parse(entry.Key, CultureInfo.InvariantCulture), Count: (long)entry.Value!)).ToList();
+        Assert.Equal((long?)classes["2xx"], codes.Where(code => code.Code is >= 200 and < 300).Sum(code => code.Count));
+        Assert.Equal((long?)classes["4xx"], codes.Where(code => code.Code is >= 400 and < 500).Sum(code => code.Count));
+        var noResponse = progress["noResponse"]!.AsObject();
+        Assert.Equal((long?)classes["noResponse"], noResponse.Sum(entry => (long)entry.Value!));
+        Assert.Equal((long?)progress["robotsDisallowed"], (long?)noResponse["robotsDisallowed"]);
+        Assert.InRange((long)progress["internalFetched"]!, 0, (long)progress["internalFound"]!);
+    }
+
+    private static void AssertRises(JsonArray points) =>
+        Assert.All(points.Zip(points.Skip(1)), pair =>
+        {
+            Assert.True(At(pair.Second!) >= At(pair.First!));
+            Assert.True((long)pair.Second!["fetched"]! >= (long)pair.First!["fetched"]!);
+        });
+
+    private static DateTime At(JsonNode point) => DateTime.Parse((string)point["at"]!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+
+    private async Task<JsonNode> StartAsync(JsonObject options)
+    {
+        var started = await _sidecar.PostAsync("api/crawls", new JsonObject { ["options"] = options });
+        Assert.True(started.Status == HttpStatusCode.Created, $"{(int)started.Status} {started.Body?.ToJsonString()}");
+        return started.Body!;
+    }
+
+    private static long Count(string path, string sql)
+    {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString());
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+    }
+
+    private static void Execute(string path, string sql)
+    {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
+    }
+}

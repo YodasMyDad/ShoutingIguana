@@ -560,7 +560,11 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
         var path = _files.NewPath();
         await using var site = await StartAsync(SiteWith(www, home));
         var options = Options(site);
-        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(configure?.Invoke(options) ?? options, path)).Status);
+        var summary = await TestCrawls.RunAsync(configure?.Invoke(options) ?? options, path);
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+
+        // Probes adopted as the site's own URLs, and fetched again, leave the live counts where the file's are.
+        ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
         return (path, await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path));
     }
 

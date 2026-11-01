@@ -151,7 +151,11 @@ public sealed class FrontierTests : IAsyncLifetime
             site.Release("/sitemap.xml");
             await TestCrawls.WaitUntilAsync(linksFirst, "SELECT sitemaps_done FROM crawl");
             site.Release("/embed-held");
-            Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
+            var summary = await job.Completion.WaitAsync(TestCrawls.TIMEOUT);
+            Assert.Equal(CrawlStatus.Completed, summary.Status);
+
+            // /embed was status-checked, then fetched again in full: counted once, where the file has it.
+            ProgressAgreement.AssertMatchesTheFile(summary.Progress, linksFirst);
         }
 
         // Sitemap first: the home page waits until every sitemap URL is stored, and a little longer.
@@ -161,7 +165,9 @@ public sealed class FrontierTests : IAsyncLifetime
             await TestCrawls.WaitUntilAsync(sitemapFirst, "SELECT sitemaps_done FROM crawl");
             await Task.Delay(TimeSpan.FromMilliseconds(500));
             site.Release("/");
-            Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
+            var summary = await job.Completion.WaitAsync(TestCrawls.TIMEOUT);
+            Assert.Equal(CrawlStatus.Completed, summary.Status);
+            ProgressAgreement.AssertMatchesTheFile(summary.Progress, sitemapFirst);
         }
 
         foreach (var table in new[] { CrawlTables.URLS, CrawlTables.RESPONSES, CrawlTables.LINKS, CrawlTables.SITEMAP_URLS })
@@ -209,7 +215,11 @@ public sealed class FrontierTests : IAsyncLifetime
             _synthetic.Release(heldPath);
         }
 
-        Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
+        var summary = await job.Completion.WaitAsync(TestCrawls.TIMEOUT);
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+
+        // Status checks made full fetches leave the live counts where the file's are.
+        ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
         return path;
     }
 

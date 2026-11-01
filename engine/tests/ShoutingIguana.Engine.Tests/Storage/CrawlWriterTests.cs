@@ -8,6 +8,7 @@ using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
+using ShoutingIguana.Engine.Tests.Crawling;
 using ShoutingIguana.Engine.Tests.Support;
 using ShoutingIguana.Engine.Urls;
 using ShoutingIguana.TestSite;
@@ -289,8 +290,9 @@ public sealed class CrawlWriterTests : IAsyncLifetime
         var path = _files.NewPath();
         var start = new Uri("https://example.com/");
         var (options, link) = Site(start);
+        var counters = new CrawlCounters();
 
-        await using (var writer = CrawlWriter.Open(path, options with { MaxUrls = 2 }, resume: false, new CrawlCounters(), NullLogger.Instance))
+        await using (var writer = CrawlWriter.Open(path, options with { MaxUrls = 2 }, resume: false, counters, NullLogger.Instance))
         {
             await SeedAsync(writer, link, start, ["https://www.example.com/"]);
             var claim = await writer.ClaimAsync(10, 10, CancellationToken.None);
@@ -319,6 +321,10 @@ public sealed class CrawlWriterTests : IAsyncLifetime
             Row("https://example.com/p2", FetchMode.Crawl, 1, UrlState.Skipped, SkipReason.UrlLimit, DiscoverySource.Link),
             Row("https://www.example.com/", FetchMode.Crawl, 1, UrlState.Fetching, SkipReason.None, DiscoverySource.Link)
         ], TestCrawls.Rows(path, URL_ROWS));
+
+        // The site's own now, found and, while its answer stood, fetched; then fetched again, so not fetched yet.
+        Assert.Equal((2, 1), (counters.InternalFound, counters.InternalFetched));
+        ProgressAgreement.AssertMatchesTheFile(counters, path);
     }
 
     /// <summary>
@@ -333,8 +339,9 @@ public sealed class CrawlWriterTests : IAsyncLifetime
         var path = _files.NewPath();
         var start = new Uri("https://example.com/");
         var (options, link) = Site(start);
+        var counters = new CrawlCounters();
 
-        await using (var writer = CrawlWriter.Open(path, options, resume: false, new CrawlCounters(), NullLogger.Instance))
+        await using (var writer = CrawlWriter.Open(path, options, resume: false, counters, NullLogger.Instance))
         {
             await SeedAsync(writer, link, start, ["https://www.example.com/"]);
             var claim = await writer.ClaimAsync(10, 10, CancellationToken.None);
@@ -354,6 +361,7 @@ public sealed class CrawlWriterTests : IAsyncLifetime
 
         Assert.Contains(Row("https://www.example.com/", FetchMode.Crawl, 1, UrlState.Queued, SkipReason.None, DiscoverySource.Link), TestCrawls.Rows(path, URL_ROWS));
         Assert.Equal(0, TestCrawls.Count(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url = 'https://www.example.com/'"));
+        ProgressAgreement.AssertMatchesTheFile(counters, path);
     }
 
     /// <summary>Resuming remembers which URLs only a probe found, so the site linking to one afterwards still makes it the site's own.</summary>
@@ -370,13 +378,17 @@ public sealed class CrawlWriterTests : IAsyncLifetime
             await RecordAsync(writer, claim.Internal.Single(item => item.Source == DiscoverySource.SiteVersion), FetchOutcome.Success);
         }
 
-        await using (var writer = CrawlWriter.Open(path, options, resume: true, new CrawlCounters(), NullLogger.Instance))
+        var counters = new CrawlCounters();
+        await using (var writer = CrawlWriter.Open(path, options, resume: true, counters, NullLogger.Instance))
         {
             var home = Assert.Single((await writer.ClaimAsync(10, 10, CancellationToken.None)).Internal);
             await RecordAsync(writer, home, FetchOutcome.Success, link("https://www.example.com/", LinkKind.Hyperlink));
         }
 
         Assert.Contains(Row("https://www.example.com/", FetchMode.Crawl, 1, UrlState.Queued, SkipReason.None, DiscoverySource.Link), TestCrawls.Rows(path, URL_ROWS));
+
+        // Restored as it was, then the probe adopted and fetched again: the counts are the file's.
+        ProgressAgreement.AssertMatchesTheFile(counters, path);
     }
 
     /// <summary>A probe that redirects to another site leaves it unchecked when the crawl leaves other sites unchecked.</summary>

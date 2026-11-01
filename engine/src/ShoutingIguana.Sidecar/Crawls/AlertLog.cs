@@ -4,8 +4,9 @@ using ShoutingIguana.Sidecar.Api.Models;
 namespace ShoutingIguana.Sidecar.Crawls;
 
 /// <summary>
-/// Every crawl's alerts since the sidecar started, oldest first, for a UI that wasn't listening when they came. At most
-/// <c>limitPerCrawl</c> per crawl are kept, dropping the oldest, so a long-running sidecar's memory stays flat.
+/// The alerts of each crawl running here, from the start of its run until its file is closed, oldest first: the crawl
+/// file keeps them all, but the engine stores each a moment after it is raised, so these fill the gap for a UI that asks
+/// in between. At most <c>limitPerCrawl</c> per crawl are kept, dropping the oldest.
 /// </summary>
 internal sealed class AlertLog(int limitPerCrawl = AlertLog.DEFAULT_LIMIT)
 {

@@ -90,14 +90,19 @@ internal sealed class AnalysisReader : IDisposable
     public int CountNotChecked() =>
         Convert.ToInt32(CrawlDatabase.Scalar(_connection, $"SELECT COUNT(*) FROM responses r WHERE {NOT_CHECKED}"), CultureInfo.InvariantCulture);
 
-    public UrlTable ReadUrls()
+    /// <summary>The URLs <see cref="ReadUrls"/> will read: ids run from 1 with none missing, so the highest is the count.</summary>
+    public int CountUrls() => Convert.ToInt32(CrawlDatabase.Scalar(_connection, "SELECT COALESCE(MAX(id), 0) FROM urls"), CultureInfo.InvariantCulture);
+
+    /// <param name="progress">Told of each URL as it is read.</param>
+    public UrlTable ReadUrls(AnalysisProgressReporter? progress = null)
     {
-        var maxId = Convert.ToInt32(CrawlDatabase.Scalar(_connection, "SELECT COALESCE(MAX(id), 0) FROM urls"), CultureInfo.InvariantCulture);
+        var maxId = CountUrls();
         var inSitemap = new bool[maxId + 1];
         Rows("SELECT DISTINCT url_id FROM sitemap_urls", reader => inSitemap[reader.GetInt32(0)] = true);
 
         var statuses = new UrlStatus[maxId + 1];
         var startId = 0;
+        long read = 0;
         // A URL failed without a request, because its host had stopped answering, was never checked: links to it can't
         // be judged, so it counts as unfetched.
         Rows($"""
@@ -132,6 +137,8 @@ internal sealed class AnalysisReader : IDisposable
                 InSitemap: inSitemap[id],
                 IsResource: ResourceTypes.IsResource(reader.GetString(13), contentType),
                 Source: (DiscoverySource)reader.GetInt32(4));
+            read++;
+            progress?.Advance(read);
         });
 
         return new UrlTable(statuses, startId, ReadInstantRefreshes(), ReadCanonicalTargets());

@@ -32,7 +32,16 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     internal Action<object>? Finishing { get; set; }
 
     /// <summary>Analyses a crawl that is not being written to. A crawl still running (or interrupted) is refused.</summary>
-    public Task<AnalysisSummary> AnalyzeAsync(string databasePath, AnalysisSettings? settings = null, CancellationToken cancellationToken = default)
+    public Task<AnalysisSummary> AnalyzeAsync(string databasePath, AnalysisSettings? settings = null, CancellationToken cancellationToken = default) =>
+        AnalyzeAsync(databasePath, settings, progress: null, cancellationToken);
+
+    /// <summary>Analyses a crawl that is not being written to, saying how far it has got as it goes.</summary>
+    /// <param name="progress">
+    /// Hears of each phase as it starts and as it ends, and a few times a second between, on the analysis's own thread and so
+    /// in order. Report straight from it: <see cref="Progress{T}"/> hands each report to the thread pool, which can reorder them.
+    /// </param>
+    public Task<AnalysisSummary> AnalyzeAsync(string databasePath, AnalysisSettings? settings, IProgress<AnalysisProgress>? progress,
+        CancellationToken cancellationToken = default)
     {
         settings ??= new AnalysisSettings();
         var errors = settings.Validate();
@@ -41,10 +50,27 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             throw new ArgumentException(string.Join(" ", errors), nameof(settings));
         }
 
-        return Task.Run(() => Analyze(databasePath, settings, cancellationToken), cancellationToken);
+        return Task.Run(() => Analyze(databasePath, settings, new AnalysisProgressReporter(progress, TimeProvider.System), cancellationToken),
+            cancellationToken);
     }
 
-    private AnalysisSummary Analyze(string databasePath, AnalysisSettings settings, CancellationToken cancellationToken)
+    private AnalysisSummary Analyze(string databasePath, AnalysisSettings settings, AnalysisProgressReporter progress, CancellationToken cancellationToken)
+    {
+        AnalysisSummary summary;
+
+        // Opening the writer locks the file against crawls first, then refuses a crawl that is running or was interrupted.
+        using (var writer = IssueWriter.Open(databasePath, _logger))
+        {
+            summary = AnalyzeWith(writer, databasePath, settings, progress, cancellationToken);
+        }
+
+        // Committed, and the file folded back into one: there's nothing left to do.
+        progress.Finish(1);
+        return summary;
+    }
+
+    private AnalysisSummary AnalyzeWith(IssueWriter writer, string databasePath, AnalysisSettings settings, AnalysisProgressReporter progress,
+        CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         List<string> notes = [];
@@ -53,14 +79,13 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
         List<IssueHit> hits = [];
         var finishFailed = false;
 
-        // Opening the writer locks the file against crawls first, then refuses a crawl that is running or was interrupted.
-        using var writer = IssueWriter.Open(databasePath, _logger);
         long pages = 0;
         UrlTable urls;
         using (var reader = AnalysisReader.Open(databasePath))
         {
             var status = reader.ReadStatus();
-            urls = reader.ReadUrls();
+            progress.Start(AnalysisPhase.Reading, reader.CountUrls());
+            urls = reader.ReadUrls(progress);
             var options = reader.ReadOptions();
             var sitemaps = reader.ReadSitemaps();
             UrlNormalizer.TryNormalize(options.StartUrl, out var startUrl);
@@ -169,10 +194,12 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             ];
 
             writer.AddIndexability(urls.IndexabilityChanges);
+            progress.Finish();
+            progress.Start(AnalysisPhase.PageRules, urls.PagesToAudit());
             foreach (var page in reader.ReadPages(urls))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                pages++;
+                progress.Advance(++pages);
                 foreach (var rule in page.IsRedirect ? redirectRules : pageRules)
                 {
                     // Hits are collected first, so a rule that fails halfway through a page adds nothing for it.
@@ -203,9 +230,13 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 }
             }
 
+            progress.Finish(pages);
+            progress.Start(AnalysisPhase.SiteRules, siteRules.Length);
+            var rulesDone = 0;
             foreach (var rule in siteRules)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                progress.Advance(rulesDone++);
                 hits.Clear();
                 var declared = rule.Checks;
                 try
@@ -236,6 +267,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 
                 Store(hits);
             }
+
+            progress.Finish(siteRules.Length);
         }
 
         // A skipped check stores nothing, whatever its rule found on the way: it isn't in the results, so its rows
@@ -268,7 +301,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
         var checks = IssueCatalog.All.Where(issue => !skipped.ContainsKey(issue)).ToList();
         // The not-in-sitemap check runs only when every sitemap was read: then the summary can say a URL isn't in one.
         var counts = writer.Commit(checks, info, JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings), notes, skips, urls,
-            sitemapsCovered: !skipped.ContainsKey(IssueCatalog.NOT_IN_SITEMAP));
+            sitemapsCovered: !skipped.ContainsKey(IssueCatalog.NOT_IN_SITEMAP), progress);
         var issues = checks.Select(issue => new IssueCount(issue, counts.GetValueOrDefault(issue.Id))).ToList();
 
         _logger.LogInformation("Analysed {Pages} pages in {Elapsed}: {Flagged} issues across {Types} checks",

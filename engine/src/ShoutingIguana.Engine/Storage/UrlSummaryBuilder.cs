@@ -44,8 +44,10 @@ internal static class UrlSummaryBuilder
     /// Every sitemap was read, so a URL none lists isn't in them: the analysis ran the not-in-sitemap check. Otherwise only
     /// a listing is known.
     /// </param>
+    /// <param name="progress">Told of each row as it is written.</param>
     /// <returns>The rows written: one per URL.</returns>
-    public static long Build(SqliteConnection connection, SqliteTransaction transaction, UrlTable urls, bool sitemapsCovered)
+    public static long Build(SqliteConnection connection, SqliteTransaction transaction, UrlTable urls, bool sitemapsCovered,
+        AnalysisProgressReporter? progress = null)
     {
         CrawlDatabase.Execute(connection, CrawlSchema.URL_SUMMARY, transaction);
 
@@ -74,6 +76,7 @@ internal static class UrlSummaryBuilder
                 Bind(parameters, Summarise(urls, id, urlRows, flagged ? issueRows : null, sitemapsCovered));
                 insert.ExecuteNonQuery();
                 written++;
+                progress?.Advance(written);
             }
         }
 

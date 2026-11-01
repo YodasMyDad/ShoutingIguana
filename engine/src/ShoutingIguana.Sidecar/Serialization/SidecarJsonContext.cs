@@ -20,6 +20,9 @@ namespace ShoutingIguana.Sidecar.Serialization;
     [
         typeof(CamelCaseEnumConverter<CrawlListStatus>),
         typeof(CamelCaseEnumConverter<CrawlNoticeLevel>),
+        typeof(CamelCaseEnumConverter<CrawlPhase>),
+        typeof(CamelCaseEnumConverter<CrawlWaitReason>),
+        typeof(CamelCaseEnumConverter<AnalysisPhase>),
         typeof(CamelCaseEnumConverter<CrawlStatus>),
         typeof(CamelCaseEnumConverter<IssueCategory>),
         typeof(CamelCaseEnumConverter<IssueSeverity>),
@@ -40,11 +43,13 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(IReadOnlyList<CrawlListItem>))]
 [JsonSerializable(typeof(AlertDto))]
 [JsonSerializable(typeof(IReadOnlyList<AlertDto>))]
+[JsonSerializable(typeof(HistoryDto))]
 [JsonSerializable(typeof(AnalysisDto))]
 [JsonSerializable(typeof(CrawlStatsDto))]
 [JsonSerializable(typeof(IssuesPageDto))]
 [JsonSerializable(typeof(HelloEventDto))]
 [JsonSerializable(typeof(ProgressEventDto))]
+[JsonSerializable(typeof(AnalysisEventDto))]
 [JsonSerializable(typeof(CrawlEventDto))]
 [JsonSerializable(typeof(LibraryFile))]
 [JsonSerializable(typeof(SummaryCacheFile))]

@@ -61,6 +61,7 @@ internal sealed class CrawlSession
     private readonly ConcurrentDictionary<int, PageRecord> _retried = new();
     private readonly Lock _pauseSync = new();
     private volatile CrawlStatus _status = CrawlStatus.Running;
+    private volatile CrawlPhase _phase = CrawlPhase.Starting;
     private double _pagesPerSecond;
     private int _deferredTotal;
     private DateTimeOffset? _pausedAt;
@@ -74,7 +75,6 @@ internal sealed class CrawlSession
         _options = request.Options;
         _timeProvider = timeProvider;
         _logger = loggerFactory.CreateLogger<CrawlSession>();
-        _observer = new SafeCrawlObserver(observer, _logger);
 
         UrlNormalizer.TryNormalize(_options.StartUrl, out var startUrl);
         _startUri = new Uri(startUrl);
@@ -86,6 +86,9 @@ internal sealed class CrawlSession
             : new HostGate(EXTERNAL_CONCURRENCY_PER_HOST, TimeSpan.Zero, timeProvider));
 
         _writer = CrawlWriter.Open(request.DatabasePath, _options, request.Resume, _counters, loggerFactory.CreateLogger<CrawlWriter>());
+
+        // Every notice is kept with the crawl, then handed on: the host hears of it with the id the file keeps it under.
+        _observer = new NoticeRecorder(new SafeCrawlObserver(observer, _logger), _writer, timeProvider);
         _fetcher = new HttpFetcher(_options, userAgent, scope, timeProvider);
         var fetcher = new RetryingFetcher(_fetcher, _gates, scope, _options.MaxRetries, _observer, timeProvider);
         _robots = new RobotsCache(fetcher, _gates, _writer, scope, _options, userAgent.RobotsToken, _observer,
@@ -142,9 +145,21 @@ internal sealed class CrawlSession
         _pause.Resume();
     }
 
+    /// <summary>
+    /// The crawl's counts as they stand, what it is doing, and what holds it up: counters and a few gates, nothing that
+    /// grows with the crawl.
+    /// </summary>
     public CrawlProgress Snapshot()
     {
         var status = _status;
+        var phase = _phase;
+
+        // Nothing is being fetched, and something waits for robots.txt: that is all the crawl is doing.
+        if (phase == CrawlPhase.Crawling && _processor.WaitingForRobotsTxt > 0 && _processor.Fetching == 0)
+        {
+            phase = CrawlPhase.ReadingRobotsTxt;
+        }
+
         return new CrawlProgress(
             status == CrawlStatus.Running && _pause.IsPaused ? CrawlStatus.Paused : status,
             _elapsed.Elapsed,
@@ -159,7 +174,60 @@ internal sealed class CrawlSession
             _counters.RobotsDisallowed,
             _counters.Skipped,
             _counters.Bytes,
-            Volatile.Read(ref _pagesPerSecond));
+            Volatile.Read(ref _pagesPerSecond))
+        {
+            Phase = phase,
+            StatusClasses = _counters.StatusClasses,
+            StatusCodes = _counters.StatusCodes(),
+            NoResponse = _counters.NoResponse,
+            InternalFound = _counters.InternalFound,
+            InternalFetched = _counters.InternalFetched,
+            Waits = Waits(phase)
+        };
+    }
+
+    /// <summary>
+    /// What holds the crawl up now. The site's gates are a handful; the outages are read only while there are some, and
+    /// robots.txt's cool-down, which looks at every origin's robots.txt, only while URLs it refused wait for their last try.
+    /// </summary>
+    private List<CrawlWait> Waits(CrawlPhase phase)
+    {
+        List<CrawlWait> waits = [];
+        if (_processor.WaitingForRobotsTxt is > 0 and var waiting)
+        {
+            waits.Add(new CrawlWait(CrawlWaitReason.RobotsTxt, Urls: waiting));
+        }
+
+        foreach (var (host, state) in _gates.ReadSiteStates())
+        {
+            if (state.CrawlDelay is { } delay)
+            {
+                waits.Add(new CrawlWait(CrawlWaitReason.CrawlDelay, host, Duration: delay));
+            }
+
+            if (state.Backoff > TimeSpan.Zero)
+            {
+                waits.Add(new CrawlWait(CrawlWaitReason.Backoff, host, Duration: state.Backoff));
+            }
+
+            if (state.HeldFor > TimeSpan.Zero)
+            {
+                waits.Add(new CrawlWait(CrawlWaitReason.HeldBack, host, Duration: state.HeldFor));
+            }
+        }
+
+        var now = _timeProvider.GetUtcNow();
+        if (_gates.LongestOutage(now) is { } outage)
+        {
+            waits.Add(new CrawlWait(CrawlWaitReason.SiteDown, outage.Origin, Duration: outage.Duration));
+        }
+
+        if (phase == CrawlPhase.Retrying && Volatile.Read(ref _refusedByRobots) > 0 && _robots.CoolDownEndsAt() is { } coolDownEnds && coolDownEnds > now)
+        {
+            waits.Add(new CrawlWait(CrawlWaitReason.RobotsTxtCoolDown, Duration: coolDownEnds - now));
+        }
+
+        return waits;
     }
 
     public async Task<CrawlSummary> RunAsync()
@@ -197,6 +265,7 @@ internal sealed class CrawlSession
         }
         finally
         {
+            _phase = CrawlPhase.Finishing;
             if (_status == CrawlStatus.Failed)
             {
                 await _stop.CancelAsync().ConfigureAwait(false);
@@ -287,7 +356,10 @@ internal sealed class CrawlSession
         catch (Exception exception) when (exception is not (OperationCanceledException or ChannelClosedException))
         {
             _logger.LogWarning(exception, "Sitemap discovery failed");
-            _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Warning, "sitemaps-failed", $"Sitemap discovery failed: {exception.Message}"));
+            _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Warning, "sitemaps-failed", $"Sitemap discovery failed: {exception.Message}")
+            {
+                Data = new CrawlNoticeData(Reason: exception.Message)
+            });
         }
     }
 
@@ -297,6 +369,7 @@ internal sealed class CrawlSession
         var internalCapacity = _options.Concurrency * 2;
         var externalCapacity = _options.ExternalConcurrency * 2;
         var retrying = false;
+        _phase = CrawlPhase.Crawling;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -336,11 +409,24 @@ internal sealed class CrawlSession
                 await _externalQueue.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
             }
 
-            if (claim.Internal.Count + claim.External.Count == 0)
+            if (claim.Internal.Count + claim.External.Count > 0)
+            {
+                // Something to fetch again: what the sitemaps list, as they're read.
+                if (_phase == CrawlPhase.ReadingSitemaps)
+                {
+                    _phase = CrawlPhase.Crawling;
+                }
+            }
+            else
             {
                 // Read after claiming: workers only ever add to the held-back URLs, so if everything in flight at the
                 // claim is held back now, nothing else is still being fetched.
                 var deferred = _deferred.Count;
+                if (claim.InFlight == deferred && !producersDone && _phase == CrawlPhase.Crawling)
+                {
+                    _phase = CrawlPhase.ReadingSitemaps;
+                }
+
                 if (claim.InFlight == deferred && producersDone && !retrying)
                 {
                     if (deferred == 0)
@@ -348,6 +434,8 @@ internal sealed class CrawlSession
                         return true;
                     }
 
+                    // From here to the end: the held-back URLs' one more try, after robots.txt's cool-down if it's due.
+                    _phase = CrawlPhase.Retrying;
                     if (!IsRobotsTxtCoolingDown())
                     {
                         _logger.LogInformation("Retrying {Count} URLs that got no response", deferred);
@@ -377,7 +465,10 @@ internal sealed class CrawlSession
         }
 
         _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Error, "site-down",
-            $"{outage.Origin} hasn't answered for {outage.Duration.TotalMinutes:0} minutes, so the crawl stopped. Resume it once the site is back."));
+            $"{outage.Origin} hasn't answered for {outage.Duration.TotalMinutes:0} minutes, so the crawl stopped. Resume it once the site is back.")
+        {
+            Data = new CrawlNoticeData(Origin: outage.Origin, Duration: outage.Duration)
+        });
         await _stop.CancelAsync().ConfigureAwait(false);
         return true;
     }

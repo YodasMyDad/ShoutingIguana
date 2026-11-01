@@ -27,6 +27,7 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
 
     private readonly SemaphoreSlim _slots = new(maxConcurrency, maxConcurrency);
     private readonly Lock _sync = new();
+    private readonly TimeSpan _configuredInterval = minimumInterval;
     private TimeSpan _minimumInterval = minimumInterval;
     private TimeSpan _backoff = TimeSpan.Zero;
     private DateTimeOffset _backoffSetAt = DateTimeOffset.MinValue;
@@ -43,6 +44,19 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
             {
                 return BackoffAt(timeProvider.GetUtcNow());
             }
+        }
+    }
+
+    /// <summary>What spaces this host's requests out now, beyond the crawl's settings, for its progress to say.</summary>
+    public HostGateState ReadState()
+    {
+        lock (_sync)
+        {
+            var now = timeProvider.GetUtcNow();
+            return new HostGateState(
+                _minimumInterval > _configuredInterval ? _minimumInterval : null,
+                BackoffAt(now),
+                _pausedUntil > now ? _pausedUntil - now : TimeSpan.Zero);
         }
     }
 

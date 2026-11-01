@@ -156,7 +156,10 @@ internal sealed class RobotsCache(
             observer.OnNotice(new CrawlNotice(
                 CrawlNoticeLevel.Warning,
                 "robots-unreachable",
-                $"robots.txt for {origin} could not be read ({reason}). Until it can, the site is treated as fully disallowed, as RFC 9309 requires; the crawler asks again every {RETRY_AFTER.TotalMinutes:0} minutes. Re-run with robots.txt ignored to crawl it anyway."));
+                $"robots.txt for {origin} could not be read ({reason}). Until it can, the site is treated as fully disallowed, as RFC 9309 requires; the crawler asks again every {RETRY_AFTER.TotalMinutes:0} minutes. Re-run with robots.txt ignored to crawl it anyway.")
+            {
+                Data = new CrawlNoticeData(Origin: origin, Reason: reason, Duration: RETRY_AFTER)
+            });
         }
 
         return RobotsTxt.Unreachable(reason);

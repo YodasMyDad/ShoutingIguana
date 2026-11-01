@@ -691,13 +691,19 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
     {
         var options = Options(maxRetries) with { RespectRobotsTxt = respectRobotsTxt };
         await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path), observer);
-        return await job.Completion.WaitAsync(CRAWL_TIMEOUT);
+        var summary = await job.Completion.WaitAsync(CRAWL_TIMEOUT);
+
+        // Timeouts, network errors, URLs not checked and ones robots.txt refused are each counted where the file has them.
+        ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
+        return summary;
     }
 
     private static async Task<CrawlSummary> CrawlOnFakeClockAsync(CrawlOptions options, string path, ICrawlObserver observer, FakeTimeProvider time, TimeSpan? step = null)
     {
         await using var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(new CrawlRequest(options, path), observer);
-        return await FakeClock.PumpAsync(time, job.Completion, step);
+        var summary = await FakeClock.PumpAsync(time, job.Completion, step);
+        ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
+        return summary;
     }
 
     private string NewDatabasePath()
