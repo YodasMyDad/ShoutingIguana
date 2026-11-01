@@ -1,8 +1,8 @@
 # Step 3 design direction
 
 Stage 3 of [the UI brief](v2-ui-brief.md#how-to-work). Three directions were made on the garden crawl's real data
-(`app/design/directions/`, briefed in [BRIEF.md](../app/design/directions/BRIEF.md)). Picked on 2026-11-01 under the
-owner's delegation of the stage sign-offs.
+(`app/design/directions/`, briefed in [BRIEF.md](../app/design/directions/BRIEF.md)). Picked on 2026-11-01, and
+confirmed by the owner the same day: "B looks good".
 
 ## The pick
 
