@@ -22,12 +22,14 @@ v2 is a fresh solution that ports the useful logic.
 | --- | --- | --- |
 | 1 | Headless engine, storage and CLI (`si`), proven on a generated 100k-page site, with the benchmark in CI | Done: `3e556be` |
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
-| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API | Next: start from [Handoff to step 3](#handoff-to-step-3-the-ui) |
+| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md) | Next: read [the UI brief](v2-ui-brief.md), then [Handoff to step 3](#handoff-to-step-3-the-ui) |
 | 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | Later |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
 
-**Step 3 starts with a design conversation with the owner, not with code.** The owner wants to rethink the UI/UX
-and see mockups before anything is built.
+**Step 3 starts with a design conversation with the owner, not with code.** The owner wants a "super slick,
+enterprise level" UI and UX. The old app was "clunky and a bit all over the place". **[The UI brief](v2-ui-brief.md)
+sets the bar and the process**: discovery, sign-off on mockups and a clickable prototype, vertical slices, and a
+definition of done for every screen. It also covers the performance budgets and the engine work the UI needs.
 
 ## Status
 
@@ -119,6 +121,7 @@ As of 2026-10-31:
 ## Handoff to step 3 (the UI)
 
 The engine is a library, and the CLI is a thin layer over it. The UI needs the same thin layer as a localhost API.
+What the UI must be like is in [the UI brief](v2-ui-brief.md). This section covers what the engine gives it.
 
 ### What exists
 
@@ -235,3 +238,5 @@ Both runs found every planted issue and flagged nothing else, with no check skip
 - The owner delegates freely ("get it done", "do whatever is needed next"). Pushing to `master` or releasing still
   needs an explicit yes.
 - `src/` is legacy: critical fixes only. New work goes in `engine/` (and `app/` for the UI).
+- The owner's bar for the UI is high: show them mockups and a prototype, and get a sign-off before building each
+  screen ([the UI brief](v2-ui-brief.md)).
