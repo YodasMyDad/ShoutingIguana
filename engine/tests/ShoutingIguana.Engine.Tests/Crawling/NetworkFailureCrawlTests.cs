@@ -11,6 +11,7 @@ using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Robots;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Fetching;
 using ShoutingIguana.Engine.Tests.Robots;
 using ShoutingIguana.Engine.Tests.Support;
@@ -341,11 +342,14 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
         Assert.InRange(observer.FirstAt("site-down") - observer.FirstAt("site-unreachable"),
             RetryingFetcher.GIVE_UP_AFTER - LONG_STEP, RetryingFetcher.GIVE_UP_AFTER + TimeSpan.FromMinutes(2));
 
-        // Nothing it couldn't reach was written off as broken: it's all still to do, for when the site is back.
+        // Nothing it couldn't reach was written off as broken: it's all still to do, for when the site is back. Only the
+        // probe of the https:// version, which never answered, is recorded dead: probes are never held back.
         Assert.Equal(0L, Scalar(path, $"""
             SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id
             WHERE u.is_internal = 1 AND r.outcome IN ({(int)FetchOutcome.Timeout}, {(int)FetchOutcome.NetworkError})
+              AND u.source <> {(int)DiscoverySource.SiteVersion}
             """));
+        Assert.Equal(FetchOutcome.NetworkError, Outcome(path, $"https{_server.BaseUri.AbsoluteUri[4..]}"));
         Assert.Equal(60L, Scalar(path, "SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state IN (0, 1)"));
 
         Volatile.Write(ref goesDownAfterTheHomePage, false);
@@ -460,9 +464,10 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// The site lives on https and goes down for three minutes after its home page. Started from http, which only redirects
-    /// to https and keeps answering throughout, the crawl must wait https out just the same: https has answered, so it is
-    /// down, not gone.
+    /// The site lives on https and goes down for three minutes once its home page has been read: from the first of its
+    /// pages asked for. Started from http, which only redirects to https and keeps answering throughout, the crawl must
+    /// wait https out just the same: https has answered, so it is down, not gone. (From http, the home page is asked for
+    /// twice: by the probe of the https:// version, then in full where the start URL leads.)
     /// </summary>
     [Theory]
     [InlineData("https")]
@@ -481,6 +486,11 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
                 return Status(context, 301);
             }
 
+            if (requestPath.StartsWith("/p", StringComparison.Ordinal))
+            {
+                Interlocked.CompareExchange(ref downSince, time.GetUtcNow().UtcTicks, 0);
+            }
+
             var since = Interlocked.Read(ref downSince);
             if (since != 0 && time.GetUtcNow().UtcTicks - since < TimeSpan.FromMinutes(3).Ticks)
             {
@@ -488,16 +498,12 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
                 return Task.CompletedTask;
             }
 
-            switch (requestPath)
+            return requestPath switch
             {
-                case "/":
-                    Interlocked.CompareExchange(ref downSince, time.GetUtcNow().UtcTicks, 0);
-                    return Html(context, links);
-                case "/robots.txt":
-                    return Status(context, 404);
-                default:
-                    return Html(context, "<p>Page</p>");
-            }
+                "/" => Html(context, links),
+                "/robots.txt" => Status(context, 404),
+                _ => Html(context, "<p>Page</p>")
+            };
         }, https: true);
         var start = new UriBuilder(_server.BaseUri) { Scheme = startScheme }.Uri.AbsoluteUri;
         var options = Options() with { StartUrl = start, Concurrency = 2, TrustedCertificate = _server.Certificate };

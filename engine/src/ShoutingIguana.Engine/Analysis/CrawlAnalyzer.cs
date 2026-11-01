@@ -102,6 +102,15 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                     IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE);
             }
 
+            // The crawler probes the site's other versions first thing, but a crawl stopped before then, or one from before
+            // it did, doesn't know how they answer; nor is there a main version without a home page.
+            var siteVersions = new SiteVersionRules(urls, new Uri(startUrl), reader.ReadUrlId, reader.ReadUrl);
+            if (!siteVersions.CanCheck)
+            {
+                Skip(notes, skipped, "The site's other versions (www or not, http or https) weren't all checked, so duplicate versions of the site weren't looked for.",
+                    IssueCatalog.DUPLICATE_SITE_VERSION);
+            }
+
             if (reader.CountNotChecked() is > 0 and var notChecked)
             {
                 notes.Add(notChecked == 1
@@ -130,7 +139,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 new InlinkRules(urls, linksComplete), new DuplicateRules(settings), new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks), hreflang,
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls),
                 new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList())),
-                new RobotsTxtRules(urls, reader.ReadRobots(), scope, mainOrigins)
+                new RobotsTxtRules(urls, reader.ReadRobots(), scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions
             ];
 
             writer.AddIndexability(urls.IndexabilityChanges);

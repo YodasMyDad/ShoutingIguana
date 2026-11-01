@@ -257,10 +257,20 @@ internal sealed class CrawlSession
         }
     }
 
-    private ValueTask SeedAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// The start URL, then the same path on the site's other versions (bare domain or www, http or https), so the analysis
+    /// can tell whether they redirect to the site. They are claimed right behind the start URL, so even a crawl stopped
+    /// early has the answer. On a resume, URLs already known are left as they are.
+    /// </summary>
+    private async ValueTask SeedAsync(CancellationToken cancellationToken)
     {
         var seed = _links.Create(_startUri, LinkKind.Hyperlink, LinkFlags.None, LinkPosition.Content, null);
-        return _writer.DiscoverAsync([seed], DiscoverySource.Seed, null, cancellationToken);
+        await _writer.DiscoverAsync([seed], DiscoverySource.Seed, null, cancellationToken).ConfigureAwait(false);
+
+        var versions = SiteVersions.Of(_startUri)
+            .Select(url => _links.Create(new Uri(url), LinkKind.Hyperlink, LinkFlags.None, LinkPosition.Content, null))
+            .ToList();
+        await _writer.DiscoverAsync(versions, DiscoverySource.SiteVersion, null, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task DiscoverSitemapsAsync(CancellationToken cancellationToken)
@@ -402,6 +412,7 @@ internal sealed class CrawlSession
     /// The site's own URLs that got no response, or were refused because robots.txt couldn't be read, are held back
     /// (unrecorded) for one more try at the end of the crawl, when a site that was briefly down is usually back. URLs
     /// failed without a request ("Not checked") aren't: their origin is gone, and one more try would fail the same way.
+    /// Nor are probes of the site's other versions, which never hold up a crawl: one that got no answer is dead.
     /// </summary>
     private bool Defer(PageRecord record)
     {
@@ -411,8 +422,8 @@ internal sealed class CrawlSession
                               response.Error?.StartsWith(RobotsTxt.UNREACHABLE_ERROR, StringComparison.Ordinal) == true;
         var gotNoResponse = response.Outcome is FetchOutcome.Timeout or FetchOutcome.NetworkError &&
                             response.Error?.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) != true;
-        if (!item.IsInternal || !(gotNoResponse || refusedByRobots) || _retried.ContainsKey(item.Id) ||
-            Interlocked.Increment(ref _deferredTotal) > MAX_DEFERRED)
+        if (!item.IsInternal || item.Source == DiscoverySource.SiteVersion || !(gotNoResponse || refusedByRobots) ||
+            _retried.ContainsKey(item.Id) || Interlocked.Increment(ref _deferredTotal) > MAX_DEFERRED)
         {
             return false;
         }

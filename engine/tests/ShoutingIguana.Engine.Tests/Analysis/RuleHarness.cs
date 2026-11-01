@@ -3,6 +3,7 @@ using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing;
 using ShoutingIguana.Engine.Parsing.Models;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Tests.Analysis;
@@ -37,9 +38,18 @@ internal sealed class RuleHarness(string site = "https://example.com")
         return _statuses.Count - 1;
     }
 
+    /// <summary>The id a URL was given, or 0 when no test step mentioned it, as the reader finds stored URLs.</summary>
+    public int Find(string url) => _ids.GetValueOrDefault(UrlNormalizer.Normalize(new Uri(url)));
+
+    /// <summary>The URL with an id, or null, as the reader reads it back.</summary>
+    public string? UrlOf(int id) => _ids.FirstOrDefault(pair => pair.Value == id).Key;
+
     /// <summary>Records what the crawl found at a URL.</summary>
+    /// <param name="source">How the crawl found it: <see cref="DiscoverySource.SiteVersion"/> for a probe of the site's other versions.</param>
+    /// <param name="isParsed">The body was parsed, as for a crawled page; by default every HTML response is.</param>
     public int Fetched(string url, FetchOutcome outcome, int status, bool isHtml = false, IndexabilityReason reason = IndexabilityReason.None,
-        string? redirectTo = null, long? size = null, bool inSitemap = false, string? contentType = null)
+        string? redirectTo = null, long? size = null, bool inSitemap = false, string? contentType = null,
+        DiscoverySource source = DiscoverySource.Link, bool? isParsed = null)
     {
         var id = Id(url);
         contentType ??= isHtml ? "text/html; charset=utf-8" : null;
@@ -50,14 +60,19 @@ internal sealed class RuleHarness(string site = "https://example.com")
             Outcome = outcome,
             StatusCode = status,
             IsHtml = isHtml,
-            IsParsed = isHtml,
+            IsParsed = isParsed ?? isHtml,
             IndexabilityReason = reason,
             RedirectTargetId = redirectTo is null ? 0 : Id(redirectTo),
             SizeBytes = size,
-            InSitemap = inSitemap
+            InSitemap = inSitemap,
+            Source = source
         };
         return id;
     }
+
+    /// <summary>A probe of another version of the site: status-checked, so an HTML answer isn't parsed.</summary>
+    public int Probed(string url, FetchOutcome outcome, int status, string? redirectTo = null) =>
+        Fetched(url, outcome, status, isHtml: outcome == FetchOutcome.Success, redirectTo: redirectTo, source: DiscoverySource.SiteVersion, isParsed: false);
 
     public int Ok(string url, IndexabilityReason reason = IndexabilityReason.None, bool inSitemap = false) =>
         Fetched(url, FetchOutcome.Success, 200, isHtml: true, reason, inSitemap: inSitemap);

@@ -128,7 +128,8 @@ internal sealed class AnalysisReader : IDisposable
                 RedirectTargetId: reader.IsDBNull(10) ? 0 : reader.GetInt32(10),
                 SizeBytes: reader.IsDBNull(11) ? null : reader.GetInt64(11),
                 InSitemap: inSitemap[id],
-                IsResource: ResourceTypes.IsResource(reader.GetString(13), contentType));
+                IsResource: ResourceTypes.IsResource(reader.GetString(13), contentType),
+                Source: (DiscoverySource)reader.GetInt32(4));
         });
 
         return new UrlTable(statuses, startId, ReadInstantRefreshes(), ReadCanonicalTargets());
@@ -182,6 +183,31 @@ internal sealed class AnalysisReader : IDisposable
 
     /// <summary>The stored URL with this id, or null when there's none (0 means no URL).</summary>
     public string? ReadUrl(int urlId) => CrawlDatabase.Scalar(_connection, $"SELECT url FROM urls WHERE id = {urlId}") as string;
+
+    /// <summary>The id of a stored URL, given normalised, or 0 when the crawl never found it.</summary>
+    public int ReadUrlId(string url)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT id FROM urls WHERE url = $url";
+        command.Parameters.AddWithValue("$url", url);
+        return command.ExecuteScalar() is long id ? (int)id : 0;
+    }
+
+    /// <summary>
+    /// Origins (as robots.txt rows name them) whose every URL only the crawler's probe of the site's other versions found:
+    /// nothing on the site links there, so their robots.txt is none of the site's business. A stored URL's origin is all
+    /// that comes before the first "/" after "://", so its URLs sort between origin + "/" and origin + "0".
+    /// </summary>
+    public HashSet<string> ReadSiteVersionOnlyOrigins()
+    {
+        HashSet<string> origins = new(StringComparer.Ordinal);
+        Rows($"""
+            SELECT r.origin FROM robots r
+            WHERE EXISTS (SELECT 1 FROM urls u WHERE u.url >= r.origin || '/' AND u.url < r.origin || '0' AND u.source = {(int)DiscoverySource.SiteVersion})
+              AND NOT EXISTS (SELECT 1 FROM urls u WHERE u.url >= r.origin || '/' AND u.url < r.origin || '0' AND u.source <> {(int)DiscoverySource.SiteVersion})
+            """, reader => origins.Add(reader.GetString(0)));
+        return origins;
+    }
 
     /// <summary>The stored facts of one URL, or null when it has none (not HTML, not internal, or not fetched).</summary>
     public PageFacts? ReadFacts(int urlId)

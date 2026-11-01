@@ -501,4 +501,177 @@ public sealed class SiteRuleTests
         partial.Observe(home);
         Assert.Empty(partial.Finish());
     }
+
+    /// <summary>
+    /// Started at https://example.com/, the home. www answers with a page; http://www goes there first; http:// redirects
+    /// home, as it should.
+    /// </summary>
+    [Fact]
+    public void AVersionThatAnswersWithAPageIsADuplicateOfTheSite()
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/");
+        var www = site.Probed("https://www.example.com/", FetchOutcome.Success, 200);
+        var wwwOverHttp = site.Probed("http://www.example.com/", FetchOutcome.Redirect, 301, redirectTo: "https://www.example.com/");
+        site.Probed("http://example.com/", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/");
+
+        var rules = Versions(site);
+
+        Assert.True(rules.CanCheck);
+        Assert.Equal(
+        [
+            new IssueHit(IssueCatalog.DUPLICATE_SITE_VERSION, www, "Answers HTTP 200 instead of redirecting to https://example.com/"),
+            new IssueHit(IssueCatalog.DUPLICATE_SITE_VERSION, wwwOverHttp,
+                "Redirects to https://www.example.com/, which answers HTTP 200 instead of redirecting to https://example.com/", www)
+        ], rules.Finish());
+        Assert.Equal(IssueCategory.Content, IssueCatalog.DUPLICATE_SITE_VERSION.Category);
+        Assert.Equal(IssueSeverity.Error, IssueCatalog.DUPLICATE_SITE_VERSION.Severity);
+    }
+
+    /// <summary>
+    /// A version that doesn't work isn't a copy of the site: a dead www twin is normal. Nor is one that leads off the site's
+    /// versions, or loops. Its redirects are other checks' to judge.
+    /// </summary>
+    [Fact]
+    public void AVersionThatFailsOrLeadsElsewhereIsNoDuplicate()
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/");
+        site.Probed("https://www.example.com/", FetchOutcome.NetworkError, 0);
+        site.Probed("http://example.com/", FetchOutcome.Redirect, 301, redirectTo: "https://parked.example/");
+        site.Probed("https://parked.example/", FetchOutcome.Success, 200);
+        site.Probed("http://www.example.com/", FetchOutcome.Redirect, 301, redirectTo: "http://www.example.com/loop");
+        site.Probed("http://www.example.com/loop", FetchOutcome.Redirect, 301, redirectTo: "http://www.example.com/");
+        Assert.True(Versions(site).CanCheck);
+        Assert.Empty(Versions(site).Finish());
+
+        foreach (var (outcome, status) in new[] { (FetchOutcome.ClientError, 404), (FetchOutcome.ServerError, 500), (FetchOutcome.Blocked, 403), (FetchOutcome.RobotsDisallowed, 0) })
+        {
+            site.Probed("https://www.example.com/", outcome, status);
+            Assert.Empty(Versions(site).Finish());
+        }
+
+        // A version answering with something other than a page (an empty 204, a file) isn't a copy of the site either.
+        site.Fetched("https://www.example.com/", FetchOutcome.Success, 204, source: DiscoverySource.SiteVersion);
+        Assert.Empty(Versions(site).Finish());
+    }
+
+    /// <summary>The start URL redirects to www, so www is the main version, and the bare domain must redirect there too.</summary>
+    [Fact]
+    public void TheMainVersionIsWhereTheStartUrlLeads()
+    {
+        var site = new RuleHarness();
+        site.Fetched($"{site.Site}/", FetchOutcome.Redirect, 301, redirectTo: "https://www.example.com/");
+        site.Ok("https://www.example.com/");
+        var bare = site.Probed("http://example.com/", FetchOutcome.Success, 200);
+        site.Probed("http://www.example.com/", FetchOutcome.Redirect, 301, redirectTo: "https://www.example.com/");
+
+        var rules = Versions(site);
+
+        Assert.True(rules.CanCheck);
+        Assert.Equal([new IssueHit(IssueCatalog.DUPLICATE_SITE_VERSION, bare, "Answers HTTP 200 instead of redirecting to https://www.example.com/")],
+            rules.Finish());
+    }
+
+    /// <summary>
+    /// The check is skipped, not reported clean, when the crawl can't say how every version answers: a crawl file from
+    /// before the crawler probed, a crawl stopped before the probes or their redirects were fetched, or a home page that
+    /// isn't a page, so there's no main version to redirect to.
+    /// </summary>
+    [Fact]
+    public void WhenAnyVersionsAnswerIsUnknownTheCheckCantRun()
+    {
+        var old = new RuleHarness();
+        old.Ok($"{old.Site}/");
+        Assert.False(Versions(old).CanCheck);
+        Assert.Empty(Versions(old).Finish());
+
+        var stopped = new RuleHarness();
+        stopped.Ok($"{stopped.Site}/");
+        stopped.Probed("https://www.example.com/", FetchOutcome.Success, 200);
+        stopped.Probed("http://example.com/", FetchOutcome.Redirect, 301, redirectTo: $"{stopped.Site}/");
+        stopped.Id("http://www.example.com/");
+        Assert.False(Versions(stopped).CanCheck);
+        Assert.Empty(Versions(stopped).Finish());
+
+        // Fetched, but stopped before where it redirects, on another version, was.
+        stopped.Probed("http://www.example.com/", FetchOutcome.Redirect, 301, redirectTo: "http://www.example.com/landing");
+        Assert.False(Versions(stopped).CanCheck);
+
+        // Where it leads off the versions, or home, decides nothing, fetched or not.
+        stopped.Probed("http://www.example.com/", FetchOutcome.Redirect, 301, redirectTo: $"{stopped.Site}/new-home");
+        Assert.True(Versions(stopped).CanCheck);
+
+        // But a version itself is always asked, even one on the main version's origin: here the start URL leads to
+        // www/en/, and the probe of www's / never answered.
+        var moved = new RuleHarness();
+        moved.Fetched($"{moved.Site}/", FetchOutcome.Redirect, 301, redirectTo: "https://www.example.com/en/");
+        moved.Ok("https://www.example.com/en/");
+        moved.Probed("http://example.com/", FetchOutcome.Redirect, 301, redirectTo: "https://www.example.com/en/");
+        moved.Probed("http://www.example.com/", FetchOutcome.Redirect, 301, redirectTo: "https://www.example.com/en/");
+        moved.Id("https://www.example.com/");
+        Assert.False(Versions(moved).CanCheck);
+        moved.Probed("https://www.example.com/", FetchOutcome.Redirect, 301, redirectTo: "https://www.example.com/en/");
+        Assert.True(Versions(moved).CanCheck);
+        Assert.Empty(Versions(moved).Finish());
+
+        foreach (var (outcome, status) in new[] { (FetchOutcome.ServerError, 500), (FetchOutcome.RobotsDisallowed, 0), (FetchOutcome.Redirect, 301) })
+        {
+            var broken = new RuleHarness();
+            broken.Fetched($"{broken.Site}/", outcome, status, redirectTo: outcome == FetchOutcome.Redirect ? "https://elsewhere.example/" : null);
+            broken.Probed("https://www.example.com/", FetchOutcome.Success, 200);
+            broken.Probed("http://example.com/", FetchOutcome.Success, 200);
+            broken.Probed("http://www.example.com/", FetchOutcome.Success, 200);
+            Assert.False(Versions(broken).CanCheck);
+            Assert.Empty(Versions(broken).Finish());
+        }
+    }
+
+    /// <summary>
+    /// Probes aren't the site's URLs: a dead or failing version, or where one redirects, isn't a broken URL of the site.
+    /// Once the site itself links there, it is.
+    /// </summary>
+    [Fact]
+    public void ProbesOfTheSitesOtherVersionsAreNotItsBrokenUrls()
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/");
+        site.Probed("https://www.example.com/", FetchOutcome.NetworkError, 0);
+        site.Probed("http://example.com/", FetchOutcome.Redirect, 301, redirectTo: "http://example.com/gone");
+        site.Probed("http://example.com/gone", FetchOutcome.ClientError, 404);
+        site.Probed("http://www.example.com/", FetchOutcome.RobotsDisallowed, 0);
+        var linked = site.Fetched($"{site.Site}/down", FetchOutcome.ServerError, 503);
+
+        var hits = new ResponseCodeRules(site.Table(), new Dictionary<int, string>()).Finish().ToList();
+
+        Assert.Equal([new IssueHit(IssueCatalog.INTERNAL_SERVER_ERROR, linked, "HTTP 503")], hits);
+        Assert.Contains(new RedirectRules(site.Table()).Finish(), hit => hit.Issue == IssueCatalog.REDIRECT_BROKEN && hit.UrlId == site.Id("http://example.com/"));
+    }
+
+    /// <summary>A dead www twin's robots.txt fails on nearly every crawl; it counts only once the site links there.</summary>
+    [Fact]
+    public void RobotsTxtOfAnOriginOnlyTheProbesWentToIsIgnored()
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/");
+        var scope = new CrawlScope(new Uri($"{site.Site}/"), includeSubdomains: false, stayInStartFolder: false);
+        HashSet<string> main = ["https://example.com"];
+        RobotsRecord[] robots =
+        [
+            new("https://example.com", 200, "User-agent: *", null, 0),
+            new("https://www.example.com", null, null, "Connection refused", 0),
+            new("http://www.example.com", 404, null, null, 0),
+            new("http://example.com", null, null, "Timed out", 0)
+        ];
+
+        var hits = new RobotsTxtRules(site.Table(), robots, scope, main, new HashSet<string> { "https://www.example.com", "http://www.example.com" }).Finish().ToList();
+
+        Assert.Equal([new IssueHit(IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, site.Id($"{site.Site}/"), "http://example.com/robots.txt (Timed out)")], hits);
+    }
+
+    private static SiteVersionRules Versions(RuleHarness site)
+    {
+        var urls = site.Table();
+        return new SiteVersionRules(urls, new Uri($"{site.Site}/"), site.Find, site.UrlOf);
+    }
 }

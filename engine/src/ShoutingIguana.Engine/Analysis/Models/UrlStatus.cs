@@ -1,5 +1,6 @@
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
+using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Analysis.Models;
 
@@ -13,6 +14,7 @@ namespace ShoutingIguana.Engine.Analysis.Models;
 /// <param name="RedirectTargetId">Where a redirect points, or 0 (also 0 for a redirect without a usable Location header).</param>
 /// <param name="IsMetaRefresh">A 200 page that moves on with an instant meta refresh, so it counts as a redirect.</param>
 /// <param name="IsResource">An image, video, audio file, font, stylesheet or script rather than a page (see <see cref="ResourceTypes"/>).</param>
+/// <param name="Source">How the crawl found it. <see cref="DiscoverySource.SiteVersion"/>: only a probe of the site's other versions did.</param>
 internal readonly record struct UrlStatus(
     bool Known,
     bool IsInternal,
@@ -28,7 +30,8 @@ internal readonly record struct UrlStatus(
     long? SizeBytes,
     bool InSitemap,
     bool IsMetaRefresh = false,
-    bool IsResource = false)
+    bool IsResource = false,
+    DiscoverySource Source = DiscoverySource.Link)
 {
     /// <summary>Statuses many sites send crawlers but not people (Amazon answers unknown bots with 503, LinkedIn with 999).</summary>
     private static readonly HashSet<int> BOT_REFUSALS = [401, 403, 405, 429, 503, 999];
@@ -37,6 +40,12 @@ internal readonly record struct UrlStatus(
     public bool IsPage => Fetched && Outcome == FetchOutcome.Success && IsHtml && IsParsed;
 
     public bool IsIndexablePage => IsPage && IndexabilityReason == IndexabilityReason.None;
+
+    /// <summary>
+    /// Only the crawler's probe of the site's other versions led here, or where one redirects: nothing on the site links
+    /// to it. How it answers is the duplicate-site-version check's to judge, not a broken URL of the site's.
+    /// </summary>
+    public bool IsSiteVersionProbe => Source == DiscoverySource.SiteVersion;
 
     /// <summary>
     /// The URL was checked and does not work: 4xx, 5xx, timeout or connection failure. On other sites, a status

@@ -2,7 +2,9 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using ShoutingIguana.Engine.Configuration.Models;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Robots;
+using ShoutingIguana.Engine.Robots.Models;
 using ShoutingIguana.Engine.Tests.Fetching;
 
 namespace ShoutingIguana.Engine.Tests.Robots;
@@ -35,6 +37,7 @@ public sealed class RobotsCacheTests : IAsyncLifetime
 
         Assert.True(robots.IsAllowed("/anything"));
         Assert.Null(robots.UnreachableReason);
+        Assert.Null(robots.NoAnswer);
         Assert.Single(_requests);
         Assert.Empty(harness.Observer.Notices);
         Assert.Equal(404, Assert.Single(await harness.ReadRecordsAsync()).StatusCode);
@@ -169,6 +172,9 @@ public sealed class RobotsCacheTests : IAsyncLifetime
         var record = Assert.Single(await harness.ReadRecordsAsync());
         Assert.Null(record.StatusCode);
         Assert.NotNull(record.Error);
+
+        // How it failed, for a probe of a version of the site there to go by.
+        Assert.Equal(new RobotsNoAnswer(FetchOutcome.NetworkError, record.Error), robots.NoAnswer);
     }
 
     /// <summary>
@@ -191,6 +197,9 @@ public sealed class RobotsCacheTests : IAsyncLifetime
         var record = Assert.Single(await harness.ReadRecordsAsync());
         Assert.Null(record.StatusCode);
         Assert.NotNull(record.Error);
+
+        // How it failed, for a probe of a version of the site there to go by.
+        Assert.Equal(new RobotsNoAnswer(FetchOutcome.NetworkError, record.Error), robots.NoAnswer);
     }
 
     [Fact]
@@ -203,6 +212,7 @@ public sealed class RobotsCacheTests : IAsyncLifetime
 
         Assert.False(robots.IsAllowed("/"));
         Assert.StartsWith("Could not connect", robots.UnreachableReason);
+        Assert.Null(robots.NoAnswer);
         Assert.Equal(1, _harness.Observer.Count("robots-unreachable"));
     }
 

@@ -298,6 +298,11 @@ public static class IssueCatalog
         "Another indexable page has almost the same main content.",
         "Make each page distinct, or canonicalise the near copies to one version.");
 
+    public static readonly IssueDefinition DUPLICATE_SITE_VERSION = new("duplicate-site-version", IssueCategory.Content, IssueSeverity.Error,
+        "Duplicate version of the site",
+        "This version of the site (the bare domain or www, over http or https) answers with a page instead of redirecting to the main one. Search engines treat each version as a separate site, so every page can exist twice and the copies compete.",
+        "Redirect every other version to the main one with a permanent (301) redirect that keeps the path.");
+
     // Images
     public static readonly IssueDefinition IMAGE_MISSING_ALT = new("image-missing-alt", IssueCategory.Images, IssueSeverity.Warning,
         "Images without alt text",
@@ -458,7 +463,7 @@ public static class IssueCatalog
         TITLE_MISSING, TITLE_MULTIPLE, TITLE_TOO_LONG, TITLE_TOO_SHORT, TITLE_DUPLICATE,
         DESCRIPTION_MISSING, DESCRIPTION_MULTIPLE, DESCRIPTION_TOO_LONG, DESCRIPTION_TOO_SHORT, DESCRIPTION_DUPLICATE,
         H1_MISSING, H1_MULTIPLE, H1_DUPLICATE,
-        LOW_WORD_COUNT, DUPLICATE_CONTENT, NEAR_DUPLICATE_CONTENT,
+        LOW_WORD_COUNT, DUPLICATE_CONTENT, NEAR_DUPLICATE_CONTENT, DUPLICATE_SITE_VERSION,
         IMAGE_MISSING_ALT, IMAGE_ALT_TOO_LONG, IMAGE_MISSING_DIMENSIONS, IMAGE_BROKEN, IMAGE_TOO_LARGE,
         HREFLANG_INVALID_CODE, HREFLANG_MISSING_SELF, HREFLANG_MISSING_RETURN, HREFLANG_BROKEN_TARGET,
         HREFLANG_TO_NON_INDEXABLE, HREFLANG_DUPLICATE_CODE, HREFLANG_MISSING_X_DEFAULT, HREFLANG_OUTSIDE_HEAD,

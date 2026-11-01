@@ -94,6 +94,11 @@ public sealed class SitemapHostCrawlTests : IAsyncLifetime
         Assert.Equal(2, stats.HtmlPageCount);
         Assert.Equal(2, stats.SitemapUrlCount);
         Assert.Equal(0, analysis.Issues.Single(issue => issue.Issue == IssueCatalog.SITEMAP_URL_OTHER_HOST).Count);
+
+        // www, where the start URL leads, is the main version, and the bare domain redirects there. The https:// versions,
+        // dead through this proxy, are no problem of the site's.
+        Assert.Equal(0, analysis.Issues.Single(issue => issue.Issue == IssueCatalog.DUPLICATE_SITE_VERSION).Count);
+        Assert.DoesNotContain(IssueReader.ReadAll(_path), row => row.Issue is "internal-unreachable" or "robots-txt-unreachable-other-origin");
     }
 
     private string Twin(string path) => $"http://www.127.0.0.1:{_server.BaseUri.Port}{path}";

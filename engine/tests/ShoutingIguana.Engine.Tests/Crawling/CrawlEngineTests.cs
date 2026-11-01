@@ -20,6 +20,9 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 {
     private const int PAGES = 600;
     private const int VARIANT_PAGES = 250;
+
+    /// <summary>A URL the site led to, as opposed to the crawler's probe of another version of the site.</summary>
+    private static readonly string NOT_A_PROBE = $"source <> {(int)DiscoverySource.SiteVersion}";
     private static readonly TimeSpan CRAWL_TIMEOUT = TimeSpan.FromMinutes(2);
 
     private readonly List<string> _databases = [];
@@ -164,9 +167,14 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var summary = await CrawlAsync(Options() with { MaxUrls = 40 }, path);
 
         Assert.Equal(CrawlStatus.Completed, summary.Status);
-        Assert.Equal(40, Count(path, "SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state <> 3"));
+        Assert.Equal(40, Count(path, $"SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state <> 3 AND {NOT_A_PROBE}"));
         Assert.True(CrawlStatsReader.Read(path).SkipReasons.GetValueOrDefault(SkipReason.UrlLimit) > 0);
+        AssertTheVersionWasProbedOutsideTheLimit(path);
     }
+
+    /// <summary>The probe of the site's https:// version doesn't count towards the URL limit, and is fetched all the same.</summary>
+    private static void AssertTheVersionWasProbedOutsideTheLimit(string path) =>
+        Assert.Equal(1, Count(path, $"SELECT COUNT(*) FROM urls WHERE source = {(int)DiscoverySource.SiteVersion} AND state = {(int)UrlState.Done}"));
 
     [Theory]
     [InlineData(1, 0, "depth limit")]
@@ -246,8 +254,9 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 
         await CrawlAsync(CrawlDatabase.ReadOptions(path) with { MaxRequestsPerSecond = 0 }, path, resume: true);
 
-        Assert.Equal(120, Count(path, "SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state <> 3"));
+        Assert.Equal(120, Count(path, $"SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state <> 3 AND {NOT_A_PROBE}"));
         Assert.True(CrawlStatsReader.Read(path).SkipReasons.GetValueOrDefault(SkipReason.UrlLimit) > 0);
+        AssertTheVersionWasProbedOutsideTheLimit(path);
     }
 
     [Fact]

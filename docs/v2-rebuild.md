@@ -63,7 +63,15 @@ As of 2026-10-31:
 
   There will be no proxy rotation or fingerprint spoofing.
 - **`www` and the bare domain are one site.** Both are internal, and they share one rate limit and connection limit.
-  Sites serve one and redirect the other, and separate limits would double the load on the server.
+  Sites serve one and redirect the other, and separate limits would double the load on the server. The owner confirmed
+  this on 2026-11-01.
+  - Search engines treat them, and http and https, as separate sites. So a version that answers instead of
+    redirecting to the main one is flagged `duplicate-site-version`.
+  - Nothing links to the other versions as a rule, so the crawler probes each one at the start of a crawl: a status
+    check of the start URL's path there, never parsed or followed, so the site is never crawled twice.
+  - A dead version isn't flagged, and neither are its unreachable URLs or robots.txt: a dead `www` twin is normal.
+  - A probe never holds up a crawl: one try, none at the end, and none at all where its origin's robots.txt timed
+    out. A version behind a firewall that drops packets then costs one robots.txt cycle, not three minutes.
 - **A site that stops answering stops the crawl, which can be resumed.**
   - The crawler pauses a minute between tries, and after 10 minutes without an answer it stops: status Stopped,
     and `si crawl` exits 3.
@@ -181,7 +189,6 @@ Everything below is public in `ShoutingIguana.Engine`.
   - raw-vs-rendered diffs as a feature;
   - a per-host browser fallback when a site blocks plain HTTP.
 - **Decided this round under delegation, easy to revisit:**
-  - `www` and the bare domain as one site;
   - stopping after 10 minutes without an answer;
   - the checks skipped on crawls that can't support them.
 
@@ -215,6 +222,8 @@ Everything below is public in `ShoutingIguana.Engine`.
 - Word counts for Chinese, Japanese and Thai count characters, which is close enough for thin-content checks.
 - Title and description widths count full-width characters and emoji as two, an estimate of the room they take,
   not a pixel measurement.
+- A version of the site that answers 200 is flagged `duplicate-site-version` even if its page has a canonical or an
+  instant meta refresh pointing to the main site, because probes aren't parsed.
 
 ## How to verify
 
@@ -226,14 +235,16 @@ dotnet run --project engine/src/ShoutingIguana.Cli -c Release -- bench --pages 1
 
 CI (`.github/workflows/engine.yml`) runs both on every push to `v2`.
 
-Latest results, on commit `68d55a2`:
+Latest results:
 
-| Run | Tests | Crawl | Peak memory | Analysis |
-| --- | --- | --- | --- | --- |
-| Local, 32 cores | 417 engine + 16 CLI | 35 s (2,916 pages/s) | 168 MB | 7 s |
-| GitHub runner, 4 cores | 417 + 16 on Windows, macOS and Linux | 76 s (1,338 pages/s) | 195 MB | 7 s |
+| Run | Commit | Tests | Crawl | Peak memory | Analysis |
+| --- | --- | --- | --- | --- | --- |
+| Local, 32 cores, quiet machine | `68d55a2` | 417 engine + 16 CLI | 35 s (2,916 pages/s) | 168 MB | 7 s |
+| GitHub runner, 4 cores | `530733b` | 464 + 16 on Windows, macOS and Linux | 91 s (1,114 pages/s) | 204 MB | 12 s |
 
-Both runs found every planted issue and flagged nothing else, with no check skipped or failing.
+Both runs found every planted issue and flagged nothing else, with no check skipped or failing. Runner speed varies:
+on `68d55a2` the runner crawled in 76 s and analysed in 7 s, and the analysis does almost the same work on both
+commits.
 
 ## Working with the owner
 

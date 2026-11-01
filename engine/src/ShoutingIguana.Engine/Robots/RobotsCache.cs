@@ -146,7 +146,7 @@ internal sealed class RobotsCache(
         entry.RetryFrom(timeProvider.GetUtcNow() + RETRY_AFTER);
         if (response.StatusCode is null && origin != _startOrigin)
         {
-            return RobotsTxt.AllowAll;
+            return RobotsTxt.Unanswered(new RobotsNoAnswer(response.Outcome, response.Error ?? response.Outcome.ToString()));
         }
 
         var isInternal = scope.IsInternal(new Uri(origin));

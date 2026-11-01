@@ -273,11 +273,15 @@ internal sealed class CrawlWriter : IAsyncDisposable
             _linkedInFlight--;
         }
 
-        // Promoted to a full crawl while its status check was in flight, and the check found something to crawl:
-        // fetch it again in full rather than store the check.
-        if (item.Mode == FetchMode.Check && _urls[key].Mode == FetchMode.Crawl && response.Outcome == FetchOutcome.Success)
+        // Promoted to a full crawl while its status check was in flight, and the check found something to crawl: fetch
+        // it again in full rather than store the check. A site-version probe the site found meanwhile is fetched again
+        // too unless it found a page: where a redirect leads must be found by the site rather than by a probe, and a
+        // probe's single try that failed must get the retries the site's own URLs get.
+        var entry = _urls[key];
+        if ((item.Mode == FetchMode.Check && entry.Mode == FetchMode.Crawl && response.Outcome == FetchOutcome.Success) ||
+            (item.Source == DiscoverySource.SiteVersion && !entry.IsProbe && response.Outcome != FetchOutcome.Success))
         {
-            _urls[key] = _urls[key] with { State = UrlState.Queued };
+            _urls[key] = entry with { State = UrlState.Queued };
             _statements.UpdateUrlState(item.Id, UrlState.Queued);
             _counters.OnReturned();
             NoteRefetch(item.Id, item.IsInternal);
@@ -285,14 +289,14 @@ internal sealed class CrawlWriter : IAsyncDisposable
         }
 
         // The page's depth as it is now: a shorter path may have turned up while it was being fetched.
-        var depth = _urls[key].Depth;
+        var depth = entry.Depth;
         int? redirectId = null;
         int? canonicalId = null;
         var outlinkCount = 0;
 
         foreach (var link in record.Links)
         {
-            var targetId = ResolveLink(link, item.Id, depth, record.PageNoFollow);
+            var targetId = ResolveLink(link, item.Id, depth, record.PageNoFollow, entry.IsProbe);
             _statements.InsertLink(item.Id, targetId, link);
 
             switch (link.Kind)
@@ -337,6 +341,17 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
     private void ApplyDiscover(DiscoverCommand command)
     {
+        if (command.Source == DiscoverySource.SiteVersion)
+        {
+            // Claimed right behind the start URL, which shares their depth.
+            foreach (var link in command.Urls)
+            {
+                Probe(link, 0, null);
+            }
+
+            return;
+        }
+
         var depth = command.Source == DiscoverySource.Seed ? 0 : CrawlDepth.UNLINKED;
 
         foreach (var link in command.Urls)
@@ -347,7 +362,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
             if (_urls.TryGetValue(link.Key, out var entry))
             {
                 id = entry.Id;
-                Rediscover(link, entry, depth, skip, exemptFromDepthLimit: true);
+                Rediscover(link, entry, depth, skip, exemptFromDepthLimit: true, command.Source, null);
             }
             else
             {
@@ -400,19 +415,26 @@ internal sealed class CrawlWriter : IAsyncDisposable
                 _linkedInFlight++;
             }
 
-            if (_refetches.Count == 0 || !_refetches.Remove(item.Id))
+            // A refetch took its slot the first time, and a site-version probe takes none.
+            var isRefetch = _refetches.Count > 0 && _refetches.Remove(item.Id);
+            if (!isRefetch && item.Source != DiscoverySource.SiteVersion)
             {
                 _claimedInternal++;
             }
         }
 
+        SkipQueuedIfAtUrlLimit();
+        return items;
+    }
+
+    /// <summary>Once the URL limit is reached, the internal URLs still queued are skipped, once.</summary>
+    private void SkipQueuedIfAtUrlLimit()
+    {
         if (_options.MaxUrls > 0 && !_urlLimitReached && _claimedInternal >= _options.MaxUrls)
         {
             _urlLimitReached = true;
             SkipQueuedInternal();
         }
-
-        return items;
     }
 
     /// <summary>The URL limit is reached: internal URLs still queued are skipped, except those already counted.</summary>
@@ -437,9 +459,15 @@ internal sealed class CrawlWriter : IAsyncDisposable
         _counters.OnUrlsSkipped(skipped);
     }
 
-    private int ResolveLink(OutLink link, int sourceId, int sourceDepth, bool pageNoFollow)
+    /// <param name="sourceIsProbe">The link is on a site-version probe (a redirect): see <see cref="Probe"/>.</param>
+    private int ResolveLink(OutLink link, int sourceId, int sourceDepth, bool pageNoFollow, bool sourceIsProbe)
     {
         var depth = link.Kind.KeepsDepth() ? sourceDepth : CrawlDepth.Next(sourceDepth);
+        if (sourceIsProbe)
+        {
+            return Probe(link, depth, sourceId);
+        }
+
         var skip = FollowDecision(link, pageNoFollow);
 
         // Depth-limited crawls don't follow links on pages only a sitemap lists, or the sitemap would lift the limit
@@ -447,11 +475,28 @@ internal sealed class CrawlWriter : IAsyncDisposable
         var exemptFromDepthLimit = sourceDepth >= CrawlDepth.UNLINKED && link.Kind.KeepsDepth();
         if (_urls.TryGetValue(link.Key, out var entry))
         {
-            Rediscover(link, entry, depth, skip, exemptFromDepthLimit);
+            Rediscover(link, entry, depth, skip, exemptFromDepthLimit, DiscoverySource.Link, sourceId);
             return entry.Id;
         }
 
         return Insert(link, depth, skip, DiscoverySource.Link, sourceId, exemptFromDepthLimit);
+    }
+
+    /// <summary>
+    /// A URL a site-version probe leads to: another version of the site at the start of the crawl, or where a probe
+    /// redirects. A new one gets a status check and nothing more, never parsed and never followed, so a version that
+    /// answers with the site can't get the site crawled twice. It isn't held to the URL limit. A URL already known is
+    /// left as it is: a probe changes nothing the site itself led to.
+    /// </summary>
+    private int Probe(OutLink link, int depth, int? foundOnId)
+    {
+        if (_urls.TryGetValue(link.Key, out var entry))
+        {
+            return entry.Id;
+        }
+
+        var skip = !link.IsInternal && !_options.CheckExternalLinks ? SkipReason.ExternalsDisabled : SkipReason.None;
+        return Insert(link with { IsCrawlable = false }, depth, skip, DiscoverySource.SiteVersion, foundOnId, exemptFromDepthLimit: true);
     }
 
     /// <summary>
@@ -460,9 +505,15 @@ internal sealed class CrawlWriter : IAsyncDisposable
     /// crawl; a link that isn't followed only leaves the strongest reason for skipping it.
     /// </summary>
     /// <param name="skip">Why this discovery alone would not be fetched, or None.</param>
-    private void Rediscover(OutLink link, UrlEntry entry, int depth, SkipReason skip, bool exemptFromDepthLimit)
+    /// <param name="source">How it was found this time, which a URL only a site-version probe had found takes on.</param>
+    private void Rediscover(OutLink link, UrlEntry entry, int depth, SkipReason skip, bool exemptFromDepthLimit,
+        DiscoverySource source, int? foundOnId)
     {
-        if (depth < entry.Depth)
+        if (entry.IsProbe)
+        {
+            entry = Adopt(link, entry, depth, source, foundOnId);
+        }
+        else if (depth < entry.Depth)
         {
             entry = LowerDepth(link.Key, entry, depth, link.IsInternal);
         }
@@ -559,18 +610,47 @@ internal sealed class CrawlWriter : IAsyncDisposable
     /// A URL already status-checked that can now be crawled. A full fetch only differs when the check succeeded (a
     /// page's body, the links in its headers), so only then is it queued again; otherwise the check stands for it.
     /// </summary>
-    private UrlEntry PromoteChecked(UrlEntry entry, bool isInternal)
+    private UrlEntry PromoteChecked(UrlEntry entry, bool isInternal) =>
+        _statements.ReadOutcome(entry.Id) is { Outcome: FetchOutcome.Success } check
+            ? Refetch(entry, FetchMode.Crawl, isInternal, check)
+            : SetMode(entry, FetchMode.Crawl);
+
+    /// <summary>Drops what a recorded URL's fetch stored and queues it again, to be fetched in <paramref name="mode"/>.</summary>
+    private UrlEntry Refetch(UrlEntry entry, FetchMode mode, bool isInternal, (FetchOutcome Outcome, bool IsHtml, long Bytes) stored)
     {
-        if (_statements.ReadOutcome(entry.Id) is { Outcome: FetchOutcome.Success } check)
+        _statements.DeleteResponse(entry.Id);
+        _statements.RequeueUrl(entry.Id, mode, entry.Depth);
+        _counters.OnResponseRemoved(stored.Outcome, isInternal && stored.IsHtml, stored.Bytes);
+        NoteRefetch(entry.Id, isInternal);
+        return entry with { State = UrlState.Queued, Mode = mode };
+    }
+
+    /// <summary>
+    /// A URL only a site-version probe had found, found now by the site itself: linked, listed in a sitemap, or where
+    /// the start URL redirects. From here on it is stored as found that way, at that depth (a probe's depth is no
+    /// click path), and the analysis judges it as one of the site's own URLs. If the probe already fetched it, it takes
+    /// its slot under the URL limit now. If that fetch found anything but a page it is fetched again: where a redirect
+    /// leads is then found by the site too and crawled as the site's own, and a probe's single try that failed gets the
+    /// retries the site's own URLs get.
+    /// </summary>
+    private UrlEntry Adopt(OutLink link, UrlEntry entry, int depth, DiscoverySource source, int? foundOnId)
+    {
+        _statements.UpdateUrlSource(entry.Id, source, foundOnId, link.Kind, depth);
+        var adopted = entry with { Depth = depth, IsProbe = false };
+        _urls[link.Key] = adopted;
+        if (link.IsInternal && entry.State is UrlState.Fetching or UrlState.Done)
         {
-            _statements.DeleteResponse(entry.Id);
-            _statements.RequeueUrl(entry.Id, FetchMode.Crawl, entry.Depth);
-            _counters.OnResponseRemoved(check.Outcome, isInternal && check.IsHtml, check.Bytes);
-            NoteRefetch(entry.Id, isInternal);
-            return entry with { State = UrlState.Queued, Mode = FetchMode.Crawl };
+            _claimedInternal++;
+            SkipQueuedIfAtUrlLimit();
         }
 
-        return SetMode(entry, FetchMode.Crawl);
+        if (entry.State == UrlState.Done && _statements.ReadOutcome(entry.Id) is { Outcome: not FetchOutcome.Success } stored)
+        {
+            adopted = Refetch(adopted, adopted.Mode, link.IsInternal, stored);
+            _urls[link.Key] = adopted;
+        }
+
+        return adopted;
     }
 
     private void NoteRefetch(int id, bool isInternal)
@@ -605,7 +685,10 @@ internal sealed class CrawlWriter : IAsyncDisposable
     private int Insert(OutLink link, int depth, SkipReason skip, DiscoverySource source, int? foundOnId, bool exemptFromDepthLimit)
     {
         var mode = ModeFor(link);
-        if (skip == SkipReason.None)
+        var isProbe = source == DiscoverySource.SiteVersion;
+
+        // A probe is only status-checked, which no depth limit holds back, and the URL limit doesn't count it.
+        if (skip == SkipReason.None && !isProbe)
         {
             skip = Accept(link.IsInternal, mode, depth, exemptFromDepthLimit);
         }
@@ -613,7 +696,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         var state = skip == SkipReason.None ? UrlState.Queued : UrlState.Skipped;
         var id = _nextUrlId++;
         _statements.InsertUrl(id, link, mode, depth, state, skip, source, foundOnId);
-        _urls[link.Key] = new UrlEntry(id, depth, state, skip, mode);
+        _urls[link.Key] = new UrlEntry(id, depth, state, skip, mode, isProbe);
         _counters.OnUrlAdded(state == UrlState.Queued);
         return id;
     }
@@ -697,12 +780,12 @@ internal sealed class CrawlWriter : IAsyncDisposable
         long skipped = 0;
         using (var command = _connection.CreateCommand())
         {
-            command.CommandText = "SELECT id, url, depth, state, skip_reason, fetch_mode, is_internal FROM urls";
+            command.CommandText = "SELECT id, url, depth, state, skip_reason, fetch_mode, is_internal, source FROM urls";
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
                 var entry = new UrlEntry(reader.GetInt32(0), reader.GetInt32(2), (UrlState)reader.GetInt32(3),
-                    (SkipReason)reader.GetInt32(4), (FetchMode)reader.GetInt32(5));
+                    (SkipReason)reader.GetInt32(4), (FetchMode)reader.GetInt32(5), reader.GetInt32(7) == (int)DiscoverySource.SiteVersion);
                 _urls[UrlKey.Compute(reader.GetString(1))] = entry;
                 _nextUrlId = Math.Max(_nextUrlId, entry.Id + 1);
 
@@ -716,20 +799,16 @@ internal sealed class CrawlWriter : IAsyncDisposable
                 {
                     queued++;
                 }
-                else if (reader.GetBoolean(6))
+                else if (reader.GetBoolean(6) && !entry.IsProbe)
                 {
-                    // Fetched already, so it took one of the URL limit's slots.
+                    // Fetched already, so it took one of the URL limit's slots. A site-version probe takes none.
                     _claimedInternal++;
                 }
             }
         }
 
         _counters.RestoreUrls(_urls.Count, queued, skipped);
-        if (_options.MaxUrls > 0 && _claimedInternal >= _options.MaxUrls)
-        {
-            _urlLimitReached = true;
-            SkipQueuedInternal();
-        }
+        SkipQueuedIfAtUrlLimit();
 
         using (var command = _connection.CreateCommand())
         {

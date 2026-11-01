@@ -10,7 +10,12 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// crawling of its own origin only, so one on a subdomain or the http:// version is less serious than the main one.
 /// </summary>
 /// <param name="mainOrigins">The start URL's origin and the home page's, e.g. https://example.com.</param>
-internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> robots, CrawlScope scope, IReadOnlySet<string> mainOrigins) : ISiteRule
+/// <param name="siteVersionOnlyOrigins">
+/// Origins only the crawler's probe of the site's other versions went to (a www twin, the http:// version) and nothing on
+/// the site links to. Their robots.txt is left out: a dead www twin's would fail on nearly every crawl.
+/// </param>
+internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> robots, CrawlScope scope, IReadOnlySet<string> mainOrigins,
+    IReadOnlySet<string>? siteVersionOnlyOrigins = null) : ISiteRule
 {
     public void Observe(AnalyzedPage page)
     {
@@ -23,7 +28,8 @@ internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> 
             yield break;
         }
 
-        var own = robots.Where(file => Uri.TryCreate(file.Origin, UriKind.Absolute, out var origin) && scope.IsInternal(origin)).ToList();
+        var own = robots.Where(file => Uri.TryCreate(file.Origin, UriKind.Absolute, out var origin) && scope.IsInternal(origin) &&
+                                       siteVersionOnlyOrigins?.Contains(file.Origin) != true).ToList();
 
         // RFC 9309 and Google: a 5xx, a 429 or no answer means "disallow everything"; another 4xx, or a robots.txt
         // behind too many redirects, means there are no rules (the crawler treats them the same way).

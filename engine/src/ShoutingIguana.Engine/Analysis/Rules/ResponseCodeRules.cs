@@ -3,7 +3,11 @@ using ShoutingIguana.Engine.Fetching.Models;
 
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
-/// <summary>Internal URLs of any type (pages, images, scripts) that failed, were blocked, or are disallowed by robots.txt.</summary>
+/// <summary>
+/// Internal URLs of any type (pages, images, scripts) that failed, were blocked, or are disallowed by robots.txt. The
+/// crawler's probes of the site's other versions aren't the site's URLs unless the site leads to them: a dead www twin
+/// is normal, and <see cref="SiteVersionRules"/> judges how they answer.
+/// </summary>
 internal sealed class ResponseCodeRules(UrlTable urls, IReadOnlyDictionary<int, string> blockReasons) : ISiteRule
 {
     public void Observe(AnalyzedPage page)
@@ -15,7 +19,7 @@ internal sealed class ResponseCodeRules(UrlTable urls, IReadOnlyDictionary<int, 
         for (var id = 1; id < urls.Length; id++)
         {
             var url = urls[id];
-            if (!url.IsInternal || !url.Fetched)
+            if (!url.IsInternal || !url.Fetched || url.IsSiteVersionProbe)
             {
                 continue;
             }
