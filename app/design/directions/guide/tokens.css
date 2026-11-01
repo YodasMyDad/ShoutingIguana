@@ -1,0 +1,223 @@
+/*
+  Shouting Iguana: direction C, "guide".
+  Every value the components use lives here. Colours are light-dark() pairs: the first value is the light theme,
+  the second the dark. The theme follows the OS; data-theme="light" or "dark" on <html> overrides it.
+  The sidebar sets color-scheme: dark, so inside it every pair resolves to its dark value.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  /* ---- Brand: sampled from the logo (brand.json) ---- */
+  --brand-blue: #2B93FF;
+  --brand-navy: #162832;
+
+  /* ---- Surfaces ---- */
+  --canvas: light-dark(#F2F5F7, #0D1216);
+  --surface: light-dark(#FFFFFF, #12181D);
+  --surface-subtle: light-dark(#F7F9FA, #161D23);
+  --surface-sunken: light-dark(#EEF2F5, #0F1519);
+  --surface-hover: light-dark(#F0F4F7, #1A2229);
+  --surface-selected: light-dark(#E6F1FF, #15304A);
+  --surface-selected-hover: light-dark(#DCECFF, #19385A);
+
+  /* ---- Lines ---- */
+  --border: light-dark(#E1E7EB, #232D35);
+  --border-strong: light-dark(#CAD3D9, #2F3B45);
+  --border-control: light-dark(#7A8995, #637380);
+
+  /* ---- Text ---- */
+  --text: light-dark(#15222B, #E3EAEE);
+  --text-secondary: light-dark(#44535E, #B4C1C9);
+  --text-muted: light-dark(#5A6975, #8F9EA8);
+  --text-on-tint: light-dark(#15222B, #E3EAEE);
+
+  /* ---- The one accent: the logo's blue ---- */
+  --accent: #2B93FF;
+  --accent-hover: #4DA4FF;
+  --accent-press: #1C86F2;
+  --on-accent: #0E1B22;
+  --accent-text: light-dark(#0A69CC, #63B3FF);
+  --accent-tint: light-dark(#E6F1FF, #14304B);
+  --accent-tint-strong: light-dark(#C7E0FF, #1E4A73);
+  --focus: light-dark(#1373DB, #63B3FF);
+
+  /* ---- The navy frame (sidebar), the same in both themes ---- */
+  --nav-bg: #162832;
+  --nav-bg-hover: #1D3440;
+  --nav-bg-active: #203F52;
+  --nav-line: #26404D;
+  --nav-text: #E2EBF0;
+  --nav-text-muted: #9DB1BD;
+  --nav-fav-bg: #2A4554;
+
+  /* ---- Severity: louder as it gets worse. Icon shape, word and colour always together ---- */
+  --error: light-dark(#C4262E, #FF7B7B);
+  --error-tint: light-dark(#FDEDEE, #3A1D21);
+  --warning: light-dark(#9A5A00, #F2B04B);
+  --warning-tint: light-dark(#FFF3DD, #362A12);
+  --notice: light-dark(#4B5A8F, #AAB6EC);
+  --notice-tint: light-dark(#EEF1FA, #1F2642);
+  --neutral-mark: light-dark(#66737D, #98A6AF);
+  --sev-glyph: light-dark(#FFFFFF, #12181D);
+
+  /* ---- Status-code classes ---- */
+  --status-2xx: light-dark(#1B7A47, #5BC98F);
+  --status-3xx: light-dark(#6A47BE, #B89EFF);
+  --status-4xx: light-dark(#B3470A, #FF9A5A);
+  --status-5xx: light-dark(#AE1F63, #FF85BC);
+  --status-none: light-dark(#66737D, #98A6AF);
+
+  /* ---- Data ink for diagrams ---- */
+  --ink: light-dark(#15222B, #E3EAEE);
+  --ink-soft: light-dark(#9AA8B2, #50606C);
+  --ink-faint: light-dark(#DCE3E8, #26313A);
+  --series: #2B93FF;
+  --series-fill: light-dark(#2B93FF1F, #2B93FF2E);
+
+  /* ---- Skeletons ---- */
+  --skeleton: light-dark(#E8EDF1, #1B232A);
+  --skeleton-shine: light-dark(#F5F8FA, #252F38);
+
+  /* ---- Elevation ---- */
+  --shadow-1: 0 1px 2px light-dark(#10202C14, #00000066);
+  --shadow-2: 0 2px 4px light-dark(#10202C0F, #00000059), 0 6px 16px -6px light-dark(#10202C24, #0000008C);
+  --shadow-3: 0 4px 8px light-dark(#10202C14, #00000066), 0 16px 40px -12px light-dark(#10202C38, #000000A6);
+  --shadow-panel: -1px 0 0 light-dark(#E1E7EB, #232D35), -12px 0 32px -16px light-dark(#10202C2E, #00000099);
+
+  /* ---- Type ---- */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --text-xs: 12px;      /* captions, counts, meta */
+  --text-code: 12.5px;  /* JetBrains Mono, optically matched to 13 px Inter */
+  --text-sm: 13px;      /* data: grids, lists, the inspector */
+  --text-md: 14px;      /* interface: buttons, navigation, fields */
+  --text-prose: 15px;   /* explanations */
+  --text-lg: 18px;      /* the lede: each view's one-sentence answer */
+  --text-xl: 21px;      /* section titles */
+  --text-2xl: 26px;     /* page titles */
+  --text-3xl: 30px;     /* key figures */
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-normal: 1.5;
+  --leading-prose: 1.6;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --tracking-display: -0.018em;
+  --tracking-heading: -0.011em;
+  --tracking-normal: 0;
+  --tracking-label: 0.006em;
+
+  --measure: 68ch;
+
+  /* ---- Space: a 4 px scale ---- */
+  --space-0: 0;
+  --space-half: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---- Radii: smaller for small things ---- */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-pill: 999px;
+
+  /* ---- Sizes ---- */
+  --sidebar-width: 232px;
+  --sidebar-collapsed: 60px;
+  --topbar-height: 52px;
+  --pane-width: 352px;
+  --inspector-width: 384px;
+  --control-sm: 28px;
+  --control-md: 32px;
+  --control-lg: 52px;
+  --row-height: 32px;
+  --row-height-compact: 26px;
+  --grid-header-height: 36px;
+  --search-width: 300px;
+  --hang: 136px;          /* the hanging label column of an explanation */
+  --hang-sm: 112px;       /* the same, in the inspector */
+  --evidence-width: 320px;
+  --report-width: 1180px;
+  --home-width: 1060px;
+  --logo: 26px;
+  --favicon: 16px;
+  --favicon-lg: 20px;
+  --dot: 8px;
+  /* The URL grid's Overview preset: default column widths, remembered per view once resized */
+  --col-url: 232px;
+  --col-status: 72px;
+  --col-indexability: 100px;
+  --col-title: 248px;
+  --col-number: 80px;
+  --col-issues: 92px;
+  --col-response: 88px;
+  --col-depth: 64px;
+  --col-words: 72px;
+  --col-size: 72px;
+  --chart-height: 120px;
+  --chart-height-sm: 96px;
+  --share-width: 140px;
+  --field-width: 240px;
+  --field-width-sm: 220px;
+  --aside-width: 220px;
+  --hairline-strong: 1.5px;
+  --underline-offset: 3px;
+  --hatch: 5px;
+  --gauge-height: 6px;
+  --bar-height: 22px;
+  --cell: 8px;
+  --icon-sm: 12px;
+  --icon-md: 16px;
+  --icon-sev: 14px;
+  --text-2xs: 10px;       /* favicon initials only */
+  --border-width: 1px;
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --bar-width: 2px;
+
+  /* ---- Motion: quick and quiet ---- */
+  --duration-instant: 80ms;
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --skeleton-delay: 150ms;
+  --skeleton-min: 300ms;
+  --shimmer-duration: 1600ms;
+  --pulse-duration: 2000ms;
+
+  /* ---- Layers ---- */
+  --z-sidebar: 20;
+  --z-topbar: 30;
+  --z-inspector: 25;
+  --z-popover: 50;
+}
+
+/* Smaller windows (1280 wide and less) tighten the fixed columns. */
+@media (max-width: 1360px) {
+  :root {
+    --pane-width: 312px; --inspector-width: 360px; --evidence-width: 288px; --search-width: 220px;
+    --col-url: 200px; --col-indexability: 96px; --col-title: 168px;
+  }
+}
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }

@@ -1,0 +1,306 @@
+/*
+  Shouting Iguana, direction B: "clarity".
+  Every value the components use lives here. Components use these tokens only.
+
+  Themes: each colour token holds its light and its dark value side by side, with light-dark().
+  The page follows the OS (prefers-color-scheme) through `color-scheme: light dark`, and
+  <html data-theme="light"> or <html data-theme="dark"> overrides it.
+  Density: comfortable by default, <html data-density="compact"> for compact grids.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  /* ------------------------------------------------------------------ Type */
+  --font-sans: "Inter", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --font-features: "cv11" 0, "ss03" 0;
+  --font-features-figures: "tnum" 1, "lnum" 1;
+
+  /* The scale: 11, 12, 13, 14, 16, 18, 21, 28, 36, 48. Size, then its line height. */
+  --text-11: 11px;   --leading-11: 14px;
+  --text-12: 12px;   --leading-12: 16px;
+  --text-13: 13px;   --leading-13: 18px;
+  --text-14: 14px;   --leading-14: 20px;
+  --text-16: 16px;   --leading-16: 24px;
+  --text-18: 18px;   --leading-18: 26px;
+  --text-21: 21px;   --leading-21: 28px;
+  --text-28: 28px;   --leading-28: 34px;
+  --text-36: 36px;   --leading-36: 40px;
+  --text-48: 48px;   --leading-48: 52px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --tracking-tight: -0.022em;   /* page titles */
+  --tracking-figure: -0.03em;   /* large figures */
+  --tracking-snug: -0.011em;    /* 16-21 px headings */
+  --tracking-normal: 0;
+  --tracking-wide: 0.01em;      /* 11-12 px text */
+
+  /* -------------------------------------------------------------- Spacing */
+  /* A 4 px scale. */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---------------------------------------------------------------- Radii */
+  /* By the size of the thing, so hierarchy shows in the corners too. */
+  --radius-xs: 4px;     /* keycaps, status marks, small badges */
+  --radius-sm: 6px;     /* buttons, inputs, filter chips */
+  --radius-md: 8px;     /* menus, segmented controls, list rows */
+  --radius-lg: 12px;    /* cards and grids */
+  --radius-xl: 14px;    /* the inspector sheet, the URL field */
+  --radius-full: 999px; /* the status pill, progress bars */
+
+  /* --------------------------------------------------------------- Layout */
+  --sidebar-width: 240px;
+  --topbar-height: 52px;
+  --inspector-width: 400px;
+  --checks-width: 372px;
+  --content-max: 1136px;
+  --page-gutter: var(--space-8);
+  --sheet-inset: var(--space-2);
+  --hairline: 1px;
+  --rule-width: 2px;
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --control-height: 32px;
+  --control-height-sm: 28px;
+  --control-height-lg: 52px;
+  --chip-height: 28px;
+  --icon-xs: 12px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 20px;
+  --favicon-sm: 16px;
+  --favicon-md: 20px;
+  --favicon-lg: 28px;
+  --mark-size: 8px;
+  --mark-radius: 2px;
+  --bar-height: 8px;
+  --bar-height-meter: 6px;
+  --bar-height-thin: 4px;
+  --bar-min: 3px;               /* a non-zero bar never disappears */
+  --stack-height: 10px;
+  --swatch-size: 10px;
+  --swatch-radius: 3px;
+  --halo-width: 3px;            /* the soft ring round a focused URL field */
+  --underline-offset: 3px;
+
+  /* Component sizes */
+  --control-height-xs: 24px;    /* status pill, small chips, badges with text */
+  --segment-height: 26px;
+  --segment-icon-width: 30px;
+  --theme-button-width: 26px;
+  --tab-height: 40px;
+  --kbd-size: 20px;
+  --kbd-size-sm: 18px;
+  --badge-height: 20px;
+  --code-flag-height: 22px;
+  --chip-remove-size: 22px;
+  --chevron-box: 20px;
+  --switch-width: 28px;
+  --switch-height: 16px;
+  --switch-knob: 10px;
+  --switch-inset: 3px;
+  --icon-box: 28px;             /* round icon holders in the inspector */
+  --icon-box-lg: 36px;          /* empty-state icons */
+  --button-height-lg: 40px;
+  --grid-foot-height: 36px;
+  --row-height-child: 34px;     /* a group's rows, inside a grouped grid */
+  --row-height-more: 38px;
+  --row-height-issue: 30px;
+  --tree-indent: 26px;          /* chevron plus its gap */
+  --divider-height: 20px;
+  --spark-height: 28px;
+  --spark-height-lg: 36px;
+  --chart-height: 188px;        /* the least a line chart gets; it grows to fill its card */
+  --meter-mark-height: 12px;
+  --chart-axis-width: 40px;
+  --chart-label-width: 84px;
+  --status-label-width: 104px;
+  --status-count-width: 52px;
+  --facts-label-width: 104px;
+  --percent-width: 40px;
+  --search-width: 232px;
+  --search-width-filter: 160px;
+  --search-width-library: 260px;
+  --skeleton-text: 10px;
+  --skeleton-title: 14px;
+  --skeleton-figure: 18px;
+  --skeleton-figure-width: 48px;
+  --skeleton-pill-width: 44px;
+  --leading-body: 22px;         /* 14 px reading text in explanations */
+  --stat-value-size: var(--text-36);
+  --stat-value-leading: var(--leading-36);
+
+  /* Figures: units set smaller and muted, so the number leads. */
+  --unit-scale: 0.5em;
+  --unit-scale-inline: 0.86em;
+  --unit-gap: 0.2em;
+  --figure-gap: 0.32em;
+  --mono-scale: 0.93em;         /* JetBrains Mono beside Inter */
+
+  /* Grid density: comfortable. */
+  --row-height: 40px;
+  --row-height-tall: 56px;
+  --grid-header-height: 36px;
+  --grid-font-size: var(--text-14);
+  --grid-leading: var(--leading-14);
+  --grid-mono-size: var(--text-13);
+  --grid-cell-x: var(--space-3);
+  --nav-item-height: 32px;
+  --list-row-height: 36px;
+
+  /* --------------------------------------------------------------- Motion */
+  /* 150-200 ms, easing out; for orientation, not decoration. */
+  --duration-instant: 100ms;
+  --duration-quick: 150ms;
+  --duration-panel: 200ms;
+  --duration-skeleton-delay: 150ms;
+  --duration-shimmer: 1600ms;
+  --duration-pulse: 2000ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* -------------------------------------------------------------- Colour */
+  /* Neutrals carry no hue in either theme, so colour always means something. */
+  --color-canvas:            light-dark(#F5F5F7, #0A0A0B);
+  --color-surface:           light-dark(#FFFFFF, #121214);
+  --color-surface-raised:    light-dark(#FFFFFF, #18181B);
+  --color-surface-overlay:   light-dark(#FFFFFF, #1E1E22);
+  --color-surface-sunken:    light-dark(#FAFAFB, #0E0E10);
+  --color-surface-hover:     light-dark(#F2F2F4, #1C1C20);
+  --color-surface-active:    light-dark(#EAEAED, #242428);
+  --color-surface-selected:  light-dark(#EBF4FF, #132538);
+
+  --color-border-subtle:     light-dark(#EEEEF1, #1D1D21);
+  --color-border:            light-dark(#E3E3E7, #28282D);
+  --color-border-strong:     light-dark(#CFCFD5, #3A3A40);
+  --color-border-control:    light-dark(#8A8A93, #6E6E77); /* inputs and toggles: 3:1 */
+
+  --color-text:              light-dark(#18181B, #EDEDEF);
+  --color-text-secondary:    light-dark(#46464D, #B4B4BB);
+  --color-text-muted:        light-dark(#68686F, #8E8E96);
+  --color-text-on-accent:    light-dark(#FFFFFF, #FFFFFF);
+
+  /* The one accent: the logo's blue, #2B93FF, with the shades each theme needs. */
+  --color-brand:             #2B93FF;
+  --color-iguana:            #162832;
+  --color-accent:            light-dark(#1F86F5, #2B93FF);  /* marks, bars, charts: the brand, a shade deeper in light for 3:1 */
+  --color-accent-text:       light-dark(#0B6BD3, #4FA6FF);  /* links, selected labels */
+  --color-accent-fill:       light-dark(#0B6BD3, #1A6ED3);  /* primary buttons */
+  --color-accent-fill-hover: light-dark(#095DB8, #1F74D9);
+  --color-accent-subtle:     light-dark(#EBF4FF, #132538);
+  --color-accent-border:     light-dark(#A8CFFF, #1F4C7C);
+  --color-focus:             light-dark(#1A7DEF, #4FA6FF);
+
+  /* Severity: only for severity. Colour intensity follows severity. */
+  --color-error:             light-dark(#D93636, #F26161);
+  --color-error-text:        light-dark(#C22828, #FF8A84);
+  --color-error-subtle:      light-dark(#FDEEEE, #2B1416);
+  --color-warning:           light-dark(#F5A70A, #F5B53A);
+  --color-warning-edge:      light-dark(#B06C00, #F5B53A);
+  --color-warning-glyph:     light-dark(#3A2600, #2A1C00);
+  --color-warning-text:      light-dark(#8C5400, #F7C25E);
+  --color-warning-subtle:    light-dark(#FFF5DF, #2A2010);
+  --color-notice:            light-dark(#5F6B79, #95A1AF);
+  --color-notice-text:       light-dark(#545F6C, #A9B3BF);
+  --color-notice-subtle:     light-dark(#F0F2F5, #1B1E23);
+
+  /* Status-code classes: only for status codes. A normal 2xx stays quiet in grids. */
+  --color-2xx:               light-dark(#1F9D68, #3CC48A);
+  --color-2xx-text:          light-dark(#13774A, #5FD3A1);
+  --color-2xx-subtle:        light-dark(#E7F6EE, #11251B);
+  --color-3xx:               light-dark(#7F55E6, #A889FF);
+  --color-3xx-text:          light-dark(#6538D2, #BBA3FF);
+  --color-3xx-subtle:        light-dark(#F2EDFD, #1F1932);
+  --color-4xx:               light-dark(#DD6510, #F58B3D);
+  --color-4xx-text:          light-dark(#AE4E08, #FFA468);
+  --color-4xx-subtle:        light-dark(#FDF0E6, #2B1C10);
+  --color-5xx:               light-dark(#D93636, #F26161);
+  --color-5xx-text:          light-dark(#C22828, #FF8A84);
+  --color-5xx-subtle:        light-dark(#FDEEEE, #2B1416);
+  --color-no-response:       light-dark(#85858E, #74747D);
+  --color-no-response-text:  light-dark(#5E5E66, #A3A3AB);
+  --color-no-response-subtle:light-dark(#F1F1F3, #1D1D21);
+
+  /* Charts */
+  --color-chart-grid:        light-dark(#EDEDF0, #1F1F23);
+  --color-chart-axis:        light-dark(#68686F, #8E8E96);
+  --color-chart-primary:     var(--color-accent);
+  --color-chart-primary-fill:light-dark(rgb(31 134 245 / 0.09), rgb(43 147 255 / 0.09));
+  --color-chart-secondary:   light-dark(#8A8A93, #7A7A84);
+  --color-chart-limit:       light-dark(#68686F, #8E8E96);
+  --color-chart-track:       light-dark(#EEEEF1, #222226);
+
+  /* Skeletons */
+  --color-skeleton:          light-dark(#EDEDF0, #1E1E22);
+  --color-skeleton-shine:    light-dark(#F7F7F9, #27272C);
+
+  /* Scrim behind dialogs; selection highlight */
+  --color-scrim:             light-dark(rgb(24 24 27 / 0.32), rgb(0 0 0 / 0.6));
+  --color-text-selection:    light-dark(#CFE5FF, #1F4C7C);
+
+  /* ------------------------------------------------------------ Elevation */
+  /* A z-order, not decoration. 0: chrome on the canvas. 1: content on sheets.
+     2: the inspector, above the grid. 3: popovers and menus. 4: the palette and dialogs.
+     In dark, a surface also gets lighter as it rises and carries a faint top highlight. */
+  --elevation-0: none;
+  --elevation-1:
+    0 1px 2px 0 light-dark(rgb(16 16 20 / 0.04), rgb(0 0 0 / 0.40)),
+    0 1px 1px 0 light-dark(rgb(16 16 20 / 0.03), rgb(0 0 0 / 0.30));
+  --elevation-2:
+    0 2px 4px -1px light-dark(rgb(16 16 20 / 0.04), rgb(0 0 0 / 0.40)),
+    0 12px 32px -8px light-dark(rgb(16 16 20 / 0.12), rgb(0 0 0 / 0.60));
+  --elevation-3:
+    0 4px 8px -2px light-dark(rgb(16 16 20 / 0.06), rgb(0 0 0 / 0.45)),
+    0 16px 40px -10px light-dark(rgb(16 16 20 / 0.18), rgb(0 0 0 / 0.70));
+  --elevation-4:
+    0 8px 16px -4px light-dark(rgb(16 16 20 / 0.08), rgb(0 0 0 / 0.50)),
+    0 32px 64px -16px light-dark(rgb(16 16 20 / 0.24), rgb(0 0 0 / 0.80));
+  --elevation-control: 0 1px 1px 0 light-dark(rgb(16 16 20 / 0.05), rgb(0 0 0 / 0.35));
+  --highlight-top: inset 0 1px 0 0 light-dark(rgb(255 255 255 / 0), rgb(255 255 255 / 0.05));
+  --highlight-accent: inset 0 1px 0 0 light-dark(rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.14));
+}
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"]  { color-scheme: dark; }
+
+/* Compact density: more rows on screen for the same grid. */
+:root[data-density="compact"] {
+  --row-height: 28px;
+  --row-height-tall: 44px;
+  --grid-header-height: 30px;
+  --grid-font-size: var(--text-13);
+  --grid-leading: var(--leading-13);
+  --grid-mono-size: var(--text-12);
+  --grid-cell-x: var(--space-2-5);
+  --list-row-height: 30px;
+}
+
+/* Smaller windows (1280 x 800): a narrower frame, the same components. */
+@media (max-width: 1360px) {
+  :root {
+    --sidebar-width: 224px;
+    --inspector-width: 368px;
+    --checks-width: 340px;
+    --page-gutter: var(--space-6);
+    --search-width: 200px;
+    --stat-value-size: var(--text-28);
+    --stat-value-leading: var(--leading-28);
+  }
+}

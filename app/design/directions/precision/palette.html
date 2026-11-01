@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Internal links without anchor text · Issues · gardenfurnituresets.co.uk · Shouting Iguana</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+<script>
+(() => {
+  // Theme: follows the system unless the toggle chose light or dark. Storage can be unavailable; the page works without it.
+  const root = document.documentElement;
+  const modes = ['system', 'light', 'dark'];
+  let mode = 'system';
+  try { mode = localStorage.getItem('si-precision-theme') || 'system'; } catch (e) {}
+  const apply = () => (mode === 'system' ? root.removeAttribute('data-theme') : root.setAttribute('data-theme', mode));
+  apply();
+  addEventListener('DOMContentLoaded', () => {
+    const button = document.querySelector('[data-theme-toggle]');
+    if (!button) return;
+    const label = () => button.setAttribute('aria-label', 'Theme: ' + mode + '. Change theme');
+    label();
+    button.addEventListener('click', () => {
+      mode = modes[(modes.indexOf(mode) + 1) % modes.length];
+      apply();
+      label();
+      try { localStorage.setItem('si-precision-theme', mode); } catch (e) {}
+    });
+  });
+})();
+</script>
+</head>
+<body>
+<svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs><symbol id="i-home" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.75 7.4 8 2.9l5.25 4.5v5.85H9.9V9.9H6.1v3.35H2.75z"/></symbol><symbol id="i-overview" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 11.75a5.5 5.5 0 0 1 11 0"/><path d="M8 11.75 10.6 8.4"/><path d="M2.5 14h11"/></symbol><symbol id="i-issues" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 14V2.5"/><path d="M3.5 3h8.25l-1.9 2.9 1.9 2.85H3.5"/></symbol><symbol id="i-urls" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12M2 9.75h12M6.25 6.5V13"/></symbol><symbol id="i-links" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 9.4 9.4 6.6"/><path d="m7.6 4.4.95-.95a2.6 2.6 0 0 1 3.68 3.68l-.95.95"/><path d="m8.4 11.6-.95.95a2.6 2.6 0 0 1-3.68-3.68l.95-.95"/></symbol><symbol id="i-sitemaps" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.75" y="1.75" width="4.5" height="3.25" rx=".75"/><rect x="1.75" y="11" width="4.5" height="3.25" rx=".75"/><rect x="9.75" y="11" width="4.5" height="3.25" rx=".75"/><path d="M8 5v3M4 11V8h8v3"/></symbol><symbol id="i-robots" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 1.75h5.25L12 4.5v9.75H4z"/><path d="M9 1.75V4.75h3"/><path d="M6 8.25h4M6 11h4"/></symbol><symbol id="i-sliders" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5h6M11.5 5h2M2.5 11h2M7.5 11h6"/><circle cx="10" cy="5" r="1.5"/><circle cx="6" cy="11" r="1.5"/></symbol><symbol id="i-gear" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.32 3.44Q6.73 3.27 6.81 2.82L6.92 2.12Q7 1.68 7.45 1.68L8.55 1.68Q9 1.68 9.08 2.12L9.19 2.82Q9.27 3.27 9.68 3.44L10.03 3.58Q10.45 3.76 10.82 3.5L11.4 3.08Q11.76 2.82 12.08 3.14L12.86 3.92Q13.18 4.24 12.92 4.6L12.5 5.18Q12.24 5.55 12.42 5.97L12.56 6.32Q12.73 6.73 13.18 6.81L13.88 6.92Q14.32 7 14.32 7.45L14.32 8.55Q14.32 9 13.88 9.08L13.18 9.19Q12.73 9.27 12.56 9.68L12.42 10.03Q12.24 10.45 12.5 10.82L12.92 11.4Q13.18 11.76 12.86 12.08L12.08 12.86Q11.76 13.18 11.4 12.92L10.82 12.5Q10.45 12.24 10.03 12.42L9.68 12.56Q9.27 12.73 9.19 13.18L9.08 13.88Q9 14.32 8.55 14.32L7.45 14.32Q7 14.32 6.92 13.88L6.81 13.18Q6.73 12.73 6.32 12.56L5.97 12.42Q5.55 12.24 5.18 12.5L4.6 12.92Q4.24 13.18 3.92 12.86L3.14 12.08Q2.82 11.76 3.08 11.4L3.5 10.82Q3.76 10.45 3.58 10.03L3.44 9.68Q3.27 9.27 2.82 9.19L2.12 9.08Q1.68 9 1.68 8.55L1.68 7.45Q1.68 7 2.12 6.92L2.82 6.81Q3.27 6.73 3.44 6.32L3.58 5.97Q3.76 5.55 3.5 5.18L3.08 4.6Q2.82 4.24 3.14 3.92L3.92 3.14Q4.24 2.82 4.6 3.08L5.18 3.5Q5.55 3.76 5.97 3.58Z"/><circle cx="8" cy="8" r="2"/></symbol><symbol id="i-back" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5 5.5 8l4.5 4.5"/></symbol><symbol id="i-forward" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3.5 4.5 4.5L6 12.5"/></symbol><symbol id="i-chev-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 6.25 3.5 3.5 3.5-3.5"/></symbol><symbol id="i-chev-right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6.25 4.5 3.5 3.5-3.5 3.5"/></symbol><symbol id="i-chev-up" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 9.75 3.5-3.5 3.5 3.5"/></symbol><symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></symbol><symbol id="i-pause" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.75 3.5v9M10.25 3.5v9"/></symbol><symbol id="i-stop" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.75" y="3.75" width="8.5" height="8.5" rx="1.5"/></symbol><symbol id="i-play" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.25 3.4v9.2L12.6 8z"/></symbol><symbol id="i-refresh" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.25 8a5.25 5.25 0 1 1-1.6-3.77"/><path d="M13.4 2.6v2.9h-2.9"/></symbol><symbol id="i-download" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5M4.75 6.75 8 10l3.25-3.25M3 13.25h10"/></symbol><symbol id="i-copy" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.25"/><path d="M10.5 5.5V3.75c0-.69-.56-1.25-1.25-1.25h-5.5c-.69 0-1.25.56-1.25 1.25v5.5c0 .69.56 1.25 1.25 1.25H5.5"/></symbol><symbol id="i-external" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.25 2.5h4.25v4.25M13.5 2.5 7.5 8.5"/><path d="M11.5 9.25v3.25c0 .55-.45 1-1 1h-7c-.55 0-1-.45-1-1v-7c0-.55.45-1 1-1h3.25"/></symbol><symbol id="i-close" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4 4 8 8M12 4l-8 8"/></symbol><symbol id="i-filter" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5h11M4.75 8h6.5M7 11.5h2"/></symbol><symbol id="i-columns" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 3v10M10 3v10"/></symbol><symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3.25 8.5 3.1 3 6.4-7"/></symbol><symbol id="i-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></symbol><symbol id="i-arrow-down" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M4.5 9.5 8 13l3.5-3.5"/></symbol><symbol id="i-arrow-up" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M4.5 6.5 8 3l3.5 3.5"/></symbol><symbol id="i-folder" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.25C2 3.56 2.56 3 3.25 3h3l1.5 1.75h5c.69 0 1.25.56 1.25 1.25v6.25c0 .69-.56 1.25-1.25 1.25h-9.5C2.56 13.5 2 12.94 2 12.25z"/></symbol><symbol id="i-sidebar" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2.75" width="12" height="10.5" rx="1.5"/><path d="M6 2.75v10.5"/></symbol><symbol id="i-dock-bottom" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2.75" width="12" height="10.5" rx="1.5"/><path d="M2 9.5h12"/></symbol><symbol id="i-theme" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none"/></symbol><symbol id="i-circle-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.75"/><path d="m5.6 8.2 1.7 1.7 3.2-3.5"/></symbol><symbol id="i-clock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.75"/><path d="M8 4.9v3.35l2.1 1.3"/></symbol><symbol id="i-grid" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></symbol><symbol id="i-group" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M4.5 7h9M4.5 10.5h9M2.5 3.5v7"/></symbol><symbol id="i-eye-off" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8s2-3.75 5.5-3.75S13.5 8 13.5 8s-2 3.75-5.5 3.75S2.5 8 2.5 8z"/><path d="m3 13 10-10"/></symbol><symbol id="i-power" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v5"/><path d="M5 4.6a4.6 4.6 0 1 0 6 0"/></symbol><symbol id="i-enter" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.75 3.5v4.25c0 .69-.56 1.25-1.25 1.25H4"/><path d="M6.5 6.25 3.75 9 6.5 11.75"/></symbol><symbol id="i-command" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5h11M2.5 8h7M2.5 11.5h4"/></symbol><symbol id="i-live-chart" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.25h11"/><path d="m2.5 10.5 3-3 2.5 2 5.5-6"/></symbol><symbol id="i-lightning" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.75 3.5 9h4l-.75 5.25L12.5 7h-4z"/></symbol><symbol id="i-sev-error" viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" d="M7.01 1.59Q8 0.6 8.99 1.59L14.41 7.01Q15.4 8 14.41 8.99L8.99 14.41Q8 15.4 7.01 14.41L1.59 8.99Q0.6 8 1.59 7.01ZM8 4.1h0q0.75 0 0.75 0.75v3.4q0 0.75 -0.75 0.75h-0q-0.75 0 -0.75 -0.75v-3.4q0 -0.75 0.75 -0.75ZM7.05 10.95a0.95 0.95 0 1 0 1.9 0a0.95 0.95 0 1 0 -1.9 0Z"/></symbol><symbol id="i-sev-warning" viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" d="M7.23 2.8Q8 1.4 8.77 2.8L14.23 12.7Q15 14.1 13.4 14.1L2.6 14.1Q1 14.1 1.77 12.7ZM8 5.6h0q0.75 0 0.75 0.75v3.1q0 0.75 -0.75 0.75h-0q-0.75 0 -0.75 -0.75v-3.1q0 -0.75 0.75 -0.75ZM7.05 11.95a0.95 0.95 0 1 0 1.9 0a0.95 0.95 0 1 0 -1.9 0Z"/></symbol><symbol id="i-sev-notice" viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" d="M1.25 8a6.75 6.75 0 1 0 13.5 0a6.75 6.75 0 1 0 -13.5 0ZM7 4.85a1 1 0 1 0 2 0a1 1 0 1 0 -2 0ZM8 6.9h0q0.75 0 0.75 0.75v3.5q0 0.75 -0.75 0.75h-0q-0.75 0 -0.75 -0.75v-3.5q0 -0.75 0.75 -0.75Z"/></symbol><symbol id="i-dot" viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" d="M4.75 8a3.25 3.25 0 1 0 6.5 0a3.25 3.25 0 1 0 -6.5 0Z"/></symbol><symbol id="i-more" viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" d="M2.25 8a1.25 1.25 0 1 0 2.5 0a1.25 1.25 0 1 0 -2.5 0ZM6.75 8a1.25 1.25 0 1 0 2.5 0a1.25 1.25 0 1 0 -2.5 0ZM11.25 8a1.25 1.25 0 1 0 2.5 0a1.25 1.25 0 1 0 -2.5 0Z"/></symbol><symbol id="i-sev-skipped" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="5.9" stroke-dasharray="2.3 2.3"/><path d="m5.6 10.4 4.8-4.8"/></symbol></defs></svg>
+<div class="app" inert><aside class="sidebar" aria-label="Sidebar">
+    <div class="sb-head">
+      <img class="sb-logo" src="../../../../Assets/logo.png" alt="" width="20" height="20">
+      <span class="sb-name">Shouting Iguana</span>
+      <button type="button" class="btn btn--ghost btn--icon btn--s" aria-label="Collapse the sidebar"><svg class="icon" aria-hidden="true"><use href="#i-sidebar"/></svg></button>
+    </div>
+    <div class="sb-body">
+      <nav aria-label="App"><a href="#" class="sb-item"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span class="sb-label">Home</span></a></nav>
+      <div class="sb-rule" role="presentation"></div>
+      <div class="sb-crawl"><span class="fav fav--l" aria-hidden="true">g</span><div class="sb-crawl-text"><span class="sb-crawl-site" title="https://www.gardenfurnituresets.co.uk/">gardenfurnituresets.co.uk</span><span class="sb-crawl-when">31 Oct, 14:13</span></div></div>
+      <nav aria-label="This crawl"><a href="#" class="sb-item"><svg class="icon" aria-hidden="true"><use href="#i-overview"/></svg><span class="sb-label">Overview</span><span class="kbd-group"><kbd class="kbd">Ctrl</kbd><kbd class="kbd">1</kbd></span></a><a href="#" class="sb-item is-current" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-issues"/></svg><span class="sb-label">Issues</span><span class="sb-count">19</span><span class="kbd-group"><kbd class="kbd">Ctrl</kbd><kbd class="kbd">2</kbd></span></a><a href="#" class="sb-item"><svg class="icon" aria-hidden="true"><use href="#i-urls"/></svg><span class="sb-label">URLs</span><span class="sb-count">4,521</span><span class="kbd-group"><kbd class="kbd">Ctrl</kbd><kbd class="kbd">3</kbd></span></a><a href="#" class="sb-item"><svg class="icon" aria-hidden="true"><use href="#i-links"/></svg><span class="sb-label">Links</span><span class="sb-count">21,914</span><span class="kbd-group"><kbd class="kbd">Ctrl</kbd><kbd class="kbd">4</kbd></span></a><a href="#" class="sb-item"><svg class="icon" aria-hidden="true"><use href="#i-sitemaps"/></svg><span class="sb-label">Sitemaps</span><span class="sb-count">0</span><span class="kbd-group"><kbd class="kbd">Ctrl</kbd><kbd class="kbd">5</kbd></span></a><a href="#" class="sb-item"><svg class="icon" aria-hidden="true"><use href="#i-robots"/></svg><span class="sb-label">robots.txt</span><span class="kbd-group"><kbd class="kbd">Ctrl</kbd><kbd class="kbd">6</kbd></span></a><a href="#" class="sb-item"><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg><span class="sb-label">Settings</span><span class="kbd-group"><kbd class="kbd">Ctrl</kbd><kbd class="kbd">7</kbd></span></a></nav>
+      <div class="spacer"></div>
+      <div class="sb-section">Running in the background</div>
+      <a href="#" class="sb-live">
+          <span class="sb-live-top"><span class="live-dot" aria-hidden="true"></span><span class="sb-live-site">larchmere-hotels.example</span></span>
+          <div class="segbar segbar--thin" role="img" aria-label="Crawled 18,406, Queued 9,644"><span class="seg-crawled" style="flex:18406 1 0"></span><span class="seg-queued" style="flex:9644 1 0"></span></div>
+          <span class="sb-live-meta"><span>18,406 crawled</span><span>11.6 URLs/s</span></span>
+        </a>
+    </div>
+    <div class="sb-foot">
+      <a href="#" class="sb-item"><svg class="icon" aria-hidden="true"><use href="#i-gear"/></svg><span class="sb-label">Settings</span><span class="kbd-group"><kbd class="kbd">Ctrl</kbd><kbd class="kbd">,</kbd></span></a>
+      <button type="button" class="sb-item" data-theme-toggle aria-label="Change theme"><svg class="icon" aria-hidden="true"><use href="#i-theme"/></svg><span class="sb-label">Theme</span><span class="sb-count">System</span></button>
+    </div>
+  </aside><header class="topbar">
+    <div class="tb-nav">
+      <button type="button" class="btn btn--ghost btn--icon" aria-label="Back (Alt+Left)"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg></button>
+      <button type="button" class="btn btn--ghost btn--icon" aria-label="Forward (Alt+Right)"><svg class="icon" aria-hidden="true"><use href="#i-forward"/></svg></button>
+    </div>
+    <nav class="crumbs" aria-label="Where you are"><a href="#" class="crumb crumb--site" title="gardenfurnituresets.co.uk"><span class="fav" aria-hidden="true">g</span><span class="crumb-text">gardenfurnituresets.co.uk</span></a><span class="crumb-sep" aria-hidden="true">/</span><a href="#" class="crumb">31 Oct, 14:13</a><span class="crumb-sep" aria-hidden="true">/</span><span class="crumb crumb--here" aria-current="page">Issues</span></nav>
+    <span class="crawl-status crawl-status--completed" role="status"><svg class="icon--xs" aria-hidden="true"><use href="#i-check"/></svg>Done<span class="num">4,521 URLs</span></span>
+    <div class="tb-gap"></div>
+    <div class="tb-actions"><button type="button" class="btn"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Crawl again</button>
+      <button type="button" class="cmdk" aria-label="Search or run a command (Ctrl+K)"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span class="cmdk-label">Search or jump to…</span><span class="kbd-group"><kbd class="kbd">Ctrl</kbd><kbd class="kbd">K</kbd></span></button>
+      
+    </div>
+  </header><main class="main main--split" id="main">
+    <section class="pane checks" aria-label="Checks">
+      <div class="checks-tools">
+        <label class="field field--quiet"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span class="visually-hidden">Filter checks</span><input placeholder="Filter checks"><span class="kbd-group"><kbd class="kbd">Ctrl</kbd><kbd class="kbd">F</kbd></span></label>
+        <div class="segmented segmented--fill" role="group" aria-label="Severity">
+          <button type="button" class="toggle is-on" aria-pressed="true">All <span class="num">19</span></button>
+          <button type="button" class="toggle" aria-pressed="false"><svg class="sev sev--error" aria-hidden="true"><use href="#i-sev-error"/></svg>Errors <span class="num">2</span></button><button type="button" class="toggle" aria-pressed="false"><svg class="sev sev--warning" aria-hidden="true"><use href="#i-sev-warning"/></svg>Warnings <span class="num">6</span></button><button type="button" class="toggle" aria-pressed="false"><svg class="sev sev--notice" aria-hidden="true"><use href="#i-sev-notice"/></svg>Notices <span class="num">11</span></button>
+        </div>
+      </div>
+      <div class="scroll"><div class="checks-list" role="listbox" aria-label="Checks with issues, by category"><div class="cat" role="presentation"><span>Response codes</span><span class="num">1</span></div><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--error" role="img" aria-label="Error"><use href="#i-sev-error"/></svg><span class="check-title">Internal URL returns 4xx</span><span class="check-count">9</span>
+    </a><div class="cat" role="presentation"><span>Links</span><span class="num">2</span></div><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--error" role="img" aria-label="Error"><use href="#i-sev-error"/></svg><span class="check-title">Links to broken internal URLs</span><span class="check-count">5</span>
+    </a><a href="#" class="check is-selected is-focused" role="option" aria-selected="true">
+      <svg class="sev sev--notice" role="img" aria-label="Notice"><use href="#i-sev-notice"/></svg><span class="check-title">Internal links without anchor text</span><span class="check-count">265</span>
+    </a><div class="check check--skipped" role="option" aria-selected="false" title="No sitemap could be read, so orphan pages and pages missing from the sitemaps weren't checked.">
+        <svg class="sev sev--skipped" role="img" aria-label="Skipped"><use href="#i-sev-skipped"/></svg>
+        <span class="check-title">Orphan page<span class="check-reason">No sitemap could be read</span></span>
+        <span class="skip-tag">Skipped</span>
+      </div><div class="cat" role="presentation"><span>Canonicals</span><span class="num">2</span></div><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--notice" role="img" aria-label="Notice"><use href="#i-sev-notice"/></svg><span class="check-title">Missing canonical</span><span class="check-count">8</span>
+    </a><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--notice" role="img" aria-label="Notice"><use href="#i-sev-notice"/></svg><span class="check-title">Canonicalised page</span><span class="check-count">1</span>
+    </a><div class="cat" role="presentation"><span>Sitemaps</span><span class="num">1</span></div><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--notice" role="img" aria-label="Notice"><use href="#i-sev-notice"/></svg><span class="check-title">No XML sitemap found</span><span class="check-count">1</span>
+    </a><div class="check check--skipped" role="option" aria-selected="false" title="No sitemap could be read, so orphan pages and pages missing from the sitemaps weren't checked.">
+        <svg class="sev sev--skipped" role="img" aria-label="Skipped"><use href="#i-sev-skipped"/></svg>
+        <span class="check-title">Indexable page not in a sitemap<span class="check-reason">No sitemap could be read</span></span>
+        <span class="skip-tag">Skipped</span>
+      </div><div class="cat" role="presentation"><span>Titles</span><span class="num">3</span></div><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--warning" role="img" aria-label="Warning"><use href="#i-sev-warning"/></svg><span class="check-title">Duplicate title</span><span class="check-count">6</span>
+    </a><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--notice" role="img" aria-label="Notice"><use href="#i-sev-notice"/></svg><span class="check-title">Title too long</span><span class="check-count">86</span>
+    </a><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--notice" role="img" aria-label="Notice"><use href="#i-sev-notice"/></svg><span class="check-title">Title too short</span><span class="check-count">9</span>
+    </a><div class="cat" role="presentation"><span>Meta descriptions</span><span class="num">3</span></div><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--warning" role="img" aria-label="Warning"><use href="#i-sev-warning"/></svg><span class="check-title">Missing meta description</span><span class="check-count">11</span>
+    </a><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--warning" role="img" aria-label="Warning"><use href="#i-sev-warning"/></svg><span class="check-title">Duplicate meta description</span><span class="check-count">8</span>
+    </a><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--notice" role="img" aria-label="Notice"><use href="#i-sev-notice"/></svg><span class="check-title">Meta description too long</span><span class="check-count">210</span>
+    </a><div class="cat" role="presentation"><span>Headings</span><span class="num">1</span></div><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--warning" role="img" aria-label="Warning"><use href="#i-sev-warning"/></svg><span class="check-title">Missing H1</span><span class="check-count">1</span>
+    </a><div class="cat" role="presentation"><span>Content</span><span class="num">1</span></div><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--notice" role="img" aria-label="Notice"><use href="#i-sev-notice"/></svg><span class="check-title">Low word count</span><span class="check-count">7</span>
+    </a><div class="check check--skipped" role="option" aria-selected="false" title="The site's other versions (www or not, http or https) weren't all checked, so duplicate versions of the site weren't looked for.">
+        <svg class="sev sev--skipped" role="img" aria-label="Skipped"><use href="#i-sev-skipped"/></svg>
+        <span class="check-title">Duplicate version of the site<span class="check-reason">The site's other versions (www or not, http or https) weren't all checked</span></span>
+        <span class="skip-tag">Skipped</span>
+      </div><div class="cat" role="presentation"><span>Images</span><span class="num">2</span></div><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--warning" role="img" aria-label="Warning"><use href="#i-sev-warning"/></svg><span class="check-title">Large images</span><span class="check-count">61</span>
+    </a><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--notice" role="img" aria-label="Notice"><use href="#i-sev-notice"/></svg><span class="check-title">Images without width and height attributes</span><span class="check-count">230</span>
+    </a><div class="cat" role="presentation"><span>Security</span><span class="num">1</span></div><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--notice" role="img" aria-label="Notice"><use href="#i-sev-notice"/></svg><span class="check-title">Security headers missing</span><span class="check-count">1</span>
+    </a><div class="cat" role="presentation"><span>Performance</span><span class="num">1</span></div><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--warning" role="img" aria-label="Warning"><use href="#i-sev-warning"/></svg><span class="check-title">Slow page</span><span class="check-count">3</span>
+    </a><div class="cat" role="presentation"><span>HTML</span><span class="num">1</span></div><a href="#" class="check" role="option" aria-selected="false">
+      <svg class="sev sev--notice" role="img" aria-label="Notice"><use href="#i-sev-notice"/></svg><span class="check-title">Open Graph tags missing</span><span class="check-count">11</span>
+    </a></div></div>
+      <div class="checks-foot"><svg class="icon--s" aria-hidden="true"><use href="#i-circle-check"/></svg><span>63 checks found nothing.</span><a href="#" class="link">Show them</a></div>
+    </section>
+
+    <section class="pane detail" aria-labelledby="check-title">
+      <header class="detail-head">
+        <div class="detail-kicker"><span class="sev-word"><svg class="sev sev--notice" aria-hidden="true"><use href="#i-sev-notice"/></svg>Notice</span><span>Links</span></div>
+        <div class="detail-actions">
+          <button type="button" class="btn"><svg class="icon" aria-hidden="true"><use href="#i-urls"/></svg>Open in URLs</button>
+          <button type="button" class="btn"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>Copy URLs</button>
+          <span class="anchor"><button type="button" class="btn"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Export</button></span>
+          <button type="button" class="btn btn--ghost btn--icon" aria-label="More: hide this check"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button>
+        </div>
+        <h1 class="detail-title" id="check-title">Internal links without anchor text</h1>
+        <div class="detail-figures">
+          <div class="readout">
+            <span class="readout-label">Pages affected</span>
+            <span class="readout-value">265<small>of 265 pages</small></span>
+            <span class="meter" role="img" aria-label="100% of pages"><span class="meter-fill" style="width:100.00%"></span></span>
+          </div>
+          <div class="readout">
+            <span class="readout-label">Groups</span>
+            <span class="readout-value">2<small>from 265 issues</small></span>
+            <span class="readout-note">One group covers 264 pages</span>
+          </div>
+        </div>
+      </header>
+      <div class="scroll">
+        <dl class="wwf">
+          <dt>What's wrong</dt><dd>The page has links with no text, alt text or aria-label.</dd>
+          <dt>Why it matters</dt><dd>Search engines and screen readers can't tell what they point to.</dd>
+          <dt>How to fix it</dt><dd>Add descriptive link text, or alt text to linked images.</dd>
+        </dl>
+        <div class="groups-head">
+          <h2 class="panel-title">Affected pages</h2>
+          <span class="panel-meta">Grouped by detail and related URL, largest first</span>
+          <div class="spacer"></div>
+          <button type="button" class="btn btn--s"><svg class="icon" aria-hidden="true"><use href="#i-group"/></svg>Group: detail and related URL</button>
+        </div>
+        <div class="groups" role="treegrid" aria-label="Affected pages, grouped" style="--cols: var(--size-control) minmax(0, 184px) minmax(0, 1fr) 64px 132px">
+          <div class="grid-head" role="row">
+            <span class="cell" role="columnheader"><span class="visually-hidden">Expand</span></span>
+            <span class="cell" role="columnheader">Detail</span>
+            <span class="cell" role="columnheader">Related URL</span>
+            <span class="cell cell--num is-sorted" role="columnheader" aria-sort="descending">Pages<svg class="icon--xs" aria-hidden="true"><use href="#i-arrow-down"/></svg></span>
+            <span class="cell" role="columnheader">Share</span>
+          </div>
+          <div class="grid-row group-row" role="row" aria-level="1" aria-expanded="true">
+      <span class="cell" role="gridcell"><span class="disclose"><svg class="icon--s" aria-hidden="true"><use href="#i-chev-down"/></svg></span></span>
+      <span class="cell cell--detail" role="gridcell">Links to 1 URL</span>
+      <span class="cell" role="gridcell"><span class="url" title="https://www.gardenfurnituresets.co.uk/"><span class="url-host">www.gardenfurnituresets.co.uk</span><span class="url-rest">/</span></span></span>
+      <span class="cell cell--num strong" role="gridcell">264</span>
+      <span class="cell" role="gridcell"><span class="group-share"><span class="meter"><span class="meter-fill" style="width:99.62%"></span></span><span class="num muted">99.6%</span></span></span>
+    </div><div class="grid-row member-row" role="row" aria-level="2">
+          <span class="cell" role="gridcell"></span>
+          <span class="cell cell--url" role="gridcell"><span class="url" title="https://www.gardenfurnituresets.co.uk/frequently-asked-questions/"><span class="url-host">www.gardenfurnituresets.co.uk</span><span class="url-rest">/frequently-asked-questions/</span></span></span>
+          <span class="cell cell--num" role="gridcell"></span>
+          <span class="cell" role="gridcell"></span>
+        </div><div class="grid-row member-row" role="row" aria-level="2">
+          <span class="cell" role="gridcell"></span>
+          <span class="cell cell--url" role="gridcell"><span class="url" title="https://www.gardenfurnituresets.co.uk/contact-us/"><span class="url-host">www.gardenfurnituresets.co.uk</span><span class="url-rest">/contact-us/</span></span></span>
+          <span class="cell cell--num" role="gridcell"></span>
+          <span class="cell" role="gridcell"></span>
+        </div><div class="grid-row member-row" role="row" aria-level="2">
+          <span class="cell" role="gridcell"></span>
+          <span class="cell cell--url" role="gridcell"><span class="url" title="https://www.gardenfurnituresets.co.uk/login/"><span class="url-host">www.gardenfurnituresets.co.uk</span><span class="url-rest">/login/</span></span></span>
+          <span class="cell cell--num" role="gridcell"></span>
+          <span class="cell" role="gridcell"></span>
+        </div><div class="grid-row member-row" role="row" aria-level="2">
+          <span class="cell" role="gridcell"></span>
+          <span class="cell cell--url" role="gridcell"><span class="url" title="https://www.gardenfurnituresets.co.uk/garden-furniture/"><span class="url-host">www.gardenfurnituresets.co.uk</span><span class="url-rest">/garden-furniture/</span></span></span>
+          <span class="cell cell--num" role="gridcell"></span>
+          <span class="cell" role="gridcell"></span>
+        </div><div class="grid-row member-row" role="row" aria-level="2">
+          <span class="cell" role="gridcell"></span>
+          <span class="cell cell--url" role="gridcell"><span class="url" title="https://www.gardenfurnituresets.co.uk/rattan-furniture/"><span class="url-host">www.gardenfurnituresets.co.uk</span><span class="url-rest">/rattan-furniture/</span></span></span>
+          <span class="cell cell--num" role="gridcell"></span>
+          <span class="cell" role="gridcell"></span>
+        </div><div class="grid-row member-row" role="row" aria-level="2">
+          <span class="cell" role="gridcell"></span>
+          <span class="cell cell--url" role="gridcell"><span class="url" title="https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-patio-sets/"><span class="url-host">www.gardenfurnituresets.co.uk</span><span class="url-rest">/rattan-furniture/rattan-patio-sets/</span></span></span>
+          <span class="cell cell--num" role="gridcell"></span>
+          <span class="cell" role="gridcell"></span>
+        </div><div class="grid-row member-row" role="row" aria-level="2">
+          <span class="cell" role="gridcell"></span>
+          <span class="cell cell--url" role="gridcell"><span class="url" title="https://www.gardenfurnituresets.co.uk/rattan-furniture/rattan-sofa-sets/"><span class="url-host">www.gardenfurnituresets.co.uk</span><span class="url-rest">/rattan-furniture/rattan-sofa-sets/</span></span></span>
+          <span class="cell cell--num" role="gridcell"></span>
+          <span class="cell" role="gridcell"></span>
+        </div><div class="member-more" role="row"><span role="gridcell">257 more pages in this group</span><a href="#" class="link" role="gridcell">Show all 264 in URLs</a></div><div class="grid-row group-row" role="row" aria-level="1" aria-expanded="false">
+      <span class="cell" role="gridcell"><span class="disclose"><svg class="icon--s" aria-hidden="true"><use href="#i-chev-right"/></svg></span></span>
+      <span class="cell cell--detail" role="gridcell">Links to 4 URLs</span>
+      <span class="cell" role="gridcell"><span class="url" title="https://www.gardenfurnituresets.co.uk/greenhouses/"><span class="url-host">www.gardenfurnituresets.co.uk</span><span class="url-rest">/greenhouses/</span></span></span>
+      <span class="cell cell--num strong" role="gridcell">1</span>
+      <span class="cell" role="gridcell"><span class="group-share"><span class="meter"><span class="meter-fill" style="width:0.38%"></span></span><span class="num muted">0.4%</span></span></span>
+    </div>
+        </div>
+      </div>
+    </section>
+  </main></div>
+
+<div class="scrim" aria-hidden="true"></div>
+  <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+    <div class="palette-input"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span class="palette-query" role="combobox" aria-label="Search or run a command" aria-expanded="true" aria-controls="palette-list" aria-activedescendant="palette-first">brok<span class="caret" aria-hidden="true"></span></span><span class="kbd-group"><kbd class="kbd">Esc</kbd></span></div>
+    <div class="palette-list" id="palette-list" role="listbox" aria-label="Results">
+      <div class="palette-group">Checks</div>
+      <div class="palette-item is-active" role="option" id="palette-first" aria-selected="true">
+        <svg class="sev sev--error" role="img" aria-label="Error"><use href="#i-sev-error"/></svg><span>Links to <mark>brok</mark>en internal URLs</span><span class="palette-where">Links</span><span class="palette-figure">5 pages</span>
+      </div><div class="palette-item" role="option" aria-selected="false">
+        <svg class="sev sev--muted" role="img" aria-label="No issues"><use href="#i-circle-check"/></svg><span>Redirect leads to a <mark>brok</mark>en URL</span><span class="palette-where">Redirects</span><span class="palette-figure">No issues</span>
+      </div><div class="palette-item" role="option" aria-selected="false">
+        <svg class="sev sev--muted" role="img" aria-label="No issues"><use href="#i-circle-check"/></svg><span>Links to <mark>brok</mark>en external URLs</span><span class="palette-where">Links</span><span class="palette-figure">No issues</span>
+      </div><div class="palette-item" role="option" aria-selected="false">
+        <svg class="sev sev--muted" role="img" aria-label="No issues"><use href="#i-circle-check"/></svg><span>Canonical points to a <mark>brok</mark>en URL</span><span class="palette-where">Canonicals</span><span class="palette-figure">No issues</span>
+      </div><div class="palette-item" role="option" aria-selected="false">
+        <svg class="sev sev--muted" role="img" aria-label="No issues"><use href="#i-circle-check"/></svg><span><mark>Brok</mark>en images</span><span class="palette-where">Images</span><span class="palette-figure">No issues</span>
+      </div><div class="palette-item" role="option" aria-selected="false">
+        <svg class="sev sev--muted" role="img" aria-label="No issues"><use href="#i-circle-check"/></svg><span>Hreflang points to a <mark>brok</mark>en URL</span><span class="palette-where">Hreflang</span><span class="palette-figure">No issues</span>
+      </div>
+      <div class="palette-group">URLs</div>
+      <div class="palette-item" role="option" aria-selected="false"><svg class="icon--s" aria-hidden="true"><use href="#i-search"/></svg><span>Search URLs and titles for “brok”</span><span class="palette-where">No matches in this crawl</span><span class="palette-figure"><span class="kbd-group"><kbd class="kbd">Ctrl</kbd><kbd class="kbd">F</kbd></span></span></div>
+      <div class="palette-group">Actions</div>
+      <div class="palette-item" role="option" aria-selected="false"><svg class="icon--s" aria-hidden="true"><use href="#i-download"/></svg><span>Export every check, with a summary sheet</span><span class="palette-where">Issues</span><span class="palette-figure"><span class="kbd-group"><kbd class="kbd">Ctrl</kbd><kbd class="kbd">E</kbd></span></span></div>
+    </div>
+    <div class="palette-foot"><span class="hint"><span class="kbd-group"><kbd class="kbd">↑</kbd><kbd class="kbd">↓</kbd></span><span>Move</span></span><span class="hint"><span class="kbd-group"><kbd class="kbd">Enter</kbd></span><span>Open</span></span><span class="hint"><span class="kbd-group"><kbd class="kbd">Esc</kbd></span><span>Close</span></span><span class="spacer"></span><span>Checks, URLs, actions, crawls and settings</span></div>
+  </div>
+</body>
+</html>
