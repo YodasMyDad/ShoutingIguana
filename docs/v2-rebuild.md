@@ -63,7 +63,13 @@ As of 2026-10-31:
 
   There will be no proxy rotation or fingerprint spoofing.
 - **`www` and the bare domain are one site.** Both are internal, and they share one rate limit and connection limit.
-  Sites serve one and redirect the other, and separate limits would double the load on the server.
+  Sites serve one and redirect the other, and separate limits would double the load on the server. The owner confirmed
+  this on 2026-11-01.
+  - Search engines treat them, and http and https, as separate sites. So a version that answers instead of
+    redirecting to the main one is flagged `duplicate-site-version`.
+  - Nothing links to the other versions as a rule, so the crawler probes each one at the start of a crawl: a status
+    check of the start URL's path there, never parsed or followed, so the site is never crawled twice.
+  - A dead version isn't flagged, and neither are its unreachable URLs or robots.txt: a dead `www` twin is normal.
 - **A site that stops answering stops the crawl, which can be resumed.**
   - The crawler pauses a minute between tries, and after 10 minutes without an answer it stops: status Stopped,
     and `si crawl` exits 3.
@@ -181,7 +187,6 @@ Everything below is public in `ShoutingIguana.Engine`.
   - raw-vs-rendered diffs as a feature;
   - a per-host browser fallback when a site blocks plain HTTP.
 - **Decided this round under delegation, easy to revisit:**
-  - `www` and the bare domain as one site;
   - stopping after 10 minutes without an answer;
   - the checks skipped on crawls that can't support them.
 

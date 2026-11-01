@@ -46,7 +46,13 @@ Exit codes, for scripts and schedulers:
 
 ## How a crawl works
 
-1. The start URL (and every sitemap URL) goes into the `urls` table of the crawl's SQLite file.
+1. The start URL (and every sitemap URL) goes into the `urls` table of the crawl's SQLite file. So does the start URL's
+   path on each of the site's other versions (bare domain or `www`, over http or https), claimed right behind it, so even
+   a crawl stopped early knows how they answer.
+   - These probes are status checks only: never parsed, never followed, and not counted toward the URL limit. Where one
+     redirects is checked the same way. So a version that answers with the whole site never gets it crawled twice.
+   - They go through robots.txt, the rate gate and retries like any URL.
+   - Once the site itself links to one, lists it in a sitemap or redirects to it, it is one of the site's own URLs.
 2. A dispatcher claims queued URLs breadth-first and hands them to two worker pools: one for the site itself and
    one for status checks on other sites.
 3. Each worker checks robots.txt and waits on a per-site gate. `example.com` and `www.example.com` are one site,
@@ -88,7 +94,7 @@ pages count: a genuine 403 from a site behind one of those firewalls stays a 403
 
 ## SEO analysis
 
-When a crawl completes, `CrawlAnalyzer` runs 84 checks over what was stored and writes the issues into the same
+When a crawl completes, `CrawlAnalyzer` runs 85 checks over what was stored and writes the issues into the same
 file. It never refetches or reparses anything, so any crawl can be analysed again with new rules or thresholds
 (`si analyze`). It refuses a crawl that is still running. A rule that fails on one page (page content is untrusted)
 is logged with the URL and skipped for that page, and the analysis notes say which rule failed on how many pages.
@@ -115,6 +121,9 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
     neither failure counts as a sitemap error.
   - Checks of what the crawl was told not to fetch are skipped: broken external links with `--no-external`, broken
     and oversized images with `--no-resources`, and every sitemap check with `--no-sitemaps`.
+  - The duplicate site version check needs to know how every version answered, and a home page to redirect to. A
+    crawl stopped before the probes were answered, a crawl file from before the crawler probed, or a home page that
+    isn't a page skips it.
   - A skipped check stores no rows, whatever its rule found on the way.
 - **Not checked isn't broken.** A URL the crawler gave up on without asking ("Not checked", because its host had
   stopped answering) counts as never fetched. Links to it aren't broken, and the notes give the number.
@@ -129,6 +138,15 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   H1; their titles and descriptions must still differ.
 - **Other sites.** A status many sites only send crawlers (401, 403, 405, 429, 503, 999) doesn't make an external
   link, canonical, alternate or image "broken".
+- **Site versions.** The bare domain and `www`, over http and https, are one site to the crawler but separate sites to
+  search engines. Each version of the start URL must redirect to the main one, the home page's origin.
+  - One that answers with a page, directly or at the end of its redirects on another version, is flagged
+    `duplicate-site-version`.
+  - One that is dead, fails, is blocked or is disallowed isn't: a dead `www` twin is normal.
+  - The probes aren't the site's URLs, so the response-code checks leave them out, and so do the robots.txt checks
+    for an origin only probes went to. Once the site links there, they count like any URL.
+  - The redirect checks still look at them: a version that redirects temporarily, to http, in a loop or to a broken
+    URL is a problem.
 - **Thresholds.** `AnalysisSettings` holds every limit (title 30–60 characters, description 70–155, 200
   words, images over 200 KB, pages slower than 1 s...). Each analysis stores the values it used. Title and
   description lengths count full-width (CJK) characters and emoji as two, as they take about twice the room.
@@ -152,7 +170,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | Table | Holds |
 | --- | --- |
 | `crawl` | Start URL, options (so a resume behaves the same), status, engine version |
-| `urls` | Every URL seen once: scope, depth, crawl state, why it was skipped, where it was found |
+| `urls` | Every URL seen once: scope, depth, crawl state, why it was skipped, where it was found (`source` 3 marks a probe of the site's other versions) |
 | `responses` | One row per fetched URL: status, timings, sizes, title, description, H1, canonical, indexability, content hashes |
 | `response_details` | Brotli-compressed JSON of the headers and full `PageFacts` (headings, meta tags, images, hreflang, JSON-LD, ids) |
 | `response_html` | Compressed HTML, only with `--store-html` |
@@ -175,7 +193,8 @@ conflicting canonicals, broken hreflang, invalid JSON-LD, a slow page, a firewal
 
 The e2e tests also crawl these variants:
 
-- **HTTPS**, with a self-signed certificate. Plain HTTP answers on the same port, as port 80 does on a real site.
+- **HTTPS**, with a self-signed certificate. Plain HTTP answers on the same port, as port 80 does on a real site. It
+  serves the home page there instead of redirecting: the planted duplicate version of the site.
 - **No sitemaps**, where the checks that need them are skipped.
 
 A second origin serves a partner site, so links, images and sitemap entries on another host are tested too.
