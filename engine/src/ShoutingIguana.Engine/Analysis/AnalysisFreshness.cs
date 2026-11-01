@@ -19,7 +19,7 @@ public static class AnalysisFreshness
     /// stored by another version are out of date (<see cref="OutOfDateReason.EngineChanged"/>), and the UI offers to
     /// run them again. A change to the catalog's checks is caught without a bump, by <see cref="ChecksFingerprint"/>.
     /// </summary>
-    public const int VERSION = 1;
+    public const int VERSION = 2;
 
     /// <summary>The catalog's check ids with their categories and severities, hashed. Titles and texts don't count.</summary>
     public static string ChecksFingerprint { get; } = Fingerprint(IssueCatalog.All);
@@ -63,9 +63,10 @@ public static class AnalysisFreshness
     }
 
     /// <summary>
-    /// The settings as the analysis stores them, so equal settings give equal text. Read back from a crawl file, a setting
-    /// the analysing engine didn't have reads as 0 (the source-generated reader doesn't apply defaults), so it counts as
-    /// different unless 0 is its default here: when in doubt, the analysis is out of date.
+    /// The settings as the analysis stores them, so equal settings give equal text. Read back from a crawl file, a threshold
+    /// the analysing engine didn't have takes its default. A new threshold that changes what the checks find comes with a
+    /// new <see cref="VERSION"/>, so such an analysis is out of date anyway; one that doesn't leaves it standing, unless
+    /// the threshold is set away from its default now.
     /// </summary>
     private static string Canonical(AnalysisSettings settings) => JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings);
 }

@@ -23,7 +23,8 @@ internal sealed class ChildSiteProcess : IDisposable
 
     public Uri ExternalBaseUri { get; }
 
-    public static async Task<ChildSiteProcess> StartAsync(int pages, CancellationToken cancellationToken)
+    /// <param name="deadTwin">Plant <see cref="TestSite.Models.SyntheticSiteOptions.DeadTwin"/>.</param>
+    public static async Task<ChildSiteProcess> StartAsync(int pages, bool deadTwin, CancellationToken cancellationToken)
     {
         var processPath = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot locate the running executable.");
         var start = new ProcessStartInfo(processPath)
@@ -42,6 +43,10 @@ internal sealed class ChildSiteProcess : IDisposable
         start.ArgumentList.Add("testsite");
         start.ArgumentList.Add("--pages");
         start.ArgumentList.Add(pages.ToString(CultureInfo.InvariantCulture));
+        if (deadTwin)
+        {
+            start.ArgumentList.Add("--dead-twin");
+        }
 
         var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start the synthetic site.");
         try

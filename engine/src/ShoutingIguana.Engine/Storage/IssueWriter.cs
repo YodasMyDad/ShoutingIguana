@@ -124,9 +124,10 @@ internal sealed class IssueWriter : IDisposable
     /// <param name="info">The analysis, with what it was run against (its version, partial or not).</param>
     /// <param name="skipped">The checks left out, and why.</param>
     /// <param name="urls">What the analysis judged of every URL, for the summary.</param>
+    /// <param name="sitemapsCovered">Every sitemap was read, so the summary can say a URL isn't in one.</param>
     /// <returns>Flagged URL counts per issue id.</returns>
     public Dictionary<string, long> Commit(IReadOnlyList<IssueDefinition> checks, AnalysisInfo info, string settingsJson, IReadOnlyList<string> notes,
-        IReadOnlyList<SkippedCheck> skipped, UrlTable urls)
+        IReadOnlyList<SkippedCheck> skipped, UrlTable urls, bool sitemapsCovered)
     {
         Dictionary<string, long> counts = new(StringComparer.Ordinal);
         using (var count = Command("SELECT issue, COUNT(*) FROM issues GROUP BY issue"))
@@ -159,7 +160,7 @@ internal sealed class IssueWriter : IDisposable
 
         // After the issue types: the summary counts each URL's issues by severity. It's part of the analysis's time.
         var summaryTime = Stopwatch.StartNew();
-        var summaryRows = UrlSummaryBuilder.Build(_connection, _transaction, urls);
+        var summaryRows = UrlSummaryBuilder.Build(_connection, _transaction, urls, sitemapsCovered);
         _logger.LogDebug("Stored the URL summary of {Rows} URLs in {Elapsed}", summaryRows, summaryTime.Elapsed);
 
         // The crawl row's updated_at as it stands: the lock keeps any crawl out until this commits, so it's the one analysed.

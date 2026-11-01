@@ -38,6 +38,10 @@ internal static class StatsCommand
             Print("Status codes", stats.StatusCodes.OrderBy(pair => pair.Key).Select(pair => (pair.Key.ToString(), pair.Value)));
             Print("Not indexable", stats.NonIndexableReasons.OrderByDescending(pair => pair.Value).Select(pair => (pair.Key.ToString(), pair.Value)));
             Print("Not fetched", stats.SkipReasons.OrderByDescending(pair => pair.Value).Select(pair => (pair.Key.ToString(), pair.Value)));
+            if (stats.NotCheckedCount > 0)
+            {
+                Console.WriteLine($"  Not checked   {Format.Count(stats.NotCheckedCount, "URL", "URLs")}: their site had stopped answering");
+            }
             if (stats.UnlinkedPageCount > 0)
             {
                 Console.WriteLine($"  (pages only in sitemaps have depth {CrawlDepth.UNLINKED:N0} in the urls table)");

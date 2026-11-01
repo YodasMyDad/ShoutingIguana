@@ -24,7 +24,12 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     /// <summary>Failures logged in full per rule; the rest are only counted, so a rule that fails everywhere can't flood the log.</summary>
     private const int LOGGED_FAILURES_PER_RULE = 5;
 
+    private const string RULE_FAILED_TEXT = "The check failed during the analysis, so it has no results. The log says why.";
+
     private readonly ILogger _logger = loggerFactory.CreateLogger<CrawlAnalyzer>();
+
+    /// <summary>Tests only: called with each site rule just before it reports, where its failure is caught, so a test can make one fail.</summary>
+    internal Action<object>? Finishing { get; set; }
 
     /// <summary>Analyses a crawl that is not being written to. A crawl still running (or interrupted) is refused.</summary>
     public Task<AnalysisSummary> AnalyzeAsync(string databasePath, AnalysisSettings? settings = null, CancellationToken cancellationToken = default)
@@ -89,8 +94,10 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             }
             else if (SitemapRules.Unreadable(sitemaps) is { } unreadable)
             {
-                if (unreadable.NotReadReason is { } reason)
+                if (unreadable.NotReadReason is { } notRead)
                 {
+                    // Crawl files are shared, and one can hold the "Not read" prefix with no reason after it.
+                    var reason = string.IsNullOrWhiteSpace(notRead) ? "the crawler left it unread" : notRead;
                     Skip(notes, skipped,
                         $"Pages missing from the sitemaps weren't checked: {reason}, so {unreadable.Url} and any more like it weren't read, and they may list them.",
                         SkippedCheckReasons.SITEMAPS_NOT_READ, $"{char.ToUpperInvariant(reason[0])}{reason[1..]}, so {unreadable.Url} and any more like it weren't read.",
@@ -200,15 +207,30 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 hits.Clear();
+                var declared = rule.Checks;
                 try
                 {
+                    Finishing?.Invoke(rule);
                     hits.AddRange(rule.Finish());
+
+                    // What a rule reports must be what its failure would skip, or a failure would leave a check looking clean.
+                    if (hits.FindIndex(hit => !declared.Contains(hit.Issue)) is >= 0 and var undeclared)
+                    {
+                        throw new InvalidOperationException($"{RuleName(rule)} reported {hits[undeclared].Issue.Id}, which isn't one of the checks it declares.");
+                    }
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
                     _logger.LogError(exception, "Rule {Rule} failed after the page pass; its cross-page results are left out", RuleName(rule));
                     notes.Add($"{RuleName(rule)} failed after reading every page, so its cross-page results are missing (see the log).");
                     finishFailed = true;
+
+                    // Its checks have no results, which isn't finding nothing: they are skipped, each saying why.
+                    foreach (var check in declared)
+                    {
+                        skipped.TryAdd(check, new SkippedCheck(check.Id, SkippedCheckReasons.RULE_FAILED, RULE_FAILED_TEXT));
+                    }
+
                     continue;
                 }
 
@@ -244,7 +266,9 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             ChecksFingerprint = AnalysisFreshness.ChecksFingerprint
         };
         var checks = IssueCatalog.All.Where(issue => !skipped.ContainsKey(issue)).ToList();
-        var counts = writer.Commit(checks, info, JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings), notes, skips, urls);
+        // The not-in-sitemap check runs only when every sitemap was read: then the summary can say a URL isn't in one.
+        var counts = writer.Commit(checks, info, JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings), notes, skips, urls,
+            sitemapsCovered: !skipped.ContainsKey(IssueCatalog.NOT_IN_SITEMAP));
         var issues = checks.Select(issue => new IssueCount(issue, counts.GetValueOrDefault(issue.Id))).ToList();
 
         _logger.LogInformation("Analysed {Pages} pages in {Elapsed}: {Flagged} issues across {Types} checks",

@@ -19,6 +19,13 @@ internal sealed class CrawlSummaryCache
 {
     private const string FILE_NAME = "summaries.json";
 
+    /// <summary>
+    /// What a kept summary holds. Bump it whenever <see cref="Engine.Storage.Models.CrawlFileSummary"/> gains or changes
+    /// what it carries, since builds of one engine version share the state folder: 1 added the analysis, with what it was
+    /// run against, which the out-of-date rule needs (a summary kept without it would say an old analysis still stands).
+    /// </summary>
+    private const int FORMAT = 1;
+
     private readonly ConcurrentDictionary<string, CachedSummary> _summaries = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _paths = new(StringComparer.Ordinal);
     private readonly Lock _saving = new();
@@ -75,7 +82,7 @@ internal sealed class CrawlSummaryCache
 
             try
             {
-                StateFile.Write(_file, JsonSerializer.Serialize(new SummaryCacheFile(EngineInfo.Version, kept), SidecarJsonContext.Default.SummaryCacheFile));
+                StateFile.Write(_file, JsonSerializer.Serialize(new SummaryCacheFile(EngineInfo.Version, FORMAT, kept), SidecarJsonContext.Default.SummaryCacheFile));
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
@@ -160,7 +167,7 @@ internal sealed class CrawlSummaryCache
         try
         {
             var saved = JsonSerializer.Deserialize(File.ReadAllText(_file), SidecarJsonContext.Default.SummaryCacheFile);
-            if (saved?.EngineVersion != EngineInfo.Version)
+            if (saved?.EngineVersion != EngineInfo.Version || saved.Format != FORMAT)
             {
                 return;
             }

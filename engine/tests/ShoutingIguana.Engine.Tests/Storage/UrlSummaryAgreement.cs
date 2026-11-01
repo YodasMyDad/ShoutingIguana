@@ -1,6 +1,7 @@
 using System.Globalization;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
@@ -32,6 +33,10 @@ internal static class UrlSummaryAgreement
     /// <summary>The pages the analysis audits, as its reader picks them: responses r of urls u.</summary>
     private const string AUDITED = $"u.is_internal = 1 AND r.is_html = 1 AND r.outcome = 0 AND {AnalysisReader.SITE_PAGE}";
 
+    /// <summary>A URL the analysis counts as fetched: it has a response, and one from a request (responses r).</summary>
+    private static readonly string FETCHED =
+        $"r.url_id IS NOT NULL AND substr(COALESCE(r.error, ''), 1, {RetryingFetcher.NOT_CHECKED_ERROR.Length}) <> '{RetryingFetcher.NOT_CHECKED_ERROR}'";
+
     public static void AssertAgreesWithTheChecks(string path, SyntheticSiteExpectations expected, CrawlStats stats)
     {
         Assert.True(UrlSummaryReader.IsAvailable(path));
@@ -41,14 +46,16 @@ internal static class UrlSummaryAgreement
         AssertIndexabilityAsAnalysed(path, rows);
         AssertTheChecksSawTheSameIndexability(path, rows);
 
-        // What the site planted, counted from the summary: the stats count it from the crawl's tables.
-        var internalRows = rows.Values.Where(row => row.IsInternal).ToList();
+        // What the site planted, counted from the summary: the stats count it from the crawl's tables. Both leave out the
+        // crawler's probes of the site's other versions, and the URLs that weren't checked are unknown, not unreachable.
+        var internalRows = rows.Values.Where(row => row.IsInternal && row.Source != DiscoverySource.SiteVersion).ToList();
         Assert.Equal(expected.Noindex, internalRows.Count(row => row.IndexabilityReason == IndexabilityReason.Noindex));
         Assert.Equal(expected.Canonicalised, internalRows.Count(row => row.IndexabilityReason == IndexabilityReason.Canonicalised));
         Assert.Equal(stats.NonIndexableReasons.Where(pair => pair.Key != IndexabilityReason.None).OrderBy(pair => pair.Key),
             internalRows.Where(row => row.IndexabilityReason is not (null or IndexabilityReason.None)).GroupBy(row => row.IndexabilityReason!.Value)
                 .Select(group => KeyValuePair.Create(group.Key, (long)group.Count())).OrderBy(pair => pair.Key));
-        Assert.Equal(stats.IndexablePageCount, internalRows.Count(row => row is { IsIndexable: true, ResourceType: ResourceType.Page, WordCount: not null }));
+        Assert.Equal(stats.IndexablePageCount, internalRows.Count(row => row is { IsIndexable: true, ResourceType: ResourceType.Page }));
+        Assert.Equal(expected.NotChecked, stats.NotCheckedCount);
 
         AssertLinkCounts(path, rows);
         AssertIssueCounts(path, rows);
@@ -58,13 +65,15 @@ internal static class UrlSummaryAgreement
 
     /// <summary>
     /// The UI's rule for indexability, COALESCE(effective_indexability, responses), for every URL the analysis counts as
-    /// fetched; nothing for the rest, including URLs never asked for because their host had stopped answering.
+    /// fetched; nothing for the rest, including URLs never asked for because their host had stopped answering, nor for an
+    /// HTML page whose body was never read (an iframe's, another site's) unless its response rules it out.
     /// </summary>
     private static void AssertIndexabilityAsAnalysed(string path, Dictionary<int, UrlSummary> rows)
     {
         var judged = TestCrawls.Rows(path, $"""
-            SELECT u.id, CASE WHEN r.url_id IS NULL OR substr(COALESCE(r.error, ''), 1, {RetryingFetcher.NOT_CHECKED_ERROR.Length}) = '{RetryingFetcher.NOT_CHECKED_ERROR}'
-                              THEN NULL ELSE COALESCE(e.indexability_reason, r.indexability_reason) END
+            SELECT u.id, CASE WHEN NOT ({FETCHED}) THEN NULL
+                              WHEN r.outcome = 0 AND r.is_html = 1 AND r.word_count IS NULL AND COALESCE(e.indexability_reason, r.indexability_reason) = 0 THEN NULL
+                              ELSE COALESCE(e.indexability_reason, r.indexability_reason) END
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id LEFT JOIN effective_indexability e ON e.url_id = u.id
             """);
         Assert.Equal(judged, rows.Values.Select(row => $"{row.UrlId} | {(row.IndexabilityReason is { } reason ? ((int)reason).ToString(CultureInfo.InvariantCulture) : "null")}")
@@ -93,6 +102,18 @@ internal static class UrlSummaryAgreement
         Assert.All(flagged[IssueCatalog.SITEMAP_NON_INDEXABLE.Id], row => Assert.True(row is { InSitemap: true, IsIndexable: false }));
         Assert.All(flagged[IssueCatalog.NOT_IN_SITEMAP.Id], row => Assert.True(row is { InSitemap: false, ResourceType: ResourceType.Page }));
         Assert.All(flagged[IssueCatalog.ORPHAN_PAGE.Id], row => Assert.True(row is { InSitemap: true, LinkingPages: 0 }));
+
+        // The reverse: what the summary calls an indexable page had its HTML read, so a page that was only status-checked
+        // never passes for one, and each of the site's was audited by the analysis, apart from Cloudflare's endpoints, which
+        // it leaves alone. This site has such an unread page: the one its iframe shows.
+        var audited = TestCrawls.Rows(path, $"SELECT u.id FROM urls u JOIN responses r ON r.url_id = u.id WHERE ({AUDITED}) OR instr(u.url, '/cdn-cgi/') > 0")
+            .Select(id => int.Parse(id, CultureInfo.InvariantCulture)).ToHashSet();
+        Assert.All(rows.Values.Where(row => row is { IsIndexable: true, ResourceType: ResourceType.Page }), row =>
+        {
+            Assert.NotNull(row.WordCount);
+            Assert.True(!row.IsInternal || audited.Contains(row.UrlId), $"URL {row.UrlId} is called indexable, but the analysis didn't audit it");
+        });
+        Assert.Contains(rows.Values, row => row is { IsInternal: true, StatusCode: 200, ResourceType: ResourceType.Page, IsIndexable: null, Outlinks: null });
     }
 
     /// <summary>Hyperlinks to each URL from the pages the analysis audits, other than its own, counted by SQL.</summary>
@@ -110,9 +131,9 @@ internal static class UrlSummaryAgreement
         Assert.Contains(rows.Values, row => row.NofollowInlinks > 0);
         Assert.Contains(rows.Values, row => row.Inlinks > row.LinkingPages);
 
+        // A page's links are known once its HTML was read; a URL only status-checked has none to count.
         Assert.Equal(TestCrawls.Rows(path, $"""
-                SELECT u.id, CASE WHEN r.url_id IS NULL OR substr(COALESCE(r.error, ''), 1, {RetryingFetcher.NOT_CHECKED_ERROR.Length}) = '{RetryingFetcher.NOT_CHECKED_ERROR}'
-                                  THEN NULL ELSE r.outlink_count END
+                SELECT u.id, CASE WHEN NOT ({FETCHED}) OR r.word_count IS NULL THEN NULL ELSE r.outlink_count END
                 FROM urls u LEFT JOIN responses r ON r.url_id = u.id
                 """),
             rows.Values.Select(row => $"{row.UrlId} | {Text(row.Outlinks)}").Order(StringComparer.Ordinal).ToList());
@@ -171,18 +192,27 @@ internal static class UrlSummaryAgreement
             row => Assert.Equal((row.UrlId, row.StatusCode), (row.FinalUrlId, row.FinalStatusCode)));
     }
 
-    /// <summary>The crawl's own numbers, copied for the grids to sort on, and the URLs listed in a sitemap.</summary>
+    /// <summary>
+    /// The crawl's own numbers, copied for the grids to sort on (unknown for a URL the analysis counts as unfetched), how
+    /// each URL was found, its depth (none for one only a sitemap lists), and whether a sitemap lists it: no only when the
+    /// analysis could tell, having read every sitemap.
+    /// </summary>
     private static void AssertCopiesOfTheCrawl(string path, Dictionary<int, UrlSummary> rows)
     {
-        Assert.Equal(TestCrawls.Rows(path, "SELECT id, is_internal, depth, (SELECT COUNT(*) > 0 FROM sitemap_urls s WHERE s.url_id = urls.id) FROM urls"),
-            rows.Values.Select(row => $"{row.UrlId} | {(row.IsInternal ? 1 : 0)} | {row.Depth} | {(row.InSitemap ? 1 : 0)}").Order(StringComparer.Ordinal).ToList());
         Assert.Equal(TestCrawls.Rows(path, $"""
-                SELECT r.url_id, r.status_code, r.size_bytes, CASE WHEN r.outcome = {(int)FetchOutcome.RobotsDisallowed} THEN NULL ELSE r.response_ms END, r.word_count
-                FROM responses r
-                WHERE substr(COALESCE(r.error, ''), 1, {RetryingFetcher.NOT_CHECKED_ERROR.Length}) <> '{RetryingFetcher.NOT_CHECKED_ERROR}'
+                SELECT id, is_internal, source, CASE WHEN depth < {CrawlDepth.UNLINKED} THEN depth END,
+                       CASE WHEN EXISTS (SELECT 1 FROM sitemap_urls s WHERE s.url_id = urls.id) THEN 1
+                            WHEN EXISTS (SELECT 1 FROM issue_types WHERE id = '{IssueCatalog.NOT_IN_SITEMAP.Id}') THEN 0 END
+                FROM urls
                 """),
-            rows.Values.Where(row => row.IndexabilityReason is not null)
-                .Select(row => $"{row.UrlId} | {Text(row.StatusCode)} | {Text(row.SizeBytes)} | {Text(row.ResponseMs)} | {Text(row.WordCount)}")
+            rows.Values.Select(row => $"{row.UrlId} | {(row.IsInternal ? 1 : 0)} | {(int)row.Source} | {Text(row.Depth)} | {Text(row.InSitemap is { } listed ? listed ? 1 : 0 : (int?)null)}")
+                .Order(StringComparer.Ordinal).ToList());
+        Assert.Equal(TestCrawls.Rows(path, $"""
+                SELECT u.id, CASE WHEN {FETCHED} THEN r.status_code END, CASE WHEN {FETCHED} THEN r.size_bytes END,
+                       CASE WHEN {FETCHED} AND r.outcome <> {(int)FetchOutcome.RobotsDisallowed} THEN r.response_ms END, CASE WHEN {FETCHED} THEN r.word_count END
+                FROM urls u LEFT JOIN responses r ON r.url_id = u.id
+                """),
+            rows.Values.Select(row => $"{row.UrlId} | {Text(row.StatusCode)} | {Text(row.SizeBytes)} | {Text(row.ResponseMs)} | {Text(row.WordCount)}")
                 .Order(StringComparer.Ordinal).ToList());
 
         // Every page whose HTML was parsed is a page, and the site's images are images.

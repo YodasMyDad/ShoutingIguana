@@ -25,8 +25,10 @@ public sealed record AnalysisInfo(DateTimeOffset AnalyzedAt, string EngineVersio
     public string? ChecksFingerprint { get; init; }
 
     /// <summary>
-    /// The analysis stored the URL summary (<see cref="UrlSummaryReader"/>) and why each skipped check was skipped. Engines
-    /// from before it did leave this false; so does an older engine that analyses the crawl again.
+    /// The analysis stored a URL summary this engine reads (<see cref="UrlSummaryReader"/>): one built by this
+    /// <see cref="AnalysisFreshness.VERSION"/>, as the summary's columns change with it. Engines from before the summary
+    /// leave this false, as does an older engine that analyses the crawl again, and so does a newer engine's analysis.
+    /// Whether the summary still describes the crawl is <see cref="UrlSummaryReader.IsAvailable(string)"/>'s to say.
     /// </summary>
-    public bool HasUrlSummary => AnalysisVersion is not null;
+    public bool HasUrlSummary => AnalysisVersion == AnalysisFreshness.VERSION;
 }

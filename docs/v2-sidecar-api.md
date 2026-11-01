@@ -148,11 +148,11 @@ Built in stages:
     | `needs-secrets` | 422 | A secret must be given again |
     | `not-a-crawl` | 400 | The file isn't a crawl: SQLite error 26 (as in the CLI), the wrong schema, or a view or trigger the engine never writes |
     | `crawl-not-found` | 404 | No crawl has this id |
-    | `crawl-busy` | 409 | Running here or elsewhere, an analysis is running, or another program holds the file's SQLite lock |
+    | `crawl-busy` | 409 | Running here or elsewhere, an analysis is running, another program holds the file's SQLite lock, or someone is part-way through reading the closed file, which keeps writers out |
     | `not-analysable` | 409 | The engine refuses: running or interrupted |
     | `file-error` | 400 | IO or permissions |
     | `not-analyzed` | 404 | The crawl has never been analysed |
-    | `needs-analysis` | 409 | A grid needs the URL summary, which an earlier engine's analysis doesn't have (E3) |
+    | `needs-analysis` | 409 | A grid sorts or filters on the URL summary while there is none to read: never analysed, analysed by another engine version, or changed since (E3) |
     | `not-found`, `check-not-found` | 404 | No such route, or no check with this id |
     | `bad-request` | 400 | Malformed JSON, or a property the API doesn't know |
     | `unauthorized` | 401 | The token is missing or wrong |
@@ -248,7 +248,8 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
   `GET /api/crawls/{id}/analysis` gives the reasons.
 - **Caching.** Each file's summary is read once and kept until the file's size or modified time changes, so the list
   stays cheap with many crawls. The cache is persisted in the state folder (`summaries.json`, keyed by the file's
-  stamp and the engine version), so a restart doesn't re-read every crawl. A read is given a short time limit, so one
+  stamp, the engine version and the cache's own format, which changes whenever a summary keeps more), so a restart
+  doesn't re-read every crawl. A read is given a short time limit, so one
   file crafted to be slow can't stall the list. A read that fails for a passing reason (a lock another program holds)
   is retried on a later list rather than remembered until the file changes, and opening a crawl reads it afresh. The
   engine gets a cheap summary reader; `CrawlStatsReader.Read` counts every link, which is too slow for a list.
@@ -314,7 +315,7 @@ use, as `si crawl --resume` allows. It's analysed when it completes.
 | --- | --- | --- |
 | `progress` | `{ crawlId, status, elapsedMs, discovered, queued, inFlight, fetched, htmlPages, redirects, errors, blocked, robotsDisallowed, skipped, bytesDownloaded, urlsPerSecond }` | Every 500 ms per live crawl (the engine's pace). The UI batches to 4 renders a second. `urlsPerSecond` is the rate of every URL fetched, pages and the rest alike |
 | `alert` | `{ crawlId, level, code, message, at }` | Each `CrawlNotice` (see below) |
-| `crawl` | `{ crawlId, status, error? }` | Every status change, with the library's statuses. An analysis shows as `analyzing`, then back to `completed` or `stopped` with a `library` event, and `error` if it failed |
+| `crawl` | `{ crawlId, status, error?, errorType? }` | Every status change, with the library's statuses. An analysis shows as `analyzing`, then back to `completed` or `stopped` with a `library` event, and `error` if it failed. `errorType` is the problem type when the UI can act on it: `crawl-busy` when the analysis found the file busy (someone reading it, another program writing to it), within seconds, so trying again can work |
 | `library` | `{}` | The library changed. The UI fetches `/api/crawls` again |
 | `analysis` | `{ crawlId, phase, done, total }` | E4 |
 
@@ -362,20 +363,26 @@ crawl. E4 persists them in the crawl file.
 | `external-links-off` | The crawl was told not to check links to other sites |
 | `resources-off` | The crawl was told not to fetch images and other files |
 | `site-versions-unchecked` | The site's other versions (www or not, http or https) weren't all checked |
-| `newer-than-analysis` | The check is newer than the engine that ran the analysis |
+| `rule-failed` | The check's rule failed once every page was read, so it has no results (the log says why) |
+| `newer-than-analysis` | The check is newer than the engine that ran the analysis. A check an analysis by a newer engine than the sidecar's didn't run has no `reason`: that engine dropped it |
 
 ### Data (E1: the readers that exist today)
 
 | Method and path | Returns |
 | --- | --- |
-| `GET /api/crawls/{id}/stats` | `CrawlStatsReader.Read` |
+| `GET /api/crawls/{id}/stats` | `CrawlStatsReader.Read`. `nonIndexableReasons` counts the site's URLs as the checks and the URL summary do: the probes of its other versions are left out, and so are the URLs that weren't checked, which `notCheckedCount` gives |
 | `GET /api/crawls/{id}/issues/{checkId}?limit=200&offset=0` | `{ rows: [{ url, detail, relatedUrl }], total }`. `total` is null for a check that was skipped, never 0 |
 
 E3 replaces the issues endpoint with keyset paging and grouping. Its grid queries are `POST`s to one fixed URL
 per grid (see CORS above). The URL grids read the URL summary each analysis builds (E2, `url_summary` in
 [the engine's README](../engine/README.md#url-summary)): one row per URL, with indexes for the common sorts and
-selective filters. A crawl without one, analysed by an earlier engine, gets `needs-analysis` rather than failing, and
-the UI offers to analyse it. E3 adds:
+selective filters. The summary is there only while it describes the crawl (`UrlSummaryReader.IsAvailable`): the last
+analysis stored it with this engine's analysis version, and the crawl hasn't changed since. A crawl never analysed,
+analysed by another engine version, or changed after its analysis (continued, running here or elsewhere, or stopped
+again) has none: the URL grids then show only what the crawl itself recorded (the `urls` and `responses` columns:
+the URL, its status, content type, depth, size, time, title...), a query that sorts or filters on a summary column
+gets `needs-analysis` rather than failing, and the UI offers to analyse it. An analysis out of date only because
+the checks or thresholds changed keeps its summary, shown behind the out-of-date notice. E3 adds:
 
 - `/urls`;
 - `/urls/{urlId}`, the inspector;
@@ -412,3 +419,25 @@ Each has its own tests:
   engine's defaults until Settings can change them.
 - **Files from earlier engines** read as before. They get the new tables and columns on their next analysis; the
   crawl's own schema version is unchanged.
+
+## Engine changes from the E2 review
+
+Each has a test that fails without it. `AnalysisFreshness.VERSION` is 2, so every earlier analysis is out of date
+(`engineChanged`) and its summary isn't read until the crawl is analysed again.
+
+- **The summary never claims what wasn't read.** A page that was only status-checked (outside the start folder, an
+  iframe's, another site's) has no indexability unless its response rules it out, and no outlinks; `in_sitemap` is
+  null unless the URL is listed or every sitemap was read; `depth` is null for a URL only a sitemap lists. It gains
+  `source`, so grids can hide or label the probes of the site's other versions.
+- **A stale summary isn't read.** `IsAvailable` is false once the crawl changes after its analysis, and for a summary
+  another analysis version stored. The crawl's stamp only moves forward, so a clock set back can't hide a change.
+- **The stats agree with the summary.** The indexability breakdown leaves out the probes and the URLs not checked,
+  and `notCheckedCount` gives those. The benchmark plants such URLs (a dead twin) to prove it.
+- **A failed rule's checks are skipped.** `rule-failed`, rather than shown as run and clean. A newer engine's dropped
+  check isn't called newer than the analysis.
+- **Missing settings take their defaults.** Options and thresholds stored by an earlier engine, and saved defaults,
+  read a property they lack as its default, never 0 or false.
+- **A busy file is said to be busy.** An analysis or a continue that meets someone part-way through reading a closed
+  crawl gives up within seconds with `crawl-busy` (`errorType` on the `crawl` event for an analysis).
+- **One snapshot.** `GET /api/crawls/{id}/analysis` reads the analysis, its counts, notes, skip reasons and the
+  crawl's stamp in one transaction (`IssueReader.ReadResults`).

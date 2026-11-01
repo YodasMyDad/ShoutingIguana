@@ -42,7 +42,7 @@ internal static class BenchCommand
             var pageCount = parse.GetValue(pages);
             var workers = parse.GetValue(concurrency);
             Console.WriteLine($"Starting a synthetic site with {pageCount:N0} pages...");
-            using var site = await ChildSiteProcess.StartAsync(pageCount, cancellationToken);
+            using var site = await ChildSiteProcess.StartAsync(pageCount, deadTwin: true, cancellationToken);
 
             var databasePath = Path.Combine(Path.GetTempPath(), $"si-bench-{Guid.NewGuid():N}.sicrawl");
             var options = new CrawlOptions { StartUrl = site.BaseUri.ToString(), Concurrency = workers, RequestTimeoutSeconds = 30 };
@@ -126,7 +126,8 @@ internal static class BenchCommand
         int concurrency, ChildSiteProcess site, CrawlSummary summary, IReadOnlyList<MemorySample> samples,
         AnalysisSummary? analysis, IReadOnlyList<MemorySample> analysisSamples, string databasePath)
     {
-        var expected = new SyntheticSite(new SyntheticSiteOptions { PageCount = pageCount }, site.BaseUri, site.ExternalBaseUri).GetExpectations();
+        // The site the child serves: with a dead twin, so the comparison covers URLs that weren't checked.
+        var expected = new SyntheticSite(new SyntheticSiteOptions { PageCount = pageCount, DeadTwin = true }, site.BaseUri, site.ExternalBaseUri).GetExpectations();
         var stats = CrawlStatsReader.Read(databasePath);
         var mismatches = ExpectationCheck.Compare(stats, expected);
         if (analysis is not null)
@@ -145,7 +146,7 @@ internal static class BenchCommand
                 mismatches.Add($"Checks skipped: {Listed(notRun)}; expected {Listed(expected.SkippedChecks)}");
             }
 
-            if (analysis.IsPartial != expected.SkippedChecks.Count > 0 || analysis.Notes.Count != (expected.SkippedChecks.Count > 0 ? 1 : 0))
+            if (analysis.IsPartial != expected.SkippedChecks.Count > 0 || analysis.Notes.Count != expected.NoteCount)
             {
                 mismatches.Add($"The analysis is {(analysis.IsPartial ? "partial" : "complete")}, with notes: {Listed(analysis.Notes)}");
             }

@@ -57,6 +57,19 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// The site links its https:// version, which doesn't answer: the URL asked for is unreachable, and those the crawler
+    /// came to only once it had written the twin off weren't checked, so nothing is said about them, in the issues, the
+    /// stats or the URL summary.
+    /// </summary>
+    [Fact]
+    public async Task FindsEveryPlantedIssueWithADeadTwin()
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = VARIANT_PAGES, DeadTwin = true });
+        var path = await AssertFindsExactlyThePlantsAsync(server, Options(server));
+        Assert.Equal(SyntheticSite.DEAD_TWIN_UNCHECKED, CrawlStatsReader.Read(path).NotCheckedCount);
+    }
+
     [Fact]
     public async Task ReportsASiteWithoutSitemaps()
     {
@@ -91,6 +104,8 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(expected.NofollowOnly, stats.SkipReasons.GetValueOrDefault(SkipReason.NoFollow));
         Assert.Equal(expected.Noindex, stats.NonIndexableReasons.GetValueOrDefault(IndexabilityReason.Noindex));
         Assert.Equal(expected.Canonicalised, stats.NonIndexableReasons.GetValueOrDefault(IndexabilityReason.Canonicalised));
+        Assert.Equal(expected.Unreachable, stats.NonIndexableReasons.GetValueOrDefault(IndexabilityReason.Unreachable));
+        Assert.Equal(expected.NotChecked, stats.NotCheckedCount);
         Assert.Equal(0, stats.QueuedCount);
         Assert.Equal(0, Count(path, "SELECT COUNT(*) FROM urls WHERE state = 1"));
 
@@ -109,7 +124,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         // supports; the rest are skipped with one note saying why.
         Assert.Equal(expected.AnalysedPages, analysis.PagesAnalyzed);
         Assert.Equal(expected.SkippedChecks.Count > 0, analysis.IsPartial);
-        Assert.Equal(expected.SkippedChecks.Count > 0 ? 1 : 0, analysis.Notes.Count);
+        Assert.Equal(expected.NoteCount, analysis.Notes.Count);
         var rows = IssueReader.ReadAll(path).ToList();
         var mismatches = expected.CompareIssues(
             rows.Select(row => (row.Issue, row.Url)),
@@ -318,6 +333,9 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 
         var before = IssueReader.ReadCounts(path);
         var bumped = before.First(count => count.Value > 0).Key;
+        var skippedBefore = IssueReader.ReadSkippedChecks(path);
+        var stampBefore = CrawlSummaryReader.Read(path).UpdatedAt;
+        Assert.NotEmpty(skippedBefore);
 
         // Keep the file in WAL mode so a writer and the snapshot read can run at once (the analysis folds it back to a
         // rollback journal when it closes, and there a reader and writer can't coexist).
@@ -332,24 +350,35 @@ public sealed class CrawlEngineTests : IAsyncLifetime
                 return;
             }
 
+            // And the crawl is stamped, as a resume stamps it, and the skip reasons go, as another analysis would replace them.
             using var writer = CrawlDatabase.OpenWriter(path);
-            CrawlDatabase.Execute(writer, $"UPDATE issue_types SET url_count = url_count + 1000 WHERE id = '{bumped}'");
+            CrawlDatabase.Execute(writer, $"""
+                UPDATE issue_types SET url_count = url_count + 1000 WHERE id = '{bumped}';
+                UPDATE crawl SET updated_at = updated_at + 1;
+                DELETE FROM skipped_checks;
+                """);
         };
 
         try
         {
             var results = IssueReader.ReadResults(path)!;
 
-            // The snapshot read returns the counts as they were when it began, not the change made part-way through.
+            // The snapshot read returns the counts, the skip reasons and the crawl's stamp as they were when it began, not
+            // the changes made part-way through, so whether the analysis stands is judged on the same snapshot.
             Assert.Equal(before[bumped], results.Counts[bumped]);
+            Assert.Equal(skippedBefore, results.Skipped);
+            Assert.Equal(stampBefore, results.CrawlUpdatedAt);
+            Assert.Empty(results.OutOfDate(new AnalysisSettings()));
         }
         finally
         {
             IssueReader.SnapshotTaken = null;
         }
 
-        // The change did land, so a fresh read sees it: the snapshot isolated the read, it didn't lose the write.
+        // The changes did land, so a fresh read sees them: the snapshot isolated the read, it didn't lose the writes.
         Assert.Equal(before[bumped] + 1000, IssueReader.ReadCounts(path)[bumped]);
+        Assert.NotEqual(skippedBefore, IssueReader.ReadSkippedChecks(path));
+        Assert.Equal([OutOfDateReason.CrawlChanged], IssueReader.ReadResults(path)!.OutOfDate(new AnalysisSettings()));
     }
 
     /// <summary>

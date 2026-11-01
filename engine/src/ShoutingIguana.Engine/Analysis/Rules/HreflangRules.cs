@@ -94,6 +94,9 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
         }
     }
 
+    /// <summary>Of its checks, the one across pages: the rest it reports page by page, from <see cref="Check"/>.</summary>
+    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.HREFLANG_MISSING_RETURN];
+
     public void Observe(AnalyzedPage page)
     {
         if (!page.IsIndexable)

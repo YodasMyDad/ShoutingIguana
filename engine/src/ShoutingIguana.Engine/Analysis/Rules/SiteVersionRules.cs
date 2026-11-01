@@ -26,6 +26,8 @@ internal sealed class SiteVersionRules(UrlTable urls, Uri start, Func<string, in
     /// </summary>
     public bool CanCheck => urls[urls.HomeId].IsPage && _versionIds.All(IsAnswered);
 
+    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.DUPLICATE_SITE_VERSION];
+
     public void Observe(AnalyzedPage page)
     {
     }

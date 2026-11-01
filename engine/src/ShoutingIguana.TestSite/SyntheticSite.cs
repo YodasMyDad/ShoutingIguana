@@ -17,6 +17,9 @@ public sealed partial class SyntheticSite
     public const int SITEMAP_CHUNK_SIZE = 10_000;
     public const string PLANTS_PATH = "/plants/";
 
+    /// <summary>With <see cref="SyntheticSiteOptions.DeadTwin"/>, the dead twin's URLs the first orphan links: never checked.</summary>
+    public const int DEAD_TWIN_UNCHECKED = 5;
+
     private const int PRODUCTS_PER_LISTING = 50;
     private const int PARAGRAPHS = 8;
     private const int WORDS_PER_PARAGRAPH = 60;
@@ -70,6 +73,11 @@ public sealed partial class SyntheticSite
         _options = options;
         _base = baseUri.GetLeftPart(UriPartial.Authority);
         _external = externalBaseUri.GetLeftPart(UriPartial.Authority);
+        if (options.DeadTwin && IsHttps)
+        {
+            throw new ArgumentException("The dead twin is the https:// version of a plain HTTP site.", nameof(options));
+        }
+
         _plants = CreatePlants();
         _plantsByPath = _plants.Where(plant => !plant.OnPartnerSite).ToDictionary(plant => plant.Path, StringComparer.Ordinal);
         _partnerPlantsByPath = _plants.Where(plant => plant.OnPartnerSite).ToDictionary(plant => plant.Path, StringComparer.Ordinal);
@@ -80,6 +88,9 @@ public sealed partial class SyntheticSite
     private bool IsHttps => _base.StartsWith("https:", StringComparison.Ordinal);
 
     public int OrphanCount => Math.Max(1, _options.PageCount / 100);
+
+    /// <summary>With <see cref="SyntheticSiteOptions.DeadTwin"/>, where nothing answers: the site's https:// version on its port.</summary>
+    private string DeadTwinBase => "https" + _base["http".Length..];
 
     private int ChunkCount => (PageCount + SITEMAP_CHUNK_SIZE - 1) / SITEMAP_CHUNK_SIZE;
 
@@ -153,7 +164,12 @@ public sealed partial class SyntheticSite
 
         if (TryNumber(path, "/orphan/", string.Empty, out var orphan) && orphan < OrphanCount)
         {
-            return Html(RenderSimple($"Orphan {orphan}", "Only the sitemap lists this page.", path));
+            // With a dead twin, the first orphan links the twin's URLs that are never asked for: only the sitemap leads
+            // here, so the crawler reads it once no linked URL is in flight, by when it has written the twin off.
+            var twinLinks = orphan == 0 && _options.DeadTwin
+                ? $"<ul>{string.Concat(Enumerable.Range(1, DEAD_TWIN_UNCHECKED).Select(page => $"<li><a href=\"{DeadTwinBase}{PLANTS_PATH}dead-twin/{page}\">Twin page {page}</a></li>"))}</ul>"
+                : string.Empty;
+            return Html(RenderSimple($"Orphan {orphan}", "Only the sitemap lists this page.", path, twinLinks));
         }
 
         if (TryNumber(path, "/hidden/", string.Empty, out var hidden))
@@ -337,6 +353,12 @@ public sealed partial class SyntheticSite
             Flag("duplicate-site-version", "http" + _base["https".Length..] + "/");
         }
 
+        // The site links its dead https:// version, so that version's robots.txt, which doesn't answer, is the site's.
+        if (_options.DeadTwin)
+        {
+            Flag("robots-txt-unreachable-other-origin", "/");
+        }
+
         if (_options.Sitemaps)
         {
             // The sitemap index lists a file that doesn't exist, and the orphans are only in the extra sitemap.
@@ -390,6 +412,8 @@ public sealed partial class SyntheticSite
             IssueUrls: issues.ToDictionary(pair => pair.Key, IReadOnlySet<string> (pair) => pair.Value, StringComparer.Ordinal))
         {
             NofollowOnlyFiles = NOFOLLOW_ONLY_FILES.Length,
+            Unreachable = _plants.Count(plant => plant is { Status: 0, OnPartnerSite: false }),
+            NotChecked = _options is { DeadTwin: true, Sitemaps: true } ? DEAD_TWIN_UNCHECKED : 0,
             SkippedChecks = _options.Sitemaps
                 ? new HashSet<string>(StringComparer.Ordinal)
                 : new HashSet<string>(StringComparer.Ordinal) { "orphan-page", "not-in-sitemap" }
@@ -568,13 +592,13 @@ public sealed partial class SyntheticSite
         });
     }
 
-    private string RenderSimple(string heading, string text, string path) => Render(new PageSpec
+    private string RenderSimple(string heading, string text, string path, string extraContent = "") => Render(new PageSpec
     {
         Path = path,
         Title = $"{heading} | Synthetic Store, a shop for tests",
         Description = $"{heading}: {text} Part of the Synthetic Store, a deterministic shop built for crawler tests.",
         H1 = heading,
-        Content = $"<p>{text}</p><p>{Text(heading, INTRO_WORDS)}</p>"
+        Content = $"<p>{text}</p><p>{Text(heading, INTRO_WORDS)}</p>{extraContent}"
     });
 
     private string Render(PageSpec page)

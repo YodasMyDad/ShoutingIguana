@@ -118,6 +118,40 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
         Assert.Equal(["concurrency"], mistyped["errors"]!.AsObject().Select(field => field.Key));
     }
 
+    /// <summary>
+    /// Defaults saved before an option existed lack it, and it takes the engine's default, never 0 or false: a new option
+    /// with any other default must not turn up switched off in every crawl the saved defaults start.
+    /// </summary>
+    [Fact]
+    public async Task SavedDefaultsWithoutAnOptionTakeTheEnginesDefaultForIt()
+    {
+        var engine = (await _sidecar.GetJsonAsync("api/crawl-options/defaults"))["options"]!.AsObject();
+        var saved = await _sidecar.SendAsync(HttpMethod.Put, "api/crawl-options/defaults", JsonNode.Parse("""
+            {"maxUrls":7,"maxDepth":3,"concurrency":2,"externalConcurrency":1,"maxRequestsPerSecond":1.5,"userAgent":"custom",
+             "customUserAgent":"Tester/1.0","acceptLanguage":"fr-FR","extraHeaders":{"X-Test":"1"},"respectRobotsTxt":false,
+             "respectCrawlDelay":true,"checkResources":false,"checkExternalLinks":false,"includeSubdomains":true,"stayInStartFolder":false,
+             "followNofollow":true,"crawlCanonicals":false,"crawlHreflang":true,"crawlPagination":true,"discoverSitemaps":false,
+             "extraSitemaps":["https://example.com/extra.xml"],"storeHtml":true,"useCookies":false,"proxyUrl":"http://proxy.example:8080/",
+             "requestTimeoutSeconds":9,"maxRetries":1,"maxHtmlBytes":1000000}
+            """));
+        Assert.Equal(HttpStatusCode.OK, saved.Status);
+
+        var file = Path.Combine(_sidecar.Options.StateDirectory, "defaults.json");
+        var stored = JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
+        Assert.Contains("concurrency", stored.Select(property => property.Key));
+        foreach (var name in stored.Select(property => property.Key).ToList())
+        {
+            var without = stored.DeepClone().AsObject();
+            without.Remove(name);
+            await File.WriteAllTextAsync(file, without.ToJsonString());
+
+            var read = (await _sidecar.GetJsonAsync("api/crawl-options/defaults"))["options"]!.AsObject();
+            Assert.True(engine[name]?.ToJsonString() == read[name]?.ToJsonString(), $"{name}: {read[name]?.ToJsonString()}, not the engine's {engine[name]?.ToJsonString()}");
+            Assert.All(without.Where(property => property.Key != "hasRedactedProxyCredentials"),
+                property => Assert.Equal(property.Value?.ToJsonString(), read[property.Key]?.ToJsonString()));
+        }
+    }
+
     /// <summary>The DTO carries every public option, so a new engine option can't be silently left out of the API.</summary>
     [Fact]
     public void TheOptionsDtoCarriesEveryPublicOption()

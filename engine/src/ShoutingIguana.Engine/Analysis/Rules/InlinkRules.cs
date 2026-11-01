@@ -9,6 +9,8 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// </summary>
 internal sealed class InlinkRules(UrlTable urls, bool crawlComplete) : ISiteRule
 {
+    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.ORPHAN_PAGE];
+
     public void Observe(AnalyzedPage page) => urls.CountInlinks(page);
 
     public IEnumerable<IssueHit> Finish()

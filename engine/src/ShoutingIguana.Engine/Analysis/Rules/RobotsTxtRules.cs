@@ -17,6 +17,8 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> robots, CrawlScope scope, IReadOnlySet<string> mainOrigins,
     IReadOnlySet<string>? siteVersionOnlyOrigins = null) : ISiteRule
 {
+    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.ROBOTS_TXT_UNREACHABLE, IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, IssueCatalog.ROBOTS_TXT_MISSING];
+
     public void Observe(AnalyzedPage page)
     {
     }

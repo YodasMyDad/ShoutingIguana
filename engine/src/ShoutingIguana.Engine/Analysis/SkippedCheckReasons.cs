@@ -46,8 +46,15 @@ public static class SkippedCheckReasons
     public const string SITE_VERSIONS_UNCHECKED = "site-versions-unchecked";
 
     /// <summary>
+    /// The check's rule failed once every page was read, so the check has no results at all: a bug, or a crawl it can't
+    /// cope with. The analysis log has the error, and the analysis is partial.
+    /// </summary>
+    public const string RULE_FAILED = "rule-failed";
+
+    /// <summary>
     /// Never stored: the check is newer than the engine that ran the analysis, so the analysis didn't know it.
-    /// <see cref="Storage.IssueReader.ReadSkippedChecks"/> reports it for such checks.
+    /// <see cref="Storage.IssueReader.ReadSkippedChecks"/> reports it for such checks. A check that an analysis by a newer
+    /// engine didn't run gets no reason: that engine dropped it.
     /// </summary>
     public const string NEWER_THAN_ANALYSIS = "newer-than-analysis";
 }

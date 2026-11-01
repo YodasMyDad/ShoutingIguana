@@ -454,6 +454,30 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// Continuing a crawl someone is part-way through reading (an export, another program) is refused within seconds as
+    /// busy, in words that say so, rather than blaming another program for writing to it. The crawl stays as it was.
+    /// </summary>
+    [Fact]
+    public async Task ContinuingACrawlBeingReadIsRefusedAsBusySayingWhy()
+    {
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "continue-read.sicrawl"), maxUrls: 5);
+        var id = Library.CrawlIds.For(path);
+        TestCrawlFiles.SetStoredStatus(path, CrawlStatus.Stopped);
+
+        using (var connection = CrawlDatabase.OpenReader(path))
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT url FROM urls";
+            using var reading = command.ExecuteReader();
+            Assert.True(reading.Read());
+            var refused = TestSidecar.AssertProblem(await _sidecar.PostAsync($"api/crawls/{id}/continue"), HttpStatusCode.Conflict, "crawl-busy");
+            Assert.Contains("being read", (string?)refused["title"], StringComparison.Ordinal);
+        }
+
+        Assert.Equal("stopped", (string?)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["status"]);
+    }
+
     private async Task WaitForStatusAsync(string id, string status)
     {
         using var timeout = new CancellationTokenSource(EventStreamReader.TIMEOUT);

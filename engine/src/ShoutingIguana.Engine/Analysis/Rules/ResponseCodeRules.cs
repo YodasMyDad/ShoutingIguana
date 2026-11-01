@@ -10,6 +10,8 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// </summary>
 internal sealed class ResponseCodeRules(UrlTable urls, IReadOnlyDictionary<int, string> blockReasons) : ISiteRule
 {
+    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.INTERNAL_CLIENT_ERROR, IssueCatalog.INTERNAL_SERVER_ERROR, IssueCatalog.INTERNAL_UNREACHABLE, IssueCatalog.INTERNAL_BLOCKED, IssueCatalog.BLOCKED_BY_ROBOTS];
+
     public void Observe(AnalyzedPage page)
     {
     }

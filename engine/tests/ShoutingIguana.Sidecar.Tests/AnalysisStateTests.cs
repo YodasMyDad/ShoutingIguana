@@ -1,5 +1,6 @@
 using System.Net;
 using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Sidecar.Library;
 using ShoutingIguana.Sidecar.Tests.Support;
 using ShoutingIguana.TestSite;
@@ -72,6 +73,31 @@ public sealed class AnalysisStateTests : IAsyncLifetime
         var analysis = await _sidecar.GetJsonAsync($"api/crawls/{id}/analysis");
         Assert.True((bool?)analysis["outOfDate"]);
         Assert.Equal(["crawlChanged"], analysis["outOfDateReasons"]!.AsArray().Select(reason => (string?)reason));
+    }
+
+    /// <summary>
+    /// Someone part-way through reading a closed crawl (an export, another program) keeps an analysis out: it ends within
+    /// seconds, its error a crawl-busy problem the UI can explain and offer to retry, and the results are unchanged.
+    /// </summary>
+    [Fact]
+    public async Task AnAnalysisThatFindsTheFileBeingReadEndsAsBusy()
+    {
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "read.sicrawl"), analyse: true);
+        var id = CrawlIds.For(path);
+        var before = (await _sidecar.GetJsonAsync($"api/crawls/{id}/analysis")).ToJsonString();
+
+        await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
+        using (var reading = IssueReader.ReadAll(path).GetEnumerator())
+        {
+            Assert.True(reading.MoveNext());
+            Assert.Equal(HttpStatusCode.Accepted, (await _sidecar.PostAsync($"api/crawls/{id}/analyze")).Status);
+            await events.CrawlStatusAsync(id, "analyzing");
+            var ended = await events.CrawlStatusAsync(id, "completed");
+            Assert.Equal("crawl-busy", (string?)ended["errorType"]);
+            Assert.Contains("being read", (string?)ended["error"], StringComparison.Ordinal);
+        }
+
+        Assert.Equal(before, (await _sidecar.GetJsonAsync($"api/crawls/{id}/analysis")).ToJsonString());
     }
 
     [Fact]

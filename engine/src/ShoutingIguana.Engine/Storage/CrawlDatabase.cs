@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using ShoutingIguana.Engine.Configuration.Models;
@@ -28,6 +27,10 @@ public static class CrawlDatabase
     private const int WRITE_BUSY_TIMEOUT_MS = 5000;
 
     private const int WRITE_TIMEOUT_SECONDS = 30;
+
+    /// <summary>Why a writer couldn't open a file someone is reading: the reader's lock outlasted the open timeout.</summary>
+    private const string BEING_READ =
+        "This crawl is being read (by an export, or another program), so it can't be written to until that finishes. Try again in a moment.";
 
     /// <summary>What SQLite keeps beside a database: its write-ahead log, a rollback journal, and the log's shared memory.</summary>
     private static readonly string[] COMPANIONS = ["-wal", "-journal", "-shm"];
@@ -72,7 +75,7 @@ public static class CrawlDatabase
         using var connection = OpenReader(path);
         var json = Scalar(connection, "SELECT options_json FROM crawl WHERE id = 1") as string
                    ?? throw new InvalidOperationException($"'{path}' is not a crawl database.");
-        return JsonSerializer.Deserialize(json, EngineJsonContext.Default.CrawlOptions)
+        return StoredJson.Deserialize(json, EngineJsonContext.Default.CrawlOptions, new CrawlOptions { StartUrl = string.Empty })
                ?? throw new InvalidOperationException($"'{path}' has unreadable crawl options.");
     }
 
@@ -147,12 +150,22 @@ public static class CrawlDatabase
         {
             // Before anything writes, even the switch to WAL: a file this engine can't read must stay as it is.
             CheckSchema(connection, path, allowNew);
-            Execute(connection, """
-                PRAGMA journal_mode = WAL;
-                PRAGMA synchronous = NORMAL;
-                PRAGMA temp_store = MEMORY;
-                PRAGMA cache_size = -32768;
-                """);
+            try
+            {
+                Execute(connection, """
+                    PRAGMA journal_mode = WAL;
+                    PRAGMA synchronous = NORMAL;
+                    PRAGMA temp_store = MEMORY;
+                    PRAGMA cache_size = -32768;
+                    """);
+            }
+            catch (SqliteException exception) when (exception.SqliteErrorCode is raw.SQLITE_BUSY or raw.SQLITE_LOCKED)
+            {
+                // A closed crawl is a single file in rollback-journal mode, kept that way so it can be copied and read from
+                // anywhere. While someone is part-way through reading one, it can't switch to WAL: that is said once the
+                // open timeout passes, a couple of seconds, as a busy file, rather than after Microsoft.Data.Sqlite's 30 s.
+                throw new CrawlFileInUseException(BEING_READ, exception);
+            }
 
             // Open: from here on, the writes wait for another program's lock as long as they always have.
             Execute(connection, $"PRAGMA busy_timeout = {WRITE_BUSY_TIMEOUT_MS};");

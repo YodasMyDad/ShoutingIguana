@@ -5,7 +5,8 @@ namespace ShoutingIguana.Engine.Storage.Models;
 
 /// <summary>
 /// One URL as the grids show it, from the last analysis (<see cref="UrlSummaryReader"/>). Null means unknown: the crawl
-/// never fetched the URL, or couldn't ask because its host had stopped answering.
+/// never fetched the URL, or couldn't ask because its host had stopped answering, never read what decides the value (a
+/// page that was only status-checked), or couldn't tell (a sitemap left unread).
 /// </summary>
 public sealed record UrlSummary
 {
@@ -13,8 +14,15 @@ public sealed record UrlSummary
 
     public required bool IsInternal { get; init; }
 
-    /// <summary>Clicks from the start URL; <see cref="Crawling.CrawlDepth.UNLINKED"/> for a URL only a sitemap lists.</summary>
-    public required int Depth { get; init; }
+    /// <summary>
+    /// How the crawl found the URL. <see cref="DiscoverySource.SiteVersion"/> is the crawler's probe of the site's other
+    /// versions (www or not, http or https), or where one redirects: nothing on the site leads there, so the grids hide
+    /// or label it, and the checks and the stats leave its answer to the duplicate-site-version check.
+    /// </summary>
+    public required DiscoverySource Source { get; init; }
+
+    /// <summary>Clicks from the start URL; null for a URL only a sitemap lists, which no link leads to.</summary>
+    public int? Depth { get; init; }
 
     public required ResourceType ResourceType { get; init; }
 
@@ -22,7 +30,9 @@ public sealed record UrlSummary
 
     /// <summary>
     /// Fetched successfully and indexable as search engines will see it: the same judgement the checks make (an instant
-    /// meta refresh is a redirect, a canonical that leads back to the page doesn't count).
+    /// meta refresh is a redirect, a canonical that leads back to the page doesn't count). Null for a page whose HTML was
+    /// never read, being only status-checked (outside the start folder, in an iframe, on another site), unless its
+    /// response alone rules it out (an X-Robots-Tag noindex, an error, a redirect).
     /// </summary>
     public bool? IsIndexable { get; init; }
 
@@ -35,7 +45,11 @@ public sealed record UrlSummary
     /// <summary>The status at <see cref="FinalUrlId"/>, when that was fetched.</summary>
     public int? FinalStatusCode { get; init; }
 
-    public required bool InSitemap { get; init; }
+    /// <summary>
+    /// Listed in a sitemap. False only when every sitemap was read, as the not-in-sitemap check needs; null when sitemaps
+    /// weren't read, or not all of them, so a URL none of those read lists may still be in one.
+    /// </summary>
+    public bool? InSitemap { get; init; }
 
     /// <summary>Hyperlinks to the URL on the pages audited, each one counted, not counting a page's links to itself.</summary>
     public required int Inlinks { get; init; }
@@ -49,7 +63,10 @@ public sealed record UrlSummary
     /// <summary>The pages <see cref="Inlinks"/> are on, each once.</summary>
     public required int LinkingPages { get; init; }
 
-    /// <summary>Every hyperlink on the page, links to other parts of the page itself included; 0 for a URL that isn't a page.</summary>
+    /// <summary>
+    /// Every hyperlink on the page, links to other parts of the page itself included; 0 for a page without any, null for a
+    /// URL whose HTML wasn't read (not a page, or only status-checked).
+    /// </summary>
     public int? Outlinks { get; init; }
 
     /// <summary>The checks that flagged the URL.</summary>

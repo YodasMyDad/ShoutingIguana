@@ -7,29 +7,42 @@ namespace ShoutingIguana.Engine.Storage;
 
 /// <summary>
 /// Reads the URL summary the last analysis stored (<c>url_summary</c>): one row per URL with what the grids sort and
-/// filter on. A crawl that was never analysed, or was analysed by an engine from before the summary, has none: check
-/// <see cref="IsAvailable"/> and offer to analyse it.
+/// filter on. Check <see cref="IsAvailable(string)"/> first: a crawl that was never analysed has none, nor has one analysed
+/// by another version of the engine, and a crawl that changed after its analysis has one no longer worth reading.
 /// </summary>
 public static class UrlSummaryReader
 {
-    /// <summary>Whether the last analysis stored the summary (<see cref="AnalysisInfo.HasUrlSummary"/>).</summary>
+    /// <summary>
+    /// Whether there is a summary to read: the last analysis stored one this engine reads
+    /// (<see cref="AnalysisInfo.HasUrlSummary"/>), and the crawl hasn't changed since (it was continued, or is running).
+    /// A summary of an earlier state of the crawl would show the URLs found since as unknown, or not at all, so until the
+    /// crawl is analysed again the grids show what the crawl alone knows. An analysis that's out of date only because the
+    /// engine's checks or the thresholds changed keeps its summary, which still describes the crawl.
+    /// </summary>
     public static bool IsAvailable(string databasePath)
     {
         using var connection = CrawlDatabase.OpenReader(databasePath);
-        return IsAvailable(connection);
+        using var snapshot = connection.BeginTransaction(deferred: true);
+        return IsAvailable(connection, snapshot);
     }
 
-    /// <summary>Every URL's row, in URL id order (crawl order), streamed.</summary>
-    /// <exception cref="InvalidOperationException">The crawl has no summary (see <see cref="IsAvailable"/>).</exception>
+    /// <summary>
+    /// Every URL's row, in URL id order (crawl order), streamed, from one snapshot: the rows are those of the analysis
+    /// found available, even if another analysis finishes or the crawl is continued meanwhile.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">There is no summary to read (see <see cref="IsAvailable(string)"/>).</exception>
     public static IEnumerable<UrlSummary> ReadAll(string databasePath)
     {
         using var connection = CrawlDatabase.OpenReader(databasePath);
-        if (!IsAvailable(connection))
+        using var snapshot = connection.BeginTransaction(deferred: true);
+        if (!IsAvailable(connection, snapshot))
         {
-            throw new InvalidOperationException("This crawl hasn't been analysed by this version of Shouting Iguana. Analyse it again to list its URLs.");
+            throw new InvalidOperationException(
+                "This crawl has no URL summary to read: it changed after its last analysis, or that analysis was made by another version of Shouting Iguana. Analyse it again to list its URLs.");
         }
 
         using var command = connection.CreateCommand();
+        command.Transaction = snapshot;
         command.CommandText = $"SELECT {string.Join(", ", UrlSummaryBuilder.COLUMNS)} FROM url_summary ORDER BY url_id";
         using var reader = command.ExecuteReader();
         while (reader.Read())
@@ -38,34 +51,40 @@ public static class UrlSummaryReader
         }
     }
 
-    /// <summary>The summary belongs to the last analysis only when that analysis stored it; an older engine's doesn't.</summary>
-    internal static bool IsAvailable(SqliteConnection connection) =>
-        IssueReader.ReadAnalysis(connection, transaction: null) is { HasUrlSummary: true } && IssueReader.HasTable(connection, transaction: null, "url_summary");
+    /// <summary>
+    /// The summary belongs to the last analysis only when that analysis stored it (an older engine's doesn't), and
+    /// describes the crawl only while the crawl's stamp is still the one the analysis kept.
+    /// </summary>
+    internal static bool IsAvailable(SqliteConnection connection, SqliteTransaction? transaction) =>
+        IssueReader.ReadAnalysis(connection, transaction) is { HasUrlSummary: true, CrawlUpdatedAt: { } analysed } &&
+        IssueReader.HasTable(connection, transaction, "url_summary") &&
+        IssueReader.ReadCrawlUpdatedAt(connection, transaction) == analysed;
 
     /// <summary>A row selected with <see cref="UrlSummaryBuilder.COLUMNS"/>, in that order.</summary>
     private static UrlSummary Read(SqliteDataReader reader) => new()
     {
         UrlId = reader.GetInt32(0),
         IsInternal = reader.GetBoolean(1),
-        Depth = reader.GetInt32(2),
-        ResourceType = (ResourceType)reader.GetInt32(3),
-        StatusCode = reader.IsDBNull(4) ? null : reader.GetInt32(4),
-        IsIndexable = reader.IsDBNull(5) ? null : reader.GetBoolean(5),
-        IndexabilityReason = reader.IsDBNull(6) ? null : (IndexabilityReason)reader.GetInt32(6),
-        FinalUrlId = reader.GetInt32(7),
-        FinalStatusCode = reader.IsDBNull(8) ? null : reader.GetInt32(8),
-        InSitemap = reader.GetBoolean(9),
-        Inlinks = reader.GetInt32(10),
-        FollowedInlinks = reader.GetInt32(11),
-        NofollowInlinks = reader.GetInt32(12),
-        LinkingPages = reader.GetInt32(13),
-        Outlinks = reader.IsDBNull(14) ? null : reader.GetInt32(14),
-        Issues = reader.GetInt32(15),
-        Errors = reader.GetInt32(16),
-        Warnings = reader.GetInt32(17),
-        Notices = reader.GetInt32(18),
-        SizeBytes = reader.IsDBNull(19) ? null : reader.GetInt64(19),
-        ResponseMs = reader.IsDBNull(20) ? null : reader.GetInt32(20),
-        WordCount = reader.IsDBNull(21) ? null : reader.GetInt32(21)
+        Source = (DiscoverySource)reader.GetInt32(2),
+        Depth = reader.IsDBNull(3) ? null : reader.GetInt32(3),
+        ResourceType = (ResourceType)reader.GetInt32(4),
+        StatusCode = reader.IsDBNull(5) ? null : reader.GetInt32(5),
+        IsIndexable = reader.IsDBNull(6) ? null : reader.GetBoolean(6),
+        IndexabilityReason = reader.IsDBNull(7) ? null : (IndexabilityReason)reader.GetInt32(7),
+        FinalUrlId = reader.GetInt32(8),
+        FinalStatusCode = reader.IsDBNull(9) ? null : reader.GetInt32(9),
+        InSitemap = reader.IsDBNull(10) ? null : reader.GetBoolean(10),
+        Inlinks = reader.GetInt32(11),
+        FollowedInlinks = reader.GetInt32(12),
+        NofollowInlinks = reader.GetInt32(13),
+        LinkingPages = reader.GetInt32(14),
+        Outlinks = reader.IsDBNull(15) ? null : reader.GetInt32(15),
+        Issues = reader.GetInt32(16),
+        Errors = reader.GetInt32(17),
+        Warnings = reader.GetInt32(18),
+        Notices = reader.GetInt32(19),
+        SizeBytes = reader.IsDBNull(20) ? null : reader.GetInt64(20),
+        ResponseMs = reader.IsDBNull(21) ? null : reader.GetInt32(21),
+        WordCount = reader.IsDBNull(22) ? null : reader.GetInt32(22)
     };
 }

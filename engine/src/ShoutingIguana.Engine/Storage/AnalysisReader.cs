@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
@@ -22,8 +21,11 @@ internal sealed class AnalysisReader : IDisposable
     /// </summary>
     internal const string SITE_PAGE = "r.word_count IS NOT NULL AND instr(u.url, '/cdn-cgi/') = 0";
 
-    /// <summary>A response stored without a request, because the URL's host had stopped answering.</summary>
-    private static readonly string NOT_CHECKED =
+    /// <summary>
+    /// A response stored without a request, because the URL's host had stopped answering: SQL over <c>responses r</c>. The
+    /// analysis counts such a URL as never fetched, and so do the stats and the URL summary.
+    /// </summary>
+    internal static readonly string NOT_CHECKED =
         $"COALESCE(substr(r.error, 1, {RetryingFetcher.NOT_CHECKED_ERROR.Length}) = '{RetryingFetcher.NOT_CHECKED_ERROR}', 0)";
 
     private readonly SqliteConnection _connection;
@@ -247,7 +249,7 @@ internal sealed class AnalysisReader : IDisposable
     {
         var json = CrawlDatabase.Scalar(_connection, "SELECT options_json FROM crawl WHERE id = 1") as string
                    ?? throw new InvalidOperationException("This file is not a crawl database.");
-        return JsonSerializer.Deserialize(json, EngineJsonContext.Default.CrawlOptions)
+        return StoredJson.Deserialize(json, EngineJsonContext.Default.CrawlOptions, new CrawlOptions { StartUrl = string.Empty })
                ?? throw new InvalidOperationException("The crawl options can't be read.");
     }
 

@@ -38,6 +38,15 @@ public sealed record SyntheticSiteExpectations(
     /// <summary>Of <see cref="NofollowOnly"/>, the URLs that are files (images) rather than HTML pages.</summary>
     public int NofollowOnlyFiles { get; init; }
 
+    /// <summary>The site's own URLs that got no answer: the crawler's probes of the site's other versions aren't among them.</summary>
+    public int Unreachable { get; init; }
+
+    /// <summary>URLs the crawl must fail without a request, their host having been written off (<see cref="SyntheticSiteOptions.DeadTwin"/>).</summary>
+    public int NotChecked { get; init; }
+
+    /// <summary>The analysis's notes: one for the checks it skipped, if any, and one for the URLs that weren't checked.</summary>
+    public int NoteCount => (SkippedChecks.Count > 0 ? 1 : 0) + (NotChecked > 0 ? 1 : 0);
+
     /// <summary>Checks the analysis can't run on this site, so it skips them and says why: orphans and coverage without sitemaps.</summary>
     public IReadOnlySet<string> SkippedChecks { get; init; } = new HashSet<string>(StringComparer.Ordinal);
 

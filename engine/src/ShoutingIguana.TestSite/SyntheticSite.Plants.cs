@@ -360,6 +360,14 @@ public sealed partial class SyntheticSite
         Other("gone-redirect", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "gone-redirect"));
         plants.Add(new Plant("/img/missing.jpg", 404, Linked: false, InSitemap: false, ["internal-client-error"], () => NotFound("/img/missing.jpg")));
 
+        // The site's dead https:// version (see SyntheticSiteOptions.DeadTwin): asked for, so unreachable. Its other URLs,
+        // on the first orphan page, aren't asked for once it has been written off, so they aren't judged at all.
+        if (_options.DeadTwin)
+        {
+            plants.Add(new Plant(PLANTS_PATH + "dead-twin", 0, Linked: true, InSitemap: false, ["internal-unreachable"],
+                () => new SyntheticResponse(0, HTML, null, null, null, Abort: true), Url: DeadTwinBase + PLANTS_PATH + "dead-twin"));
+        }
+
         if (IsHttps)
         {
             // A page still answering over plain HTTP on the same host, with no redirect to HTTPS. Its base element points

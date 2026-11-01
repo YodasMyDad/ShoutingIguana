@@ -24,6 +24,8 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
     private readonly List<(ulong SimHash, ulong ContentHash, int Id)> _fingerprints = [];
     private readonly List<(int From, int To)> _pagination = [];
 
+    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.TITLE_DUPLICATE, IssueCatalog.DESCRIPTION_DUPLICATE, IssueCatalog.H1_DUPLICATE, IssueCatalog.DUPLICATE_CONTENT, IssueCatalog.NEAR_DUPLICATE_CONTENT];
+
     public void Observe(AnalyzedPage page)
     {
         // Every page's rel=next/prev, so a noindex page in the middle still joins the series.

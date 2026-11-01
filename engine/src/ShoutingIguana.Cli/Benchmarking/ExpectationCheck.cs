@@ -21,12 +21,16 @@ internal static class ExpectationCheck
         Check(mismatches, "Nofollow-only URLs", expected.NofollowOnly, Get(stats.SkipReasons, SkipReason.NoFollow));
         Check(mismatches, "Noindex pages", expected.Noindex, Get(stats.NonIndexableReasons, IndexabilityReason.Noindex));
         Check(mismatches, "Canonicalised pages", expected.Canonicalised, Get(stats.NonIndexableReasons, IndexabilityReason.Canonicalised));
+        Check(mismatches, "Unreachable URLs", expected.Unreachable, Get(stats.NonIndexableReasons, IndexabilityReason.Unreachable));
+        Check(mismatches, "URLs not checked", expected.NotChecked, stats.NotCheckedCount);
         return mismatches;
     }
 
     /// <summary>
     /// The URL summary the grids read agrees with the stats, which count from the crawl's own tables: a row for every URL,
-    /// and the same indexability, judged as the analysis judged it.
+    /// and the same indexability, judged as the analysis judged it, the crawler's probes of the site's other versions left
+    /// out of both. Every page the summary calls indexable counts, read or not: a page that was only status-checked, whose
+    /// HTML nobody read, must never pass for one, and URLs that weren't checked are no more unreachable than fine.
     /// </summary>
     public static List<string> CompareSummary(IEnumerable<UrlSummary> rows, CrawlStats stats)
     {
@@ -35,12 +39,12 @@ internal static class ExpectationCheck
         foreach (var row in rows)
         {
             count++;
-            if (!row.IsInternal)
+            if (!row.IsInternal || row.Source == DiscoverySource.SiteVersion)
             {
                 continue;
             }
 
-            if (row is { IsIndexable: true, ResourceType: ResourceType.Page, WordCount: not null })
+            if (row is { IsIndexable: true, ResourceType: ResourceType.Page })
             {
                 indexablePages++;
             }

@@ -17,6 +17,8 @@ internal sealed class RedirectRules(UrlTable urls) : ISiteRule
     /// <summary>Redirecting URLs a crawled page links to in any way.</summary>
     private readonly HashSet<int> _linked = [];
 
+    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.REDIRECT_CHAIN, IssueCatalog.REDIRECT_LOOP, IssueCatalog.REDIRECT_BROKEN, IssueCatalog.REDIRECT_TEMPORARY, IssueCatalog.REDIRECT_DOWNGRADE];
+
     public void Observe(AnalyzedPage page)
     {
         foreach (var link in page.Links)

@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage.Models;
@@ -18,7 +19,7 @@ internal static class UrlSummaryBuilder
     /// <summary>The table's columns, in order, as the builder writes them and <see cref="UrlSummaryReader"/> reads them.</summary>
     public static readonly string[] COLUMNS =
     [
-        "url_id", "is_internal", "depth", "resource_type", "status_code", "indexable", "indexability_reason", "final_url_id",
+        "url_id", "is_internal", "source", "depth", "resource_type", "status_code", "indexable", "indexability_reason", "final_url_id",
         "final_status_code", "in_sitemap", "inlinks", "followed_inlinks", "nofollow_inlinks", "linking_pages", "outlinks", "issues",
         "errors", "warnings", "notices", "size_bytes", "response_ms", "word_count"
     ];
@@ -39,8 +40,12 @@ internal static class UrlSummaryBuilder
         ORDER BY i.url_id
         """;
 
+    /// <param name="sitemapsCovered">
+    /// Every sitemap was read, so a URL none lists isn't in them: the analysis ran the not-in-sitemap check. Otherwise only
+    /// a listing is known.
+    /// </param>
     /// <returns>The rows written: one per URL.</returns>
-    public static long Build(SqliteConnection connection, SqliteTransaction transaction, UrlTable urls)
+    public static long Build(SqliteConnection connection, SqliteTransaction transaction, UrlTable urls, bool sitemapsCovered)
     {
         CrawlDatabase.Execute(connection, CrawlSchema.URL_SUMMARY, transaction);
 
@@ -66,7 +71,7 @@ internal static class UrlSummaryBuilder
                 }
 
                 var flagged = issuesLeft && issueRows.GetInt32(0) == id;
-                Bind(parameters, Summarise(urls, id, urlRows, flagged ? issueRows : null));
+                Bind(parameters, Summarise(urls, id, urlRows, flagged ? issueRows : null, sitemapsCovered));
                 insert.ExecuteNonQuery();
                 written++;
             }
@@ -78,13 +83,19 @@ internal static class UrlSummaryBuilder
 
     /// <summary>One URL's row: what the analysis made of it (<paramref name="urls"/>), with the crawl's own numbers.</summary>
     /// <param name="issues">The URL's issue counts, or null when no check flagged it.</param>
-    private static UrlSummary Summarise(UrlTable urls, int id, SqliteDataReader row, SqliteDataReader? issues)
+    private static UrlSummary Summarise(UrlTable urls, int id, SqliteDataReader row, SqliteDataReader? issues, bool sitemapsCovered)
     {
         ref readonly var status = ref urls[id];
 
         // A URL whose host had stopped answering was never asked, so the analysis counts it as unfetched; so does this.
         var fetched = status.Fetched;
         var answered = fetched && !row.IsDBNull(1) && (FetchOutcome)row.GetInt32(1) == FetchOutcome.Success;
+
+        // The crawler read the HTML (a word count says so). A page outside the start folder, or in an iframe, was only
+        // status-checked: its meta robots, canonical and links were never seen, so only what its headers prove is known.
+        var read = fetched && !row.IsDBNull(4);
+        var unknownIndexability = answered && status is { IsHtml: true, IndexabilityReason: IndexabilityReason.None } && !read;
+        var judged = fetched && !unknownIndexability;
 
         // Judged as the analysis judges it: by the content type of a successful response, otherwise by the extension.
         var type = answered && !row.IsDBNull(2) ? ResourceTypes.OfContentType(row.GetString(2)) : ResourceTypes.OfUrl(row.GetString(6));
@@ -98,19 +109,20 @@ internal static class UrlSummaryBuilder
         {
             UrlId = id,
             IsInternal = status.IsInternal,
-            Depth = status.Depth,
+            Source = status.Source,
+            Depth = status.Depth >= CrawlDepth.UNLINKED ? null : status.Depth,
             ResourceType = type,
             StatusCode = fetched && status.StatusCode > 0 ? status.StatusCode : null,
-            IsIndexable = fetched ? status is { Outcome: FetchOutcome.Success, IndexabilityReason: IndexabilityReason.None } : null,
-            IndexabilityReason = fetched ? status.IndexabilityReason : null,
+            IsIndexable = judged ? status is { Outcome: FetchOutcome.Success, IndexabilityReason: IndexabilityReason.None } : null,
+            IndexabilityReason = judged ? status.IndexabilityReason : null,
             FinalUrlId = final,
             FinalStatusCode = end is { Fetched: true, StatusCode: > 0 } ? end.StatusCode : null,
-            InSitemap = status.InSitemap,
+            InSitemap = status.InSitemap ? true : sitemapsCovered ? false : null,
             Inlinks = inlinks,
             FollowedInlinks = inlinks - nofollow,
             NofollowInlinks = nofollow,
             LinkingPages = urls.LinkingPages(id),
-            Outlinks = fetched && !row.IsDBNull(5) ? row.GetInt32(5) : null,
+            Outlinks = read ? row.GetInt32(5) : null,
             Issues = issues?.GetInt32(1) ?? 0,
             Errors = issues?.GetInt32(2) ?? 0,
             Warnings = issues?.GetInt32(3) ?? 0,
@@ -127,7 +139,7 @@ internal static class UrlSummaryBuilder
     {
         object?[] values =
         [
-            summary.UrlId, summary.IsInternal, summary.Depth, (int)summary.ResourceType, summary.StatusCode, summary.IsIndexable,
+            summary.UrlId, summary.IsInternal, (int)summary.Source, summary.Depth, (int)summary.ResourceType, summary.StatusCode, summary.IsIndexable,
             (int?)summary.IndexabilityReason, summary.FinalUrlId, summary.FinalStatusCode, summary.InSitemap, summary.Inlinks,
             summary.FollowedInlinks, summary.NofollowInlinks, summary.LinkingPages, summary.Outlinks, summary.Issues, summary.Errors,
             summary.Warnings, summary.Notices, summary.SizeBytes, summary.ResponseMs, summary.WordCount

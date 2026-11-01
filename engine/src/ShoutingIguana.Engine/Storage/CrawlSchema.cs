@@ -198,14 +198,19 @@ internal static class CrawlSchema
     /// can change its columns freely). It holds what the analysis judged next to copies of the crawl's numbers the grids
     /// sort and filter on, so a sort or filter reads this one narrow table and never joins; text (the URL, title,
     /// description) stays in urls and responses. Null means unknown: the crawl never fetched the URL (or wasn't able to
-    /// ask, because its host had stopped answering).
+    /// ask, because its host had stopped answering), never read what decides it (a page's HTML, which a URL that was
+    /// only status-checked doesn't have), or couldn't tell (a sitemap left unread, a URL no link leads to).
     /// </summary>
     public const string URL_SUMMARY = """
         DROP TABLE IF EXISTS url_summary;
         CREATE TABLE url_summary (
             url_id INTEGER PRIMARY KEY,
             is_internal INTEGER NOT NULL,
-            depth INTEGER NOT NULL,
+            -- DiscoverySource: how the crawl found the URL. 3 is the crawler's probe of the site's other versions, which
+            -- nothing on the site leads to: the grids hide or label those.
+            source INTEGER NOT NULL,
+            -- Clicks from the start URL; null for a URL only a sitemap lists.
+            depth INTEGER,
             -- ResourceType: page, image, script, stylesheet, font, media, PDF or other.
             resource_type INTEGER NOT NULL,
             status_code INTEGER,
@@ -215,14 +220,15 @@ internal static class CrawlSchema
             -- Where the URL's redirects (meta refreshes included) end, and the status there.
             final_url_id INTEGER NOT NULL,
             final_status_code INTEGER,
-            in_sitemap INTEGER NOT NULL,
+            -- 1 when a sitemap lists it; 0 only when every sitemap was read (the not-in-sitemap check ran), else null.
+            in_sitemap INTEGER,
             -- Hyperlinks to the URL from the pages audited, not counting a page's links to itself: every one, those
             -- followed and those not, and the pages they're on.
             inlinks INTEGER NOT NULL,
             followed_inlinks INTEGER NOT NULL,
             nofollow_inlinks INTEGER NOT NULL,
             linking_pages INTEGER NOT NULL,
-            -- Every hyperlink on the page, as stored in responses.outlink_count.
+            -- Every hyperlink on the page, as stored in responses.outlink_count; null when its HTML wasn't read.
             outlinks INTEGER,
             -- Checks that flagged the URL, in all and by severity.
             issues INTEGER NOT NULL,

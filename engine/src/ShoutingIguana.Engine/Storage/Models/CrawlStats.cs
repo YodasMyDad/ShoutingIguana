@@ -39,6 +39,15 @@ public sealed record CrawlStats
     public IReadOnlyDictionary<int, long> StatusCodes { get; init; } = new Dictionary<int, long>();
     public IReadOnlyDictionary<SkipReason, long> SkipReasons { get; init; } = new Dictionary<SkipReason, long>();
 
-    /// <summary>Internal URLs that cannot be indexed, by reason.</summary>
+    /// <summary>
+    /// URLs failed without a request, because their host had stopped answering ("Not checked"), on this site or another.
+    /// How they would have answered isn't known, so they aren't among <see cref="NonIndexableReasons"/>.
+    /// </summary>
+    public long NotCheckedCount { get; init; }
+
+    /// <summary>
+    /// Internal URLs that cannot be indexed, by reason, as the analysis judges them: the crawler's probes of the site's
+    /// other versions, which nothing on the site leads to, and URLs that weren't checked aren't among them.
+    /// </summary>
     public IReadOnlyDictionary<IndexabilityReason, long> NonIndexableReasons { get; init; } = new Dictionary<IndexabilityReason, long>();
 }

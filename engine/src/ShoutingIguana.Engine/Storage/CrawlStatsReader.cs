@@ -9,7 +9,8 @@ namespace ShoutingIguana.Engine.Storage;
 
 /// <summary>
 /// Aggregate queries over a stored crawl. Safe to run while the crawl is still writing. Once the crawl has been
-/// analysed, indexability is the analysis's, which knows where canonicals and meta refreshes lead.
+/// analysed, indexability is the analysis's, which knows where canonicals and meta refreshes lead, and the indexability
+/// breakdown counts what the analysis counts, as the URL summary does.
 /// </summary>
 public static class CrawlStatsReader
 {
@@ -83,9 +84,14 @@ public static class CrawlStatsReader
             Outcomes = Grouped(connection, "SELECT outcome, COUNT(*) FROM responses GROUP BY outcome", value => (FetchOutcome)value),
             StatusCodes = Grouped(connection, "SELECT status_code, COUNT(*) FROM responses WHERE status_code IS NOT NULL GROUP BY status_code", value => value),
             SkipReasons = Grouped(connection, "SELECT skip_reason, COUNT(*) FROM urls WHERE state = 3 GROUP BY skip_reason", value => (SkipReason)value),
+            NotCheckedCount = Count(connection, $"SELECT COUNT(*) FROM responses r WHERE {AnalysisReader.NOT_CHECKED}"),
+
+            // The site's own URLs, as the checks judge them: a probe of the site's other versions isn't one (that the http://
+            // version doesn't answer is normal), and a URL never asked for, its host having stopped answering, has no answer.
             NonIndexableReasons = Grouped(connection, $"""
                 SELECT {reason}, COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id {join}
-                WHERE u.is_internal = 1 AND {reason} <> 0 GROUP BY 1
+                WHERE u.is_internal = 1 AND {reason} <> 0 AND u.source <> {(int)DiscoverySource.SiteVersion} AND NOT {AnalysisReader.NOT_CHECKED}
+                GROUP BY 1
                 """, value => (IndexabilityReason)value)
         };
     }

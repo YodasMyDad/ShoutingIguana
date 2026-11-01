@@ -170,8 +170,14 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
     crawl stopped before the probes were answered, a crawl file from before the crawler probed, or a home page that
     isn't a page skips it.
   - A skipped check stores no rows, whatever its rule found on the way.
+  - A cross-page rule that fails once every page is read leaves its checks with no results at all, so they're skipped
+    as `rule-failed` rather than shown as run and clean. Each such rule declares the checks it reports
+    (`ISiteRule.Checks`), and one that reports any other counts as failed. A rule that fails on single pages loses only
+    those pages' results, which the notes count: one crafted page can't switch a check off for the whole site.
 - **Not checked isn't broken.** A URL the crawler gave up on without asking ("Not checked", because its host had
-  stopped answering) counts as never fetched. Links to it aren't broken, and the notes give the number.
+  stopped answering) counts as never fetched. Links to it aren't broken, and the notes give the number, as `si stats`
+  does (`CrawlStats.NotCheckedCount`). The stats' indexability breakdown leaves such URLs out, and the probes of the
+  site's other versions too, as the checks do, so it agrees with the URL summary.
 - **As search engines see it.** An instant (0-second) meta refresh is a redirect, as Google treats it. A canonical
   whose target leads back to the page (through a redirect) or nowhere doesn't make the page non-indexable. Links and
   images are judged by where their redirects end, so a link to a redirect that ends at a 404 is broken. Where this
@@ -201,17 +207,20 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   judged and the crawl's numbers the grids sort and filter on (see [Crawl file](#crawl-file-sicrawl)). It comes from
   the same URL table the checks use, so the grid and the checks never disagree, and it's written in one streamed pass
   after the issues: about 0.7 s and 14 MB (130 bytes per URL, indexes included) on the 100k crawl.
-  `UrlSummaryReader` reads it. A crawl analysed by an earlier engine has none (`IsAvailable` is false) until it's
-  analysed again.
+  `UrlSummaryReader` reads it, only while it describes the crawl (`IsAvailable`): the last analysis stored it with this
+  `AnalysisFreshness.VERSION`, as its columns change with it, and the crawl hasn't changed since. A crawl continued
+  after its analysis (while it runs, and once it stops again), or analysed by another engine version, has none until
+  it's analysed again. An analysis out of date only because the checks or thresholds changed keeps its summary.
 - **Out of date.** `AnalysisFreshness.Check` (or `CrawlFileSummary.OutOfDate`) says why an analysis no longer stands:
   - `CrawlChanged`: the crawl row was stamped again (`updated_at`) since the stamp the analysis kept, because the
-    crawl was continued. Exact, whatever the clocks did.
+    crawl was continued. Exact, whatever the clocks did: a stamp only moves forward (`MAX(now, updated_at + 1)`), so a
+    clock set back can't repeat the one an analysis kept.
   - `EngineChanged`: the analysis ran with another `AnalysisFreshness.VERSION`, or with other checks (the catalog's
     ids, categories and severities, hashed). Bump `VERSION` with any change to what analysing the same crawl stores: a
     rule that judges differently, a default threshold, a column of the URL summary. Every analysis by an engine from
     before the summary is out of date this way.
   - `SettingsChanged`: the stored settings differ from the ones an analysis would run with now. A threshold the
-    analysing engine didn't store counts as different.
+    analysing engine didn't have takes its default: one that changes what the checks find comes with a new `VERSION`.
 
 Categories: response codes, redirects, links, indexability, canonicals, sitemaps, titles, meta descriptions,
 headings, content, images, hreflang, structured data, security, URLs, performance, HTML.
@@ -223,7 +232,13 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 - **One writer at a time.** A crawl or an analysis holds `<crawl file>-lock` while it writes. A second one is
   refused, and an analysis also refuses a crawl that is running or was interrupted. Readers can open the file at
   any time, a running crawl included. Windows deletes the lock file with the lock. On Linux and macOS it stays:
-  deleting it there would let two writers lock different files.
+  deleting it there would let two writers lock different files. While someone is part-way through reading a closed
+  crawl (a single file, in rollback-journal mode, so it can be copied and read from anywhere), a writer can't switch
+  it to WAL: it gives up as readers do, after a couple of seconds, with a `CrawlFileInUseException` saying the file is
+  being read, rather than after Microsoft.Data.Sqlite's 30 s.
+- **Read back with today's defaults.** Options and thresholds are stored as JSON. One that the engine which stored
+  them didn't have reads as its default (`StoredJson`), never 0 or false, so a new option can't change how a resumed
+  crawl runs or what an analysis checks.
 - **No secrets.** People share crawl files, so the stored options keep header names without their values, and the
   proxy without its credentials. Resuming asks for them again.
 
@@ -241,9 +256,10 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, whether it was partial, what it ran against (the crawl's `updated_at`, the analysis version, the checks' fingerprint), and what it couldn't do and why |
 | `skipped_checks` | Each check the last analysis skipped, with a reason code and a sentence |
 | `effective_indexability` | Indexability as analysed, for URLs where it differs from the crawl's (an instant meta refresh, a canonical leading back to the page) |
-| `url_summary` | One row per URL for the grids, rebuilt by each analysis: indexable or not and why, where redirects end and the status there, the type (page, image, script, stylesheet, font, media, PDF, other), in a sitemap, inlinks (all, followed, nofollow, linking pages), outlinks, issues by severity, and copies of the URL's depth, status, size, time and word count |
+| `url_summary` | One row per URL for the grids, rebuilt by each analysis: how it was found, indexable or not and why, where redirects end and the status there, the type (page, image, script, stylesheet, font, media, PDF, other), in a sitemap, inlinks (all, followed, nofollow, linking pages), outlinks, issues by severity, and copies of the URL's depth, status, size, time and word count |
 
-URLs that only appear in sitemaps keep depth `1000000` (`CrawlDepth.UNLINKED`), which is how orphan pages show up.
+URLs that only appear in sitemaps keep depth `1000000` (`CrawlDepth.UNLINKED`) in `urls`, which is how orphan pages
+show up. The URL summary has no depth for them.
 
 The analysis tables are created when a crawl is first analysed, so a crawl file from an earlier engine opens as it
 always did and gets what it lacks on its next analysis. The crawl's own schema version doesn't change.
@@ -252,13 +268,24 @@ always did and gets what it lacks on its next analysis. The crawl's own schema v
 
 What its columns mean:
 
-- **Null is unknown**: a URL the crawl never fetched, or never asked for because its host had stopped answering.
+- **Null is unknown**:
+  - every value the crawl would have given, for a URL it never fetched, or never asked for because its host had
+    stopped answering;
+  - indexability and outlinks of a page whose HTML was never read, being only status-checked (outside the start
+    folder, an iframe's, another site's), unless its response alone rules it out (an X-Robots-Tag noindex, an error,
+    a redirect);
+  - `in_sitemap` for a URL no sitemap lists, unless every sitemap was read (the not-in-sitemap check ran);
+  - `depth` of a URL only a sitemap lists.
+- **Source** is how the crawl found the URL (`DiscoverySource`). 3 is the crawler's probe of the site's other versions,
+  which nothing on the site leads to: the grids hide or label it, and the stats leave it out, as the checks do.
 - **Indexability** is the analysis's (`effective_indexability` over the crawl's): `indexable` is 1 when the URL
-  answered 2xx and nothing keeps it out of search, otherwise `indexability_reason` says why.
+  answered 2xx and nothing keeps it out of search, otherwise `indexability_reason` says why. Every page called
+  indexable had its HTML read, so `si stats` and the summary count the same indexable pages.
 - **Inlinks** are hyperlinks to the URL on the pages audited, each one counted, a page's links to itself left out.
   Nofollow ones are marked rel=nofollow, or are on a page whose robots directives say nofollow. `linking_pages`
   counts the pages.
-  Nothing is credited through redirects: these are the links as found. `outlinks` is every hyperlink on the page.
+  Nothing is credited through redirects: these are the links as found. `outlinks` is every hyperlink on a page whose
+  HTML was read.
 - **Type** is by the content type of a successful response, otherwise by the extension, as the checks tell files from
   pages.
 
@@ -298,6 +325,12 @@ The e2e tests also crawl these variants:
 - **HTTPS**, with a self-signed certificate. Plain HTTP answers on the same port, as port 80 does on a real site. It
   serves the home page there instead of redirecting: the planted duplicate version of the site.
 - **No sitemaps**, where the checks that need them are skipped.
+- **Dead twin** (`DeadTwin`, plain HTTP only). The site links its https:// version on its own port, which doesn't
+  answer: once from the plants hub, a URL the crawler asks for and finds unreachable, and five times from the first
+  orphan. Only the sitemap leads there, so the crawler reads it once no linked URL is in flight, by when it has
+  written the twin off: those five aren't checked. The benchmark plants it, so the stats and the URL summary are
+  proven to count such URLs alike. Elsewhere it's off: a resumed crawl forgets which origins it wrote off, so it may
+  ask for some of them, and the dead URL's retries add seconds to a small crawl.
 
 A second origin serves a partner site, so links, images and sitemap entries on another host are tested too.
 
@@ -308,8 +341,9 @@ To add a check: write the rule, add the issue to the catalog, and plant it on th
 test and the benchmark compare the whole issues table row by row, so a check that flags anything unplanted fails
 them.
 
-`si bench` serves the synthetic site from a child process, crawls it, analyses it, and checks both against the
-expectations. It can fail on thresholds, and CI runs it on every push (`.github/workflows/engine.yml`).
+`si bench` serves the synthetic site from a child process, with the dead twin, crawls it, analyses it, and checks
+both against the expectations, the URL summary against the stats too. It can fail on thresholds, and CI runs it on
+every push (`.github/workflows/engine.yml`).
 
 On a 32-core Windows machine, at concurrency 16, against the local synthetic site:
 
@@ -317,8 +351,8 @@ On a 32-core Windows machine, at concurrency 16, against the local synthetic sit
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 101,107 | 110,251 | 5.05 M | 35 s | 2,916 pages/s | 168 MB | none (−1 MB) | 7 s, 157 MB peak | 400 MB |
 
-This was measured on `68d55a2`. Since then, the crawl also probes the site's other versions, which adds one URL
-(110,252).
+This was measured on `68d55a2`. Since then, the crawl also probes the site's other versions, which adds one URL,
+and the benchmark plants the dead twin, six more (110,258).
 
 Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and
 unreachable URL make the crawler back off briefly, as it would on a real site. On real sites, speed is set by the

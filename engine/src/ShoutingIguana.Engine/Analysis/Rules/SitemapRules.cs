@@ -30,6 +30,8 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
     public static StoredSitemap? Unreadable(IReadOnlyList<StoredSitemap> sitemaps) =>
         sitemaps.FirstOrDefault(sitemap => sitemap is { Error: not null, IsProbe: false, StatusCode: not (404 or 410) });
 
+    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.SITEMAP_URL_OTHER_HOST, IssueCatalog.SITEMAP_NON_INDEXABLE, IssueCatalog.NOT_IN_SITEMAP, IssueCatalog.SITEMAP_ERROR, IssueCatalog.SITEMAP_MISSING];
+
     public void Observe(AnalyzedPage page)
     {
     }

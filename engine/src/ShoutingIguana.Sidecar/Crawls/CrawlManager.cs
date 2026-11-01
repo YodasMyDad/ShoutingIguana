@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
@@ -580,6 +581,7 @@ internal sealed class CrawlManager(
     {
         var cancellation = crawl.Analysis!;
         string? error = null;
+        string? errorType = null;
         try
         {
             var summary = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(crawl.Path, AnalysisSettings, cancellation.Token).ConfigureAwait(false);
@@ -588,6 +590,14 @@ internal sealed class CrawlManager(
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
             _logger.LogInformation("The analysis of {Path} was cancelled; its previous results are unchanged", crawl.Path);
+        }
+        catch (CrawlFileInUseException exception)
+        {
+            // The file was busy for a moment (someone part-way through reading it, another program writing): the UI can
+            // say so and offer to try again, as it would for the problem.
+            _logger.LogWarning("The analysis of {Path} found the file busy: {Error}", crawl.Path, exception.Message);
+            var busy = Problems.CrawlBusy(exception.Message).Problem;
+            (error, errorType) = (busy.Title, busy.Type);
         }
         catch (Exception exception) when (EngineErrors.IsExpected(exception))
         {
@@ -601,14 +611,14 @@ internal sealed class CrawlManager(
         }
 
         // Back to what the file says (completed, or stopped), with the new results.
-        End(crawl, error);
+        End(crawl, error, errorType);
     }
 
     /// <summary>
     /// The crawl is no longer live here: announced with what its file says now, then the library changes. The file is
     /// read first, outside the lock; the crawl leaves the live ones and its events go out together, under it.
     /// </summary>
-    private void End(LiveCrawl crawl, string? error)
+    private void End(LiveCrawl crawl, string? error, string? errorType = null)
     {
         summaries.Invalidate(crawl.Id);
         var status = FileStatus(crawl.Id, crawl.Path);
@@ -619,7 +629,7 @@ internal sealed class CrawlManager(
                 _crawls.Remove(crawl.Id);
             }
 
-            PublishCrawl(new CrawlEventDto(crawl.Id, status, error), crawlEnded: true);
+            PublishCrawl(new CrawlEventDto(crawl.Id, status, error, errorType), crawlEnded: true);
             events.PublishLibrary();
         }
     }
@@ -860,6 +870,8 @@ internal sealed class CrawlManager(
         _logger.LogWarning("Could not open {Path}: {Error}", request.DatabasePath, exception.Message);
         return exception switch
         {
+            // Someone part-way through reading the closed file, which keeps writers out: the engine's words say so.
+            CrawlFileInUseException { InnerException: SqliteException } => Problems.CrawlBusy(exception.Message),
             CrawlFileInUseException => Problems.CrawlBusy(IN_USE_ELSEWHERE),
             InvalidOperationException when !request.Resume => Problems.CrawlBusy(exception.Message),
             _ => EngineErrors.ForRead(exception)

@@ -31,6 +31,7 @@ internal sealed record CrawlStatsDto
     public required IReadOnlyDictionary<string, long> Outcomes { get; init; }
     public required IReadOnlyDictionary<string, long> StatusCodes { get; init; }
     public required IReadOnlyDictionary<string, long> SkipReasons { get; init; }
+    public long NotCheckedCount { get; init; }
     public required IReadOnlyDictionary<string, long> NonIndexableReasons { get; init; }
 
     public static CrawlStatsDto From(CrawlStats stats) => new()
@@ -55,6 +56,7 @@ internal sealed record CrawlStatsDto
         Outcomes = ByName(stats.Outcomes),
         StatusCodes = stats.StatusCodes.ToDictionary(group => group.Key.ToString(CultureInfo.InvariantCulture), group => group.Value),
         SkipReasons = ByName(stats.SkipReasons),
+        NotCheckedCount = stats.NotCheckedCount,
         NonIndexableReasons = ByName(stats.NonIndexableReasons)
     };
 

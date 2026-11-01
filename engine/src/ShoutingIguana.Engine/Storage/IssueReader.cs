@@ -34,7 +34,8 @@ public static class IssueReader
     /// <summary>
     /// The checks the last analysis skipped, each with why, in catalog order. Empty before the first analysis, and for
     /// an analysis by an engine that didn't store reasons (its notes say why instead). A check the analysis didn't know,
-    /// being newer than the engine that ran it, is listed as <see cref="SkippedCheckReasons.NEWER_THAN_ANALYSIS"/>.
+    /// being newer than the engine that ran it, is listed as <see cref="SkippedCheckReasons.NEWER_THAN_ANALYSIS"/>; one
+    /// an analysis by a newer engine than this didn't run isn't listed, as that engine dropped it and nothing is known.
     /// </summary>
     public static IReadOnlyList<SkippedCheck> ReadSkippedChecks(string databasePath)
     {
@@ -235,7 +236,7 @@ public static class IssueReader
     private static bool HasAnalysis(SqliteConnection connection, SqliteTransaction? transaction) => HasTable(connection, transaction, "analysis");
 
     /// <summary>The crawl's stamp: when its status last changed (<see cref="CrawlFileSummary.UpdatedAt"/>).</summary>
-    private static DateTimeOffset ReadCrawlUpdatedAt(SqliteConnection connection, SqliteTransaction? transaction)
+    internal static DateTimeOffset ReadCrawlUpdatedAt(SqliteConnection connection, SqliteTransaction? transaction)
     {
         using var command = Command(connection, transaction, "SELECT updated_at FROM crawl WHERE id = 1");
         return command.ExecuteScalar() is long updatedAt
@@ -272,17 +273,26 @@ public static class IssueReader
             }
         }
 
-        // An analysis that knew a check either ran it or stored why not; a newer engine's checks follow the catalog's.
+        // An analysis that knew a check either ran it or stored why not, so one it neither ran nor skipped it didn't know:
+        // newer than its engine, unless that engine is newer than this one, when the check is one it no longer has. (A
+        // check can be added without a new analysis version, so one of the same version may still be newer.) The newer
+        // engine's own checks follow the catalog's.
+        var droppedSince = analysis.AnalysisVersion > AnalysisFreshness.VERSION;
         List<SkippedCheck> skipped =
         [
-            .. IssueCatalog.All.Where(check => !ran.Contains(check.Id)).Select(check => stored.GetValueOrDefault(check.Id) ??
-                new SkippedCheck(check.Id, SkippedCheckReasons.NEWER_THAN_ANALYSIS, "This check is newer than the analysis. Analyse the crawl again to run it."))
+            .. IssueCatalog.All.Where(check => !ran.Contains(check.Id))
+                .Select(check => stored.GetValueOrDefault(check.Id) ?? (droppedSince ? null
+                    : new SkippedCheck(check.Id, SkippedCheckReasons.NEWER_THAN_ANALYSIS, "This check is newer than the analysis. Analyse the crawl again to run it.")))
+                .OfType<SkippedCheck>()
         ];
         skipped.AddRange(stored.Values.Where(check => IssueCatalog.Find(check.CheckId) is null).OrderBy(check => check.CheckId, StringComparer.Ordinal));
         return skipped;
     }
 
-    /// <summary>The settings as stored; settings that can't be read (edited by hand, say) are none, so they differ from any.</summary>
+    /// <summary>
+    /// The settings as stored, a threshold the analysing engine didn't have taking its default; settings that can't be
+    /// read (edited by hand, say) are none, so they differ from any.
+    /// </summary>
     private static AnalysisSettings? ReadSettings(string? json)
     {
         if (json is null)
@@ -292,7 +302,7 @@ public static class IssueReader
 
         try
         {
-            return JsonSerializer.Deserialize(json, EngineJsonContext.Default.AnalysisSettings);
+            return StoredJson.Deserialize(json, EngineJsonContext.Default.AnalysisSettings, new AnalysisSettings());
         }
         catch (JsonException)
         {

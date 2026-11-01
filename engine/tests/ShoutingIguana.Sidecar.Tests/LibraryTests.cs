@@ -288,6 +288,36 @@ public sealed class LibraryTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// Summaries kept by a build that stored less of each one (the same engine version, before the analysis was kept with
+    /// them) aren't used: such a summary would say an earlier engine's analysis still stands. The crawl is read again.
+    /// </summary>
+    [Fact]
+    public async Task SummariesKeptInAnEarlierFormatAreReadAgain()
+    {
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "earlier-format.sicrawl"), analyse: true);
+        TestCrawlFiles.AsAnalysedByAnEarlierEngine(path);
+        var id = CrawlIds.For(path);
+        Assert.True((bool?)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["outOfDate"]);
+        await _sidecar.DisposeAsync();
+
+        // As the build before it left the file: no format, and no analysis in the summaries.
+        var file = Path.Combine(_root, "state", "summaries.json");
+        var cache = JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
+        Assert.NotNull(cache["format"]);
+        cache.Remove("format");
+        foreach (var summary in cache["summaries"]!.AsArray())
+        {
+            Assert.NotNull(summary!["summary"]!["analysis"]);
+            summary["summary"]!.AsObject().Remove("analysis");
+        }
+
+        await File.WriteAllTextAsync(file, cache.ToJsonString());
+
+        _sidecar = await TestSidecar.StartAsync(_root);
+        Assert.True((bool?)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["outOfDate"]);
+    }
+
+    /// <summary>
     /// A library change takes effect only once it is saved: a save that fails leaves the library as it was, so a retry
     /// really retries rather than returning success for a change that was never written.
     /// </summary>

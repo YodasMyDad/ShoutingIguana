@@ -115,8 +115,10 @@ internal sealed class WriterStatements : IDisposable
             """, "$status", "$isIndex", "$count", "$error", "$isProbe", "$id");
         _insertSitemapUrl = Prepare(connection,
             "INSERT OR IGNORE INTO sitemap_urls (sitemap_id, url_id) VALUES ($sitemap, $url)", "$sitemap", "$url");
+        // The stamp only ever moves forward, even when the clock went back (or two runs fell in one millisecond): an
+        // analysis keeps the stamp it saw, and a crawl that changed since must never stamp that same value again.
         _updateCrawlStatus = Prepare(connection, """
-            UPDATE crawl SET status = $status, updated_at = $now,
+            UPDATE crawl SET status = $status, updated_at = MAX($now, updated_at + 1),
                 finished_at = CASE WHEN $finished = 1 THEN $now ELSE NULL END
             WHERE id = 1
             """, "$status", "$now", "$finished");

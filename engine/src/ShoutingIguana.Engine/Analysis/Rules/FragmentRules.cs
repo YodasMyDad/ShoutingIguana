@@ -23,6 +23,8 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
     /// <summary>Each fragment as written and decoded: browsers look for an id matching either (see <see cref="Finds"/>).</summary>
     private readonly HashSet<(int Target, ulong Raw, ulong Decoded)> _wanted = [];
 
+    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.BROKEN_FRAGMENT_LINKS];
+
     public void Observe(AnalyzedPage page)
     {
         // A page that moves on at once with a meta refresh is a redirect nobody sees, so its links aren't checked.
