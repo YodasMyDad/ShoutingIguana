@@ -101,7 +101,8 @@ links and "reopen where I left off" all work.
 **Issues.**
 
 - The checks list, grouped by category and filterable by severity and search. Its rows show severity, title and pages
-  affected. "Show all checks" adds the ones that passed and the skipped ones, with their reasons.
+  affected. Skipped checks are always listed in their category, with their reasons: hiding them would read as
+  clean. "Show all checks" adds the ones that passed.
 - The selected check shows what's wrong, why it matters and how to fix it.
 - Its rows are grouped by detail, so a template fault is one row with its count; expand a row for its URLs.
 - Actions: export, copy URLs, hide the check.
@@ -112,6 +113,8 @@ links and "reopen where I left off" all work.
   filter bar.
 - Quick search and saved views.
 - "12,345 of 101,107 URLs", live while crawling.
+- URLs on the crawled host show their path after the site's favicon, with the host named once in the column header.
+  Other hosts, and the site's other versions, show in full. "Show full URLs" is a view option.
 
 **Links.** All links, with anchor text, position, follow flags and the target's status, in the same grid.
 
