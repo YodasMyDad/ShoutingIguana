@@ -7,7 +7,8 @@ Stage 1 of [the UI brief](v2-ui-brief.md#how-to-work). It records:
 - what happens to each of its features;
 - the words the app uses.
 
-The owner's sign-off on this page ends discovery.
+Signed off on 2026-11-01. The owner delegated the stage sign-offs: "you don't really need my input ... just
+continue".
 
 ## The owner's answers (2026-11-01)
 
