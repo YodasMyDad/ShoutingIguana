@@ -70,6 +70,8 @@ As of 2026-10-31:
   - Nothing links to the other versions as a rule, so the crawler probes each one at the start of a crawl: a status
     check of the start URL's path there, never parsed or followed, so the site is never crawled twice.
   - A dead version isn't flagged, and neither are its unreachable URLs or robots.txt: a dead `www` twin is normal.
+  - A probe never holds up a crawl: one try, none at the end, and none at all where its origin's robots.txt timed
+    out. A version behind a firewall that drops packets then costs one robots.txt cycle, not three minutes.
 - **A site that stops answering stops the crawl, which can be resumed.**
   - The crawler pauses a minute between tries, and after 10 minutes without an answer it stops: status Stopped,
     and `si crawl` exits 3.
@@ -220,6 +222,8 @@ Everything below is public in `ShoutingIguana.Engine`.
 - Word counts for Chinese, Japanese and Thai count characters, which is close enough for thin-content checks.
 - Title and description widths count full-width characters and emoji as two, an estimate of the room they take,
   not a pixel measurement.
+- A version of the site that answers 200 is flagged `duplicate-site-version` even if its page has a canonical or an
+  instant meta refresh pointing to the main site, because probes aren't parsed.
 
 ## How to verify
 

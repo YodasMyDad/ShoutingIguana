@@ -51,7 +51,9 @@ Exit codes, for scripts and schedulers:
    a crawl stopped early knows how they answer.
    - These probes are status checks only: never parsed, never followed, and not counted toward the URL limit. Where one
      redirects is checked the same way. So a version that answers with the whole site never gets it crawled twice.
-   - They go through robots.txt, the rate gate and retries like any URL.
+   - They go through robots.txt and the rate gate like any URL, but never hold up a crawl. A probe gets a single try,
+     and isn't tried again at the end. Where its origin's robots.txt timed out, it isn't sent at all: it is recorded
+     dead with that error.
    - Once the site itself links to one, lists it in a sitemap or redirects to it, it is one of the site's own URLs.
 2. A dispatcher claims queued URLs breadth-first and hands them to two worker pools: one for the site itself and
    one for status checks on other sites.
