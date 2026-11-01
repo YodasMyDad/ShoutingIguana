@@ -90,3 +90,8 @@ $RECYCLE.BIN/
 *.sicrawl-wal
 *.sicrawl-shm
 engine/bench.json
+
+# Step 3 design fixtures: regenerated from real crawls by app/design/data/extract, never committed
+app/design/data/fixtures/
+app/design/assets/logo.png
+app/design/directions/*/screens/
