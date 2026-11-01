@@ -217,6 +217,9 @@ On a 32-core Windows machine, at concurrency 16, against the local synthetic sit
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 101,107 | 110,251 | 5.05 M | 35 s | 2,916 pages/s | 168 MB | none (−1 MB) | 7 s, 157 MB peak | 400 MB |
 
+This was measured on `68d55a2`. Since then, the crawl also probes the site's other versions, which adds one URL
+(110,252).
+
 Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and
 unreachable URL make the crawler back off briefly, as it would on a real site. On real sites, speed is set by the
 network and your rate settings, not by the crawler.
