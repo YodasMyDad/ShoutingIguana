@@ -1,0 +1,45 @@
+[package]
+name = "shouting-iguana"
+version = "2.0.0-alpha.1"
+description = "Shouting Iguana: the desktop app's shell. It runs the engine as a sidecar and hosts the UI."
+authors = ["Aptitude"]
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+# Every crate is pinned exactly, to a version at least two weeks old when it was chosen (the supply-chain rule).
+[build-dependencies]
+tauri-build = { version = "=2.7.3", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.4", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "=2.8.3"
+tauri-plugin-log = "=2.10.1"
+tauri-plugin-notification = "=2.7.0"
+tauri-plugin-opener = "=2.7.2"
+tauri-plugin-single-instance = "=2.5.4"
+tauri-plugin-store = "=2.5.0"
+tauri-plugin-window-state = "=2.5.0"
+log = "=0.4.34"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+getrandom = "=0.4.3"
+# Plain HTTP to 127.0.0.1 only: no TLS, no compression.
+ureq = { version = "=3.4.2", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+# The versions Tauri resolves, so the controller from with_webview() is the same type.
+webview2-com = "=0.39.1"
+windows-core = "=0.62.2"
+windows-sys = { version = "=0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

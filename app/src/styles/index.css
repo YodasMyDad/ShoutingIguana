@@ -1,0 +1,9 @@
+/* The app's one stylesheet entry: Tailwind, the tokens, then the base rules every screen shares. */
+@import 'tailwindcss';
+@import './tokens.css';
+@import './base.css';
+
+/* Only the app's own source makes utilities: never the spike, the design work or the shell. */
+@source not '../../spike';
+@source not '../../design';
+@source not '../../src-tauri';

@@ -1,0 +1,482 @@
+/*
+  Shouting Iguana design tokens. Every value a component uses lives here: components use tokens only.
+
+  Source: direction B, clarity (app/design/directions/clarity/tokens.css, picked in docs/v2-ui-design.md), under the
+  same role names. Added here: the density scale (28 / 32 / 40 px rows), high contrast (forced colours), and the
+  mapping into Tailwind v4. The design-system pass owns the values; the names are the architecture.
+
+  How it fits together:
+  - This file is one `@theme` block, so each token is a CSS custom property on :root *and* a Tailwind utility where
+    Tailwind has a namespace for it (colours: bg-surface, text-text-muted, border-border; radii: rounded-md; type:
+    text-13; shadows: shadow-2; easing: ease-out). Tailwind's own palette, scales and shadows are cleared first, so
+    bg-blue-500 or text-sm resolve to nothing; an arbitrary value such as text-[13px] still works, so review rejects it.
+  - Tokens without a Tailwind namespace (layout sizes, density, durations) are used as `w-(--sidebar-width)` or
+    `duration-(--duration-quick)`, or straight from CSS.
+  - Themes: each colour holds its light and dark value with light-dark(). The page follows the OS through
+    `color-scheme: light dark`; <html data-theme="light|dark"> overrides it.
+  - Density: <html data-density="compact|standard|comfortable">, standard by default.
+  - High contrast: under `forced-colors: active` the roles map to the system colours.
+*/
+
+@theme static {
+  /* Tailwind's defaults are cleared: only these tokens exist. */
+  --color-*: initial;
+  --font-*: initial;
+  --font-weight-*: initial;
+  --text-*: initial;
+  --tracking-*: initial;
+  --leading-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+  --blur-*: initial;
+  --ease-*: initial;
+  --animate-*: initial;
+  --container-*: initial;
+  --breakpoint-*: initial;
+
+  /* ------------------------------------------------------------------ Type */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --font-features: 'cv11' 0, 'ss03' 0;
+  --font-features-figures: 'tnum' 1, 'lnum' 1;
+
+  /* The scale: 11, 12, 13, 14, 16, 18, 21, 28, 36, 48. `text-13` sets the size and its line height. */
+  --text-11: 11px;
+  --text-11--line-height: 14px;
+  --text-12: 12px;
+  --text-12--line-height: 16px;
+  --text-13: 13px;
+  --text-13--line-height: 18px;
+  --text-14: 14px;
+  --text-14--line-height: 20px;
+  --text-16: 16px;
+  --text-16--line-height: 24px;
+  --text-18: 18px;
+  --text-18--line-height: 26px;
+  --text-21: 21px;
+  --text-21--line-height: 28px;
+  --text-28: 28px;
+  --text-28--line-height: 34px;
+  --text-36: 36px;
+  --text-36--line-height: 40px;
+  --text-48: 48px;
+  --text-48--line-height: 52px;
+
+  --leading-11: 14px;
+  --leading-12: 16px;
+  --leading-13: 18px;
+  --leading-14: 20px;
+  --leading-16: 24px;
+  --leading-18: 26px;
+  --leading-21: 28px;
+  --leading-28: 34px;
+  --leading-36: 40px;
+  --leading-48: 52px;
+  --leading-body: 22px; /* 14 px reading text in explanations */
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  --tracking-tight: -0.022em; /* page titles */
+  --tracking-figure: -0.03em; /* large figures */
+  --tracking-snug: -0.011em; /* 16-21 px headings */
+  --tracking-normal: 0;
+  --tracking-wide: 0.01em; /* 11-12 px text */
+
+  /* -------------------------------------------------------------- Spacing */
+  /* A 4 px scale: p-1 is 4 px, p-2.5 is 10 px, gap-8 is 32 px. The named steps are for hand-written CSS. */
+  --spacing: 4px;
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---------------------------------------------------------------- Radii */
+  /* By the size of the thing, so hierarchy shows in the corners too. */
+  --radius-xs: 4px; /* keycaps, status marks, small badges */
+  --radius-sm: 6px; /* buttons, inputs, filter chips */
+  --radius-md: 8px; /* menus, segmented controls, list rows */
+  --radius-lg: 12px; /* cards and grids */
+  --radius-xl: 14px; /* the inspector sheet, the URL field */
+  --radius-full: 999px; /* the status pill, progress bars */
+
+  /* ----------------------------------------------------------- Breakpoints */
+  --breakpoint-narrow: 1360px; /* below it, the frame narrows (1280 x 800) */
+  --breakpoint-wide: 1920px;
+  --container-content: 1136px;
+
+  /* --------------------------------------------------------------- Motion */
+  /* 150-200 ms, easing out; for orientation, not decoration. Reduced motion turns it off (base.css). */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --animate-shimmer: shimmer var(--duration-shimmer) linear infinite;
+  --animate-pulse: pulse var(--duration-pulse) var(--ease-in-out) infinite;
+
+  /* -------------------------------------------------------------- Colour */
+  /* Neutrals carry no hue in either theme, so colour always means something. */
+  --color-canvas: light-dark(#f5f5f7, #0a0a0b);
+  --color-surface: light-dark(#ffffff, #121214);
+  --color-surface-raised: light-dark(#ffffff, #18181b);
+  --color-surface-overlay: light-dark(#ffffff, #1e1e22);
+  --color-surface-sunken: light-dark(#fafafb, #0e0e10);
+  --color-surface-hover: light-dark(#f2f2f4, #1c1c20);
+  --color-surface-active: light-dark(#eaeaed, #242428);
+  --color-surface-selected: light-dark(#ebf4ff, #132538);
+
+  --color-border-subtle: light-dark(#eeeef1, #1d1d21);
+  --color-border: light-dark(#e3e3e7, #28282d);
+  --color-border-strong: light-dark(#cfcfd5, #3a3a40);
+  --color-border-control: light-dark(#8a8a93, #6e6e77); /* inputs and toggles: 3:1 */
+
+  --color-text: light-dark(#18181b, #ededef);
+  --color-text-secondary: light-dark(#46464d, #b4b4bb);
+  --color-text-muted: light-dark(#68686f, #8e8e96);
+  --color-text-on-accent: light-dark(#ffffff, #ffffff);
+
+  /* The one accent: the logo's blue, #2B93FF, with the shades each theme needs. */
+  --color-brand: #2b93ff;
+  --color-iguana: #162832;
+  --color-accent: light-dark(#1f86f5, #2b93ff); /* marks, bars, charts */
+  --color-accent-text: light-dark(#0b6bd3, #4fa6ff); /* links, selected labels */
+  --color-accent-fill: light-dark(#0b6bd3, #1a6ed3); /* primary buttons */
+  --color-accent-fill-hover: light-dark(#095db8, #1f74d9);
+  --color-accent-subtle: light-dark(#ebf4ff, #132538);
+  --color-accent-border: light-dark(#a8cfff, #1f4c7c);
+  --color-focus: light-dark(#1a7def, #4fa6ff);
+
+  /* Severity: only for severity. Colour intensity follows severity. */
+  --color-error: light-dark(#d93636, #f26161);
+  --color-error-text: light-dark(#c22828, #ff8a84);
+  --color-error-subtle: light-dark(#fdeeee, #2b1416);
+  --color-warning: light-dark(#f5a70a, #f5b53a);
+  --color-warning-edge: light-dark(#b06c00, #f5b53a);
+  --color-warning-glyph: light-dark(#3a2600, #2a1c00);
+  --color-warning-text: light-dark(#8c5400, #f7c25e);
+  --color-warning-subtle: light-dark(#fff5df, #2a2010);
+  --color-notice: light-dark(#5f6b79, #95a1af);
+  --color-notice-text: light-dark(#545f6c, #a9b3bf);
+  --color-notice-subtle: light-dark(#f0f2f5, #1b1e23);
+
+  /* Status-code classes: only for status codes. A normal 2xx stays quiet in grids. */
+  --color-2xx: light-dark(#1f9d68, #3cc48a);
+  --color-2xx-text: light-dark(#13774a, #5fd3a1);
+  --color-2xx-subtle: light-dark(#e7f6ee, #11251b);
+  --color-3xx: light-dark(#7f55e6, #a889ff);
+  --color-3xx-text: light-dark(#6538d2, #bba3ff);
+  --color-3xx-subtle: light-dark(#f2edfd, #1f1932);
+  --color-4xx: light-dark(#dd6510, #f58b3d);
+  --color-4xx-text: light-dark(#ae4e08, #ffa468);
+  --color-4xx-subtle: light-dark(#fdf0e6, #2b1c10);
+  --color-5xx: light-dark(#d93636, #f26161);
+  --color-5xx-text: light-dark(#c22828, #ff8a84);
+  --color-5xx-subtle: light-dark(#fdeeee, #2b1416);
+  --color-no-response: light-dark(#85858e, #74747d);
+  --color-no-response-text: light-dark(#5e5e66, #a3a3ab);
+  --color-no-response-subtle: light-dark(#f1f1f3, #1d1d21);
+
+  /* Charts */
+  --color-chart-grid: light-dark(#ededf0, #1f1f23);
+  --color-chart-axis: light-dark(#68686f, #8e8e96);
+  --color-chart-primary: var(--color-accent);
+  --color-chart-primary-fill: light-dark(rgb(31 134 245 / 0.09), rgb(43 147 255 / 0.09));
+  --color-chart-secondary: light-dark(#8a8a93, #7a7a84);
+  --color-chart-limit: light-dark(#68686f, #8e8e96);
+  --color-chart-track: light-dark(#eeeef1, #222226);
+
+  /* Skeletons */
+  --color-skeleton: light-dark(#ededf0, #1e1e22);
+  --color-skeleton-shine: light-dark(#f7f7f9, #27272c);
+
+  /* Scrim behind dialogs; selection highlight */
+  --color-scrim: light-dark(rgb(24 24 27 / 0.32), rgb(0 0 0 / 0.6));
+  --color-text-selection: light-dark(#cfe5ff, #1f4c7c);
+
+  /* ------------------------------------------------------------ Elevation */
+  /* A z-order, not decoration. 0: chrome on the canvas. 1: content on sheets. 2: the inspector, above the grid.
+     3: popovers and menus. 4: the palette and dialogs. In dark, a surface also gets lighter as it rises. */
+  --shadow-1: var(--elevation-1);
+  --shadow-2: var(--elevation-2);
+  --shadow-3: var(--elevation-3);
+  --shadow-4: var(--elevation-4);
+  --shadow-control: var(--elevation-control);
+}
+
+:root {
+  color-scheme: light dark;
+
+  --elevation-0: none;
+  --elevation-1:
+    0 1px 2px 0 light-dark(rgb(16 16 20 / 0.04), rgb(0 0 0 / 0.4)),
+    0 1px 1px 0 light-dark(rgb(16 16 20 / 0.03), rgb(0 0 0 / 0.3));
+  --elevation-2:
+    0 2px 4px -1px light-dark(rgb(16 16 20 / 0.04), rgb(0 0 0 / 0.4)),
+    0 12px 32px -8px light-dark(rgb(16 16 20 / 0.12), rgb(0 0 0 / 0.6));
+  --elevation-3:
+    0 4px 8px -2px light-dark(rgb(16 16 20 / 0.06), rgb(0 0 0 / 0.45)),
+    0 16px 40px -10px light-dark(rgb(16 16 20 / 0.18), rgb(0 0 0 / 0.7));
+  --elevation-4:
+    0 8px 16px -4px light-dark(rgb(16 16 20 / 0.08), rgb(0 0 0 / 0.5)),
+    0 32px 64px -16px light-dark(rgb(16 16 20 / 0.24), rgb(0 0 0 / 0.8));
+  --elevation-control: 0 1px 1px 0 light-dark(rgb(16 16 20 / 0.05), rgb(0 0 0 / 0.35));
+  --highlight-top: inset 0 1px 0 0 light-dark(rgb(255 255 255 / 0), rgb(255 255 255 / 0.05));
+  --highlight-accent: inset 0 1px 0 0 light-dark(rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.14));
+
+  /* --------------------------------------------------------------- Motion */
+  --duration-instant: 100ms;
+  --duration-quick: 150ms;
+  --duration-panel: 200ms;
+  --duration-shimmer: 1600ms;
+  --duration-pulse: 2000ms;
+  /* The loading rule (src/feedback/useDelayedLoading.ts holds the same numbers): a skeleton appears after this long,
+     and once shown stays at least the minimum. */
+  --duration-skeleton-delay: 150ms;
+  --duration-skeleton-min: 300ms;
+
+  /* --------------------------------------------------------------- Layout */
+  --sidebar-width: 240px;
+  --sidebar-width-collapsed: 56px;
+  --topbar-height: 52px;
+  --inspector-width: 400px;
+  --inspector-width-min: 320px;
+  --inspector-height: 320px; /* docked at the bottom */
+  --checks-width: 372px;
+  --content-max: 1136px;
+  --page-gutter: var(--space-8);
+  --sheet-inset: var(--space-2);
+  --hairline: 1px;
+  --rule-width: 2px;
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --control-height: 32px;
+  --control-height-sm: 28px;
+  --control-height-lg: 52px;
+  --control-height-xs: 24px; /* status pill, small chips, badges with text */
+  --chip-height: 28px;
+  --icon-xs: 12px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 20px;
+  --favicon-sm: 16px;
+  --favicon-md: 20px;
+  --favicon-lg: 28px;
+  --mark-size: 8px;
+  --mark-radius: 2px;
+  --bar-height: 8px;
+  --bar-height-meter: 6px;
+  --bar-height-thin: 4px;
+  --bar-min: 3px; /* a non-zero bar never disappears */
+  --stack-height: 10px;
+  --swatch-size: 10px;
+  --swatch-radius: 3px;
+  --halo-width: 3px; /* the soft ring round a focused URL field */
+  --underline-offset: 3px;
+  --scrollbar-size: 10px;
+  --scrollbar-thumb-min: 24px;
+
+  /* Component sizes */
+  --segment-height: 26px;
+  --segment-icon-width: 30px;
+  --theme-button-width: 26px;
+  --tab-height: 40px;
+  --kbd-size: 20px;
+  --kbd-size-sm: 18px;
+  --badge-height: 20px;
+  --code-flag-height: 22px;
+  --chip-remove-size: 22px;
+  --chevron-box: 20px;
+  --switch-width: 28px;
+  --switch-height: 16px;
+  --switch-knob: 10px;
+  --switch-inset: 3px;
+  --icon-box: 28px; /* round icon holders in the inspector */
+  --icon-box-lg: 36px; /* empty-state icons */
+  --button-height-lg: 40px;
+  --grid-foot-height: 36px;
+  --row-height-child: 34px; /* a group's rows, inside a grouped grid */
+  --row-height-more: 38px;
+  --row-height-issue: 30px;
+  --tree-indent: 26px; /* chevron plus its gap */
+  --divider-height: 20px;
+  --spark-height: 28px;
+  --spark-height-lg: 36px;
+  --chart-height: 188px; /* the least a line chart gets; it grows to fill its card */
+  --meter-mark-height: 12px;
+  --chart-axis-width: 40px;
+  --chart-label-width: 84px;
+  --status-label-width: 104px;
+  --status-count-width: 52px;
+  --facts-label-width: 104px;
+  --percent-width: 40px;
+  --search-width: 232px;
+  --search-width-filter: 160px;
+  --search-width-library: 260px;
+  --palette-width: 640px;
+  --palette-top: 12vh; /* the palette sits high, near where the eye already is */
+  --palette-list-max: 60vh;
+  --dialog-max-height: 80vh;
+  --dialog-width: 560px;
+  --toast-width: 360px;
+  --skeleton-text: 10px;
+  --skeleton-title: 14px;
+  --skeleton-figure: 18px;
+  --skeleton-figure-width: 48px;
+  --skeleton-pill-width: 44px;
+  --stat-value-size: var(--text-36);
+  --stat-value-leading: var(--leading-36);
+
+  /* Figures: units set smaller and muted, so the number leads. */
+  --unit-scale: 0.5em;
+  --unit-scale-inline: 0.86em;
+  --unit-gap: 0.2em;
+  --figure-gap: 0.32em;
+  --mono-scale: 0.93em; /* JetBrains Mono beside Inter */
+
+  /* ------------------------------------------------------------- Density */
+  /* Standard, the default: 32 px rows. The grid's virtualiser reads --row-height, so rows are only ever this tall. */
+  --row-height: 32px;
+  --row-height-tall: 48px;
+  --grid-header-height: 32px;
+  --grid-font-size: var(--text-13);
+  --grid-leading: var(--leading-13);
+  --grid-mono-size: var(--text-12);
+  --grid-cell-x: var(--space-3);
+  --nav-item-height: 32px;
+  --list-row-height: 32px;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+/* Compact: more rows on screen for the same grid. */
+:root[data-density='compact'] {
+  --row-height: 28px;
+  --row-height-tall: 44px;
+  --grid-header-height: 30px;
+  --grid-font-size: var(--text-13);
+  --grid-leading: var(--leading-13);
+  --grid-mono-size: var(--text-12);
+  --grid-cell-x: var(--space-2-5);
+  --list-row-height: 30px;
+}
+
+/* Comfortable: direction B's own density. */
+:root[data-density='comfortable'] {
+  --row-height: 40px;
+  --row-height-tall: 56px;
+  --grid-header-height: 36px;
+  --grid-font-size: var(--text-14);
+  --grid-leading: var(--leading-14);
+  --grid-mono-size: var(--text-13);
+  --grid-cell-x: var(--space-3);
+  --list-row-height: 36px;
+}
+
+/* Smaller windows (1280 x 800): a narrower frame, the same components. */
+@media (max-width: 1360px) {
+  :root {
+    --sidebar-width: 224px;
+    --inspector-width: 368px;
+    --checks-width: 340px;
+    --page-gutter: var(--space-6);
+    --search-width: 200px;
+    --stat-value-size: var(--text-28);
+    --stat-value-leading: var(--leading-28);
+  }
+}
+
+/*
+  High contrast (Windows contrast themes). The browser already forces text, backgrounds and borders to the user's
+  system colours; these mappings cover what it leaves alone: SVG marks and bars, shadows, and anything drawn with
+  `forced-color-adjust: none`. Meaning never rests on colour (severity is a shape and a word), so severity and status
+  colours become plain text colour here.
+*/
+@media (forced-colors: active) {
+  :root {
+    --color-canvas: Canvas;
+    --color-surface: Canvas;
+    --color-surface-raised: Canvas;
+    --color-surface-overlay: Canvas;
+    --color-surface-sunken: Canvas;
+    --color-surface-hover: Canvas;
+    --color-surface-active: Canvas;
+    --color-surface-selected: Highlight;
+    --color-border-subtle: GrayText;
+    --color-border: CanvasText;
+    --color-border-strong: CanvasText;
+    --color-border-control: ButtonText;
+    --color-text: CanvasText;
+    --color-text-secondary: CanvasText;
+    --color-text-muted: CanvasText;
+    --color-text-on-accent: HighlightText;
+    --color-accent: Highlight;
+    --color-accent-text: LinkText;
+    --color-accent-fill: Highlight;
+    --color-accent-fill-hover: Highlight;
+    --color-accent-subtle: Canvas;
+    --color-accent-border: Highlight;
+    --color-focus: Highlight;
+    --color-error: CanvasText;
+    --color-error-text: CanvasText;
+    --color-error-subtle: Canvas;
+    --color-warning: CanvasText;
+    --color-warning-edge: CanvasText;
+    --color-warning-glyph: Canvas;
+    --color-warning-text: CanvasText;
+    --color-warning-subtle: Canvas;
+    --color-notice: CanvasText;
+    --color-notice-text: CanvasText;
+    --color-notice-subtle: Canvas;
+    --color-2xx: CanvasText;
+    --color-2xx-text: CanvasText;
+    --color-2xx-subtle: Canvas;
+    --color-3xx: CanvasText;
+    --color-3xx-text: CanvasText;
+    --color-3xx-subtle: Canvas;
+    --color-4xx: CanvasText;
+    --color-4xx-text: CanvasText;
+    --color-4xx-subtle: Canvas;
+    --color-5xx: CanvasText;
+    --color-5xx-text: CanvasText;
+    --color-5xx-subtle: Canvas;
+    --color-no-response: GrayText;
+    --color-no-response-text: CanvasText;
+    --color-no-response-subtle: Canvas;
+    --color-chart-grid: GrayText;
+    --color-chart-axis: CanvasText;
+    --color-chart-primary: Highlight;
+    --color-chart-primary-fill: Canvas;
+    --color-chart-secondary: CanvasText;
+    --color-chart-limit: CanvasText;
+    --color-chart-track: GrayText;
+    --color-skeleton: GrayText;
+    --color-skeleton-shine: GrayText;
+    --color-scrim: transparent;
+    --color-text-selection: Highlight;
+    --elevation-1: none;
+    --elevation-2: none;
+    --elevation-3: none;
+    --elevation-4: none;
+    --elevation-control: none;
+    --highlight-top: none;
+    --highlight-accent: none;
+  }
+}

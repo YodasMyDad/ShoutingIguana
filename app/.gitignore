@@ -1,0 +1,22 @@
+# The app's build output. The spike and the design work keep their own ignores.
+node_modules/
+dist/
+dist-e2e/
+storybook-static/
+test-results/
+playwright-report/
+blob-report/
+coverage/
+*.tsbuildinfo
+.env.local
+.env.*.local
+
+# The sidecar, built by scripts/build-sidecar.* into these two folders.
+.sidecar-build/
+src-tauri/binaries/
+# The engine's CLI, built by scripts/make-crawl.mjs for synthetic crawls.
+.engine-build/
+
+# Tauri.
+src-tauri/target/
+src-tauri/gen/schemas/

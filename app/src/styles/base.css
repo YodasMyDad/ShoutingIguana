@@ -1,0 +1,296 @@
+/* Base rules, in tokens only. Placeholder styling: the design-system pass refines it. */
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-canvas);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+    font-feature-settings: var(--font-features);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--color-text-selection);
+  }
+
+  /* One focus ring everywhere. An outline, so it survives forced colours (shadows don't). */
+  :focus-visible {
+    outline: var(--focus-width) solid var(--color-focus);
+    outline-offset: var(--focus-offset);
+  }
+
+  /* Every number column and figure lines up. */
+  .figures,
+  [data-figures] {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: var(--font-features-figures);
+  }
+
+  code,
+  kbd,
+  samp,
+  .mono {
+    font-family: var(--font-mono);
+    font-size: var(--mono-scale);
+  }
+
+  * {
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+}
+
+@layer components {
+  /* Skeletons: still blocks, shimmering only when motion is allowed. */
+  .skeleton {
+    background-color: var(--color-skeleton);
+    border-radius: var(--radius-xs);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .skeleton {
+      background-image: linear-gradient(
+        90deg,
+        var(--color-skeleton) 0%,
+        var(--color-skeleton-shine) 50%,
+        var(--color-skeleton) 100%
+      );
+      background-size: 200% 100%;
+      animation: var(--animate-shimmer);
+    }
+  }
+}
+
+@layer components {
+  /* A placeholder that never moves: rows waiting for their page while scrolling. */
+  .skeleton-static {
+    background-color: var(--color-skeleton);
+    border-radius: var(--radius-xs);
+  }
+
+  /* The grid primitive (src/grid/GridCore.tsx). Placeholder look; the design-system pass restyles it. */
+  .si-grid {
+    background: var(--color-surface);
+    font-size: var(--grid-font-size);
+    line-height: var(--grid-leading);
+    outline: none;
+  }
+
+  .si-grid-row {
+    display: grid;
+    grid-template-columns: var(--grid-template);
+    align-items: center;
+    border-bottom: var(--hairline) solid var(--color-border-subtle);
+  }
+
+  .si-grid-head {
+    background: var(--color-surface-raised);
+    border-bottom-color: var(--color-border);
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .si-grid-cell {
+    overflow: hidden;
+    padding-inline: var(--grid-cell-x);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .si-grid-cell.font-mono {
+    font-size: var(--grid-mono-size);
+  }
+
+  .si-grid-cell--numeric {
+    text-align: end;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-grid-row:not(.si-grid-head):hover {
+    background: var(--color-surface-hover);
+  }
+
+  .si-grid-row[data-selected] {
+    background: var(--color-surface-selected);
+  }
+
+  /* The keyboard cursor: drawn on the active cell while the grid has focus. An outline survives forced colours. */
+  .si-grid:focus-visible [data-active] {
+    outline: var(--focus-width) solid var(--color-focus);
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  .si-grid:focus-visible {
+    box-shadow: inset 0 0 0 var(--hairline) var(--color-focus);
+  }
+
+  /* Windowed: the custom scrollbar shows the vertical position, so the native vertical bar goes (the horizontal stays). */
+  .si-grid--windowed {
+    scrollbar-color: auto;
+    scrollbar-width: auto;
+  }
+
+  .si-grid--windowed::-webkit-scrollbar {
+    width: 0;
+    height: var(--scrollbar-size);
+  }
+
+  .si-grid--windowed::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: var(--radius-full);
+  }
+
+  .si-grid--windowed::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  @media (forced-colors: active) {
+    .si-scroll-thumb {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+
+    .si-grid-row[data-selected] {
+      forced-color-adjust: none;
+      background: Highlight;
+      color: HighlightText;
+    }
+  }
+
+  /* Toasts (Sonner), on the tokens. */
+  .si-toast {
+    --normal-bg: var(--color-surface-overlay);
+    --normal-text: var(--color-text);
+    --normal-border: var(--color-border);
+    --error-bg: var(--color-surface-overlay);
+    --error-text: var(--color-text);
+    --error-border: var(--color-error);
+    --success-bg: var(--color-surface-overlay);
+    --success-text: var(--color-text);
+    --success-border: var(--color-border);
+    width: var(--toast-width);
+    border-radius: var(--radius-md);
+    box-shadow: var(--elevation-3);
+    font-family: var(--font-sans);
+  }
+
+  .si-toast-title {
+    font-size: var(--text-13);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .si-toast-description {
+    color: var(--color-text-secondary);
+    font-size: var(--text-12);
+  }
+
+  .si-toast-action {
+    background: var(--color-accent-fill);
+    color: var(--color-text-on-accent);
+    border-radius: var(--radius-sm);
+    font-weight: var(--font-weight-medium);
+  }
+
+  /* The command palette's rows: the highlighted option has aria-selected. */
+  .si-palette-heading {
+    padding: var(--space-2) var(--space-2-5) var(--space-1);
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .si-palette-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: var(--list-row-height);
+    padding-inline: var(--space-2-5);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    font-size: var(--text-13);
+    cursor: default;
+  }
+
+  .si-palette-item[aria-selected='true'] {
+    background: var(--color-surface-selected);
+  }
+
+  .si-palette-item[aria-disabled='true'] {
+    color: var(--color-text-muted);
+  }
+
+  @media (forced-colors: active) {
+    .si-palette-item[aria-selected='true'] {
+      outline: var(--focus-width) solid Highlight;
+    }
+  }
+
+  /* Refreshing: a thin line at the top of the panel; what's shown stays. */
+  .si-progress-line {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    z-index: 3;
+    height: var(--rule-width);
+    background: var(--color-accent);
+    transform-origin: left;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .si-progress-line {
+      animation: progress-line 1.2s var(--ease-in-out) infinite;
+    }
+  }
+}
+
+@keyframes progress-line {
+  0% {
+    transform: scaleX(0);
+    opacity: 1;
+  }
+  70% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Reduced motion: no shimmer, no tweening. Orientation still happens; it just doesn't move. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

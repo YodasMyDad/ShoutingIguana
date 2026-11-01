@@ -1,0 +1,16 @@
+# Not app code: their own tooling, or generated.
+spike/
+design/
+src-tauri/
+node_modules/
+dist/
+dist-*/
+storybook-static/
+coverage/
+playwright-report/
+test-results/
+.sidecar-build/
+.engine-build/
+package-lock.json
+# Docs keep the repo's hand-wrapped style.
+*.md

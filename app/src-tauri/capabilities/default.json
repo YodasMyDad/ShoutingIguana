@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window: the shell's commands, native file dialogs, links to the web, revealing a file, and the store. Nothing that spawns processes, reads files or sends notifications: Rust owns those.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-theme",
+    "core:webview:allow-set-webview-zoom",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "http://*" }, { "url": "https://*" }]
+    },
+    "opener:allow-reveal-item-in-dir",
+    "store:default",
+    "allow-sidecar-state",
+    "allow-restart-sidecar",
+    "allow-request-quit",
+    "allow-shell-info",
+    "allow-take-pending-open-files"
+  ]
+}
