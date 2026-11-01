@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
@@ -453,6 +455,81 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
         Assert.Equal(FetchOutcome.Timeout, (FetchOutcome)TestCrawls.Count(path, $"SELECT r.outcome FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url = '{WWW}/'"));
         var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
         Assert.Equal(0, analysis.Issues.Single(issue => issue.Issue == IssueCatalog.DUPLICATE_SITE_VERSION).Count);
+    }
+
+    /// <summary>
+    /// A site on an internationalised domain, started from its Unicode name, with a Unicode Sitemap line and links. Stored
+    /// URLs and robots.txt origins are punycode alike, so every origin comparison sees one form: www, answering with a
+    /// page, is flagged; the robots.txt of the dead https:// versions and www's missing one, which only probes went to,
+    /// aren't reported; and the sitemap's entry is on the site's own host.
+    /// </summary>
+    [Fact]
+    public async Task AnInternationalisedDomainHasItsOriginsInOneForm()
+    {
+        var path = _files.NewPath();
+        await using var site = await StartAsync(Idn(robots: context => Text(context, $"User-agent: *\nAllow: /\nSitemap: {UNICODE}/sitemap.xml")));
+        var options = new CrawlOptions { StartUrl = $"{UNICODE}/", ProxyUrl = site.BaseUri.AbsoluteUri, MaxRetries = 0 };
+
+        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(options, path)).Status);
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+
+        Assert.Equal([$"http://www.{PUNYCODE[7..]}", PUNYCODE, $"https://www.{PUNYCODE[7..]}", $"https://{PUNYCODE[7..]}"],
+            TestCrawls.Rows(path, "SELECT origin FROM robots"));
+        Assert.Equal(0, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE url LIKE '%{UNICODE[7..]}%'"));
+        var issues = Issues(path);
+        Assert.Contains($"duplicate-site-version | http://www.{PUNYCODE[7..]}/ | Answers HTTP 200 instead of redirecting to {PUNYCODE}/ | null", issues);
+        Assert.DoesNotContain(issues, row => row.Split(" | ")[0] is "robots-txt-unreachable-other-origin" or "robots-txt-missing" or "sitemap-url-other-host");
+    }
+
+    /// <summary>
+    /// The same site's robots.txt fails (HTTP 503) on the main origin itself, which the analysis must call the main
+    /// robots.txt being unavailable, not another origin's. On the fake clock, so its two-minute cool-down passes at once.
+    /// </summary>
+    [Fact]
+    public async Task AnInternationalisedDomainsMainRobotsTxtIsTheMainOne()
+    {
+        var path = _files.NewPath();
+        await using var site = await StartAsync(Idn(robots: context => Status(context, 503)));
+        var options = new CrawlOptions { StartUrl = $"{UNICODE}/", ProxyUrl = site.BaseUri.AbsoluteUri, MaxRetries = 0, DiscoverSitemaps = false };
+        var time = new FakeTimeProvider();
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(new CrawlRequest(options, path)))
+        {
+            Assert.Equal(CrawlStatus.Completed, (await FakeClock.PumpAsync(time, job.Completion)).Status);
+        }
+
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+
+        var issues = Issues(path);
+        Assert.Contains($"robots-txt-unreachable | {PUNYCODE}/ | {PUNYCODE}/robots.txt (HTTP 503) | null", issues);
+        Assert.DoesNotContain(issues, row => row.StartsWith("robots-txt-unreachable-other-origin", StringComparison.Ordinal));
+    }
+
+    private const string UNICODE = "http://bücher.example";
+    private const string PUNYCODE = "http://xn--bcher-kva.example";
+
+    /// <summary>bücher.example with a home page, one page and a sitemap listing it, and its www version answering with a copy.</summary>
+    private static RequestDelegate Idn(RequestDelegate robots)
+    {
+        var idn = new IdnMapping();
+        return context => idn.GetAscii(context.Request.Host.Host) switch
+        {
+            "www.xn--bcher-kva.example" => context.Request.Path.Value == "/robots.txt" ? Status(context, 404) : Html(context, "<p>A copy</p>"),
+            "xn--bcher-kva.example" => context.Request.Path.Value switch
+            {
+                "/robots.txt" => robots(context),
+                "/sitemap.xml" => Xml(context, $"<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>{UNICODE}/a</loc></url></urlset>"),
+                "/" => Html(context, $"<a href=\"{UNICODE}/a\">A</a>"),
+                "/a" => Html(context, "<p>A page</p>"),
+                _ => Status(context, 404)
+            },
+            _ => Status(context, 404)
+        };
+    }
+
+    private static Task Xml(HttpContext context, string body)
+    {
+        context.Response.ContentType = "application/xml";
+        return context.Response.WriteAsync(body);
     }
 
     private static async Task NeverAnswersAsync(HttpContext context)
