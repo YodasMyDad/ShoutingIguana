@@ -123,6 +123,9 @@ As of 2026-10-31:
 The engine is a library, and the CLI is a thin layer over it. The UI needs the same thin layer as a localhost API.
 What the UI must be like is in [the UI brief](v2-ui-brief.md). This section covers what the engine gives it.
 
+Work on a branch off `v2` (for example `ui/step-3`) and merge `v2` in often. Engine changes keep landing on `v2`
+meanwhile, starting with the check for duplicate site versions (bare domain or `www`, http or https).
+
 ### What exists
 
 Everything below is public in `ShoutingIguana.Engine`.
