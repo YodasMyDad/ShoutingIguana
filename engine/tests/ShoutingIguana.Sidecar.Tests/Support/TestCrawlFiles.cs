@@ -30,13 +30,28 @@ internal static class TestCrawlFiles
     }
 
     /// <summary>What a crash leaves: the file says it is in this state, and nothing holds its lock.</summary>
-    public static void SetStoredStatus(string path, CrawlStatus status)
+    public static void SetStoredStatus(string path, CrawlStatus status) => Assert.Equal(1, Execute(path, $"UPDATE crawl SET status = {(int)status}"));
+
+    /// <summary>What an engine from before the URL summary leaves: its analysis without the columns and tables added since.</summary>
+    public static void AsAnalysedByAnEarlierEngine(string path) => Execute(path, """
+        ALTER TABLE analysis DROP COLUMN is_partial;
+        ALTER TABLE analysis DROP COLUMN crawl_updated_at;
+        ALTER TABLE analysis DROP COLUMN analysis_version;
+        ALTER TABLE analysis DROP COLUMN checks_fingerprint;
+        DROP TABLE url_summary;
+        DROP TABLE skipped_checks;
+        """);
+
+    /// <summary>What a crawl run by another program leaves: the crawl row stamped again.</summary>
+    public static void StampAsCrawledAgain(string path) => Assert.Equal(1, Execute(path, "UPDATE crawl SET updated_at = updated_at + 1000"));
+
+    private static int Execute(string path, string sql)
     {
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
         connection.Open();
         using var command = connection.CreateCommand();
-        command.CommandText = $"UPDATE crawl SET status = {(int)status}";
-        Assert.Equal(1, command.ExecuteNonQuery());
+        command.CommandText = sql;
+        return command.ExecuteNonQuery();
     }
 
     /// <summary>Holds a crawl file's lock as a crawl in another program would, until disposed.</summary>

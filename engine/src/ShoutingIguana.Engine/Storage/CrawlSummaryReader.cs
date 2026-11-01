@@ -19,7 +19,7 @@ public static class CrawlSummaryReader
     {
         using var connection = CrawlDatabase.OpenReader(databasePath);
         var summary = ReadCrawlRow(connection);
-        var analyzedAt = AnalyzedAt(connection);
+        var analysis = IssueReader.ReadAnalysis(connection);
         return summary with
         {
             FetchedUrlCount = Count(connection, "SELECT COUNT(*) FROM responses"),
@@ -27,8 +27,9 @@ public static class CrawlSummaryReader
                 SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id
                 WHERE u.is_internal = 1 AND r.is_html = 1 AND r.outcome = {(int)FetchOutcome.Success} AND r.word_count IS NOT NULL
                 """),
-            AnalyzedAt = analyzedAt,
-            FlaggedChecks = analyzedAt is null ? null : FlaggedChecks(connection)
+            AnalyzedAt = analysis?.AnalyzedAt,
+            Analysis = analysis,
+            FlaggedChecks = analysis is null ? null : FlaggedChecks(connection)
         };
     }
 
@@ -49,13 +50,6 @@ public static class CrawlSummaryReader
             }
             : throw new InvalidOperationException("This file is not a crawl database.");
     }
-
-    /// <summary>A first analysis that was cancelled or failed leaves its tables behind without a row.</summary>
-    private static DateTimeOffset? AnalyzedAt(SqliteConnection connection) =>
-        CrawlDatabase.Scalar(connection, "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'analysis'") is not null &&
-        CrawlDatabase.Scalar(connection, "SELECT analyzed_at FROM analysis WHERE id = 1") is long analyzedAt
-            ? DateTimeOffset.FromUnixTimeMilliseconds(analyzedAt)
-            : null;
 
     private static Dictionary<IssueSeverity, long> FlaggedChecks(SqliteConnection connection)
     {

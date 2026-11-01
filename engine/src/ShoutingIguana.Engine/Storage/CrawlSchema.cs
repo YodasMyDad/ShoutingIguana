@@ -117,20 +117,37 @@ internal static class CrawlSchema
 
     /// <summary>
     /// Analysis results, created on first analysis and replaced as a whole by every later one. Severity and
-    /// category are stored as text so the file explains itself in any SQLite browser.
+    /// category are stored as text so the file explains itself in any SQLite browser. A file analysed by an earlier
+    /// engine gets what it lacks on its next analysis: new tables here, new columns from <see cref="ANALYSIS_COLUMNS"/>.
     /// </summary>
     public const string ANALYSIS = """
+        -- Which engine ran the last analysis, and against what: the crawl's updated_at as it stood, the engine's analysis
+        -- version and checks fingerprint, the settings. That tells whether it is out of date. Columns after duration_ms are
+        -- null when an earlier engine analysed the crawl (and when an earlier engine analyses it again), and so they
+        -- also say whether url_summary and skipped_checks belong to this analysis.
         CREATE TABLE IF NOT EXISTS analysis (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             analyzed_at INTEGER NOT NULL,
             engine_version TEXT NOT NULL,
             settings_json TEXT NOT NULL,
             pages INTEGER NOT NULL,
-            duration_ms INTEGER NOT NULL
+            duration_ms INTEGER NOT NULL,
+            is_partial INTEGER,
+            crawl_updated_at INTEGER,
+            analysis_version INTEGER,
+            checks_fingerprint TEXT
         );
 
         -- What the last analysis couldn't do and why (checks this crawl can't support, rules that failed), in order.
         CREATE TABLE IF NOT EXISTS analysis_notes (id INTEGER PRIMARY KEY, note TEXT NOT NULL);
+
+        -- The checks the last analysis skipped, each with a stable reason code and a sentence saying why. The notes say it
+        -- for the analysis as a whole; this is per check, for the UI.
+        CREATE TABLE IF NOT EXISTS skipped_checks (
+            check_id TEXT PRIMARY KEY,
+            reason TEXT NOT NULL,
+            text TEXT NOT NULL
+        ) WITHOUT ROWID;
 
         -- Every check that ran, with how many URLs it flagged (0 = checked and clean). Checks the crawl can't
         -- support, such as orphans on a depth-limited crawl, are left out.
@@ -163,5 +180,72 @@ internal static class CrawlSchema
             url_id INTEGER PRIMARY KEY,
             indexability_reason INTEGER NOT NULL
         );
+        """;
+
+    /// <summary>The <c>analysis</c> columns added since the table was first created, which files analysed earlier lack.</summary>
+    public static readonly (string Name, string Type)[] ANALYSIS_COLUMNS =
+        [("is_partial", "INTEGER"), ("crawl_updated_at", "INTEGER"), ("analysis_version", "INTEGER"), ("checks_fingerprint", "TEXT")];
+
+    /// <summary>
+    /// The URL grids' table: one row per URL, rebuilt by every analysis (dropped and created again, so a later engine
+    /// can change its columns freely). It holds what the analysis judged next to copies of the crawl's numbers the grids
+    /// sort and filter on, so a sort or filter reads this one narrow table and never joins; text (the URL, title,
+    /// description) stays in urls and responses. Null means unknown: the crawl never fetched the URL (or wasn't able to
+    /// ask, because its host had stopped answering).
+    /// </summary>
+    public const string URL_SUMMARY = """
+        DROP TABLE IF EXISTS url_summary;
+        CREATE TABLE url_summary (
+            url_id INTEGER PRIMARY KEY,
+            is_internal INTEGER NOT NULL,
+            depth INTEGER NOT NULL,
+            -- ResourceType: page, image, script, stylesheet, font, media, PDF or other.
+            resource_type INTEGER NOT NULL,
+            status_code INTEGER,
+            -- Indexability as the analysis judged it (see effective_indexability): 1 or 0, with the IndexabilityReason.
+            indexable INTEGER,
+            indexability_reason INTEGER,
+            -- Where the URL's redirects (meta refreshes included) end, and the status there.
+            final_url_id INTEGER NOT NULL,
+            final_status_code INTEGER,
+            in_sitemap INTEGER NOT NULL,
+            -- Hyperlinks to the URL from the pages audited, not counting a page's links to itself: every one, those
+            -- followed and those not, and the pages they're on.
+            inlinks INTEGER NOT NULL,
+            followed_inlinks INTEGER NOT NULL,
+            nofollow_inlinks INTEGER NOT NULL,
+            linking_pages INTEGER NOT NULL,
+            -- Every hyperlink on the page, as stored in responses.outlink_count.
+            outlinks INTEGER,
+            -- Checks that flagged the URL, in all and by severity.
+            issues INTEGER NOT NULL,
+            errors INTEGER NOT NULL,
+            warnings INTEGER NOT NULL,
+            notices INTEGER NOT NULL,
+            size_bytes INTEGER,
+            response_ms INTEGER,
+            word_count INTEGER
+        );
+        """;
+
+    /// <summary>
+    /// Built once the rows are in, which is far quicker than keeping them up to date row by row. One per column the grids
+    /// sort by most or filter on selectively: with LIMIT, a sort walks its index and stops after a page, and a selective
+    /// filter (a status, a non-indexable reason, a depth, a rare type) reads only its rows. Every index ends with the row
+    /// id, which keyset paging and ties need. The other columns (is_internal, in_sitemap, the other inlink counts, the
+    /// severities) are cheap to scan in a table this narrow, about 100 ms per million URLs. This SQLite has no STAT4
+    /// histograms, so its planner can't tell a common value from a rare one; the grids' readers count the matching rows
+    /// first and choose between the filter's index and the sort's (engine/README.md).
+    /// </summary>
+    public const string URL_SUMMARY_INDEXES = """
+        CREATE INDEX ix_url_summary_status ON url_summary (status_code);
+        CREATE INDEX ix_url_summary_indexability ON url_summary (indexability_reason);
+        CREATE INDEX ix_url_summary_type ON url_summary (resource_type);
+        CREATE INDEX ix_url_summary_depth ON url_summary (depth);
+        CREATE INDEX ix_url_summary_linking_pages ON url_summary (linking_pages);
+        CREATE INDEX ix_url_summary_issues ON url_summary (issues);
+        CREATE INDEX ix_url_summary_response_ms ON url_summary (response_ms);
+        CREATE INDEX ix_url_summary_size ON url_summary (size_bytes);
+        CREATE INDEX ix_url_summary_words ON url_summary (word_count);
         """;
 }

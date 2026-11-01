@@ -3,11 +3,12 @@ using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Errors;
+using ShoutingIguana.Sidecar.Library;
 
 namespace ShoutingIguana.Sidecar.Crawls;
 
 /// <summary>What a crawl file holds, through the engine's readers. Readers are safe at any time, a running crawl included.</summary>
-internal sealed class CrawlData(CrawlManager crawls)
+internal sealed class CrawlData(CrawlManager crawls, CrawlSummaryCache summaries)
 {
     private const int DEFAULT_LIMIT = 200;
     private const int MAX_LIMIT = 1_000;
@@ -19,12 +20,22 @@ internal sealed class CrawlData(CrawlManager crawls)
         return CrawlOptionsDto.From(EngineErrors.Read(() => CrawlDatabase.ReadOptions(path)));
     }
 
+    /// <summary>
+    /// The last analysis, whether it still stands, and every check's count or why it was skipped. An analysis by an
+    /// engine from before the summary is out of date (the engine changed), with no reasons for its skips: its notes say.
+    /// </summary>
     public AnalysisDto Analysis(string id)
     {
         var path = crawls.PathOf(id);
-        var analysis = EngineErrors.Read(() => IssueReader.ReadAnalysis(path)) ?? throw Problems.NotAnalyzed();
+
+        // The library's summary of the file, read once per change of it: the analysis as stored, and the crawl's stamp.
+        var cached = summaries.Get(id, path);
+        var crawl = cached.Summary ?? throw EngineErrors.ForRead(cached.Error ?? new FileNotFoundException("Crawl database not found.", path));
+        var analysis = crawl.Analysis ?? throw Problems.NotAnalyzed();
         var counts = EngineErrors.Read(() => IssueReader.ReadCounts(path));
         var notes = EngineErrors.Read(() => IssueReader.ReadNotes(path));
+        var reasons = EngineErrors.Read(() => IssueReader.ReadSkippedChecks(path)).ToDictionary(skip => skip.CheckId, StringComparer.Ordinal);
+        var outOfDate = crawl.OutOfDate(crawls.AnalysisSettings);
 
         // In catalog order. A check from a newer engine, which this one doesn't know, still counts, after the rest.
         List<CheckCountDto> ran = [.. IssueCatalog.All.Where(check => counts.ContainsKey(check.Id)).Select(check => new CheckCountDto(check.Id, counts[check.Id]))];
@@ -36,10 +47,15 @@ internal sealed class CrawlData(CrawlManager crawls)
             analysis.EngineVersion,
             analysis.PagesAnalyzed,
             (long)analysis.Duration.TotalMilliseconds,
-            IsPartial: null,
+            analysis.IsPartial,
+            outOfDate.Count > 0,
+            outOfDate,
             notes,
             ran,
-            [.. IssueCatalog.All.Where(check => !counts.ContainsKey(check.Id)).Select(check => new SkippedCheckDto(check.Id, Reason: null))]);
+            [
+                .. IssueCatalog.All.Where(check => !counts.ContainsKey(check.Id)).Select(check => new SkippedCheckDto(check.Id,
+                    reasons.TryGetValue(check.Id, out var skip) ? new SkipReasonDto(skip.Reason, skip.Text) : null))
+            ]);
     }
 
     public CrawlStatsDto Stats(string id)

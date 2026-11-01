@@ -1,0 +1,53 @@
+namespace ShoutingIguana.Engine.Analysis;
+
+/// <summary>
+/// Why a check was skipped (<see cref="Models.SkippedCheck.Reason"/>). The codes are stored in crawl files and keyed on
+/// by the UI, so never change one; add new ones instead.
+/// </summary>
+public static class SkippedCheckReasons
+{
+    /// <summary>The crawl was told not to read sitemaps.</summary>
+    public const string SITEMAPS_OFF = "sitemaps-off";
+
+    /// <summary>The crawl was stopped (or failed) before it finished.</summary>
+    public const string CRAWL_UNFINISHED = "crawl-unfinished";
+
+    /// <summary>The crawl finished, but not every sitemap was read.</summary>
+    public const string SITEMAPS_UNFINISHED = "sitemaps-unfinished";
+
+    /// <summary>No sitemap could be read, so there's nothing to compare the crawl with.</summary>
+    public const string NO_SITEMAP = "no-sitemap";
+
+    /// <summary>A declared sitemap failed for a reason that says nothing about what it lists (a 5xx, a timeout, bad XML).</summary>
+    public const string SITEMAP_UNREADABLE = "sitemap-unreadable";
+
+    /// <summary>Sitemaps were left unread at the crawler's limits (too many, or nested too deep).</summary>
+    public const string SITEMAPS_NOT_READ = "sitemaps-not-read";
+
+    /// <summary>The depth limit kept internal URLs out of the crawl.</summary>
+    public const string DEPTH_LIMIT = "depth-limit";
+
+    /// <summary>The URL limit kept internal URLs out of the crawl.</summary>
+    public const string URL_LIMIT = "url-limit";
+
+    /// <summary>The crawl stayed in its start folder, so links from the rest of the site weren't read.</summary>
+    public const string START_FOLDER = "start-folder";
+
+    /// <summary>The crawl was told not to check links to other sites.</summary>
+    public const string EXTERNAL_LINKS_OFF = "external-links-off";
+
+    /// <summary>The crawl was told not to fetch images and other files.</summary>
+    public const string RESOURCES_OFF = "resources-off";
+
+    /// <summary>
+    /// The site's other versions (www or not, http or https) weren't all checked: the crawl stopped before they answered,
+    /// it predates the crawler's probes, or the home page isn't a page.
+    /// </summary>
+    public const string SITE_VERSIONS_UNCHECKED = "site-versions-unchecked";
+
+    /// <summary>
+    /// Never stored: the check is newer than the engine that ran the analysis, so the analysis didn't know it.
+    /// <see cref="Storage.IssueReader.ReadSkippedChecks"/> reports it for such checks.
+    /// </summary>
+    public const string NEWER_THAN_ANALYSIS = "newer-than-analysis";
+}

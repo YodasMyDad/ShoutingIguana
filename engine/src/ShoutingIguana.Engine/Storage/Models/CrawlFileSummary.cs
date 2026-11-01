@@ -1,3 +1,4 @@
+using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 
@@ -36,8 +37,19 @@ public sealed record CrawlFileSummary
     public DateTimeOffset? AnalyzedAt { get; init; }
 
     /// <summary>
+    /// The last analysis, with what it was run against, or null when the crawl has never been analysed. Whether it's out
+    /// of date also depends on the thresholds set now: <see cref="OutOfDate"/>.
+    /// </summary>
+    public AnalysisInfo? Analysis { get; init; }
+
+    /// <summary>
     /// Checks that flagged at least one URL in the last analysis, by severity: the rows of an issues screen, not the
     /// flagged URLs. Null when the crawl has never been analysed.
     /// </summary>
     public IReadOnlyDictionary<IssueSeverity, long>? FlaggedChecks { get; init; }
+
+    /// <summary>Why the last analysis no longer stands, if it doesn't; nothing when it does, or there's none.</summary>
+    /// <param name="settings">The thresholds an analysis would run with now.</param>
+    public IReadOnlyList<OutOfDateReason> OutOfDate(AnalysisSettings settings) =>
+        Analysis is null ? [] : AnalysisFreshness.Check(Analysis, UpdatedAt, settings);
 }

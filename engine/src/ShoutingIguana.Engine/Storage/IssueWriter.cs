@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
+using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Parsing.Models;
@@ -31,9 +33,10 @@ internal sealed class IssueWriter : IDisposable
         _fileLock = fileLock;
         _logger = logger;
         _transaction = connection.BeginTransaction();
-        CrawlDatabase.Execute(connection,
-            "DELETE FROM issues; DELETE FROM issue_types; DELETE FROM analysis; DELETE FROM analysis_notes; DELETE FROM effective_indexability;",
-            _transaction);
+        CrawlDatabase.Execute(connection, """
+            DELETE FROM issues; DELETE FROM issue_types; DELETE FROM analysis; DELETE FROM analysis_notes; DELETE FROM effective_indexability;
+            DELETE FROM skipped_checks;
+            """, _transaction);
 
         _insert = connection.CreateCommand();
         _insert.Transaction = _transaction;
@@ -74,6 +77,7 @@ internal sealed class IssueWriter : IDisposable
             }
 
             CrawlDatabase.Execute(connection, CrawlSchema.ANALYSIS);
+            AddMissingColumns(connection);
             return new IssueWriter(connection, fileLock, logger);
         }
         catch
@@ -112,10 +116,17 @@ internal sealed class IssueWriter : IDisposable
         }
     }
 
-    /// <summary>Records every check that ran with its URL count, plus the analysis itself and its notes, then commits.</summary>
+    /// <summary>
+    /// Records every check that ran with its URL count, the URL summary, and the analysis itself with its notes and the
+    /// checks it skipped, then commits.
+    /// </summary>
     /// <param name="checks">The checks that ran; ones the crawl couldn't support are left out.</param>
+    /// <param name="info">The analysis, with what it was run against (its version, partial or not).</param>
+    /// <param name="skipped">The checks left out, and why.</param>
+    /// <param name="urls">What the analysis judged of every URL, for the summary.</param>
     /// <returns>Flagged URL counts per issue id.</returns>
-    public Dictionary<string, long> Commit(IReadOnlyList<IssueDefinition> checks, AnalysisInfo info, string settingsJson, IReadOnlyList<string> notes)
+    public Dictionary<string, long> Commit(IReadOnlyList<IssueDefinition> checks, AnalysisInfo info, string settingsJson, IReadOnlyList<string> notes,
+        IReadOnlyList<SkippedCheck> skipped, UrlTable urls)
     {
         Dictionary<string, long> counts = new(StringComparer.Ordinal);
         using (var count = Command("SELECT issue, COUNT(*) FROM issues GROUP BY issue"))
@@ -146,16 +157,27 @@ internal sealed class IssueWriter : IDisposable
             }
         }
 
+        // After the issue types: the summary counts each URL's issues by severity. It's part of the analysis's time.
+        var summaryTime = Stopwatch.StartNew();
+        var summaryRows = UrlSummaryBuilder.Build(_connection, _transaction, urls);
+        _logger.LogDebug("Stored the URL summary of {Rows} URLs in {Elapsed}", summaryRows, summaryTime.Elapsed);
+
+        // The crawl row's updated_at as it stands: the lock keeps any crawl out until this commits, so it's the one analysed.
         using (var analysis = Command("""
-                   INSERT INTO analysis (id, analyzed_at, engine_version, settings_json, pages, duration_ms)
-                   VALUES (1, $analyzedAt, $engineVersion, $settings, $pages, $durationMs)
+                   INSERT INTO analysis (id, analyzed_at, engine_version, settings_json, pages, duration_ms, is_partial, crawl_updated_at,
+                                         analysis_version, checks_fingerprint)
+                   VALUES (1, $analyzedAt, $engineVersion, $settings, $pages, $durationMs, $isPartial, (SELECT updated_at FROM crawl WHERE id = 1),
+                           $analysisVersion, $checksFingerprint)
                    """))
         {
             analysis.Parameters.AddWithValue("$analyzedAt", info.AnalyzedAt.ToUnixTimeMilliseconds());
             analysis.Parameters.AddWithValue("$engineVersion", info.EngineVersion);
             analysis.Parameters.AddWithValue("$settings", settingsJson);
             analysis.Parameters.AddWithValue("$pages", info.PagesAnalyzed);
-            analysis.Parameters.AddWithValue("$durationMs", (long)info.Duration.TotalMilliseconds);
+            analysis.Parameters.AddWithValue("$durationMs", (long)(info.Duration + summaryTime.Elapsed).TotalMilliseconds);
+            analysis.Parameters.AddWithValue("$isPartial", (object?)info.IsPartial ?? DBNull.Value);
+            analysis.Parameters.AddWithValue("$analysisVersion", (object?)info.AnalysisVersion ?? DBNull.Value);
+            analysis.Parameters.AddWithValue("$checksFingerprint", (object?)info.ChecksFingerprint ?? DBNull.Value);
             analysis.ExecuteNonQuery();
         }
 
@@ -166,6 +188,20 @@ internal sealed class IssueWriter : IDisposable
             {
                 text.Value = value;
                 note.ExecuteNonQuery();
+            }
+        }
+
+        using (var skip = Command("INSERT INTO skipped_checks (check_id, reason, text) VALUES ($checkId, $reason, $text)"))
+        {
+            var checkId = skip.Parameters.Add("$checkId", SqliteType.Text);
+            var reason = skip.Parameters.Add("$reason", SqliteType.Text);
+            var text = skip.Parameters.Add("$text", SqliteType.Text);
+            foreach (var check in skipped)
+            {
+                checkId.Value = check.CheckId;
+                reason.Value = check.Reason;
+                text.Value = check.Text;
+                skip.ExecuteNonQuery();
             }
         }
 
@@ -190,6 +226,26 @@ internal sealed class IssueWriter : IDisposable
         {
             CrawlDatabase.CloseWriter(_connection, _logger);
             _fileLock.Dispose();
+        }
+    }
+
+    /// <summary>A file analysed by an earlier engine has the analysis table without the columns added since.</summary>
+    private static void AddMissingColumns(SqliteConnection connection)
+    {
+        HashSet<string> existing = new(StringComparer.OrdinalIgnoreCase);
+        using (var columns = connection.CreateCommand())
+        {
+            columns.CommandText = "SELECT name FROM pragma_table_info('analysis')";
+            using var reader = columns.ExecuteReader();
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(0));
+            }
+        }
+
+        foreach (var (name, type) in CrawlSchema.ANALYSIS_COLUMNS.Where(column => !existing.Contains(column.Name)))
+        {
+            CrawlDatabase.Execute(connection, $"ALTER TABLE analysis ADD COLUMN {name} {type}");
         }
     }
 
