@@ -20,7 +20,9 @@ export type UrlPage = { total: number; offset: number; rows: UrlRow[] };
 
 export class SidecarUnavailableError extends Error {}
 
-const fetchMode = new URLSearchParams(location.search).get('fetch') === 'post' ? 'post' : 'get';
+import { params } from './params';
+
+const fetchMode = params.get('fetch') === 'post' ? 'post' : 'get';
 
 export async function sidecarFetch(path: string, init: RequestInit = {}) {
   const connection = getConnection();

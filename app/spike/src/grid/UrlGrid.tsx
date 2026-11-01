@@ -1,22 +1,28 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { queryOptions, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { flexRender, useTable, type Row, type SortingState } from '@tanstack/react-table';
 import { fetchUrlPage, type UrlRow } from '../api';
 import { useConnection } from '../connection';
 import { formatInteger } from '../format';
-import { HEADER_HEIGHT, markGridMount, registerGrid, ROW_HEIGHT } from '../perf/probe';
+import { markGridMount, registerGrid, ROW_HEIGHT } from '../perf/probe';
 import { createScrollWindow, type ScrollWindow } from './scrollWindow';
+import { params } from '../params';
 import { columns, features } from './columns';
+import { useFixedRows, useTanStackRows } from './useRowWindow';
 
 export const PAGE_SIZE = 200;
 const SKELETON_ROWS = 40;
-const OVERSCAN = 12;
+const OVERSCAN = Number(params.get('overscan') ?? 12);
+// Variant switches for the memory profile: row positioning, page cache lifetime and size.
+const POSITION_WITH_TOP = params.get('pos') === 'top';
+const PAGE_GC_MS = Number(params.get('gc') ?? 30_000);
 const MAX_PREFETCH_PAGES = 8;
 const LOOKAHEAD_SECONDS = 0.4;
 // ?recycle=1 keys rows by slot, so React reuses row elements instead of mounting and unmounting them while scrolling.
-const recycleRows = new URLSearchParams(location.search).get('recycle') === '1';
+const recycleRows = params.get('recycle') === '1';
 const ROW_SLOTS = 128;
+// ?virt=own swaps TanStack Virtual for a fixed-height window that stores nothing per row (chosen once, so hook order is stable).
+const useRows = params.get('virt') === 'own' ? useFixedRows : useTanStackRows;
 
 type GridRowModel = Row<typeof features, UrlRow>;
 
@@ -26,7 +32,7 @@ function pageQuery(pageIndex: number, sort: string, enabled: boolean) {
     queryFn: ({ signal }) => fetchUrlPage(pageIndex, PAGE_SIZE, sort, signal),
     enabled,
     staleTime: Infinity,
-    gcTime: 30_000,
+    gcTime: PAGE_GC_MS,
   });
 }
 
@@ -43,7 +49,7 @@ const GridRow = memo(function GridRow({ row, index, start }: { row: GridRowModel
       aria-rowindex={index + 2}
       className="row"
       data-index={index}
-      style={{ transform: `translateY(${start}px)` }}
+      style={POSITION_WITH_TOP ? { top: start } : { transform: `translateY(${start}px)` }}
     >
       {row.getVisibleCells().map((cell, column) => (
         <div
@@ -75,7 +81,7 @@ const PlaceholderRow = memo(function PlaceholderRow({ index, start, columnCount 
       aria-busy="true"
       className="row placeholder"
       data-index={index}
-      style={{ transform: `translateY(${start}px)` }}
+      style={POSITION_WITH_TOP ? { top: start } : { transform: `translateY(${start}px)` }}
     >
       {cells}
     </div>
@@ -102,16 +108,13 @@ export function UrlGrid() {
 
   // Scroll velocity in rows per second (signed), smoothed; a jump resets it.
   const velocity = useRef({ offset: 0, at: 0, rowsPerSecond: 0 });
-  const virtualizer = useVirtualizer({
+  const rows = useRows({
     count: rowCount,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
     overscan: OVERSCAN,
-    observeElementOffset: scrollWindow.observeElementOffset,
-    scrollToFn: scrollWindow.scrollToFn,
-    onChange: (instance) => {
+    scrollRef,
+    scrollWindow,
+    onOffset: (offset) => {
       const now = performance.now();
-      const offset = instance.scrollOffset ?? 0;
       const state = velocity.current;
       const elapsed = now - state.at;
       const moved = offset - state.offset;
@@ -127,26 +130,7 @@ export function UrlGrid() {
     },
   });
 
-  // TanStack Virtual reads the DOM scroll position and extent directly for its clamping and scroll reconciliation,
-  // and has no option for a virtual scroll space, so two private readers are replaced (spike only: not a stable API).
-  const patchedRef = useRef(false);
-  if (!patchedRef.current) {
-    const internals = virtualizer as unknown as {
-      _elementMaxScrollOffset: () => number | null;
-      _readElementOffset: () => number | null;
-    };
-    internals._elementMaxScrollOffset = () => {
-      const element = scrollRef.current;
-      return element ? Math.max(0, HEADER_HEIGHT + scrollWindow.total - element.clientHeight) : null;
-    };
-    internals._readElementOffset = () => {
-      const element = scrollRef.current;
-      return element ? scrollWindow.base + element.scrollTop : null;
-    };
-    patchedRef.current = true;
-  }
-
-  const items = virtualizer.getVirtualItems();
+  const items = rows.items;
   const firstPageIndex = items.length ? Math.floor(items[0].index / PAGE_SIZE) : 0;
   const lastPageIndex = items.length ? Math.floor(items[items.length - 1].index / PAGE_SIZE) : 0;
   const visiblePages = useMemo(() => range(firstPageIndex, lastPageIndex), [firstPageIndex, lastPageIndex]);
@@ -194,10 +178,10 @@ export function UrlGrid() {
       scroller: scrollRef.current!,
       rowCount: () => rowCountRef.current,
       scrollOffset: () => scrollWindow.base + scrollRef.current!.scrollTop,
-      scrollToIndex: (index) => virtualizer.scrollToIndex(index, { align: 'start' }),
+      scrollToIndex: rows.scrollToIndex,
     });
     return () => registerGrid(null);
-  }, [virtualizer, scrollWindow]);
+  }, [rows.scrollToIndex, scrollWindow]);
 
   const rowsById = table.getRowModel().rowsById;
   const visibleColumns = table.getVisibleLeafColumns();
@@ -214,6 +198,7 @@ export function UrlGrid() {
         aria-rowcount={total === undefined ? -1 : total + 1}
         aria-colcount={visibleColumns.length}
         aria-busy={total === undefined}
+        data-contain={params.get('contain') ?? 'default'}
         tabIndex={0}
         style={{ '--grid-cols': template, '--grid-width': `${width}px` } as CSSProperties}
       >

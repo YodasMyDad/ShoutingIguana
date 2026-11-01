@@ -390,3 +390,17 @@ body {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* Memory-profile variants (?contain=strict|cv|none). */
+.grid[data-contain='strict'] .row {
+  contain: strict;
+}
+
+.grid[data-contain='cv'] .row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 28px;
+}
+
+.grid[data-contain='none'] .row {
+  contain: none;
+}

@@ -298,6 +298,94 @@ mod job {
     }
 }
 
+/// Hides the window as if sent to the tray, optionally asking WebView2 to use less memory ("low") and/or suspending the
+/// webview ("suspend"), then shows it again after `ms`. The crawl itself runs in the sidecar and is unaffected.
+#[tauri::command]
+fn spike_tray(app: AppHandle, mode: String, ms: u64) -> Result<(), String> {
+    let window = app.get_webview_window("main").ok_or("no main window")?;
+    window.hide().map_err(|e| e.to_string())?;
+    log_event("tray-hidden", json!({ "mode": mode }));
+    #[cfg(windows)]
+    tray::enter(&window, &mode);
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(ms));
+        if let Some(window) = app.get_webview_window("main") {
+            #[cfg(windows)]
+            tray::leave(&window);
+            let _ = window.show();
+            log_event("tray-shown", json!({}));
+        }
+    });
+    Ok(())
+}
+
+/// WebView2 memory controls Tauri doesn't expose, reached through webview2-com on the UI thread.
+#[cfg(windows)]
+mod tray {
+    use super::log_event;
+    use serde_json::json;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2_19, ICoreWebView2_3, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+    };
+    use webview2_com::TrySuspendCompletedHandler;
+    use windows_core::Interface;
+
+    pub fn enter(window: &tauri::WebviewWindow, mode: &str) {
+        let mode = mode.to_string();
+        let _ = window.with_webview(move |webview| unsafe {
+            let controller = webview.controller();
+            if mode.contains("low") {
+                let result = controller
+                    .CoreWebView2()
+                    .and_then(|core| core.cast::<ICoreWebView2_19>())
+                    .and_then(|core| core.SetMemoryUsageTargetLevel(COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW));
+                log_event("tray-memory-target-low", json!({ "result": format!("{result:?}") }));
+            }
+            if mode.contains("invisible") && !mode.contains("suspend") {
+                // Telling WebView2 the webview is not visible makes the page hidden (document.hidden), which stops
+                // rendering and throttles timers, without suspending script.
+                let visible = controller.SetIsVisible(false);
+                log_event("tray-invisible", json!({ "result": format!("{visible:?}") }));
+            }
+            if mode.contains("suspend") {
+                // TrySuspend requires the webview itself to be invisible, not just its window.
+                let visible = controller.SetIsVisible(false);
+                let handler = TrySuspendCompletedHandler::create(Box::new(|result, suspended| {
+                    log_event(
+                        "tray-suspend-completed",
+                        json!({ "result": format!("{result:?}"), "suspended": format!("{suspended:?}") }),
+                    );
+                    Ok(())
+                }));
+                let result = controller
+                    .CoreWebView2()
+                    .and_then(|core| core.cast::<ICoreWebView2_3>())
+                    .and_then(|core| core.TrySuspend(&handler));
+                log_event(
+                    "tray-suspend-requested",
+                    json!({ "setIsVisible": format!("{visible:?}"), "result": format!("{result:?}") }),
+                );
+            }
+        });
+    }
+
+    pub fn leave(window: &tauri::WebviewWindow) {
+        let _ = window.with_webview(|webview| unsafe {
+            let controller = webview.controller();
+            if let Ok(core) = controller.CoreWebView2() {
+                if let Ok(core3) = core.cast::<ICoreWebView2_3>() {
+                    let _ = core3.Resume();
+                }
+                if let Ok(core19) = core.cast::<ICoreWebView2_19>() {
+                    let _ = core19.SetMemoryUsageTargetLevel(COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL);
+                }
+            }
+            let _ = controller.SetIsVisible(true);
+        });
+    }
+}
+
 fn main() {
     if let Ok(path) = std::env::var("SPIKE_LOG") {
         let file = OpenOptions::new().create(true).append(true).open(path).ok();
@@ -316,7 +404,7 @@ fn main() {
             orphan_fix,
             exit_mode,
         })
-        .invoke_handler(tauri::generate_handler![sidecar_connection, report])
+        .invoke_handler(tauri::generate_handler![sidecar_connection, report, spike_tray])
         .on_page_load(|_webview, payload| {
             log_event(
                 "page-load",
@@ -328,6 +416,15 @@ fn main() {
             if let Err(error) = spawn_sidecar(app.handle()) {
                 log_event("sidecar-spawn-failed", json!({ "error": error }));
             }
+            // SPIKE_START_PAGE=hello.html opens an empty page in the same shell: WebView2's fixed memory floor.
+            let page = std::env::var("SPIKE_START_PAGE").unwrap_or_else(|_| "index.html".into());
+            // SPIKE_QUERY ("pos=top&overscan=4") reaches the page as window.__SPIKE_QUERY__ before any script runs.
+            let query = std::env::var("SPIKE_QUERY").unwrap_or_default();
+            tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App(page.into()))
+                .title("Shouting Iguana spike")
+                .inner_size(1536.0, 864.0)
+                .initialization_script(format!("window.__SPIKE_QUERY__ = {};", serde_json::to_string(&query)?))
+                .build()?;
             Ok(())
         })
         .build(tauri::generate_context!())

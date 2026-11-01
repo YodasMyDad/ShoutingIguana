@@ -50,9 +50,16 @@ function publish() {
   state = { status: pendingStatus ?? state.status, progress: pendingProgress ?? state.progress, history, notices };
   pendingProgress = null;
   pendingStatus = null;
+  // While the window is hidden (in the tray) the state keeps up but nothing re-renders, so the renderer stays idle
+  // and the memory WebView2 trims stays paged out. Showing the window renders the latest state at once.
+  if (document.hidden) return;
   liveStats.published++;
   listeners.forEach((listener) => listener());
 }
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) listeners.forEach((listener) => listener());
+});
 
 export function pushMessage(message: SseMessage) {
   liveStats.received++;

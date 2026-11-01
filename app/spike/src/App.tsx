@@ -6,7 +6,7 @@ import { pushMessage, pushStatus } from './live/liveStore';
 import { startProgressStream, type StreamStats } from './live/sse';
 import { markConnection } from './perf/probe';
 
-const params = new URLSearchParams(location.search);
+import { params } from './params';
 const initialCharts = (params.get('charts') ?? 'visx') as ChartsVariant;
 const liveEnabled = params.get('live') !== '0';
 const sseIntervalMs = Number(params.get('sseInterval') ?? 500);

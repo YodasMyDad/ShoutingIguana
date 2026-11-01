@@ -16,6 +16,9 @@ serde_json = "1"
 getrandom = "0.4"
 
 [target.'cfg(windows)'.dependencies]
+# Same versions Tauri uses, so the controller type from with_webview() matches.
+webview2-com = "=0.39.1"
+windows-core = "=0.62.2"
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Security",

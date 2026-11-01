@@ -26,9 +26,12 @@ changed). This report is the deliverable. Measured on 1 November 2026.
 - **Cold start: well inside 2 s.** The release build painted its shell 331 ms after launch (515 ms on a first launch),
   before the sidecar was ready, and showed rows at 474 ms. With a sidecar that took 3 s to start, the shell still
   painted at 321 ms.
-- **Memory: the open question.** The JS heap stays near 21–25 MB, but WebView2's processes together start at 267 MB and
-  reached 455 MB after scrolling 54,000 rows, mostly renderer memory that pressure does not return. Whether the 300 MB
-  budget is met depends on what it counts; see [risks](#risks-and-gotchas).
+- **Memory: met, once the budget counts the right thing and three fixes are in.** WebView2's own floor is 74 MB (private
+  working set, empty page). The spike's first grid peaked at 433 MB after a 50,000-row fling and settled at 197 MB.
+  Scrolled through all 1M rows, it peaked at 1.1 GB and settled at 321 MB, because TanStack Virtual stores an object
+  per row visited. With our own fixed-height virtualiser, a 20-page cache and overscan 6, it shows the first page at
+  96 MB, peaks at 260 MB, settles at 127 MB (178 MB after all 1M rows), and holds 10–25 MB hidden in the tray with
+  WebView2's Low memory target. See [Memory profile](#memory-profile) for the breakdown and the proposed definition.
 
 ## Environment
 
@@ -98,7 +101,7 @@ per frame. All grid figures are for 1,000,000 rows with the windowed scroll spac
 | Fast fling (20,000 px/s), not a budget | | 0% dropped, 0 empty rows | 9.4% dropped, 0 empty rows | 0% over 16.7 ms, 0 empty rows | 95% over 16.7 ms (about 35 fps), 0 empty rows |
 | Jump to the middle / the end, to a filled viewport (includes 20–50 ms of query time) | 100 ms (any click or key) | 47 ms / 46 ms; other jumps 66 ms max | 114 ms / 84 ms; others 120 ms max | 40 ms / 47 ms; others 68 ms max | 110 ms / 103 ms; others 125 ms max |
 | Live crawl at 2,900 pages/s while the grid scrolls | 60 fps | 0% dropped with ECharts or visx | 0% dropped with either | 0% over 16.7 ms with either | 0.5% over 16.7 ms with either |
-| UI memory with a 1M-row crawl open | 300 MB | After a 54,000-row sweep: JS heap 22 MB, renderer 227 MB, all browser processes 285 MB | 25 MB, 259 MB, 318 MB | At start: JS heap 7 MB, all UI processes 267 MB. After the sweep: 21 MB and 455 MB | 25 MB and 446 MB |
+| UI memory with a 1M-row crawl open: the app's private working set (see [Memory profile](#memory-profile)) | 300 MB peak on a 50k-row fling; proposed: 120 MB idle, 200 MB settled | Not used: Playwright's Network capture inflates the renderer | Not used | With the fixes: 96 MB idle, 260 MB peak, 127 MB settled (178 MB after scrolling all 1M rows); 25 MB in the tray. Without: 120, 433, 197 (321) | Without the fixes: 394 MB peak, against 428 MB at 1× |
 
 Not measured, because they depend on the engine's readers rather than the UI stack: opening a 100k-page crawl, and
 sort or filter times.
@@ -119,6 +122,155 @@ Other results worth knowing:
 - **Sidecar restart.** In the Tauri build, after the sidecar was killed the shell started a new one (ready 419 ms after
   the kill, including a deliberate 250 ms pause) and the SSE stream was flowing again 477 ms after the kill; grid pages
   loaded from the new sidecar at once.
+
+## Memory profile
+
+Measured on the release build. Every figure counts the shell process plus each `msedgewebview2.exe` started with this
+app's user data folder (matched by command line, typed by `--type`); the sidecar is listed separately. *Private working
+set* is what Task Manager's Memory column shows: private memory in RAM. *Private bytes* is committed private memory,
+resident or not. The page drives itself (`src/perf/autopilot.ts`: first page, a 50,000-row sweep at 50,000 px/s, a jump
+to the end, idle, then a GC), so nothing is attached. Allocator figures come from Chromium's memory-infra dumps
+(`disabled-by-default-memory-infra`, detailed) over a bare CDP connection that enables no domain; with it attached the
+app measured within 7 MB of a run with nothing attached. Memory figures taken with Playwright attached (as in the first
+version of this report) overstate the renderer by about 35 MB: its Network domain keeps every response body alive (258
+buffers of 80 KB after the sweep). The other agent's synthetic test site was running on the machine throughout, at low
+load; memory figures are insensitive to it.
+
+### By process
+
+Private working set / private bytes, MB, at 1×:
+
+| Point | Renderer | GPU | Browser | Network, storage, crashpad | Shell | App total | Sidecar (working set) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Empty page in the same shell (WebView2's floor) | 11 / 19 | 18 / 69 | 29 / 37 | 11 / 22 | 5 / 7 | **74** / 155 | n/a |
+| App started, before any data | 26 / 37 | 22 / 118 | 26 / 34 | 11 / 22 | 5 / 7 | **90** / 218 | 7 |
+| First page shown | 54 / 65 | 24 / 142 | 26 / 34 | 11 / 22 | 5 / 7 | **120** / 269 | 15 |
+| Just after scrolling 50,000 rows | 363 / 377 | 27 / 169 | 26 / 35 | 12 / 23 | 5 / 7 | **433** / 612 | 22 |
+| 2 minutes later | 129 / 140 | 28 / 133 | 24 / 33 | 11 / 22 | 5 / 7 | **197** / 335 | 23 |
+| After a GC | 109 / 120 | 28 / 133 | 24 / 33 | 11 / 22 | 5 / 7 | **177** / 315 | 23 |
+| Scrolled through all 1,000,000 rows, 2 minutes later | 239 / 256 | 34 / 125 | 29 / 38 | 14 / 24 | 5 / 7 | **321** / 450 | 18 |
+| With the fixes below: first page shown | 31 / 42 | 24 / 146 | 25 / 34 | 11 / 21 | 5 / 7 | **96** / 250 | 15 |
+| With the fixes: 50,000 rows, 40 s later | 61 / 72 | 27 / 121 | 24 / 33 | 11 / 22 | 5 / 7 | **127** / 255 | 23 |
+| With the fixes: all 1,000,000 rows, 2 minutes later | 95 / 105 | 34 / 125 | 30 / 39 | 14 / 26 | 5 / 7 | **178** / 302 | 19 |
+
+The two 1M-row runs ran side by side with a third instance (each with its own WebView2 user data folder), which slows
+GC and may raise their peaks; the settled figures are what matter there. Peaks during the 1M-row sweep reached 1,103 MB
+without the fixes and 591 MB with them.
+
+Almost all the change is in the renderer. The browser, network, storage and crashpad processes are WebView2's fixed
+cost. The GPU process keeps 22–34 MB in RAM while its private bytes swing between 115 and 218 MB from run to run,
+because most of its memory is graphics memory and committed-but-untouched shared buffers. That swing is why private bytes is a poor budget
+measure here.
+
+### Inside the renderer
+
+Allocators in the renderer, MB (committed, with live objects in brackets where Chromium reports them):
+
+| Allocator | Start | First page | Just after 50k rows | 2 min later | After a GC |
+| --- | --- | --- | --- | --- | --- |
+| Oilpan (`blink_gc`: DOM, layout, styles) | 5.8 (4.7) | 10.5 (9.5) | **192 (15.5)** | 61 (7.0) | 41 (3.7) |
+| V8 (JavaScript) | 5.5 | 10.3 | 80 | 18 | 18 |
+| malloc | 18 (13) | 21 (15) | 61 (43) | 31 (18) | 30 (18) |
+| PartitionAlloc buffers (strings, vectors) | 2.3 (2.1) | 2.8 (2.4) | 21 (16) | 8.2 (3.2) | 7.3 (2.4) |
+| PartitionAlloc array buffers | 0 | 15.3 | 15.3 | 15.3 | 15.3 |
+| Renderer private working set (from the OS) | 26 | 56 | 359 | 132 | 111 |
+
+These five account for the renderer's private working set to within a few MB. Tiles (32–55 MB, `cc`) and GPU transfer
+buffers (18 MB after heavy scrolling) also appear in the renderer's dump but live in graphics or shared memory, not in
+its private working set. Font, Skia and image caches stayed under 1 MB.
+
+What grows, and whether it comes back:
+
+1. **Garbage from fast scrolling, which comes back.** At 1,800 rows/s every row that scrolls in creates about 15
+   elements with their styles and layout objects, and every page parsed creates JavaScript objects. Before GC catches
+   up, Oilpan reached 192 MB with 15.5 MB live, and V8 80 MB. This is the 433 MB peak. Most of it is collected within
+   seconds.
+2. **High-water marks, which mostly don't.** After a full GC and a critical memory-pressure signal, Oilpan still held
+   41 MB of pages with 3.7 MB live, and malloc 30 MB with 18 MB live. Neither returns free pages to the system on this
+   WebView2. That is why the app settles at about 180 MB, against 120 MB before the sweep.
+3. **TanStack Virtual's per-row storage, which never comes back.** For 1M rows it allocates a `Float64Array` of 2 × 1M
+   (the constant 15.3 MB of array buffers), an array of 1M slots (4.4 MB of V8 heap), and an object for each row
+   visited. It grows with the row count, not with use.
+4. **Ruled out:** one compositor layer per row (the whole page had 11 layers at every point, with rows positioned by
+   `transform`), detached DOM (0–1 nodes), the cached rows themselves (dropping the cache to 2 pages lowered the JS
+   heap but not the renderer), and fonts, Skia or images. The live panel costs nothing measurable either (see below).
+
+### Fixes tried
+
+Same scenario with a 40 s idle; app private working set in MB. Runs of the same build differ by up to about 15 MB.
+
+| Change | Just after 50k rows | 40 s later | After a GC | Verdict |
+| --- | --- | --- | --- | --- |
+| None (baseline) | 428 | 212 | 193 | |
+| Overscan 12 → 4 | 341 | 196 | 175 | Peak −20%; settled within noise. Take a middle value (6) so fast flings still have rows ready |
+| Recycle row elements (stable slot keys) | 435 | 203 | 182 | No effect |
+| Rows positioned with `top` instead of `transform` | 439 | 202 | 183 | No effect: rows were never layers |
+| `content-visibility: auto` on rows | 475 | 214 | 178 | Worse peak, same settled |
+| `contain: strict` on rows | 570 | 219 | 186 | Much worse peak |
+| Cap the page cache (20 pages, `gcTime` 5 s) | **266** | **160** | **160** | Peak −38%, settled −33 MB: the biggest win |
+| No live panel | 439 | 222 | 180 | No effect: the live panel costs nothing measurable |
+| Software raster (`--disable-gpu-rasterization`) | 472 | 215 | 192 | Worse: tiles move into the GPU process's RAM (+26 MB at first page) |
+| No GPU (`--disable-gpu`) | 414 | 193 | 173 | Same working set; private bytes −100 MB (the graphics driver's commit). Not worth software compositing |
+| Own fixed-height virtualiser instead of TanStack Virtual | 441 | 191 | 170 | Settled −23 MB; JS heap after GC 6.3 MB instead of 28; first page 106 instead of 119 |
+| **Own virtualiser, page cache of 20 (`gcTime` 5 s), overscan 6** | **260** | **127** | **131** | **Peak −39%, settled −85 MB; the renderer settles at 60 MB and the JS heap at 6–11 MB** |
+
+### Hidden in the tray
+
+The owner chose to keep crawling with the window in the tray. The crawl runs in the sidecar, so only the UI's footprint
+changes. After a 50,000-row sweep and a jump to the end (about 240 MB before hiding), app private working set in MB:
+
+| How the window is hidden | +5 s | +30 s | +60 s | Private bytes at +60 s |
+| --- | --- | --- | --- | --- |
+| Window hidden only | 238 | 209 | 203 | 334 |
+| `MemoryUsageTargetLevel = Low` | 87 | **23** | 74 | 319 |
+| `TrySuspend` (after `IsVisible = false`) | 73 | 97 | 104 | 320 |
+| Low and `TrySuspend` | 72 | 96 | 101 | 313 |
+| Low and `IsVisible = false`, page renders nothing while hidden (with the fixes) | 72 | **9.7** | **24.8** | 235 |
+
+- **Low** makes WebView2 trim every process's working set (browser 0.3 MB, renderer 9.5 MB at +30 s). Nothing is
+  freed: private bytes stay at about 320 MB, and pages come back from the page file as soon as they are touched. In
+  that run the page still thought it was visible and kept rendering the live panel, which paged 50 MB back in within a
+  minute.
+- **Low with `IsVisible = false`** is the one to use. The page sees `document.hidden`, so rendering stops and timers
+  slow, and the live store keeps its state without re-rendering until the window is shown again. The app then held
+  10–25 MB in RAM, and came back at 64 MB when shown. The SSE stream keeps running, so the UI is current the moment it
+  reappears.
+- **`TrySuspend`** froze the page (it reported success) but left about 60 MB of the renderer resident. A suspended page
+  handles no events until it is resumed (the SSE client reconnects on resume), and it is no smaller, so it isn't worth
+  it here.
+- **How hard:** Tauri exposes neither. `WebviewWindow::with_webview` hands Rust the `ICoreWebView2Controller` on the UI
+  thread, and about 40 lines cast `CoreWebView2()` to `ICoreWebView2_19` (memory target) and `ICoreWebView2_3`
+  (`TrySuspend`, `Resume`), with `webview2-com` 0.39.1 and `windows-core` 0.62.2 pinned to Tauri's versions so the
+  types match (`src-tauri/src/main.rs`, module `tray`). It is Windows-only: WKWebView and WebKitGTK have nothing
+  equivalent.
+
+### Proposed budget
+
+**What to count.** The private working set of the shell and of every WebView2 process in the app's user data folder:
+it is what Task Manager shows the user, and it is the RAM the app actually holds. The sidecar is the engine and gets
+its own budget. Add one guard on committed memory, the renderer's private bytes, because Windows can trim a working set
+from outside (once, at 4×, the app showed 57 MB in RAM with 360 MB committed) and that would hide a leak. Don't budget
+the total of private bytes: WebView2's empty page alone commits 155 MB, and the GPU process's commit swings by 100 MB
+from run to run with the graphics driver's reservations.
+
+**What is achievable** (1×, this machine, 1M-row crawl, with the fixes):
+
+| Measure | Proposed budget | Measured with the fixes | Measured without |
+| --- | --- | --- | --- |
+| Crawl open, first page shown, idle | 120 MB | 96 MB | 120 MB |
+| Peak during the CI scenario (a 50,000-row fling at 1,800 rows/s) | 300 MB | 260 MB | 433 MB |
+| Settled: 2 minutes after the last interaction, however much was scrolled (up to all 1M rows) | 200 MB | 127 MB after 50k rows, 178 MB after 1M | 197 MB, 321 MB |
+| Renderer private bytes, settled after 1M rows (leak guard) | 150 MB | 105 MB | 256 MB |
+| JS heap, settled | 20 MB | 6–10 MB | 28–95 MB |
+| Hidden in the tray, 60 s after hiding | 50 MB | 25 MB | 203 MB |
+| For reference: WebView2's floor, an empty page | n/a | 74 MB | 74 MB |
+
+So the brief's "300 MB" holds as the peak for that scenario, provided "UI memory" means the app's private working set
+and the three fixes go into the real grid: no per-row storage in the virtualiser, a small page cache (20 pages,
+`gcTime` 5 s) and modest overscan (6). The settled 200 MB is the number that catches leaks. Memory did not depend on
+CPU speed: at 4× the peak was 394 MB against 428 MB at 1× on the same build, so one budget serves both. The GPU process
+held 22–34 MB of RAM here (an RTX 4090 driving a 4K display); an integrated GPU shares system RAM, so confirm the
+numbers on the reference laptop before CI enforces them.
 
 ## The shell and sidecar contract
 
@@ -224,17 +376,20 @@ already survives because an interrupted crawl resumes.
 
 - **TanStack Table 9** for the column model: sizing, ordering, pinning, visibility, multi-sort and filter state, all
   manual (server-side). Feed it only the rows of the pages in view; it never sees 1M rows.
-- **Row virtualisation for the 1M-row grid: our own fixed-height virtualiser over a windowed scroll space**, about
-  150 lines, rather than TanStack Virtual with patched internals. With a fixed row height the range maths is one
-  division; TanStack Virtual's strengths (measuring variable heights, scroll anchoring, reconciliation) are not needed
-  there, and its internals had to be patched to make the windowed space work. Keep TanStack Virtual for the
-  variable-height lists (inspector panels, grouped issues). If we would rather not own this, the alternative is to ask
-  TanStack for public hooks for the scroll extent and position read-back (two functions); the spike shows the rest
-  works.
-- **TanStack Query** for the page cache, with `staleTime: Infinity` for a finished crawl, a short `gcTime` (30 s kept the
-  cache to about 270 pages, about 22 MB of JS heap after a 54,000-row sweep), queries for the pages in view and
-  `prefetchQuery` for pages ahead, scaled by scroll speed. For a crawl that is still running, invalidate pages on a
-  progress tick instead of polling.
+- **Row virtualisation for the 1M-row grid: our own fixed-height virtualiser over a windowed scroll space**, rather than
+  TanStack Virtual with patched internals. The spike has one (`src/grid/useRowWindow.ts`, `?virt=own`, about 60 lines
+  over `scrollWindow.ts`); it scrolled with no dropped frames or empty rows and jumped in 47–68 ms. With a fixed row
+  height the range maths is one division, so nothing is stored per row. TanStack Virtual keeps a `Float64Array` of
+  2 × count, an array of count items and an object per row visited: 19 MB more JS heap at the first page, 94 MB after
+  scrolling all 1M rows. Keep TanStack Virtual for the variable-height lists (inspector panels, grouped issues), where
+  counts are small.
+- **TanStack Query** for the page cache, with `staleTime: Infinity` for a finished crawl, queries for the pages in view,
+  and `prefetchQuery` for pages ahead, scaled by scroll speed. **Cap it at about 20 pages with a `gcTime` of 5 s.** A
+  small live JS heap makes V8 run its major GCs more often, and those collect the DOM garbage too: the peak after a
+  50k-row fling fell from 428 to 266 MB, and the settled figure from 193 to 160 MB. For a crawl that is still running,
+  invalidate pages on a progress tick instead of polling.
+- **Overscan of about 6 rows.** Overscan 4 cut the fling peak by 20% (rows rendered at once multiply the garbage per data
+  change). 6 is a judgement between that and having rows ready during a fling; empty rows were not re-measured at 6.
 - **Grid requests as POST to one URL** (`/api/urls/query` with offset, limit, sort and filters in the body), so a
   session pays for one preflight instead of one per page. Pages of 200 rows worked well (other sizes were not tried):
   one or two requests cover a viewport, and a fling needs at most 8 in flight.
@@ -268,6 +423,9 @@ other grounds, all in favour of visx:
   Query, Table, Radix, Tailwind, cmdk, CodeMirror 6, Sonner and Vitest were not contradicted by anything measured.
 - Add: our own fixed-height virtualiser with a windowed scroll space and a custom scrollbar for the URL-scale grids,
   and a small SSE-over-fetch client (or the `eventsource-parser` package) instead of `EventSource`.
+- Tray: when hiding to the tray, set WebView2's `MemoryUsageTargetLevel` to Low and the controller's `IsVisible` to
+  false (through webview2-com, as in `src-tauri/src/main.rs`), and let the UI stop rendering while `document.hidden`.
+  That held 10–25 MB in RAM in the tray, with the crawl and the SSE stream still running.
 - TypeScript 7 (the native compiler) type-checked the spike without problems.
 - The sidecar's packaging is still open: the spike used a framework-dependent single file (needs the .NET runtime;
   ready in 100–150 ms). Self-contained adds the runtime to the download; Native AOT would start faster but needs the
@@ -297,23 +455,20 @@ other grounds, all in favour of visx:
    check): the 20–50 ms query, a preflight, and React mounting the shell and grid four times slower. The real app will
    carry more code on its first route, so keep that route's chunk small (the chart libraries were lazy-loaded here) and
    use the POST shape to drop the preflight.
-5. **UI memory is over the 300 MB budget if the budget counts every WebView2 process.** In the Tauri build the UI's
-   processes (host, WebView2 browser, GPU, renderer and utilities) held 267 MB private at start, before any scrolling,
-   and 455 MB after a 54,000-row sweep; the JS heap was 7 MB and 21 MB. On this machine the GPU process alone is about
-   150 MB (an RTX 4090 driving a 4K display); a laptop's will differ. The growth is in the renderer (62 MB to 240 MB),
-   and it is neither the JS heap nor the page cache: a critical memory-pressure signal returned almost none of it;
-   dropping the page cache (after the 30 s `gcTime`) lowered the JS heap to 13 MB but left the renderer at about
-   180 MB; and recycling row elements instead of mounting new ones made no difference. Sweeping further, new parts of
-   the list added 31–42 MB each time (renderer 218, 259, 290 and 324 MB after 50k, 100k, 150k and 200k rows) plus
-   about 3.5 MB of JS heap per 100,000 rows (small objects holding numbers, not diagnosed). Step 3 should agree what
-   the budget measures (the renderer, or everything, in which case WebView2's 267 MB baseline leaves little room) and
-   profile the renderer's growth with Chromium's memory-infra tracing before the grid is built for real.
+5. **Memory depends on three grid decisions and one measuring trap** (all in [Memory profile](#memory-profile)). The
+   virtualiser must store nothing per row: TanStack Virtual's storage grew to 94 MB of JS heap after 1M rows and
+   pushed the renderer past 1 GB while scrolling. The page cache must stay small, and overscan modest. Oilpan keeps its
+   high-water mark of free pages after heavy scrolling (41 MB committed with 4 MB live) and no setting tried returns
+   it, so the settled figure creeps up with the size of the biggest burst. The trap: never measure memory with
+   Playwright attached, because its Network domain keeps every response body in the renderer.
 6. **Live updates must stay out of the grid's React tree.** Holding stream state in a store outside React and letting
    only the live panel subscribe is what keeps a 2,900 pages/s crawl from re-rendering 60 rows twice a second. A naive
    `useState` at app level would re-render the grid on every event.
-7. **Rust picks the wrong MSVC on this machine.** `rustc` chose Visual Studio 18 Community, which has no C++ libraries
-   installed, and linking failed with `LNK1104: cannot open file 'msvcrt.lib'`. Building inside the VS 2019 Build Tools
-   environment (`app/spike/scripts/with-msvc.ps1`) works. Developer machines and CI need one known MSVC toolset.
+7. **Rust needs the C++ workload of the Visual Studio it picks.** `rustc` chose Visual Studio 2026 Community, which at
+   first had no C++ libraries, and linking failed with `LNK1104: cannot open file 'msvcrt.lib'`. The "Desktop
+   development with C++" workload (MSVC 14.51) is now installed on this machine and a plain `cargo build` links.
+   `app/spike/scripts/with-msvc.ps1`, which builds inside the VS 2019 Build Tools environment, is only needed on a
+   machine without that workload. Developer machines and CI need one known MSVC toolset.
 8. **Supply chain.** Two of the latest versions pinned here (`@tanstack/react-virtual` 3.14.25, `@tanstack/react-query`
    5.105.1) were published on the day of the spike. The real project should pin versions at least two weeks old.
    TanStack Table 9 is three months old (9.0.0 shipped on 4 August 2026), with a new API (`useTable`, `tableFeatures`)
@@ -341,13 +496,18 @@ npm run build                                   # type-check (TypeScript 7) and 
 node bench/smoke.mjs                            # sidecar guards and endpoints, no browser
 node bench/run.mjs --rates 1,4                  # Chromium bench (add --new-headless for the display's refresh rate)
 node bench/precision.mjs                        # row positions deep in the list (add window=0 to see the bug)
-powershell -ExecutionPolicy Bypass -File scripts/with-msvc.ps1 npx tauri build
+npx tauri build                                 # or via scripts/with-msvc.ps1 without the VS C++ workload
 node bench/tauri.mjs all                        # cold start (resets the spike's WebView2 profile), lifecycle, reconnect, WebView2 runs
 powershell -ExecutionPolicy Bypass -File scripts/dev-origin.ps1   # the Origin seen under `tauri dev`
+node bench/memprofile.mjs floor                 # WebView2's floor: an empty page in the same shell
+node bench/memauto.mjs base '{"delayMs":6000}'  # memory with nothing attached (add "dumps":true for allocators)
+node bench/memauto.mjs best '{"query":"virt=own&maxPages=20&gc=5000&overscan=6"}'   # with the fixes
+node bench/memauto.mjs tray '{"tray":"low+invisible"}'    # hidden in the tray (modes: plain, low, suspend, invisible)
 ```
 
 Results land in `app/spike/results/` (git-ignored). The page takes `?charts=visx|echarts|none`, `?live=0`,
-`?fetch=post`, `?sseInterval=50` and `?window=0` to switch variants.
+`?fetch=post`, `?sseInterval=50`, `?window=0`, `?virt=own`, `?maxPages=20`, `?gc=5000`, `?overscan=6`, `?pos=top`,
+`?contain=strict|cv|none`, `?recycle=1` and `?autopilot=1` to switch variants; in the Tauri build they go in `SPIKE_QUERY`.
 
 Where to look: the shell is `src-tauri/src/main.rs` (spawn, ready line, restart, exit modes, job object); the dummy
 sidecar is `sidecar/Program.cs` (guards, CORS, pages, SSE, parent and stdin watches); the grid is

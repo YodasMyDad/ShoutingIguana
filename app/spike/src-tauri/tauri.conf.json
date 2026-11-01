@@ -8,14 +8,7 @@
     "devUrl": "http://localhost:51873"
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "Shouting Iguana spike",
-        "width": 1536,
-        "height": 864
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:*; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
     }

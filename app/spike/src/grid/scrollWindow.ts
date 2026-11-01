@@ -6,7 +6,7 @@
 import type { Virtualizer } from '@tanstack/react-virtual';
 import { ROW_HEIGHT } from '../perf/probe';
 
-const params = new URLSearchParams(location.search);
+import { params } from '../params';
 export const WINDOW_PX = Number(params.get('window') ?? 2_000_000); // 0 turns windowing off
 const EDGE_PX = WINDOW_PX / 4;
 
