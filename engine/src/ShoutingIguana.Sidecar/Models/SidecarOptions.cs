@@ -55,4 +55,10 @@ internal sealed record SidecarOptions
     /// under a second; a file crafted to be slow is listed as unreadable instead of holding up the list.
     /// </summary>
     public TimeSpan SummaryTimeLimit { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// How many grid reads run at once: one a core, as each keeps a core busy. More queue, holding no thread, so a burst
+    /// of them never keeps the rest of the API (health, events, crawl control) waiting.
+    /// </summary>
+    public int GridReads { get; init; } = Math.Max(2, Environment.ProcessorCount);
 }

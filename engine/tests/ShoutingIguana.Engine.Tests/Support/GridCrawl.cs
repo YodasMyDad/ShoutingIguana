@@ -17,8 +17,19 @@ public sealed class GridCrawl : IAsyncLifetime
     public const int PAGES = 240;
 
     private readonly CrawlFiles _files = new();
+    private readonly Lazy<string> _changed;
+
+    public GridCrawl() => _changed = new Lazy<string>(() =>
+    {
+        var copy = Copy();
+        GridQueries.Stamp(copy);
+        return copy;
+    });
 
     public SyntheticSiteServer Server { get; private set; } = null!;
+
+    /// <summary>A copy continued since its analysis, which tests only read: its grids read the crawl's own tables.</summary>
+    public string Changed => _changed.Value;
 
     public string Path { get; private set; } = string.Empty;
 

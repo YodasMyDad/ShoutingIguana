@@ -30,9 +30,9 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
             Assert.Equal(row["url"], url.Url);
             Assert.Equal(row["isInternal"], url.IsInternal);
             Assert.Equal(row["type"], Name(url.Type));
-            Assert.Equal(row["source"], Name(url.Discovery.Source));
+            Assert.Equal(row["source"], Name(url.Discovery.Source!.Value));
             Assert.Equal(row["depth"], (long?)url.Discovery.Depth);
-            Assert.True(Equals(row["outcome"], url.Response is { } response ? Name(response.Outcome) : null), what);
+            Assert.True(Equals(row["outcome"], url.Response is { Outcome: { } outcome } ? Name(outcome) : null), what);
             Assert.True(Equals(row["statusCode"], (long?)url.Response?.StatusCode), what);
             Assert.True(Equals(row["responseMs"], (long?)url.Response?.ResponseMs), what);
             Assert.True(Equals(row["ttfbMs"], (long?)url.Response?.TtfbMs), what);

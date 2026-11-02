@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using ShoutingIguana.Cli.Benchmarking.Models;
+using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
@@ -8,14 +10,44 @@ using ShoutingIguana.Engine.Storage.Models;
 namespace ShoutingIguana.Cli.Benchmarking;
 
 /// <summary>
-/// Times the grids' readers on a real crawl file, as the UI calls them: the first page and a page half way down, for every
-/// sort, for filters common and rare (up to three at once), for search, facets, the inspector, its links, and a check's
-/// groups and rows. Each read runs on a fresh connection with nothing cached, as the first read of a filter set does; the
-/// file itself is warm, as it is once a crawl is open.
+/// Times the grids' readers on a real crawl file, as the UI calls them: the first page, the page half way down and the one
+/// just past it (read from the far end), for every sort, for filters common and rare (up to three at once), for text
+/// filters, regular expressions and search (common and rare, up to three), for facets, the inspector, its links (of the
+/// most linked URLs, by kind), a check's groups and rows, and again without the URL summary, as a crawl running or
+/// continued since its analysis is read. Each read runs on a fresh connection with nothing cached, as the first read of a
+/// filter set does; the file itself is warm, as it is once a crawl is open.
 /// </summary>
 /// <param name="only">Run only the reads whose name contains this text (ignoring case); all of them when null.</param>
 internal sealed class ReaderBenchmark(string path, int runs, Action<string> progress, string? only = null)
 {
+    /// <summary>
+    /// Each class of read's gate at 100k URLs, p95 in ms: what CI holds the 100k benchmark crawl to. A read grows with the
+    /// crawl as its class does, so a read at its gate on CI's runner would take about the 1M budget on 1M URLs:
+    /// <list type="bullet">
+    /// <item>gate = 1,000 ms ÷ the class's growth × 2. The growth is its slowest read's p95 at 1M over its slowest at 100k,
+    /// measured on a 32-core desktop, and at least 10, linear, as a read that regresses to a scan grows. The runner's core
+    /// is taken as twice as slow as the desktop's.</item>
+    /// <item>Two classes are slower than 1 s at 1M today, and held to that instead, so they can't get slower: the facets
+    /// without the summary (1.35 s at 1M, a ceiling of 1.5 s), and links of a kind to a URL that has a million of them
+    /// (1.8 s, a ceiling of 2 s, until the links' indexes hold their kind).</item>
+    /// </list>
+    /// engine/README.md has the measurements.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, double> GATE_MS = new Dictionary<string, double>(StringComparer.Ordinal)
+    {
+        ["indexed"] = 200,
+        ["scan"] = 200,
+        ["filter"] = 110,
+        ["text"] = 190,
+        ["check"] = 75,
+        ["facets"] = 200,
+        ["inspector"] = 200,
+        ["links"] = 200,
+        ["links-kind"] = 240,
+        ["crawl"] = 185,
+        ["crawl-facets"] = 245
+    };
+
     /// <summary>The Overview columns, which every grid read fetches.</summary>
     private static readonly string[] COLUMNS = ["url", "statusCode", "indexability", "issues", "title", "wordCount", "responseMs", "depth", "inlinks", "sizeBytes"];
 
@@ -28,57 +60,152 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         {
             foreach (var descending in new[] { false, true })
             {
-                Grid($"Sort by {column.Id} {(descending ? "desc" : "asc")}", new UrlQuery { Sort = [new UrlSort(column.Id, descending)] });
+                Grid($"Sort by {column.Id} {(descending ? "desc" : "asc")}", Indexed(column.Id) ? "indexed" : "scan", new UrlQuery { Sort = [new UrlSort(column.Id, descending)] });
             }
         }
 
-        Grid("Pages by response time (a common filter)", Query([In("type", "page")], "responseMs", descending: true));
-        Grid("Status 500 by response time (a rare filter)", Query([Number("statusCode", FilterOperator.Eq, 500)], "responseMs", descending: true));
-        Grid("4xx by linking pages", Query([In("statusClass", "4xx")], "linkingPages", descending: true));
-        Grid("Noindex by words", Query([In("indexability", "noindex")], "wordCount", descending: false));
-        Grid("Indexable internal pages, thinnest first (three common filters)",
+        Grid("Pages by response time (a common filter)", "filter", Query([In("type", "page")], "responseMs", descending: true));
+        Grid("Status 500 by response time (a rare filter)", "filter", Query([Number("statusCode", FilterOperator.Eq, 500)], "responseMs", descending: true));
+        Grid("4xx by linking pages", "filter", Query([In("statusClass", "4xx")], "linkingPages", descending: true));
+        Grid("Noindex by words", "filter", Query([In("indexability", "noindex")], "wordCount", descending: false));
+        Grid("Indexable internal pages, thinnest first (three common filters)", "filter",
             Query([Boolean("isInternal", true), In("type", "page"), Boolean("indexable", true)], "wordCount", descending: false));
-        Grid("Responses of 500 ms or more by size", Query([Number("responseMs", FilterOperator.Gte, 500)], "sizeBytes", descending: true));
-        Grid("Depth 8 or more by size", Query([new UrlFilter("depth", FilterOperator.Between) { Min = 8 }], "sizeBytes", descending: true));
-        Grid("Images by size (a rare type)", Query([In("type", "image")], "sizeBytes", descending: true));
-        Grid("Redirects by final status", Query([In("statusClass", "3xx")], "finalStatusCode", descending: true));
-        Grid("URLs with errors, most first", Query([Number("errors", FilterOperator.Gte, 1)], "errors", descending: true));
-        Grid("Titles over 60 by length", Query([Number("titleLength", FilterOperator.Gt, 60)], "titleLength", descending: true));
-        Grid("Not in a sitemap, internal, by inlinks", Query([Boolean("inSitemap", false), Boolean("isInternal", true)], "inlinks", descending: false));
-        Grid("Internal 404 pages by response time (three filters, one rare)",
+        Grid("Responses of 500 ms or more by size", "filter", Query([Number("responseMs", FilterOperator.Gte, 500)], "sizeBytes", descending: true));
+        Grid("Depth 8 or more by size", "filter", Query([new UrlFilter("depth", FilterOperator.Between) { Min = 8 }], "sizeBytes", descending: true));
+        Grid("Images by size (a rare type)", "filter", Query([In("type", "image")], "sizeBytes", descending: true));
+        Grid("Redirects by final status", "filter", Query([In("statusClass", "3xx")], "finalStatusCode", descending: true));
+        Grid("URLs with errors, most first", "filter", Query([Number("errors", FilterOperator.Gte, 1)], "errors", descending: true));
+        Grid("Titles over 60 by length", "filter", Query([Number("titleLength", FilterOperator.Gt, 60)], "titleLength", descending: true));
+        Grid("Not in a sitemap, internal, by inlinks", "filter", Query([Boolean("inSitemap", false), Boolean("isInternal", true)], "inlinks", descending: false));
+        Grid("Internal 404 pages by response time (three filters, one rare)", "filter",
             Query([In("type", "page"), Boolean("isInternal", true), Number("statusCode", FilterOperator.Eq, 404)], "responseMs", descending: true));
-        Grid("Not 2xx, by URL (a negative filter)", Query([new UrlFilter("statusClass", FilterOperator.NotIn) { Values = [FilterValue.Of("2xx")] }], "url", descending: false));
-        Grid("Title contains text, by issues", Query([Text("title", FilterOperator.Contains, "Product 12")], "issues", descending: true));
-        Grid("URL matches a regular expression, by depth", Query([Text("url", FilterOperator.Regex, "/p/12[0-9]{3}$")], "depth", descending: false));
-        Grid("Search, by URL", new UrlQuery { Search = "kestrel", Sort = [new UrlSort("url")] });
+        Grid("Not 2xx, by URL (a negative filter)", "filter", Query([new UrlFilter("statusClass", FilterOperator.NotIn) { Values = [FilterValue.Of("2xx")] }], "url", descending: false));
+
+        // A selective filter on a column without an index, against an indexed sort: the walk reads most of the index.
+        Grid("External URLs by size (the slowest walk)", "filter", Query([Boolean("isInternal", false)], "sizeBytes", descending: true));
+
+        Grid("Title contains text, by issues (rare)", "text", Query([Text("title", FilterOperator.Contains, "Product 12")], "issues", descending: true));
+        Grid("Title contains a common word, by depth", "text", Query([Text("title", FilterOperator.Contains, "product")], "depth", descending: false));
+        Grid("Title doesn't contain a common word, by depth", "text", Query([Text("title", FilterOperator.NotContains, "product")], "depth", descending: false));
+        Grid("URL matches a regular expression, by depth (rare)", "text", Query([Text("url", FilterOperator.Regex, "/p/12[0-9]{3}$")], "depth", descending: false));
+        Grid("URL matches a common regular expression, by depth", "text", Query([Text("url", FilterOperator.Regex, @"/p/\d+$")], "depth", descending: false));
+        Grid("Title matches a common regular expression, by followed inlinks (no index)", "text",
+            Query([Text("title", FilterOperator.Regex, @"Product \d+")], "followedInlinks", descending: true));
+        Grid("Three common text filters, by depth", "text",
+            Query([Text("title", FilterOperator.Contains, "product"), Text("url", FilterOperator.Contains, "/p/"), Number("h1Count", FilterOperator.Eq, 1)], "depth", descending: false));
+        Grid("Search, by URL (rare)", "text", new UrlQuery { Search = "kestrel", Sort = [new UrlSort("url")] });
+        Grid("Search for a common word, by URL", "text", new UrlQuery { Search = "product", Sort = [new UrlSort("url")] });
 
         var checks = IssueReader.ReadCounts(path).Where(check => check.Value > 0).OrderByDescending(check => check.Value).ToList();
         if (checks.Count > 0)
         {
             var biggest = checks[0].Key;
-            Grid($"Flagged by {biggest}, by inlinks", Query([new UrlFilter("check", FilterOperator.In) { Values = [FilterValue.Of(biggest)] }], "inlinks", descending: true));
-            Timed($"Groups of {biggest}", "groups", null, () => IssueGroupReader.ReadGroups(path, biggest, 0, UrlGridReader.DEFAULT_LIMIT));
+            Grid($"Flagged by {biggest}, by inlinks", "check", Query([new UrlFilter("check", FilterOperator.In) { Values = [FilterValue.Of(biggest)] }], "inlinks", descending: true));
+            Timed($"Groups of {biggest}", "groups", "check", null, () => IssueGroupReader.ReadGroups(path, biggest, 0, UrlGridReader.DEFAULT_LIMIT));
             var rows = IssueGroupReader.ReadRows(path, biggest, new UrlQuery { Limit = 1 })?.Page?.Matching ?? 0;
-            Paged($"Rows of {biggest}, by inlinks", "rows", rows,
+            Paged($"Rows of {biggest}, by inlinks", "rows", "check", rows,
                 offset => IssueGroupReader.ReadRows(path, biggest, new UrlQuery { Columns = [.. COLUMNS, "detail"], Sort = [new UrlSort("inlinks", true)], Offset = offset }));
         }
 
-        Timed("Facets of every URL", "facets", all.Total, () => UrlGridReader.Facets(path, new UrlFacetQuery()));
-        Timed("Facets of the pages", "facets", null, () => UrlGridReader.Facets(path, new UrlFacetQuery { Filters = [In("type", "page")] }));
+        Timed("Facets of every URL", "facets", "facets", all.Total, () => UrlGridReader.Facets(path, new UrlFacetQuery()));
+        Timed("Facets of the pages", "facets", "facets", null, () => UrlGridReader.Facets(path, new UrlFacetQuery { Filters = [In("type", "page")] }));
+        Timed("Facets of a common title filter", "facets", "facets", null, () => UrlGridReader.Facets(path, new UrlFacetQuery { Filters = [Text("title", FilterOperator.Contains, "product")] }));
 
         var start = all.Rows.Count > 0 ? all.Rows[0].Id : 1;
         var startUrl = all.Rows.Count > 0 ? (string)all.Rows[0].Values[1]! : string.Empty;
-        Timed("Look up a URL", "lookup", null, () => UrlGridReader.Lookup(path, startUrl));
-        Timed("Inspect the start URL", "inspector", null, () => UrlInspectorReader.Read(path, start));
-        Timed("Inspect a URL half way through the crawl", "inspector", null, () => UrlInspectorReader.Read(path, (int)Math.Max(1, all.Total / 2)));
-        var inlinks = UrlInspectorReader.ReadLinks(path, start, LinkDirection.Inlinks, new LinkQuery { Limit = 1 })?.Total ?? 0;
-        Paged("Inlinks of the start URL", "links", inlinks, offset => UrlInspectorReader.ReadLinks(path, start, LinkDirection.Inlinks, new LinkQuery { Offset = offset }));
-        var hyperlinks = UrlInspectorReader.ReadLinks(path, start, LinkDirection.Inlinks, new LinkQuery { Kinds = [LinkKind.Hyperlink], Limit = 1 })?.Total ?? 0;
-        Paged("Hyperlinks to the start URL", "links", hyperlinks,
-            offset => UrlInspectorReader.ReadLinks(path, start, LinkDirection.Inlinks, new LinkQuery { Kinds = [LinkKind.Hyperlink], Offset = offset }));
-        Timed("Outlinks of the start URL", "links", null, () => UrlInspectorReader.ReadLinks(path, start, LinkDirection.Outlinks, new LinkQuery()));
+        Timed("Look up a URL", "lookup", "inspector", null, () => UrlGridReader.Lookup(path, startUrl));
+        Timed("Inspect the start URL", "inspector", "inspector", null, () => UrlInspectorReader.Read(path, start));
+        Timed("Inspect a URL half way through the crawl", "inspector", "inspector", null, () => UrlInspectorReader.Read(path, (int)Math.Max(1, all.Total / 2)));
+        if (MostNamed() is { } named)
+        {
+            Timed("Inspect the URL most issues name", "inspector", "inspector", null, () => UrlInspectorReader.Read(path, named));
+        }
+
+        Links("Inlinks of the start URL", start, []);
+        Links("Hyperlinks to the start URL", start, [LinkKind.Hyperlink]);
+        Links("Canonical links to the start URL (a few among a million)", start, [LinkKind.Canonical]);
+        Timed("Outlinks of the start URL", "links", "links", null, () => UrlInspectorReader.ReadLinks(path, start, LinkDirection.Outlinks, new LinkQuery()));
+
+        // The other URLs every page links to: a menu's targets, the stylesheet.
+        if (First(new UrlQuery { Sort = [new UrlSort("inlinks", true)], Limit = 2 }, other: start) is { } linked)
+        {
+            Links("Hyperlinks to the most linked page", linked, [LinkKind.Hyperlink]);
+        }
+
+        if (First(new UrlQuery { Filters = [In("type", "stylesheet")], Limit = 1 }) is { } stylesheet)
+        {
+            Links("Stylesheet links to the stylesheet", stylesheet, [LinkKind.Stylesheet]);
+        }
+
+        WithoutSummary();
         return _cases;
     }
+
+    /// <summary>
+    /// The grids' reads as a crawl without its URL summary has them, from the crawl's own tables: one running, or continued
+    /// since its analysis. The file isn't changed: the reads only take it as having none.
+    /// </summary>
+    private void WithoutSummary()
+    {
+        GridReadContext.ReadWithoutSummary = true;
+        try
+        {
+            Grid("Without the summary: crawl order", "crawl", new UrlQuery());
+            Grid("Without the summary: sort by status", "crawl", new UrlQuery { Sort = [new UrlSort("statusCode")] });
+            Grid("Without the summary: sort by response time desc", "crawl", new UrlQuery { Sort = [new UrlSort("responseMs", true)] });
+            Grid("Without the summary: pages by response time", "crawl", Query([In("type", "page")], "responseMs", descending: true));
+            Grid("Without the summary: 4xx by depth", "crawl", Query([In("statusClass", "4xx")], "depth", descending: false));
+            Grid("Without the summary: title contains a common word, by URL", "crawl", Query([Text("title", FilterOperator.Contains, "product")], "url", descending: false));
+            Grid("Without the summary: search for a common word", "crawl", new UrlQuery { Search = "product" });
+            Timed("Without the summary: facets of every URL", "facets", "crawl-facets", null, () => UrlGridReader.Facets(path, new UrlFacetQuery()));
+            Timed("Without the summary: facets of the pages", "facets", "crawl-facets", null, () => UrlGridReader.Facets(path, new UrlFacetQuery { Filters = [In("type", "page")] }));
+        }
+        finally
+        {
+            GridReadContext.ReadWithoutSummary = false;
+        }
+    }
+
+    /// <summary>A URL many issues name as the other URL involved: the largest group of a check grouped by the other URL.</summary>
+    private int? MostNamed()
+    {
+        var best = IssueReader.ReadCounts(path)
+            .Where(check => check.Value > 0 && IssueCatalog.Find(check.Key)?.Grouping == IssueGrouping.RelatedUrl)
+            .Select(check => IssueGroupReader.ReadGroups(path, check.Key, 0, 1)?.Groups.FirstOrDefault())
+            .OfType<IssueGroup>()
+            .Where(group => group.RelatedUrlId is not null)
+            .MaxBy(group => group.Pages);
+        return best?.RelatedUrlId;
+    }
+
+    /// <summary>The first URL the query lists, but for <paramref name="other"/>; null without the URL summary.</summary>
+    private int? First(UrlQuery query, int? other = null)
+    {
+        try
+        {
+            return UrlGridReader.Query(path, query).Rows.Select(row => (int?)row.Id).FirstOrDefault(id => id != other);
+        }
+        catch (NeedsAnalysisException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A URL's inlinks of some kinds (every kind when none), a page at a time.</summary>
+    private void Links(string name, int urlId, IReadOnlyList<LinkKind> kinds)
+    {
+        if (!Wanted(name))
+        {
+            return;
+        }
+
+        var total = UrlInspectorReader.ReadLinks(path, urlId, LinkDirection.Inlinks, new LinkQuery { Kinds = kinds, Limit = 1 })?.Total ?? 0;
+        Paged(name, "links", kinds.Count == 0 ? "links" : "links-kind", total,
+            offset => UrlInspectorReader.ReadLinks(path, urlId, LinkDirection.Inlinks, new LinkQuery { Kinds = kinds, Offset = offset }));
+    }
+
+    /// <summary>An index of the URL summary gives the column's order, the row id's and the URL's included.</summary>
+    private static bool Indexed(string column) => column is "id" or "url" || UrlColumns.Find(column, issueColumns: false) is { Indexed: true };
 
     private static UrlQuery Query(UrlFilter[] filters, string sort, bool descending) => new() { Filters = filters, Sort = [new UrlSort(sort, descending)] };
 
@@ -90,7 +217,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
 
     private static UrlFilter Text(string column, FilterOperator op, string value) => new(column, op) { Value = FilterValue.Of(value) };
 
-    private void Grid(string name, UrlQuery query)
+    private void Grid(string name, string readClass, UrlQuery query)
     {
         if (!Wanted(name))
         {
@@ -109,11 +236,11 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             return;
         }
 
-        Paged(name, "grid", matching, offset => UrlGridReader.Query(path, shown with { Offset = offset }));
+        Paged(name, "grid", readClass, matching, offset => UrlGridReader.Query(path, shown with { Offset = offset }));
     }
 
-    /// <summary>A paged read: its first page, and the page half way down when there's more than one.</summary>
-    private void Paged(string name, string kind, long rows, Func<int, object?> read)
+    /// <summary>A paged read: its first page, and the page half way down and the one just past it when there's more than one.</summary>
+    private void Paged(string name, string kind, string readClass, long rows, Func<int, object?> read)
     {
         if (!Wanted(name))
         {
@@ -121,11 +248,17 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         }
 
         var first = Time(() => read(0));
-        (double P50, double P95)? half = rows > UrlGridReader.DEFAULT_LIMIT ? Time(() => read((int)(rows / 2))) : null;
-        Add(new ReaderBenchCase(name, kind, rows, first.P50, first.P95, half?.P50, half?.P95));
+        (double P50, double P95)? half = null, pastHalf = null;
+        if (rows > UrlGridReader.DEFAULT_LIMIT)
+        {
+            half = Time(() => read((int)(rows / 2)));
+            pastHalf = Time(() => read((int)(rows / 2) + 1));
+        }
+
+        Add(new ReaderBenchCase(name, kind, readClass, rows, first.P50, first.P95, half?.P50, half?.P95, pastHalf?.P50, pastHalf?.P95));
     }
 
-    private void Timed(string name, string kind, long? rows, Func<object?> read)
+    private void Timed(string name, string kind, string readClass, long? rows, Func<object?> read)
     {
         if (!Wanted(name))
         {
@@ -133,7 +266,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         }
 
         var (p50, p95) = Time(() => read());
-        Add(new ReaderBenchCase(name, kind, rows, p50, p95, null, null));
+        Add(new ReaderBenchCase(name, kind, readClass, rows, p50, p95, null, null, null, null));
     }
 
     private bool Wanted(string name) => only is null || name.Contains(only, StringComparison.OrdinalIgnoreCase);
@@ -141,8 +274,8 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     private void Add(ReaderBenchCase result)
     {
         _cases.Add(result);
-        var half = result.HalfP95Ms is { } halfP95 ? $"  half way {result.HalfP50Ms:N1} / {halfP95:N1} ms" : string.Empty;
-        progress($"  {result.FirstP95Ms,8:N1} ms  {result.Name} ({result.Matching?.ToString("N0") ?? "-"} rows): first {result.FirstP50Ms:N1} / {result.FirstP95Ms:N1} ms{half}");
+        var half = result.HalfP95Ms is { } halfP95 ? $"  half way {result.HalfP50Ms:N1} / {halfP95:N1} ms, past it {result.PastHalfP50Ms:N1} / {result.PastHalfP95Ms:N1} ms" : string.Empty;
+        progress($"  {result.WorstP95Ms,8:N1} ms  {result.Name} ({result.Matching?.ToString("N0") ?? "-"} rows): first {result.FirstP50Ms:N1} / {result.FirstP95Ms:N1} ms{half}");
     }
 
     /// <summary>p50 and p95 over the runs, after one untimed read that warms the file and the code.</summary>

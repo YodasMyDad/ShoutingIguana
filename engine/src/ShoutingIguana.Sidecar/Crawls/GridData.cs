@@ -4,16 +4,26 @@ using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Sidecar.Api;
 using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Errors;
+using ShoutingIguana.Sidecar.Models;
+using ShoutingIguana.Sidecar.Serialization;
 
 namespace ShoutingIguana.Sidecar.Crawls;
 
 /// <summary>
 /// The grids' reads of a crawl file, through the engine's readers: the URL grid, its facets and lookup, the inspector
 /// with its links and source, and a check's groups and rows. Counts are kept in one cache for every crawl, keyed so a
-/// crawl continued or analysed again counts afresh.
+/// crawl continued or analysed again counts afresh, and each thing is counted once however many requests want it.
+/// <list type="bullet">
+/// <item>A request given up (the client closed its connection, as a grid scrolled on does) stops its read within
+/// milliseconds: the engine interrupts the statement running.</item>
+/// <item>At most <see cref="SidecarOptions.GridReads"/> run at once, each on a thread of its own; the rest queue holding
+/// no thread, so the API's other calls never wait behind them, and one given up while it queues never runs.</item>
+/// </list>
 /// </summary>
-internal sealed class GridData(CrawlManager crawls, ReadCache cache)
+internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOptions options)
 {
+    private readonly SemaphoreSlim _reads = new(options.GridReads, options.GridReads);
+
     /// <summary>The columns for the column chooser and the filter bar, a check's own last.</summary>
     public static IReadOnlyList<UrlColumnDto> Columns { get; } =
     [
@@ -27,7 +37,10 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache)
             UrlGridReader.Columns.All(other => other.Id != column.Id)))
     ];
 
-    public UrlPageDto Query(string id, GridQueryRequest? request)
+    /// <summary>Tests only: called as each read starts, on its own thread, with the token that stops it.</summary>
+    internal Action<CancellationToken>? ReadStarting { get; set; }
+
+    public async Task<UrlPageDto> QueryAsync(string id, GridQueryRequest? request, CancellationToken cancellationToken)
     {
         if (request?.Group is not null)
         {
@@ -36,23 +49,25 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache)
 
         var path = crawls.PathOf(id);
         var query = GridRequests.Query(request);
-        return Page(Read(() => UrlGridReader.Query(path, query, cache)));
+        return Page(await ReadAsync(token => UrlGridReader.Query(path, query, cache, token), cancellationToken).ConfigureAwait(false));
     }
 
-    public FacetsDto Facets(string id, FacetsRequest? request)
+    public async Task<FacetsDto> FacetsAsync(string id, FacetsRequest? request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         var filters = GridRequests.Filters(request?.Filters, errors);
+        var asked = GridRequests.Facets(request?.Facets, errors);
         GridRequests.ThrowIfAny(errors);
-        var facets = Read(() => UrlGridReader.Facets(path, new UrlFacetQuery { Filters = filters, Search = request?.Search, Facets = request?.Facets ?? [] }, cache));
+        var query = new UrlFacetQuery { Filters = filters, Search = request?.Search, Facets = asked };
+        var facets = await ReadAsync(token => UrlGridReader.Facets(path, query, cache, token), cancellationToken).ConfigureAwait(false);
         return new FacetsDto(facets.Matching, facets.Total, facets.Summary, facets.Unavailable,
             facets.Facets.ToDictionary(facet => facet.Key, facet => (IReadOnlyList<FacetBucketDto>)
                 [.. facet.Value.Select(bucket => new FacetBucketDto(GridRequests.Element(bucket.Value), bucket.Count, GridRequests.Dto(bucket.Filter)) { Min = bucket.Min, Max = bucket.Max })],
                 StringComparer.Ordinal));
     }
 
-    public UrlRef Lookup(string id, UrlLookupRequest request)
+    public async Task<UrlRef> LookupAsync(string id, UrlLookupRequest request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
         if (string.IsNullOrWhiteSpace(request.Url))
@@ -60,13 +75,16 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache)
             throw Problems.InvalidQuery(new Dictionary<string, IReadOnlyList<string>> { ["url"] = ["Give a URL, or a path that starts with /."] });
         }
 
-        return Read(() => UrlGridReader.Lookup(path, request.Url)) ?? throw Problems.UrlNotFound();
+        return await ReadAsync(token => UrlGridReader.Lookup(path, request.Url, token), cancellationToken).ConfigureAwait(false) ?? throw Problems.UrlNotFound();
     }
 
-    public UrlDetailDto Url(string id, int urlId)
+    public async Task<UrlDetailDto> UrlAsync(string id, UrlRequest request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
-        var url = Read(() => UrlInspectorReader.Read(path, urlId, cache)) ?? throw Problems.UrlNotFound();
+        var url = (GridRequests.UrlId(request.UrlId) is { } urlId
+                      ? await ReadAsync(token => UrlInspectorReader.Read(path, urlId, cache, token), cancellationToken).ConfigureAwait(false)
+                      : null)
+                  ?? throw Problems.UrlNotFound();
         var indexability = url.Indexability;
         return new UrlDetailDto(
             url.Id, url.Url, url.IsInternal, url.Type, url.Discovery,
@@ -77,33 +95,47 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache)
             new SourceStateDto(url.SourceStored));
     }
 
-    public LinkPageDto Links(string id, int urlId, LinkDirection direction, LinksRequest? request)
+    public async Task<LinkPageDto> LinksAsync(string id, LinkDirection direction, LinksRequest request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
+        var urlId = GridRequests.UrlId(request.UrlId);
         var query = new LinkQuery
         {
-            Kinds = GridRequests.Kinds(request?.Kinds),
-            Offset = request?.Offset ?? 0,
-            Limit = request?.Limit ?? UrlGridReader.DEFAULT_LIMIT,
-            After = request?.After
+            Kinds = GridRequests.Kinds(request.Kinds),
+            Offset = request.Offset ?? 0,
+            Limit = request.Limit ?? UrlGridReader.DEFAULT_LIMIT,
+            After = request.After
         };
-        var page = Read(() => UrlInspectorReader.ReadLinks(path, urlId, direction, query, cache)) ?? throw Problems.UrlNotFound();
+        var page = (urlId is { } known
+                       ? await ReadAsync(token => UrlInspectorReader.ReadLinks(path, known, direction, query, cache, token), cancellationToken).ConfigureAwait(false)
+                       : null)
+                   ?? throw Problems.UrlNotFound();
         return new LinkPageDto([.. page.Rows.Select(LinkRowDto.From)], page.Offset, page.Total, page.Next);
     }
 
-    public HtmlSourceDto Source(string id, int urlId)
+    /// <summary>The stored HTML, written as it's unpacked (<see cref="HtmlSourceResult"/>), or why there's none.</summary>
+    public async Task<IResult> SourceAsync(string id, UrlRequest request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
-        var source = Read(() => UrlInspectorReader.ReadSource(path, urlId)) ?? throw Problems.UrlNotFound();
-        return source.Stored
-            ? new HtmlSourceDto(true) { Html = source.Html, Bytes = source.Bytes, Truncated = source.Truncated }
-            : new HtmlSourceDto(false) { Reason = source.Missing == HtmlSourceMissing.NotStored ? "notStored" : "notPage" };
+        var source = (GridRequests.UrlId(request.UrlId) is { } urlId
+                         ? await ReadAsync(token => UrlInspectorReader.OpenSource(path, urlId, token), cancellationToken).ConfigureAwait(false)
+                         : null)
+                     ?? throw Problems.UrlNotFound();
+        if (source.Missing is { } missing)
+        {
+            source.Dispose();
+            return TypedResults.Json(new HtmlSourceDto(false) { Reason = missing == HtmlSourceMissing.NotStored ? "notStored" : "notPage" },
+                SidecarJsonContext.Default.HtmlSourceDto);
+        }
+
+        return new HtmlSourceResult(source);
     }
 
-    public IssueGroupPageDto Groups(string id, string checkId, GroupsRequest? request)
+    public async Task<IssueGroupPageDto> GroupsAsync(string id, string checkId, GroupsRequest? request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
-        var page = Read(() => IssueGroupReader.ReadGroups(path, checkId, request?.Offset ?? 0, request?.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache))
+        var page = await ReadAsync(token => IssueGroupReader.ReadGroups(path, checkId, request?.Offset ?? 0, request?.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token),
+                       cancellationToken).ConfigureAwait(false)
                    ?? throw Problems.NotAnalyzed();
         if (page.Total is null && IssueCatalog.Find(checkId) is null)
         {
@@ -113,12 +145,13 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache)
         return new IssueGroupPageDto(page.CheckId, GridRequests.Grouping(page.Grouping), page.Total, page.GroupCount, page.Offset, page.Groups);
     }
 
-    public UrlPageDto Rows(string id, string checkId, GridQueryRequest? request)
+    public async Task<UrlPageDto> RowsAsync(string id, string checkId, GridQueryRequest? request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
         var query = GridRequests.Query(request);
         var group = request?.Group is { } key ? new IssueGroupKey(key.Detail, key.RelatedUrlId) : null;
-        var rows = Read(() => IssueGroupReader.ReadRows(path, checkId, query, group, cache)) ?? throw Problems.NotAnalyzed();
+        var rows = await ReadAsync(token => IssueGroupReader.ReadRows(path, checkId, query, group, cache, token), cancellationToken).ConfigureAwait(false)
+                   ?? throw Problems.NotAnalyzed();
         if (rows.Page is { } page)
         {
             return Page(page);
@@ -132,6 +165,27 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache)
 
     private static UrlPageDto Page(UrlPage page) =>
         new(page.Columns, new UrlRowsDto(page.Columns, page.Rows), page.Offset, page.Matching, page.Total, page.Next, page.Summary, page.Unavailable);
+
+    /// <summary>
+    /// A read, once one of the read slots is free, on a thread of its own: SQLite's reads block, and a pool thread blocked
+    /// is one the rest of the API waits for. Its refusals come back as the problems the UI keys on.
+    /// </summary>
+    private async Task<T> ReadAsync<T>(Func<CancellationToken, T> read, CancellationToken cancellationToken)
+    {
+        await _reads.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await Task.Factory.StartNew(() =>
+            {
+                ReadStarting?.Invoke(cancellationToken);
+                return Read(() => read(cancellationToken));
+            }, cancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default).ConfigureAwait(false);
+        }
+        finally
+        {
+            _reads.Release();
+        }
+    }
 
     /// <summary>A read, its refusals as the problems the UI keys on.</summary>
     private static T Read<T>(Func<T> read)

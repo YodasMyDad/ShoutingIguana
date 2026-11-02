@@ -125,12 +125,18 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
             {"filters":[{"column":"check","op":"in","values":["title-too-long"]}],"sort":[{"column":"inlinks","desc":true}]}
             """)), HttpStatusCode.Conflict, "needs-analysis");
         Assert.Equal("crawlChanged", (string?)refused["reason"]);
-        Assert.Equal(["check", "inlinks"], refused["columns"]!.AsArray().Select(column => (string?)column));
+        Assert.Equal(["inlinks"], refused["columns"]!.AsArray().Select(column => (string?)column));
+
+        // The check filter reads the last analysis's issues, as a check's rows do, so a group's count still opens its URLs.
+        var check = new JsonObject { ["filters"] = JsonNode.Parse("""[{"column":"check","op":"in","values":["title-too-long"]}]"""), ["limit"] = 1 };
+        var rows = await PostOkAsync($"api/crawls/{changed}/issues/title-too-long/rows", new JsonObject { ["limit"] = 1 });
+        Assert.Equal((long?)rows["total"], (long?)(await PostOkAsync($"api/crawls/{changed}/urls", check))["matching"]);
 
         var neverAnalysed = TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.FreshId}/urls/facets", JsonNode.Parse("""
-            {"filters":[{"column":"issues","op":"gt","value":0}]}
+            {"filters":[{"column":"issues","op":"gt","value":0},{"column":"check","op":"in","values":["title-too-long"]}]}
             """)), HttpStatusCode.Conflict, "needs-analysis");
         Assert.Equal("notAnalyzed", (string?)neverAnalysed["reason"]);
+        Assert.Equal(["issues", "check"], neverAnalysed["columns"]!.AsArray().Select(column => (string?)column));
     }
 
     [Fact]
@@ -184,7 +190,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
     [Fact]
     public async Task TheInspectorGivesOneUrlInFull()
     {
-        var product = await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/urls/{IdOf("/p/7")}");
+        var product = await InspectAsync(IdOf("/p/7"));
         Assert.Equal(
             ["id", "url", "isInternal", "type", "discovery", "response", "redirects", "indexability", "content", "limits", "links", "headers", "structuredData",
              "hreflang", "issues", "namedBy", "summary", "source"],
@@ -207,56 +213,72 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Equal("""{"test":"noindex","outcome":"pass","meta":false,"header":false}""", tests[2]!.ToJsonString());
         Assert.Equal(grid.Url("/p/7"), (string?)tests[3]!["canonical"]!["url"]);
 
-        var gone = await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/urls/{IdOf("/plants/gone")}");
+        var gone = await InspectAsync(IdOf("/plants/gone"));
         Assert.Equal("clientError", (string?)gone["indexability"]!["reason"]);
         Assert.Equal("""{"test":"answered","outcome":"fail","statusCode":404}""", gone["indexability"]!["tests"]![0]!.ToJsonString());
         Assert.Null(gone["content"]);
 
-        var chain = await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/urls/{IdOf("/plants/chain-a")}");
+        var chain = await InspectAsync(IdOf("/plants/chain-a"));
         Assert.Equal([grid.Url("/plants/chain-b"), grid.Url("/plants/chain-c"), grid.Url("/plants/thin")],
             chain["redirects"]!["hops"]!.AsArray().Select(hop => (string?)hop!["url"]));
         Assert.Equal("http", (string?)chain["redirects"]!["hops"]![0]!["via"]);
 
-        TestSidecar.AssertProblem(await Sidecar.SendAsync(HttpMethod.Get, $"api/crawls/{grid.Id}/urls/999999"), HttpStatusCode.NotFound, "url-not-found");
+        // Any id no URL has, past what an id holds too (this one is 1 if cut to an int), is a URL the crawl doesn't have;
+        // none at all is a field error.
+        foreach (var missing in new[] { "999999", "0", "-1", "4294967297" })
+        {
+            TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/inspect", JsonNode.Parse($$"""{"urlId":{{missing}}}""")),
+                HttpStatusCode.NotFound, "url-not-found");
+        }
+
+        var none = TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/inspect", JsonNode.Parse("{}")), HttpStatusCode.UnprocessableEntity, "invalid-query");
+        Assert.Contains("urlId", none["errors"]!.AsObject().Select(error => error.Key));
     }
 
     [Fact]
     public async Task LinksPageAlikeByOffsetAndByCursor()
     {
         var home = IdOf("/");
-        var first = await PostOkAsync($"api/crawls/{grid.Id}/urls/{home}/inlinks", JsonNode.Parse("""{"kinds":["hyperlink"],"limit":5}"""));
+        var first = await PostOkAsync($"api/crawls/{grid.Id}/urls/inlinks", JsonNode.Parse($$"""{"urlId":{{home}},"kinds":["hyperlink"],"limit":5}"""));
         var link = first["rows"]![0]!;
         Assert.Equal(["id", "url", "kind", "text", "position", "flags", "followed", "fragment", "statusCode", "indexable", "fetched"], link.AsObject().Select(property => property.Key));
         Assert.Equal("hyperlink", (string?)link["kind"]);
         Assert.NotNull(link["flags"]!.AsArray());
         Assert.True((long?)first["total"] > 5);
 
-        var byCursor = await PostOkAsync($"api/crawls/{grid.Id}/urls/{home}/inlinks", new JsonObject { ["kinds"] = new JsonArray("hyperlink"), ["after"] = (string?)first["next"], ["limit"] = 5 });
-        var byOffset = await PostOkAsync($"api/crawls/{grid.Id}/urls/{home}/inlinks", JsonNode.Parse("""{"kinds":["hyperlink"],"offset":5,"limit":5}"""));
+        var byCursor = await PostOkAsync($"api/crawls/{grid.Id}/urls/inlinks",
+            new JsonObject { ["urlId"] = home, ["kinds"] = new JsonArray("hyperlink"), ["after"] = (string?)first["next"], ["limit"] = 5 });
+        var byOffset = await PostOkAsync($"api/crawls/{grid.Id}/urls/inlinks", JsonNode.Parse($$"""{"urlId":{{home}},"kinds":["hyperlink"],"offset":5,"limit":5}"""));
         Assert.Equal(byOffset["rows"]!.ToJsonString(), byCursor["rows"]!.ToJsonString());
 
-        var outlinks = await PostOkAsync($"api/crawls/{grid.Id}/urls/{home}/outlinks");
+        // A cursor carries no SQL and nothing crawled: a hash and a row id, whatever the list.
+        var cursor = Encoding.UTF8.GetString(System.Buffers.Text.Base64Url.DecodeFromChars((string)first["next"]!));
+        Assert.DoesNotContain("kind", cursor, StringComparison.Ordinal);
+        Assert.Matches("""^\{"h":"[0-9a-f]{16}","i":\d+,"k":"[0-9a-f]{16}"\}$""", cursor);
+
+        var outlinks = await PostOkAsync($"api/crawls/{grid.Id}/urls/outlinks", new JsonObject { ["urlId"] = home });
         Assert.NotEmpty(outlinks["rows"]!.AsArray());
         Assert.DoesNotContain(outlinks["rows"]!.AsArray(), row => (int?)row!["id"] == home);
 
-        var kind = TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/{home}/outlinks", JsonNode.Parse("""{"kinds":["anchor"]}""")),
+        var kind = TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/outlinks", JsonNode.Parse($$"""{"urlId":{{home}},"kinds":["anchor"]}""")),
             HttpStatusCode.UnprocessableEntity, "invalid-query");
         Assert.Contains("kinds[0]", kind["errors"]!.AsObject().Select(error => error.Key));
-        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/999999/inlinks"), HttpStatusCode.NotFound, "url-not-found");
+        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/inlinks", JsonNode.Parse("""{"urlId":999999}""")), HttpStatusCode.NotFound, "url-not-found");
     }
 
     [Fact]
     public async Task TheSourceIsTheStoredHtmlOrWhyThereIsNone()
     {
-        var page = await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/urls/{IdOf("/p/7")}/source");
+        var page = await PostOkAsync($"api/crawls/{grid.Id}/urls/source", new JsonObject { ["urlId"] = IdOf("/p/7") });
         Assert.Equal(["stored", "html", "bytes", "truncated"], page.AsObject().Select(property => property.Key));
         Assert.StartsWith("<!DOCTYPE html>", (string?)page["html"], StringComparison.OrdinalIgnoreCase);
         Assert.Equal(Encoding.UTF8.GetByteCount((string)page["html"]!), (long?)page["bytes"]);
-        Assert.Equal("""{"stored":false,"reason":"notPage"}""", (await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/urls/{IdOf("/img/1.jpg")}/source")).ToJsonString());
+        Assert.False((bool)page["truncated"]!);
+        Assert.Equal("""{"stored":false,"reason":"notPage"}""", (await PostOkAsync($"api/crawls/{grid.Id}/urls/source", new JsonObject { ["urlId"] = IdOf("/img/1.jpg") })).ToJsonString());
 
         var unstored = UrlGridReader.Lookup(System.IO.Path.Combine(Sidecar.DataDirectory, "fresh.sicrawl"), grid.Url("/"))!.Id;
-        Assert.Equal("""{"stored":false,"reason":"notStored"}""", (await Sidecar.GetJsonAsync($"api/crawls/{grid.FreshId}/urls/{unstored}/source")).ToJsonString());
-        TestSidecar.AssertProblem(await Sidecar.SendAsync(HttpMethod.Get, $"api/crawls/{grid.Id}/urls/999999/source"), HttpStatusCode.NotFound, "url-not-found");
+        Assert.Equal("""{"stored":false,"reason":"notStored"}""", (await PostOkAsync($"api/crawls/{grid.FreshId}/urls/source", new JsonObject { ["urlId"] = unstored })).ToJsonString());
+        TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/source", JsonNode.Parse("""{"urlId":999999}""")), HttpStatusCode.NotFound, "url-not-found");
     }
 
     [Fact]
@@ -329,6 +351,8 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
     }
 
     private int IdOf(string path) => UrlGridReader.Lookup(grid.Path, grid.Url(path))!.Id;
+
+    private Task<JsonNode> InspectAsync(int urlId) => PostOkAsync($"api/crawls/{grid.Id}/urls/inspect", new JsonObject { ["urlId"] = urlId });
 
     private static JsonNode With(JsonNode query, string name, int value)
     {

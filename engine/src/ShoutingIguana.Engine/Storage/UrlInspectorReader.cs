@@ -1,5 +1,5 @@
 using System.Globalization;
-using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
@@ -26,7 +26,7 @@ public static class UrlInspectorReader
     public const int MAX_SOURCE_BYTES = 16 * 1024 * 1024;
 
     /// <summary>How much of a stored page is unpacked to measure it, so a crafted file can't make the reader unpack forever.</summary>
-    private const long MAX_MEASURED_BYTES = 512L * 1024 * 1024;
+    public const long MAX_MEASURED_BYTES = 512L * 1024 * 1024;
 
     // Lenient where browsers and Google are, as the structured data check is.
     private static readonly JsonDocumentOptions JSON_LD = new() { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip };
@@ -36,11 +36,17 @@ public static class UrlInspectorReader
         [nameof(IssueSeverity.Error)] = 0, [nameof(IssueSeverity.Warning)] = 1, [nameof(IssueSeverity.Notice)] = 2
     };
 
-    /// <summary>The URL with this id in full, or null when the crawl has none.</summary>
+    /// <summary>
+    /// The URL with this id in full, or null when the crawl has none. A stored value this engine doesn't know (a newer
+    /// engine's kind of link or outcome, a crafted file's) reads as unknown: null.
+    /// </summary>
     /// <exception cref="InvalidOperationException">The file isn't a crawl, or was written with another schema.</exception>
-    public static UrlDetail? Read(string databasePath, int urlId, ReadCache? cache = null)
+    /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
+    public static UrlDetail? Read(string databasePath, int urlId, ReadCache? cache = null, CancellationToken cancellationToken = default) =>
+        GridReadContext.Read(databasePath, cache, cancellationToken, context => Read(context, urlId));
+
+    private static UrlDetail? Read(GridReadContext context, int urlId)
     {
-        using var context = GridReadContext.Open(databasePath, cache);
         using var command = context.Command($"""
             SELECT u.url, u.is_internal, u.fetch_mode, u.depth, u.state, u.skip_reason, u.source, u.found_on_id, f.url, u.found_via,
                    r.url_id IS NOT NULL, {AnalysisReader.NOT_CHECKED}, r.fetched_at, r.outcome, r.status_code, r.content_type, r.size_bytes,
@@ -67,8 +73,8 @@ public static class UrlInspectorReader
         var facts = read ? details?.Page : null;
         var answered = self.Fetched && self.Outcome == FetchOutcome.Success;
         var contentType = row.IsDBNull(15) ? null : row.GetString(15);
-        var depth = row.GetInt32(3);
-        var crawlReason = self.Fetched && !row.IsDBNull(24) ? (IndexabilityReason?)row.GetInt32(24) : null;
+        var depth = Int32OrNull(row, 3);
+        var crawlReason = self.Fetched ? Known<IndexabilityReason>(row, 24) : null;
 
         var redirects = Redirects(context, self);
         var (verdict, links) = Verdict(context, self, read, crawlReason);
@@ -80,13 +86,13 @@ public static class UrlInspectorReader
             IsInternal = self.IsInternal,
             Type = answered && contentType is not null ? ResourceTypes.OfContentType(contentType) : ResourceTypes.OfUrl(url),
             Discovery = new UrlDiscovery(
-                (DiscoverySource)row.GetInt32(6),
-                depth >= Crawling.CrawlDepth.UNLINKED ? null : depth,
-                row.IsDBNull(7) || row.IsDBNull(8) ? null : new UrlRef(row.GetInt32(7), row.GetString(8)),
-                row.IsDBNull(9) ? null : (LinkKind)row.GetInt32(9),
-                (FetchMode)row.GetInt32(2),
-                (UrlState)row.GetInt32(4),
-                (UrlState)row.GetInt32(4) == UrlState.Skipped ? (SkipReason)row.GetInt32(5) : null),
+                Known<DiscoverySource>(row, 6),
+                depth is null or >= Crawling.CrawlDepth.UNLINKED or < 0 ? null : depth,
+                row.IsDBNull(7) || row.IsDBNull(8) || Int32OrNull(row, 7) is not { } foundOn ? null : new UrlRef(foundOn, row.GetString(8)),
+                Known<LinkKind>(row, 9),
+                Known<FetchMode>(row, 2),
+                Known<UrlState>(row, 4),
+                Known<UrlState>(row, 4) == UrlState.Skipped ? Known<SkipReason>(row, 5) : null),
             Response = self.HasResponse ? Response(row, self) : null,
             Redirects = redirects,
             Indexability = Checklist(context, self, details, facts, read, row, verdict),
@@ -108,7 +114,9 @@ public static class UrlInspectorReader
     /// the crawl has no such URL. Each row names the other end, with its status.
     /// </summary>
     /// <exception cref="UrlQueryException">The paging is out of range, or the cursor isn't this list's.</exception>
-    public static LinkPage? ReadLinks(string databasePath, int urlId, LinkDirection direction, LinkQuery query, ReadCache? cache = null)
+    /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
+    public static LinkPage? ReadLinks(string databasePath, int urlId, LinkDirection direction, LinkQuery query, ReadCache? cache = null,
+        CancellationToken cancellationToken = default)
     {
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         UrlQueryCompiler.ValidatePaging(query.Offset, query.Limit, query.After, errors);
@@ -118,7 +126,11 @@ public static class UrlInspectorReader
         }
 
         UrlGridReader.ThrowIfInvalid(errors);
-        using var context = GridReadContext.Open(databasePath, cache);
+        return GridReadContext.Read(databasePath, cache, cancellationToken, context => ReadLinks(context, urlId, direction, query));
+    }
+
+    private static LinkPage? ReadLinks(GridReadContext context, int urlId, LinkDirection direction, LinkQuery query)
+    {
         if (Inspected(context, urlId) is not { } self)
         {
             return null;
@@ -140,7 +152,8 @@ public static class UrlInspectorReader
         long take;
         if (query.After is { } cursor)
         {
-            start = GridCursor.Decode(cursor, Hash(hash), [], "after").Id;
+            // A link stays as the crawl stored it: its place is its row id.
+            start = GridCursor.Decode(cursor, Hash(hash), _ => [], "after").Id;
             from = " AND l.rowid > $start";
             take = query.Limit + 1;
         }
@@ -179,18 +192,18 @@ public static class UrlInspectorReader
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                var kind = (LinkKind)reader.GetInt32(2);
-                var flags = (LinkFlags)reader.GetInt32(5);
+                var kind = Known<LinkKind>(reader, 2);
+                var flags = (LinkFlags)reader.GetInt64(5);
                 rows.Add((new LinkRow(
                     reader.GetInt32(0),
                     reader.GetString(1),
                     kind,
                     reader.IsDBNull(3) ? null : reader.GetString(3),
-                    (LinkPosition)reader.GetInt32(4),
+                    Known<LinkPosition>(reader, 4),
                     flags,
                     kind == LinkKind.Hyperlink ? !flags.HasFlag(LinkFlags.NoFollow) && reader.GetInt64(10) == 0 : null,
                     reader.IsDBNull(6) ? null : reader.GetString(6),
-                    reader.IsDBNull(7) ? null : reader.GetInt32(7),
+                    Int32OrNull(reader, 7),
                     reader.IsDBNull(8) ? null : reader.GetBoolean(8),
                     !reader.IsDBNull(9) && reader.GetBoolean(9)), reader.GetInt64(11)));
             }
@@ -272,43 +285,54 @@ public static class UrlInspectorReader
         return ($"CASE WHEN {fetched} AND orr.status_code > 0 THEN orr.status_code END", $"CASE WHEN {fetched} AND NOT {unread} THEN {reason} = 0 END", fetched, join);
     }
 
-    /// <summary>The URL's stored HTML, cut at <see cref="MAX_SOURCE_BYTES"/>, or why it has none; null when the crawl has no such URL.</summary>
-    public static HtmlSource? ReadSource(string databasePath, int urlId)
+    /// <summary>
+    /// The URL's stored HTML, cut at <see cref="MAX_SOURCE_BYTES"/>, or why it has none; null when the crawl has no such
+    /// URL. It's read whole, into one string: the source view reads it a piece at a time (<see cref="OpenSource"/>).
+    /// </summary>
+    /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
+    public static HtmlSource? ReadSource(string databasePath, int urlId, CancellationToken cancellationToken = default)
     {
-        using var context = GridReadContext.Open(databasePath, cache: null);
-        if (Inspected(context, urlId) is null)
+        using var source = OpenSource(databasePath, urlId, cancellationToken);
+        if (source is null)
         {
             return null;
         }
 
-        using var command = context.Command("SELECT html FROM response_html WHERE url_id = $id", [new("$id", urlId)]);
-        if (command.ExecuteScalar() is not byte[] html)
+        if (source.Missing is { } missing)
         {
-            return new HtmlSource(null, null, false, context.Options.StoreHtml ? HtmlSourceMissing.NotPage : HtmlSourceMissing.NotStored);
+            return new HtmlSource(null, null, false, missing);
         }
 
-        // Kept up to the limit, and the rest only measured, and only so far.
-        using var brotli = new BrotliStream(new MemoryStream(html), CompressionMode.Decompress);
-        using var kept = new MemoryStream();
-        var chunk = new byte[81_920];
-        long bytes = 0;
+        var text = new StringBuilder();
+        var buffer = new char[32 * 1024];
         int count;
-        while (bytes <= MAX_MEASURED_BYTES && (count = brotli.Read(chunk, 0, chunk.Length)) > 0)
+        while ((count = source.Read(buffer)) > 0)
         {
-            kept.Write(chunk, 0, (int)Math.Min(count, MAX_SOURCE_BYTES - kept.Length));
-            bytes += count;
+            text.Append(buffer, 0, count);
         }
 
-        var truncated = bytes > kept.Length;
-        var text = Encoding.UTF8.GetString(kept.GetBuffer(), 0, (int)kept.Length);
-        if (truncated)
-        {
-            // A cut through a character leaves half of it, which decodes as a replacement character.
-            text = text.TrimEnd('�');
-        }
-
-        return new HtmlSource(text, bytes > MAX_MEASURED_BYTES ? null : bytes, truncated, null);
+        return new HtmlSource(text.ToString(), source.Bytes, source.Truncated, null);
     }
+
+    /// <summary>
+    /// The URL's stored HTML to read a piece at a time, so a large page is never held whole, or why it has none; null when
+    /// the crawl has no such URL. The page is read from the file packed, as stored, and the file let go before this
+    /// returns: unpacking it holds nothing open.
+    /// </summary>
+    /// <exception cref="OperationCanceledException">The token was cancelled, now or while the HTML is read.</exception>
+    public static HtmlSourceReader? OpenSource(string databasePath, int urlId, CancellationToken cancellationToken = default) =>
+        GridReadContext.Read(databasePath, cache: null, cancellationToken, context =>
+        {
+            if (Inspected(context, urlId) is null)
+            {
+                return null;
+            }
+
+            using var command = context.Command("SELECT html FROM response_html WHERE url_id = $id", [new("$id", urlId)]);
+            return command.ExecuteScalar() is byte[] html
+                ? new HtmlSourceReader(html, cancellationToken)
+                : new HtmlSourceReader(context.Options.StoreHtml ? HtmlSourceMissing.NotPage : HtmlSourceMissing.NotStored);
+        });
 
     /// <summary>The facts the inspector judges a URL by, as the analysis keeps them for every URL; null when there's no such URL.</summary>
     private static InspectedUrl? Inspected(GridReadContext context, int urlId)
@@ -332,12 +356,28 @@ public static class UrlInspectorReader
             reader.GetBoolean(2),
             hasResponse,
             hasResponse && reader.GetBoolean(4),
-            hasResponse ? (FetchOutcome)reader.GetInt32(5) : null,
-            reader.IsDBNull(6) ? null : reader.GetInt32(6),
+            hasResponse ? Known<FetchOutcome>(reader, 5) : null,
+            Int32OrNull(reader, 6),
             hasResponse && reader.GetBoolean(7),
             hasResponse && !reader.IsDBNull(8) && reader.GetBoolean(8),
-            reader.IsDBNull(9) ? 0 : reader.GetInt32(9));
+            Int32OrNull(reader, 9) ?? 0);
     }
+
+    /// <summary>A stored enum's value, or null for one this engine doesn't know: a newer engine's, or a crafted file's.</summary>
+    private static TEnum? Known<TEnum>(SqliteDataReader reader, int ordinal) where TEnum : struct, Enum
+    {
+        if (reader.IsDBNull(ordinal))
+        {
+            return null;
+        }
+
+        var value = (TEnum)Enum.ToObject(typeof(TEnum), reader.GetInt64(ordinal));
+        return Enum.IsDefined(value) ? value : null;
+    }
+
+    /// <summary>A stored number as an int, or null when there's none or it doesn't fit one (a crafted file's infinity).</summary>
+    private static int? Int32OrNull(SqliteDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) || reader.GetInt64(ordinal) is < int.MinValue or > int.MaxValue ? null : (int)reader.GetInt64(ordinal);
 
     /// <summary>
     /// Where a URL moves on to, as the analysis follows it: an HTTP redirect's Location, or, for a page the analysis audits,
@@ -419,10 +459,10 @@ public static class UrlInspectorReader
             {
                 return (new IndexabilityChecklist(
                         reader.IsDBNull(0) ? null : reader.GetBoolean(0),
-                        reader.IsDBNull(1) ? null : (IndexabilityReason)reader.GetInt32(1),
+                        Known<IndexabilityReason>(reader, 1),
                         IndexabilityJudge.Analysis, []),
-                    new UrlLinkCounts(reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5),
-                        reader.IsDBNull(6) ? null : reader.GetInt32(6), reader.IsDBNull(7) ? null : reader.GetBoolean(7)));
+                    new UrlLinkCounts(Int32OrNull(reader, 2) ?? 0, Int32OrNull(reader, 3) ?? 0, Int32OrNull(reader, 4) ?? 0, Int32OrNull(reader, 5) ?? 0,
+                        Int32OrNull(reader, 6), reader.IsDBNull(7) ? null : reader.GetBoolean(7)));
             }
         }
 
@@ -540,13 +580,13 @@ public static class UrlInspectorReader
         var requested = self.Fetched && self.Outcome != FetchOutcome.RobotsDisallowed;
         return new UrlResponse(
             self.Fetched,
-            self.Shown!.Value,
+            self.Shown,
             self.Status,
             row.IsDBNull(15) ? null : row.GetString(15),
             row.IsDBNull(20) ? null : row.GetString(20),
-            DateTimeOffset.FromUnixTimeMilliseconds(row.GetInt64(12)),
-            requested ? row.GetInt32(18) : null,
-            requested ? row.GetInt32(19) : null,
+            DateTimeOffset.FromUnixTimeMilliseconds(Math.Clamp(row.GetInt64(12), DateTimeOffset.MinValue.ToUnixTimeMilliseconds(), DateTimeOffset.MaxValue.ToUnixTimeMilliseconds())),
+            requested ? Int32OrNull(row, 18) : null,
+            requested ? Int32OrNull(row, 19) : null,
             row.IsDBNull(16) ? null : row.GetInt64(16),
             row.IsDBNull(17) ? null : row.GetInt64(17),
             row.IsDBNull(21) ? null : row.GetString(21),
@@ -751,7 +791,8 @@ public static class UrlInspectorReader
     private static bool SelfNofollow(GridReadContext context, int urlId) =>
         context.Scalar("SELECT COALESCE((SELECT is_nofollow FROM responses WHERE url_id = $id), 0)", [new("$id", urlId)]) != 0;
 
-    private static string Hash(string list) => "links:" + list;
+    /// <summary>The list a links cursor belongs to (direction, URL and kinds), hashed, so the cursor carries none of it.</summary>
+    private static string Hash(string list) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("links:" + list)))[..16];
 
     private static ResponseDetails? Decode(byte[] data)
     {

@@ -66,13 +66,15 @@ jobs:
           --db bench.sicrawl --json bench.json
 
       # The grids' reads of that crawl, each on a fresh connection with nothing cached, as a filter set's first read is:
-      # the URL grid's first page and the page half way down for every sort and for filters common and rare (up to
-      # three), search, facets, the inspector and its links, and a check's groups and rows. 300 ms at p95 is the UI's
-      # budget for 100k URLs; the slowest read takes about 80 ms on a 32-core desktop.
+      # the URL grid's first page, the page half way down and the one just past it, for every sort, for filters common
+      # and rare (up to three), text filters, regular expressions and search (common and rare), facets, the inspector
+      # and its links, a check's groups and rows, and again without the URL summary. Each class of read is held to its
+      # own p95 here, its growth from 100k URLs to 1M taken into account, so a read that would miss the UI's 1 s budget
+      # at 1M fails at 100k (engine/README.md, Grid reads).
       - name: Read the crawl as the grids do
         run: >
           dotnet src/ShoutingIguana.Cli/bin/Release/net10.0/si.dll readbench bench.sicrawl
-          --runs 20 --max-p95-ms 300 --json readbench.json
+          --runs 20 --gate --json readbench.json
 
       - uses: actions/upload-artifact@v4
         if: always()

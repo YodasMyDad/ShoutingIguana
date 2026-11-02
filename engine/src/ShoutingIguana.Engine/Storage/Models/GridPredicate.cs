@@ -17,4 +17,16 @@ internal sealed record GridPredicate(string Sql, string Disabled, IReadOnlyList<
     /// and kept while few enough, so the scan of the crawl's text isn't run again for the count and each page.
     /// </summary>
     public string? Ids { get; init; }
+
+    /// <summary>
+    /// How to read the URL ids a condition on the crawl's own tables matches into a set, once per filter set, which each
+    /// row is then tested against (<see cref="GridPlanner.Materialize"/>); null for a condition on the row itself.
+    /// </summary>
+    public IdSource? Source { get; init; }
+
+    /// <summary>Once read: the set of the rows it matches, by their own URL id.</summary>
+    public UrlIdSet? Matched { get; init; }
+
+    /// <summary>Once read: the set of the rows it leaves out, by their own URL id; it matches every other row.</summary>
+    public UrlIdSet? Excluded { get; init; }
 }

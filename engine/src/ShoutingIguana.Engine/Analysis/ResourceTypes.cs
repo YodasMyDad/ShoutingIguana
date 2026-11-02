@@ -51,9 +51,12 @@ internal static class ResourceTypes
         contentType is null ? OfUrl(url) : OfContentType(contentType);
 
     /// <summary>What a successful response with this Content-Type is.</summary>
-    public static ResourceType OfContentType(string contentType)
+    public static ResourceType OfContentType(string contentType) => OfContentType(contentType.AsSpan());
+
+    /// <inheritdoc cref="OfContentType(string)"/>
+    public static ResourceType OfContentType(ReadOnlySpan<char> contentType)
     {
-        var mediaType = contentType.AsSpan();
+        var mediaType = contentType;
         var parameters = mediaType.IndexOf(';');
         mediaType = (parameters < 0 ? mediaType : mediaType[..parameters]).Trim();
         foreach (var (prefix, type) in MEDIA_TYPE_PREFIXES)
@@ -71,9 +74,12 @@ internal static class ResourceTypes
     /// What a URL without a successful response probably is, by the extension of its path's last segment; the query
     /// doesn't count (/download?file=a.jpg is a page).
     /// </summary>
-    public static ResourceType OfUrl(string url)
+    public static ResourceType OfUrl(string url) => OfUrl(url.AsSpan());
+
+    /// <inheritdoc cref="OfUrl(string)"/>
+    public static ResourceType OfUrl(ReadOnlySpan<char> url)
     {
-        var path = url.AsSpan();
+        var path = url;
         var end = path.IndexOfAny('?', '#');
         if (end >= 0)
         {

@@ -27,11 +27,20 @@ internal static class GridRequests
     {
         request ??= new GridQueryRequest();
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+        foreach (var index in Nulls(request.Columns))
+        {
+            Add(errors, $"columns[{index}]", "Give a column's id.");
+        }
+
         var filters = Filters(request.Filters, errors);
         List<UrlSort> sort = [];
         foreach (var (key, index) in (request.Sort ?? []).Select((key, index) => (key, index)))
         {
-            if (string.IsNullOrEmpty(key.Column))
+            if (key is null)
+            {
+                Add(errors, $"sort[{index}]", "Give a column to sort by, as { \"column\": \"…\", \"desc\": true }.");
+            }
+            else if (string.IsNullOrEmpty(key.Column))
             {
                 Add(errors, $"sort[{index}].column", "Give the column to sort by.");
             }
@@ -60,6 +69,12 @@ internal static class GridRequests
         foreach (var (filter, index) in (filters ?? []).Select((filter, index) => (filter, index)))
         {
             var field = $"filters[{index}]";
+            if (filter is null)
+            {
+                Add(errors, field, "Give a filter: a column, an operator and what it takes.");
+                continue;
+            }
+
             if (string.IsNullOrEmpty(filter.Column))
             {
                 Add(errors, $"{field}.column", "Give the column to filter by.");
@@ -98,19 +113,49 @@ internal static class GridRequests
         List<LinkKind> parsed = [];
         foreach (var (name, index) in (kinds ?? []).Select((name, index) => (name, index)))
         {
-            if (KINDS.TryGetValue(name, out var kind))
+            if (name is null || !KINDS.TryGetValue(name, out var kind))
             {
-                parsed.Add(kind);
+                Add(errors, $"kinds[{index}]", $"There's no kind of link called '{name}': there are {string.Join(", ", KINDS.Keys)}.");
+            }
+            else if (parsed.Contains(kind))
+            {
+                Add(errors, $"kinds[{index}]", $"'{name}' is named twice: name each kind of link once.");
             }
             else
             {
-                Add(errors, $"kinds[{index}]", $"There's no kind of link called '{name}': there are {string.Join(", ", KINDS.Keys)}.");
+                parsed.Add(kind);
             }
         }
 
         ThrowIfAny(errors);
         return parsed;
     }
+
+    /// <summary>The facets asked for; a null among them is a field error, as the engine's are for names it doesn't know.</summary>
+    public static IReadOnlyList<string> Facets(IReadOnlyList<string>? facets, Dictionary<string, List<string>> errors)
+    {
+        foreach (var index in Nulls(facets))
+        {
+            Add(errors, $"facets[{index}]", "Give a facet's name.");
+        }
+
+        return facets ?? [];
+    }
+
+    /// <summary>
+    /// A URL's id from a request: none is a field error; one no URL could have (0, below, or past what an id holds) is
+    /// null, which is a URL the crawl doesn't have.
+    /// </summary>
+    public static int? UrlId(long? urlId) => urlId switch
+    {
+        null => throw Problems.InvalidQuery(new Dictionary<string, IReadOnlyList<string>> { ["urlId"] = ["Give the URL's id."] }),
+        < 1 or > int.MaxValue => null,
+        { } id => (int)id
+    };
+
+    /// <summary>Where a list sent has nulls in it.</summary>
+    private static IEnumerable<int> Nulls<T>(IReadOnlyList<T?>? items) where T : class =>
+        (items ?? []).Select((item, index) => (item, index)).Where(entry => entry.item is null).Select(entry => entry.index);
 
     /// <summary>A filter as the facets give it back, for the UI to add to its query.</summary>
     public static UrlFilterDto Dto(UrlFilter filter) => new()

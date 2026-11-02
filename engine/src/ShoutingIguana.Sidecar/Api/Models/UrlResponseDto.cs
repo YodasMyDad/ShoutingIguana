@@ -5,7 +5,7 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 /// <summary>A URL's response, with its time in UTC as every time the API gives.</summary>
 internal sealed record UrlResponseDto(
     bool Fetched,
-    UrlOutcome Outcome,
+    UrlOutcome? Outcome,
     int? StatusCode,
     string? ContentType,
     string? HttpVersion,

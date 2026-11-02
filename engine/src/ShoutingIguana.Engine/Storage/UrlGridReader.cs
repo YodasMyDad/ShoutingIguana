@@ -9,8 +9,9 @@ namespace ShoutingIguana.Engine.Storage;
 
 /// <summary>
 /// The URL grid's reads: a page of URLs with the columns a view shows, the facets its filter chips and Overview count, and
-/// a URL found by its text. Each read takes one snapshot of the file and holds it for that read only, so a grid never keeps
-/// a crawl or an analysis waiting. With a URL summary that describes the crawl, the grid reads it; without one (a crawl
+/// a URL found by its text. Each read takes one snapshot of the file and holds it for that read only; an analysis or a
+/// continue starting in this process stops the reads of its crawl for the moment it switches the file to WAL mode, and
+/// they read again after (<see cref="CrawlReadGate"/>). With a URL summary that describes the crawl, the grid reads it; without one (a crawl
 /// running, never analysed, or continued since) it reads the crawl's own tables, and refuses filters and sorts on the
 /// summary's columns rather than ignoring them (<see cref="NeedsAnalysisException"/>).
 /// </summary>
@@ -58,14 +59,17 @@ public static class UrlGridReader
 
     /// <summary>One page of the URL grid.</summary>
     /// <param name="cache">Where counts are kept between reads, so scrolling doesn't count again; none counts each time.</param>
-    /// <exception cref="UrlQueryException">The query can't be run: the errors say why, by field.</exception>
+    /// <param name="cancellationToken">Stops the read within milliseconds, the statement running included.</param>
+    /// <exception cref="UrlQueryException">
+    /// The query can't be run: the errors say why, by field. A regular expression too complex for the crawl's text is one.
+    /// </exception>
     /// <exception cref="NeedsAnalysisException">It filters or sorts on the URL summary, and there's none that describes the crawl.</exception>
     /// <exception cref="InvalidOperationException">The file isn't a crawl, or was written with another schema.</exception>
-    public static UrlPage Query(string databasePath, UrlQuery query, ReadCache? cache = null)
+    /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
+    public static UrlPage Query(string databasePath, UrlQuery query, ReadCache? cache = null, CancellationToken cancellationToken = default)
     {
         ThrowIfInvalid(UrlQueryCompiler.Validate(query, GridScope.AllUrls));
-        using var context = GridReadContext.Open(databasePath, cache);
-        return Read(context, query, GridScope.AllUrls);
+        return Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context => Read(context, query, GridScope.AllUrls)));
     }
 
     /// <summary>
@@ -73,7 +77,7 @@ public static class UrlGridReader
     /// filter chips, with a query's filters, and for Overview's breakdowns, with none.
     /// </summary>
     /// <inheritdoc cref="Query" path="/exception"/>
-    public static UrlFacets Facets(string databasePath, UrlFacetQuery query, ReadCache? cache = null)
+    public static UrlFacets Facets(string databasePath, UrlFacetQuery query, ReadCache? cache = null, CancellationToken cancellationToken = default)
     {
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         UrlQueryCompiler.ValidateFilters(query.Filters, query.Search, GridScope.AllUrls, errors);
@@ -86,7 +90,11 @@ public static class UrlGridReader
         }
 
         ThrowIfInvalid(errors);
-        using var context = GridReadContext.Open(databasePath, cache);
+        return Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context => Facets(context, query)));
+    }
+
+    private static UrlFacets Facets(GridReadContext context, UrlFacetQuery query)
+    {
         RefuseWithoutSummary(context, query.Filters, [], GridScope.AllUrls);
         var compiled = UrlQueryCompiler.Compile(new UrlQuery { Filters = query.Filters, Search = query.Search }, context.Mode, GridScope.AllUrls, context.Reason);
         compiled = GridPlanner.Materialize(context, compiled);
@@ -101,9 +109,10 @@ public static class UrlGridReader
         {
             wanted.ForEach(facet => facets[facet] = []);
         }
-        else if (compiled.All.Any() && wanted.Count >= ONE_PASS_FACETS)
+        else if ((compiled.All.Any() || context.Mode == GridMode.Crawl) && wanted.Count >= ONE_PASS_FACETS)
         {
-            // Filtered, each facet would be a scan of its own: one pass counts them all.
+            // Filtered, or without a summary (whose own tables have no index for a facet), each facet would be a scan of
+            // its own: one pass counts them all.
             var groups = context.Cached($"facets|{string.Join(",", wanted)}|{conditions}", () => OnePass(context, compiled, wanted));
             wanted.ForEach(facet => facets[facet] = Buckets(facet, groups[facet]));
         }
@@ -120,8 +129,10 @@ public static class UrlGridReader
     /// lowercased); a path starting with <c>/</c> is taken on the start URL's origin. Null when the crawl has no such URL.
     /// </summary>
     /// <exception cref="UrlQueryException">The text isn't a URL.</exception>
-    public static UrlRef? Lookup(string databasePath, string text)
+    public static UrlRef? Lookup(string databasePath, string text, CancellationToken cancellationToken = default)
     {
+        // Two lookups by key: nothing to interrupt once it's started.
+        cancellationToken.ThrowIfCancellationRequested();
         using var connection = CrawlDatabase.OpenReader(databasePath);
         var candidate = text.Trim();
         if (candidate.StartsWith('/') && !candidate.StartsWith("//", StringComparison.Ordinal) &&
@@ -160,9 +171,7 @@ public static class UrlGridReader
         compiled = GridPlanner.Materialize(context, compiled);
         var total = GridPlanner.Total(context, compiled);
         var matching = GridPlanner.Matching(context, compiled, total);
-        var after = query.After is { } cursor
-            ? GridCursor.Decode(cursor, compiled.Hash, [.. compiled.Sort.Select(key => key.Column.Type == UrlColumnType.Text)])
-            : null;
+        var after = query.After is { } cursor ? GridCursor.Decode(cursor, compiled.Hash, id => GridPlanner.KeysOf(context, compiled, id)) : null;
         var rows = GridPlanner.Page(context, compiled, matching, query.Offset, query.Limit, after, out var more);
         var values = Values(context, compiled, [.. rows.Select(row => row.Id)]);
         var next = more && rows.Count > 0 ? GridCursor.Encode(compiled.Hash, rows[^1].Keys, rows[^1].Id) : null;
@@ -185,9 +194,23 @@ public static class UrlGridReader
         }
     }
 
+    /// <summary>A read, a regular expression it gave up on (too complex for the crawl's text) refused on the filters with it.</summary>
+    internal static T Refusing<T>(IReadOnlyList<UrlFilter> filters, Func<T> read)
+    {
+        try
+        {
+            return read();
+        }
+        catch (RegexTooComplexException exception)
+        {
+            throw UrlQueryCompiler.TooComplex(filters, exception.Pattern);
+        }
+    }
+
+    /// <summary>A filter or sort on the URL summary without one is refused; the check filter needs only the last analysis's issues.</summary>
     private static void RefuseWithoutSummary(GridReadContext context, IReadOnlyList<UrlFilter> filters, IReadOnlyList<UrlSort> sort, GridScope scope)
     {
-        if (!context.Summary.Available && UrlQueryCompiler.NeedingSummary(filters, sort, scope) is { Count: > 0 } needing)
+        if (!context.Summary.Available && UrlQueryCompiler.NeedingSummary(filters, sort, scope, hasIssues: context.Analysis is not null) is { Count: > 0 } needing)
         {
             throw new NeedsAnalysisException(context.Summary.Reason!.Value, needing);
         }
@@ -383,17 +406,18 @@ public static class UrlGridReader
             layout[name] = (layout.Values.Sum(field => field.Bits), bits);
         }
 
+        // Counted as they're read (si_tally), rather than grouped by SQLite, which sorts every row to group them: a third
+        // of the time on a million.
         var packed = string.Join(" | ", fields.Select(field => $"(({field.Sql}) << {layout[field.Name].Shift})"));
         var tallies = facets.ToDictionary(facet => facet, _ => new Dictionary<long, long>(), StringComparer.Ordinal);
         Dictionary<string, long> unknown = new(StringComparer.Ordinal);
-        using (var command = context.Command(GridPlanner.Over(context, query, $"{packed}, COUNT(*)", groupBy: 1, packed),
+        context.Tallies.Clear();
+        using (var command = context.Command(GridPlanner.Over(context, query, $"COUNT({ReaderFunctions.TALLY}({packed}))", groupBy: 0, packed),
                    query.All.SelectMany(predicate => predicate.Parameters).ToList()))
-        using (var reader = command.ExecuteReader())
         {
-            while (reader.Read())
+            command.ExecuteScalar();
+            foreach (var (key, count) in context.Tallies)
             {
-                var key = reader.GetInt64(0);
-                var count = reader.GetInt64(1);
                 long Field(string name) => (key >> layout[name].Shift) & Largest(layout[name].Bits);
                 foreach (var facet in facets)
                 {

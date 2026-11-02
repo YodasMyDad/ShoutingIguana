@@ -198,8 +198,8 @@ internal static class UrlColumns
     private static readonly Dictionary<string, UrlColumnDefinition> BY_ID = ALL.ToDictionary(column => column.Id, StringComparer.Ordinal);
 
     /// <summary>The column with this id, or null; a check's own columns only when <paramref name="issueColumns"/>.</summary>
-    public static UrlColumnDefinition? Find(string id, bool issueColumns) =>
-        BY_ID.GetValueOrDefault(id) is { } column && (issueColumns || !column.IsIssueColumn) ? column : null;
+    public static UrlColumnDefinition? Find(string? id, bool issueColumns) =>
+        id is not null && BY_ID.GetValueOrDefault(id) is { } column && (issueColumns || !column.IsIssueColumn) ? column : null;
 
     /// <summary>The columns for the column chooser: the URL grid's, or a check's rows' too.</summary>
     public static IReadOnlyList<UrlColumnInfo> Describe(bool issueColumns) =>

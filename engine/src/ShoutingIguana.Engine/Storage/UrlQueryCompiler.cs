@@ -24,6 +24,9 @@ internal static class UrlQueryCompiler
     /// <summary>Stands for the column's SQL in a condition, so one condition gives both its forms.</summary>
     private const string COLUMN = "@column";
 
+    /// <summary>The URL summary row's own URL id, which most sets of URL ids are tested against.</summary>
+    private const string ROW_ID = "s.url_id";
+
     private static readonly IReadOnlyDictionary<UrlColumnType, FilterOperator[]> OPERATORS = new Dictionary<UrlColumnType, FilterOperator[]>
     {
         [UrlColumnType.Number] = [Eq, Ne, Lt, Lte, Gt, Gte, Between, In, NotIn, IsEmpty, IsNotEmpty],
@@ -50,7 +53,11 @@ internal static class UrlQueryCompiler
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         for (var index = 0; index < query.Columns.Count; index++)
         {
-            if (UrlColumns.Find(query.Columns[index], scope.IsCheck) is null)
+            if (query.Columns[index] is null)
+            {
+                Add(errors, $"columns[{index}]", "Give a column's id.");
+            }
+            else if (UrlColumns.Find(query.Columns[index], scope.IsCheck) is null)
             {
                 Add(errors, $"columns[{index}]", $"There's no column called '{query.Columns[index]}'.");
             }
@@ -65,6 +72,12 @@ internal static class UrlQueryCompiler
         HashSet<string> sorted = new(StringComparer.Ordinal);
         for (var index = 0; index < query.Sort.Count; index++)
         {
+            if (query.Sort[index] is null)
+            {
+                Add(errors, $"sort[{index}]", "Give a column to sort by.");
+                continue;
+            }
+
             var key = query.Sort[index].Column;
             var column = UrlColumns.Find(key, scope.IsCheck);
             if (column is null)
@@ -95,6 +108,12 @@ internal static class UrlQueryCompiler
 
         for (var index = 0; index < filters.Count; index++)
         {
+            if (filters[index] is null)
+            {
+                Add(errors, $"filters[{index}]", "Give a filter: a column, an operator and what it takes.");
+                continue;
+            }
+
             ValidateFilter(filters[index], $"filters[{index}]", scope, errors);
         }
 
@@ -122,13 +141,29 @@ internal static class UrlQueryCompiler
         }
     }
 
-    /// <summary>The columns a query filters or sorts on that need the URL summary, each once, in the order they appear.</summary>
-    public static List<string> NeedingSummary(IReadOnlyList<UrlFilter> filters, IReadOnlyList<UrlSort> sort, GridScope scope) =>
+    /// <summary>
+    /// The columns a query filters or sorts on that need the URL summary, each once, in the order they appear. The check
+    /// filter needs only the issues, which a crawl analysed and changed since still has (<paramref name="hasIssues"/>).
+    /// </summary>
+    public static List<string> NeedingSummary(IReadOnlyList<UrlFilter> filters, IReadOnlyList<UrlSort> sort, GridScope scope, bool hasIssues = false) =>
     [
         .. filters.Select(filter => filter.Column).Concat(sort.Select(key => key.Column))
-            .Where(id => id == UrlColumns.CHECK || UrlColumns.Find(id, scope.IsCheck)?.NeedsAnalysis == true)
+            .Where(id => id == UrlColumns.CHECK ? !hasIssues : UrlColumns.Find(id, scope.IsCheck)?.NeedsAnalysis == true)
             .Distinct(StringComparer.Ordinal)
     ];
+
+    /// <summary>The query's filters with this regular expression, refused: its matches took too long on the crawl's text.</summary>
+    public static UrlQueryException TooComplex(IReadOnlyList<UrlFilter> filters, string pattern)
+    {
+        List<string> fields =
+        [
+            .. filters.Select((filter, index) => (filter, index))
+                .Where(item => item.filter.Operator is FilterOperator.Regex or NotRegex && item.filter.Value?.Text == pattern)
+                .Select(item => $"filters[{item.index}].value")
+        ];
+        return new UrlQueryException((fields.Count == 0 ? ["filters"] : fields)
+            .ToDictionary(field => field, _ => (IReadOnlyList<string>)[ReaderFunctions.TOO_COMPLEX], StringComparer.Ordinal));
+    }
 
     /// <param name="reason">The crawl's indexability reason in crawl SQL: the analysis's where it judged differently.</param>
     public static CompiledQuery Compile(UrlQuery query, GridMode mode, GridScope scope, string reason)
@@ -195,7 +230,7 @@ internal static class UrlQueryCompiler
         }
 
         var sql = $"s.url_id IN (SELECT url_id FROM issues WHERE {condition})";
-        return new GridPredicate(sql, "+" + sql, parameters, Driving: true, Key(sql, parameters));
+        return new GridPredicate(sql, "+" + sql, parameters, Driving: true, Key(sql, parameters)) { Source = Issues(condition, negated: false) };
     }
 
     /// <summary>One key of the sort. A status class sorts as its status code.</summary>
@@ -241,6 +276,7 @@ internal static class UrlQueryCompiler
             return;
         }
 
+        ValidateUnused(filter, field, errors);
         switch (filter.Operator)
         {
             case Between:
@@ -306,6 +342,34 @@ internal static class UrlQueryCompiler
         }
     }
 
+    /// <summary>A value the operator doesn't take is refused, not ignored: the filter wouldn't mean what was sent.</summary>
+    private static void ValidateUnused(UrlFilter filter, string field, Dictionary<string, List<string>> errors)
+    {
+        var op = filter.Operator;
+        if (filter.Value is not null && op is Between or In or NotIn or IsEmpty or IsNotEmpty)
+        {
+            Add(errors, $"{field}.value", $"{Name(op)} doesn't take a value{(op is In or NotIn ? ": give values" : string.Empty)}.");
+        }
+
+        if (filter.Values is not null && op is not (In or NotIn))
+        {
+            Add(errors, $"{field}.values", $"{Name(op)} doesn't take values{(op is Between or IsEmpty or IsNotEmpty ? string.Empty : ": give a value")}.");
+        }
+
+        if (op != Between)
+        {
+            if (filter.Min is not null)
+            {
+                Add(errors, $"{field}.min", $"{Name(op)} doesn't take a min: only between does.");
+            }
+
+            if (filter.Max is not null)
+            {
+                Add(errors, $"{field}.max", $"{Name(op)} doesn't take a max: only between does.");
+            }
+        }
+    }
+
     private static void ValidateCheck(UrlFilter filter, string field, Dictionary<string, List<string>> errors)
     {
         if (filter.Operator is not (In or NotIn))
@@ -313,6 +377,8 @@ internal static class UrlQueryCompiler
             Add(errors, $"{field}.op", $"'check' takes in or notIn, not {Name(filter.Operator)}.");
             return;
         }
+
+        ValidateUnused(filter, field, errors);
 
         if (filter.Values is not { Count: > 0 and <= MAX_VALUES } values || values.Any(value => value.Text is null))
         {
@@ -351,13 +417,18 @@ internal static class UrlQueryCompiler
 
         if (filter.Column == UrlColumns.CHECK)
         {
-            return Check(filter, Parameter, parameters);
+            return Check(filter, mode, Parameter, parameters);
         }
 
         var column = UrlColumns.Find(filter.Column, scope.IsCheck)!;
         if (mode == GridMode.Crawl)
         {
             return Inline(filter, column, Resolve(column.CrawlSql!, reason), column.UrlIdSql is { } id ? Resolve(id, reason) : null, indexed: false, Parameter, parameters);
+        }
+
+        if (column is { Source: ColumnSource.Summary, UrlIdSql: { } other } && filter.Operator is not (IsEmpty or IsNotEmpty))
+        {
+            return OtherUrl(filter, column, other, Parameter, parameters);
         }
 
         if (column == UrlColumns.STATUS_CLASS && filter.Operator == In)
@@ -422,14 +493,32 @@ internal static class UrlQueryCompiler
         var condition = Condition(filter, matched, column, column.UrlIdSql, parameter).Replace(COLUMN, column.Sql(GridMode.Summary)!, StringComparison.Ordinal);
         var check = column.Source == ColumnSource.Issues ? $"i.issue = {parameter(scope.CheckId!)} AND " : string.Empty;
         var subquery = $"SELECT {id} FROM {from} WHERE {check}{condition}";
+        var source = new IdSource([new IdScan(from, id, check + condition, Combinable: column.Source != ColumnSource.Issues)], ROW_ID, negative);
         if (negative)
         {
-            return Plain($"s.url_id NOT IN ({subquery})", parameters);
+            return Plain($"s.url_id NOT IN ({subquery})", parameters) with { Source = source };
         }
 
         var sql = $"s.url_id IN ({subquery})";
-        return new GridPredicate(sql, "+" + sql, parameters, Driving: true, Key(sql, parameters)) { Ids = subquery };
+        return new GridPredicate(sql, "+" + sql, parameters, Driving: true, Key(sql, parameters)) { Ids = subquery, Source = source };
     }
+
+    /// <summary>
+    /// A condition on another URL's text, which the URL summary names by id (where the row's redirects end): the URLs whose
+    /// text matches are read into a set, which each row's id for that URL is tested against.
+    /// </summary>
+    private static GridPredicate OtherUrl(UrlFilter filter, UrlColumnDefinition column, string urlId, Func<object, string> parameter,
+        List<KeyValuePair<string, object>> parameters)
+    {
+        var negated = POSITIVE.TryGetValue(filter.Operator, out var positive);
+        var text = Condition(filter, negated ? positive : filter.Operator, column, null, parameter).Replace(COLUMN, "u.url", StringComparison.Ordinal);
+        var matched = $"{urlId} IN (SELECT u.id FROM urls u WHERE {text})";
+        var sql = negated ? $"({urlId} IS NULL OR NOT ({matched}))" : matched;
+        return Plain(sql, parameters) with { Source = new IdSource([new IdScan("urls u", "u.id", text, Combinable: true)], urlId, negated) };
+    }
+
+    /// <summary>The URLs a check flagged, or one group of them, as their issues' key finds them.</summary>
+    private static IdSource Issues(string condition, bool negated) => new([new IdScan("issues i", "i.url_id", condition, Combinable: false)], ROW_ID, negated);
 
     /// <summary>
     /// The positive condition an operator states, with <see cref="COLUMN"/> for the column. A column whose value is
@@ -487,7 +576,11 @@ internal static class UrlQueryCompiler
         return Indexed($"({string.Join(" OR ", classes)})", "s.status_code", parameters);
     }
 
-    private static GridPredicate Check(UrlFilter filter, Func<object, string> parameter, List<KeyValuePair<string, object>> parameters)
+    /// <summary>
+    /// The URLs a check flagged (or one group of them), from the last analysis's issues: with a URL summary, read into a
+    /// set; without one (a crawl continued since its analysis), matched against the crawl's own URLs, as a check's rows are.
+    /// </summary>
+    private static GridPredicate Check(UrlFilter filter, GridMode mode, Func<object, string> parameter, List<KeyValuePair<string, object>> parameters)
     {
         var checks = filter.Values!.Select(value => value.Text!).ToList();
         string condition;
@@ -507,27 +600,38 @@ internal static class UrlQueryCompiler
         }
 
         var subquery = $"SELECT url_id FROM issues WHERE {condition}";
+        if (mode == GridMode.Crawl)
+        {
+            return Plain($"u.id {(filter.Operator == NotIn ? "NOT IN" : "IN")} ({subquery})", parameters);
+        }
+
         if (filter.Operator == NotIn)
         {
-            return Plain($"s.url_id NOT IN ({subquery})", parameters);
+            return Plain($"s.url_id NOT IN ({subquery})", parameters) with { Source = Issues(condition, negated: true) };
         }
 
         var sql = $"s.url_id IN ({subquery})";
-        return new GridPredicate(sql, "+" + sql, parameters, Driving: true, Key(sql, parameters)) { Ids = subquery };
+        return new GridPredicate(sql, "+" + sql, parameters, Driving: true, Key(sql, parameters)) { Ids = subquery, Source = Issues(condition, negated: false) };
     }
 
     /// <summary>The URL or the title contains the text.</summary>
     private static GridPredicate Search(string search, GridMode mode)
     {
         List<KeyValuePair<string, object>> parameters = [new("$q", $"%{Escape(search)}%")];
+        const string URL = @"u.url LIKE $q ESCAPE '\'";
+        const string TITLE = @"r.title LIKE $q ESCAPE '\'";
         if (mode == GridMode.Crawl)
         {
-            return Plain(@"(u.url LIKE $q ESCAPE '\' OR r.title LIKE $q ESCAPE '\')", parameters);
+            return Plain($"({URL} OR {TITLE})", parameters);
         }
 
-        const string IDS = @"SELECT u.id FROM urls u WHERE u.url LIKE $q ESCAPE '\' UNION SELECT r.url_id FROM responses r WHERE r.title LIKE $q ESCAPE '\'";
+        const string IDS = $"SELECT u.id FROM urls u WHERE {URL} UNION SELECT r.url_id FROM responses r WHERE {TITLE}";
         const string SQL = $"s.url_id IN ({IDS})";
-        return new GridPredicate(SQL, "+" + SQL, parameters, Driving: true, Key(SQL, parameters)) { Ids = IDS };
+        return new GridPredicate(SQL, "+" + SQL, parameters, Driving: true, Key(SQL, parameters))
+        {
+            Ids = IDS,
+            Source = new IdSource([new IdScan("urls u", "u.id", URL, Combinable: true), new IdScan("responses r", "r.url_id", TITLE, Combinable: true)], ROW_ID, Negated: false)
+        };
     }
 
     /// <summary>A condition on an indexed column: free to use the index, or kept off it with a unary plus.</summary>

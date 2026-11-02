@@ -353,8 +353,9 @@ two rows under 1 ms.
 
 ## Grid reads
 
-The desktop app's grids read a crawl file through three readers in `Storage/`. Each read opens the file read-only and
-holds one snapshot for that one page, so a grid never keeps a crawl or an analysis waiting.
+The desktop app's grids read a crawl file through three readers in `Storage/`. Each read opens the file as readers do
+(read-write, with `query_only` on, so it works in WAL mode) and holds one snapshot for that one page. Every reader
+method takes a `CancellationToken`, which stops the read within milliseconds.
 
 - `UrlGridReader`: a page of URLs with the columns a view shows (`Query`), the counts behind the filter chips and
   Overview's breakdowns (`Facets`), and a URL found by its text (`Lookup`).
@@ -371,21 +372,50 @@ a page gives to read on. The API, with every column and operator, is in
 - **With or without the URL summary.** While a summary describes the crawl, sorts and filters read it. Without one (a
   crawl running, never analysed, or continued since), they read the crawl's own tables, and a filter or sort on a
   column only the summary has throws `NeedsAnalysisException` with the reason and the columns, rather than being
-  ignored. A query that can't run throws `UrlQueryException`, its messages keyed by field.
+  ignored. The `check` filter needs only the last analysis's issues, as a check's rows do. A query that can't run
+  throws `UrlQueryException`, its messages keyed by field.
 - **Choosing a plan.** SQLite can't tell a rare value from a common one here (no STAT4), so `GridPlanner` counts each
   condition that could drive the query, up to 50,000 rows, and keeps the count. A rare condition (under 50,000 rows
   and under a tenth of the URLs) drives through its index and its rows are sorted; otherwise the sort's index is
   walked; otherwise (a sort without an index) the summary is scanned and sorted. A unary plus keeps the other
-  conditions off their indexes (`+s.status_code = 404`). A page past half way is read backwards from the far end. A
-  condition on the crawl's text (a title, a search) is read once into the URL ids it matches while there are at most
-  50,000, which then drive.
-- **Cursors** carry the last row's sort values and id, with a hash of the query, and read on as ranges of the first
-  key's index, its unknown values a range of their own: reading on costs a page however deep.
+  conditions off their indexes (`+s.status_code = 404`). A page past half way is read backwards from the far end, and
+  a page far from both ends of a sort without an index is picked out in memory: the matching rows' keys are kept in
+  one scan, the page's first and last rows found in place, and only the page sorted, which takes a third of the time
+  SQLite's sorter takes to sort every row up to it.
+- **Text conditions are read once into sets.** A condition on the crawl's own tables (a title, a URL's text, a
+  regular expression, a search, a check's URLs) is read into the set of URL ids it matches (`UrlIdSet`: a bit per
+  URL, 140 KB a million), kept per filter set. All the conditions on one table (a title and an H1 count, say) are read
+  in one scan of it. The set gives the condition's count, so no count scans again, and the counts of several sets are
+  bit operations. A set of up to 50,000 ids can drive the plan through them (`json_each`); a larger one is tested row
+  by row (`si_ids`, a function at about 60 ns a call), which a walk of the sort's index stops on once its page is full:
+  half way down a million rows, 25 ms. Functions the SQL calls for every row (`si_ids`, `si_regex`,
+  `si_resource_type`, and those that fill sets and tallies) go through SQLite's own interface, which costs a third of
+  what Microsoft.Data.Sqlite's wrapper does a call.
+- **Regular expressions** run in .NET's non-backtracking mode, each match stopped after 100 ms and a read's matches
+  after 3 s in all: nested counted repeats (`((.{0,9}){0,9}){0,9}`) build an automaton that can take minutes on one
+  URL, so such a pattern is refused as too complex for the crawl (and kept refused while the crawl stands still).
+- **Stopping a read.** Cancelling a read's token interrupts the statement it's running (`sqlite3_interrupt`), and
+  each statement checks it before it starts, so an abandoned read frees its core within milliseconds, a regular
+  expression part-way through its rows included.
+- **Writers here never wait on a grid.** A closed crawl is a single file in rollback-journal mode, and a read holds its
+  shared lock until it ends, which would keep a writer's switch to WAL mode waiting, then refused. So a writer of this
+  process about to switch (an analysis, a continue, a crawl closing back to one file) stops new grid reads of that
+  file, stops those in flight, switches, and lets them read again (`CrawlReadGate`): it waits milliseconds. Another
+  program reading the file isn't seen, and can still keep it out.
+- **Cursors** carry the last row's URL id and a hash of its sort values, with a hash of the query: under 100
+  characters, whatever the row holds. Reading on reads the row's sort values again in the new snapshot, and a row
+  that has gone or changed since is refused (start from an offset again) rather than read on from a place that has
+  moved. They read on as ranges of the first key's index, its unknown values a range of their own: reading on costs a
+  page however deep.
 - **Counts** (matching rows, facets, a check's groups, id sets) are kept in a `ReadCache` by crawl file, crawl stamp,
-  analysis and conditions, so scrolling never counts again. A running crawl's never are.
-- **Facets.** Filtered, three facets or more are counted in one pass: each row's values are packed into one number and
-  the rows grouped by it, as sorting a million rows by one number takes half the time of sorting them by a column per
-  value. Otherwise each facet is counted on its own, most of them from their own index.
+  analysis and conditions, so scrolling never counts again; a running crawl's for 2 s, then counted again. Requests
+  that want what another is counting wait for that count, and count it themselves only if its read stops. Past its
+  capacity, the entries used least recently go; a long key is kept by its hash.
+- **Facets.** Filtered, or without the URL summary, three facets or more are counted in one pass: each row's values
+  are packed into one number, counted as the rows are read (`si_tally`) rather than grouped by SQLite, which sorts
+  every row to group them. Otherwise each facet is counted on its own, most of them from their own index.
+- **Values this engine doesn't know** (a newer engine's link kind or outcome, a crafted file's numbers) read as
+  unknown, null, in every reader, never as an error.
 - **Issue groups.** Each check says how its issues group (`IssueDefinition.Grouping`): by detail and the other URL
   (`PageDetail`, `ResponseDetail`), by the other URL alone (`RelatedUrl`), or not at all (`None`, as its detail is a
   measurement). A group is a likely template fault when it holds at least half of the check's URLs, and at least 10,
@@ -396,25 +426,42 @@ a page gives to read on. The API, with every column and operator, is in
   and follows redirects hop by hop as the analysis does, instant meta refreshes included, up to 20.
 
 `si readbench <crawl>` times the grids' reads as the UI makes them, each on a fresh connection with nothing cached, as
-a filter set's first read is: the first page and the page half way down for every sort, filters common and rare (up to
-three at once), search, facets, the inspector, its links, and a check's groups and rows. With `--max-p95-ms` it fails
-when any read is over, and `--only` runs the reads whose name has the text. CI runs it on the 100k benchmark crawl
-with the UI's budget of 300 ms. The worst p95 of each kind of read, in ms, for the first page / the page half way down,
-on a 32-core Windows machine (20 runs; the 1M crawl is `si bench --pages 1000000`, 1.1M URLs and 50M links):
+a filter set's first read is: the first page, the page half way down and the one just past it (read from the far end),
+for every sort, filters common and rare (up to three at once, the slowest walk among them), text filters, regular
+expressions and searches common and rare (up to three), facets, the inspector (the URL most issues name included), the
+links of the most linked URLs by kind, a check's groups and rows, and again without the URL summary, as a running crawl
+is read (`GridReadContext.ReadWithoutSummary`, which leaves the file as it is). `--only` runs the reads whose name has
+the text (none is an error), `--max-p95-ms` fails a read over one budget, and `--gate` holds each class of read to its
+own p95 at 100k (`ReaderBenchmark.GATE_MS`), which is what CI runs on the 100k benchmark crawl.
 
-| Read | 100k URLs (112,584) | 1M URLs (1,123,028) |
-| --- | --- | --- |
-| Sorted by an indexed column | 2 / 3 | 12 / 40 |
-| Sorted by a column without an index | 21 / 46 | 228 / 639 |
-| Filtered (common and rare, up to three), sorted | 11 / 15 | 195 / 184 |
-| A title filter, a regular expression, a search | 40 / 30 | 341 / 340 |
-| A check: its filter, groups and rows | 6 / 6 | 198 / 215 |
-| Facets of every URL; of the pages | 47; 53 | 645; 612 |
-| A URL looked up, inspected | 2 | 17 |
-| Links: to the home page (all, hyperlinks), from it | 7 / 76 | 59 / 830 |
+**The gates.** The budgets are 300 ms for 100k URLs and 1 s for 1M, but a read grows 8–27 times from 100k to 1M where
+the budget grows 3.3 times, so a gate of 300 ms at 100k would let through reads that miss at 1M. Each class's gate is
+1 s ÷ its growth (at least 10, linear, as a read that regresses to a scan grows) × 2, as CI's 4-core runner is taken to
+be twice as slow a core as the desktop measured here: a read at its gate on CI would take about 1 s on 1M URLs. That
+factor is an estimate; the first CI runs' `readbench.json` should set it. Two classes over 1 s at 1M today are held to
+their own figures so they can't get slower: the facets without the summary (a ceiling of 1.5 s), and links of one kind to
+a URL with a million of them (2 s, until the links' indexes hold their kind). Worst p95 of each class in ms (first page,
+half way or just past it), on a 32-core Windows machine (20 runs at 100k, 5 at 1M; the 1M crawl is
+`si bench --pages 1000000`, 1.1M URLs and 50M links):
 
-The budgets are 300 ms for 100k URLs and 1 s for 1M. The slowest read of 1M is the home page's hyperlinks half way
-down, as a list of some kinds of link reads the links it skips to reach an offset.
+| Class | 100k URLs (112,584) | 1M URLs (1,123,028) | Growth | Gate at 100k |
+| --- | --- | --- | --- | --- |
+| Sorted by an indexed column (`indexed`) | 5 | 43 | 8.5 | 200 |
+| Sorted by a column without an index (`scan`) | 26 | 241 | 9.3 | 200 |
+| Filtered, common and rare, up to three, the slowest walk (`filter`) | 24 | 435 | 18.3 | 110 |
+| Text filters, regular expressions and searches, up to three (`text`) | 58 | 610 | 10.5 | 190 |
+| A check: its filter, groups and rows (`check`) | 7 | 183 | 26.5 | 75 |
+| Facets: of every URL, the pages, a common title filter (`facets`) | 80 | 713 | 8.9 | 200 |
+| A URL looked up, inspected (`inspector`) | 2 | 17 | 8.0 | 200 |
+| Links of every kind, to and from the home page (`links`) | 8 | 69 | 8.6 | 200 |
+| Links of one kind to the most linked URLs (`links-kind`) | 111 | 1,782 | 16.1 | 240 |
+| Without the summary: pages, sorted and filtered (`crawl`) | 87 | 920 | 10.6 | 185 |
+| Without the summary: facets (`crawl-facets`) | 111 | 1,353 | 12.2 | 245 |
+
+Three reads take over 1 s at 1M: the stylesheet's links of its kind (1.4 s half way, 1.8 s just past it) and the home
+page's hyperlinks just past half way (1.2 s), as a list of some kinds of link reads the links it skips to reach an
+offset; and the facets of the pages without the summary (1.35 s), which read and judge every row of the crawl's own
+tables. Every other read of 1M is under 1 s, the slowest the pages by response time without the summary (0.92 s).
 
 ## Synthetic site and benchmark
 

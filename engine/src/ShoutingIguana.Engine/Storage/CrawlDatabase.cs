@@ -152,8 +152,14 @@ public static class CrawlDatabase
             CheckSchema(connection, path, allowNew);
             try
             {
+                // A closed crawl's switch to WAL needs no reader part-way through it: the grids' reads here stop for the
+                // moment it takes, and read again after (CrawlReadGate). A file already in WAL mode has nothing to switch.
+                using (Scalar(connection, "PRAGMA journal_mode;") is "wal" ? null : CrawlReadGate.Exclusive(path))
+                {
+                    Execute(connection, "PRAGMA journal_mode = WAL;");
+                }
+
                 Execute(connection, """
-                    PRAGMA journal_mode = WAL;
                     PRAGMA synchronous = NORMAL;
                     PRAGMA temp_store = MEMORY;
                     PRAGMA cache_size = -32768;
@@ -181,13 +187,16 @@ public static class CrawlDatabase
 
     /// <summary>
     /// Folds the write-ahead log back so the crawl is a single file again, then closes the connection. Leaving WAL mode
-    /// needs every other connection closed. When one is still open (si stats, a SQLite browser, an export, the UI) the
-    /// file stays in WAL mode, and SQLite folds the log in when that connection closes. Nothing here waits for them.
+    /// needs every other connection closed: the grids' reads here stop for the moment it takes, and read again after
+    /// (<see cref="CrawlReadGate"/>). When another program has the file open (si stats, a SQLite browser, an export) it
+    /// stays in WAL mode, and SQLite folds the log in when that connection closes. Nothing here waits for them.
     /// </summary>
     internal static void CloseWriter(SqliteConnection connection, ILogger logger)
     {
         try
         {
+            using var exclusive = CrawlReadGate.Exclusive(connection.DataSource);
+
             // A reader part-way through a query holds back part of the log; checkpoint the rest rather than wait.
             Execute(connection, "PRAGMA busy_timeout = 0; PRAGMA wal_checkpoint(TRUNCATE);");
 

@@ -111,11 +111,14 @@ Built in stages:
     - `Vary: Origin`.
   - If the preflight asks with `Access-Control-Request-Private-Network: true`, the reply adds
     `Access-Control-Allow-Private-Network: true`.
-  - Real responses repeat `Access-Control-Allow-Origin` and `Vary: Origin`, and carry `Cache-Control: no-store`.
+  - Real responses repeat `Access-Control-Allow-Origin` and `Vary: Origin`, and carry `Cache-Control: no-store`,
+    `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`: no
+    answer is a page, and no browser may take one for a page.
   - No cookies and no credentials mode.
   - Chromium caches a preflight per URL, so query strings that change every call (paging) cost a preflight each. The
-    grid queries (E3) are therefore `POST`s with a JSON body to one fixed URL per grid. The UI never sets
-    `cache: 'no-store'` on a request, because that turns the preflight cache off.
+    grid queries (E3) are therefore `POST`s with a JSON body to one fixed URL per grid, and the inspector, a URL's
+    links and its source take the URL's id in the body, so inspecting URL after URL costs no preflight either. The UI
+    never sets `cache: 'no-store'` on a request, because that turns the preflight cache off.
 - **Bodies.** A request body is at most 1 MB.
 - **Paths from the UI** (open, add to library) must be absolute and end in `.sicrawl`. The file is checked to be a
   crawl before it's added. A path to another computer is refused with `file-error` ("copy the crawl to this computer
@@ -153,12 +156,12 @@ Built in stages:
     | `needs-secrets` | 422 | A secret must be given again |
     | `not-a-crawl` | 400 | The file isn't a crawl: SQLite error 26 (as in the CLI), the wrong schema, or a view or trigger the engine never writes |
     | `crawl-not-found` | 404 | No crawl has this id |
-    | `crawl-busy` | 409 | Running here or elsewhere, an analysis is running, another program holds the file's SQLite lock, or someone is part-way through reading the closed file, which keeps writers out |
+    | `crawl-busy` | 409 | Running here or elsewhere, an analysis is running, another program holds the file's SQLite lock, or another program is part-way through reading the closed file, which keeps writers out (the grids' reads here never do: an analysis or a continue starting stops them for the moment it takes) |
     | `not-analysable` | 409 | The engine refuses: running or interrupted |
     | `file-error` | 400 | IO or permissions |
     | `not-analyzed` | 404 | The crawl has never been analysed |
     | `needs-analysis` | 409 | A grid sorts or filters on the URL summary while there is none to read: never analysed, analysed by another engine version, or changed since. `reason` says which, and `columns` names the columns (E3a) |
-    | `invalid-query` | 422 | A grid query the engine can't run: an unknown column, an operator its type doesn't take, a value of the wrong type, a regular expression that doesn't compile or needs backtracking, a cursor from another query. `errors` is keyed by the field's path, such as `filters[1].value` (E3a) |
+    | `invalid-query` | 422 | A grid query the engine can't run: an unknown column, an operator its type doesn't take, a value of the wrong type for its column, a field the operator doesn't take, a null in a list, a regular expression that doesn't compile, needs backtracking or is too complex for the crawl, a cursor from another query or whose row has changed or gone. `errors` is keyed by the field's path, such as `filters[1].value` (E3a) |
     | `url-not-found` | 404 | No URL of the crawl has this id or text (E3a) |
     | `not-found`, `check-not-found` | 404 | No such route, or no check with this id |
     | `bad-request` | 400 | Malformed JSON, or a property the API doesn't know |
@@ -169,6 +172,11 @@ Built in stages:
     | `internal` | 500 | Anything else: the title is generic, and the detail is the exception message, never a stack trace |
 
   - An option value of the wrong type is a field error under `invalid-options`, not a 400.
+  - In a grid query, a field whose JSON type is fixed (`limit`, `offset`, `desc`, `urlId`, `after`, a column's or a
+    kind's name, a group's `relatedUrlId`) is a `bad-request` 400 when it has another; a filter's `value` and `values`,
+    which may be text, a number or a boolean, are checked against the column, under `invalid-query` (E3a).
+  - A value a crawl file holds that this engine doesn't know (a newer engine's kind of link or outcome, a crafted
+    file's number out of range) reads as null, as an unknown value does: never an error (E3a).
 
   - The expected exceptions are the CLI's set (`CommandErrors`): `InvalidOperationException`, `SqliteException`,
     `IOException`, `UnauthorizedAccessException`, and `ArgumentException` for a path. Their messages are already
@@ -552,7 +560,18 @@ The GET issues endpoint above stays as it is, for scripts and the design fixture
 
 The URL grid: every URL the crawl found is a row, fetched or not (filter on `fetched` for the library's
 `fetchedUrlCount`), the probes of the site's other versions included (filter on `source`). Each call reads one snapshot
-of the file and holds it for that one page only, so a grid never keeps an analysis or a crawl waiting.
+of the file and holds it for that one page only.
+
+- **A grid never keeps an analysis or a continue waiting.** Starting one here stops the grids' reads of that crawl for
+  the moment it switches the closed file to WAL mode (milliseconds), and they read again after, so the UI sees a page
+  a moment later, never an error. Another program part-way through reading the closed file (`si stats`, a SQLite
+  browser, an export) isn't seen, and can still keep it out: the analysis or continue then fails with `crawl-busy`
+  within a couple of seconds.
+- **A request given up stops its read.** The webview aborts a page request when the grid scrolls on (it closes the
+  connection): the read stops within milliseconds, so a fast scroll costs the page it stops on, not every page it
+  passed.
+- **Grid reads queue.** At most one a core runs at once; the rest wait without holding the sidecar up, so `/api/health`,
+  the event stream and crawl control answer at once whatever the grids are doing.
 
 `POST /api/crawls/{id}/urls` takes a query and returns one page of rows:
 
@@ -576,10 +595,15 @@ of the file and holds it for that one page only, so a grid never keeps an analys
     (default 100).
   - `next` is a cursor for the row after the last one, null at the end. Passed back as `after`, with the same
     filters, search and sort, it reads on from there (for exports) instead of from `offset`. Give `offset` or `after`,
-    not both.
+    not both. A page read on from a cursor has `offset` null.
+  - A cursor is under 100 characters whatever the row holds (a URL of thousands of characters included), so an export
+    reads on to the end. It names its row: one that has since gone, or whose sort values have changed (a crawl running,
+    analysed again), is refused with `invalid-query` on `after` ("start from an offset again"), never read on from a
+    place that has moved.
 - **Counts.** `matching` counts the rows the filters and search match, and `total` every URL in the crawl, so the UI
   can say "3 of 6,286 URLs". Both are cached per crawl file, analysis and filter set, so scrolling never counts again;
-  a running crawl's are counted afresh each time.
+  a running crawl's are kept for 2 s, then counted again. Requests that want a count being counted (a page, its
+  prefetch, the facets) wait for that count rather than counting it again.
 - **`filters`** must all match. Each is `{ column, op, ... }` by the column's type:
 
   | Type | `op` | With |
@@ -595,13 +619,21 @@ of the file and holds it for that one page only, so a grid never keeps an analys
 
   - A negative operator (`ne`, `notIn`, `notContains`, `notRegex`) matches unknown values too, as "exclude this value"
     should; add `isNotEmpty` to leave them out.
-  - Regular expressions run in .NET's non-backtracking mode, so no pattern can hang a query; a pattern that needs
-    backtracking (backreferences, lookarounds, atomic groups) is refused. Text values and patterns are at most 1,000
-    characters, and a query has at most 20 filters.
+  - A field the operator doesn't take is refused, not ignored: `values` or `min` beside `eq`, `value` beside `in`.
+    A null in `filters`, `columns` or `sort` is a field error (`filters[0]`).
+  - Regular expressions run in .NET's non-backtracking mode, linear in the text. A pattern that needs backtracking
+    (backreferences, lookarounds, atomic groups) is refused, and so is one too large to build (a repeat such as
+    `{100000}`). Nested counted repeats (`((.{0,9}){0,9}){0,9}`) can still take minutes on one URL, so each match stops
+    after 100 ms, and a read's matches after 3 s in all: a pattern that takes longer is refused with `invalid-query`
+    on its `value`, "This pattern is too complex to run on this crawl. Simplify it.", so no pattern can hang a read.
+    A simple pattern takes about 0.3 µs a title. Text values and patterns are at most 1,000 characters, and a query
+    has at most 20 filters.
   - **`check`** is a filter, not a column: `{ "column": "check", "op": "in", "values": ["title-too-long"] }` matches the
     URLs that any of these checks flagged, and `notIn` the URLs none of them did. With one check, `group` narrows it to
     one of the check's groups (see Issue groups), so a group's count opens its URLs in this grid:
-    `{"column":"check","op":"in","values":["empty-anchor-text"],"group":{"detail":null,"relatedUrlId":1}}`.
+    `{"column":"check","op":"in","values":["empty-anchor-text"],"group":{"detail":null,"relatedUrlId":1}}`. It reads
+    the last analysis's issues, as `/rows` does, so it works without the URL summary too (a crawl continued since its
+    analysis); only a crawl never analysed refuses it, with `needs-analysis`.
 - **`search`** matches the URL or the title containing the text, ignoring the case of ASCII letters. It's a plain scan
   for now (fast search comes in E6), at most 1,000 characters.
 - **`sort`** is up to 3 `{ column, desc }`, with unknown values last whichever the direction, and the URL's `id`
@@ -619,6 +651,11 @@ of the file and holds it for that one page only, so a grid never keeps an analys
   of each row. A filter or sort on one is refused with `needs-analysis` (409), whose `reason` is the one above and
   whose `columns` name the columns, rather than ignored. The other columns read the crawl's own tables, so a running
   crawl's grid works, live.
+
+  Those tables have an index only for a URL and its id, so without the summary a read of a big crawl reads every row:
+  on 1M URLs, a page sorted or filtered takes 0.3–0.9 s, and the facets 0.9 s, or 1.35 s filtered by a column (the
+  pages), the one read over the 1 s budget. During a crawl, counts and facets are kept for 2 s, so Overview and a
+  scrolled grid count at most that often.
 
 `GET /api/url-columns` lists the columns, for the column chooser and the filter bar:
 `[{ id, type, needsAnalysis, sortable, filterable, values, issueRowsOnly }]`, where `values` lists an enum's values
@@ -655,10 +692,12 @@ and `issueRowsOnly` marks a check's own columns, which only its rows have (see I
 | `inlinks`, `followedInlinks`, `nofollowInlinks`, `linkingPages` | number | Yes | Hyperlinks to the URL on the pages audited, each counted, a page's links to itself left out: all, those followed, the nofollow ones, and the pages they're on |
 | `issues`, `errors`, `warnings`, `notices` | number | Yes | Checks that flagged the URL, in all and by severity |
 
-- **Sorting.** Every number, enum and boolean column sorts, and `url` does. The other text columns are filters only:
-  a sort by a page's text reads every page's text (1.4 s for a page halfway down 1M URLs), and `redirectTargetStatusCode`
-  is looked up per row, so it filters but doesn't sort either. `metaRobots` and `xRobotsTag` are read from each page's
-  stored details, so they are shown only: filter on `noindex` and `nofollow` instead.
+- **Sorting.** `url` sorts, and every number, enum and boolean column but those read from each response (`outcome`,
+  `noindex`, `nofollow`, `h1Count`, `ttfbMs`, and `redirectTargetStatusCode`, which is looked up per row): they filter
+  but don't sort, as a sort by them would read every response, as a sort by a page's text would (1.4 s for a page half
+  way down 1M URLs), so the other text columns are filters only too. `metaRobots` and `xRobotsTag` are read from each
+  page's stored details, so they are shown only: filter on `noindex` and `nofollow` instead. `/api/url-columns` says
+  which columns sort (`sortable`).
 - The filter `check` needs the analysis, as the columns marked do.
 
 #### Facets
@@ -703,7 +742,9 @@ starts with `/` is taken on the start URL's origin. `url-not-found` (404) says t
 
 ### The inspector (E3a)
 
-`GET /api/crawls/{id}/urls/{urlId}` gives one URL in full; `url-not-found` (404) for an id the crawl doesn't have.
+`POST /api/crawls/{id}/urls/inspect` with `{ "urlId": 119 }` gives one URL in full: the URL inspected is in the body,
+not the path, so moving from URL to URL costs no preflight. `url-not-found` (404) for an id the crawl doesn't have (0,
+below, or past what an id holds), and `invalid-query` without one.
 
 ```json
 {"id":119,"url":"https://www.example.com/blog/?p=2","isInternal":true,"type":"page",
@@ -737,6 +778,10 @@ starts with `/` is taken on the start URL's origin. `url-not-found` (404) says t
   `queued`, `fetching`, `done` or `skipped`, and `notFetchedBecause` why a skipped URL wasn't fetched (`noFollow`,
   `notFollowedByOption`, `resourcesDisabled`, `externalsDisabled`, `depthLimit`, `urlLimit`).
 - **`response`** is null for a URL never fetched.
+- **A value this engine doesn't know** (a newer engine's, a crafted file's) is null, as an unknown one is: discovery's
+  `source`, `fetchMode`, `state`, `foundVia` and `notFetchedBecause`, the response's `outcome`, the verdict's `reason`,
+  a link's `kind` and `position`; a link's `flags` leave out a flag this engine doesn't know, and a number that doesn't
+  fit (an infinite `responseMs`) is null too.
 - **`redirects`** follows the URL's redirects hop by hop, an instant meta refresh counting as one, as the analysis
   does: `hops` lists each step `{ id, url, statusCode, outcome, via: "http" | "metaRefresh" }`, at most 20, and
   `final` where they end. `loop` is true when they come back on themselves, and `tooLong` when there are more than 20.
@@ -756,7 +801,8 @@ starts with `/` is taken on the start URL's origin. `url-not-found` (404) says t
   for a page that was only status-checked.
 - **`content`** is null for anything that isn't a parsed page. Titles, descriptions and H1s are each listed in page
   order with their `length` as the checks measure it; `headings` counts H1 to H6, `images` the images and
-  `imagesMissingAlt` those without alt text; `robots` lists the directives that apply to the crawler or to Googlebot.
+  `imagesMissingAlt` those without alt text; `robots` lists the directives that apply to the crawler or to Googlebot;
+  `metaRefresh` is `{ delaySeconds, url }` for a page with a meta refresh, else null.
   **`limits`** are what the analysis judged them against: its stored settings (`fromAnalysis: true`), or the engine's
   defaults before the first analysis (`fromAnalysis: false`).
 - **`links`** comes from the URL summary, and is null without one (`summary` says why). `type` is judged as the
@@ -771,11 +817,11 @@ starts with `/` is taken on the start URL's origin. `url-not-found` (404) says t
   are null before the first.
 - **`source.stored`** says whether `/source` has the HTML.
 
-`POST /api/crawls/{id}/urls/{urlId}/inlinks` and `/outlinks` page the links to and from the URL, a page's links to
-itself left out, in the order they were found:
+`POST /api/crawls/{id}/urls/inlinks` and `/urls/outlinks` page the links to and from the URL whose id is in the body, a
+page's links to itself left out, in the order they were found:
 
 ```json
-{"kinds":["hyperlink"],"offset":0,"limit":100}
+{"urlId":119,"kinds":["hyperlink"],"offset":0,"limit":100}
 ```
 
 ```json
@@ -791,12 +837,16 @@ itself left out, in the order they were found:
   is `content`, `navigation`, `header`, `footer`, `sidebar` or `head`. `flags` are among `noFollow`, `sponsored`,
   `ugc`, `imageLink`, `outsideHead`, `samePage` and `fromHttpHeader`; `followed` is whether search engines follow a
   hyperlink, which a nofollow on its page stops too.
-- Paging is as the URL grid's: `offset`, `limit` (1 to 1,000), and `after` with the `next` cursor.
+- Paging is as the URL grid's: `offset`, `limit` (1 to 1,000), and `after` with the `next` cursor. Name each kind once:
+  one named twice, or a null, is a field error (`kinds[2]`).
 
-`GET /api/crawls/{id}/urls/{urlId}/source` gives the stored HTML, `{ "stored": true, "html": "…", "bytes": 96340,
-"truncated": false }`, or `{ "stored": false, "reason": "notStored" | "notPage" }`: the crawl didn't store HTML (`--store-html`
-is off by default), or this URL has none (not a page fetched successfully). HTML over 16 MB unpacked is cut there, and
-`truncated` says so.
+`POST /api/crawls/{id}/urls/source` with `{ "urlId": 119 }` gives the stored HTML, `{ "stored": true, "html": "…",
+"bytes": 96340, "truncated": false }`, or `{ "stored": false, "reason": "notStored" | "notPage" }`: the crawl didn't
+store HTML (`--store-html` is off by default), or this URL has none (not a page fetched successfully). It's written as
+it's unpacked, a piece at a time, so a view of a 16 MB page holds a few megabytes (4 MB), not the page; it's escaped
+as every answer is (`<` as `<`), so its bytes hold no markup. HTML over 16 MB unpacked is cut there, on a
+character's boundary, and `truncated` says so; `bytes` is its size unpacked, before any cut, or null for a page over
+512 MB, which isn't unpacked that far. A page whose stored HTML is damaged is `file-error`.
 
 ### Issue groups (E3a)
 
@@ -850,8 +900,8 @@ with `matching` the rows the filters match and `total` the check's flagged URLs,
  "offset":0,"matching":264,"total":264,"next":"…","summary":{"available":true,"reason":null},"unavailable":[]}
 ```
 
-A skipped check has `total` null and no rows. Without a URL summary, the URL columns are the crawl's as in `/urls`:
-the issues are the last analysis's, as on the Issues screen.
+A skipped check has `total` and `matching` null and no rows. Without a URL summary, the URL columns are the crawl's as
+in `/urls`: the issues are the last analysis's, as on the Issues screen.
 
 ## Engine changes E1 needs
 
@@ -918,9 +968,10 @@ Each has its own tests, and each of those tests was seen to fail with the code i
   `GET /api/checks` gives as `grouping`), and each analysis adds the index `ix_issues_group` on
   `issues (issue, detail, related_url_id)`.
 - **`si readbench <crawl>`** times the grids' reads as the UI makes them and fails over a budget (`--max-p95-ms`), and
-  **`si bench --db <file>`** keeps its crawl for it. CI runs both on the 100k crawl, with the UI's budget of 300 ms. At
-  p95 the slowest read takes 76 ms on the 100k crawl, and 0.83 s on a 1M one against its budget of 1 s,
-  on a 32-core machine: the engine's README has the table ([Grid reads](../engine/README.md#grid-reads)).
+  **`si bench --db <file>`** keeps its crawl for it. CI runs both on the 100k crawl. Its cases were rare text filters
+  only, and a common one took 0.9–1.7 s on 1M (three, up to 6 s): the review's fixes below brought every read of 1M
+  under its budget but those they name, and gate CI by each class of read's growth
+  ([Grid reads](../engine/README.md#grid-reads)).
 
 ## Engine changes E4 made
 
@@ -982,3 +1033,45 @@ stopped (quitting stops it, as the IA has it) or interrupted (a crash), and both
 would only make "Continue" ask whether to start paused, which nobody wants. It would cost a write, and a new stamp on
 the crawl, at every pause and resume. The engine still reads a stored `paused` status as running or interrupted, as
 it does today.
+
+## Engine changes from the E3a review: queries and HTTP
+
+Each has a test that fails without it. The crawl's schema is unchanged. Measured on the 1M crawl (1,123,028 URLs),
+p95 on a 32-core machine, against `e81a98a`:
+
+- **Text filters, regular expressions and searches are read once into sets.** A common one cost 0.9–1.7 s a read on
+  1M (three, 3.2–6 s), re-scanning the crawl's tables three or four times: each is now read once into a set of URL ids
+  (`UrlIdSet`), kept per filter set, which gives its count and which each row is tested against. Common text filters
+  and searches take 0.15–0.48 s, three of them 0.53 / 0.64 s, a common pattern with a sort without an index
+  0.62 / 0.72 s (first page / half way); the bench now times them.
+- **No pattern can hang a read.** Each match stops after 100 ms and a read's matches after 3 s: the review's patterns
+  that ran 0.6 s to 230 s are refused in about 0.1 s, `invalid-query` on their filter's `value`. A pattern too large to
+  build is called too complex, not "needs backtracking".
+- **A request given up stops its read.** Every reader takes a `CancellationToken`, and the sidecar passes the request's:
+  the statement is interrupted. Twenty pages aborted in a fling cost 0.2–0.3 s of CPU, not 51 s, and the page the
+  user stops on takes 0.18 s after them (it took 2.2–2.6 s), on 32 cores and on 4.
+- **Grid reads queue** (`SidecarOptions.GridReads`, one a core), each on a thread of its own, so `/api/health` answers in
+  4 ms during 20 heavy reads on 4 cores (it took up to 0.76 s). **Counting is shared**: 20 requests for one new filter
+  set at once cost 0.7 s of CPU, not 41 s.
+- **A writer here never waits on a grid** (`CrawlReadGate`): an analysis or a continue starting during a read on a
+  closed crawl opens at once, where it was refused after 2.2 s; the read runs again after. A crawl closing switches
+  back to one file even while grids read it.
+- **Cursors are short and never stale**: a row's id and a hash of its sort values, under 100 characters, so a cursor
+  after a URL of thousands of characters reads on (it was refused), and one whose row has changed or gone is refused.
+- **`/source` is written as it's unpacked**: six views of big pages at once add 40 MB to the sidecar, given back, where
+  they added 2.4 GB and kept it. A cut at 16 MB keeps a page's own characters at the cut.
+- **The inspector, links and source are POSTs to fixed URLs** (`/urls/inspect`, `/urls/inlinks`, `/urls/outlinks`,
+  `/urls/source`, the URL's id in the body): moving from URL to URL costs no preflight, and an id past what an id holds
+  is `url-not-found`.
+- **Stored values this engine doesn't know read as null**, in every reader: a kind of link, a position, an outcome, a
+  source, an infinite number. A null in a request's list, and a field an operator doesn't take, are field errors; a
+  kind named twice is refused. Every answer carries `nosniff` and a `default-src 'none'` policy.
+- **The check filter without a summary** reads the last analysis's issues, as `/rows` does.
+- **Without the URL summary** (a crawl running, or continued since), a running crawl's counts and facets are kept for
+  2 s, then counted again; deep pages of a sort are picked out in memory, and the facets counted in one pass. Pages
+  take 0.4–0.9 s on 1M; **the facets are the one read still slow there**: 0.9 s for every URL and 1.3 s for the
+  pages, as every row of the crawl's own tables is read and judged.
+- **`si readbench`** times what it missed (common text filters and searches, three text filters, the slowest walk, the
+  page just past half way, read from the far end, the most linked URLs' links by kind, the URL most issues name, and
+  every read without the summary) and holds each class of read to its own gate at 100k (`--gate`, which CI runs), set
+  from the class's growth from 100k to 1M, so a read that would miss 1 s at 1M fails at 100k.

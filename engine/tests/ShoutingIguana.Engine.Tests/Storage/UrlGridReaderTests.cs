@@ -103,6 +103,7 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
         { "boolean false", [Boolean("indexable", false)] },
         { "boolean empty", [new UrlFilter("indexable", FilterOperator.IsEmpty)] },
         { "boolean not empty", [new UrlFilter("inSitemap", FilterOperator.IsNotEmpty)] },
+        { "indexable not empty", [new UrlFilter("indexable", FilterOperator.IsNotEmpty)] },
         { "fetched", [Boolean("fetched", false)] },
         { "internal", [Boolean("isInternal", false)] },
         { "noindex", [Boolean("noindex", true)] },
@@ -148,6 +149,25 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
         }
     }
 
+    /// <summary>Without a URL summary, every filter on the crawl's own columns matches what it does with one.</summary>
+    [Theory]
+    [MemberData(nameof(Filters))]
+    public void EveryFilterMatchesTheSameWithoutASummary(string name, UrlFilter[] filters)
+    {
+        if (filters.Any(filter => filter.Column != "check" && UrlColumns.Find(filter.Column, issueColumns: false)!.NeedsAnalysis))
+        {
+            return;
+        }
+
+        foreach (var sort in new UrlSort[][] { [], [new UrlSort("responseMs", true)], [new UrlSort("url")] })
+        {
+            var query = new UrlQuery { Filters = filters, Sort = sort };
+            var expected = crawl.Reference.Order(sort, crawl.Reference.Matching(filters));
+            Assert.True(expected.SequenceEqual(ByOffset(query, new ReadCache(), crawl.Changed)), $"{name}, sorted by {string.Join(",", sort.Select(key => key.Column))}");
+            Assert.Equal(expected, ByCursor(query, new ReadCache(), crawl.Changed));
+        }
+    }
+
     [Fact]
     public void MultipleKeysSortInTurnEachWithUnknownLast()
     {
@@ -173,6 +193,7 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
         {
             var expected = crawl.Reference.Order([new UrlSort("url")], crawl.Reference.Matching([], text));
             Assert.Equal(expected, ByOffset(new UrlQuery { Search = text, Sort = [new UrlSort("url")] }, new ReadCache()));
+            Assert.Equal(expected, ByOffset(new UrlQuery { Search = text, Sort = [new UrlSort("url")] }, new ReadCache(), crawl.Changed));
         }
     }
 
@@ -253,7 +274,32 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
         var refused = Assert.Throws<NeedsAnalysisException>(() =>
             UrlGridReader.Query(copy, new UrlQuery { Filters = [Number("inlinks", FilterOperator.Gt, 1), Names("check", FilterOperator.In, "orphan-page")], Sort = [new UrlSort("issues")] }));
         Assert.Equal(SummaryUnavailableReason.CrawlChanged, refused.Reason);
-        Assert.Equal(["inlinks", "check", "issues"], refused.Columns);
+        Assert.Equal(["inlinks", "issues"], refused.Columns);
+    }
+
+    /// <summary>
+    /// The check filter needs only the last analysis's issues, which a crawl continued since still has: a group's count
+    /// opens its URLs in the grid as its rows do. A crawl never analysed has none.
+    /// </summary>
+    [Fact]
+    public void WithoutASummaryTheCheckFilterReadsTheLastAnalysissIssues()
+    {
+        var copy = crawl.Copy();
+        Stamp(copy);
+        foreach (var check in crawl.Reference.Issues.SelectMany(issue => issue.Value.Select(item => item.Issue)).Distinct(StringComparer.Ordinal))
+        {
+            foreach (var op in new[] { FilterOperator.In, FilterOperator.NotIn })
+            {
+                UrlFilter[] filters = [Names("check", op, check), Names("type", FilterOperator.In, "page")];
+                Assert.Equal(crawl.Reference.Order([new UrlSort("url")], crawl.Reference.Matching(filters)),
+                    ByOffset(new UrlQuery { Filters = filters, Sort = [new UrlSort("url")] }, new ReadCache(), copy));
+            }
+        }
+
+        var neverAnalysed = crawl.Copy();
+        Change(neverAnalysed, "DELETE FROM analysis");
+        var refused = Assert.Throws<NeedsAnalysisException>(() => UrlGridReader.Query(neverAnalysed, new UrlQuery { Filters = [Names("check", FilterOperator.In, "orphan-page")] }));
+        Assert.Equal(["check"], refused.Columns);
     }
 
     [Fact]
@@ -274,13 +320,38 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
         using (new FileStream(running + "-lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1,
                    OperatingSystem.IsWindows() ? FileOptions.DeleteOnClose : FileOptions.None))
         {
-            var cache = new ReadCache();
-            var live = UrlGridReader.Query(running, new UrlQuery { Filters = [Names("type", FilterOperator.In, "page")] }, cache);
+            var live = UrlGridReader.Query(running, new UrlQuery { Filters = [Names("type", FilterOperator.In, "page")] });
             Assert.Equal(SummaryUnavailableReason.Crawling, live.Summary.Reason);
-            Assert.Equal(0, cache.Count);
         }
 
         Assert.Equal(SummaryState.Present, UrlGridReader.Query(crawl.Path, new UrlQuery()).Summary);
+    }
+
+    /// <summary>
+    /// A running crawl changes from one read to the next, so what it counts is kept only briefly: a burst of reads (a page,
+    /// its prefetch, the facets) counts once, and a count is never older than <see cref="ReadCache.LIVE_FOR"/>.
+    /// </summary>
+    [Fact]
+    public void ARunningCrawlsCountsAreKeptBriefly()
+    {
+        var running = crawl.Copy();
+        Change(running, $"UPDATE crawl SET status = {(int)CrawlStatus.Running}, updated_at = updated_at + 1");
+        var page = crawl.Reference.Rows.First(row => (string?)row.Value["type"] == "page").Key;
+        UrlFilter[] pages = [Names("type", FilterOperator.In, "page")];
+        using (new FileStream(running + "-lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1,
+                   OperatingSystem.IsWindows() ? FileOptions.DeleteOnClose : FileOptions.None))
+        {
+            var cache = new ReadCache();
+            var before = UrlGridReader.Query(running, new UrlQuery { Filters = pages, Limit = 1 }, cache);
+            Assert.Equal(SummaryUnavailableReason.Crawling, before.Summary.Reason);
+            Assert.True(cache.Count > 0);
+
+            // The crawl moves on: a page turns out to be an image. Within the moment, the count stands; after it, it's read again.
+            Change(running, "UPDATE responses SET content_type = 'image/png' WHERE url_id = $id", ("$id", page));
+            Assert.Equal(before.Matching, UrlGridReader.Query(running, new UrlQuery { Filters = pages, Limit = 1 }, cache).Matching);
+            Thread.Sleep(ReadCache.LIVE_FOR + TimeSpan.FromMilliseconds(200));
+            Assert.Equal(before.Matching - 1, UrlGridReader.Query(running, new UrlQuery { Filters = pages, Limit = 1 }, cache).Matching);
+        }
     }
 
     public static TheoryData<string, UrlQuery> BadQueries() => new()
@@ -315,7 +386,19 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
         { "offset", new UrlQuery { Offset = -1 } },
         { "after", new UrlQuery { Offset = 10, After = "x" } },
         { "after", new UrlQuery { After = "not a cursor" } },
-        { "search", new UrlQuery { Search = new string('a', 1_001) } }
+        { "search", new UrlQuery { Search = new string('a', 1_001) } },
+
+        // What an operator doesn't take is refused, not ignored, and a list with nothing in a place is a field error.
+        { "filters[0].values", new UrlQuery { Filters = [Number("statusCode", FilterOperator.Eq, 200) with { Values = [FilterValue.Of(200)] }] } },
+        { "filters[0].value", new UrlQuery { Filters = [Names("type", FilterOperator.In, "page") with { Value = FilterValue.Of("page") }] } },
+        { "filters[0].value", new UrlQuery { Filters = [new UrlFilter("depth", FilterOperator.Between) { Min = 1, Value = FilterValue.Of(2) }] } },
+        { "filters[0].min", new UrlQuery { Filters = [Number("depth", FilterOperator.Eq, 1) with { Min = 0 }] } },
+        { "filters[0].max", new UrlQuery { Filters = [new UrlFilter("title", FilterOperator.IsEmpty) { Max = 3 }] } },
+        { "filters[0].value", new UrlQuery { Filters = [Names("check", FilterOperator.In, "title-too-long") with { Value = FilterValue.Of("x") }] } },
+        { "columns[0]", new UrlQuery { Columns = [null!] } },
+        { "filters[0]", new UrlQuery { Filters = [null!] } },
+        { "sort[0]", new UrlQuery { Sort = [null!] } },
+        { "filters[0].value", new UrlQuery { Filters = [Text("url", FilterOperator.Regex, "a{100000}")] } }
     };
 
     [Theory]
@@ -371,8 +454,13 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
         Assert.DoesNotContain("TEMP B-TREE", common);
         Assert.Contains("TEMP B-TREE", Plan(new UrlQuery { Sort = [new UrlSort("followedInlinks", true)] }));
 
-        // A text filter is read once into the URL ids it matches, which then drive.
-        Assert.Contains("json_each", Plan(new UrlQuery { Filters = [Text("title", FilterOperator.Contains, "product 1")], Sort = [new UrlSort("depth")] }), StringComparison.OrdinalIgnoreCase);
+        // A text filter is read once into the URL ids it matches: a rare one's ids drive, and a common one's are tested row
+        // by row as the sort's index is walked, which stops once the page is full.
+        Assert.Contains("json_each", Plan(new UrlQuery { Filters = [Text("title", FilterOperator.Contains, "product 12")], Sort = [new UrlSort("depth")] }), StringComparison.OrdinalIgnoreCase);
+        var commonText = Plan(new UrlQuery { Filters = [Text("title", FilterOperator.Contains, "product")], Sort = [new UrlSort("depth")] });
+        Assert.Contains("ix_url_summary_depth", commonText);
+        Assert.DoesNotContain("TEMP B-TREE", commonText);
+        Assert.DoesNotContain("responses", commonText);
     }
 
     [Fact]
@@ -421,6 +509,11 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
 
         var (last, values) = ran[^1];
         using var connection = CrawlDatabase.OpenReader(crawl.Path);
+
+        // The reader's own functions, which a plan only names.
+        connection.CreateFunction<long, long?, bool>(ReaderFunctions.IN_SET, (_, _) => false);
+        connection.CreateFunction<string, string?, bool>(ReaderFunctions.REGEX, (_, _) => false);
+        connection.CreateFunction<string, string?, int>(ReaderFunctions.RESOURCE_TYPE, (_, _) => 0);
         using var command = connection.CreateCommand();
         command.CommandText = "EXPLAIN QUERY PLAN " + last;
         foreach (var (name, value) in values)

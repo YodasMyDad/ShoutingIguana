@@ -13,6 +13,8 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="ShoutingIguana.Engine.Tests" />
+        <!-- si readbench times the grids' reads as a crawl without a URL summary has them, without changing the file. -->
+        <InternalsVisibleTo Include="si" />
     </ItemGroup>
 
 </Project>

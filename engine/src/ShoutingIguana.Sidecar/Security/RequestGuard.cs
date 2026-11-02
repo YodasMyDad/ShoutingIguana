@@ -24,10 +24,13 @@ internal sealed class RequestGuard(RequestDelegate next, SidecarSecurity securit
         if (!isPreflight)
         {
             // Every answer is about this moment's state, so nothing may keep one. At the last moment, so a failed
-            // request's problem (which clears the response) carries it too.
+            // request's problem (which clears the response) carries it too. And none is ever a page: a browser must not
+            // guess otherwise from its bytes, nor run or load anything if one were opened as a document.
             context.Response.OnStarting(() =>
             {
                 context.Response.Headers.CacheControl = "no-store";
+                context.Response.Headers.XContentTypeOptions = "nosniff";
+                context.Response.Headers.ContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'";
                 return Task.CompletedTask;
             });
         }

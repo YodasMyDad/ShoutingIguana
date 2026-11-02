@@ -38,7 +38,8 @@ public sealed class GridFallbackTests : IDisposable
         await using var job = TestCrawls.Start(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 2 }, path);
         await TestCrawls.WaitUntilAsync(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url LIKE '%/c'");
 
-        // The crawl is waiting on /held: the grid reads what it has so far, and keeps no counts, which change as it goes.
+        // The crawl is waiting on /held: the grid reads what it has so far, and keeps its counts, which change as it goes,
+        // only briefly (ReadCache.LIVE_FOR).
         var cache = new ReadCache();
         var page = UrlGridReader.Query(path, new UrlQuery { Columns = ["url", "statusCode", "title", "inlinks"], Sort = [new UrlSort("url")] }, cache);
         Assert.Equal(new SummaryState(false, SummaryUnavailableReason.Crawling), page.Summary);
@@ -49,7 +50,7 @@ public sealed class GridFallbackTests : IDisposable
         Assert.Null(held.Values[2]);
         Assert.Equal(page.Rows.Count, page.Total);
         Assert.InRange(page.Total, 5, TestCrawls.Count(path, "SELECT COUNT(*) FROM urls"));
-        Assert.Equal(0, cache.Count);
+        Assert.True(cache.Count > 0);
 
         var refused = Assert.Throws<NeedsAnalysisException>(() => UrlGridReader.Query(path, new UrlQuery { Sort = [new UrlSort("inlinks", true)] }));
         Assert.Equal(SummaryUnavailableReason.Crawling, refused.Reason);
@@ -58,7 +59,6 @@ public sealed class GridFallbackTests : IDisposable
         var facets = UrlGridReader.Facets(path, new UrlFacetQuery(), cache);
         Assert.Equal(["inSitemap", "severity"], facets.Unavailable);
         Assert.Contains(facets.Facets["statusCode"], bucket => bucket.Value is null);
-        Assert.Equal(0, cache.Count);
 
         var home = page.Rows.Single(row => (string?)row.Values[1] == site.BaseUri.AbsoluteUri).Id;
         var inspected = UrlInspectorReader.Read(path, home)!;

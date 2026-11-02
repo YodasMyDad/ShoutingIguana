@@ -7,9 +7,9 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 internal sealed record LinkRowDto(
     int Id,
     string Url,
-    LinkKind Kind,
+    LinkKind? Kind,
     string? Text,
-    LinkPosition Position,
+    LinkPosition? Position,
     IReadOnlyList<string> Flags,
     bool? Followed,
     string? Fragment,

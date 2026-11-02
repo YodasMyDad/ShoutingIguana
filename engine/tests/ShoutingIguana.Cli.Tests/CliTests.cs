@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
+using ShoutingIguana.Cli.Benchmarking;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Storage;
@@ -242,18 +243,29 @@ public sealed class CliTests : IAsyncLifetime
             result["cases"]!.AsArray().Select(read => (string)read!["kind"]!).Distinct().Order(StringComparer.Ordinal));
         Assert.All(result["cases"]!.AsArray(), read => Assert.True((double?)read!["firstP95Ms"] >= (double?)read["firstP50Ms"]));
 
+        // Every read has a class, each class its gate; the reads without the summary are timed too, and so is the page
+        // just past half way, which is read from the far end.
+        Assert.All(result["cases"]!.AsArray(), read => Assert.Contains((string)read!["class"]!, ReaderBenchmark.GATE_MS.Keys));
+        Assert.Contains(result["cases"]!.AsArray(), read => ((string)read!["name"]!).StartsWith("Without the summary", StringComparison.Ordinal));
+        Assert.Contains(result["cases"]!.AsArray(), read => read!["pastHalfP95Ms"] is not null);
+        var gated = await RunAsync("readbench", crawl, "--runs", "1", "--gate", "--only", "sort by depth");
+        Assert.True(gated.ExitCode == 0, gated.Output + gated.Error);
+
         // Only some reads, and a budget every read is over.
         var over = await RunAsync("readbench", crawl, "--runs", "1", "--max-p95-ms", "0.000001", "--only", "facets");
         Assert.Equal(1, over.ExitCode);
         Assert.Contains("FAILED       Facets of every URL", over.Output);
         Assert.DoesNotContain("Sort by", over.Output);
 
+        // A filter that leaves nothing to time is a mistake, not a pass.
+        Assert.Equal(2, (await RunAsync("readbench", crawl, "--runs", "1", "--max-p95-ms", "1", "--only", "no such read")).ExitCode);
+
         // Never analysed: the reads that need the URL summary are skipped, so the budget isn't met.
         var unanalysed = Path.Combine(_folder, "unanalysed.sicrawl");
         Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", unanalysed, "--max-urls", "20", "-q", "--no-analyze")).ExitCode);
         var partial = await RunAsync("readbench", unanalysed, "--runs", "1", "--max-p95-ms", "60000");
         Assert.Equal(1, partial.ExitCode);
-        Assert.Contains("has no URL summary (NotAnalyzed)", partial.Output);
+        Assert.Contains("has no URL summary, as it was never analysed", partial.Output);
         Assert.Contains("skipped", partial.Output);
 
         Assert.Equal(2, (await RunAsync("readbench", Path.Combine(_folder, "missing.sicrawl"))).ExitCode);

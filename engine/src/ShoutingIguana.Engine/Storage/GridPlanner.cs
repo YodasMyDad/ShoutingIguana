@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Storage;
@@ -16,15 +17,22 @@ namespace ShoutingIguana.Engine.Storage;
 /// </list>
 /// The others are kept off their indexes with a unary plus (<c>+s.status_code</c>), which is what makes the choice stick.
 /// A page past half way is read from the other end in reverse, so the last page costs what the first does. A condition
-/// on the crawl's text (a title, a search) is read once into a set of URL ids, kept while it's small.
+/// on the crawl's own tables (a title, a search, a check's URLs) is read once into a set of URL ids, which is kept, gives
+/// its count, and drives the plan while it's small.
 /// </summary>
 internal static class GridPlanner
 {
     /// <summary>A condition's rows are counted up to this many: past it, the condition is common.</summary>
     public const int PROBE_CAP = 50_000;
 
-    /// <summary>The most URL ids kept for a condition on the crawl's text; with more, its subquery runs in each read.</summary>
+    /// <summary>The most URL ids a set lists for <c>json_each</c>, so they can drive a query; a larger set is tested row by row.</summary>
     public const int ID_SET_CAP = 50_000;
+
+    /// <summary>
+    /// From this offset on, a page of a sort without an index is picked out in memory rather than by SQLite's sorter, whose
+    /// heap of the first rows is quicker for a page near the top. Tests lower it, to read every page both ways.
+    /// </summary>
+    internal static int SelectFrom { get; set; } = 10_000;
 
     private enum Plan
     {
@@ -55,6 +63,14 @@ internal static class GridPlanner
             return known;
         }
 
+        // Every condition a set of URL ids, as text filters, a search and a check's URLs are: counted from the sets alone.
+        if (predicates.All(predicate => predicate.Matched is not null || predicate.Excluded is not null))
+        {
+            List<UrlIdSet> matched = [.. predicates.Select(predicate => predicate.Matched).OfType<UrlIdSet>()];
+            List<UrlIdSet> excluded = [.. predicates.Select(predicate => predicate.Excluded).OfType<UrlIdSet>()];
+            return matched.Count > 0 ? UrlIdSet.CountMatching(matched, excluded) : total - UrlIdSet.CountAny(excluded);
+        }
+
         return context.Count("matching|" + Keys(predicates), () =>
         {
             var parameters = predicates.SelectMany(predicate => predicate.Parameters);
@@ -77,48 +93,130 @@ internal static class GridPlanner
     }
 
     /// <summary>
-    /// The query with each condition on the crawl's text read into the URL ids it matches, kept while there are at most
-    /// <see cref="ID_SET_CAP"/>: the scan of every title or URL then runs once for the count and every page that follows,
-    /// not once per query, and the few ids drive the plan. With more, the condition stays a subquery.
+    /// The query with each condition on the crawl's own tables (a title, a search, a check's URLs) read into the set of URL
+    /// ids it matches, kept per filter set: the scan of every title or URL then runs once for the count and every page that
+    /// follows, not once per query, and the count is the set's. Sets not kept yet are read together, one scan of a table
+    /// for all of its conditions. A set of few ids (<see cref="ID_SET_CAP"/>) can drive the plan through them; a larger
+    /// one is tested row by row (<c>si_ids</c>, tens of nanoseconds), which a walk of the sort's index stops on once its
+    /// page is full.
     /// </summary>
     public static CompiledQuery Materialize(GridReadContext context, CompiledQuery query)
     {
-        if (query.Mode != GridMode.Summary || query.Predicates.All(predicate => predicate.Ids is null))
+        List<GridPredicate> reading = [.. query.All.Where(predicate => predicate.Source is not null)];
+        if (query.Mode != GridMode.Summary || reading.Count == 0)
         {
             return query;
         }
 
-        var index = 0;
-        return query with { Predicates = [.. query.Predicates.Select(predicate => predicate.Ids is null ? predicate : IdSet(context, predicate, index++))] };
+        var largest = new Lazy<long>(() => context.Scalar("SELECT COALESCE(MAX(id), 0) FROM urls", []));
+        List<GridPredicate> missing = [.. reading.Where(predicate => !context.HasLarge(SetKey(predicate)))];
+        var read = new Lazy<Dictionary<GridPredicate, UrlIdSet>>(() => ReadSets(context, missing, largest.Value));
+        var total = new Lazy<long>(() => context.Count("total", () => context.Scalar("SELECT COUNT(*) FROM url_summary", [])));
+        GridPredicate Materialized(GridPredicate predicate) => Use(context, predicate, total, context.CachedLarge(SetKey(predicate), () =>
+            read.Value.TryGetValue(predicate, out var set) ? set : ReadSets(context, [predicate], largest.Value)[predicate]));
+
+        return query with
+        {
+            Scope = query.Scope is { Source: not null } scope ? Materialized(scope) : query.Scope,
+            Predicates = [.. query.Predicates.Select(predicate => predicate.Source is null ? predicate : Materialized(predicate))]
+        };
     }
 
-    private static GridPredicate IdSet(GridReadContext context, GridPredicate predicate, int index)
+    /// <summary>
+    /// The sets of URL ids the conditions match, read by scanning their tables: every condition on one table (titles and
+    /// H1s on <c>responses</c>, say) in one scan, which fills a set per condition (<c>si_add</c>) as it goes. A check's
+    /// issues are found through their key, each check on its own.
+    /// </summary>
+    private static Dictionary<GridPredicate, UrlIdSet> ReadSets(GridReadContext context, IReadOnlyList<GridPredicate> predicates, long largest)
     {
-        var set = context.CachedLarge("ids|" + predicate.Key, () =>
+        Dictionary<GridPredicate, UrlIdSet> sets = new(ReferenceEqualityComparer.Instance);
+        List<(IdScan Scan, int Slot, GridPredicate Predicate)> scans = [];
+        foreach (var predicate in predicates)
         {
-            HashSet<long> ids = [];
-            using var command = context.Command(predicate.Ids!, predicate.Parameters);
+            var set = new UrlIdSet(largest);
+            sets[predicate] = set;
+            var slot = context.Use(set);
+            scans.AddRange(predicate.Source!.Scans.Select(scan => (scan, slot, predicate)));
+        }
+
+        foreach (var table in scans.Select((item, index) => (item, index)).GroupBy(entry => entry.item.Scan.Combinable ? entry.item.Scan.From : $"#{entry.index}"))
+        {
+            List<(IdScan Scan, int Slot, GridPredicate Predicate)> items = [.. table.Select(entry => entry.item)];
+            var from = items[0].Scan.From;
+            var sql = items is [var only]
+                ? $"SELECT COUNT({ReaderFunctions.ADD_TO_SET}({only.Slot}, {only.Scan.Id})) FROM {from} WHERE {only.Scan.Condition}"
+                : $"SELECT {string.Join(", ", items.Select(item => $"COUNT(CASE WHEN {item.Scan.Condition} THEN {ReaderFunctions.ADD_TO_SET}({item.Slot}, {item.Scan.Id}) END)"))} FROM {from}";
+            using var command = context.Command(sql, items.SelectMany(item => item.Predicate.Parameters));
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                // Reading stops as soon as there are too many: a common text filter costs a part of a scan, not all of it.
-                if (ids.Add(reader.GetInt64(0)) && ids.Count > ID_SET_CAP)
-                {
-                    return new IdSet(null, 0);
-                }
             }
-
-            return new IdSet($"[{string.Join(",", ids.Order())}]", ids.Count);
-        });
-
-        if (set.Json is null)
-        {
-            return predicate;
         }
 
-        var name = "$ids" + index.ToString(CultureInfo.InvariantCulture);
-        var sql = $"s.url_id IN (SELECT value FROM json_each({name}))";
-        return predicate with { Sql = sql, Disabled = "+" + sql, Parameters = [new(name, set.Json)], KnownCount = set.Count };
+        foreach (var set in sets.Values)
+        {
+            set.Seal(ID_SET_CAP);
+        }
+
+        return sets;
+    }
+
+    /// <summary>
+    /// A condition as its set is tested: few ids drive through <c>json_each</c>, and each row is otherwise tested against
+    /// the set. Its own count is the set's, or for a negative one every other URL's.
+    /// </summary>
+    private static GridPredicate Use(GridReadContext context, GridPredicate predicate, Lazy<long> total, UrlIdSet set)
+    {
+        var source = predicate.Source!;
+        var slot = context.Use(set);
+        var test = $"{ReaderFunctions.IN_SET}({slot.ToString(CultureInfo.InvariantCulture)}, {source.Subject})";
+        if (source.Negated)
+        {
+            var sql = source.OnRowId ? $"NOT {test}" : $"({source.Subject} IS NULL OR NOT {test})";
+            return predicate with
+            {
+                Sql = sql, Disabled = sql, Driving = false, Ids = null, Source = null,
+                KnownCount = source.OnRowId ? total.Value - set.Count : null, Excluded = source.OnRowId ? set : null
+            };
+        }
+
+        if (!source.OnRowId)
+        {
+            return predicate with { Sql = test, Disabled = test, Driving = false, Ids = null, Source = null };
+        }
+
+        if (set.Json is { } json)
+        {
+            var name = "$ids" + slot.ToString(CultureInfo.InvariantCulture);
+            return predicate with
+            {
+                Sql = $"s.url_id IN (SELECT value FROM json_each({name}))", Disabled = test, Parameters = [.. predicate.Parameters, new(name, json)],
+                Driving = true, Ids = null, Source = null, KnownCount = set.Count, Matched = set
+            };
+        }
+
+        return predicate with { Sql = test, Disabled = test, Driving = false, Ids = null, Source = null, KnownCount = set.Count, Matched = set };
+    }
+
+    private static string SetKey(GridPredicate predicate) => "ids|" + predicate.Key;
+
+    /// <summary>
+    /// The sort key values of the row with this URL id, as a page reads them for its cursor, so a cursor need carry only
+    /// the id; null when the crawl has no such row.
+    /// </summary>
+    public static object?[]? KeysOf(GridReadContext context, CompiledQuery query, long id)
+    {
+        var where = $"{Id(query)} = $cursorId";
+        if (query.Mode == GridMode.Crawl && query.Scope is { } scope)
+        {
+            where += " AND " + scope.Sql;
+        }
+
+        List<KeyValuePair<string, object>> parameters = [.. query.Scope?.Parameters ?? [], new("$cursorId", id)];
+        using var command = context.Command(
+            $"SELECT 1{string.Concat(query.Sort.Select(key => ", " + key.Sql))} FROM {From(context, query, Plan.Drive)} WHERE {where} LIMIT 1", parameters);
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? [.. query.Sort.Select((key, index) => KeyValue(reader, index + 1, key))] : null;
     }
 
     /// <summary>
@@ -128,6 +226,7 @@ internal static class GridPlanner
     public static List<(long Id, object?[] Keys)> Page(GridReadContext context, CompiledQuery query, long matching, int offset, int limit,
         GridCursorPosition? after, out bool more)
     {
+        var plan = Choose(context, query);
         if (after is null)
         {
             if (offset >= matching)
@@ -136,11 +235,21 @@ internal static class GridPlanner
                 return [];
             }
 
-            // Past half way, the same rows read backwards from the far end: walked or sorted, the first rows are the cheap ones.
+            // Far from both ends, a page of a sort without an index is picked out in memory; near the far end, read
+            // backwards, the sorter keeps only the rows up to the page.
             var take = (int)Math.Min(limit, matching - offset);
+            if (Math.Min(offset, matching - offset - take) >= SelectFrom && query.Sort is [{ Indexed: false, Column.Type: not UrlColumnType.Text } key] &&
+                (plan == Plan.Scan || query.Mode == GridMode.Crawl))
+            {
+                var selected = Select(context, query, plan, key, offset, take);
+                more = offset + selected.Count < matching;
+                return selected;
+            }
+
+            // Past half way, the same rows read backwards from the far end: walked or sorted, the first rows are the cheap ones.
             var reverse = offset > matching / 2;
             var skip = reverse ? matching - offset - take : offset;
-            var rows = Run(context, query, Choose(context, query), null, reverse, skip, take);
+            var rows = Run(context, query, plan, null, reverse, skip, take);
             if (reverse)
             {
                 rows.Reverse();
@@ -150,7 +259,6 @@ internal static class GridPlanner
             return rows;
         }
 
-        var plan = Choose(context, query);
         List<(long Id, object?[] Keys)> page = [];
         foreach (var section in Sections(query, after, plan == Plan.Walk, RowId(query, plan)))
         {
@@ -245,17 +353,109 @@ internal static class GridPlanner
         List<(long Id, object?[] Keys)> rows = [];
         while (reader.Read())
         {
-            var values = new object?[query.Sort.Count];
-            for (var index = 0; index < values.Length; index++)
-            {
-                values[index] = reader.IsDBNull(index + 1) ? null : query.Sort[index].Column.Type == UrlColumnType.Text ? reader.GetString(index + 1) : reader.GetInt64(index + 1);
-            }
-
-            rows.Add((reader.GetInt64(0), values));
+            rows.Add((reader.GetInt64(0), [.. query.Sort.Select((key, index) => KeyValue(reader, index + 1, key))]));
         }
 
         return rows;
     }
+
+    /// <summary>
+    /// A page deep in a sort without an index, picked out in memory: SQLite's sorter would sort every row up to the page
+    /// (half a million of them, half way down a million), which takes 0.5 s and more. The matching rows' keys and ids are
+    /// kept in one scan (<c>si_keep</c>), the page's first and last rows found in place without sorting the rest, and only
+    /// the page sorted: a third of the time. Unknown values come last, and ties go by id in the key's direction, as the
+    /// sort says.
+    /// </summary>
+    private static List<(long Id, object?[] Keys)> Select(GridReadContext context, CompiledQuery query, Plan plan, GridSortKey key, long offset, int take)
+    {
+        var predicates = query.All.ToList();
+        var crawl = query.Mode == GridMode.Crawl;
+        var where = Conditions(predicates, null, enabled: crawl);
+        var sql = $"SELECT COUNT({ReaderFunctions.KEEP}({(crawl ? key.Sql : key.Disabled)}, {Id(query)})) FROM {From(context, query, plan)}{(where.Length == 0 ? string.Empty : " WHERE " + where)}";
+        List<KeyValuePair<string, object>> parameters = [.. predicates.SelectMany(predicate => predicate.Parameters)];
+        Ran?.Invoke(sql, parameters);
+        context.Kept.Clear();
+        using (var command = context.Command(sql, parameters))
+        {
+            command.ExecuteScalar();
+        }
+
+        var rows = context.Kept.ToArray();
+        context.Kept.Clear();
+        var descending = key.Descending;
+        var order = Comparer<(long? Key, long Id)>.Create((one, other) =>
+        {
+            if (one.Key is null != other.Key is null)
+            {
+                return one.Key is null ? 1 : -1;
+            }
+
+            var compared = one.Key is { } first && other.Key is { } second ? first.CompareTo(second) : 0;
+            compared = compared != 0 ? compared : one.Id.CompareTo(other.Id);
+            return descending ? -compared : compared;
+        });
+
+        var start = (int)offset;
+        if (start >= rows.Length)
+        {
+            return [];
+        }
+
+        var end = Math.Min(rows.Length, start + take);
+        Nth(rows, start, order, 0, rows.Length - 1);
+        Nth(rows, end - 1, order, start, rows.Length - 1);
+        Array.Sort(rows, start, end - start, order);
+        return [.. rows[start..end].Select(row => (row.Id, new object?[] { row.Key }))];
+    }
+
+    /// <summary>
+    /// Puts the row at place <paramref name="nth"/> of the order there, those before it ordered no later, those after no
+    /// earlier, without ordering either side (Hoare's selection: linear on average).
+    /// </summary>
+    private static void Nth<T>(T[] rows, int nth, IComparer<T> order, int low, int high)
+    {
+        while (high > low)
+        {
+            var pivot = rows[low + (high - low) / 2];
+            var (left, right) = (low, high);
+            while (left <= right)
+            {
+                while (order.Compare(rows[left], pivot) < 0)
+                {
+                    left++;
+                }
+
+                while (order.Compare(rows[right], pivot) > 0)
+                {
+                    right--;
+                }
+
+                if (left <= right)
+                {
+                    (rows[left], rows[right]) = (rows[right], rows[left]);
+                    left++;
+                    right--;
+                }
+            }
+
+            if (nth <= right)
+            {
+                high = right;
+            }
+            else if (nth >= left)
+            {
+                low = left;
+            }
+            else
+            {
+                return;
+            }
+        }
+    }
+
+    /// <summary>A sort key's value as a cursor keeps it: text, a number, or null.</summary>
+    private static object? KeyValue(SqliteDataReader reader, int ordinal, GridSortKey key) =>
+        reader.IsDBNull(ordinal) ? null : key.Column.Type == UrlColumnType.Text ? reader.GetString(ordinal) : reader.GetInt64(ordinal);
 
     /// <summary>
     /// Where rows after a cursor are, as conditions, one section after the other: with a nullable first key, the rows with

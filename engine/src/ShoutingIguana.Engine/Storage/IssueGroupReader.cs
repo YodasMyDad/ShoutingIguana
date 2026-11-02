@@ -21,15 +21,20 @@ public static class IssueGroupReader
     /// skipped has no total and no groups, and one that isn't grouped has its total and no groups.
     /// </summary>
     /// <exception cref="UrlQueryException">The paging is out of range.</exception>
-    public static IssueGroupPage? ReadGroups(string databasePath, string checkId, int offset, int limit, ReadCache? cache = null)
+    /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
+    public static IssueGroupPage? ReadGroups(string databasePath, string checkId, int offset, int limit, ReadCache? cache = null,
+        CancellationToken cancellationToken = default)
     {
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         UrlQueryCompiler.ValidatePaging(offset, limit, after: null, errors);
         UrlGridReader.ThrowIfInvalid(errors);
+        return GridReadContext.Read(databasePath, cache, cancellationToken, context => ReadGroups(context, checkId, offset, limit));
+    }
 
+    private static IssueGroupPage? ReadGroups(GridReadContext context, string checkId, int offset, int limit)
+    {
         // A check from a newer engine than this one, which the file holds but the catalog doesn't know, is listed flat.
         var grouping = IssueCatalog.Find(checkId)?.Grouping ?? IssueGrouping.None;
-        using var context = GridReadContext.Open(databasePath, cache);
         if (context.Analysis is null)
         {
             return null;
@@ -61,7 +66,8 @@ public static class IssueGroupReader
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
-            var related = reader.IsDBNull(1) ? (int?)null : reader.GetInt32(1);
+            // An id past the crawl's (a crafted file's) names no URL.
+            var related = reader.IsDBNull(1) || reader.GetInt64(1) is < int.MinValue or > int.MaxValue ? (int?)null : reader.GetInt32(1);
             var pages = reader.GetInt64(3);
             groups.Add(new IssueGroup(
                 reader.IsDBNull(0) ? null : reader.GetString(0),
@@ -81,7 +87,8 @@ public static class IssueGroupReader
     /// to one group by <paramref name="group"/>. Null when the crawl has never been analysed.
     /// </summary>
     /// <inheritdoc cref="UrlGridReader.Query" path="/exception"/>
-    public static IssueRowPage? ReadRows(string databasePath, string checkId, UrlQuery query, IssueGroupKey? group = null, ReadCache? cache = null)
+    public static IssueRowPage? ReadRows(string databasePath, string checkId, UrlQuery query, IssueGroupKey? group = null, ReadCache? cache = null,
+        CancellationToken cancellationToken = default)
     {
         var grouping = IssueCatalog.Find(checkId)?.Grouping ?? IssueGrouping.None;
         var scope = new GridScope(checkId, group, grouping);
@@ -92,15 +99,17 @@ public static class IssueGroupReader
         }
 
         UrlGridReader.ThrowIfInvalid(errors);
-        using var context = GridReadContext.Open(databasePath, cache);
-        if (context.Analysis is null)
+        return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context =>
         {
-            return null;
-        }
+            if (context.Analysis is null)
+            {
+                return null;
+            }
 
-        return Flagged(context, checkId) is null
-            ? new IssueRowPage(null, context.Summary)
-            : new IssueRowPage(UrlGridReader.Read(context, query, scope), context.Summary);
+            return Flagged(context, checkId) is null
+                ? new IssueRowPage(null, context.Summary)
+                : new IssueRowPage(UrlGridReader.Read(context, query, scope), context.Summary);
+        }));
     }
 
     /// <summary>
