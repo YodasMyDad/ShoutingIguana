@@ -103,4 +103,39 @@ describe('RowWindowModel', () => {
     model.configure({ count: 10_000, rowHeight: 40, headerHeight: HEADER });
     expect(model.getSnapshot().firstVisible).toBe(500);
   });
+
+  it('tells offset listeners about a jump once, not again when its scroll event arrives', () => {
+    const model = new RowWindowModel();
+    const { element } = scroller();
+    model.configure({ count: 1_000_000, rowHeight: ROW, headerHeight: HEADER });
+    model.attach(element);
+    const offsets: number[] = [];
+    model.onOffset((offset) => offsets.push(offset));
+    model.scrollToOffset(64_000);
+    // The browser's scroll event for the same move follows a frame later.
+    element.dispatchEvent(new Event('scroll'));
+    expect(offsets).toEqual([64_000]);
+  });
+
+  it('reaches the last row exactly at compact density, in one jump', () => {
+    const model = new RowWindowModel();
+    const { element } = scroller();
+    model.configure({ count: 1_000_000, rowHeight: 28, headerHeight: HEADER });
+    model.attach(element);
+    model.scrollToIndex(999_999);
+    expect(model.offset()).toBe(1_000_000 * 28 - VIEWPORT);
+    expect(element.scrollTop).toBeLessThanOrEqual(model.getSnapshot().bodyHeight - VIEWPORT);
+    expect(model.getSnapshot().lastVisible).toBe(999_999);
+  });
+
+  it('says when the scrollbar’s thumb is held and let go', () => {
+    const model = new RowWindowModel();
+    const heard: boolean[] = [];
+    model.onScrubbing((scrubbing) => heard.push(scrubbing));
+    model.setScrubbing(true);
+    model.setScrubbing(true);
+    expect(model.isScrubbing()).toBe(true);
+    model.setScrubbing(false);
+    expect(heard).toEqual([true, false]);
+  });
 });

@@ -43,7 +43,14 @@ export const GRID_KEY_COMMANDS: readonly Command[] = [
     keys: ['home', 'end'],
   },
   { id: 'grid.page', title: 'Up or down a screenful', group: 'In grids', scope: 'grid', keys: ['pageup', 'pagedown'] },
-  { id: 'grid.ends', title: 'First or last row', group: 'In grids', scope: 'grid', keys: ['mod+home', 'mod+end'] },
+  {
+    id: 'grid.columnEnds',
+    title: 'First or last row',
+    group: 'In grids',
+    scope: 'grid',
+    keys: ['mod+arrowup', 'mod+arrowdown'],
+  },
+  { id: 'grid.ends', title: 'First or last cell', group: 'In grids', scope: 'grid', keys: ['mod+home', 'mod+end'] },
   {
     id: 'grid.menu',
     title: 'Open the row’s menu',
@@ -108,6 +115,7 @@ export function useAppCommands(): void {
         group: 'App',
         keys: ['mod+k'],
         inInputs: true,
+        inOverlays: true,
         palette: false,
         run: () => setOverlay(getOverlay() === 'palette' ? null : 'palette'),
       },
@@ -283,5 +291,7 @@ export function useAppCommands(): void {
       controls.canContinue,
       controls.canAnalyse,
     ],
+    // The app's own: a screen's registration of the same id wins while the screen is shown.
+    'app',
   );
 }

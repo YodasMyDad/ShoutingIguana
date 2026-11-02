@@ -36,13 +36,15 @@ export function createQueryClient(): QueryClient {
 }
 
 /**
- * Keeps at most GRID_PAGE_CACHE_LIMIT grid pages: when one is added past the limit, the oldest pages nobody is
- * looking at go first. A small live heap lets V8 collect the DOM garbage of fast scrolling sooner (the spike's
- * biggest memory win: the peak after a 50k-row fling fell from 428 to 266 MB).
+ * Keeps at most GRID_PAGE_CACHE_LIMIT grid pages: when one is added past the limit, or a fetch lands while the cache is
+ * over it (pages still fetching can't go, so a burst can overshoot), the oldest pages nobody is looking at go first. A
+ * small live heap lets V8 collect the DOM garbage of fast scrolling sooner (the spike's biggest memory win: the peak
+ * after a 50k-row fling fell from 428 to 266 MB).
  */
 export function capGridPages(cache: QueryCache, limit = GRID_PAGE_CACHE_LIMIT): () => void {
   return cache.subscribe((event) => {
-    if (event.type !== 'added') return;
+    const landed = event.type === 'updated' && event.action.type === 'success';
+    if (event.type !== 'added' && !landed) return;
     const key: unknown = event.query.queryKey;
     if (!Array.isArray(key) || key[0] !== queryKeys.gridPrefix[0]) return;
     queueMicrotask(() => {

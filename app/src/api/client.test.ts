@@ -115,6 +115,36 @@ describe('the API client', () => {
     expect(errorDetail(error)).toContain('Bad gateway');
   });
 
+  it('reads a body without a problem type as off the contract, never as a problem of no type', async () => {
+    fetchMock.mockResolvedValue(problem({ title: 'Something broke.', status: 500 }, 500));
+    const error = await api.health().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(UnexpectedResponseError);
+    expect(isProblem(error)).toBe(false);
+  });
+
+  it('reads E3a’s problems with what they carry: why an analysis is needed, and which columns', async () => {
+    fetchMock.mockResolvedValue(
+      problem(
+        {
+          type: 'needs-analysis',
+          title: 'Filtering or sorting by these columns needs an analysis, which can’t run while the crawl does.',
+          status: 409,
+          reason: 'crawling',
+          columns: ['issues', 'check'],
+        },
+        409,
+      ),
+    );
+    const error = await api
+      .urls('0123456789abcdef', { filters: [], sort: [{ column: 'issues', desc: true }], limit: 200 })
+      .catch((caught: unknown) => caught);
+    expect(isProblem(error, 'needs-analysis')).toBe(true);
+    if (!isProblem(error)) return;
+    expect(error.reason).toBe('crawling');
+    expect(error.columns).toEqual(['issues', 'check']);
+    expect(error.retryable).toBe(false);
+  });
+
   it('turns a success that is not JSON into UnexpectedResponseError', async () => {
     fetchMock.mockResolvedValue(new Response('not json', { status: 200 }));
     await expect(api.health()).rejects.toBeInstanceOf(UnexpectedResponseError);

@@ -1,7 +1,8 @@
 // Keyboard and pointer behaviour of the grid as a pure state machine, following the ARIA grid pattern and the IA's
-// keyboard map: arrows move, Home/End go to the row's first and last cell (Ctrl+Home/End to the first and last row),
-// Page Up/Down move by a screenful, Enter inspects, Space selects, Shift extends, Ctrl+A selects all, Ctrl+C copies,
-// Shift+F10 or the menu key opens the row's menu. Cmd replaces Ctrl on macOS.
+// keyboard map: arrows move, Home/End go to the row's first and last cell, Ctrl+Home/End to the grid's first and last
+// cell (the APG's rule), Ctrl+Up/Down to the first and last row in the column (Cmd+Up/Down on macOS, whose laptops
+// have no Home or End), Page Up/Down move by a screenful, Enter inspects, Space selects, Shift extends, Ctrl+A selects
+// all, Ctrl+C copies, Shift+F10 or the menu key opens the row's menu. Cmd replaces Ctrl on macOS.
 //
 // One rule keeps selection predictable: a row selected by a plain click moves with the cursor, as in a list; a
 // selection built with Space, Shift, Ctrl+click or Ctrl+A stays put while the cursor moves.
@@ -91,8 +92,10 @@ export function gridKey(state: GridNavState, input: KeyInput, dims: GridDims): G
 
   switch (input.key) {
     case 'ArrowDown':
+      if (input.mod) return moveTo(current, { row: lastRow, col: here.col }, input.shift);
       return moveTo(current, { row: active ? clamp(here.row + 1, lastRow) : 0, col: here.col }, input.shift);
     case 'ArrowUp':
+      if (input.mod) return moveTo(current, { row: 0, col: here.col }, input.shift);
       return moveTo(current, { row: active ? clamp(here.row - 1, lastRow) : 0, col: here.col }, input.shift);
     case 'ArrowRight':
       if (input.mod || input.shift) return unhandled(state);
@@ -102,11 +105,11 @@ export function gridKey(state: GridNavState, input: KeyInput, dims: GridDims): G
       return moveTo(current, { row: here.row, col: active ? clamp(here.col - 1, lastCol) : 0 }, false);
     case 'Home':
       return input.mod
-        ? moveTo(current, { row: 0, col: here.col }, input.shift)
+        ? moveTo(current, { row: 0, col: 0 }, input.shift)
         : moveTo(current, { row: here.row, col: 0 }, false);
     case 'End':
       return input.mod
-        ? moveTo(current, { row: lastRow, col: here.col }, input.shift)
+        ? moveTo(current, { row: lastRow, col: lastCol }, input.shift)
         : moveTo(current, { row: here.row, col: lastCol }, false);
     case 'PageDown':
       return moveTo(current, { row: clamp(here.row + pageRows, lastRow), col: here.col }, input.shift);

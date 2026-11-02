@@ -257,4 +257,25 @@ describe('startEventStream', () => {
     expect(server.open).toHaveBeenCalledOnce();
     expect(states.at(-1)).toBe('stopped');
   });
+
+  it('lets go of a stream whose message handler threw, so its connection isn’t held for good', async () => {
+    const server = fakeServer();
+    const sidecar = connection(1);
+    const stream = startEventStream({
+      ...sidecar,
+      open: server.open,
+      onMessage: () => {
+        throw new Error('a handler failed');
+      },
+    });
+    await flush();
+    server.send(0, 'event: hello\ndata: {}\n\n');
+    await flush();
+    // Chromium allows 6 connections to the sidecar: one left open for good would be a leak.
+    expect(server.opened[0]?.signal.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(server.open).toHaveBeenCalledTimes(2);
+    expect(server.opened[1]?.signal.aborted).toBe(false);
+    stream.stop();
+  });
 });

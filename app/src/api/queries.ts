@@ -1,6 +1,6 @@
 // Query keys and options for every read, so each screen asks for the same data the same way and the live layer knows
 // what to refresh. Freshness comes from events (`library`, `crawl`), not polling: reads stay fresh until told.
-import { queryOptions } from '@tanstack/react-query';
+import { queryOptions, type QueryFilters } from '@tanstack/react-query';
 import { api } from './client';
 import type { GridQuery } from './grids';
 
@@ -19,11 +19,19 @@ export const queryKeys = {
   alerts: (id: string) => ['crawl', id, 'alerts'] as const,
   issues: (id: string, checkId: string, offset: number, limit: number) =>
     ['crawl', id, 'issues', checkId, offset, limit] as const,
-  /** Grid pages live under their own prefix, so the page cache can be capped (see queryClient.ts). */
+  /**
+   * Grid pages live under their own prefix, so the page cache can be capped (see queryClient.ts). Every grid's keys
+   * are `['grid', <grid>, <crawl id>, <query>, ...]`, so a crawl's pages can be found (gridPagesOf).
+   */
   gridPage: (grid: string, id: string, query: Omit<GridQuery, 'offset' | 'limit'>, page: number) =>
     ['grid', grid, id, query, page] as const,
   gridPrefix: ['grid'] as const,
 };
+
+/** Every page of every grid of one crawl: what a change to the crawl makes stale. */
+export function gridPagesOf(crawlId: string): QueryFilters {
+  return { queryKey: queryKeys.gridPrefix, predicate: (query) => query.queryKey[2] === crawlId };
+}
 
 export const healthQuery = () =>
   queryOptions({ queryKey: queryKeys.health, queryFn: ({ signal }) => api.health(signal), staleTime: Infinity });

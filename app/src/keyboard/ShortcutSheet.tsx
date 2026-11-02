@@ -1,5 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { setOverlay, useOverlay } from '../app/overlays';
+import clsx from 'clsx';
+import { restoreFocus, setOverlay, useOverlay } from '../app/overlays';
 import { Kbd } from '../ui/Kbd';
 import { COMMAND_GROUPS, commands, useRegistryVersion } from './registry';
 
@@ -10,7 +11,14 @@ export function ShortcutSheet() {
     <Dialog.Root open={open} onOpenChange={(next) => setOverlay(next ? 'shortcuts' : null)}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-scrim" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-40 flex max-h-(--dialog-max-height) w-(--palette-width) max-w-full -translate-1/2 flex-col rounded-xl border border-border bg-surface-overlay shadow-4">
+        <Dialog.Content
+          // Opened with `?`, there's no trigger for Radix to give focus back to: put it where it was.
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            restoreFocus();
+          }}
+          className="fixed top-1/2 left-1/2 z-40 flex max-h-(--dialog-max-height) w-(--palette-width) max-w-full -translate-1/2 flex-col rounded-xl border border-border bg-surface-overlay shadow-4"
+        >
           <div className="flex items-center border-b border-border-subtle px-5 py-3">
             <Dialog.Title className="text-16 font-semibold">Keyboard shortcuts</Dialog.Title>
             <Dialog.Close className="ml-auto rounded-sm px-2 text-text-muted hover:bg-surface-hover" aria-label="Close">
@@ -18,25 +26,31 @@ export function ShortcutSheet() {
             </Dialog.Close>
           </div>
           <Dialog.Description className="sr-only">Every shortcut in the app, by where it works.</Dialog.Description>
-          <ShortcutList />
+          <ShortcutList scrollable />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   );
 }
 
-/** The list itself, also shown in Settings > Shortcuts. */
-export function ShortcutList() {
+/**
+ * The list itself, also shown in Settings > Shortcuts. In the sheet it scrolls, so it's a named region that takes
+ * focus: keyboard users can scroll it with the arrows.
+ */
+export function ShortcutList({ scrollable = false }: { scrollable?: boolean }) {
   useRegistryVersion();
   const listed = commands.list().filter((command) => (command.keys?.length ?? 0) > 0);
   return (
-    <div className="grid gap-6 overflow-auto p-5">
+    <div
+      {...(scrollable ? { role: 'region', 'aria-label': 'Shortcuts', tabIndex: 0 } : {})}
+      className={clsx('grid gap-6 p-5', scrollable && 'overflow-auto')}
+    >
       {COMMAND_GROUPS.map((group) => {
         const inGroup = listed.filter((command) => command.group === group);
         return inGroup.length === 0 ? null : (
           <section key={group} aria-labelledby={`shortcuts-${group}`}>
             <h3 id={`shortcuts-${group}`} className="pb-2 text-12 font-medium text-text-muted">
-              {group === 'In grids' ? 'In grids' : group}
+              {group}
             </h3>
             <dl className="flex flex-col gap-1.5">
               {inGroup.map((command) => (

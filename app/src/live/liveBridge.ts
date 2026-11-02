@@ -5,21 +5,23 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { ApiError } from '../api/errors';
 import { api } from '../api/client';
-import { queryKeys } from '../api/queries';
+import { gridPagesOf, queryKeys } from '../api/queries';
 import { getTransport } from '../api/transport';
 import type { CrawlEvent, CrawlListItem, CrawlStatus } from '../api/types';
-import { isCrawling } from '../api/types';
+import { isCrawling, isLive } from '../api/types';
 import { analyseCrawl, continueCrawl } from '../crawl/actions';
 import { crawlName, statusAnnouncement } from '../crawl/status';
 import { announce } from '../feedback/announce';
-import { notifyError, notifyResult } from '../feedback/notify';
-import { formatCount, formatCountOf } from '../lib/format';
+import { crawlToast, dismissToast, notifyError, notifyResult } from '../feedback/notify';
+import { formatCountOf } from '../lib/format';
 import { getConnection, subscribeSidecarStatus } from '../shell/connection';
-import { liveStore, type LiveStore } from './liveStore';
+import { liveStore, type LiveState, type LiveStore } from './liveStore';
 import { startEventStream } from './sse';
 
 /** How long a completed crawl waits for its analysis to begin before its toast says it finished without one. */
 const ANALYSIS_GRACE_MS = 1_000;
+/** A crawling crawl's open grids (their counts and rows) refresh at most this often. */
+export const LIVE_GRID_REFRESH_MS = 1_000;
 
 export interface LiveBridgeOptions {
   queryClient: QueryClient;
@@ -38,6 +40,10 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
   /** When each running analysis's crawl was last analysed: an analysis that ends with it unchanged was cancelled. */
   const analysedBefore = new Map<string, string | null>();
   const lastStatus = new Map<string, CrawlStatus>();
+  /** When each crawling crawl's grids last refreshed. */
+  const gridRefreshedAt = new Map<string, number>();
+  /** The sidecar generation the last `hello` came from; undefined before the first. */
+  let helloGeneration: number | null | undefined;
 
   const stream = startEventStream({
     open: (signal) =>
@@ -48,17 +54,19 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     onState: (state) => store.setStreamState(state),
   });
 
-  const offEvents = store.onEvent((event) => {
+  const offEvents = store.onEvent((event, previous) => {
     switch (event.type) {
       case 'library':
         void queryClient.invalidateQueries({ queryKey: queryKeys.library, exact: true });
         break;
       case 'hello':
-        // A new stream: whatever happened while it was down, the library says now.
-        void queryClient.invalidateQueries({ queryKey: queryKeys.library, exact: true });
+        onHello(event.data.live, previous);
         break;
       case 'progress':
-        if (isCrawling(event.data.status)) crawledHere.add(event.data.crawlId);
+        if (isCrawling(event.data.status)) {
+          crawledHere.add(event.data.crawlId);
+          if (event.data.status !== 'paused') refreshLiveGrids(event.data.crawlId);
+        }
         break;
       case 'crawl':
         onCrawlEvent(event.data);
@@ -67,6 +75,52 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
         break;
     }
   });
+
+  /**
+   * A new stream: `hello` says what's live now, whatever the app believed. A crawl that was live and isn't any more
+   * (its sidecar crashed and the shell started another, or it ended while the stream was down) has its status and
+   * reads fetched again, so the screens show what the sidecar says now: `interrupted`, with Continue. A reconnect to
+   * the same sidecar may also have missed events (the sidecar drops a client that falls far behind), so every
+   * crawl's reads refresh then. A new sidecar's reads were all refreshed when it came (below).
+   */
+  function onHello(live: readonly string[], previous: LiveState) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.library, exact: true });
+    const generation = getConnection()?.generation ?? null;
+    const reconnected = helloGeneration !== undefined && helloGeneration === generation;
+    helloGeneration = generation;
+    const wasLive = new Set(previous.live);
+    for (const crawl of Object.values(previous.crawls)) {
+      if (crawl.status !== null && isLive(crawl.status)) wasLive.add(crawl.id);
+    }
+    for (const crawlId of wasLive) {
+      if (live.includes(crawlId)) continue;
+      // Its next status is news, whatever the old sidecar last said.
+      lastStatus.delete(crawlId);
+      gridRefreshedAt.delete(crawlId);
+      analysingAfterCrawl.delete(crawlId);
+      if (!reconnected) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.crawl(crawlId) }, { cancelRefetch: false });
+        void queryClient.invalidateQueries(gridPagesOf(crawlId), { cancelRefetch: false });
+      }
+    }
+    if (reconnected) {
+      void queryClient.invalidateQueries({ queryKey: ['crawl'] }, { cancelRefetch: false });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.gridPrefix }, { cancelRefetch: false });
+    }
+  }
+
+  /**
+   * While a crawl runs, its grids' counts and rows refresh in place (the IA's "12,345 of 101,107 URLs, live while
+   * crawling"): at most once a second, never cancelling a page that's still on its way, so a slow page isn't fetched
+   * forever. Only grids on screen fetch; the rest are marked stale for when they're next shown.
+   */
+  function refreshLiveGrids(crawlId: string) {
+    const now = Date.now();
+    const last = gridRefreshedAt.get(crawlId);
+    if (last !== undefined && now - last < LIVE_GRID_REFRESH_MS) return;
+    gridRefreshedAt.set(crawlId, now);
+    void queryClient.invalidateQueries(gridPagesOf(crawlId), { cancelRefetch: false });
+  }
 
   function onCrawlEvent(event: CrawlEvent) {
     const { crawlId, status } = event;
@@ -82,14 +136,22 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
       item ? { ...item, status } : item,
     );
     if (status === previous) return;
+    dismissStaleToasts(crawlId, status);
     if (status === 'completed' || status === 'stopped' || status === 'failed') {
+      gridRefreshedAt.delete(crawlId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.crawl(crawlId) });
-      void queryClient.invalidateQueries({ queryKey: [...queryKeys.gridPrefix] });
+      void queryClient.invalidateQueries(gridPagesOf(crawlId));
     } else {
       void queryClient.invalidateQueries({ queryKey: queryKeys.crawlItem(crawlId) });
     }
     void announceStatus(crawlId, status);
     decideToast(event, previous);
+  }
+
+  /** A crawl's toast whose action no longer fits its status goes: no Continue for a crawl that runs again. */
+  function dismissStaleToasts(crawlId: string, status: CrawlStatus) {
+    if (status !== 'stopped' && status !== 'interrupted') dismissToast(crawlToast(crawlId, 'stopped'));
+    if (status !== 'failed') dismissToast(crawlToast(crawlId, 'failed'));
   }
 
   /**
@@ -137,6 +199,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
       const retry = event.errorType === 'crawl-busy' ? () => void analyseCrawl(crawlId) : undefined;
       void itemOf(crawlId).then((item) =>
         notifyError(new CrawlFailure(event.error ?? 'The engine didn’t say why.', retry !== undefined), {
+          id: crawlToast(crawlId, 'failed'),
           title:
             status === 'failed' ? `${crawlName(item)}: the crawl failed` : `${crawlName(item)}: the analysis failed`,
           ...(retry ? { retry } : {}),
@@ -183,6 +246,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
           : `${formatCountOf(checks, 'check')} found issues`;
     const urls = crawled && item ? formatCountOf(item.fetchedUrlCount, 'URL') : null;
     notifyResult(crawled ? 'Crawl finished' : 'Analysis finished', {
+      id: crawlToast(crawlId, 'finished'),
       description: [name, [urls, found].filter(Boolean).join(', ')].filter(Boolean).join(': '),
       action: { label: 'View issues', onClick: () => openCrawl(crawlId, 'issues') },
     });
@@ -192,7 +256,8 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     const item = await itemOf(crawlId);
     const name = crawlName(item);
     notifyResult('Crawl stopped', {
-      description: item ? `${name}: ${formatCount(item.fetchedUrlCount)} URLs. You can continue it later.` : name,
+      id: crawlToast(crawlId, 'stopped'),
+      description: item ? `${name}: ${formatCountOf(item.fetchedUrlCount, 'URL')}. You can continue it later.` : name,
       action: { label: 'Continue', onClick: () => void continueCrawl(crawlId) },
     });
   }

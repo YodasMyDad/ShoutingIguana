@@ -24,6 +24,24 @@ const event = (
 });
 
 describe('chords', () => {
+  it('match the key marked on a non-Latin layout, by its physical place', () => {
+    // A Russian layout: the K key types "л", the comma key "б", the 1 key "1".
+    expect(matchesChord(parseChord('mod+k'), event('л', { ctrlKey: true }, 'KeyK'), false)).toBe(true);
+    expect(matchesChord(parseChord('mod+c'), event('с', { ctrlKey: true }, 'KeyC'), false)).toBe(true);
+    expect(matchesChord(parseChord('mod+,'), event('б', { ctrlKey: true }, 'Comma'), false)).toBe(true);
+    expect(matchesChord(parseChord('mod+k'), event('л', { metaKey: true }, 'KeyK'), true)).toBe(true);
+  });
+
+  it('match the letter marked on a Latin layout, wherever it is', () => {
+    // AZERTY: the A key sits where QWERTY has Q.
+    expect(matchesChord(parseChord('mod+a'), event('a', { ctrlKey: true }, 'KeyQ'), false)).toBe(true);
+    expect(matchesChord(parseChord('mod+q'), event('a', { ctrlKey: true }, 'KeyQ'), false)).toBe(false);
+    // AZERTY's 1 key types "&": Ctrl+1 is still Ctrl+1.
+    expect(matchesChord(parseChord('mod+1'), event('&', { ctrlKey: true }, 'Digit1'), false)).toBe(true);
+    // A German layout's comma is ASCII where it is: kept.
+    expect(matchesChord(parseChord('mod+,'), event(',', { ctrlKey: true }, 'Comma'), false)).toBe(true);
+  });
+
   it('parses modifiers and a key', () => {
     expect(parseChord('mod+shift+P')).toEqual({ mod: true, ctrl: false, alt: false, shift: true, key: 'p' });
     expect(parseChord('esc').key).toBe('escape');

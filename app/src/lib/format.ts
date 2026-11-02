@@ -15,9 +15,11 @@ export function formatCountOf(value: number, singular: string, plural = `${singu
   return `${formatCount(value)} ${value === 1 ? singular : plural}`;
 }
 
-/** 12.3 URLs/s. */
-export function formatRate(perSecond: number): string {
-  return `${oneDecimal.format(perSecond)}/s`;
+/** 12.3 URLs/s. A missing value is an en dash. */
+export function formatRate(perSecond: number | null | undefined): string {
+  return perSecond === null || perSecond === undefined || !Number.isFinite(perSecond)
+    ? '–'
+    : `${oneDecimal.format(perSecond)}/s`;
 }
 
 const SIZE_UNITS = ['bytes', 'KB', 'MB', 'GB', 'TB'] as const;
@@ -40,8 +42,9 @@ export function formatMilliseconds(ms: number | null | undefined): string {
   return ms < 1000 ? `${integer.format(ms)} ms` : formatDuration(ms);
 }
 
-/** "1 min 12 s", "2 h 5 min", "8 s". */
-export function formatDuration(ms: number): string {
+/** "1 min 12 s", "2 h 5 min", "8 s". A missing value is an en dash. */
+export function formatDuration(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || !Number.isFinite(ms)) return '–';
   const totalSeconds = Math.max(0, Math.round(ms / 1000));
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);

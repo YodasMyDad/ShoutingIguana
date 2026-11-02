@@ -3,31 +3,50 @@
 // delete, start), replays the garden crawl's real progress for a crawl started here, and streams events like the
 // sidecar does. Nothing is made up beyond what a running crawl must show: its progress is the garden crawl's own.
 import type { ProblemBody } from '../errors';
-import type { GridQuery } from '../grids';
-import type { Transport, TransportRequest } from '../transport';
 import type {
-  Analysis,
-  CrawlListItem,
-  CrawlOptionDefaults,
-  CrawlOptions,
-  CrawlStatus,
-  IssuePage,
-  ProgressEvent,
-  StartCrawlRequest,
+  CheckGrouping,
+  FacetsQuery,
+  GridPage,
+  GridQuery,
+  IssueGroup,
+  IssueGroupPage,
+  IssueRow,
+  SummaryState,
+  UrlRef,
+} from '../grids';
+import type { LinkPage, LinksQuery } from '../inspector';
+import type { Transport, TransportRequest } from '../transport';
+import {
+  isCrawling,
+  type Analysis,
+  type CrawlListItem,
+  type CrawlOptionDefaults,
+  type CrawlOptions,
+  type CrawlStatus,
+  type IssuePage,
+  type ProgressEvent,
+  type StartCrawlRequest,
 } from '../types';
 import {
   MissingFixtureError,
   adaptAnalysis,
+  adaptChecks,
   adaptCrawlItem,
+  adaptInspector,
+  adaptLinks,
   adaptSnapshot,
+  adaptSource,
   adaptStats,
   fixture,
+  inspectorFixtures,
   optionalFixture,
   urlRows,
   type FixtureCrawl,
   type LiveSnapshot,
+  type SavedChecks,
 } from './fixtures';
-import { runGridQuery } from './gridQuery';
+import { answerFacets, answerGridQuery } from './gridQuery';
+import { URL_COLUMNS } from './urlColumns';
 
 /** Every answer waits this long, so loading states behave as they will against the sidecar. */
 const LATENCY_MS = 30;
@@ -80,6 +99,98 @@ const crawlNotFound = (id: string): ProblemBody => ({
 });
 
 const busy = (): ProblemBody => ({ type: 'crawl-busy', title: 'This crawl is running. Stop it first.', status: 409 });
+
+const urlNotFound = (url: string): ProblemBody => ({
+  type: 'url-not-found',
+  title: 'This crawl didn’t find that URL.',
+  status: 404,
+  detail: url,
+});
+
+const notAnalyzed = (): ProblemBody => ({
+  type: 'not-analyzed',
+  title: 'This crawl hasn’t been analysed yet.',
+  status: 404,
+});
+
+const checkNotFound = (checkId: string): ProblemBody => ({
+  type: 'check-not-found',
+  title: `There’s no check called ‘${checkId}’.`,
+  status: 404,
+});
+
+/** The design fixtures hold some things for a few URLs only: said plainly, never made up. */
+const sampleLacks = (what: string): ProblemBody => ({
+  type: 'not-found',
+  title: `The sample data doesn’t have ${what}.`,
+  status: 404,
+  detail: 'The mock serves the design fixtures, which hold the inspector for a few URLs of the garden crawl.',
+});
+
+/**
+ * A URL as the crawl stores it, from what was typed: a path starting with / is on the start URL's origin, the fragment
+ * goes, the scheme and host are lowercased. Null for text that isn't a URL.
+ */
+function normaliseUrl(text: string, startUrl: string | null): string | null {
+  try {
+    const url = text.startsWith('/') && startUrl ? new URL(text, startUrl) : new URL(text);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    url.hash = '';
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+/** A share of a check's URLs, with at least this many, is a likely template fault: one fix clears it. */
+const TEMPLATE_SHARE = 0.5;
+const TEMPLATE_MIN_PAGES = 10;
+
+/** A check's issues grouped by their cause (E3a, Issue groups), largest first. */
+function issueGroups(
+  checkId: string,
+  grouping: CheckGrouping,
+  rows: readonly IssueRow[] | null,
+  offset: number,
+  limit: number,
+): IssueGroupPage {
+  if (rows === null) return { checkId, grouping, total: null, groupCount: 0, offset, groups: [] };
+  const total = rows.length;
+  if (grouping === 'none') return { checkId, grouping, total, groupCount: 0, offset, groups: [] };
+  const groups = new Map<string, IssueGroup>();
+  for (const row of rows) {
+    const detail = grouping === 'relatedUrl' ? null : (row.detail ?? null);
+    const key = JSON.stringify([detail, row.relatedUrlId ?? null]);
+    const group = groups.get(key) ?? {
+      detail,
+      relatedUrlId: row.relatedUrlId ?? null,
+      relatedUrl: row.relatedUrl ?? null,
+      pages: 0,
+      share: 0,
+      likelyTemplate: false,
+    };
+    group.pages++;
+    groups.set(key, group);
+  }
+  const all = [...groups.values()]
+    .map((group) => {
+      const share = total > 0 ? group.pages / total : 0;
+      // A detail that says how the URL answered ("HTTP 404") is no evidence of a template.
+      const evidence = group.relatedUrlId !== null || !(group.detail ?? '').startsWith('HTTP ');
+      return {
+        ...group,
+        share,
+        likelyTemplate: evidence && share >= TEMPLATE_SHARE && group.pages >= TEMPLATE_MIN_PAGES,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.pages - a.pages ||
+        (a.detail ?? '').localeCompare(b.detail ?? '') ||
+        (a.relatedUrlId ?? 0) - (b.relatedUrlId ?? 0),
+    );
+  return { checkId, grouping, total, groupCount: all.length, offset, groups: all.slice(offset, offset + limit) };
+}
 
 function hexId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -174,7 +285,7 @@ export function createMockTransport(): Transport {
   const routes: [method: TransportRequest['method'], pattern: RegExp, handler: Handler][] = [
     ['GET', /^\/api\/health$/, async () => json(await fixture('api/health.json'))],
     ['POST', /^\/api\/shutdown$/, () => Promise.resolve(empty(202))],
-    ['GET', /^\/api\/checks$/, async () => json(await fixture('api/checks.json'))],
+    ['GET', /^\/api\/checks$/, async () => json(adaptChecks(await fixture<SavedChecks>('api/checks.json')))],
     ['GET', /^\/api\/crawl-options\/defaults$/, async () => json(await fixture('api/crawl-options-defaults.json'))],
     [
       'PUT',
@@ -407,17 +518,193 @@ export function createMockTransport(): Transport {
         return json(await issuesPage(analysis, folderOf(id), checkId, offset, limit));
       },
     ],
+    ['GET', /^\/api\/url-columns$/, () => Promise.resolve(json(URL_COLUMNS))],
     [
       'POST',
       /^\/api\/crawls\/([0-9a-f]{16})\/urls$/,
       async ([, id = ''], request) => {
-        await load();
-        if (!items.has(id)) return problem(crawlNotFound(id));
-        const rows = await urlRows(folderOf(id));
-        return json(runGridQuery(rows, request.body as GridQuery));
+        const item = await itemOrNull(id);
+        if (!item) return problem(crawlNotFound(id));
+        const answer = answerGridQuery(await crawlRows(id), request.body as GridQuery, summaryOf(item));
+        return answer.ok ? json(answer.page) : problem(answer.problem);
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/([0-9a-f]{16})\/urls\/facets$/,
+      async ([, id = ''], request) => {
+        const item = await itemOrNull(id);
+        if (!item) return problem(crawlNotFound(id));
+        const query: FacetsQuery = (request.body as FacetsQuery | undefined) ?? {};
+        return json(answerFacets(await crawlRows(id), query, summaryOf(item)));
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/([0-9a-f]{16})\/urls\/lookup$/,
+      async ([, id = ''], request) => {
+        const item = await itemOrNull(id);
+        if (!item) return problem(crawlNotFound(id));
+        const url = (request.body as { url?: unknown } | undefined)?.url;
+        const text = typeof url === 'string' ? url.trim() : '';
+        const wanted = normaliseUrl(text, item.startUrl);
+        if (wanted === null) {
+          return problem({
+            type: 'invalid-query',
+            title: 'This view’s query can’t be run.',
+            status: 422,
+            detail: 'That isn’t a URL.',
+            errors: { url: ['That isn’t a URL.'] },
+          });
+        }
+        const row = (await crawlRows(id)).find((candidate) => candidate.url === wanted);
+        return row ? json({ id: row.id, url: row.url } satisfies UrlRef) : problem(urlNotFound(wanted));
+      },
+    ],
+    [
+      'GET',
+      /^\/api\/crawls\/([0-9a-f]{16})\/urls\/(\d+)$/,
+      async ([, id = '', urlId = '']) => {
+        const found = await inspected(id, Number(urlId));
+        if (found instanceof Response) return found;
+        const rows = await crawlRows(id);
+        const idOf = (url: string) => rows.find((row) => row.url === url)?.id ?? null;
+        return json(adaptInspector(found.raw, idOf));
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/([0-9a-f]{16})\/urls\/(\d+)\/(inlinks|outlinks)$/,
+      async ([, id = '', urlId = '', direction = 'inlinks'], request) => {
+        const found = await inspected(id, Number(urlId));
+        if (found instanceof Response) return found;
+        const query = (request.body ?? {}) as LinksQuery;
+        const all = adaptLinks(found.raw, direction === 'outlinks' ? 'outlinks' : 'inlinks').filter(
+          (link) => !query.kinds?.length || query.kinds.includes(link.kind),
+        );
+        const offset = Math.max(0, query.offset ?? 0);
+        const limit = Math.min(1_000, Math.max(1, query.limit ?? 100));
+        const rows = all.slice(offset, offset + limit);
+        return json({ rows, offset, total: all.length, next: null } satisfies LinkPage);
+      },
+    ],
+    [
+      'GET',
+      /^\/api\/crawls\/([0-9a-f]{16})\/urls\/(\d+)\/source$/,
+      async ([, id = '', urlId = '']) => {
+        const found = await inspected(id, Number(urlId));
+        if (found instanceof Response) return found;
+        const source = adaptSource(found.raw);
+        return source ? json(source) : problem(sampleLacks('the HTML of this URL'));
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/([0-9a-f]{16})\/issues\/([a-z0-9-]+)\/(groups|rows)$/,
+      async ([, id = '', checkId = '', what = 'groups'], request) => {
+        const item = await itemOrNull(id);
+        if (!item) return problem(crawlNotFound(id));
+        if (item.analyzedAt === null) return problem(notAnalyzed());
+        const analysis = adaptAnalysis(await fixture<Record<string, unknown>>(`api/${folderOf(id)}/analysis.json`));
+        const catalog = adaptChecks(await fixture<SavedChecks>('api/checks.json'));
+        const check = catalog.checks.find((candidate) => candidate.id === checkId);
+        const skipped = analysis.skipped.some((skip) => skip.checkId === checkId);
+        const counted = analysis.counts.some((count) => count.checkId === checkId);
+        if (!check && !skipped && !counted) return problem(checkNotFound(checkId));
+        const grouping: CheckGrouping = check?.grouping ?? 'none';
+        const issueRows = skipped ? [] : await joinedIssueRows(id, checkId);
+        if (what === 'groups') {
+          const body = (request.body ?? {}) as { offset?: number; limit?: number };
+          return json(issueGroups(checkId, grouping, skipped ? null : issueRows, body.offset ?? 0, body.limit ?? 100));
+        }
+        const query = request.body as GridQuery;
+        if (skipped) {
+          return json({
+            columns: ['id'],
+            rows: [],
+            offset: query.offset ?? 0,
+            matching: null,
+            total: null,
+            next: null,
+            summary: summaryOf(item),
+            unavailable: [],
+          } satisfies GridPage<IssueRow>);
+        }
+        const inGroup = query.group
+          ? issueRows.filter(
+              (row) =>
+                (grouping === 'relatedUrl' || row.detail === query.group?.detail) &&
+                row.relatedUrlId === query.group?.relatedUrlId,
+            )
+          : issueRows;
+        const { group: _group, ...rest } = query;
+        const answer = answerGridQuery(
+          inGroup,
+          { ...rest, columns: rest.columns ?? ['url', 'detail', 'relatedUrl'] },
+          summaryOf(item),
+          {
+            issueRows: true,
+          },
+        );
+        return answer.ok ? json(answer.page) : problem(answer.problem);
       },
     ],
   ];
+
+  async function itemOrNull(id: string) {
+    await load();
+    return items.get(id) ?? null;
+  }
+
+  /**
+   * Whether the URL summary describes the crawl, as the sidecar decides it: not while it runs, not before its first
+   * analysis, and not once it was continued after one.
+   */
+  function summaryOf(item: CrawlListItem): SummaryState {
+    if (live(item.id) || isCrawling(item.status)) return { available: false, reason: 'crawling' };
+    if (item.analyzedAt === null) return { available: false, reason: 'notAnalyzed' };
+    if (item.status === 'interrupted') return { available: false, reason: 'crawlChanged' };
+    return { available: true, reason: null };
+  }
+
+  /** The crawl's URLs: while a crawl started here runs, only those its replay has reached, so the grid grows live. */
+  async function crawlRows(id: string) {
+    const rows = await urlRows(folderOf(id));
+    const simulation = live(id);
+    if (!simulation) return rows;
+    const reached = (await liveSnapshots())[simulation.index]?.fetched ?? 0;
+    return rows.slice(0, reached);
+  }
+
+  /** The URL for the inspector: its design fixture, or the problem the sidecar (or the sample data) would give. */
+  async function inspected(id: string, urlId: number): Promise<{ raw: Record<string, unknown> } | Response> {
+    const item = await itemOrNull(id);
+    if (!item) return problem(crawlNotFound(id));
+    if (!(await crawlRows(id)).some((row) => row.id === urlId)) return problem(urlNotFound(`URL ${urlId}`));
+    const raw = (await inspectorFixtures()).get(urlId);
+    return raw ? { raw } : problem(sampleLacks(`the inspector for URL ${urlId}`));
+  }
+
+  /** The issue rows of a check, each joined to its URL's row: what `/rows` filters and sorts. */
+  async function joinedIssueRows(id: string, checkId: string): Promise<IssueRow[]> {
+    const rows = await crawlRows(id);
+    const byUrl = new Map(rows.map((row) => [row.url, row]));
+    const file = await optionalFixture<IssuePage>(`api/${folderOf(id)}/issues/${checkId}.json`);
+    return (file?.rows ?? []).flatMap((issue) => {
+      const row = byUrl.get(issue.url);
+      if (!row) return [];
+      const related = issue.relatedUrl === null ? undefined : byUrl.get(issue.relatedUrl);
+      return [
+        {
+          ...row,
+          detail: issue.detail,
+          relatedUrl: issue.relatedUrl,
+          relatedUrlId: related?.id ?? null,
+          relatedStatusCode: related?.statusCode ?? null,
+        },
+      ];
+    });
+  }
 
   async function issuesPage(analysis: Analysis, folder: FixtureCrawl, checkId: string, offset: number, limit: number) {
     if (analysis.skipped.some((skip) => skip.checkId === checkId)) return { rows: [], total: null } satisfies IssuePage;

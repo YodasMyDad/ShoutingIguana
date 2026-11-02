@@ -29,11 +29,20 @@ describe('grid keys', () => {
     expect(gridKey(at(5, 0), key('ArrowLeft'), dims).state.active).toEqual({ row: 5, col: 0 });
   });
 
-  it('goes to the row ends with Home and End, and the grid ends with Ctrl', () => {
+  it('goes to the row ends with Home and End, and the grid’s first and last cell with Ctrl, as the APG says', () => {
     expect(gridKey(at(5, 2), key('Home'), dims).state.active).toEqual({ row: 5, col: 0 });
     expect(gridKey(at(5, 2), key('End'), dims).state.active).toEqual({ row: 5, col: 4 });
-    expect(gridKey(at(5, 2), key('Home', { mod: true }), dims).state.active).toEqual({ row: 0, col: 2 });
-    expect(gridKey(at(5, 2), key('End', { mod: true }), dims).state.active).toEqual({ row: 999, col: 2 });
+    expect(gridKey(at(5, 2), key('Home', { mod: true }), dims).state.active).toEqual({ row: 0, col: 0 });
+    expect(gridKey(at(5, 2), key('End', { mod: true }), dims).state.active).toEqual({ row: 999, col: 4 });
+  });
+
+  it('goes to the first and last row in the column with Ctrl+Up and Ctrl+Down (Cmd on macOS)', () => {
+    expect(gridKey(at(5, 2), key('ArrowUp', { mod: true }), dims).state.active).toEqual({ row: 0, col: 2 });
+    const down = gridKey(at(5, 2), key('ArrowDown', { mod: true }), dims);
+    expect(down.state.active).toEqual({ row: 999, col: 2 });
+    expect(down.reveal).toBe(999);
+    const extended = gridKey(at(5, 2), key('ArrowDown', { mod: true, shift: true }), dims);
+    expect(effectiveRanges(extended.state.selection)).toEqual([[5, 999]]);
   });
 
   it('moves a screenful with Page Up and Page Down', () => {

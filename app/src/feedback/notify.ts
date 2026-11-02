@@ -4,6 +4,10 @@
 // - errors say the plain cause, offer Retry when it could work, and keep the technical detail behind "Details";
 // - long work shows progress with Cancel;
 // - form problems are never toasts: they show inline, beside the field.
+//
+// A toast with an `id` replaces the one already showing with that id rather than stacking under it: the same failure
+// twice is one toast, and a crawl's toasts are keyed by crawl and event, so a newer one takes the older's place and a
+// stale one can be dismissed (the live bridge drops "Continue" once the crawl runs again).
 import { toast } from 'sonner';
 import { errorDetail, errorTitle, isAbort, type ApiError } from '../api/errors';
 import { copyText } from '../lib/clipboard';
@@ -18,9 +22,10 @@ export const UNDO_DURATION_MS = 8_000;
 export const ERROR_DURATION_MS = 10_000;
 
 /** A background result, usually with the action that follows from it. */
-export function notifyResult(title: string, options: { description?: string; action?: ToastAction } = {}) {
+export function notifyResult(title: string, options: { id?: string; description?: string; action?: ToastAction } = {}) {
   return toast(title, {
     duration: TOAST_DURATION_MS,
+    ...(options.id ? { id: options.id } : {}),
     ...(options.description ? { description: options.description } : {}),
     ...(options.action ? { action: options.action } : {}),
   });
@@ -31,20 +36,39 @@ export function notifyUndo(title: string, onUndo: () => void) {
   return toast(title, { duration: UNDO_DURATION_MS, action: { label: 'Undo', onClick: onUndo } });
 }
 
-/** A failure, in plain words. Retry is offered only when trying again could work; the detail can be copied. */
-export function notifyError(error: unknown, options: { title?: string; retry?: () => void } = {}) {
+/**
+ * A failure, in plain words. Retry is offered only when the caller has one and trying again could work; otherwise the
+ * detail can be copied. The same failure again replaces the toast already showing, rather than stacking.
+ */
+export function notifyError(
+  error: unknown,
+  options: { title?: string; description?: string; retry?: () => void; id?: string } = {},
+) {
   if (isAbort(error)) return undefined;
   const detail = errorDetail(error);
   const retryable = (error as Partial<ApiError> | null)?.retryable === true;
-  return toast.error(options.title ?? errorTitle(error), {
+  const title = options.title ?? errorTitle(error);
+  const description = options.description ?? (options.title ? errorTitle(error) : undefined);
+  return toast.error(title, {
+    id: options.id ?? `error:${title}|${description ?? ''}`,
     duration: ERROR_DURATION_MS,
-    ...(options.title ? { description: errorTitle(error) } : {}),
+    ...(description ? { description } : {}),
     ...(options.retry && retryable
       ? { action: { label: 'Retry', onClick: options.retry } }
       : detail
         ? { action: { label: 'Copy details', onClick: () => void copyText(detail) } }
         : {}),
   });
+}
+
+/** Takes a toast away: its news, or its action, no longer holds. */
+export function dismissToast(id: string): void {
+  toast.dismiss(id);
+}
+
+/** The id of a crawl's toast for one kind of news ("stopped", "finished", "pause"): one at a time of each. */
+export function crawlToast(crawlId: string, event: string): string {
+  return `crawl:${crawlId}:${event}`;
 }
 
 /** Long work: one toast, updated in place, with Cancel while it runs. Returns the controls. */

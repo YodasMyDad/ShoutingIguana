@@ -67,6 +67,22 @@ describe('the windowed scroll space', () => {
     expect(placed.base % ROW).toBe(0);
   });
 
+  it('reaches the very end at every density, 28 px rows included', () => {
+    const viewport = 600;
+    for (const rowHeight of [28, 32, 40]) {
+      const total = 1_000_000 * rowHeight;
+      const space = createScrollSpace(total, rowHeight);
+      expect(space.windowPx % rowHeight).toBe(0);
+      expect(space.windowPx).toBeLessThanOrEqual(WINDOW_PX);
+      const placed = placeOffset(space, Number.MAX_SAFE_INTEGER, viewport);
+      // The real scrollTop a browser can reach shows exactly the last row at the bottom: nothing 12 px short.
+      expect(placed.scrollTop).toBeLessThanOrEqual(space.windowPx - viewport);
+      expect(placed.base + placed.scrollTop).toBe(total - viewport);
+      expect(placed.base % rowHeight).toBe(0);
+      expect(centredBase(space, total)).toBe(total - space.windowPx);
+    }
+  });
+
   it('keeps the base when the jump target is already inside the window', () => {
     const space = { ...createScrollSpace(MILLION, ROW), base: 6_400_000 };
     const placed = placeOffset(space, 6_400_000 + 50_000, 600);

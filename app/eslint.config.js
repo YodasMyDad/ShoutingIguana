@@ -62,6 +62,31 @@ export default defineConfig([
     plugins: { 'react-refresh': reactRefresh },
     rules: {
       'react-refresh/only-export-components': ['error', { allowConstantExport: true }],
+      // docs/v2-ui-architecture.md, "Rules every slice follows": crawled text renders as text, never HTML (6), and
+      // components use tokens only, never arbitrary values such as w-[37px] or [mask:x] (2).
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+          message: 'Render text as text: crawled text is the site’s, and is never HTML here.',
+        },
+        {
+          selector: String.raw`Literal[value=/(^|\s)[\w:!-]*-\[[^\]]*\]/]`,
+          message: 'No arbitrary values: use a token, as w-(--sidebar-width) does.',
+        },
+        {
+          selector: String.raw`TemplateElement[value.raw=/(^|\s)[\w:!-]*-\[[^\]]*\]/]`,
+          message: 'No arbitrary values: use a token, as w-(--sidebar-width) does.',
+        },
+        {
+          selector: String.raw`Literal[value=/(^|\s)!?\[[a-z-]+:[^\]]+\]/]`,
+          message: 'No arbitrary properties: add a token or a class in styles/ instead.',
+        },
+        {
+          selector: String.raw`TemplateElement[value.raw=/(^|\s)!?\[[a-z-]+:[^\]]+\]/]`,
+          message: 'No arbitrary properties: add a token or a class in styles/ instead.',
+        },
+      ],
     },
   },
   {

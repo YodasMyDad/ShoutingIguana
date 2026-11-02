@@ -3,15 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { checksQuery, libraryQuery } from '../api/queries';
-import { setOverlay, useOverlay } from '../app/overlays';
+import { restoreFocus, setOverlay, useOverlay } from '../app/overlays';
 import { crawlName } from '../crawl/status';
-import { formatRelativeTime } from '../lib/format';
+import { formatCount, formatRelativeTime } from '../lib/format';
 import { Kbd } from '../ui/Kbd';
 import { searchPalette, type PaletteEntry } from './paletteSearch';
 import { COMMAND_GROUPS, commands, useRegistryVersion } from './registry';
 
 const RECENT_CRAWLS = 8;
 const PAGE_STEP = 8;
+/** The result count is announced once typing pauses, not on every key. */
+const ANNOUNCE_DELAY_MS = 400;
 const GROUP_ORDER = [...COMMAND_GROUPS.filter((group) => group !== 'In grids'), 'Checks', 'Recent crawls'];
 
 export interface PaletteItem extends PaletteEntry {
@@ -81,6 +83,11 @@ export function CommandPalette() {
         <Dialog.Overlay className="fixed inset-0 z-40 bg-scrim" />
         <Dialog.Content
           aria-describedby={undefined}
+          // Opened from the keyboard there's no trigger for Radix to give focus back to: put it where it was.
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            restoreFocus();
+          }}
           className="fixed top-(--palette-top) left-1/2 z-40 w-(--palette-width) max-w-full -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-surface-overlay shadow-4"
         >
           <Dialog.Title className="sr-only">Command palette</Dialog.Title>
@@ -103,13 +110,16 @@ export function PaletteBody({
   const [highlight, setHighlight] = useState(0);
   const results = useMemo(() => searchPalette(entries, query, GROUP_ORDER), [entries, query]);
   const active = results.length === 0 ? -1 : Math.min(highlight, results.length - 1);
-  const optionId = (index: number) => `${id}-option-${index}`;
+  // By the entry, not its place: when typing changes what's highlighted, the attribute changes too, and screen
+  // readers hear the new option.
+  const optionId = (entry: PaletteItem) => `${id}-${entry.id}`;
+  const activeEntry = active >= 0 ? results[active] : undefined;
+  const activeId = activeEntry ? optionId(activeEntry) : undefined;
+  const announcement = useDebouncedValue(resultCount(results.length), ANNOUNCE_DELAY_MS);
 
   useEffect(() => {
-    if (active >= 0) document.getElementById(optionId(active))?.scrollIntoView({ block: 'nearest' });
-    // optionId only joins strings: active is what moves.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+    if (activeId) document.getElementById(activeId)?.scrollIntoView({ block: 'nearest' });
+  }, [activeId]);
 
   /** Where a key moves the highlight, or null for a key the palette leaves to the input. */
   const moveFor = (key: string, last: number): number | null => {
@@ -152,7 +162,7 @@ export function PaletteBody({
         aria-expanded="true"
         aria-controls={`${id}-list`}
         aria-autocomplete="list"
-        aria-activedescendant={active >= 0 ? optionId(active) : undefined}
+        aria-activedescendant={activeId}
         aria-label="Search commands, checks and crawls"
         placeholder="Search or run a command…"
         autoComplete="off"
@@ -182,7 +192,7 @@ export function PaletteBody({
                   aria-activedescendant. jsx-a11y can't see that, so it asks for keys and focus on the option itself. */}
             {/* eslint-disable-next-line jsx-a11y-x/click-events-have-key-events, jsx-a11y-x/interactive-supports-focus */}
             <div
-              id={optionId(index)}
+              id={optionId(entry)}
               role="option"
               aria-selected={index === active}
               onPointerMove={() => {
@@ -199,10 +209,29 @@ export function PaletteBody({
         ))}
       </div>
       {results.length === 0 ? (
-        <p role="status" className="px-3 pb-6 text-center text-13 text-text-muted">
+        <p aria-hidden="true" className="px-3 pb-6 text-center text-13 text-text-muted">
           Nothing matches that.
         </p>
       ) : null}
+      {/* Always mounted, so what changes in it is read: how many results there are, once typing pauses. */}
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {announcement}
+      </div>
     </div>
   );
+}
+
+function resultCount(count: number): string {
+  if (count === 0) return 'Nothing matches that.';
+  return count === 1 ? '1 result' : `${formatCount(count)} results`;
+}
+
+/** The value, once it has stayed the same for `delayMs`. */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+  return settled;
 }

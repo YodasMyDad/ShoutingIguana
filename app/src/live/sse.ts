@@ -180,9 +180,13 @@ export function startEventStream(deps: EventStreamDeps): { stop: () => void } {
           for (const message of parser.push(value)) deps.onMessage(message);
         }
       } catch {
-        // Aborted (new sidecar, idle, stop) or failed: either way, reconnect below unless stopped.
+        // Aborted (new sidecar, idle, stop) or failed, a message handler that threw included: either way, reconnect
+        // below unless stopped.
       } finally {
         clearInterval(watchdog);
+        // However the read ended, the connection goes with it: the browser allows the sidecar 6, and a stream left
+        // open after a failure would hold one for good.
+        current.abort();
         if (run.controller === current) run.controller = null;
       }
       if (isStopped()) break;

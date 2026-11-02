@@ -1,4 +1,7 @@
-// The sidecar's JSON, as docs/v2-sidecar-api.md defines it (E1 and E2). camelCase, enums as camelCase strings, times in
+import type { CheckGrouping } from './grids';
+
+// The sidecar's JSON, as docs/v2-sidecar-api.md defines it (E1 and E2; the grids' E3a shapes are in grids.ts and
+// inspector.ts). camelCase, enums as camelCase strings, times in
 // ISO 8601 UTC, durations in ms, sizes in bytes. Crawled text (titles, anchors, details, alert messages) is exactly as
 // stored: render it as text, never as HTML. Ids and enums the engine may extend are typed as strings.
 
@@ -16,6 +19,24 @@ export type CrawlStatus =
   | 'failed'
   | 'inUse'
   | 'unreadable';
+
+export const CRAWL_STATUSES: readonly CrawlStatus[] = [
+  'running',
+  'paused',
+  'stopping',
+  'analyzing',
+  'stopped',
+  'interrupted',
+  'completed',
+  'failed',
+  'inUse',
+  'unreadable',
+];
+
+/** A status the contract defines: the live stream drops any other at the boundary. */
+export function isCrawlStatus(value: unknown): value is CrawlStatus {
+  return CRAWL_STATUSES.includes(value as CrawlStatus);
+}
 
 /** Statuses that mean this sidecar is crawling it right now. */
 export const CRAWLING_STATUSES: readonly CrawlStatus[] = ['running', 'paused', 'stopping'];
@@ -56,6 +77,8 @@ export interface Check {
   title: string;
   description: string;
   fix: string;
+  /** How its issues group on the Issues screen (E3a). */
+  grouping: CheckGrouping;
 }
 
 export interface Checks {

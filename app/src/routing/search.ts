@@ -1,25 +1,39 @@
 // The views' state in the route's search params (docs/v2-ui-ia.md, Routes): filters, sort, columns, search and the
-// inspected URL, so back and forward, links and "reopen where I left off" all work. A search string is user input:
-// every value is checked, and anything unusable is dropped rather than breaking the view.
-import { GRID_FILTER_OPS, type GridFilter, type GridSort } from '../api/grids';
+// inspected URL, so back and forward, links and "reopen where I left off" all work. A search string is user input, and
+// the app restores the last one at start-up, even after an update changed what a param means: every value is checked
+// here, at the router boundary, and anything unusable falls back to its default instead of breaking the view.
+//
+// TanStack Router builds a route's search as `{ ...rawSearch, ...validated }`, so a key the validator leaves out keeps
+// its raw value. So every leaf route's validator returns every key of the search (`strictSearch`): its own, checked,
+// and any other as undefined. Screens and the shell read only checked values. The layout routes (the root and
+// /crawls/:crawl) have no validator, so their children still see the raw values they check.
+import { GRID_FILTER_OPS, type CheckGroupRef, type GridFilter, type GridSort } from '../api/grids';
 import type { Severity } from '../api/types';
 
 const SEVERITIES: readonly Severity[] = ['error', 'warning', 'notice'];
 const COLUMN = /^[a-zA-Z][a-zA-Z0-9]*$/;
-/** The contract's limits: text values of at most 1,000 characters, at most 100 values in a list. */
+/** The contract's limits (docs/v2-sidecar-api.md, URLs): text of at most 1,000 characters, 100 values in a list. */
 const MAX_TEXT = 1_000;
 const MAX_VALUES = 100;
+/** A query sorts by at most 3 columns, each once, and has at most 20 filters: more is trimmed, never sent. */
+export const MAX_SORTS = 3;
+export const MAX_FILTERS = 20;
+
+/** Every key of the raw search as undefined, then the route's own checked values: nothing raw gets through. */
+function strictSearch<T extends object>(raw: Record<string, unknown>, own: T): T {
+  return { ...Object.fromEntries(Object.keys(raw).map((key) => [key, undefined])), ...own };
+}
 
 function text(value: unknown): string | undefined {
-  if (typeof value === 'number') return String(value);
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   if (typeof value !== 'string') return undefined;
   const trimmed = value.slice(0, MAX_TEXT);
   return trimmed === '' ? undefined : trimmed;
 }
 
 function positiveInteger(value: unknown): number | undefined {
-  const number = typeof value === 'string' ? Number(value) : value;
-  return typeof number === 'number' && Number.isInteger(number) && number > 0 ? number : undefined;
+  const number = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  return typeof number === 'number' && Number.isSafeInteger(number) && number > 0 ? number : undefined;
 }
 
 function list<T>(value: unknown, item: (entry: unknown) => T | undefined): T[] | undefined {
@@ -32,9 +46,9 @@ function column(value: unknown): string | undefined {
   return typeof value === 'string' && COLUMN.test(value) ? value : undefined;
 }
 
-/** `{ column, desc }` objects, or the compact `-status,url` form. */
+/** `{ column, desc }` objects, or the compact `-status,url` form. A column sorts once, and at most 3 do. */
 export function parseSort(value: unknown): GridSort[] | undefined {
-  return list<GridSort>(value, (entry) => {
+  const sorts = list<GridSort>(value, (entry) => {
     if (typeof entry === 'string') {
       const desc = entry.startsWith('-');
       const name = column(desc ? entry.slice(1) : entry);
@@ -46,13 +60,33 @@ export function parseSort(value: unknown): GridSort[] | undefined {
       return name ? { column: name, desc: record.desc === true } : undefined;
     }
     return undefined;
-  });
+  })
+    ?.filter((sort, index, all) => all.findIndex((other) => other.column === sort.column) === index)
+    .slice(0, MAX_SORTS);
+  return sorts && sorts.length > 0 ? sorts : undefined;
 }
 
 const finite = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 
-/** A filter as the contract shapes it (E3a): what it carries depends on its operator. */
+/**
+ * A check's group (E3a, Issue groups): `detail` and `relatedUrlId`, each null when the group has none. Null when the
+ * value isn't one, so the filter that carries it is dropped rather than widened to the whole check.
+ */
+function groupRef(value: unknown): CheckGroupRef | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  const detail = record.detail ?? null;
+  const relatedUrlId = record.relatedUrlId ?? null;
+  if (detail !== null && typeof detail !== 'string') return null;
+  if (relatedUrlId !== null && positiveInteger(relatedUrlId) === undefined) return null;
+  return {
+    detail: detail === null ? null : detail.slice(0, MAX_TEXT),
+    relatedUrlId: relatedUrlId === null ? null : (positiveInteger(relatedUrlId) ?? null),
+  };
+}
+
+/** A filter as the contract shapes it (E3a): what it carries depends on its operator. At most 20 are kept. */
 export function parseFilters(value: unknown): GridFilter[] | undefined {
   return list<GridFilter>(value, (entry) => {
     if (typeof entry !== 'object' || entry === null) return undefined;
@@ -70,6 +104,7 @@ export function parseFilters(value: unknown): GridFilter[] | undefined {
         const min = finite(record.min);
         const max = finite(record.max);
         if (min === undefined && max === undefined) return undefined;
+        if (min !== undefined && max !== undefined && min > max) return undefined;
         return { column: name, op, ...(min === undefined ? {} : { min }), ...(max === undefined ? {} : { max }) };
       }
       case 'in':
@@ -81,15 +116,11 @@ export function parseFilters(value: unknown): GridFilter[] | undefined {
           )
           .slice(0, MAX_VALUES);
         if (values.length === 0) return undefined;
-        const group = record.group as Record<string, unknown> | undefined;
-        return typeof group?.detail === 'string'
-          ? {
-              column: name,
-              op,
-              values,
-              group: { detail: group.detail.slice(0, MAX_TEXT), relatedUrlId: finite(group.relatedUrlId) ?? null },
-            }
-          : { column: name, op, values };
+        if (record.group === undefined) return { column: name, op, values };
+        // A group narrows one check to one of its groups: anything else is a link the engine would refuse.
+        const group = groupRef(record.group);
+        if (!group || name !== 'check' || op !== 'in' || values.length !== 1) return undefined;
+        return { column: name, op, values, group };
       }
       default: {
         const raw = record.value;
@@ -98,11 +129,14 @@ export function parseFilters(value: unknown): GridFilter[] | undefined {
         return number === undefined ? undefined : { column: name, op, value: number };
       }
     }
-  });
+  })?.slice(0, MAX_FILTERS);
 }
 
-function definedOnly<T extends object>(value: T): T {
-  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T;
+/** A route that takes no search params: whatever the URL has is dropped. */
+export type NoSearch = Record<string, undefined>;
+
+export function validateNoSearch(search: Record<string, unknown>): NoSearch {
+  return strictSearch(search, {});
 }
 
 export interface HomeSearch {
@@ -111,7 +145,7 @@ export interface HomeSearch {
 }
 
 export function validateHomeSearch(search: Record<string, unknown>): HomeSearch {
-  return definedOnly({ q: text(search.q) });
+  return strictSearch(search, { q: text(search.q) });
 }
 
 export interface NewCrawlSearch {
@@ -120,7 +154,7 @@ export interface NewCrawlSearch {
 }
 
 export function validateNewCrawlSearch(search: Record<string, unknown>): NewCrawlSearch {
-  return definedOnly({ url: text(search.url) });
+  return strictSearch(search, { url: text(search.url) });
 }
 
 export interface IssuesSearch {
@@ -133,7 +167,7 @@ export interface IssuesSearch {
 }
 
 export function validateIssuesSearch(search: Record<string, unknown>): IssuesSearch {
-  return definedOnly({
+  return strictSearch(search, {
     severity: list<Severity>(search.severity, (entry) => SEVERITIES.find((severity) => severity === entry)),
     q: text(search.q),
     group: text(search.group),
@@ -154,7 +188,7 @@ export interface GridSearch {
 }
 
 export function validateGridSearch(search: Record<string, unknown>): GridSearch {
-  return definedOnly({
+  return strictSearch(search, {
     view: text(search.view)?.match(/^[a-z0-9-]{1,64}$/)?.[0],
     filter: parseFilters(search.filter),
     sort: parseSort(search.sort),
@@ -169,5 +203,11 @@ export interface InspectSearch {
 }
 
 export function validateInspectSearch(search: Record<string, unknown>): InspectSearch {
-  return definedOnly({ inspect: positiveInteger(search.inspect) });
+  return strictSearch(search, { inspect: positiveInteger(search.inspect) });
+}
+
+/** The URL the inspector shows, from the current view's checked search: only a positive whole number. */
+export function inspectedUrl(search: unknown): number | undefined {
+  const value = typeof search === 'object' && search !== null ? (search as { inspect?: unknown }).inspect : undefined;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }

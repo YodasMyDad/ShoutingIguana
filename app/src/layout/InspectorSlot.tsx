@@ -1,7 +1,8 @@
-import { useNavigate, useSearch } from '@tanstack/react-router';
+import { useMatches, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { useRef, type KeyboardEvent, type PointerEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { useCommands } from '../keyboard/registry';
+import { inspectedUrl } from '../routing/search';
 import { INSPECTOR_HEIGHT_RANGE, INSPECTOR_WIDTH_RANGE } from '../settings/schema';
 import { updateSettings, useSettings } from '../settings/settingsStore';
 import { Button } from '../ui/Button';
@@ -15,10 +16,8 @@ const KEY_STEP = 16;
  */
 export function InspectorSlot() {
   const navigate = useNavigate();
-  const inspect = useSearch({ strict: false, select: (search) => (search as { inspect?: number }).inspect });
-  const dock = useSettings((settings) => settings.inspectorDock);
-  const size = useSettings((settings) => (dock === 'right' ? settings.inspectorWidth : settings.inspectorHeight));
-  const drag = useRef<{ start: number; size: number } | null>(null);
+  // The current view's own checked search: a view without `inspect` (Home, Overview, Settings) never opens it.
+  const inspect = useMatches({ select: (matches) => inspectedUrl(matches[matches.length - 1]?.search) });
   const open = inspect !== undefined;
 
   const close = () =>
@@ -37,11 +36,35 @@ export function InspectorSlot() {
       },
     ],
     [open],
+    'app',
   );
 
-  if (!open) return null;
+  return open ? <InspectorPanel urlId={inspect} onClose={close} /> : null;
+}
 
+/**
+ * The panel itself. Until the user resizes it, it takes the layout's size (tokens.css `--inspector-width` and
+ * `--inspector-height`, which narrow with the window); once resized, the size they chose, remembered.
+ */
+function InspectorPanel({ urlId, onClose }: { urlId: number; onClose: () => void }) {
+  const dock = useSettings((settings) => settings.inspectorDock);
+  const chosen = useSettings((settings) => (dock === 'right' ? settings.inspectorWidth : settings.inspectorHeight));
   const range = dock === 'right' ? INSPECTOR_WIDTH_RANGE : INSPECTOR_HEIGHT_RANGE;
+  const panelRef = useRef<HTMLElement>(null);
+  const drag = useRef<{ start: number; size: number } | null>(null);
+  const [measured, setMeasured] = useState<number>(range.min);
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return undefined;
+    const measure = () => setMeasured(dock === 'right' ? panel.offsetWidth : panel.offsetHeight);
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(panel);
+    return () => observer?.disconnect();
+  }, [dock]);
+
+  const size = Math.min(range.max, Math.max(range.min, chosen ?? measured));
   const resize = (next: number) =>
     updateSettings(dock === 'right' ? { inspectorWidth: next } : { inspectorHeight: next });
 
@@ -70,12 +93,14 @@ export function InspectorSlot() {
 
   return (
     <aside
+      ref={panelRef}
       aria-label="Inspector"
       className={clsx(
         'relative flex shrink-0 flex-col border-border bg-surface-raised shadow-2',
         dock === 'right' ? 'border-l' : 'border-t',
+        chosen === null && (dock === 'right' ? 'w-(--inspector-width)' : 'h-(--inspector-height)'),
       )}
-      style={dock === 'right' ? { width: size } : { height: size }}
+      style={chosen === null ? undefined : dock === 'right' ? { width: size } : { height: size }}
     >
       {/* A focusable separator is the APG window-splitter widget; jsx-a11y only knows the static separator. */}
       {/* eslint-disable-next-line jsx-a11y-x/no-noninteractive-element-interactions */}
@@ -85,7 +110,7 @@ export function InspectorSlot() {
         tabIndex={0}
         aria-label="Resize the inspector"
         aria-orientation={dock === 'right' ? 'vertical' : 'horizontal'}
-        aria-valuenow={size}
+        aria-valuenow={Math.round(size)}
         aria-valuemin={range.min}
         aria-valuemax={range.max}
         onPointerDown={onPointerDown}
@@ -99,7 +124,7 @@ export function InspectorSlot() {
       />
       <div className="flex h-(--tab-height) items-center gap-2 border-b border-border-subtle px-3">
         <h2 className="text-13 font-semibold">Inspector</h2>
-        <span className="figures text-12 text-text-muted">URL {inspect}</span>
+        <span className="figures text-12 text-text-muted">URL {urlId}</span>
         <Button
           variant="ghost"
           size="sm"
@@ -114,7 +139,7 @@ export function InspectorSlot() {
           command="inspector.close"
           aria-label="Close the inspector"
           title="Close"
-          onClick={close}
+          onClick={onClose}
         >
           ✕
         </Button>

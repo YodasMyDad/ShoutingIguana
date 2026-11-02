@@ -16,6 +16,7 @@ export function OverviewScreen() {
   const crawl = useQuery(crawlQuery(crawlId)).data;
   const live = useLiveCrawl(crawlId);
   const status = effectiveStatus(crawl, live);
+  const unreadable = status === 'unreadable';
   const progress = live?.progress;
 
   return (
@@ -37,14 +38,17 @@ export function OverviewScreen() {
       ) : crawl ? (
         <dl className="grid max-w-(--content-max) grid-cols-4 gap-4">
           <Figure label="Status" value={status ? statusLabel(status) : '–'} />
-          <Figure label="URLs" value={formatCount(crawl.fetchedUrlCount)} />
-          <Figure label="Pages" value={formatCount(crawl.pageCount)} />
+          {/* A file that couldn't be read says nothing about its counts: "–", never 0. */}
+          <Figure label="URLs" value={formatCount(unreadable ? null : crawl.fetchedUrlCount)} />
+          <Figure label="Pages" value={formatCount(unreadable ? null : crawl.pageCount)} />
           <Figure
             label="Checks with issues"
             value={
-              crawl.issues
-                ? formatCount(crawl.issues.error + crawl.issues.warning + crawl.issues.notice)
-                : 'Not analysed'
+              unreadable
+                ? '–'
+                : crawl.issues
+                  ? formatCount(crawl.issues.error + crawl.issues.warning + crawl.issues.notice)
+                  : 'Not analysed'
             }
           />
         </dl>

@@ -40,7 +40,10 @@ another checkout of the engine, such as a clean worktree while someone edits thi
 - Ctrl+C stops both. Set `SI_DEV_LOG=1` to see the sidecar's log.
 
 The mock needs the fixtures, which git ignores. Make them with `node app/design/data/extract/run-all.mjs` (from the
-repo root; see `design/data/README.md`). Without them, every mock answer says so.
+repo root; see `design/data/README.md`). Without them, every mock answer says so. It answers the grids as the sidecar
+does at 46a2703, failures included: a running or unanalysed crawl has no URL summary (its columns are left out and
+named), a sort or filter on them is `needs-analysis`, a query the engine can't run is `invalid-query`. The inspector
+answers for the few URLs the fixtures hold it for.
 
 ## Test
 
@@ -50,7 +53,7 @@ repo root; see `design/data/README.md`). Without them, every mock answer says so
 | `npm run lint` | ESLint: typed rules, React hooks, jsx-a11y, TanStack Query, Storybook |
 | `npm run format:check` | Prettier (`npm run format` fixes) |
 | `npm test` | Vitest unit and component tests (`npm run test:watch` while working) |
-| `npm run e2e` | Playwright against the real sidecar, with axe: zero violations allowed |
+| `npm run e2e` | Playwright against the real sidecar, with axe: zero violations allowed. `e2e/states.spec.ts` also checks what only a browser shows: state indicators at 3:1 and their text at 4.5:1 in both themes and under forced colours, focus coming back after an overlay, the grid's cursor kept in view, and toasts in the app's look |
 | `npm run build-storybook` | Storybook builds |
 
 `npm run e2e` builds the app for the test (`--mode e2e`), starts the sidecar on a temp data folder holding one crawl,

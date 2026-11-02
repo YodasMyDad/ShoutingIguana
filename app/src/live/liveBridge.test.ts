@@ -1,13 +1,21 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, type QueryKey } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { queryKeys } from '../api/queries';
 import { setTransport, type Transport } from '../api/transport';
 import type { CrawlListItem } from '../api/types';
-import { notifyError, notifyResult } from '../feedback/notify';
-import { resetConnectionForTests } from '../shell/connection';
-import { startLiveBridge } from './liveBridge';
+import type * as NotifyModule from '../feedback/notify';
+import { dismissToast, notifyError, notifyResult } from '../feedback/notify';
+import { resetConnectionForTests, setDirectConnection } from '../shell/connection';
+import { testUrlPage } from '../test/fakeSidecar';
+import { LIVE_GRID_REFRESH_MS, startLiveBridge } from './liveBridge';
 import { LiveStore, type LiveStoreClock } from './liveStore';
 
-vi.mock('../feedback/notify', () => ({ notifyResult: vi.fn(), notifyError: vi.fn() }));
+vi.mock('../feedback/notify', async (importOriginal) => ({
+  ...(await importOriginal<typeof NotifyModule>()),
+  notifyResult: vi.fn(),
+  notifyError: vi.fn(),
+  dismissToast: vi.fn(),
+}));
 vi.mock('../feedback/announce', () => ({ announce: vi.fn() }));
 
 const ID = '0123456789abcdef';
@@ -26,12 +34,12 @@ const clock: LiveStoreClock = {
   isHidden: () => false,
 };
 
-function setup() {
+function setup(queryClient = new QueryClient()) {
   const store = new LiveStore(clock);
-  const stop = startLiveBridge({ queryClient: new QueryClient(), openCrawl: vi.fn(), store });
+  const stop = startLiveBridge({ queryClient, openCrawl: vi.fn(), store });
   const send = (event: string, data: object) => store.ingest({ event, id: '', data: JSON.stringify(data) });
   const status = (value: string, extra: object = {}) => send('crawl', { crawlId: ID, status: value, ...extra });
-  return { stop, send, status };
+  return { stop, send, status, store };
 }
 
 const settle = () => vi.advanceTimersByTimeAsync(0);
@@ -64,6 +72,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.mocked(notifyResult).mockClear();
   vi.mocked(notifyError).mockClear();
+  vi.mocked(dismissToast).mockClear();
   resetConnectionForTests();
 });
 
@@ -149,6 +158,21 @@ describe('the live bridge’s toasts', () => {
     stop();
   });
 
+  it('gives each crawl’s news one toast, and takes Continue away once the crawl runs again', async () => {
+    const { stop, status } = setup();
+    status('running');
+    status('stopping');
+    status('stopped');
+    await settle();
+    expect(notifyResult).toHaveBeenCalledWith('Crawl stopped', expect.objectContaining({ id: `crawl:${ID}:stopped` }));
+    vi.mocked(dismissToast).mockClear();
+    status('stopped');
+    expect(dismissToast).not.toHaveBeenCalledWith(`crawl:${ID}:stopped`);
+    status('running'); // continued, here or from the tray
+    expect(dismissToast).toHaveBeenCalledWith(`crawl:${ID}:stopped`);
+    stop();
+  });
+
   it('reports a failure with the engine’s words, and offers a retry when the file was only busy', async () => {
     const { stop, status } = setup();
     status('analyzing');
@@ -159,6 +183,121 @@ describe('the live bridge’s toasts', () => {
       expect.objectContaining({ title: 'example.com: the analysis failed', retry: expect.any(Function) as unknown }),
     );
     expect(notifyResult).not.toHaveBeenCalled();
+    stop();
+  });
+});
+
+describe('what the live bridge refreshes', () => {
+  const OTHER = 'fedcba9876543210';
+  const gridKey = (crawl: string, page: number): QueryKey => ['grid', 'urls', crawl, { sort: [] }, 200, page];
+
+  /** A cache holding the library, both crawls' reads and a grid page each, all fresh. */
+  function cachedClient() {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(queryKeys.library, [item]);
+    for (const crawl of [ID, OTHER]) {
+      queryClient.setQueryData(queryKeys.crawlItem(crawl), { ...item, id: crawl });
+      queryClient.setQueryData(queryKeys.stats(crawl), {});
+      queryClient.setQueryData(gridKey(crawl, 0), testUrlPage());
+      queryClient.setQueryData(gridKey(crawl, 3), testUrlPage());
+    }
+    const stale = (key: QueryKey) => queryClient.getQueryState(key)?.isInvalidated === true;
+    return { queryClient, stale };
+  }
+
+  it('fetches the library again when the sidecar says it changed', () => {
+    const { queryClient, stale } = cachedClient();
+    const { stop, send } = setup(queryClient);
+    send('library', {});
+    expect(stale(queryKeys.library)).toBe(true);
+    expect(stale(queryKeys.crawlItem(ID))).toBe(false);
+    stop();
+  });
+
+  it('fetches everything again when a new sidecar takes over', () => {
+    setDirectConnection({ baseUrl: 'http://127.0.0.1:1', token: 't', generation: 1, version: 'x' });
+    const { queryClient, stale } = cachedClient();
+    const { stop } = setup(queryClient);
+    expect(stale(queryKeys.crawlItem(OTHER))).toBe(false);
+    setDirectConnection({ baseUrl: 'http://127.0.0.1:2', token: 'u', generation: 2, version: 'x' });
+    expect(stale(queryKeys.library)).toBe(true);
+    expect(stale(queryKeys.crawlItem(OTHER))).toBe(true);
+    expect(stale(gridKey(OTHER, 3))).toBe(true);
+    stop();
+  });
+
+  it('after a restart, fetches the real status and reads of a crawl that was live and isn’t any more', () => {
+    setDirectConnection({ baseUrl: 'http://127.0.0.1:1', token: 't', generation: 1, version: 'x' });
+    const { queryClient, stale } = cachedClient();
+    const { stop, send, store } = setup(queryClient);
+    send('hello', { live: [ID] });
+    send('progress', { crawlId: ID, status: 'running', fetched: 10 });
+    send('crawl', { crawlId: OTHER, status: 'completed' });
+    queryClient.setQueryData(queryKeys.crawlItem(ID), { ...item, status: 'running' });
+    queryClient.setQueryData(queryKeys.stats(ID), {});
+    queryClient.setQueryData(gridKey(ID, 0), testUrlPage());
+    queryClient.setQueryData(queryKeys.crawlItem(OTHER), { ...item, id: OTHER, status: 'completed' });
+    // The sidecar crashed; the shell's new one has nothing live.
+    setDirectConnection({ baseUrl: 'http://127.0.0.1:2', token: 'u', generation: 2, version: 'x' });
+    queryClient.setQueryData(queryKeys.crawlItem(ID), { ...item, status: 'running' });
+    queryClient.setQueryData(queryKeys.crawlItem(OTHER), { ...item, id: OTHER, status: 'completed' });
+    send('hello', { live: [] });
+    expect(store.getState().crawls[ID]?.status ?? null).toBeNull();
+    expect(stale(queryKeys.crawlItem(ID))).toBe(true);
+    // A crawl that wasn't live has nothing new to say.
+    expect(stale(queryKeys.crawlItem(OTHER))).toBe(false);
+    stop();
+  });
+
+  it('after the same sidecar drops the stream, fetches every crawl’s reads again: events may have been lost', () => {
+    setDirectConnection({ baseUrl: 'http://127.0.0.1:1', token: 't', generation: 1, version: 'x' });
+    const { queryClient, stale } = cachedClient();
+    const { stop, send } = setup(queryClient);
+    send('hello', { live: [] });
+    expect(stale(queryKeys.crawlItem(OTHER))).toBe(false);
+    send('hello', { live: [] });
+    expect(stale(queryKeys.crawlItem(OTHER))).toBe(true);
+    expect(stale(queryKeys.stats(ID))).toBe(true);
+    expect(stale(gridKey(OTHER, 0))).toBe(true);
+    stop();
+  });
+
+  it('hears a crawl continued after a restart as news: its status, reads and announcement follow', async () => {
+    setDirectConnection({ baseUrl: 'http://127.0.0.1:1', token: 't', generation: 1, version: 'x' });
+    const { queryClient, stale } = cachedClient();
+    const { stop, send, status } = setup(queryClient);
+    send('hello', { live: [] });
+    status('running');
+    await settle();
+    send('hello', { live: [] }); // the stream dropped while it ran
+    queryClient.setQueryData(queryKeys.crawlItem(ID), { ...item, status: 'interrupted' });
+    status('running'); // continued
+    expect(stale(queryKeys.crawlItem(ID))).toBe(true);
+    expect(queryClient.getQueryData<CrawlListItem>(queryKeys.crawlItem(ID))?.status).toBe('running');
+    stop();
+  });
+
+  it('refreshes a crawling crawl’s grids at most once a second, and nothing else', async () => {
+    const { queryClient, stale } = cachedClient();
+    const { stop, send } = setup(queryClient);
+    const tick = (fetched: number, status = 'running') => send('progress', { crawlId: ID, status, fetched });
+    tick(1);
+    expect(stale(gridKey(ID, 0))).toBe(true);
+    expect(stale(gridKey(ID, 3))).toBe(true);
+    expect(stale(gridKey(OTHER, 0))).toBe(false);
+    expect(stale(queryKeys.crawlItem(ID))).toBe(false);
+    queryClient.setQueryData(gridKey(ID, 0), testUrlPage());
+    await vi.advanceTimersByTimeAsync(LIVE_GRID_REFRESH_MS / 2);
+    tick(2);
+    expect(stale(gridKey(ID, 0))).toBe(false);
+    await vi.advanceTimersByTimeAsync(LIVE_GRID_REFRESH_MS / 2);
+    tick(3);
+    expect(stale(gridKey(ID, 0))).toBe(true);
+    // Paused, nothing changes: no refresh.
+    queryClient.setQueryData(gridKey(ID, 0), testUrlPage());
+    await vi.advanceTimersByTimeAsync(LIVE_GRID_REFRESH_MS * 2);
+    tick(3, 'paused');
+    expect(stale(gridKey(ID, 0))).toBe(false);
     stop();
   });
 });

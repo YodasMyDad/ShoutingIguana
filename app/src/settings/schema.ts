@@ -13,10 +13,13 @@ export interface Settings {
   zoom: number;
   sidebarCollapsed: boolean;
   inspectorDock: InspectorDock;
-  /** px, when docked on the right. */
-  inspectorWidth: number;
-  /** px, when docked at the bottom. */
-  inspectorHeight: number;
+  /**
+   * px, when docked on the right, once the user has resized it. Null until then: the layout's own size
+   * (tokens.css `--inspector-width`), which narrows with the window.
+   */
+  inspectorWidth: number | null;
+  /** px, when docked at the bottom, once resized; null for tokens.css `--inspector-height`. */
+  inspectorHeight: number | null;
   /** The last view opened in each crawl (`overview`, `issues`, `urls`...), so a crawl reopens where it was left. */
   lastViewByCrawl: Record<string, string>;
   /** Where the app was when it closed: a path with its search, reopened at the next start. */
@@ -29,8 +32,8 @@ export const DEFAULT_SETTINGS: Settings = {
   zoom: 1,
   sidebarCollapsed: false,
   inspectorDock: 'right',
-  inspectorWidth: 400,
-  inspectorHeight: 320,
+  inspectorWidth: null,
+  inspectorHeight: null,
   lastViewByCrawl: {},
   lastLocation: null,
 };
@@ -44,7 +47,11 @@ function oneOf<T extends string>(value: unknown, options: readonly T[], fallback
   return options.includes(value as T) ? (value as T) : fallback;
 }
 
-function numberIn(value: unknown, range: { min: number; max: number }, fallback: number): number {
+function numberIn<T extends number | null>(
+  value: unknown,
+  range: { min: number; max: number },
+  fallback: T,
+): number | T {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.min(range.max, Math.max(range.min, value))
     : fallback;

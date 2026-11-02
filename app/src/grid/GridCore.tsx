@@ -17,16 +17,20 @@ import {
   type PointerEvent,
   type ReactNode,
 } from 'react';
+import { announce } from '../feedback/announce';
+import { notifyError } from '../feedback/notify';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
+import { commands } from '../keyboard/registry';
 import { copyText } from '../lib/clipboard';
+import { formatCountOf } from '../lib/format';
 import { isMac } from '../lib/platform';
 import { INITIAL_NAV, gridKey, gridPointer, type GridNavState, type GridPosition } from './gridNavigation';
-import { DEFAULT_OVERSCAN, rowsPerPage } from './rowRange';
+import { DEFAULT_OVERSCAN, firstFullyVisible, rowsPerPage, scrollLeftToReveal } from './rowRange';
 import { useRowWindow, type RowWindowModel } from './rowWindow';
-import { WINDOW_PX } from './scrollWindow';
+import { windowFor } from './scrollWindow';
 import { clampSelection, effectiveRanges, selectedIndices, type Range } from './selection';
 import { MAX_COPY_ROWS, toTsv } from './tsv';
-import type { GridColumn, RowFetcher } from './types';
+import type { GridColumn, GridRange, RowFetcher } from './types';
 import { VirtualScrollbar } from './VirtualScrollbar';
 
 export interface GridCopyResult {
@@ -49,8 +53,11 @@ export interface GridCoreProps<Row> {
   rowHeight: number;
   headerHeight: number;
   overscan?: number;
-  /** Rows in view changed: fetch their pages, and prefetch ahead. */
-  onRangeChange?: (range: { first: number; last: number }) => void;
+  /**
+   * Rows in view changed: fetch their pages, and prefetch ahead. `scrubbing` while the scrollbar's thumb is held:
+   * rows fly past, so the data layer waits for it to settle.
+   */
+  onRangeChange?: (range: GridRange) => void;
   /** Every scroll's virtual offset, for prefetching by speed. */
   onScrollOffset?: (offset: number) => void;
   /** Enter or double-click: open the inspector. */
@@ -72,6 +79,13 @@ export interface GridCoreProps<Row> {
 }
 
 const SKELETON_ROWS = 12;
+
+/** The width the custom vertical scrollbar covers at the right of a windowed grid (tokens.css `--scrollbar-size`). */
+function coveredWidth(element: HTMLElement, windowed: boolean): number {
+  if (!windowed) return 0;
+  const size = Number.parseFloat(getComputedStyle(element).getPropertyValue('--scrollbar-size'));
+  return Number.isFinite(size) ? size : 0;
+}
 
 function GridCoreInner<Row>({
   label,
@@ -96,26 +110,43 @@ function GridCoreInner<Row>({
   const id = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [nav, setNav] = useState<GridNavState>(INITIAL_NAV);
-  const loading = rowCount === null;
-  const showSkeleton = useDelayedLoading(loading);
-  const count = rowCount ?? 0;
+  // A skeleton shows only for a first load over 150 ms, and then for at least 300 ms, rows or no rows: a skeleton
+  // that flashes away is what the rule exists to prevent.
+  const skeleton = useDelayedLoading(rowCount === null);
+  const loading = rowCount === null || skeleton;
+  const count = loading ? 0 : rowCount;
 
   const { view, model } = useRowWindow(scrollRef, { count, rowHeight, headerHeight, overscan });
 
-  const exposeModel = useEffectEvent(() => modelRef?.(model));
-  useLayoutEffect(() => exposeModel(), [model]);
+  const exposeModel = useEffectEvent(() => {
+    modelRef?.(model);
+  });
+  useLayoutEffect(() => {
+    exposeModel();
+  }, [model]);
 
   // The data layer hears which rows are in view, and every scroll's offset, to fetch and prefetch pages.
-  const reportRange = useEffectEvent((first: number, last: number) => onRangeChange?.({ first, last }));
+  const reportRange = useEffectEvent((first: number, last: number) =>
+    onRangeChange?.({ first, last, scrubbing: model.isScrubbing() }),
+  );
   useEffect(() => {
     if (count > 0) reportRange(view.first, view.last);
   }, [view.first, view.last, count]);
+  // Letting go of the thumb settles the range: its pages are fetched at once, and prefetching resumes.
+  useEffect(
+    () =>
+      model.onScrubbing(() => {
+        const current = model.getSnapshot();
+        if (current.last >= current.first) reportRange(current.first, current.last);
+      }),
+    [model],
+  );
   const reportOffset = useEffectEvent((offset: number) => onScrollOffset?.(offset));
   useEffect(() => model.onOffset((offset) => reportOffset(offset)), [model]);
 
   const template = columns.map((column) => `${column.width}px`).join(' ');
   const width = columns.reduce((sum, column) => sum + column.width, 0);
-  const bodyHeight = Math.min(count * rowHeight, WINDOW_PX);
+  const bodyHeight = Math.min(count * rowHeight, windowFor(rowHeight));
 
   // The cursor and selection, kept within the rows that exist now.
   const active =
@@ -130,33 +161,64 @@ function GridCoreInner<Row>({
   for (let index = view.first; index <= view.last; index++) indices.push(index);
   const activeOffscreen = active !== null && (active.row < view.first || active.row > view.last);
 
+  /** Scrolls sideways, just enough, so the cursor's cell is in view: the URL grid is wider than most windows. */
+  const revealColumn = (col: number) => {
+    const element = scrollRef.current;
+    const column = columns[col];
+    if (!element || !column) return;
+    const left = columns.slice(0, col).reduce((sum, other) => sum + other.width, 0);
+    const visible = element.clientWidth - coveredWidth(element, view.windowed);
+    const next = scrollLeftToReveal(left, column.width, element.scrollLeft, visible);
+    if (next !== element.scrollLeft) element.scrollLeft = next;
+  };
+
   const apply = (next: GridNavState, reveal: number | null) => {
     if (next.active?.row !== active?.row) onActiveRowChange?.(next.active?.row ?? null);
     setNav(next);
-    if (reveal !== null) model.scrollToIndex(reveal);
+    if (reveal !== null) {
+      model.scrollToIndex(reveal);
+      if (next.active) revealColumn(next.active.col);
+    }
   };
 
-  const copy = async () => {
-    const pick = selectedIndices(selection, MAX_COPY_ROWS);
-    if (pick.indices.length === 0) {
-      if (!active) return;
-      const column = columns[active.col];
-      const row = getRow(active.row) ?? (await fetchRows?.([active.row]))?.[0];
-      if (!column || row === undefined) return;
-      await copyText(column.text(row));
-      onCopy?.({ rows: 1, truncated: false, cell: true });
-      return;
-    }
-    const missing = pick.indices.filter((index) => getRow(index) === undefined);
+  /** The rows as text: rows that aren't loaded are fetched first. Throws when a page can't be. */
+  const selectionText = async (indices: readonly number[]) => {
+    const missing = indices.filter((index) => getRow(index) === undefined);
     const fetched = missing.length && fetchRows ? await fetchRows(missing) : [];
     const byIndex = new Map(missing.map((index, i) => [index, fetched[i]]));
-    const rows = pick.indices.map((index) => getRow(index) ?? byIndex.get(index));
-    const text = toTsv(
+    const rows = indices.map((index) => getRow(index) ?? byIndex.get(index));
+    return toTsv(
       columns.map((column) => column.header),
       rows.map((row) => columns.map((column) => (row === undefined ? '' : column.text(row)))),
     );
-    await copyText(text);
-    onCopy?.({ rows: pick.indices.length, truncated: pick.truncated, cell: false });
+  };
+
+  /**
+   * Ctrl+C: the selected rows as tab-separated text for a spreadsheet, or with nothing selected the cell under the
+   * cursor, exactly as it is. Screen readers hear what was copied; a copy that fails says so.
+   */
+  const copy = async () => {
+    const pick = selectedIndices(selection, MAX_COPY_ROWS);
+    try {
+      if (pick.indices.length === 0) {
+        if (!active) return;
+        const column = columns[active.col];
+        const row = getRow(active.row) ?? (await fetchRows?.([active.row]))?.[0];
+        if (!column || row === undefined) return;
+        if (!(await copyText(column.text(row)))) throw new ClipboardRefused();
+        announce('Copied the cell.');
+        onCopy?.({ rows: 1, truncated: false, cell: true });
+        return;
+      }
+      if (!(await copyText(await selectionText(pick.indices)))) throw new ClipboardRefused();
+      announce(`Copied ${formatCountOf(pick.indices.length, 'row')}.`);
+      onCopy?.({ rows: pick.indices.length, truncated: pick.truncated, cell: false });
+    } catch (error) {
+      notifyError(error, {
+        title: pick.indices.length > 0 ? 'The rows couldn’t be copied.' : 'The cell couldn’t be copied.',
+        ...(error instanceof ClipboardRefused ? { description: 'The clipboard didn’t take it. Try again.' } : {}),
+      });
+    }
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -164,6 +226,8 @@ function GridCoreInner<Row>({
     const textSelected = (window.getSelection()?.toString() ?? '') !== '';
     const mod = isMac ? event.metaKey : event.ctrlKey;
     if (mod && event.key.toLowerCase() === 'c' && textSelected) return;
+    // Esc closes what's open around the grid (the inspector) before it clears the grid's selection.
+    if (event.key === 'Escape' && commands.claims(event.nativeEvent)) return;
     const result = gridKey(
       { active, selection, follow: nav.follow },
       { key: event.key, shift: event.shiftKey, mod, alt: event.altKey },
@@ -216,10 +280,11 @@ function GridCoreInner<Row>({
   };
 
   const onFocus = (event: FocusEvent<HTMLDivElement>) => {
-    // Focus arriving on the grid lands on a cell: the last one, or the first in view. A click that focused it has
-    // already placed the cursor, which the functional update sees.
+    // Focus arriving on the grid lands on a cell: the last one, or the first row wholly in view (the top one can be
+    // half under the sticky header). A click that focused it has already placed the cursor, which the functional
+    // update sees.
     if (event.target !== event.currentTarget || count === 0) return;
-    const first = view.firstVisible;
+    const first = firstFullyVisible(model.offset(), rowHeight, view);
     setNav((current) => (current.active ? current : { ...current, active: { row: first, col: 0 } }));
   };
 
@@ -242,7 +307,7 @@ function GridCoreInner<Row>({
         className={clsx('si-grid min-h-0 flex-1 overflow-auto', view.windowed && 'si-grid--windowed')}
         style={style}
       >
-        <div role="rowgroup" className="sticky top-0 z-1">
+        <div role="rowgroup" className="sticky top-0 z-2">
           <div
             role="row"
             aria-rowindex={1}
@@ -265,12 +330,12 @@ function GridCoreInner<Row>({
         <div
           role="rowgroup"
           className="relative"
-          style={{ height: loading ? (showSkeleton ? SKELETON_ROWS * rowHeight : 0) : bodyHeight, width }}
+          style={{ height: skeleton ? SKELETON_ROWS * rowHeight : loading ? 0 : bodyHeight, width }}
           onPointerDown={onPointerDown}
           onDoubleClick={onDoubleClick}
           onContextMenu={onContextMenuEvent}
         >
-          {loading && showSkeleton
+          {skeleton
             ? Array.from({ length: SKELETON_ROWS }, (_, index) => (
                 <PlaceholderRow
                   key={index}
@@ -279,13 +344,30 @@ function GridCoreInner<Row>({
                   height={rowHeight}
                   width={width}
                   columns={columns.length}
+                  activeCol={-1}
+                  cellIdPrefix={null}
                 />
               ))
             : null}
+          {/* The selection's accent rule: a gutter that stays at the left edge when the grid scrolls sideways. */}
+          <div aria-hidden="true" className="si-grid-gutter">
+            {loading
+              ? null
+              : indices
+                  .filter((index) => inRanges(ranges, index))
+                  .map((index) => (
+                    <span
+                      key={index}
+                      className="si-grid-mark"
+                      style={{ transform: `translateY(${index * rowHeight - view.base}px)`, height: rowHeight }}
+                    />
+                  ))}
+          </div>
           {indices.map((index) => {
             const row = getRow(index);
             const top = index * rowHeight - view.base;
             return row === undefined ? (
+              // Its page is on its way: the cursor's cell keeps its id, so aria-activedescendant names a real cell.
               <PlaceholderRow
                 key={index}
                 index={index}
@@ -293,6 +375,8 @@ function GridCoreInner<Row>({
                 height={rowHeight}
                 width={width}
                 columns={columns.length}
+                activeCol={active?.row === index ? active.col : -1}
+                cellIdPrefix={id}
               />
             ) : (
               <GridRow
@@ -325,7 +409,7 @@ function GridCoreInner<Row>({
       {view.windowed ? (
         <VirtualScrollbar model={model} total={count * rowHeight} viewport={view.viewport} top={headerHeight} />
       ) : null}
-      {rowCount === 0 && emptyState ? (
+      {!loading && rowCount === 0 && emptyState ? (
         <div className="absolute inset-x-0 bottom-0 overflow-auto" style={{ top: headerHeight }}>
           {emptyState}
         </div>
@@ -427,12 +511,18 @@ const PlaceholderRow = memo(function PlaceholderRow({
   height,
   width,
   columns,
+  activeCol,
+  cellIdPrefix,
 }: {
   index: number;
   top: number;
   height: number;
   width: number;
   columns: number;
+  /** The active cell's column in this row, or -1. */
+  activeCol: number;
+  /** Null for the first load's skeleton, whose rows aren't real yet. */
+  cellIdPrefix: string | null;
 }) {
   return (
     <div
@@ -443,13 +533,29 @@ const PlaceholderRow = memo(function PlaceholderRow({
       style={{ transform: `translateY(${top}px)`, height, width }}
     >
       {Array.from({ length: columns }, (_, col) => (
-        <div key={col} role="gridcell" aria-colindex={col + 1} className="si-grid-cell">
+        <div
+          key={col}
+          {...(cellIdPrefix === null
+            ? {}
+            : { id: `${cellIdPrefix}-r${index}-c${col}`, 'data-row': index, 'data-col': col })}
+          role="gridcell"
+          aria-colindex={col + 1}
+          data-active={col === activeCol || undefined}
+          className="si-grid-cell"
+        >
           <span aria-hidden="true" className="skeleton-static block h-(--skeleton-text) w-3/4" />
         </div>
       ))}
     </div>
   );
 });
+
+/** The clipboard said no: the browser refused, and so did the fallback. */
+class ClipboardRefused extends Error {
+  constructor() {
+    super('The clipboard refused the text.');
+  }
+}
 
 /** The grid primitive. Give it a new `key` when the rows change meaning (another sort or filter). */
 export const GridCore = GridCoreInner as <Row>(props: GridCoreProps<Row>) => ReactNode;
