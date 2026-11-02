@@ -87,6 +87,9 @@ impl Event {
 #[serde(rename_all = "camelCase")]
 pub struct CrawlItem {
     pub id: String,
+    /// Where the crawl's file is.
+    #[serde(default)]
+    pub path: String,
     #[serde(default)]
     pub file_name: String,
     pub site: Option<String>,
@@ -362,6 +365,11 @@ impl LiveView {
         change
     }
 
+    /// The crawls that are crawling (running, paused or stopping): if the sidecar goes, these are what it took with it.
+    pub fn crawling(&self) -> impl Iterator<Item = &str> {
+        self.crawls.iter().filter(|crawl| crawl.status.is_crawling()).map(|crawl| crawl.id.as_str())
+    }
+
     /// The sidecar went away: nothing it said holds any more.
     pub fn clear(&mut self) -> Change {
         let menu = !self.crawls.is_empty();
@@ -628,6 +636,18 @@ mod tests {
         let items = [item("a", None, "stopping"), item("b", None, "inUse")];
         assert_eq!(LiveKinds::of_items(&items), LiveKinds { crawling: true, analysing: false });
         assert!(!LiveKinds::of_items(&[]).any());
+    }
+
+    #[test]
+    fn crawling_names_the_crawls_a_lost_sidecar_takes_with_it_but_not_analyses() {
+        let mut view = LiveView::default();
+        view.crawl(&change("running", "running"));
+        view.crawl(&change("paused", "paused"));
+        view.crawl(&change("stopping", "stopping"));
+        view.crawl(&change("analysing", "analyzing"));
+        assert_eq!(view.crawling().collect::<Vec<_>>(), ["running", "paused", "stopping"]);
+        view.clear();
+        assert_eq!(view.crawling().count(), 0);
     }
 
     #[test]

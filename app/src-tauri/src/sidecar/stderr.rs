@@ -23,10 +23,31 @@ impl StderrTail {
     }
 
     /// The sidecar's own sentence about why it stopped: when it can't start, it writes one plain line to stderr
-    /// last. Log entries (JSON, or the console logger's "12:01:02 info: …") are skipped.
+    /// last. A crash's "Unhandled exception." line wins over anything after it. Log entries (JSON, or the console
+    /// logger's "12:01:02 info: …") and stack frames ("at …", "--- End of …") are never the reason.
     pub fn reason(&self) -> Option<&str> {
-        self.lines.iter().rev().map(|line| line.trim()).find(|line| !line.is_empty() && !is_log_entry(line))
+        let mut plain = self
+            .lines
+            .iter()
+            .rev()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty() && !is_log_entry(line) && !is_stack_frame(line));
+        let last = plain.clone().next();
+        plain.find(|line| line.starts_with(UNHANDLED_EXCEPTION)).or(last)
     }
+
+    /// Every kept line, oldest first, for the log when the sidecar stops unexpectedly.
+    pub fn lines(&self) -> impl Iterator<Item = &str> {
+        self.lines.iter().map(String::as_str)
+    }
+}
+
+/// How .NET starts the report of an exception nothing caught, before the stack trace.
+const UNHANDLED_EXCEPTION: &str = "Unhandled exception.";
+
+/// A line of a .NET stack trace: a frame ("at …"), an inner exception ("---> …") or a section's end ("--- End of …").
+fn is_stack_frame(line: &str) -> bool {
+    line.starts_with("at ") || line.starts_with("---")
 }
 
 fn is_log_entry(line: &str) -> bool {
@@ -57,8 +78,8 @@ pub struct ExitReport {
     pub spawn_error: Option<String>,
     /// Its last plain line on stderr.
     pub reason: Option<String>,
-    /// Restarts within the last minute.
-    pub restarts: usize,
+    /// Crashes in a row, the last one included.
+    pub crashes: u32,
 }
 
 /// A plain sentence for the UI.
@@ -73,10 +94,10 @@ pub fn failure_message(reason: FailureReason, report: &ExitReport, start_timeout
             Some(reason) => sentence(format!("The engine couldn't start with the settings the app gave it: {reason}")),
             None => "The engine couldn't start with the settings the app gave it.".to_owned(),
         },
-        FailureReason::StateInUse => match &report.reason {
-            Some(reason) => sentence(reason.clone()),
-            None => "Another copy of the engine is still using its folder. Close it, then try again.".to_owned(),
-        },
+        // The engine's own sentence names its command-line option, which means nothing to a user: it goes to the log.
+        FailureReason::StateInUse => {
+            "Close the other copy of Shouting Iguana, or the engine it started, then try again.".to_owned()
+        }
         FailureReason::StartFailed => {
             if report.timed_out {
                 format!("The engine didn't start within {} seconds.", start_timeout.as_secs())
@@ -89,8 +110,8 @@ pub fn failure_message(reason: FailureReason, report: &ExitReport, start_timeout
             }
         }
         FailureReason::Crashed => format!(
-            "The engine stopped unexpectedly {} times in a minute ({}).",
-            report.restarts + 1,
+            "The engine stopped unexpectedly {} times in a row ({}).",
+            report.crashes,
             describe_exit(report.code)
         ),
     }
@@ -144,6 +165,56 @@ mod tests {
         );
     }
 
+    /// The review's case (L7): the engine's sentence ends "give this one another --state-dir", which a user can't act
+    /// on. The message is the shell's own, and never names an option.
+    #[test]
+    fn a_busy_state_folder_is_explained_in_plain_words_without_the_engines_option() {
+        let busy = ExitReport {
+            code: Some(3),
+            reason: Some(
+                r"Another Shouting Iguana engine is already using C:\state. Close it, or give this one another --state-dir."
+                    .into(),
+            ),
+            ..ExitReport::default()
+        };
+        let message = failure_message(FailureReason::StateInUse, &busy, TIMEOUT);
+        assert_eq!(message, "Close the other copy of Shouting Iguana, or the engine it started, then try again.");
+        assert!(!message.contains("--"), "{message}");
+    }
+
+    /// The review's case (L3): a crash ends with stack frames, and the reason used to be the last of them.
+    #[test]
+    fn a_crash_gives_its_unhandled_exception_line_and_never_a_stack_frame() {
+        let mut tail = StderrTail::default();
+        for line in [
+            "12:01:02 info: ShoutingIguana.Sidecar[0] Shouting Iguana sidecar listening on 127.0.0.1:5000",
+            "Unhandled exception. System.InvalidOperationException: The crawl store is corrupt.",
+            // An exception's message can run over more than one line: its last line isn't the reason.
+            "It was last written by version 1.9.",
+            " ---> System.IO.IOException: The file is locked.",
+            "   --- End of inner exception stack trace ---",
+            "   at ShoutingIguana.Engine.Storage.CrawlStore.Open(String path)",
+            "   at Program.<Main>(String[] args)",
+        ] {
+            tail.push(line);
+        }
+        assert_eq!(
+            tail.reason(),
+            Some("Unhandled exception. System.InvalidOperationException: The crawl store is corrupt.")
+        );
+
+        let mut frames_only = StderrTail::default();
+        frames_only.push("   at Program.<Main>(String[] args)");
+        assert_eq!(frames_only.reason(), None);
+
+        // Without a crash, the last plain line is still the reason.
+        let mut plain = StderrTail::default();
+        plain.push("The sidecar couldn't start: Access to the path is denied.");
+        plain.push("   at Somewhere()");
+        assert_eq!(plain.reason(), Some("The sidecar couldn't start: Access to the path is denied."));
+        assert_eq!(plain.lines().count(), 2);
+    }
+
     #[test]
     fn a_timestamp_alone_is_not_a_log_entry() {
         assert!(!is_log_entry("12:01:02 The sidecar couldn't start"));
@@ -188,14 +259,13 @@ mod tests {
             "The engine stopped before it was ready (exit code 0xC0000005)."
         );
 
-        let crashed = ExitReport { code: Some(-532462766), restarts: 5, ..ExitReport::default() };
+        let crashed = ExitReport { code: Some(-532462766), crashes: 6, ..ExitReport::default() };
         assert_eq!(
             failure_message(FailureReason::Crashed, &crashed, TIMEOUT),
-            "The engine stopped unexpectedly 6 times in a minute (exit code 0xE0434352)."
+            "The engine stopped unexpectedly 6 times in a row (exit code 0xE0434352)."
         );
 
         let busy = ExitReport { code: Some(3), ..ExitReport::default() };
-        assert!(failure_message(FailureReason::StateInUse, &busy, TIMEOUT).starts_with("Another copy of the engine"));
         assert!(failure_message(FailureReason::MissingBinary, &busy, TIMEOUT).contains(BINARY_NAME));
 
         let arguments =

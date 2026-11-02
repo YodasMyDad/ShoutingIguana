@@ -1,5 +1,6 @@
 // `npm run smoke:tauri`: the built app, end to end, in its own WebView2 (Windows). Starts the release (or debug) exe
-// on a temp data folder holding one crawl, attaches Playwright over WebView2's debugging port, and checks that the
+// on a temp data folder holding one crawl, with a temp profile (SI_APP_PROFILE_DIR) so it never touches the user's own
+// copy of the app and runs beside it, attaches Playwright over WebView2's debugging port, and checks that the
 // shell handed the page its sidecar over IPC, under the app's CSP: the library lists the crawl, the event stream is
 // open, and nothing failed in the console. Then closes the window and checks nothing is left running.
 // Options: --exe <path>, --crawl <file> (else the e2e synthetic crawl, made with the CLI if missing).
@@ -39,6 +40,7 @@ const app = spawn(exe, [], {
     ...process.env,
     SI_APP_DATA_DIR: path.join(temp, 'data'),
     SI_APP_STATE_DIR: path.join(temp, 'state'),
+    SI_APP_PROFILE_DIR: path.join(temp, 'profile'),
     WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
   },
   stdio: 'ignore',

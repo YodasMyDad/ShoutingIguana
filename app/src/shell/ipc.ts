@@ -1,15 +1,28 @@
 // The Tauri shell's IPC, typed (app/src-tauri/src/commands.rs and sidecar/). Only called inside the shell: every
-// caller checks `isTauri` first. The webview never spawns anything; Rust owns the sidecar.
+// caller checks `isTauri` first. The webview never spawns anything, and never names a path for the shell to read or
+// write: Rust owns the sidecar, the preferences file and the crawl files' folders.
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 export type SidecarFailureReason = 'missing-binary' | 'bad-arguments' | 'state-in-use' | 'start-failed' | 'crashed';
 
+/** Why the engine is being started again: it stopped while serving, stopped while starting, or never said it was ready. */
+export type SidecarRestartReason = 'crashed' | 'start-failed' | 'start-timed-out';
+
 /** The shell's `sidecar://state` payload. `seq` only ever grows, so the newest wins whichever arrives first. */
 export type ShellSidecarState =
   | { state: 'starting'; seq: number; generation: number }
   | { state: 'ready'; seq: number; generation: number; port: number; token: string; version: string }
-  | { state: 'restarting'; seq: number; generation: number; attempt: number; exitCode: number | null }
+  | {
+      state: 'restarting';
+      seq: number;
+      generation: number;
+      /** Restart `attempt` of at most `attempts` before the shell gives up. */
+      attempt: number;
+      attempts: number;
+      reason: SidecarRestartReason;
+      exitCode: number | null;
+    }
   | {
       state: 'failed';
       seq: number;
@@ -49,8 +62,18 @@ export function parseShellSidecarState(value: unknown): ShellSidecarState | null
         token: v.token,
         version: typeof v.version === 'string' ? v.version : '',
       };
-    case 'restarting':
-      return { state: 'restarting', seq, generation, attempt: typeof v.attempt === 'number' ? v.attempt : 1, exitCode };
+    case 'restarting': {
+      const attempt = typeof v.attempt === 'number' ? v.attempt : 1;
+      return {
+        state: 'restarting',
+        seq,
+        generation,
+        attempt,
+        attempts: typeof v.attempts === 'number' ? v.attempts : attempt,
+        reason: isRestartReason(v.reason) ? v.reason : 'crashed',
+        exitCode,
+      };
+    }
     case 'failed':
       return {
         state: 'failed',
@@ -63,6 +86,10 @@ export function parseShellSidecarState(value: unknown): ShellSidecarState | null
     default:
       return null;
   }
+}
+
+function isRestartReason(value: unknown): value is SidecarRestartReason {
+  return value === 'crashed' || value === 'start-failed' || value === 'start-timed-out';
 }
 
 function isFailureReason(value: unknown): value is SidecarFailureReason {
@@ -85,13 +112,17 @@ export const ipc = {
   restartSidecar: (): Promise<void> => invoke('restart_sidecar'),
   requestQuit: (): Promise<void> => invoke('request_quit'),
   shellInfo: (): Promise<ShellInfo> => invoke<ShellInfo>('shell_info'),
+  /** The `.sicrawl` files waiting to be opened, each handed over once. */
   takePendingOpenFiles: async (): Promise<string[]> => {
     const paths = await invoke<unknown>('take_pending_open_files');
     return Array.isArray(paths) ? paths.filter((path): path is string => typeof path === 'string') : [];
   },
-  onOpenCrawlFiles: (handler: (paths: string[]) => void): Promise<UnlistenFn> =>
-    listen<{ paths?: unknown }>('shell://open-crawl-files', (event) => {
-      const paths = event.payload.paths;
-      if (Array.isArray(paths)) handler(paths.filter((path): path is string => typeof path === 'string'));
-    }),
+  /** More crawl files are waiting: take them when the engine can open them. */
+  onOpenCrawlFiles: (handler: () => void): Promise<UnlistenFn> => listen('shell://open-crawl-files', () => handler()),
+  /** The stored preferences, or null when there are none yet. */
+  settingsRead: (): Promise<unknown> => invoke<unknown>('settings_read'),
+  /** Stores the preferences: a JSON object, at most 64 KB. */
+  settingsWrite: (settings: string): Promise<void> => invoke('settings_write', { settings }),
+  /** Shows a library crawl's file in Explorer or Finder. The shell finds the file from the crawl's id. */
+  revealCrawlFile: (crawlId: string): Promise<void> => invoke('reveal_crawl_file', { crawlId }),
 };

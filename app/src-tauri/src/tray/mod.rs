@@ -30,9 +30,10 @@ const RESUME_PREFIX: &str = "resume:";
 /// The ring and the tooltip change at most this often.
 const REDRAW_INTERVAL: Duration = Duration::from_secs(1);
 
-/// The app icon, for the plain tray icon and the logo inside the ring.
-const ICON_32: &[u8] = include_bytes!("../../icons/32x32.png");
-const ICON_64: &[u8] = include_bytes!("../../icons/64x64.png");
+/// The app icon, for the plain tray icon and the logo inside the ring, decoded at compile time: the app reads no
+/// image at run time, so it needs no PNG decoder (nor the webview a command to read one from a path).
+const ICON_32: Image<'static> = tauri::include_image!("icons/32x32.png");
+const ICON_64: Image<'static> = tauri::include_image!("icons/64x64.png");
 
 enum Message {
     /// The live crawls or the window changed; `menu` when the menu may need rebuilding.
@@ -73,8 +74,6 @@ struct Look {
 
 struct Tray {
     app: AppHandle,
-    icon: Option<Image<'static>>,
-    logo: Option<Image<'static>>,
     tray: Option<TrayIcon<Wry>>,
     shown: bool,
     quitting: bool,
@@ -88,25 +87,7 @@ struct Tray {
 
 impl Tray {
     fn new(app: AppHandle) -> Self {
-        let decode = |bytes: &[u8]| match Image::from_bytes(bytes) {
-            Ok(image) => Some(image),
-            Err(error) => {
-                log::error!("Couldn't read the tray icon: {error}");
-                None
-            }
-        };
-        Self {
-            app,
-            icon: decode(ICON_32),
-            logo: decode(ICON_64),
-            tray: None,
-            shown: false,
-            quitting: false,
-            menu: None,
-            look: None,
-            drawn_at: None,
-            due: None,
-        }
+        Self { app, tray: None, shown: false, quitting: false, menu: None, look: None, drawn_at: None, due: None }
     }
 
     fn run(mut self, receiver: &Receiver<Message>) {
@@ -249,13 +230,13 @@ impl Tray {
     }
 
     fn image(&self, ring: Option<Ring>) -> Option<Image<'static>> {
-        match (ring, &self.logo) {
-            (Some(ring), Some(logo)) => {
-                let rgba = ring::draw(logo.rgba(), logo.width() as usize, ring.percent, ring.paused);
-                Some(Image::new_owned(rgba, ring::SIZE as u32, ring::SIZE as u32))
+        Some(match ring {
+            Some(ring) => {
+                let rgba = ring::draw(ICON_64.rgba(), ICON_64.width() as usize, ring.percent, ring.paused);
+                Image::new_owned(rgba, ring::SIZE as u32, ring::SIZE as u32)
             }
-            _ => self.icon.clone(),
-        }
+            None => ICON_32,
+        })
     }
 }
 

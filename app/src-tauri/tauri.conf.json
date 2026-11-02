@@ -42,6 +42,7 @@
       }
     ],
     "windows": {
+      "signCommand": { "cmd": "node", "args": ["../scripts/sign.mjs", "%1"] },
       "nsis": {
         "installMode": "currentUser"
       }

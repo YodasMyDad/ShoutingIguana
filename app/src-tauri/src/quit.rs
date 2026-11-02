@@ -9,6 +9,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::live::api::QUICK_CALL_TIMEOUT;
 use crate::live::model::LiveKinds;
+use crate::open_files;
 use crate::shell::{QuitPhase, Shell};
 use crate::sidecar::GRACEFUL_SHUTDOWN_TIMEOUT;
 use crate::sync::lock;
@@ -69,7 +70,16 @@ fn run(app: &AppHandle) {
             if !seen.any() {
                 window::show(app);
             }
-            *lock(&shell.quit) = QuitPhase::Running;
+            // Launches made while the question was up are this copy's after all. The same lock order as a launch.
+            let launched = {
+                let mut files = lock(&shell.open_files);
+                *lock(&shell.quit) = QuitPhase::Running;
+                files.quit_cancelled()
+            };
+            if let Some(paths) = launched {
+                window::show(app);
+                open_files::forward(app, paths);
+            }
             return;
         }
         // The window says it is stopping crawls while the engine stops them.
@@ -87,6 +97,10 @@ fn run(app: &AppHandle) {
         started.elapsed().as_millis(),
         stopped.map_or_else(|| "it wasn't running".to_owned(), |status| status.to_string())
     );
+    // The app was launched again while it quit: that launch gets a copy of its own, now the engine has let go.
+    if let Some(paths) = lock(&shell.open_files).relaunch_after_quit() {
+        open_files::relaunch(&paths);
+    }
     app.exit(0);
 }
 

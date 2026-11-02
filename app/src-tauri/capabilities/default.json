@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window: the shell's commands, native file dialogs, links to the web, revealing a file, and the store. Nothing that spawns processes, reads files or sends notifications: Rust owns those.",
+  "description": "The main window: the events it listens to, its theme and zoom, native file dialogs, links to the web, and the shell's commands. Nothing that takes a path, spawns processes or sends notifications: Rust owns those, and tests/capabilities.rs keeps it so.",
   "windows": ["main"],
   "permissions": [
-    "core:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
     "core:window:allow-set-theme",
     "core:webview:allow-set-webview-zoom",
     "dialog:allow-open",
@@ -13,12 +14,13 @@
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "http://*" }, { "url": "https://*" }]
     },
-    "opener:allow-reveal-item-in-dir",
-    "store:default",
     "allow-sidecar-state",
     "allow-restart-sidecar",
     "allow-request-quit",
     "allow-shell-info",
-    "allow-take-pending-open-files"
+    "allow-take-pending-open-files",
+    "allow-settings-read",
+    "allow-settings-write",
+    "allow-reveal-crawl-file"
   ]
 }

@@ -2,6 +2,7 @@
 //! in docs/v2-sidecar-api.md).
 
 use std::ffi::OsString;
+use std::io;
 use std::path::{Path, PathBuf};
 
 /// Tauri copies `externalBin` next to the app's own binary, without the target triple, in dev, build and bundles.
@@ -15,6 +16,12 @@ pub const PARENT_VARIABLE: &str = "SI_PARENT_PID";
 /// by a user.
 pub const DATA_DIR_OVERRIDE: &str = "SI_APP_DATA_DIR";
 pub const STATE_DIR_OVERRIDE: &str = "SI_APP_STATE_DIR";
+
+/// Where a single-file .NET app unpacks the native libraries bundled in it (e_sqlite3): %TEMP%\.net by default.
+pub const EXTRACT_DIR_VARIABLE: &str = "DOTNET_BUNDLE_EXTRACT_BASE_DIR";
+
+/// The folder, in the app's local data folder, that holds one such folder per app version.
+pub const EXTRACT_FOLDER: &str = "engine";
 
 /// The origin this build's webview sends: Tauri's custom protocol as WebView2 and WebKit name it.
 pub const WEBVIEW_ORIGIN: &str = if cfg!(windows) { "http://tauri.localhost" } else { "tauri://localhost" };
@@ -70,6 +77,23 @@ pub fn folder_override(variable: &str) -> Option<OsString> {
     std::env::var_os(variable).filter(|value| !value.is_empty())
 }
 
+/// Makes `root/<version>` for this version's engine to unpack into, and removes the folders other versions left in
+/// `root`: only one copy of the app runs (single instance), so no engine is using them.
+pub fn prepare_extraction_folder(root: &Path, version: &str) -> io::Result<PathBuf> {
+    let folder = root.join(version);
+    std::fs::create_dir_all(&folder)?;
+    for entry in std::fs::read_dir(root)?.flatten() {
+        let stale = entry.file_name() != version && entry.file_type().is_ok_and(|kind| kind.is_dir());
+        if stale {
+            match std::fs::remove_dir_all(entry.path()) {
+                Ok(()) => log::info!("Removed the engine files of another version: {}", entry.path().display()),
+                Err(error) => log::debug!("Couldn't remove {}: {error}", entry.path().display()),
+            }
+        }
+    }
+    Ok(folder)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,6 +139,28 @@ mod tests {
             ["--stdin-lifeline", "--data-dir", "C:\\data dir", "--state-dir", "C:\\state"]
         );
         assert_eq!(arguments(None, Some("/tmp/state".into())), ["--stdin-lifeline", "--state-dir", "/tmp/state"]);
+    }
+
+    /// The review's case (L9): every build used to leave its own unpacked libraries in %TEMP%, forever.
+    #[test]
+    fn the_engine_unpacks_into_a_folder_for_this_version_and_other_versions_go() {
+        let root = std::env::temp_dir().join(format!("si-extract-test-{}", std::process::id()));
+        let old = root.join("2.0.0-alpha.0").join("si-sidecar").join("ABC123");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("e_sqlite3.dll"), b"old").unwrap();
+        std::fs::write(root.join("note.txt"), b"not a folder").unwrap();
+
+        let folder = prepare_extraction_folder(&root, "2.0.0-alpha.1").unwrap();
+        assert_eq!(folder, root.join("2.0.0-alpha.1"));
+        assert!(folder.is_dir());
+        assert!(!root.join("2.0.0-alpha.0").exists());
+        assert!(root.join("note.txt").is_file(), "only folders are removed");
+
+        // Again for the same version: its folder and what is in it stay.
+        std::fs::write(folder.join("kept"), b"x").unwrap();
+        assert_eq!(prepare_extraction_folder(&root, "2.0.0-alpha.1").unwrap(), folder);
+        assert!(folder.join("kept").is_file());
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

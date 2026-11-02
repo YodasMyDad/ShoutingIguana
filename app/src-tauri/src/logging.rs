@@ -15,9 +15,14 @@ const KEPT_FILES: usize = 5;
 pub fn plugin() -> TauriPlugin<Wry> {
     // The shell and the sidecar's stderr at debug level while developing; the sidecar keeps its own full log.
     let own = if cfg!(debug_assertions) { LevelFilter::Debug } else { LevelFilter::Info };
+    let file_name = Some(FILE_NAME.to_owned());
+    let file = match crate::profile::log_folder() {
+        Some(path) => TargetKind::Folder { path, file_name },
+        None => TargetKind::LogDir { file_name },
+    };
     let mut builder = tauri_plugin_log::Builder::new()
         .clear_targets()
-        .target(Target::new(TargetKind::LogDir { file_name: Some(FILE_NAME.to_owned()) }))
+        .target(Target::new(file))
         .rotation_strategy(RotationStrategy::KeepSome(KEPT_FILES))
         .max_file_size(MAX_FILE_BYTES)
         .timezone_strategy(TimezoneStrategy::UseLocal)

@@ -3,14 +3,16 @@
 use std::sync::atomic::Ordering;
 
 use tauri::window::Color;
-use tauri::{AppHandle, Manager, Theme, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
+use tauri::{AppHandle, Manager, Theme, Url, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::StoreExt;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 use crate::live::notify;
-use crate::quit;
 use crate::shell::Shell;
+use crate::sidecar::WEBVIEW_ORIGIN;
 use crate::sync::lock;
+use crate::{profile, quit};
 
 pub const MAIN_WINDOW: &str = "main";
 
@@ -28,12 +30,29 @@ pub fn state_flags() -> StateFlags {
 }
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
-    let window = WebviewWindowBuilder::new(app, MAIN_WINDOW, WebviewUrl::default())
+    let dev_server = if cfg!(debug_assertions) { app.config().build.dev_url.clone() } else { None };
+    let opener = app.clone();
+    let mut builder = WebviewWindowBuilder::new(app, MAIN_WINDOW, WebviewUrl::default());
+    if let Some(folder) = profile::webview_data() {
+        builder = builder.data_directory(folder);
+    }
+    let window = builder
         .title("Shouting Iguana")
         .inner_size(1280.0, 800.0)
         .min_inner_size(960.0, 600.0)
         .center()
         .visible(false)
+        .on_navigation(move |url| match navigation(url, dev_server.as_ref()) {
+            Navigation::Stay => true,
+            Navigation::OpenInBrowser => {
+                open_in_browser(&opener, url.as_str());
+                false
+            }
+            Navigation::Refuse => {
+                log::warn!("Kept the window from leaving the app for a {} URL", url.scheme());
+                false
+            }
+        })
         .build()?;
     // The window-state plugin restored the window as it was created. Before it shows, the OS theme's background,
     // so the window never flashes white in dark mode.
@@ -55,6 +74,48 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         log::debug!("Couldn't focus the window: {error}");
     }
     Ok(())
+}
+
+/// Where the main window may go.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Navigation {
+    Stay,
+    OpenInBrowser,
+    Refuse,
+}
+
+/// The app's own pages (and the dev server's, in debug builds) load in the window. An http(s) link opens in the
+/// browser instead, and anything else goes nowhere: the window never shows someone else's page in place of the app,
+/// where the browser keys that could lead back are off.
+pub fn navigation(url: &Url, dev_server: Option<&Url>) -> Navigation {
+    let app = Url::parse(WEBVIEW_ORIGIN).ok();
+    let is_app = app.iter().chain(dev_server).any(|origin| same_origin(url, origin));
+    if is_app || url.as_str() == "about:blank" {
+        Navigation::Stay
+    } else if matches!(url.scheme(), "http" | "https") {
+        Navigation::OpenInBrowser
+    } else {
+        Navigation::Refuse
+    }
+}
+
+fn same_origin(url: &Url, origin: &Url) -> bool {
+    url.scheme() == origin.scheme()
+        && url.host_str() == origin.host_str()
+        && url.port_or_known_default() == origin.port_or_known_default()
+}
+
+/// Off the UI thread: the browser can take a moment to start.
+fn open_in_browser(app: &AppHandle, url: &str) {
+    let (app, url) = (app.clone(), url.to_owned());
+    let spawned = std::thread::Builder::new().name("open-link".to_owned()).spawn(move || {
+        if let Err(error) = app.opener().open_url(url, None::<&str>) {
+            log::warn!("Couldn't open a link in the browser: {error}");
+        }
+    });
+    if let Err(error) = spawned {
+        log::warn!("Couldn't start a thread to open a link: {error}");
+    }
 }
 
 /// Closing the window hides it to the tray while a crawl or an analysis is live; otherwise it quits the app.
@@ -139,7 +200,7 @@ pub fn is_in_front(app: &AppHandle) -> bool {
 
 /// The first time ever the window hides to the tray, say so.
 fn first_time_in_tray(app: &AppHandle) {
-    let store = match app.store(SHELL_STORE) {
+    let store = match app.store(profile::shell_store(SHELL_STORE)) {
         Ok(store) => store,
         Err(error) => {
             log::warn!("Couldn't open the shell's settings: {error}");
@@ -153,5 +214,45 @@ fn first_time_in_tray(app: &AppHandle) {
     store.set(TRAY_NOTICE_SHOWN, true);
     if let Err(error) = store.save() {
         log::warn!("Couldn't save the shell's settings: {error}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn url(text: &str) -> Url {
+        Url::parse(text).unwrap()
+    }
+
+    /// The review's case (L2): `location.href = 'https://example.com/'` replaced the app in its own window.
+    #[test]
+    fn the_window_stays_on_the_app_and_sends_web_links_to_the_browser() {
+        let app = format!("{WEBVIEW_ORIGIN}/crawls/abc/urls?sort=-issues");
+        assert_eq!(navigation(&url(&app), None), Navigation::Stay);
+        assert_eq!(navigation(&url("about:blank"), None), Navigation::Stay);
+        assert_eq!(navigation(&url("https://example.com/"), None), Navigation::OpenInBrowser);
+        assert_eq!(navigation(&url("http://example.com/page"), None), Navigation::OpenInBrowser);
+        for elsewhere in ["file:///C:/Windows/win.ini", "data:text/html,<p>x</p>", "javascript:alert(1)", "ftp://x/"] {
+            assert_eq!(navigation(&url(elsewhere), None), Navigation::Refuse, "{elsewhere}");
+        }
+    }
+
+    #[test]
+    fn a_look_alike_origin_is_not_the_app() {
+        let app = url(WEBVIEW_ORIGIN);
+        let other_port = format!("{}://{}:8080/", app.scheme(), app.host_str().unwrap());
+        let other_host = format!("{}://{}.example.com/", app.scheme(), app.host_str().unwrap());
+        for elsewhere in [other_port, other_host] {
+            assert_ne!(navigation(&url(&elsewhere), None), Navigation::Stay, "{elsewhere}");
+        }
+    }
+
+    #[test]
+    fn the_dev_server_is_the_app_only_when_given() {
+        let dev = url("http://localhost:51874");
+        assert_eq!(navigation(&url("http://localhost:51874/crawls"), Some(&dev)), Navigation::Stay);
+        assert_eq!(navigation(&url("http://localhost:51874/crawls"), None), Navigation::OpenInBrowser);
+        assert_eq!(navigation(&url("http://localhost:51875/"), Some(&dev)), Navigation::OpenInBrowser);
     }
 }

@@ -1,6 +1,6 @@
 // How requests reach the sidecar. The client only ever sees this interface: `http` (the real sidecar) or `mock` (the
 // design fixtures, for Storybook, the prototype and the grids the engine doesn't serve yet). VITE_TRANSPORT picks one.
-import { getConnection } from '../shell/connection';
+import { waitForConnection } from '../shell/connection';
 import { SidecarUnavailableError, SidecarUnreachableError, isAbort } from './errors';
 
 export interface TransportRequest {
@@ -20,13 +20,14 @@ export interface Transport {
 }
 
 /**
- * The real sidecar, over fetch with the bearer token. Never `cache: 'no-store'`: it turns Chromium's CORS preflight
- * cache off, and every call would pay for a preflight (the sidecar sends `Cache-Control: no-store` itself).
+ * The real sidecar, over fetch with the bearer token. A call made while the shell starts or restarts the sidecar
+ * waits for it. Never `cache: 'no-store'`: it turns Chromium's CORS preflight cache off, and every call would pay for
+ * a preflight (the sidecar sends `Cache-Control: no-store` itself).
  */
 export const httpTransport: Transport = {
   kind: 'http',
   async send({ method, path, body, headers, signal }) {
-    const connection = getConnection();
+    const connection = await waitForConnection(signal);
     if (!connection) throw new SidecarUnavailableError();
     const init: RequestInit = {
       method,

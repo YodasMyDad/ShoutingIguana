@@ -21,6 +21,18 @@ pub enum FailureReason {
     Crashed,
 }
 
+/// Why the engine is being started again. The UI says it in plain words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RestartReason {
+    /// It was serving, then stopped.
+    Crashed,
+    /// It stopped before it was ready.
+    StartFailed,
+    /// It didn't say it was ready within the start timeout, so it was stopped.
+    StartTimedOut,
+}
+
 #[derive(Clone, PartialEq, Serialize)]
 #[serde(tag = "state", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum SidecarState {
@@ -30,9 +42,11 @@ pub enum SidecarState {
         token: String,
         version: String,
     },
-    /// The sidecar was lost and a new one is on its way.
+    /// The sidecar was lost, or didn't start, and a new one is on its way: restart `attempt` of at most `attempts`.
     Restarting {
         attempt: u32,
+        attempts: u32,
+        reason: RestartReason,
         exit_code: Option<i32>,
     },
     Failed {
@@ -53,9 +67,13 @@ impl fmt::Debug for SidecarState {
             Self::Ready { port, version, .. } => {
                 formatter.debug_struct("Ready").field("port", port).field("version", version).finish_non_exhaustive()
             }
-            Self::Restarting { attempt, exit_code } => {
-                formatter.debug_struct("Restarting").field("attempt", attempt).field("exit_code", exit_code).finish()
-            }
+            Self::Restarting { attempt, attempts, reason, exit_code } => formatter
+                .debug_struct("Restarting")
+                .field("attempt", attempt)
+                .field("attempts", attempts)
+                .field("reason", reason)
+                .field("exit_code", exit_code)
+                .finish(),
             Self::Failed { reason, exit_code, message } => formatter
                 .debug_struct("Failed")
                 .field("reason", reason)
@@ -104,11 +122,21 @@ mod tests {
     }
 
     #[test]
-    fn restarting_sends_a_missing_exit_code_as_null() {
+    fn restarting_says_which_attempt_and_why_with_a_missing_exit_code_as_null() {
+        let restarting =
+            SidecarState::Restarting { attempt: 2, attempts: 5, reason: RestartReason::Crashed, exit_code: None };
         assert_eq!(
-            payload(SidecarState::Restarting { attempt: 3, exit_code: None }),
-            json!({ "state": "restarting", "attempt": 3, "exitCode": null, "seq": 7, "generation": 2 })
+            payload(restarting),
+            json!({ "state": "restarting", "attempt": 2, "attempts": 5, "reason": "crashed", "exitCode": null, "seq": 7, "generation": 2 })
         );
+        let reasons = [
+            (RestartReason::Crashed, "crashed"),
+            (RestartReason::StartFailed, "start-failed"),
+            (RestartReason::StartTimedOut, "start-timed-out"),
+        ];
+        for (reason, name) in reasons {
+            assert_eq!(serde_json::to_value(reason).unwrap(), json!(name));
+        }
     }
 
     #[test]

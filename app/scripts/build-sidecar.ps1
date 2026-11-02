@@ -7,7 +7,9 @@ fits the platform.
 Publishes engine/src/ShoutingIguana.Sidecar as one self-contained file for the target's .NET runtime, so users need
 no .NET installed, into app/.sidecar-build (its own artefacts folder, so it never collides with other builds of the
 engine). Then copies si-sidecar to src-tauri/binaries/si-sidecar-<target triple>(.exe), where Tauri's externalBin
-expects it. Tauri copies it next to the app, without the triple, in dev, build and bundles.
+expects it, and signs a Windows build there with scripts/sign.mjs (which skips, saying so, without a certificate).
+Tauri copies it next to the app, without the triple, in dev, build and bundles. IIS's in-process module, which a
+self-hosted Kestrel never loads, is left out.
 
 .PARAMETER EngineRoot
 The engine folder. Defaults to the repo's engine/, found from this script's location.
@@ -93,6 +95,7 @@ $arguments = @(
     '--self-contained', 'true',
     '-p:PublishSingleFile=true',
     '-p:IncludeNativeLibrariesForSelfExtract=true',
+    "-p:CustomAfterMicrosoftCommonTargets=$(Join-Path $PSScriptRoot 'sidecar-publish.targets')",
     '-p:DebugType=none',
     "-p:PublishReadyToRun=$readyToRunValue",
     '--artifacts-path', $artifacts,
@@ -113,6 +116,16 @@ $binaries = Join-Path $appRoot 'src-tauri\binaries'
 New-Item -ItemType Directory -Force -Path $binaries | Out-Null
 $destination = Join-Path $binaries "si-sidecar-$Target$extension"
 Copy-Item -LiteralPath $published -Destination $destination -Force
+# Signed as soon as it exists, so the release never depends on the bundler covering externalBin.
+if ($extension -eq '.exe') {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        Fail 'node wasn''t found, which signs the sidecar (scripts/sign.mjs).'
+    }
+    & node (Join-Path $PSScriptRoot 'sign.mjs') $destination
+    if ($LASTEXITCODE -ne 0) {
+        Fail 'signing the sidecar failed.'
+    }
+}
 $megabytes = [math]::Round((Get-Item -LiteralPath $destination).Length / 1MB, 1)
 $aheadOfTime = if ($NoReadyToRun) { '' } else { ', ReadyToRun' }
 Write-Host "build-sidecar: $destination ($megabytes MB, $runtime, $Configuration$aheadOfTime)"
