@@ -52,7 +52,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache)
                 StringComparer.Ordinal));
     }
 
-    public UrlRef Lookup(string id, UrlLookupRequest request)
+    public UrlLookup Lookup(string id, UrlLookupRequest request)
     {
         var path = crawls.PathOf(id);
         if (string.IsNullOrWhiteSpace(request.Url))

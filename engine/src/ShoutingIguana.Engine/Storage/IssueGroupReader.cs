@@ -9,7 +9,10 @@ namespace ShoutingIguana.Engine.Storage;
 /// A check's issues for the Issues screen: grouped by their cause, so a template fault is one row rather than one per
 /// page, and its rows as a URL grid, all of them or one group's. How a check's issues group is the catalog's to say
 /// (<see cref="IssueDefinition.Grouping"/>): a detail that's a measurement ("78 characters") would make a group per value.
-/// The issues are the last analysis's, whatever its state, as the Issues screen shows them.
+/// A check grouped by the other URL is grouped by every URL each issue names, so a page linking to three broken URLs is in
+/// three groups, and its groups' pages can add up to more than the check's; one whose detail is each page's own instance of
+/// a fault is grouped by the fault (<see cref="IssueDefinition.FaultOf"/>). The issues are the last analysis's, whatever its
+/// state, as the Issues screen shows them.
 /// </summary>
 public static class IssueGroupReader
 {
@@ -18,7 +21,7 @@ public static class IssueGroupReader
 
     /// <summary>
     /// One page of a check's groups, largest first. Null when the crawl has never been analysed; a check the analysis
-    /// skipped has no total and no groups, and one that isn't grouped has its total and no groups.
+    /// skipped has no total, no group count and no groups, and one that isn't grouped has its total and no groups.
     /// </summary>
     /// <exception cref="UrlQueryException">The paging is out of range.</exception>
     public static IssueGroupPage? ReadGroups(string databasePath, string checkId, int offset, int limit, ReadCache? cache = null)
@@ -28,7 +31,8 @@ public static class IssueGroupReader
         UrlGridReader.ThrowIfInvalid(errors);
 
         // A check from a newer engine than this one, which the file holds but the catalog doesn't know, is listed flat.
-        var grouping = IssueCatalog.Find(checkId)?.Grouping ?? IssueGrouping.None;
+        var definition = IssueCatalog.Find(checkId);
+        var grouping = definition?.Grouping ?? IssueGrouping.None;
         using var context = GridReadContext.Open(databasePath, cache);
         if (context.Analysis is null)
         {
@@ -38,7 +42,7 @@ public static class IssueGroupReader
         KeyValuePair<string, object>[] check = [new("$check", checkId)];
         if (Flagged(context, checkId) is not { } total)
         {
-            return new IssueGroupPage(checkId, grouping, null, 0, offset, []);
+            return new IssueGroupPage(checkId, grouping, null, null, offset, []);
         }
 
         if (grouping == IssueGrouping.None)
@@ -46,34 +50,55 @@ public static class IssueGroupReader
             return new IssueGroupPage(checkId, grouping, total, 0, offset, []);
         }
 
-        var key = grouping == IssueGrouping.RelatedUrl ? "related_url_id" : "detail, related_url_id";
-        var groupCount = context.Count($"groups|{checkId}", () =>
-            context.Scalar($"SELECT COUNT(*) FROM (SELECT 1 FROM issues WHERE issue = $check GROUP BY {key})", check));
+        var counted = Counted(context, definition!, grouping);
+        var groupCount = context.Count($"groups|{checkId}", () => context.Scalar($"SELECT COUNT(*) FROM ({counted})", check));
 
         List<IssueGroup> groups = [];
         using var command = context.Command($"""
-            SELECT {(grouping == IssueGrouping.RelatedUrl ? "NULL" : "g.detail")}, g.related_url_id, u.url, g.pages
-            FROM (SELECT {key}, COUNT(*) AS pages FROM issues WHERE issue = $check GROUP BY {key}
-                  ORDER BY pages DESC, {key} LIMIT {limit.ToString(CultureInfo.InvariantCulture)} OFFSET {offset.ToString(CultureInfo.InvariantCulture)}) g
+            SELECT g.detail, g.related_url_id, u.url, g.pages
+            FROM (SELECT * FROM ({counted}) ORDER BY pages DESC, detail, related_url_id
+                  LIMIT {limit.ToString(CultureInfo.InvariantCulture)} OFFSET {offset.ToString(CultureInfo.InvariantCulture)}) g
             LEFT JOIN urls u ON u.id = g.related_url_id
-            ORDER BY g.pages DESC, {string.Join(", ", key.Split(", ").Select(column => "g." + column))}
+            ORDER BY g.pages DESC, g.detail, g.related_url_id
             """, check);
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
             var related = reader.IsDBNull(1) ? (int?)null : reader.GetInt32(1);
             var pages = reader.GetInt64(3);
+
+            // Links to sections missing on the page itself name no other URL, and are a fault in the page's own HTML.
+            var sharesCause = related is not null || definition == IssueCatalog.BROKEN_FRAGMENT_LINKS;
             groups.Add(new IssueGroup(
                 reader.IsDBNull(0) ? null : reader.GetString(0),
                 related,
                 reader.IsDBNull(2) ? null : reader.GetString(2),
                 pages,
                 total == 0 ? 0 : (double)pages / total,
-                IsLikelyTemplate(grouping, pages, total, related is not null)));
+                IsLikelyTemplate(grouping, pages, total, sharesCause)));
         }
 
         return new IssueGroupPage(checkId, grouping, total, groupCount, offset, groups);
     }
+
+    /// <summary>
+    /// The check's groups counted, <c>(detail, related_url_id, pages)</c>, in no order, from where the analysis keeps them:
+    /// every URL each issue names, those naming none (<see cref="Analysis.Models.IssueHit.NO_OTHER_URL"/>) a group without
+    /// one; the fault each issue is an instance of; or, for the rest and for an earlier engine's analysis, each issue's own
+    /// detail and first other URL.
+    /// </summary>
+    private static string Counted(GridReadContext context, IssueDefinition check, IssueGrouping grouping) => grouping switch
+    {
+        IssueGrouping.RelatedUrl when context.HasIssueTargets => $"""
+            SELECT NULL AS detail, NULLIF(related_url_id, {IssueHit.NO_OTHER_URL}) AS related_url_id, COUNT(*) AS pages
+            FROM issue_targets WHERE issue = $check GROUP BY issue_targets.related_url_id
+            """,
+        IssueGrouping.PageDetail when context.HasIssueTargets && check.FaultOf is not null =>
+            "SELECT fault AS detail, NULL AS related_url_id, COUNT(*) AS pages FROM issue_faults WHERE issue = $check GROUP BY fault",
+        IssueGrouping.RelatedUrl =>
+            "SELECT NULL AS detail, related_url_id, COUNT(*) AS pages FROM issues WHERE issue = $check GROUP BY related_url_id",
+        _ => "SELECT detail, related_url_id, COUNT(*) AS pages FROM issues WHERE issue = $check GROUP BY detail, related_url_id"
+    };
 
     /// <summary>
     /// One page of a check's rows as a URL grid: a row per URL the check flagged, with the URL grid's columns and the
@@ -107,7 +132,8 @@ public static class IssueGroupReader
     /// A group one fix probably clears, as it's in the site's template: it holds at least half of the check's flagged URLs,
     /// and at least <see cref="TEMPLATE_MIN_PAGES"/>, and either they share the other URL involved (the logo link without
     /// text, a canonical every page names) or its detail names a fault in the page's own HTML ("Missing og:image"). How
-    /// a URL itself answered ("HTTP 404") is no evidence of a template, however many share it.
+    /// a URL itself answered ("HTTP 404") is no evidence of a template, however many share it. Where a check's detail takes
+    /// only a value or two (no H1 at all, or an empty one), it says no more than that most of its pages share the fault.
     /// </summary>
     public static bool IsLikelyTemplate(IssueGrouping grouping, long pages, long total, bool sharesUrl) =>
         pages >= TEMPLATE_MIN_PAGES && pages * 2 >= total && (sharesUrl || grouping == IssueGrouping.PageDetail);

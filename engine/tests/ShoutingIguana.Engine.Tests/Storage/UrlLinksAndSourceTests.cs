@@ -22,6 +22,8 @@ public sealed class UrlLinksAndSourceTests(GridCrawl crawl)
     {
         { "/", LinkDirection.Inlinks, [] },
         { "/", LinkDirection.Inlinks, [LinkKind.Hyperlink] },
+        { "/", LinkDirection.Inlinks, [LinkKind.Hyperlink, LinkKind.Canonical] },
+        { "/p/7", LinkDirection.Inlinks, [LinkKind.Canonical, LinkKind.Hyperlink] },
         { "/", LinkDirection.Outlinks, [] },
         { "/p/7", LinkDirection.Inlinks, [] },
         { "/p/7", LinkDirection.Outlinks, [LinkKind.Hyperlink, LinkKind.Image] },
@@ -53,6 +55,57 @@ public sealed class UrlLinksAndSourceTests(GridCrawl crawl)
         }
 
         Assert.Empty(UrlInspectorReader.ReadLinks(crawl.Path, id, direction, new LinkQuery { Kinds = kinds, Offset = expected.Count }, cache)!.Rows);
+    }
+
+    /// <summary>
+    /// Some kinds of link to a URL are reached at any offset on the analysis's index of the links to a URL by kind alone, each
+    /// kind's in crawl order and merged, so skipping to the middle of a nav target's million hyperlinks reads none of them.
+    /// Without the index (an earlier engine's analysis), the same rows come from the links themselves.
+    /// </summary>
+    [Fact]
+    public void SomeKindsOfLinkToAUrlAreReadOnTheIndexByKind()
+    {
+        var home = Id("/");
+        LinkKind[] kinds = [LinkKind.Hyperlink, LinkKind.Canonical];
+        List<(string Sql, IReadOnlyList<KeyValuePair<string, object>> Parameters)> ran = [];
+        UrlInspectorReader.Ran = (sql, parameters) => ran.Add((sql, parameters));
+        try
+        {
+            UrlInspectorReader.ReadLinks(crawl.Path, home, LinkDirection.Inlinks, new LinkQuery { Kinds = kinds, Offset = 5, Limit = 3 });
+        }
+        finally
+        {
+            UrlInspectorReader.Ran = null;
+        }
+
+        var (last, values) = ran[^1];
+        using (var connection = CrawlDatabase.OpenReader(crawl.Path))
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "EXPLAIN QUERY PLAN " + last;
+            foreach (var (name, value) in values)
+            {
+                command.Parameters.AddWithValue(name, value);
+            }
+
+            using var reader = command.ExecuteReader();
+            List<string> plan = [];
+            while (reader.Read())
+            {
+                plan.Add(reader.GetString(3));
+            }
+
+            Assert.Contains("MERGE (UNION ALL)", plan);
+            Assert.Equal(2, plan.Count(step => step == "SEARCH links USING COVERING INDEX ix_links_to_kind (to_id=? AND kind=?)"));
+            Assert.Contains("SEARCH l USING INTEGER PRIMARY KEY (rowid=?)", plan);
+        }
+
+        var copy = crawl.Copy();
+        Change(copy, "DROP INDEX ix_links_to_kind");
+        foreach (var asked in new[] { kinds, [LinkKind.Hyperlink], [LinkKind.Canonical] })
+        {
+            Assert.Equal(Expected(crawl.Path, home, LinkDirection.Inlinks, asked), ByOffset(copy, home, LinkDirection.Inlinks, asked, new ReadCache()));
+        }
     }
 
     /// <summary>A page's own links to itself (its canonical, a link back to the top) aren't its inlinks or outlinks.</summary>

@@ -301,6 +301,10 @@ public sealed class SiteRuleTests
         var titles = rules.Finish().Where(hit => hit.Issue == IssueCatalog.TITLE_DUPLICATE).ToList();
         Assert.Equal([first.UrlId, second.UrlId], titles.Select(hit => hit.UrlId).Order());
         Assert.All(titles, hit => Assert.Equal("1 other page", hit.Detail));
+
+        // Each names the other, and the pair is named after its first page, which names itself as well: one group.
+        Assert.Equal([(first.UrlId, (int?)second.UrlId), (second.UrlId, first.UrlId)], titles.Select(hit => (hit.UrlId, hit.RelatedUrlId)).Order());
+        Assert.All(titles, hit => Assert.Equal([first.UrlId], hit.AllTargets));
     }
 
     [Fact]
@@ -326,7 +330,8 @@ public sealed class SiteRuleTests
         Assert.DoesNotContain(hits, hit => hit.Issue == IssueCatalog.H1_DUPLICATE);
         Assert.Equal([first.UrlId, second.UrlId], hits.Where(hit => hit.Issue == IssueCatalog.TITLE_DUPLICATE).Select(hit => hit.UrlId).Order());
 
-        // A page outside it with the same heading is a duplicate of all three, and they of it.
+        // A page outside it with the same heading is a duplicate of all three, and they of it. The four are one cluster, named
+        // after its first page, which the series' pages name too, though their duplicate is the page outside it.
         var withOther = new DuplicateRules(new AnalysisSettings());
         foreach (var page in new[] { first, second, third, elsewhere })
         {
@@ -335,9 +340,9 @@ public sealed class SiteRuleTests
 
         Assert.Equal(
         [
-            new IssueHit(IssueCatalog.H1_DUPLICATE, first.UrlId, "1 other page", elsewhere.UrlId),
-            new IssueHit(IssueCatalog.H1_DUPLICATE, second.UrlId, "1 other page", elsewhere.UrlId),
-            new IssueHit(IssueCatalog.H1_DUPLICATE, third.UrlId, "1 other page", elsewhere.UrlId),
+            new IssueHit(IssueCatalog.H1_DUPLICATE, first.UrlId, "1 other page", elsewhere.UrlId) { Targets = [first.UrlId] },
+            new IssueHit(IssueCatalog.H1_DUPLICATE, second.UrlId, "1 other page", elsewhere.UrlId) { Targets = [first.UrlId] },
+            new IssueHit(IssueCatalog.H1_DUPLICATE, third.UrlId, "1 other page", elsewhere.UrlId) { Targets = [first.UrlId] },
             new IssueHit(IssueCatalog.H1_DUPLICATE, elsewhere.UrlId, "3 other pages", first.UrlId)
         ], withOther.Finish().Where(hit => hit.Issue == IssueCatalog.H1_DUPLICATE).OrderBy(hit => hit.UrlId));
 
@@ -374,10 +379,11 @@ public sealed class SiteRuleTests
         var hits = rules.Finish().ToList();
         Assert.Equal([original.UrlId, copy.UrlId], hits.Where(hit => hit.Issue == IssueCatalog.DUPLICATE_CONTENT).Select(hit => hit.UrlId).Order());
 
-        // The edit is near both copies, so all three form one group, each pointing at its lowest-id other member.
+        // The edit is near both copies, so all three form one group, each pointing at its lowest-id other member, and the
+        // group named after its lowest-id page, which names itself there.
         Assert.Equal(
         [
-            new IssueHit(IssueCatalog.NEAR_DUPLICATE_CONTENT, original.UrlId, "2 similar pages", copy.UrlId),
+            new IssueHit(IssueCatalog.NEAR_DUPLICATE_CONTENT, original.UrlId, "2 similar pages", copy.UrlId) { Targets = [original.UrlId] },
             new IssueHit(IssueCatalog.NEAR_DUPLICATE_CONTENT, copy.UrlId, "2 similar pages", original.UrlId),
             new IssueHit(IssueCatalog.NEAR_DUPLICATE_CONTENT, near.UrlId, "2 similar pages", original.UrlId)
         ], hits.Where(hit => hit.Issue == IssueCatalog.NEAR_DUPLICATE_CONTENT).OrderBy(hit => hit.UrlId));

@@ -48,7 +48,7 @@ internal sealed class SecurityRules(UrlTable urls) : IPageRule
         if (insecure.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.MIXED_CONTENT, page.UrlId,
-                RuleText.Count(insecure.Count, "HTTP resource", "HTTP resources"), insecure.First);
+                RuleText.Count(insecure.Count, "HTTP resource", "HTTP resources"), insecure.First) { Targets = insecure.Ids };
         }
     }
 

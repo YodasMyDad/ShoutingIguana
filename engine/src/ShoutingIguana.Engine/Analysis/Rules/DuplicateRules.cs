@@ -128,6 +128,9 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
                 }
             }
 
+            // Each page names a page that repeats it, and the cluster is named after its first page, which that page names too:
+            // its own series' pages repeat it by design, so they name another series' first page.
+            var first = entries[start].Id;
             for (var index = start; index < end; index++)
             {
                 var key = keys[index - start];
@@ -135,7 +138,10 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
                 if (others > 0)
                 {
                     var related = entries[key == keys[0] ? firstOfAnotherSeries : start].Id;
-                    yield return new IssueHit(issue, entries[index].Id, RuleText.Count(others, "other page", "other pages"), related);
+                    yield return new IssueHit(issue, entries[index].Id, RuleText.Count(others, "other page", "other pages"), related)
+                    {
+                        Targets = related == first ? null : [first]
+                    };
                 }
             }
 
@@ -201,8 +207,10 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
 
             var id = _fingerprints[index].Id;
             var (lowestId, secondId) = lowest[root];
+
+            // The group is named after its lowest-id page, which names itself there.
             yield return new IssueHit(IssueCatalog.NEAR_DUPLICATE_CONTENT, id, RuleText.Count(size - 1, "similar page", "similar pages"),
-                id == lowestId ? secondId : lowestId);
+                id == lowestId ? secondId : lowestId) { Targets = id == lowestId ? [lowestId] : null };
         }
     }
 }

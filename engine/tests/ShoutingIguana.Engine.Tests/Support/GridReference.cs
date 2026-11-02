@@ -19,16 +19,28 @@ internal sealed class GridReference
 {
     private static readonly string[] STATUS_CLASSES = ["2xx", "3xx", "4xx", "5xx", "other", "noResponse"];
 
-    private GridReference(Dictionary<int, Dictionary<string, object?>> rows, Dictionary<int, List<(string Issue, string? Detail, int? Related)>> issues)
+    private GridReference(Dictionary<int, Dictionary<string, object?>> rows, Dictionary<int, List<(string Issue, string? Detail, int? Related)>> issues,
+        Dictionary<(string Issue, int Url), List<int>> targets, Dictionary<(string Issue, int Url), string> faults)
     {
         Rows = rows;
         Issues = issues;
+        Targets = targets;
+        Faults = faults;
     }
 
     public IReadOnlyDictionary<int, Dictionary<string, object?>> Rows { get; }
 
     /// <summary>Each URL's issues: the check, its detail and the other URL involved.</summary>
     public IReadOnlyDictionary<int, List<(string Issue, string? Detail, int? Related)>> Issues { get; }
+
+    /// <summary>
+    /// Every URL each issue is about, as the analysis stored them (<c>issue_targets</c>), by check and URL flagged, in id order:
+    /// 0 is no other URL.
+    /// </summary>
+    public IReadOnlyDictionary<(string Issue, int Url), List<int>> Targets { get; }
+
+    /// <summary>The fault each issue of a check grouped by one is an instance of (<c>issue_faults</c>), by check and URL flagged.</summary>
+    public IReadOnlyDictionary<(string Issue, int Url), string> Faults { get; }
 
     public static GridReference Load(string path)
     {
@@ -145,7 +157,37 @@ internal sealed class GridReference
             }
         }
 
-        return new GridReference(rows, issues);
+        Dictionary<(string, int), List<int>> targets = [];
+        Dictionary<(string, int), string> faults = [];
+        using (var connection = CrawlDatabase.OpenReader(path))
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT issue, url_id, related_url_id FROM issue_targets ORDER BY issue, url_id, related_url_id";
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    var key = (reader.GetString(0), reader.GetInt32(1));
+                    if (!targets.TryGetValue(key, out var list))
+                    {
+                        targets[key] = list = [];
+                    }
+
+                    list.Add(reader.GetInt32(2));
+                }
+            }
+
+            command.CommandText = "SELECT issue, url_id, fault FROM issue_faults";
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    faults[(reader.GetString(0), reader.GetInt32(1))] = reader.GetString(2);
+                }
+            }
+        }
+
+        return new GridReference(rows, issues, targets, faults);
     }
 
     /// <summary>The ids of the rows a filter set matches, in a sort's order: unknown values last, crawl order breaking ties.</summary>

@@ -17,6 +17,15 @@ namespace ShoutingIguana.Engine.Storage;
 /// </summary>
 internal sealed class IssueWriter : IDisposable
 {
+    /// <summary>Threads SQLite may sort with while it builds the links index, which takes a third of the time of one.</summary>
+    private const int SORT_THREADS = 4;
+
+    /// <summary>
+    /// The memory each of those sorts in before it spills to a temporary file: about 100 MB in all, however many links
+    /// (12 s for a million-page crawl's 50 million on 32 cores; 8 MB takes twice that, and 32 MB adds 200 MB for 1 s).
+    /// </summary>
+    private const int SORT_CACHE_KIB = 16_384;
+
     private readonly SqliteConnection _connection;
     private readonly CrawlFileLock _fileLock;
     private readonly SqliteTransaction _transaction;
@@ -25,6 +34,14 @@ internal sealed class IssueWriter : IDisposable
     private readonly SqliteParameter _urlId;
     private readonly SqliteParameter _detail;
     private readonly SqliteParameter _relatedUrlId;
+    private readonly SqliteCommand _insertTarget;
+    private readonly SqliteParameter _targetIssue;
+    private readonly SqliteParameter _targetId;
+    private readonly SqliteParameter _targetUrlId;
+    private readonly SqliteCommand _insertFault;
+    private readonly SqliteParameter _faultIssue;
+    private readonly SqliteParameter _fault;
+    private readonly SqliteParameter _faultUrlId;
     private readonly ILogger _logger;
 
     private IssueWriter(SqliteConnection connection, CrawlFileLock fileLock, ILogger logger)
@@ -35,7 +52,7 @@ internal sealed class IssueWriter : IDisposable
         _transaction = connection.BeginTransaction();
         CrawlDatabase.Execute(connection, """
             DELETE FROM issues; DELETE FROM issue_types; DELETE FROM analysis; DELETE FROM analysis_notes; DELETE FROM effective_indexability;
-            DELETE FROM skipped_checks;
+            DELETE FROM skipped_checks; DELETE FROM issue_targets; DELETE FROM issue_faults;
             """, _transaction);
 
         _insert = connection.CreateCommand();
@@ -49,6 +66,18 @@ internal sealed class IssueWriter : IDisposable
         _detail = _insert.Parameters.Add("$detail", SqliteType.Text);
         _relatedUrlId = _insert.Parameters.Add("$relatedUrlId", SqliteType.Integer);
         _insert.Prepare();
+
+        _insertTarget = Command("INSERT OR IGNORE INTO issue_targets (issue, related_url_id, url_id) VALUES ($issue, $relatedUrlId, $urlId)");
+        _targetIssue = _insertTarget.Parameters.Add("$issue", SqliteType.Text);
+        _targetId = _insertTarget.Parameters.Add("$relatedUrlId", SqliteType.Integer);
+        _targetUrlId = _insertTarget.Parameters.Add("$urlId", SqliteType.Integer);
+        _insertTarget.Prepare();
+
+        _insertFault = Command("INSERT OR IGNORE INTO issue_faults (issue, fault, url_id) VALUES ($issue, $fault, $urlId)");
+        _faultIssue = _insertFault.Parameters.Add("$issue", SqliteType.Text);
+        _fault = _insertFault.Parameters.Add("$fault", SqliteType.Text);
+        _faultUrlId = _insertFault.Parameters.Add("$urlId", SqliteType.Integer);
+        _insertFault.Prepare();
     }
 
     /// <exception cref="InvalidOperationException">
@@ -92,14 +121,43 @@ internal sealed class IssueWriter : IDisposable
         }
     }
 
-    /// <summary>Stores one flagged URL. A second hit for the same issue and URL is ignored.</summary>
+    /// <summary>
+    /// Stores one flagged URL, with every other URL the issue is about and the fault it groups by. An issue of a check grouped
+    /// by the other URL that names none is stored as naming <see cref="IssueHit.NO_OTHER_URL"/>, so the check's groups are
+    /// all in one table. A second hit for the same issue and URL is ignored, its other URLs with it.
+    /// </summary>
     public void Add(IssueHit hit)
     {
         _issue.Value = hit.Issue.Id;
         _urlId.Value = hit.UrlId;
         _detail.Value = (object?)hit.Detail ?? DBNull.Value;
         _relatedUrlId.Value = hit.RelatedUrlId is { } related ? related : DBNull.Value;
-        _insert.ExecuteNonQuery();
+        if (_insert.ExecuteNonQuery() == 0)
+        {
+            return;
+        }
+
+        var targets = hit.AllTargets;
+        if (targets.Count == 0 && hit.Issue.Grouping == IssueGrouping.RelatedUrl)
+        {
+            targets = [IssueHit.NO_OTHER_URL];
+        }
+
+        _targetIssue.Value = hit.Issue.Id;
+        _targetUrlId.Value = hit.UrlId;
+        foreach (var target in targets)
+        {
+            _targetId.Value = target;
+            _insertTarget.ExecuteNonQuery();
+        }
+
+        if (hit.Issue.FaultOf is { } faultOf && hit.Detail is { } detail)
+        {
+            _faultIssue.Value = hit.Issue.Id;
+            _fault.Value = faultOf(detail);
+            _faultUrlId.Value = hit.UrlId;
+            _insertFault.ExecuteNonQuery();
+        }
     }
 
     /// <summary>Stores indexability the analysis judged differently from the crawl, for the stats and the UI.</summary>
@@ -166,7 +224,8 @@ internal sealed class IssueWriter : IDisposable
         _logger.LogDebug("Stored the URL summary of {Rows} URLs in {Elapsed}", summaryRows, summaryTime.Elapsed);
         progress.Finish(summaryRows);
 
-        // The rest is quick, but for the commit and the file folded back into one, which the analyzer reports the end of.
+        // The rest is quick, but for the commit, the links index on a first analysis, and the file folded back into one,
+        // which the analyzer reports the end of.
         progress.Start(AnalysisPhase.Writing, 1);
 
         // The crawl row's updated_at as it stands: the lock keeps any crawl out until this commits, so it's the one analysed.
@@ -213,6 +272,7 @@ internal sealed class IssueWriter : IDisposable
         }
 
         _transaction.Commit();
+        IndexLinkKinds();
         return counts;
     }
 
@@ -222,6 +282,8 @@ internal sealed class IssueWriter : IDisposable
         try
         {
             _insert.Dispose();
+            _insertTarget.Dispose();
+            _insertFault.Dispose();
             _transaction.Dispose();
         }
         catch (SqliteException exception)
@@ -233,6 +295,27 @@ internal sealed class IssueWriter : IDisposable
         {
             CrawlDatabase.CloseWriter(_connection, _logger);
             _fileLock.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Indexes the links to each URL by kind, which the inspector's links of some kinds read, once per crawl file. After the
+    /// commit, so the results can be read meanwhile, and outside a transaction, so the sort can spill to temporary files
+    /// rather than memory: a million-page crawl's 50 million links take 0.6 GB of index. Failing to build it (a full disk)
+    /// leaves the analysis as committed, and the links are read without it.
+    /// </summary>
+    private void IndexLinkKinds()
+    {
+        var time = Stopwatch.StartNew();
+        try
+        {
+            CrawlDatabase.Execute(_connection,
+                $"PRAGMA temp_store = FILE; PRAGMA cache_size = -{SORT_CACHE_KIB}; PRAGMA threads = {Math.Min(SORT_THREADS, Environment.ProcessorCount)}; {CrawlSchema.LINK_KINDS_INDEX}");
+            _logger.LogDebug("Indexed the links by kind in {Elapsed}", time.Elapsed);
+        }
+        catch (SqliteException exception)
+        {
+            _logger.LogWarning(exception, "Couldn't index the links by kind; the inspector reads links of some kinds without it");
         }
     }
 

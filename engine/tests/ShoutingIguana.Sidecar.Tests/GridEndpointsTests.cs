@@ -167,7 +167,9 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
     public async Task ALookupFindsAUrlByItsText()
     {
         var found = await PostOkAsync($"api/crawls/{grid.Id}/urls/lookup", new JsonObject { ["url"] = grid.Url("/p/7#reviews") });
+        Assert.Equal(["id", "url", "requested"], found.AsObject().Select(property => property.Key));
         Assert.Equal(grid.Url("/p/7"), (string?)found["url"]);
+        Assert.Null(found["requested"]);
         Assert.Equal((int?)found["id"], (int?)(await PostOkAsync($"api/crawls/{grid.Id}/urls/lookup", new JsonObject { ["url"] = "/p/7" }))["id"]);
 
         TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/lookup", new JsonObject { ["url"] = "/no/such/page" }), HttpStatusCode.NotFound, "url-not-found");
@@ -305,6 +307,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         // The limited crawl skipped the orphan check: no total and no rows, never 0.
         var skipped = await PostOkAsync($"api/crawls/{grid.LimitedId}/issues/{IssueCatalog.ORPHAN_PAGE.Id}/groups");
         Assert.Null(skipped["total"]);
+        Assert.Null(skipped["groupCount"]);
         Assert.Empty(skipped["groups"]!.AsArray());
         var rows = await PostOkAsync($"api/crawls/{grid.LimitedId}/issues/{IssueCatalog.ORPHAN_PAGE.Id}/rows");
         Assert.Null((long?)rows["total"]);

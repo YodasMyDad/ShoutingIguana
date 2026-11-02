@@ -176,12 +176,12 @@ public static class IssueCatalog
     public static readonly IssueDefinition CANONICAL_RELATIVE = new("canonical-relative", IssueCategory.Canonicals, IssueSeverity.Notice,
         "Relative canonical URL",
         "The canonical is a relative URL. It works, but an absolute URL avoids mistakes when pages are copied or served on other hosts.",
-        "Use the full URL, including https:// and the host.") { Grouping = IssueGrouping.PageDetail };
+        "Use the full URL, including https:// and the host.") { Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.RelativeCanonical };
 
     public static readonly IssueDefinition CANONICAL_INVALID = new("canonical-invalid", IssueCategory.Canonicals, IssueSeverity.Warning,
         "Invalid canonical URL",
         "The canonical isn't a valid http(s) URL, so it's ignored.",
-        "Fix the canonical URL.") { Grouping = IssueGrouping.PageDetail };
+        "Fix the canonical URL.") { Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.InvalidCanonical };
 
     public static readonly IssueDefinition NOINDEX_WITH_CANONICAL = new("noindex-with-canonical", IssueCategory.Canonicals, IssueSeverity.Warning,
         "Noindex page with a canonical to another URL",
@@ -374,7 +374,7 @@ public static class IssueCatalog
     public static readonly IssueDefinition STRUCTURED_DATA_INVALID = new("structured-data-invalid", IssueCategory.StructuredData, IssueSeverity.Error,
         "Invalid JSON-LD",
         "A JSON-LD block isn't valid JSON, so search engines ignore all of it.",
-        "Fix the JSON syntax; Google's Rich Results Test shows where.") { Grouping = IssueGrouping.PageDetail };
+        "Fix the JSON syntax; Google's Rich Results Test shows where.") { Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.JsonError };
 
     public static readonly IssueDefinition STRUCTURED_DATA_MISSING_REQUIRED = new("structured-data-missing-required", IssueCategory.StructuredData, IssueSeverity.Warning,
         "Structured data missing required properties",

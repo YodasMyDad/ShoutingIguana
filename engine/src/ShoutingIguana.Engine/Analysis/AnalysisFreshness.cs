@@ -18,8 +18,10 @@ public static class AnalysisFreshness
     /// stores: a rule that judges differently, a changed threshold default, a new column in the URL summary. Analyses
     /// stored by another version are out of date (<see cref="OutOfDateReason.EngineChanged"/>), and the UI offers to
     /// run them again. A change to the catalog's checks is caught without a bump, by <see cref="ChecksFingerprint"/>.
+    /// 4 stores every other URL an issue is about and the fault some checks group by (<c>issue_targets</c>,
+    /// <c>issue_faults</c>), and indexes the links to a URL by kind.
     /// </summary>
-    public const int VERSION = 3;
+    public const int VERSION = 4;
 
     /// <summary>The catalog's check ids with their categories and severities, hashed. Titles and texts don't count.</summary>
     public static string ChecksFingerprint { get; } = Fingerprint(IssueCatalog.All);

@@ -233,6 +233,13 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   description lengths count full-width (CJK) characters and emoji as two, as they take about twice the room.
 - **Atomic.** The issues are replaced in one transaction, so a failed or cancelled analysis keeps the
   previous results.
+- **What an issue names.** An issue is one check on one URL, with a short detail and the other URL involved. Where a
+  page has several (it links to three broken URLs, shows two large images), `issues` keeps the first and
+  `issue_targets` every one, so the Issues screen puts the page in the group of each and the inspector counts each as
+  named by it. A duplicate is stored under its cluster's first page, so a cluster is one group. Three checks whose
+  detail is each page's own instance of a fault (a relative canonical's path, where a JSON parser stopped) store the
+  fault in `issue_faults`, and group by it. The 100k benchmark's 32,406 issues name 19,000 URLs this way, the 1M
+  crawl's 323,000 issues 189,000.
 - **Progress.** Given an `IProgress<AnalysisProgress>`, an analysis says how far it has got, in order on its own
   thread: reading the URLs, the page rules (pages), the site rules, the URL summary (rows), then writing. Each phase is
   reported as it starts and ends, and at most every 250 ms between.
@@ -285,7 +292,9 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `links` | Every link: source, target, kind (link/image/script/canonical/hreflang/redirect...), rel flags, page region, anchor text |
 | `robots`, `sitemaps`, `sitemap_urls` | robots.txt per origin, sitemaps read (under the URL they were found at, which may redirect elsewhere; `is_probe` marks a guess at `/sitemap.xml` when nothing declared one; the first one left unread, past 1,000 sitemaps or nested more than 3 deep, has an error starting "Not read"), and which URLs each listed |
 | `notices` | What the crawl told the person running it, every run's, in order: an id numbered across runs, when, the level as text, a stable code, the message, and JSON of the facts it's about (host, origin, URL, reason, counts, a duration) |
-| `issues` | One row per flagged URL and issue: a short detail, and the other URL involved (broken target, duplicate, canonical) |
+| `issues` | One row per flagged URL and issue: a short detail, and the other URL involved (broken target, duplicate, canonical): the first, where there are several |
+| `issue_targets` | Every other URL each issue is about (each broken target of a page's links, the canonical, a duplicate cluster's first page), which the Issues screen groups by and the inspector's "named by" counts; `0` stands for no other URL |
+| `issue_faults` | The fault an issue of `canonical-relative`, `canonical-invalid` or `structured-data-invalid` is an instance of, which its groups are by |
 | `issue_types` | Every check that ran: its title, category, severity, description, fix, and how many URLs it flagged |
 | `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, whether it was partial, what it ran against (the crawl's `updated_at`, the analysis version, the checks' fingerprint), and what it couldn't do and why |
 | `skipped_checks` | Each check the last analysis skipped, with a reason code and a sentence |
@@ -296,7 +305,13 @@ URLs that only appear in sitemaps keep depth `1000000` (`CrawlDepth.UNLINKED`) i
 show up. The URL summary has no depth for them.
 
 The analysis tables are created when a crawl is first analysed, so a crawl file from an earlier engine opens as it
-always did and gets what it lacks on its next analysis. `notices` is created whenever the crawl writer opens a file,
+always did and gets what it lacks on its next analysis. That first analysis also adds an index of the links by target
+and kind, `ix_links_to_kind`, which the inspector's links of some kinds read (a crawl continued since keeps it up to
+date). It's built after the analysis commits, sorting in four threads with about 100 MB of memory and spilling to
+temporary files. It costs 13 s and 0.66 GB (15%) on the 1M crawl's 50M links (85 s to analyse it becomes 98 s), and
+about 2 s and 50 MB on the 100k benchmark, whose analysis then peaks at 278 MB rather than 195 MB.
+
+`notices` is created whenever the crawl writer opens a file,
 so an earlier engine's crawl gets it when it's continued, and reads as having none until then. The crawl's own schema
 version doesn't change. Files are shared, so a notice another program wrote oddly is read as well as it can be (one
 without a code or a message is left out, a missing level reads as a warning and a missing time as the crawl's start),
@@ -388,9 +403,21 @@ a page gives to read on. The API, with every column and operator, is in
   value. Otherwise each facet is counted on its own, most of them from their own index.
 - **Issue groups.** Each check says how its issues group (`IssueDefinition.Grouping`): by detail and the other URL
   (`PageDetail`, `ResponseDetail`), by the other URL alone (`RelatedUrl`), or not at all (`None`, as its detail is a
-  measurement). A group is a likely template fault when it holds at least half of the check's URLs, and at least 10,
-  and they share the other URL or the detail names a fault in the page's own HTML. Each analysis adds the index
-  `ix_issues_group` on `issues (issue, detail, related_url_id)`, which the groups read.
+  measurement). A check grouped by the other URL is grouped by every URL its issues name (`issue_targets`, keyed by
+  check and URL named), so a page linking to three broken URLs is in three groups, and a group's share is of the
+  check's pages, so the shares can add up to more than the whole. A check whose detail is each page's own instance of
+  a fault (`IssueDefinition.FaultOf`) is grouped by the fault (`issue_faults`). A group is a likely template fault when
+  it holds at least half of the check's URLs, and at least 10, and they share the other URL or the detail names a
+  fault in the page's own HTML. The rest are grouped on the index `ix_issues_group`, on
+  `issues (issue, detail, related_url_id)`. A crawl analysed by an earlier engine is grouped as it was.
+- **"Named by"**, the issues on other URLs naming one, is read on `issue_targets`' index by the URL named, so it costs
+  what that URL is named by, not every issue in the crawl.
+- **Links of some kinds to a URL** (the hyperlinks to a nav target, a stylesheet's links) are counted on the analysis's
+  index of the links by target and kind, and a page of them anywhere is found there too: each kind's in crawl order,
+  merged as they're read, so no link is read to be skipped. Links from a page are few, and read as they are.
+- **Lookup** takes a path on the origin the start URL's redirects end at, as a crawl from `example.com` lives on
+  `https://www.example.com/`, takes text without a scheme, and finds a URL the crawl has only on another of the site's
+  versions (www or not, http or https), saying what was asked for.
 - **The inspector's "Indexable, and why"** lists four tests in the order they decide it (it answered 2xx, robots.txt
   allowed it, no noindex, its canonical is itself), each passed, failed or not checked, beside the analysis's verdict,
   and follows redirects hop by hop as the analysis does, instant meta refreshes included, up to 20.
@@ -410,11 +437,15 @@ on a 32-core Windows machine (20 runs; the 1M crawl is `si bench --pages 1000000
 | A title filter, a regular expression, a search | 40 / 30 | 341 / 340 |
 | A check: its filter, groups and rows | 6 / 6 | 198 / 215 |
 | Facets of every URL; of the pages | 47; 53 | 645; 612 |
-| A URL looked up, inspected | 2 | 17 |
-| Links: to the home page (all, hyperlinks), from it | 7 / 76 | 59 / 830 |
+| A URL looked up, inspected | 2 | 2 |
+| Links: to the home page (all, hyperlinks), from it | 7 / 13 | 56 / 125 |
+| Links of one kind to a nav target, the stylesheet; two kinds to the home page | 11; 5; 12 | 167; 94; 241 |
 
-The budgets are 300 ms for 100k URLs and 1 s for 1M. The slowest read of 1M is the home page's hyperlinks half way
-down, as a list of some kinds of link reads the links it skips to reach an offset.
+The budgets are 300 ms for 100k URLs and 1 s for 1M. The links rows are half way down the list, and the 1M ones were
+timed as `si readbench` times them (20 runs, each on a fresh connection), on a 1M crawl analysed by this engine: before
+the index by kind, they took 1.7 to 3.1 s on the same machine, and the inspector 35 ms, reading every issue for
+"named by" (100 ms with 3.5M issues; now 2 ms, and 8 ms for a URL 112,000 issues name). Restricted to 4 cores, the
+links rows take 109; 60; 139 ms.
 
 ## Synthetic site and benchmark
 

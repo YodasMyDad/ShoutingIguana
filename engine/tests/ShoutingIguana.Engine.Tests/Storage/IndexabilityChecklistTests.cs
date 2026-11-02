@@ -105,6 +105,34 @@ public sealed class IndexabilityChecklistTests : IDisposable
         Assert.Equal([TestOutcome.Pass, TestOutcome.NotChecked, TestOutcome.Pass, TestOutcome.Pass], home.Indexability.Tests.Select(test => test.Outcome));
     }
 
+    /// <summary>
+    /// A page only status-checked keeps no links, so the canonical its Link header names is no URL of the crawl's: the test
+    /// still names it, by its URL, as it does a canonical the crawl has.
+    /// </summary>
+    [Fact]
+    public async Task ACanonicalTheCrawlDoesntHaveIsNamedByItsUrl()
+    {
+        const string ELSEWHERE = "https://elsewhere.example/the-page";
+        await using var site = await TestWebHost.StartAsync((_, _) => Serve(new(StringComparer.Ordinal)
+        {
+            ["/robots.txt"] = new(200, "text/plain; charset=utf-8", "User-agent: *\nDisallow:\n", null, null),
+            ["/docs/"] = Page("Docs", string.Empty, """<a href="/outside">Outside the folder</a>"""),
+            ["/outside"] = Page("Outside", string.Empty, "<p>Status-checked only.</p>") with
+            {
+                Headers = new Dictionary<string, string> { ["Link"] = $"<{ELSEWHERE}>; rel=\"canonical\"" }
+            }
+        }));
+        var path = await CrawlAndAnalyseAsync(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri + "docs/", StayInStartFolder = true });
+
+        var canonical = Test(Inspect(path, site, "outside"), Canonical);
+        Assert.Equal((TestOutcome.Fail, ELSEWHERE, null), (canonical.Outcome, canonical.CanonicalUrl, canonical.Canonical));
+
+        // One the crawl has is named both ways.
+        var docs = Test(Inspect(path, site, "docs/"), Canonical);
+        Assert.Equal(TestOutcome.Pass, docs.Outcome);
+        Assert.Null(docs.CanonicalUrl);
+    }
+
     public void Dispose() => _files.Dispose();
 
     private async Task<string> CrawlAndAnalyseAsync(CrawlOptions options)

@@ -176,26 +176,62 @@ internal static class UrlQueryCompiler
     {
         List<KeyValuePair<string, object>> parameters = [new("$s0", scope.CheckId!)];
         var condition = "issue = $s0";
+        string? stored = null;
         if (scope.Group is { } group)
         {
-            if (scope.Grouping is IssueGrouping.PageDetail or IssueGrouping.ResponseDetail)
+            stored = StoredGroup(scope, group.Detail, group.RelatedUrlId, "$s0", value =>
+            {
+                var name = $"$s{parameters.Count}";
+                parameters.Add(new(name, value));
+                return name;
+            });
+
+            if (stored is null && scope.Grouping is IssueGrouping.PageDetail or IssueGrouping.ResponseDetail)
             {
                 condition += " AND detail IS $s1";
                 parameters.Add(new("$s1", (object?)group.Detail ?? DBNull.Value));
             }
 
-            condition += " AND related_url_id IS $s2";
-            parameters.Add(new("$s2", group.RelatedUrlId is { } related ? related : DBNull.Value));
+            if (stored is null)
+            {
+                condition += " AND related_url_id IS $s2";
+                parameters.Add(new("$s2", group.RelatedUrlId is { } related ? related : DBNull.Value));
+            }
         }
 
         if (mode == GridMode.Crawl)
         {
-            var inline = string.Join(" AND ", condition.Split(" AND ").Select(term => "i." + term));
+            var inline = string.Join(" AND ", condition.Split(" AND ").Select(term => "i." + term)) + (stored is null ? string.Empty : $" AND i.url_id IN ({stored})");
             return new GridPredicate(inline, inline, parameters, Driving: true, Key(inline, parameters));
         }
 
-        var sql = $"s.url_id IN (SELECT url_id FROM issues WHERE {condition})";
+        var sql = $"s.url_id IN ({stored ?? $"SELECT url_id FROM issues WHERE {condition}"})";
         return new GridPredicate(sql, "+" + sql, parameters, Driving: true, Key(sql, parameters));
+    }
+
+    /// <summary>
+    /// The URL ids of one group of a check, as its count on the Issues screen came from the analysis's targets or faults:
+    /// those naming the other URL, a page in each group of the URLs it names (no URL being those naming none); or those
+    /// that are instances of the fault. Null when the group is the issues' own (one by detail, an earlier engine's analysis).
+    /// </summary>
+    /// <param name="check">The check's id, as a parameter already bound.</param>
+    private static string? StoredGroup(GridScope scope, string? detail, int? relatedUrlId, string check, Func<object, string> parameter)
+    {
+        if (!scope.TargetsStored)
+        {
+            return null;
+        }
+
+        var definition = IssueCatalog.Find(scope.CheckId!);
+        if (definition?.Grouping == IssueGrouping.RelatedUrl)
+        {
+            return $"SELECT g.url_id FROM issue_targets g WHERE g.issue = {check} AND g.related_url_id = {parameter(relatedUrlId ?? IssueHit.NO_OTHER_URL)}";
+        }
+
+        // A fault's issues name no other URL, so a group with one has none of them.
+        return definition is { Grouping: IssueGrouping.PageDetail, FaultOf: not null }
+            ? $"SELECT g.url_id FROM issue_faults g WHERE g.issue = {check} AND g.fault IS {parameter((object?)detail ?? DBNull.Value)}{(relatedUrlId is null ? string.Empty : " AND 0")}"
+            : null;
     }
 
     /// <summary>One key of the sort. A status class sorts as its status code.</summary>
@@ -351,7 +387,7 @@ internal static class UrlQueryCompiler
 
         if (filter.Column == UrlColumns.CHECK)
         {
-            return Check(filter, Parameter, parameters);
+            return Check(filter, Parameter, parameters, scope);
         }
 
         var column = UrlColumns.Find(filter.Column, scope.IsCheck)!;
@@ -487,26 +523,33 @@ internal static class UrlQueryCompiler
         return Indexed($"({string.Join(" OR ", classes)})", "s.status_code", parameters);
     }
 
-    private static GridPredicate Check(UrlFilter filter, Func<object, string> parameter, List<KeyValuePair<string, object>> parameters)
+    private static GridPredicate Check(UrlFilter filter, Func<object, string> parameter, List<KeyValuePair<string, object>> parameters, GridScope scope)
     {
         var checks = filter.Values!.Select(value => value.Text!).ToList();
         string condition;
+        string? stored = null;
         if (filter.Group is { } group)
         {
-            condition = $"issue = {parameter(checks[0])}";
-            if (IssueCatalog.Find(checks[0])!.Grouping is IssueGrouping.PageDetail or IssueGrouping.ResponseDetail)
+            var check = parameter(checks[0]);
+            condition = $"issue = {check}";
+            var grouping = IssueCatalog.Find(checks[0])!.Grouping;
+            stored = StoredGroup(new GridScope(checks[0], group, grouping) { TargetsStored = scope.TargetsStored }, group.Detail, group.RelatedUrlId, check, parameter);
+            if (stored is null && grouping is IssueGrouping.PageDetail or IssueGrouping.ResponseDetail)
             {
                 condition += $" AND detail IS {parameter((object?)group.Detail ?? DBNull.Value)}";
             }
 
-            condition += $" AND related_url_id IS {parameter(group.RelatedUrlId is { } related ? related : DBNull.Value)}";
+            if (stored is null)
+            {
+                condition += $" AND related_url_id IS {parameter(group.RelatedUrlId is { } related ? related : DBNull.Value)}";
+            }
         }
         else
         {
             condition = $"issue IN ({string.Join(", ", checks.Select(parameter))})";
         }
 
-        var subquery = $"SELECT url_id FROM issues WHERE {condition}";
+        var subquery = stored ?? $"SELECT url_id FROM issues WHERE {condition}";
         if (filter.Operator == NotIn)
         {
             return Plain($"s.url_id NOT IN ({subquery})", parameters);

@@ -170,19 +170,22 @@ public sealed class RuleConditionTests
     {
         var site = new RuleHarness();
         string Alternate(string code, string path) => $"<link rel=\"alternate\" hreflang=\"{code}\" href=\"{site.Site}{path}\">";
-        var en = site.Page($"{site.Site}/en", RuleHarness.Html(Alternate("en", "/en") + Alternate("fr", "/fr") + Alternate("de", "/de") + Alternate("es", "/es")));
+        var en = site.Page($"{site.Site}/en", RuleHarness.Html(
+            Alternate("en", "/en") + Alternate("fr", "/fr") + Alternate("de", "/de") + Alternate("es", "/es") + Alternate("it", "/it")));
         var fr = site.Page($"{site.Site}/fr", RuleHarness.Html(Alternate("fr", "/fr") + Alternate("en", "/en")));
         var de = site.Page($"{site.Site}/de", RuleHarness.Html(Alternate("de", "/de")));
+        var it = site.Page($"{site.Site}/it", RuleHarness.Html(Alternate("it", "/it")));
         site.Ok($"{site.Site}/es", IndexabilityReason.Noindex);
         var rules = new HreflangRules(site.Table());
 
-        foreach (var page in new[] { en, fr, de })
+        foreach (var page in new[] { en, fr, de, it })
         {
             rules.Observe(page);
         }
 
-        // /de doesn't link back; /fr does; /es isn't indexable, which is reported on its own.
-        Assert.Equal([new IssueHit(IssueCatalog.HREFLANG_MISSING_RETURN, en.UrlId, "1 alternate doesn't link back", de.UrlId)], rules.Finish());
+        // /de and /it don't link back, and the issue names both; /fr does; /es isn't indexable, which is reported on its own.
+        Assert.Equal([new IssueHit(IssueCatalog.HREFLANG_MISSING_RETURN, en.UrlId, "2 alternates don't link back", de.UrlId) { Targets = [de.UrlId, it.UrlId] }],
+            rules.Finish());
     }
 
     [Fact]
@@ -203,8 +206,10 @@ public sealed class RuleConditionTests
         rules.Observe(page);
         rules.Observe(target);
 
-        // #nowhere here, and #missing on /b (linked twice); a capped id list can't prove an id is missing.
-        Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "3 links", page.UrlId)], rules.Finish());
+        // #nowhere here, and #missing on /b (linked twice); a capped id list can't prove an id is missing. The issue names /b,
+        // and the page itself as no other URL.
+        Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "3 links", target.UrlId) { Targets = [target.UrlId, IssueHit.NO_OTHER_URL] }],
+            rules.Finish());
     }
 
     /// <summary>
@@ -228,8 +233,8 @@ public sealed class RuleConditionTests
         rules.Observe(page);
         rules.Observe(other);
 
-        // Only #ない (encoded) has no id to find.
-        Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "1 link", page.UrlId)], rules.Finish());
+        // Only #ない (encoded) has no id to find, on the page itself: no other URL.
+        Assert.Equal([new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, page.UrlId, "1 link")], rules.Finish());
     }
 
     /// <summary>A page that moves on at once with a meta refresh is a redirect, so its links aren't checked, as for a 301.</summary>
