@@ -152,7 +152,9 @@ Built in stages:
     | `not-analysable` | 409 | The engine refuses: running or interrupted |
     | `file-error` | 400 | IO or permissions |
     | `not-analyzed` | 404 | The crawl has never been analysed |
-    | `needs-analysis` | 409 | A grid sorts or filters on the URL summary while there is none to read: never analysed, analysed by another engine version, or changed since (E3) |
+    | `needs-analysis` | 409 | A grid sorts or filters on the URL summary while there is none to read: never analysed, analysed by another engine version, or changed since. `reason` says which, and `columns` names the columns (E3a) |
+    | `invalid-query` | 422 | A grid query the engine can't run: an unknown column, an operator its type doesn't take, a value of the wrong type, a regular expression that doesn't compile or needs backtracking, a cursor from another query. `errors` is keyed by the field's path, such as `filters[1].value` (E3a) |
+    | `url-not-found` | 404 | No URL of the crawl has this id or text (E3a) |
     | `not-found`, `check-not-found` | 404 | No such route, or no check with this id |
     | `bad-request` | 400 | Malformed JSON, or a property the API doesn't know |
     | `unauthorized` | 401 | The token is missing or wrong |
@@ -181,7 +183,8 @@ Built in stages:
 `GET /api/checks` returns two lists:
 
 - `categories: [{ id, title }]`, where the title is a plain name such as "Meta descriptions";
-- `checks: [{ id, category, severity, title, description, fix }]`, in catalog order.
+- `checks: [{ id, category, severity, title, description, fix, grouping }]`, in catalog order. `grouping` (E3a) is how
+  the check's issues group: see [Issue groups](#issue-groups-e3a).
 
 Both come from `IssueCatalog`. The engine gets public category titles, so the UI hard-codes none.
 
@@ -384,14 +387,321 @@ the URL, its status, content type, depth, size, time, title...), a query that so
 gets `needs-analysis` rather than failing, and the UI offers to analyse it. An analysis out of date only because
 the checks or thresholds changed keeps its summary, shown behind the out-of-date notice. E3 adds:
 
-- `/urls`;
-- `/urls/{urlId}`, the inspector;
-- `/links`;
-- `/sitemaps`;
-- `/robots`;
-- `/issues/{checkId}/groups`;
+- `/urls`, its facets and lookup (E3a, below);
+- `/urls/{urlId}`, the inspector (E3a);
+- `/issues/{checkId}/groups` and `/rows` (E3a);
+- `/links` (E3b);
+- `/sitemaps` (E3b);
+- `/robots` (E3b);
 - `/search` (E6);
 - `/export` (E5).
+
+The GET issues endpoint above stays as it is, for scripts and the design fixtures; the Issues screen uses `/rows`.
+
+### URLs (E3a)
+
+The URL grid: every URL the crawl found is a row, fetched or not (filter on `fetched` for the library's
+`fetchedUrlCount`), the probes of the site's other versions included (filter on `source`). Each call reads one snapshot
+of the file and holds it for that one page only, so a grid never keeps an analysis or a crawl waiting.
+
+`POST /api/crawls/{id}/urls` takes a query and returns one page of rows:
+
+```json
+{"columns":["url","statusCode","indexability","issues","title"],
+ "filters":[{"column":"type","op":"in","values":["page"]},{"column":"statusCode","op":"between","min":400,"max":499}],
+ "search":"rattan","sort":[{"column":"issues","desc":true}],"offset":0,"limit":100}
+```
+
+```json
+{"columns":["id","url","statusCode","indexability","issues","title"],
+ "rows":[{"id":119,"url":"https://www.example.com/rattan/old/","statusCode":404,"indexability":"clientError","issues":2,"title":null}],
+ "offset":0,"matching":3,"total":6286,"next":"…","summary":{"available":true,"reason":null},"unavailable":[]}
+```
+
+- **`columns`** says what each row carries, so a query reads only what the view shows. `id`, the URL's id in the
+  crawl, is always first; the default is `["id", "url"]`. A row's value is null when it is unknown (a URL never
+  fetched has no status), never 0.
+- **Paging.**
+  - `offset` and `limit` reach any row, for a grid whose scrollbar can be dragged anywhere. `limit` is 1 to 1,000
+    (default 100).
+  - `next` is a cursor for the row after the last one, null at the end. Passed back as `after`, with the same
+    filters, search and sort, it reads on from there (for exports) instead of from `offset`. Give `offset` or `after`,
+    not both.
+- **Counts.** `matching` counts the rows the filters and search match, and `total` every URL in the crawl, so the UI
+  can say "3 of 6,286 URLs". Both are cached per crawl file, analysis and filter set, so scrolling never counts again;
+  a running crawl's are counted afresh each time.
+- **`filters`** must all match. Each is `{ column, op, ... }` by the column's type:
+
+  | Type | `op` | With |
+  | --- | --- | --- |
+  | number | `eq`, `ne`, `lt`, `lte`, `gt`, `gte` | `value` |
+  | number | `between` (inclusive) | `min`, `max`, or both |
+  | number, enum | `in`, `notIn` | `values`, 1 to 100 of them |
+  | text | `contains`, `notContains`, `startsWith`, `endsWith` | `value`, matched ignoring the case of ASCII letters |
+  | text | `eq`, `ne` | `value`, matched exactly |
+  | text | `regex`, `notRegex` | `value`, a .NET regular expression, case-sensitive unless it starts `(?i)` |
+  | boolean | `is` | `value`: true or false |
+  | every type | `isEmpty`, `isNotEmpty` | Nothing. Empty is unknown (null), and for text also `""` |
+
+  - A negative operator (`ne`, `notIn`, `notContains`, `notRegex`) matches unknown values too, as "exclude this value"
+    should; add `isNotEmpty` to leave them out.
+  - Regular expressions run in .NET's non-backtracking mode, so no pattern can hang a query; a pattern that needs
+    backtracking (backreferences, lookarounds, atomic groups) is refused. Text values and patterns are at most 1,000
+    characters, and a query has at most 20 filters.
+  - **`check`** is a filter, not a column: `{ "column": "check", "op": "in", "values": ["title-too-long"] }` matches the
+    URLs that any of these checks flagged, and `notIn` the URLs none of them did. With one check, `group` narrows it to
+    one of the check's groups (see Issue groups), so a group's count opens its URLs in this grid:
+    `{"column":"check","op":"in","values":["empty-anchor-text"],"group":{"detail":null,"relatedUrlId":1}}`.
+- **`search`** matches the URL or the title containing the text, ignoring the case of ASCII letters. It's a plain scan
+  for now (fast search comes in E6), at most 1,000 characters.
+- **`sort`** is up to 3 `{ column, desc }`, with unknown values last whichever the direction, and the URL's `id`
+  breaking ties, in the last key's direction (so an index walked backwards needs no sort). The default is crawl order.
+- **The summary.** `summary` says whether the URL summary describes the crawl (see above), and `reason` why not:
+
+  | Reason | The summary isn't there because |
+  | --- | --- |
+  | `crawling` | The crawl is running, here or in another program |
+  | `notAnalyzed` | The crawl has never been analysed |
+  | `engineChanged` | Another version of the engine analysed it |
+  | `crawlChanged` | The crawl was continued after its analysis |
+
+  Without it, the columns marked "Needs analysis" below have no values: they are listed in `unavailable`, and left out
+  of each row. A filter or sort on one is refused with `needs-analysis` (409), whose `reason` is the one above and
+  whose `columns` name the columns, rather than ignored. The other columns read the crawl's own tables, so a running
+  crawl's grid works, live.
+
+`GET /api/url-columns` lists the columns, for the column chooser and the filter bar:
+`[{ id, type, needsAnalysis, sortable, filterable, values, issueRowsOnly }]`, where `values` lists an enum's values
+and `issueRowsOnly` marks a check's own columns, which only its rows have (see Issue groups).
+
+| Column | Type | Needs analysis | Is |
+| --- | --- | --- | --- |
+| `id` | number | | The URL's id: the order the crawl found URLs in |
+| `url` | text | | The URL, normalised |
+| `fetched` | boolean | | The crawl got an answer, or robots.txt refused the request. False for a URL only found (a nofollow link, one past a limit) and for one not checked because its host had stopped answering |
+| `isInternal` | boolean | | On the site being crawled |
+| `source` | enum | | How the crawl found it: `seed`, `link`, `sitemap`, or `siteVersion` (the crawler's probe of the site's other versions, which nothing on the site leads to) |
+| `depth` | number | | Clicks from the start URL. Null for a URL only a sitemap lists |
+| `type` | enum | | `page`, `image`, `script`, `stylesheet`, `font`, `media`, `pdf` or `other`: by the content type of a successful response, otherwise by the extension, as the checks tell files from pages |
+| `statusCode` | number | | The HTTP status. Null with no answer, or when not fetched |
+| `statusClass` | enum | | `2xx`, `3xx`, `4xx`, `5xx`, `other` (any other code), or `noResponse` (fetched, but no HTTP answer: a timeout, robots.txt refusing it). Null when not fetched. Sorts as `statusCode` |
+| `outcome` | enum | | `success`, `redirect`, `clientError`, `serverError`, `blocked` (a firewall or bot challenge), `robotsDisallowed`, `timeout`, `networkError`, `processingError`, or `notChecked` (its host had stopped answering). Null when not fetched |
+| `redirectTarget`, `redirectTargetStatusCode` | text, number | | Where an HTTP redirect's first hop goes, and the status there |
+| `indexable` | boolean | | As the analysis judged it (the crawl's own judgement where the analysis hasn't seen the URL). Null for a page that was only status-checked, whose HTML wasn't read, unless its response rules it out |
+| `indexability` | enum | | Why not: `none` (indexable), `noindex`, `canonicalised`, `redirected`, `clientError`, `serverError`, `blockedByRobots`, `blocked` or `unreachable`. Null when `indexable` is |
+| `noindex`, `nofollow` | boolean | | A robots meta tag or the `X-Robots-Tag` header says it, to the crawler or to Googlebot. Null when the HTML wasn't read and the header doesn't say it |
+| `metaRobots`, `xRobotsTag` | text | | The robots meta tags' content and the `X-Robots-Tag` header, as the page sent them, for the internal URLs whose details the crawl stores |
+| `canonicalUrl` | text | | The canonical a search engine honours: the first in the head or a `Link` header |
+| `contentType` | text | | The `Content-Type` header |
+| `title`, `description`, `h1` | text | | The first title, meta description and H1. Null for anything that isn't a parsed page |
+| `h1Count` | number | | H1s on the page |
+| `wordCount` | number | | Main-content words, for a page whose HTML was read |
+| `outlinks` | number | | Hyperlinks on a page whose HTML was read |
+| `sizeBytes` | number | | Bytes on the wire |
+| `responseMs`, `ttfbMs` | number | | The whole response, and the first byte. Null when no request was made |
+| `titleLength`, `descriptionLength` | number | Yes | The room the title and meta description take in search results, as the checks measure it: full-width characters and emoji count two |
+| `finalUrl`, `finalStatusCode` | text, number | Yes | Where the URL's redirects end, meta refreshes included, and the status there. The URL itself when it doesn't redirect |
+| `inSitemap` | boolean | Yes | Listed in a sitemap. False only when every sitemap was read |
+| `inlinks`, `followedInlinks`, `nofollowInlinks`, `linkingPages` | number | Yes | Hyperlinks to the URL on the pages audited, each counted, a page's links to itself left out: all, those followed, the nofollow ones, and the pages they're on |
+| `issues`, `errors`, `warnings`, `notices` | number | Yes | Checks that flagged the URL, in all and by severity |
+
+- **Sorting.** Every number, enum and boolean column sorts, and `url` does. The other text columns are filters only:
+  a sort by a page's text reads every page's text (1.4 s for a page halfway down 1M URLs), and `redirectTargetStatusCode`
+  is looked up per row, so it filters but doesn't sort either. `metaRobots` and `xRobotsTag` are read from each page's
+  stored details, so they are shown only: filter on `noindex` and `nofollow` instead.
+- The filter `check` needs the analysis, as the columns marked do.
+
+#### Facets
+
+`POST /api/crawls/{id}/urls/facets` counts the matching URLs by value, for the filter chips and Overview's breakdowns.
+It takes `{ filters, search, facets }`, the filters and search as above (none for the whole crawl), and the facets to
+count (all of them by default):
+
+```json
+{"matching":6286,"total":6286,"summary":{"available":true,"reason":null},"unavailable":[],
+ "facets":{"statusClass":[{"value":"2xx","count":4300,"filter":{"column":"statusClass","op":"in","values":["2xx"]}},
+                          {"value":null,"count":1765,"filter":{"column":"statusClass","op":"isEmpty"}}],
+           "responseTime":[{"value":"250-499","min":250,"max":499,"count":822,
+                            "filter":{"column":"responseMs","op":"between","min":250,"max":499}}]}}
+```
+
+- **Every count opens its URLs.** Each value carries the `filter` that selects it: added to the query's filters, it
+  gives a grid of exactly `count` rows.
+- **The facets.** Each lists only the values with URLs, and every URL counts once in each, except `severity`:
+
+  | Facet | Values |
+  | --- | --- |
+  | `statusClass` | As the column, and null (not fetched) |
+  | `statusCode` | Each status code, and null |
+  | `indexability` | As the column, and null (not judged) |
+  | `type` | As the column |
+  | `depth` | Each depth, and null (only in a sitemap) |
+  | `responseTime` | `0-249`, `250-499`, `500-999`, `1000-1999` and `2000+` ms, with `min` and `max` (no `max` for the last), and null (no request made) |
+  | `inSitemap` | true, false, and null (not known) |
+  | `severity` | `error`, `warning` and `notice` (URLs with at least one issue of that severity, so a URL can count in several), and `none` (no issues) |
+
+- Without the URL summary, the facets that need it are listed in `unavailable` and left out: `inSitemap` and
+  `severity`. A filter on a column that needs it is refused with `needs-analysis`, as above.
+
+#### Lookup
+
+`POST /api/crawls/{id}/urls/lookup` finds a URL by its text, for the palette's "Go to URL…" and for walking links:
+`{ "url": "https://www.example.com/a?b=1#top" }` gives `{ "id": 12, "url": "https://www.example.com/a?b=1" }`. The
+text is normalised as the crawl stores URLs (the fragment goes, the scheme and host are lowercased); a path that
+starts with `/` is taken on the start URL's origin. `url-not-found` (404) says the crawl has no such URL, and
+`invalid-query` (422) that the text isn't a URL.
+
+### The inspector (E3a)
+
+`GET /api/crawls/{id}/urls/{urlId}` gives one URL in full; `url-not-found` (404) for an id the crawl doesn't have.
+
+```json
+{"id":119,"url":"https://www.example.com/blog/?p=2","isInternal":true,"type":"page",
+ "discovery":{"source":"link","depth":2,"foundOn":{"id":7,"url":"https://www.example.com/blog/"},"foundVia":"hyperlink",
+              "fetchMode":"crawl","state":"done","notFetchedBecause":null},
+ "response":{"fetched":true,"outcome":"success","statusCode":200,"contentType":"text/html; charset=utf-8","httpVersion":"2.0",
+             "crawledAt":"2026-10-31T20:15:02Z","ttfbMs":180,"responseMs":240,"sizeBytes":18011,"bodyBytes":96340,
+             "blockReason":null,"error":null},
+ "redirects":{"hops":[],"final":{"id":119,"url":"https://www.example.com/blog/?p=2","statusCode":200},"loop":false,"tooLong":false},
+ "indexability":{"indexable":false,"reason":"canonicalised","judgedBy":"analysis",
+   "tests":[{"test":"answered","outcome":"pass","statusCode":200},{"test":"robotsTxt","outcome":"pass"},
+            {"test":"noindex","outcome":"pass","meta":false,"header":false},
+            {"test":"canonical","outcome":"fail","canonical":{"id":7,"url":"https://www.example.com/blog/","statusCode":200}}]},
+ "content":{"titles":[{"text":"Blog, page 2","length":12}],"descriptions":[],"h1s":[{"text":"Blog","length":4}],
+            "headings":[1,3,0,0,0,0],"wordCount":412,"language":"en-GB","charset":"utf-8","robots":[],"metaRefresh":null,
+            "images":12,"imagesMissingAlt":0},
+ "limits":{"titleMin":30,"titleMax":60,"descriptionMin":70,"descriptionMax":155,"minWords":200,"slowResponseMs":1000,
+           "largePageBytes":1048576,"fromAnalysis":true},
+ "links":{"inlinks":3,"followedInlinks":3,"nofollowInlinks":0,"linkingPages":2,"outlinks":45,"inSitemap":false},
+ "headers":[{"name":"content-type","value":"text/html; charset=utf-8"}],
+ "structuredData":[{"valid":true,"types":["BlogPosting"],"json":"{…}","error":null,"truncated":false}],
+ "hreflang":[],
+ "issues":[{"checkId":"title-too-short","severity":"notice","detail":"12 characters","related":null}],
+ "namedBy":{"total":0,"checks":[]},
+ "summary":{"available":true,"reason":null},
+ "source":{"stored":false}}
+```
+
+- **`discovery`** is how the crawl first found it: `foundVia` is the kind of link (`hyperlink`, `image`, `canonical`,
+  `redirect`...), `fetchMode` is `crawl` (fetched, parsed, its links followed) or `check` (status only), `state` is
+  `queued`, `fetching`, `done` or `skipped`, and `notFetchedBecause` why a skipped URL wasn't fetched (`noFollow`,
+  `notFollowedByOption`, `resourcesDisabled`, `externalsDisabled`, `depthLimit`, `urlLimit`).
+- **`response`** is null for a URL never fetched.
+- **`redirects`** follows the URL's redirects hop by hop, an instant meta refresh counting as one, as the analysis
+  does: `hops` lists each step `{ id, url, statusCode, outcome, via: "http" | "metaRefresh" }`, at most 20, and
+  `final` where they end. `loop` is true when they come back on themselves, and `tooLong` when there are more than 20.
+- **`indexability`** is the "Indexable, and why" checklist. Each test's `outcome` is `pass`, `fail` or `notChecked`
+  (the crawl never read what decides it: a page only status-checked, a crawl that ignored robots.txt, a test that a
+  failure before it makes moot):
+
+  | Test | Passes when | With |
+  | --- | --- | --- |
+  | `answered` | The URL answered 2xx and doesn't move on with an instant meta refresh | `statusCode`, and `metaRefresh` (the target) when it does |
+  | `robotsTxt` | robots.txt allowed the request | `unreachable`: true when robots.txt couldn't be read, which refuses everything |
+  | `noindex` | No noindex in a robots meta tag or the `X-Robots-Tag` header | `meta` and `header`: where a noindex is |
+  | `canonical` | No canonical, one to the URL itself, or one that leads back to it or nowhere | `canonical`: the target `{ id, url, statusCode }` |
+
+  `indexable` and `reason` are the verdict, as the analysis judged it (`judgedBy: "analysis"`); without a URL summary
+  they are the crawl's own judgement where the analysis hasn't seen the URL (`judgedBy: "crawl"`), and both are null
+  for a page that was only status-checked.
+- **`content`** is null for anything that isn't a parsed page. Titles, descriptions and H1s are each listed in page
+  order with their `length` as the checks measure it; `headings` counts H1 to H6, `images` the images and
+  `imagesMissingAlt` those without alt text; `robots` lists the directives that apply to the crawler or to Googlebot.
+  **`limits`** are what the analysis judged them against: its stored settings (`fromAnalysis: true`), or the engine's
+  defaults before the first analysis (`fromAnalysis: false`).
+- **`links`** comes from the URL summary, and is null without one (`summary` says why). `type` is judged as the
+  grid's column is.
+- **`headers`** are as stored: names lowercased, for internal URLs only. **`structuredData`** is each JSON-LD block,
+  `valid` when it parses, with its `@type`s (those in a `@graph` included), or the parser's `error`; `truncated` when
+  the page's block was cut at the parser's limit. **`hreflang`** is each annotation `{ language, href, url, target, inHead,
+  fromHttpHeader }`, `target` being the URL it names in the crawl, with its status, or null.
+- **`issues`** are the checks that flagged this URL in the last analysis, errors first, with the other URL involved;
+  **`namedBy`** counts the issues on other URLs that name this one as theirs (the page linking to a 404, the page
+  canonicalised to it), by check. Both come from the last analysis whatever its state, as the Issues screen's do, and
+  are null before the first.
+- **`source.stored`** says whether `/source` has the HTML.
+
+`POST /api/crawls/{id}/urls/{urlId}/inlinks` and `/outlinks` page the links to and from the URL, a page's links to
+itself left out, in the order they were found:
+
+```json
+{"kinds":["hyperlink"],"offset":0,"limit":100}
+```
+
+```json
+{"rows":[{"id":7,"url":"https://www.example.com/blog/","kind":"hyperlink","text":"Older posts","position":"content",
+          "flags":[],"followed":true,"fragment":null,"statusCode":200,"indexable":true,"fetched":true}],
+ "offset":0,"total":3,"next":"…"}
+```
+
+- `id`, `url` and the status columns are the other end's: the linking page for an inlink, the target for an outlink.
+  `kinds` filters by the kind of link (`hyperlink`, `image`, `script`, `stylesheet`, `iframe`, `media`, `icon`,
+  `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect`; every kind by default).
+- `text` is the anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link. `position`
+  is `content`, `navigation`, `header`, `footer`, `sidebar` or `head`. `flags` are among `noFollow`, `sponsored`,
+  `ugc`, `imageLink`, `outsideHead`, `samePage` and `fromHttpHeader`; `followed` is whether search engines follow a
+  hyperlink, which a nofollow on its page stops too.
+- Paging is as the URL grid's: `offset`, `limit` (1 to 1,000), and `after` with the `next` cursor.
+
+`GET /api/crawls/{id}/urls/{urlId}/source` gives the stored HTML, `{ "stored": true, "html": "…", "bytes": 96340,
+"truncated": false }`, or `{ "stored": false, "reason": "notStored" | "notPage" }`: the crawl didn't store HTML (`--store-html`
+is off by default), or this URL has none (not a page fetched successfully). HTML over 16 MB unpacked is cut there, and
+`truncated` says so.
+
+### Issue groups (E3a)
+
+A check's issues grouped by their cause, so a template fault is one row, not 265. How a check's issues group is the
+catalog's to say, per check, and `GET /api/checks` gives it as each check's `grouping`:
+
+| `grouping` | The check's issues are grouped by | Checks like |
+| --- | --- | --- |
+| `detail` | The detail and the other URL involved: the detail names the cause | `open-graph-missing` ("Missing og:image"), `internal-client-error` ("HTTP 404"), `structured-data-invalid` |
+| `relatedUrl` | The other URL alone: the detail is a count, and the URL is the cause | `broken-internal-links` (the broken target), `empty-anchor-text`, `canonicalised-page`, `title-duplicate` (the first page with that title) |
+| `none` | Nothing: the detail is a measurement (78 characters, 1,250 ms, 3 images), or the same on every issue | `title-too-long`, `slow-response`, `noindex-page` |
+
+The UI lists a `none` check's URLs flat (`/rows` below), with the detail as a column.
+
+`POST /api/crawls/{id}/issues/{checkId}/groups` takes `{ offset, limit }` (limit 1 to 1,000, default 100):
+
+```json
+{"checkId":"empty-anchor-text","grouping":"relatedUrl","total":265,"groupCount":2,"offset":0,
+ "groups":[{"detail":null,"relatedUrlId":1,"relatedUrl":"https://www.example.com/","pages":264,"share":0.9962,"likelyTemplate":true},
+           {"detail":null,"relatedUrlId":31,"relatedUrl":"https://www.example.com/greenhouses/","pages":1,"share":0.0038,"likelyTemplate":false}]}
+```
+
+- Groups come largest first, then by detail and related URL. `total` is the check's flagged URLs, and `share` a
+  group's part of them. A `relatedUrl` check's groups have no `detail`; a `none` check has no groups.
+- **`likelyTemplate`** marks a group that one fix probably clears, being in the site's template: it holds at least half
+  of the check's flagged URLs, and at least 10 of them, and either they share the other URL (the logo link without
+  text, a canonical every page names) or the detail names a fault in the page's own HTML (every page "Missing
+  og:image"). A detail that says how the URL itself answered (every 404 says "HTTP 404") is no evidence of a template.
+- A skipped check has `total` null and no groups, never 0. `check-not-found` is a check the engine doesn't know, and
+  `not-analyzed` a crawl never analysed.
+
+`POST /api/crawls/{id}/issues/{checkId}/rows` is the URL grid for one check: a row per URL the check flagged (an issue
+is one check on one URL, so a page linking to three broken URLs is one row, "3 broken URLs", naming the first). It
+takes the URL grid's query (`columns`, `filters`, `search`, `sort`, `offset`, `limit`, `after`) and answers as it does,
+with `matching` the rows the filters match and `total` the check's flagged URLs, cached alike. Two more things:
+
+- **The issue's own columns**, for `columns`, `filters` and `sort`: `detail` (text), `relatedUrlId` (number), and
+  `relatedUrl` and `relatedStatusCode` (text and number, the other URL and its status, filters only). Without
+  `columns`, a row has `url`, `detail` and `relatedUrl`.
+- **`group`** narrows the rows to one of the check's groups: `{ detail, relatedUrlId }` as `/groups` gave it, where
+  null matches null, and a `relatedUrl` check's group is its `relatedUrlId` alone. `total` is then the group's.
+  A `none` check has no groups to narrow to.
+
+```json
+{"group":{"detail":null,"relatedUrlId":1},"columns":["url","inlinks","detail"],"sort":[{"column":"inlinks","desc":true}],"limit":100}
+```
+
+```json
+{"columns":["id","url","inlinks","detail"],
+ "rows":[{"id":2,"url":"https://www.example.com/about/","inlinks":264,"detail":"Links to 1 URL"}],
+ "offset":0,"matching":264,"total":264,"next":"…","summary":{"available":true,"reason":null},"unavailable":[]}
+```
+
+A skipped check has `total` null and no rows. Without a URL summary, the URL columns are the crawl's as in `/urls`:
+the issues are the last analysis's, as on the Issues screen.
 
 ## Engine changes E1 needs
 
@@ -441,3 +751,23 @@ Each has a test that fails without it. `AnalysisFreshness.VERSION` is 2, so ever
   crawl gives up within seconds with `crawl-busy` (`errorType` on the `crawl` event for an analysis).
 - **One snapshot.** `GET /api/crawls/{id}/analysis` reads the analysis, its counts, notes, skip reasons and the
   crawl's stamp in one transaction (`IssueReader.ReadResults`).
+
+## Engine changes E3a made
+
+Each has its own tests, and each of those tests was seen to fail with the code it covers broken.
+
+- **The grids' readers** in `Storage/`: `UrlGridReader` (`Query`, `Facets`, `Lookup`), `UrlInspectorReader` (`Read`,
+  `ReadLinks`, `ReadSource`) and `IssueGroupReader` (`ReadGroups`, `ReadRows`), with the query model in
+  `Storage/Models`. A query that can't run throws `UrlQueryException`, its messages by field (`invalid-query`); one
+  that needs a URL summary there isn't throws `NeedsAnalysisException` (`needs-analysis`). The sidecar keeps one
+  `ReadCache` for every crawl, so a filter set is counted once while its crawl stands still.
+- **The URL summary** gains `title_length` and `description_length`, measured as the title and description checks
+  measure them, so the grid sorts and filters on them. `AnalysisFreshness.VERSION` is 3: every earlier analysis is out
+  of date (`engineChanged`) until analysed again.
+- **Issue groups.** Each check in the catalog says how its issues group (`IssueDefinition.Grouping`, which
+  `GET /api/checks` gives as `grouping`), and each analysis adds the index `ix_issues_group` on
+  `issues (issue, detail, related_url_id)`.
+- **`si readbench <crawl>`** times the grids' reads as the UI makes them and fails over a budget (`--max-p95-ms`), and
+  **`si bench --db <file>`** keeps its crawl for it. CI runs both on the 100k crawl, with the UI's budget of 300 ms. At
+  p95 the slowest read takes 76 ms on the 100k crawl, and 0.83 s on a 1M one against its budget of 1 s,
+  on a 32-core machine: the engine's README has the table ([Grid reads](../engine/README.md#grid-reads)).

@@ -10,4 +10,11 @@ public sealed record IssueDefinition(
     IssueSeverity Severity,
     string Title,
     string Description,
-    string Fix);
+    string Fix)
+{
+    /// <summary>
+    /// How the check's issues group, as its rule writes their details. Only how they're shown: it isn't stored with an
+    /// analysis, nor part of <see cref="AnalysisFreshness.ChecksFingerprint"/>.
+    /// </summary>
+    public required IssueGrouping Grouping { get; init; }
+}

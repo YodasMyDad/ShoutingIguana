@@ -9,7 +9,7 @@ Analytics / Ads integrations later.
 | Project | What it is |
 | --- | --- |
 | `src/ShoutingIguana.Engine` | Crawler library: fetching, robots.txt, sitemaps, parsing, storage, SEO analysis |
-| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `stats`, `testsite`, `bench` |
+| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `stats`, `testsite`, `bench`, `readbench` |
 | `src/ShoutingIguana.Sidecar` | `si-sidecar`: the engine as a localhost HTTP API for the desktop app (see [Sidecar](#sidecar)) |
 | `src/ShoutingIguana.TestSite` | Deterministic synthetic shop with planted SEO issues, for tests and benchmarks |
 | `tests/ShoutingIguana.Engine.Tests` | xUnit: unit tests plus end-to-end crawls and analyses of the synthetic site |
@@ -30,6 +30,8 @@ dotnet run --project src/ShoutingIguana.Cli -- analyze example.sicrawl          
 dotnet run --project src/ShoutingIguana.Cli -- stats example.sicrawl
 dotnet run --project src/ShoutingIguana.Cli -- crawl --resume --db example.sicrawl              # after Ctrl+C
 dotnet run --project src/ShoutingIguana.Cli -c Release -- bench --pages 100000
+dotnet run --project src/ShoutingIguana.Cli -c Release -- bench --pages 100000 --db bench.sicrawl              # keeps the crawl
+dotnet run --project src/ShoutingIguana.Cli -c Release -- readbench bench.sicrawl --max-p95-ms 300            # the grids' reads
 ```
 
 `si crawl --help` lists every option: concurrency and rate cap, user agent presets, extra headers (for firewall
@@ -256,7 +258,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, whether it was partial, what it ran against (the crawl's `updated_at`, the analysis version, the checks' fingerprint), and what it couldn't do and why |
 | `skipped_checks` | Each check the last analysis skipped, with a reason code and a sentence |
 | `effective_indexability` | Indexability as analysed, for URLs where it differs from the crawl's (an instant meta refresh, a canonical leading back to the page) |
-| `url_summary` | One row per URL for the grids, rebuilt by each analysis: how it was found, indexable or not and why, where redirects end and the status there, the type (page, image, script, stylesheet, font, media, PDF, other), in a sitemap, inlinks (all, followed, nofollow, linking pages), outlinks, issues by severity, and copies of the URL's depth, status, size, time and word count |
+| `url_summary` | One row per URL for the grids, rebuilt by each analysis: how it was found, indexable or not and why, where redirects end and the status there, the type (page, image, script, stylesheet, font, media, PDF, other), in a sitemap, inlinks (all, followed, nofollow, linking pages), outlinks, issues by severity, the room the title and meta description take as the checks measure it, and copies of the URL's depth, status, size, time and word count |
 
 URLs that only appear in sitemaps keep depth `1000000` (`CrawlDepth.UNLINKED`) in `urls`, which is how orphan pages
 show up. The URL summary has no depth for them.
@@ -312,6 +314,71 @@ and choose. When few rows match, they sort them, keeping the sort's index out of
 Otherwise they walk the sort's index, keeping a common value's index out (`+resource_type = 0`). Both brought the last
 two rows under 1 ms.
 
+## Grid reads
+
+The desktop app's grids read a crawl file through three readers in `Storage/`. Each read opens the file read-only and
+holds one snapshot for that one page, so a grid never keeps a crawl or an analysis waiting.
+
+- `UrlGridReader`: a page of URLs with the columns a view shows (`Query`), the counts behind the filter chips and
+  Overview's breakdowns (`Facets`), and a URL found by its text (`Lookup`).
+- `UrlInspectorReader`: one URL in full (`Read`), its links in and out (`ReadLinks`), and its stored HTML
+  (`ReadSource`).
+- `IssueGroupReader`: a check's issues grouped by their cause (`ReadGroups`), and its rows as a URL grid
+  (`ReadRows`).
+
+A query (`UrlQuery`) has typed filters per column, up to three sort keys with unknown values last, a quick search of
+the URL and title, the columns to read, and `offset` plus `limit` (up to 1,000) to reach any row, or the `after` cursor
+a page gives to read on. The API, with every column and operator, is in
+[`docs/v2-sidecar-api.md`](../docs/v2-sidecar-api.md#urls-e3a).
+
+- **With or without the URL summary.** While a summary describes the crawl, sorts and filters read it. Without one (a
+  crawl running, never analysed, or continued since), they read the crawl's own tables, and a filter or sort on a
+  column only the summary has throws `NeedsAnalysisException` with the reason and the columns, rather than being
+  ignored. A query that can't run throws `UrlQueryException`, its messages keyed by field.
+- **Choosing a plan.** SQLite can't tell a rare value from a common one here (no STAT4), so `GridPlanner` counts each
+  condition that could drive the query, up to 50,000 rows, and keeps the count. A rare condition (under 50,000 rows
+  and under a tenth of the URLs) drives through its index and its rows are sorted; otherwise the sort's index is
+  walked; otherwise (a sort without an index) the summary is scanned and sorted. A unary plus keeps the other
+  conditions off their indexes (`+s.status_code = 404`). A page past half way is read backwards from the far end. A
+  condition on the crawl's text (a title, a search) is read once into the URL ids it matches while there are at most
+  50,000, which then drive.
+- **Cursors** carry the last row's sort values and id, with a hash of the query, and read on as ranges of the first
+  key's index, its unknown values a range of their own: reading on costs a page however deep.
+- **Counts** (matching rows, facets, a check's groups, id sets) are kept in a `ReadCache` by crawl file, crawl stamp,
+  analysis and conditions, so scrolling never counts again. A running crawl's never are.
+- **Facets.** Filtered, three facets or more are counted in one pass: each row's values are packed into one number and
+  the rows grouped by it, as sorting a million rows by one number takes half the time of sorting them by a column per
+  value. Otherwise each facet is counted on its own, most of them from their own index.
+- **Issue groups.** Each check says how its issues group (`IssueDefinition.Grouping`): by detail and the other URL
+  (`PageDetail`, `ResponseDetail`), by the other URL alone (`RelatedUrl`), or not at all (`None`, as its detail is a
+  measurement). A group is a likely template fault when it holds at least half of the check's URLs, and at least 10,
+  and they share the other URL or the detail names a fault in the page's own HTML. Each analysis adds the index
+  `ix_issues_group` on `issues (issue, detail, related_url_id)`, which the groups read.
+- **The inspector's "Indexable, and why"** lists four tests in the order they decide it (it answered 2xx, robots.txt
+  allowed it, no noindex, its canonical is itself), each passed, failed or not checked, beside the analysis's verdict,
+  and follows redirects hop by hop as the analysis does, instant meta refreshes included, up to 20.
+
+`si readbench <crawl>` times the grids' reads as the UI makes them, each on a fresh connection with nothing cached, as
+a filter set's first read is: the first page and the page half way down for every sort, filters common and rare (up to
+three at once), search, facets, the inspector, its links, and a check's groups and rows. With `--max-p95-ms` it fails
+when any read is over, and `--only` runs the reads whose name has the text. CI runs it on the 100k benchmark crawl
+with the UI's budget of 300 ms. The worst p95 of each kind of read, in ms, for the first page / the page half way down,
+on a 32-core Windows machine (20 runs; the 1M crawl is `si bench --pages 1000000`, 1.1M URLs and 50M links):
+
+| Read | 100k URLs (112,584) | 1M URLs (1,123,028) |
+| --- | --- | --- |
+| Sorted by an indexed column | 2 / 3 | 12 / 40 |
+| Sorted by a column without an index | 21 / 46 | 228 / 639 |
+| Filtered (common and rare, up to three), sorted | 11 / 15 | 195 / 184 |
+| A title filter, a regular expression, a search | 40 / 30 | 341 / 340 |
+| A check: its filter, groups and rows | 6 / 6 | 198 / 215 |
+| Facets of every URL; of the pages | 47; 53 | 645; 612 |
+| A URL looked up, inspected | 2 | 17 |
+| Links: to the home page (all, hyperlinks), from it | 7 / 76 | 59 / 830 |
+
+The budgets are 300 ms for 100k URLs and 1 s for 1M. The slowest read of 1M is the home page's hyperlinks half way
+down, as a list of some kinds of link reads the links it skips to reach an offset.
+
 ## Synthetic site and benchmark
 
 The synthetic site is clean by construction: every page passes every check unless an issue is planted on it.
@@ -343,7 +410,8 @@ them.
 
 `si bench` serves the synthetic site from a child process, with the dead twin, crawls it, analyses it, and checks
 both against the expectations, the URL summary against the stats too. It can fail on thresholds, and CI runs it on
-every push (`.github/workflows/engine.yml`).
+every push (`.github/workflows/engine.yml`), keeping the crawl (`--db`) for `si readbench`, which then holds the
+grids' reads of it to their budget (see [Grid reads](#grid-reads)).
 
 On a 32-core Windows machine, at concurrency 16, against the local synthetic site:
 

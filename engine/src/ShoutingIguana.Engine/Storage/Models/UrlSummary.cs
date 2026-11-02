@@ -86,4 +86,13 @@ public sealed record UrlSummary
 
     /// <summary>Main-content words, for pages whose HTML was parsed.</summary>
     public int? WordCount { get; init; }
+
+    /// <summary>
+    /// The room the first title takes in search results, as the title checks measure it: full-width characters and emoji
+    /// count two. Null without a title.
+    /// </summary>
+    public int? TitleLength { get; init; }
+
+    /// <summary>The room the first meta description takes, measured the same way. Null without one.</summary>
+    public int? DescriptionLength { get; init; }
 }

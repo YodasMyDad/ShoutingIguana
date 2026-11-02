@@ -2,6 +2,8 @@ using System.Text.Json.Serialization;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Parsing.Models;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Errors.Models;
 using ShoutingIguana.Sidecar.Events.Models;
@@ -24,7 +26,23 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<IssueCategory>),
         typeof(CamelCaseEnumConverter<IssueSeverity>),
         typeof(CamelCaseEnumConverter<OutOfDateReason>),
-        typeof(CamelCaseEnumConverter<UserAgentPreset>)
+        typeof(CamelCaseEnumConverter<UserAgentPreset>),
+
+        // The grids (E3a).
+        typeof(CamelCaseEnumConverter<SummaryUnavailableReason>),
+        typeof(CamelCaseEnumConverter<ResourceType>),
+        typeof(CamelCaseEnumConverter<DiscoverySource>),
+        typeof(CamelCaseEnumConverter<LinkKind>),
+        typeof(CamelCaseEnumConverter<LinkPosition>),
+        typeof(CamelCaseEnumConverter<FetchMode>),
+        typeof(CamelCaseEnumConverter<UrlState>),
+        typeof(CamelCaseEnumConverter<SkipReason>),
+        typeof(CamelCaseEnumConverter<UrlOutcome>),
+        typeof(CamelCaseEnumConverter<RedirectVia>),
+        typeof(CamelCaseEnumConverter<IndexabilityReason>),
+        typeof(CamelCaseEnumConverter<IndexabilityJudge>),
+        typeof(CamelCaseEnumConverter<IndexabilityTestKind>),
+        typeof(CamelCaseEnumConverter<TestOutcome>)
     ])]
 [JsonSerializable(typeof(ReadyEvent))]
 [JsonSerializable(typeof(ProblemDto))]
@@ -48,6 +66,25 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(CrawlEventDto))]
 [JsonSerializable(typeof(LibraryFile))]
 [JsonSerializable(typeof(SummaryCacheFile))]
+
+// The grids (E3a).
+[JsonSerializable(typeof(IReadOnlyList<UrlColumnDto>))]
+[JsonSerializable(typeof(GridQueryRequest))]
+[JsonSerializable(typeof(UrlPageDto))]
+[JsonSerializable(typeof(FacetsRequest))]
+[JsonSerializable(typeof(FacetsDto))]
+[JsonSerializable(typeof(UrlLookupRequest))]
+[JsonSerializable(typeof(UrlRef))]
+[JsonSerializable(typeof(UrlDetailDto))]
+[JsonSerializable(typeof(LinksRequest))]
+[JsonSerializable(typeof(LinkPageDto))]
+[JsonSerializable(typeof(HtmlSourceDto))]
+[JsonSerializable(typeof(GroupsRequest))]
+[JsonSerializable(typeof(IssueGroupPageDto))]
+[JsonSerializable(typeof(string))]
+[JsonSerializable(typeof(bool))]
+[JsonSerializable(typeof(double))]
+[JsonSerializable(typeof(long))]
 internal sealed partial class SidecarJsonContext : JsonSerializerContext
 {
 }

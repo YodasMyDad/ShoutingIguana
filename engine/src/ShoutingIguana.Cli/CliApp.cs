@@ -13,7 +13,8 @@ internal static class CliApp
         IssuesCommand.Create(),
         StatsCommand.Create(),
         TestSiteCommand.Create(),
-        BenchCommand.Create()
+        BenchCommand.Create(),
+        ReadBenchCommand.Create()
     };
 
     // Ctrl+C asks the crawl to stop; give in-flight requests time to settle so the crawl stays resumable.

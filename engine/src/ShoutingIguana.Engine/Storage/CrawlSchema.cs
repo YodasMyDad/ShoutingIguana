@@ -180,6 +180,10 @@ internal static class CrawlSchema
 
         CREATE INDEX IF NOT EXISTS ix_issues_url ON issues (url_id);
 
+        -- A check's issues by detail and other URL, as the Issues screen groups them, each group's URLs in crawl order
+        -- (an index on a table without rowid ends with the rest of its key: url_id).
+        CREATE INDEX IF NOT EXISTS ix_issues_group ON issues (issue, detail, related_url_id);
+
         -- Indexability as the analysis judged it, only where that differs from responses.indexability_reason: an
         -- instant meta refresh is a redirect, and a canonical leading back to the page or to a broken URL is ignored.
         -- Read COALESCE(e.indexability_reason, r.indexability_reason) for what search engines will see.
@@ -237,7 +241,11 @@ internal static class CrawlSchema
             notices INTEGER NOT NULL,
             size_bytes INTEGER,
             response_ms INTEGER,
-            word_count INTEGER
+            word_count INTEGER,
+            -- The room the first title and meta description take in search results, as the checks measure it (full-width
+            -- characters and emoji count two); null without one.
+            title_length INTEGER,
+            description_length INTEGER
         );
         """;
 

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Sidecar.Api;
 using ShoutingIguana.Sidecar.Crawls;
 using ShoutingIguana.Sidecar.Errors;
@@ -156,6 +157,8 @@ internal sealed class SidecarHost : IAsyncDisposable
         builder.Services.AddSingleton<DefaultsStore>();
         builder.Services.AddSingleton<CrawlManager>();
         builder.Services.AddSingleton<CrawlData>();
+        builder.Services.AddSingleton(new ReadCache());
+        builder.Services.AddSingleton<GridData>();
 
         // Crawls are told to stop as soon as shutdown begins, before the web server waits for requests in flight.
         builder.Services.AddHostedService<CrawlShutdown>();
@@ -179,6 +182,7 @@ internal sealed class SidecarHost : IAsyncDisposable
         LibraryEndpoints.Map(app);
         CrawlEndpoints.Map(app);
         AnalysisEndpoints.Map(app);
+        GridEndpoints.Map(app);
         endpoint = bound!;
         return app;
     }

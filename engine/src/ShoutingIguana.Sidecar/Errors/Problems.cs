@@ -1,3 +1,4 @@
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Sidecar.Errors.Models;
 
 namespace ShoutingIguana.Sidecar.Errors;
@@ -40,6 +41,31 @@ internal static class Problems
 
     public static ProblemException FileError(string title, string? detail = null) =>
         new(new ProblemDto("file-error", title, 400) { Detail = detail });
+
+    /// <summary>A grid query the engine can't run, with what's wrong by the field's path (<c>filters[1].value</c>).</summary>
+    public static ProblemException InvalidQuery(IReadOnlyDictionary<string, IReadOnlyList<string>> errors) =>
+        new(new ProblemDto("invalid-query", "This view's query can't be run.", 422) { Errors = errors, Detail = errors.Values.SelectMany(messages => messages).FirstOrDefault() });
+
+    /// <summary>A grid filters or sorts on what the URL summary holds, and the crawl has none that describes it.</summary>
+    public static ProblemException NeedsAnalysis(SummaryUnavailableReason reason, IReadOnlyList<string> columns)
+    {
+        var why = reason switch
+        {
+            SummaryUnavailableReason.Crawling => "which can't run while the crawl does",
+            SummaryUnavailableReason.NotAnalyzed => "and this crawl hasn't been analysed yet",
+            SummaryUnavailableReason.EngineChanged => "and this crawl was analysed by another version of Shouting Iguana, so it needs analysing again",
+            _ => "and this crawl was continued after its last analysis, so it needs analysing again"
+        };
+
+        var name = reason.ToString();
+        return new(new ProblemDto("needs-analysis", $"Filtering or sorting by these columns needs an analysis, {why}.", 409)
+        {
+            Reason = char.ToLowerInvariant(name[0]) + name[1..],
+            Columns = columns
+        });
+    }
+
+    public static ProblemException UrlNotFound() => new(new ProblemDto("url-not-found", "This crawl didn't find that URL.", 404));
 
     /// <summary>A request the UI shouldn't send: a missing or malformed body, a parameter out of range.</summary>
     public static ProblemException BadRequest(string title, string? detail = null) =>

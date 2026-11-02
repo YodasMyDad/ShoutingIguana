@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Analysis;
@@ -219,6 +220,55 @@ public sealed class CliTests : IAsyncLifetime
         var resumed = await RunAsync("crawl", "--resume", "--db", crawl, "-q", "--no-analyze");
         Assert.Equal(0, resumed.ExitCode);
         Assert.Contains("X-Crawler-Key", resumed.Error);
+    }
+
+    /// <summary>
+    /// The reader benchmark times every kind of read the grids make on an analysed crawl, writes them as JSON, and fails a
+    /// read over budget; a crawl without a URL summary can't be measured fully, so a budget fails it too.
+    /// </summary>
+    [Fact]
+    public async Task ReadbenchTimesTheGridsReadsAndFailsOverBudget()
+    {
+        var crawl = await CrawlAsync();
+        var json = Path.Combine(_folder, "readbench.json");
+        var timed = await RunAsync("readbench", crawl, "--runs", "2", "--max-p95-ms", "60000", "--json", json);
+        Assert.True(timed.ExitCode == 0, timed.Output + timed.Error);
+        Assert.Contains("Readers:", timed.Output);
+        var result = JsonNode.Parse(await File.ReadAllTextAsync(json))!;
+        Assert.True((bool?)result["summaryAvailable"]);
+        Assert.Equal(2, (int?)result["runs"]);
+        Assert.Empty(result["failures"]!.AsArray());
+        Assert.Equal(["facets", "grid", "groups", "inspector", "links", "lookup", "rows"],
+            result["cases"]!.AsArray().Select(read => (string)read!["kind"]!).Distinct().Order(StringComparer.Ordinal));
+        Assert.All(result["cases"]!.AsArray(), read => Assert.True((double?)read!["firstP95Ms"] >= (double?)read["firstP50Ms"]));
+
+        // Only some reads, and a budget every read is over.
+        var over = await RunAsync("readbench", crawl, "--runs", "1", "--max-p95-ms", "0.000001", "--only", "facets");
+        Assert.Equal(1, over.ExitCode);
+        Assert.Contains("FAILED       Facets of every URL", over.Output);
+        Assert.DoesNotContain("Sort by", over.Output);
+
+        // Never analysed: the reads that need the URL summary are skipped, so the budget isn't met.
+        var unanalysed = Path.Combine(_folder, "unanalysed.sicrawl");
+        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", unanalysed, "--max-urls", "20", "-q", "--no-analyze")).ExitCode);
+        var partial = await RunAsync("readbench", unanalysed, "--runs", "1", "--max-p95-ms", "60000");
+        Assert.Equal(1, partial.ExitCode);
+        Assert.Contains("has no URL summary (NotAnalyzed)", partial.Output);
+        Assert.Contains("skipped", partial.Output);
+
+        Assert.Equal(2, (await RunAsync("readbench", Path.Combine(_folder, "missing.sicrawl"))).ExitCode);
+    }
+
+    /// <summary>The benchmark keeps its crawl where --db says, for si readbench, but never over a file already there.</summary>
+    [Fact]
+    public async Task BenchKeepsItsCrawlOnlyInANewFile()
+    {
+        var existing = Path.Combine(_folder, "kept.sicrawl");
+        await File.WriteAllTextAsync(existing, "a crawl");
+        var result = await RunAsync("bench", "--pages", "10", "--db", existing);
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("There's already a file at", result.Error);
+        Assert.Equal("a crawl", await File.ReadAllTextAsync(existing));
     }
 
     private async Task<string> CrawlAsync()

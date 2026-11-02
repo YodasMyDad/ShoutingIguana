@@ -1,6 +1,7 @@
 # v2 engine: build and test on every OS we ship to, then hold the line on speed and memory by
 # crawling a generated 100,000-page site. The benchmark fails the run if the crawl misses a planted
-# issue, memory grows as the crawl grows, or throughput collapses.
+# issue, memory grows as the crawl grows, or throughput collapses, and then if any of the grids'
+# reads of that crawl is slower than the UI's budget.
 name: Engine (v2)
 
 # The engine's Directory.Build.props imports the root one, so a change there can break the engine too.
@@ -62,10 +63,21 @@ jobs:
           dotnet src/ShoutingIguana.Cli/bin/Release/net10.0/si.dll bench
           --pages 100000 --concurrency 16
           --max-peak-mb 400 --max-growth-mb 100 --max-growth-bytes-per-url 250 --min-pages-per-sec 600
-          --json bench.json
+          --db bench.sicrawl --json bench.json
+
+      # The grids' reads of that crawl, each on a fresh connection with nothing cached, as a filter set's first read is:
+      # the URL grid's first page and the page half way down for every sort and for filters common and rare (up to
+      # three), search, facets, the inspector and its links, and a check's groups and rows. 300 ms at p95 is the UI's
+      # budget for 100k URLs; the slowest read takes about 80 ms on a 32-core desktop.
+      - name: Read the crawl as the grids do
+        run: >
+          dotnet src/ShoutingIguana.Cli/bin/Release/net10.0/si.dll readbench bench.sicrawl
+          --runs 20 --max-p95-ms 300 --json readbench.json
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: benchmark
-          path: engine/bench.json
+          path: |
+            engine/bench.json
+            engine/readbench.json

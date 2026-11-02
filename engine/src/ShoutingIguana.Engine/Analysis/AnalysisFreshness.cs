@@ -19,7 +19,7 @@ public static class AnalysisFreshness
     /// stored by another version are out of date (<see cref="OutOfDateReason.EngineChanged"/>), and the UI offers to
     /// run them again. A change to the catalog's checks is caught without a bump, by <see cref="ChecksFingerprint"/>.
     /// </summary>
-    public const int VERSION = 2;
+    public const int VERSION = 3;
 
     /// <summary>The catalog's check ids with their categories and severities, hashed. Titles and texts don't count.</summary>
     public static string ChecksFingerprint { get; } = Fingerprint(IssueCatalog.All);

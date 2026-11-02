@@ -22,4 +22,12 @@ internal sealed record ProblemDto(string Type, string Title, int Status)
     /// <summary>For <c>needs-secrets</c>: the proxy's user name and password must be given again.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ProxyCredentials { get; init; }
+
+    /// <summary>For <c>needs-analysis</c>: why the crawl has no URL summary (<c>crawling</c>, <c>notAnalyzed</c>...).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Reason { get; init; }
+
+    /// <summary>For <c>needs-analysis</c>: the columns the query filters or sorts on that need it.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? Columns { get; init; }
 }

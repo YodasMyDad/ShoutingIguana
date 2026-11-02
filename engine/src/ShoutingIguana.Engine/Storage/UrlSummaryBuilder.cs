@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
@@ -21,12 +22,12 @@ internal static class UrlSummaryBuilder
     [
         "url_id", "is_internal", "source", "depth", "resource_type", "status_code", "indexable", "indexability_reason", "final_url_id",
         "final_status_code", "in_sitemap", "inlinks", "followed_inlinks", "nofollow_inlinks", "linking_pages", "outlinks", "issues",
-        "errors", "warnings", "notices", "size_bytes", "response_ms", "word_count"
+        "errors", "warnings", "notices", "size_bytes", "response_ms", "word_count", "title_length", "description_length"
     ];
 
     /// <summary>The URL's own facts that the table in memory doesn't hold, and its address for its type.</summary>
     private const string URLS = """
-        SELECT u.id, r.outcome, r.content_type, r.response_ms, r.word_count, r.outlink_count, u.url
+        SELECT u.id, r.outcome, r.content_type, r.response_ms, r.word_count, r.outlink_count, u.url, r.title, r.meta_description
         FROM urls u LEFT JOIN responses r ON r.url_id = u.id
         ORDER BY u.id
         """;
@@ -131,7 +132,11 @@ internal static class UrlSummaryBuilder
 
             // robots.txt refusing a URL is recorded without a request, so there's no time to show.
             ResponseMs = fetched && status.Outcome != FetchOutcome.RobotsDisallowed && !row.IsDBNull(3) ? row.GetInt32(3) : null,
-            WordCount = fetched && !row.IsDBNull(4) ? row.GetInt32(4) : null
+            WordCount = fetched && !row.IsDBNull(4) ? row.GetInt32(4) : null,
+
+            // Measured as the title and description checks measure them, so a sort by length agrees with what they flag.
+            TitleLength = fetched && !row.IsDBNull(7) ? DisplayWidth.Measure(row.GetString(7)).Width : null,
+            DescriptionLength = fetched && !row.IsDBNull(8) ? DisplayWidth.Measure(row.GetString(8)).Width : null
         };
     }
 
@@ -142,7 +147,8 @@ internal static class UrlSummaryBuilder
             summary.UrlId, summary.IsInternal, (int)summary.Source, summary.Depth, (int)summary.ResourceType, summary.StatusCode, summary.IsIndexable,
             (int?)summary.IndexabilityReason, summary.FinalUrlId, summary.FinalStatusCode, summary.InSitemap, summary.Inlinks,
             summary.FollowedInlinks, summary.NofollowInlinks, summary.LinkingPages, summary.Outlinks, summary.Issues, summary.Errors,
-            summary.Warnings, summary.Notices, summary.SizeBytes, summary.ResponseMs, summary.WordCount
+            summary.Warnings, summary.Notices, summary.SizeBytes, summary.ResponseMs, summary.WordCount, summary.TitleLength,
+            summary.DescriptionLength
         ];
 
         for (var index = 0; index < parameters.Length; index++)

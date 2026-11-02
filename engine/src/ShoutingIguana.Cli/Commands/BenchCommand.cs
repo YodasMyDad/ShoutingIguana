@@ -31,25 +31,33 @@ internal static class BenchCommand
         var minRate = new Option<double>("--min-pages-per-sec") { Description = "Fail if throughput is lower (0 = no check)." };
         var json = new Option<string?>("--json") { Description = "Write the results as JSON to this file." };
         var keep = new Option<bool>("--keep") { Description = "Keep the crawl file instead of deleting it." };
+        var database = new Option<string?>("--db") { Description = "Write the crawl to this new file and keep it, for si readbench." };
 
         var command = new Command("bench", "Benchmark the crawler against a generated site.")
         {
-            pages, concurrency, maxPeak, maxGrowth, maxGrowthPerUrl, minRate, json, keep
+            pages, concurrency, maxPeak, maxGrowth, maxGrowthPerUrl, minRate, json, keep, database
         };
 
         command.SetAction(async (parse, cancellationToken) =>
         {
             var pageCount = parse.GetValue(pages);
             var workers = parse.GetValue(concurrency);
+            var named = parse.GetValue(database);
+            var databasePath = named is null ? Path.Combine(Path.GetTempPath(), $"si-bench-{Guid.NewGuid():N}.sicrawl") : Path.GetFullPath(named);
+            if (named is not null && File.Exists(databasePath))
+            {
+                Console.Error.WriteLine($"There's already a file at {databasePath}: name a new one.");
+                return 2;
+            }
+
             Console.WriteLine($"Starting a synthetic site with {pageCount:N0} pages...");
             using var site = await ChildSiteProcess.StartAsync(pageCount, deadTwin: true, cancellationToken);
 
-            var databasePath = Path.Combine(Path.GetTempPath(), $"si-bench-{Guid.NewGuid():N}.sicrawl");
             var options = new CrawlOptions { StartUrl = site.BaseUri.ToString(), Concurrency = workers, RequestTimeoutSeconds = 30 };
             using var loggerFactory = Logging.Create(verbose: false);
             var observer = new ConsoleCrawlObserver(quiet: false);
 
-            var keepCrawl = parse.GetValue(keep);
+            var keepCrawl = parse.GetValue(keep) || named is not null;
             try
             {
                 CrawlSummary summary;
