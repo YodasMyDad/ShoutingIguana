@@ -270,6 +270,60 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
     }
 
     /// <summary>
+    /// A URL limit of three, reached as the third page is claimed; that page links the www version, which its probe found
+    /// redirecting. There's no slot left for it, as for any URL found then: it stays a probe and isn't fetched again, so
+    /// the site's own URLs found and fetched end at the limit, as an ETA heads for it.
+    /// </summary>
+    [Fact]
+    public async Task AVersionTheSiteLinksToOnceTheUrlLimitIsReachedStaysAProbe()
+    {
+        var path = _files.NewPath();
+        await using var site = await StartAsync(context => (context.Request.Host.Host, context.Request.Path.Value) switch
+        {
+            ("www.example.com", _) => RedirectsHome(301)(context),
+            ("example.com", "/robots.txt") => Text(context, "User-agent: *\nAllow: /"),
+            ("example.com", "/") => Html(context, "<a href=\"/a\">A</a> <a href=\"/b\">B</a> <a href=\"/c\">C</a>"),
+            ("example.com", "/b") => Html(context, $"<a href=\"{WWW}/\">The www version</a>"),
+            _ => Html(context, "<p>A page</p>")
+        });
+
+        var summary = await TestCrawls.RunAsync(Options(site) with { MaxUrls = 3 }, path);
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        Assert.Equal(3, summary.Progress.MaxUrls);
+        Assert.Equal(3, summary.Progress.InternalFound);
+        Assert.Equal(3, summary.Progress.InternalFetched);
+        Assert.Equal([$"{(int)DiscoverySource.SiteVersion} | {(int)FetchOutcome.Redirect}"],
+            TestCrawls.Rows(path, $"SELECT u.source, r.outcome FROM urls u JOIN responses r ON r.url_id = u.id WHERE u.url = '{WWW}/'"));
+        Assert.Single(_requests, request => request == "www.example.com/");
+        ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
+    }
+
+    /// <summary>
+    /// A crawl from the www host names the bare domain as the start URL has the site's host, as one site: a firewall
+    /// blocking a page there is said to block www.example.com, and read back it counts that page's blocked response.
+    /// </summary>
+    [Fact]
+    public async Task AnAlertNamesTheSitesHostAsTheStartUrlHasIt()
+    {
+        var path = _files.NewPath();
+        await using var site = await StartAsync(context => (context.Request.Host.Host, context.Request.Path.Value) switch
+        {
+            (_, "/robots.txt") => Text(context, "User-agent: *\nAllow: /"),
+            ("www.example.com", "/") => Html(context, $"<a href=\"{BARE}/blocked\">Blocked</a>"),
+            ("example.com", "/blocked") => Challenge(context),
+            _ => Redirect(context, 301, $"{WWW}/")
+        });
+
+        var summary = await TestCrawls.RunAsync(Options(site) with { StartUrl = $"{WWW}/" }, path);
+
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        var blocked = Assert.Single(CrawlNoticeReader.Read(path), notice => notice.Code == "blocked");
+        Assert.Equal(("www.example.com", 1L), (blocked.Data!.Host, blocked.Data.Count));
+        Assert.StartsWith("www.example.com is blocking the crawler", blocked.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The origins whose robots.txt the analysis leaves out are those only probes went to: not one the site also links
     /// to, and not one the crawl has no URLs on at all.
     /// </summary>
@@ -560,7 +614,11 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
         var path = _files.NewPath();
         await using var site = await StartAsync(SiteWith(www, home));
         var options = Options(site);
-        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(configure?.Invoke(options) ?? options, path)).Status);
+        var summary = await TestCrawls.RunAsync(configure?.Invoke(options) ?? options, path);
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+
+        // Probes adopted as the site's own URLs, and fetched again, leave the live counts where the file's are.
+        ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
         return (path, await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path));
     }
 
@@ -656,6 +714,14 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
     private static Task Status(HttpContext context, int status)
     {
         context.Response.StatusCode = status;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Cloudflare's challenge, as a firewall in front of the site answers a crawler.</summary>
+    private static Task Challenge(HttpContext context)
+    {
+        context.Response.StatusCode = 403;
+        context.Response.Headers["cf-mitigated"] = "challenge";
         return Task.CompletedTask;
     }
 }

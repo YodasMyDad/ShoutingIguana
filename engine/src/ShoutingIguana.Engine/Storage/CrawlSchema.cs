@@ -123,6 +123,29 @@ internal static class CrawlSchema
         """;
 
     /// <summary>
+    /// What the crawl told the person running it (the site blocking it, robots.txt unreadable, the site down, the sitemaps
+    /// read), every run's, in the order raised. A crawl-time table the writer creates whenever it opens the file, so a file
+    /// from an earlier engine gets it when it is continued; readers find none in a file that never was. The level is text,
+    /// so the file explains itself; data is JSON of the facts the notice is about (<c>CrawlNoticeData</c>), or null.
+    /// </summary>
+    public const string NOTICES = """
+        CREATE TABLE IF NOT EXISTS notices (
+            id INTEGER PRIMARY KEY,
+            at INTEGER NOT NULL,
+            level TEXT NOT NULL,
+            code TEXT NOT NULL,
+            message TEXT NOT NULL,
+            data TEXT
+        );
+        """;
+
+    /// <summary>
+    /// The columns of <see cref="NOTICES"/>, which the writer stores into and readers read by name. Another program can
+    /// have made the table its own way: readers then find no notices, and the writer refuses to continue the crawl.
+    /// </summary>
+    public static readonly string[] NOTICE_COLUMNS = ["id", "at", "level", "code", "message", "data"];
+
+    /// <summary>
     /// Analysis results, created on first analysis and replaced as a whole by every later one. Severity and
     /// category are stored as text so the file explains itself in any SQLite browser. A file analysed by an earlier
     /// engine gets what it lacks on its next analysis: new tables here, new columns from <see cref="ANALYSIS_COLUMNS"/>.

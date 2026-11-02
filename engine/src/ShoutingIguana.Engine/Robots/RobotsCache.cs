@@ -41,6 +41,10 @@ internal sealed class RobotsCache(
     private readonly ConcurrentDictionary<string, RobotsCacheEntry> _origins = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, bool> _reported = new(StringComparer.Ordinal);
     private readonly string _startOrigin = scope.StartOrigin.GetLeftPart(UriPartial.Authority);
+    private int _coolDownWaiters;
+
+    /// <summary>Something (the sitemap discovery) is waiting out a cool-down in <see cref="GetAfterCoolDownAsync"/> now.</summary>
+    public bool IsCoolDownWaitedOut => Volatile.Read(ref _coolDownWaiters) > 0;
 
     public Task<RobotsTxt> GetAsync(Uri uri)
     {
@@ -72,7 +76,16 @@ internal sealed class RobotsCache(
         var wait = retryAt - timeProvider.GetUtcNow();
         if (wait > TimeSpan.Zero)
         {
-            await Task.Delay(wait, timeProvider, cancellationToken).ConfigureAwait(false);
+            // Counted while it lasts, so the crawl's progress says what it is waiting for.
+            Interlocked.Increment(ref _coolDownWaiters);
+            try
+            {
+                await Task.Delay(wait, timeProvider, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _coolDownWaiters);
+            }
         }
 
         await pause.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -156,7 +169,10 @@ internal sealed class RobotsCache(
             observer.OnNotice(new CrawlNotice(
                 CrawlNoticeLevel.Warning,
                 "robots-unreachable",
-                $"robots.txt for {origin} could not be read ({reason}). Until it can, the site is treated as fully disallowed, as RFC 9309 requires; the crawler asks again every {RETRY_AFTER.TotalMinutes:0} minutes. Re-run with robots.txt ignored to crawl it anyway."));
+                $"robots.txt for {origin} could not be read ({reason}). Until it can, the site is treated as fully disallowed, as RFC 9309 requires; the crawler asks again every {RETRY_AFTER.TotalMinutes:0} minutes. Re-run with robots.txt ignored to crawl it anyway.")
+            {
+                Data = new CrawlNoticeData(Origin: origin, Reason: reason, Duration: RETRY_AFTER)
+            });
         }
 
         return RobotsTxt.Unreachable(reason);

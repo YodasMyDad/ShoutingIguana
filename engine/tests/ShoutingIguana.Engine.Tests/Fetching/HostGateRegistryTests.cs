@@ -26,6 +26,18 @@ public sealed class HostGateRegistryTests
         Assert.Same(registry.For(new Uri("https://example.com/")), registry.For(new Uri("https://www.example.com/")));
     }
 
+    /// <summary>The gate shared by a site's bare domain and its www host is named as the start URL has it, whichever met it first.</summary>
+    [Fact]
+    public void TheSitesGatesAreNamedAsTheStartUrlHasItsHost()
+    {
+        var registry = Registry("https://www.example.com/", new FakeTimeProvider());
+        registry.For(new Uri("http://example.com/old-link")).AddRobotsTxtWaiter(1);
+
+        var (host, state) = Assert.Single(registry.ReadSiteStates());
+        Assert.Equal("www.example.com", host);
+        Assert.Equal(1, state.WaitingForRobotsTxt);
+    }
+
     [Fact]
     public void AnotherPortOnTheSameHostIsAnotherSite()
     {

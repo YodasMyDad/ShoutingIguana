@@ -114,7 +114,10 @@ internal sealed class SitemapDiscoverer(
         observer.OnNotice(new CrawlNotice(
             CrawlNoticeLevel.Info,
             "sitemaps",
-            urlCount > 0 ? $"Read {sitemapCount} sitemap(s) listing {urlCount:N0} URLs." : "No sitemap URLs found."));
+            urlCount > 0 ? $"Read {sitemapCount} sitemap(s) listing {urlCount:N0} URLs." : "No sitemap URLs found.")
+        {
+            Data = new CrawlNoticeData(Count: sitemapCount, UrlCount: urlCount)
+        });
     }
 
     /// <summary>
@@ -128,7 +131,10 @@ internal sealed class SitemapDiscoverer(
         observer.OnNotice(new CrawlNotice(
             CrawlNoticeLevel.Warning,
             "sitemaps-not-read",
-            $"Not every sitemap was read: {reason}, so {url} was left out, and any more like it. Checks against the sitemaps only see the ones read."));
+            $"Not every sitemap was read: {reason}, so {url} was left out, and any more like it. Checks against the sitemaps only see the ones read.")
+        {
+            Data = new CrawlNoticeData(Url: url, Reason: reason)
+        });
     }
 
     private async Task<(List<string> Children, int UrlCount)> ReadSitemapAsync(Uri uri, int sitemapId, bool isProbe, CancellationToken cancellationToken)

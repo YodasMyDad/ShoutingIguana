@@ -362,8 +362,10 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
         Volatile.Write(ref goesDownAfterTheHomePage, false);
         Volatile.Write(ref isUp, true);
         await using var resumed = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path, Resume: true));
-        Assert.Equal(CrawlStatus.Completed, (await resumed.Completion.WaitAsync(CRAWL_TIMEOUT)).Status);
+        var resumedSummary = await resumed.Completion.WaitAsync(CRAWL_TIMEOUT);
+        Assert.Equal(CrawlStatus.Completed, resumedSummary.Status);
         Assert.Equal(60L, Scalar(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url LIKE '%/p%' AND r.status_code = 200"));
+        ProgressAgreement.AssertMatchesTheFile(resumedSummary.Progress, path);
     }
 
     /// <summary>
@@ -570,7 +572,8 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
 
     /// <summary>
     /// The site links to a dead www twin. The twin's URLs that were asked for before it was found dead keep their real
-    /// error, as another site's would, even after their one more try at the end meets the written-off twin.
+    /// error, as another site's would, even after their one more try at the end meets the written-off twin. Continued, the
+    /// crawl's counts come back as they were: the URLs never asked are not checked, not network errors.
     /// </summary>
     [Fact]
     public async Task UrlsOnADeadWwwTwinThatWereAskedForKeepTheirRealError()
@@ -596,6 +599,13 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
         Assert.True(twinErrors.Count(row => !row.Contains(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal)) == HostGate.UNREACHABLE_AFTER_URLS,
             string.Join(Environment.NewLine, twinErrors));
         Assert.Equal(7L, Scalar(path, $"SELECT COUNT(*) FROM responses WHERE error LIKE '{RetryingFetcher.NOT_CHECKED_ERROR}%'"));
+
+        await using var resumed = new CrawlEngine(NullLoggerFactory.Instance, time).Start(
+            new CrawlRequest(Options() with { Concurrency = 1, RespectRobotsTxt = false }, path, Resume: true));
+        var resumedSummary = await FakeClock.PumpAsync(time, resumed.Completion);
+        Assert.Equal(CrawlStatus.Completed, resumedSummary.Status);
+        Assert.Equal(7, resumedSummary.Progress.NoResponse.NotChecked);
+        ProgressAgreement.AssertMatchesTheFile(resumedSummary.Progress, path);
     }
 
     /// <summary>
@@ -691,13 +701,19 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
     {
         var options = Options(maxRetries) with { RespectRobotsTxt = respectRobotsTxt };
         await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path), observer);
-        return await job.Completion.WaitAsync(CRAWL_TIMEOUT);
+        var summary = await job.Completion.WaitAsync(CRAWL_TIMEOUT);
+
+        // Timeouts, network errors, URLs not checked and ones robots.txt refused are each counted where the file has them.
+        ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
+        return summary;
     }
 
     private static async Task<CrawlSummary> CrawlOnFakeClockAsync(CrawlOptions options, string path, ICrawlObserver observer, FakeTimeProvider time, TimeSpan? step = null)
     {
         await using var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(new CrawlRequest(options, path), observer);
-        return await FakeClock.PumpAsync(time, job.Completion, step);
+        var summary = await FakeClock.PumpAsync(time, job.Completion, step);
+        ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
+        return summary;
     }
 
     private string NewDatabasePath()

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Fetching;
@@ -13,6 +14,9 @@ namespace ShoutingIguana.Engine.Fetching;
 internal sealed class HostGateRegistry(CrawlScope scope, Func<bool, HostGate> createGate)
 {
     private readonly ConcurrentDictionary<string, HostGate> _gates = new(StringComparer.Ordinal);
+
+    // The site's own gates again, by site host, so its progress reads a handful of them rather than every site's.
+    private readonly ConcurrentDictionary<string, HostGate> _siteGates = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, OriginReachability> _origins = new(StringComparer.Ordinal);
 
     // The site's origins that are down, by name, for the outage notices.
@@ -23,9 +27,27 @@ internal sealed class HostGateRegistry(CrawlScope scope, Func<bool, HostGate> cr
     {
         var isInternal = scope.IsInternal(uri);
         var host = UrlNormalizer.GetHost(uri);
-        var key = isInternal ? $"site {CrawlScope.SiteHost(host)}" : $"{host}:{uri.Port}";
-        return _gates.GetOrAdd(key, static (_, state) => state.CreateGate(state.IsInternal), (CreateGate: createGate, IsInternal: isInternal));
+        if (!isInternal)
+        {
+            return _gates.GetOrAdd($"{host}:{uri.Port}", static (_, create) => create(false), createGate);
+        }
+
+        var siteHost = CrawlScope.SiteHost(host);
+        if (_siteGates.TryGetValue(siteHost, out var known))
+        {
+            return known;
+        }
+
+        var gate = _gates.GetOrAdd($"site {siteHost}", static (_, create) => create(true), createGate);
+        return _siteGates.GetOrAdd(siteHost, gate);
     }
+
+    /// <summary>
+    /// What holds up the requests to each of the site's hosts now (example.com and www.example.com are one), each named as
+    /// <see cref="CrawlScope.HostName"/> names it.
+    /// </summary>
+    public IEnumerable<(string Host, HostGateState State)> ReadSiteStates() =>
+        _siteGates.Select(site => (scope.HostName(site.Key), site.Value.ReadState()));
 
     /// <summary>Whether the URL's exact origin (scheme, host and port) answers.</summary>
     public OriginReachability OriginOf(Uri uri) =>

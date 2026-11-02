@@ -42,6 +42,7 @@ internal sealed class CrawlManager(
     private readonly Lock _sync = new();
     private readonly Dictionary<string, LiveCrawl> _crawls = new(StringComparer.Ordinal);
     private readonly CrawlEngine _engine = new(loggerFactory);
+    private readonly HistoryCache _histories = new();
     private readonly ILogger<CrawlManager> _logger = loggerFactory.CreateLogger<CrawlManager>();
     private bool _stopping;
 
@@ -50,6 +51,9 @@ internal sealed class CrawlManager(
 
     /// <summary>Tests only: starts a crawl in place of the engine.</summary>
     internal Func<CrawlRequest, ICrawlObserver, CrawlJob>? StartJob { get; set; }
+
+    /// <summary>Tests only: called with the crawl's id once <see cref="Alerts"/> has read the file, before it adds the unstored ones.</summary>
+    internal Action<string>? AlertsFileRead { get; set; }
 
     /// <summary>
     /// The thresholds every analysis here runs with, and so what an analysis must have used to be up to date. The
@@ -141,6 +145,7 @@ internal sealed class CrawlManager(
 
         var id = library.IdOf(fullPath);
         summaries.Invalidate(id);
+        _histories.Invalidate(id);
         var cached = summaries.Get(id, fullPath);
         if (cached.Summary is not { } summary)
         {
@@ -204,6 +209,7 @@ internal sealed class CrawlManager(
             {
                 // The file has gone whether or not the library could be saved.
                 summaries.Invalidate(id);
+                _histories.Invalidate(id);
                 alerts.Forget(id);
                 events.PublishLibrary();
             }
@@ -234,7 +240,7 @@ internal sealed class CrawlManager(
         {
             ThrowIfStopping();
             var path = FreePath(CrawlDatabase.DefaultDatabasePath(crawlOptions.StartUrl));
-            crawl = new LiveCrawl(library.IdOf(path), path, crawlOptions.StartUrl) { AnalyzeWhenDone = analyzeWhenDone };
+            crawl = new LiveCrawl(library.IdOf(path), path, crawlOptions.StartUrl) { AnalyzeWhenDone = analyzeWhenDone, RunStartedAt = DateTime.UtcNow };
             _crawls[crawl.Id] = crawl;
             library.Created(crawl.Id, path);
             crawl.Lifetime = Task.Run(() => RunAsync(crawl, new CrawlRequest(crawlOptions, path)));
@@ -295,7 +301,7 @@ internal sealed class CrawlManager(
         {
             ThrowIfStopping();
             ThrowIfLive(id);
-            crawl = new LiveCrawl(id, path, plan.Options.StartUrl) { AnalyzeWhenDone = true };
+            crawl = new LiveCrawl(id, path, plan.Options.StartUrl) { AnalyzeWhenDone = true, RunStartedAt = DateTime.UtcNow, Resumed = true };
             _crawls[id] = crawl;
             crawl.Lifetime = Task.Run(() => RunAsync(crawl, new CrawlRequest(plan.Options, path, Resume: true)));
         }
@@ -408,10 +414,83 @@ internal sealed class CrawlManager(
         analysis?.Cancel();
     }
 
+    /// <summary>
+    /// The crawl's alerts as its file keeps them, every run's, whoever ran it, oldest first. A crawl live here adds the ones
+    /// the engine hasn't stored yet, which it does within a second or so. Those are taken before the file is read: a crawl
+    /// that closes in between stores every alert it then forgets, so each is in one or the other, and one raised after
+    /// they were taken is in neither, with its live event still on its way.
+    /// </summary>
     public IReadOnlyList<AlertDto> Alerts(string id)
     {
-        PathOf(id);
-        return alerts.For(id);
+        var path = PathOf(id);
+        IReadOnlyList<AlertDto>? unstored = null;
+        lock (_sync)
+        {
+            if (_crawls.ContainsKey(id))
+            {
+                unstored = alerts.For(id);
+            }
+        }
+
+        List<AlertDto> stored = File.Exists(path) || unstored is null
+            ? [.. EngineErrors.Read(() => CrawlNoticeReader.Read(path, AlertLog.DEFAULT_LIMIT)).Select(notice => AlertDto.From(id, notice))]
+            : [];
+        AlertsFileRead?.Invoke(id);
+        if (unstored is null)
+        {
+            return stored;
+        }
+
+        // An alert is its id and the time it was raised: ids continue from the file's highest, which a crash can leave
+        // short of the last ones a UI heard.
+        HashSet<(long Id, DateTime At)> known = [.. stored.Select(alert => (alert.Id, alert.At))];
+        stored.AddRange(unstored.Where(alert => !known.Contains((alert.Id, alert.At))));
+        return [.. stored.OrderBy(alert => alert.Id).TakeLast(AlertLog.DEFAULT_LIMIT)];
+    }
+
+    /// <summary>
+    /// The crawl's progress since it started, for its chart. A crawl live here has this run's points as the sidecar took
+    /// them, after the earlier runs counted back from the file, which are read once; any other crawl has the file's alone,
+    /// kept until the file changes.
+    /// </summary>
+    public HistoryDto History(string id)
+    {
+        var path = PathOf(id);
+        LiveCrawl? crawl;
+        lock (_sync)
+        {
+            crawl = _crawls.GetValueOrDefault(id);
+        }
+
+        if (crawl?.RunStartedAt is not { } runStartedAt)
+        {
+            var history = _histories.Get(id, path, () => EngineErrors.Read(() => CrawlHistoryReader.Read(path)));
+            return new HistoryDto(id, history.StartedAt.UtcDateTime, null, [.. history.Points.Select(HistoryPointDto.FromFile)]);
+        }
+
+        var live = crawl.History.Points();
+        if (!crawl.Resumed)
+        {
+            return new HistoryDto(id, runStartedAt, runStartedAt, live);
+        }
+
+        // Read outside the lock, as a big crawl takes a moment, and kept. Two requests at once may both read it: either will do.
+        CrawlHistory? earlier;
+        lock (_sync)
+        {
+            earlier = crawl.EarlierRuns;
+        }
+
+        if (earlier is null)
+        {
+            earlier = EngineErrors.Read(() => CrawlHistoryReader.Read(path, runStartedAt));
+            lock (_sync)
+            {
+                crawl.EarlierRuns = earlier;
+            }
+        }
+
+        return new HistoryDto(id, earlier.StartedAt.UtcDateTime, runStartedAt, [.. earlier.Points.Select(HistoryPointDto.FromFile), .. live]);
     }
 
     /// <summary>
@@ -480,14 +559,32 @@ internal sealed class CrawlManager(
 
     internal void OnNotice(LiveCrawl crawl, CrawlNotice notice)
     {
-        var alert = new AlertDto(crawl.Id, notice.Level, notice.Code, notice.Message, DateTime.UtcNow);
+        // With the id and time the crawl file keeps it under, so the UI knows it again when it reads the file's.
+        var alert = AlertDto.From(crawl.Id, notice);
         alerts.Add(alert);
         events.PublishAlert(alert);
+    }
+
+    /// <summary>
+    /// An analysis's progress, as it reports it. Dropped once the analysis is no longer live here: a stream that connects
+    /// later must not hear of an analysis that has ended.
+    /// </summary>
+    internal void OnAnalysisProgress(LiveCrawl crawl, AnalysisProgress progress)
+    {
+        lock (_sync)
+        {
+            if (_crawls.TryGetValue(crawl.Id, out var live) && ReferenceEquals(live, crawl) && crawl.State is LiveCrawlState.Analyzing)
+            {
+                events.PublishAnalysis(new AnalysisEventDto(crawl.Id, progress.Phase, progress.Done, progress.Total));
+            }
+        }
     }
 
     /// <summary>Opens the crawl's file (off the request thread: continuing reads every URL into memory), crawls, then analyses.</summary>
     private async Task RunAsync(LiveCrawl crawl, CrawlRequest request)
     {
+        // The file has every alert of the runs before this one.
+        alerts.Forget(crawl.Id);
         CrawlJob job;
         try
         {
@@ -549,6 +646,10 @@ internal sealed class CrawlManager(
         {
             await job.DisposeAsync().ConfigureAwait(false);
             summaries.Invalidate(crawl.Id);
+            _histories.Invalidate(crawl.Id);
+
+            // The file has every alert now, the last ones stored as it closed.
+            alerts.Forget(crawl.Id);
         }
 
         bool analyse;
@@ -584,7 +685,8 @@ internal sealed class CrawlManager(
         string? errorType = null;
         try
         {
-            var summary = await new CrawlAnalyzer(loggerFactory).AnalyzeAsync(crawl.Path, AnalysisSettings, cancellation.Token).ConfigureAwait(false);
+            var summary = await new CrawlAnalyzer(loggerFactory)
+                .AnalyzeAsync(crawl.Path, AnalysisSettings, new SidecarAnalysisProgress(this, crawl), cancellation.Token).ConfigureAwait(false);
             _logger.LogInformation("Analysed {Pages} pages of {Path} in {Duration}", summary.PagesAnalyzed, crawl.Path, summary.Duration);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -621,6 +723,7 @@ internal sealed class CrawlManager(
     private void End(LiveCrawl crawl, string? error, string? errorType = null)
     {
         summaries.Invalidate(crawl.Id);
+        _histories.Invalidate(crawl.Id);
         var status = FileStatus(crawl.Id, crawl.Path);
         lock (_sync)
         {
@@ -690,7 +793,9 @@ internal sealed class CrawlManager(
         var status = crawl.State is LiveCrawlState.Stopping && progress.Status is CrawlStatus.Running or CrawlStatus.Paused
             ? CrawlListStatus.Stopping
             : StatusOf(progress.Status);
-        var dto = ProgressEventDto.From(crawl.Id, status, progress);
+        var at = DateTime.UtcNow;
+        crawl.History.Add(at, progress);
+        var dto = ProgressEventDto.From(crawl.Id, status, progress, at);
         Publishing?.Invoke(dto);
         events.PublishProgress(dto);
     }

@@ -129,6 +129,34 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
 5. Stop at any point with Ctrl+C, then continue with `--resume`. Progress counts what was actually read:
    `BytesDownloaded` is the bodies fetched, not the sizes that status checks were told.
 
+Progress (`CrawlProgress`, twice a second) costs the same at a million URLs as at ten. The writer keeps running totals
+as it stores each response, and publishes them as one record after each batch it stores, so one report's numbers are
+all of one moment and agree with each other, and a crawl's last counts are what its file holds. The rest is read from
+the site's host gates:
+
+- every URL fetched by status class (2xx to 5xx, another status, no response, blocked) and by status code, a block
+  page's status being the firewall's rather than the site's, and why the URLs without a status have none;
+- the site's own URLs (internal, not the probes of its other versions) found and fetched, which a URL limit counts and
+  they never pass, and the limit itself;
+- the phase: starting, reading robots.txt (nothing else can be fetched), crawling, reading sitemaps (nothing else is
+  left), retrying (the last tries of URLs that got no response, until they're over), finishing;
+- what holds it up now: the site's URLs waiting for its robots.txt and other sites' (link checks) waiting for theirs, a
+  crawl-delay, a backoff or Retry-After, an origin that's down, robots.txt's cool-down. At most five for each reason,
+  the longest first, with a count of the rest; none once the crawl is finishing.
+
+Progress and notices name one of the site's hosts the same way: the start URL's host for it and its www twin, which are
+one site with one budget, and a subdomain without its `www.` (`CrawlScope.HostName`). Origins (scheme, host and port)
+are named as they are.
+
+Every notice (the site blocking the crawler, robots.txt unreadable, the site down, the sitemaps read) is kept in the
+crawl file, numbered across runs, with the facts it's about (which host, how many responses were blocked), so any
+program that opens the crawl can show it (`CrawlNoticeReader`). `blocked` is said once per host, and
+`robots-unreachable` once per origin, in each run. Read back, a `blocked` notice counts the host's blocked responses in
+the whole crawl, every run's. Ids carry on from the file's highest, so the last ones heard before a crash can be given
+again: a notice is its id and its time. `CrawlHistoryReader` counts a crawl's fetching over time back from the stored
+fetch times, for a chart of a crawl continued later, and the site's own URLs found, each from when the page that first
+linked it was fetched; the other found and queued counts can't be told, as when each URL was found isn't stored.
+
 Memory stays flat because the only thing in memory that grows with the crawl is a 128-bit key per URL (about
 40 bytes). The frontier, results and links all live on disk.
 
@@ -205,6 +233,9 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   description lengths count full-width (CJK) characters and emoji as two, as they take about twice the room.
 - **Atomic.** The issues are replaced in one transaction, so a failed or cancelled analysis keeps the
   previous results.
+- **Progress.** Given an `IProgress<AnalysisProgress>`, an analysis says how far it has got, in order on its own
+  thread: reading the URLs, the page rules (pages), the site rules, the URL summary (rows), then writing. Each phase is
+  reported as it starts and ends, and at most every 250 ms between.
 - **URL summary.** Each analysis rebuilds `url_summary`, the URL grids' table: one row per URL with what the analysis
   judged and the crawl's numbers the grids sort and filter on (see [Crawl file](#crawl-file-sicrawl)). It comes from
   the same URL table the checks use, so the grid and the checks never disagree, and it's written in one streamed pass
@@ -253,6 +284,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `response_html` | Compressed HTML, only with `--store-html` |
 | `links` | Every link: source, target, kind (link/image/script/canonical/hreflang/redirect...), rel flags, page region, anchor text |
 | `robots`, `sitemaps`, `sitemap_urls` | robots.txt per origin, sitemaps read (under the URL they were found at, which may redirect elsewhere; `is_probe` marks a guess at `/sitemap.xml` when nothing declared one; the first one left unread, past 1,000 sitemaps or nested more than 3 deep, has an error starting "Not read"), and which URLs each listed |
+| `notices` | What the crawl told the person running it, every run's, in order: an id numbered across runs, when, the level as text, a stable code, the message, and JSON of the facts it's about (host, origin, URL, reason, counts, a duration) |
 | `issues` | One row per flagged URL and issue: a short detail, and the other URL involved (broken target, duplicate, canonical) |
 | `issue_types` | Every check that ran: its title, category, severity, description, fix, and how many URLs it flagged |
 | `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, whether it was partial, what it ran against (the crawl's `updated_at`, the analysis version, the checks' fingerprint), and what it couldn't do and why |
@@ -264,7 +296,12 @@ URLs that only appear in sitemaps keep depth `1000000` (`CrawlDepth.UNLINKED`) i
 show up. The URL summary has no depth for them.
 
 The analysis tables are created when a crawl is first analysed, so a crawl file from an earlier engine opens as it
-always did and gets what it lacks on its next analysis. The crawl's own schema version doesn't change.
+always did and gets what it lacks on its next analysis. `notices` is created whenever the crawl writer opens a file,
+so an earlier engine's crawl gets it when it's continued, and reads as having none until then. The crawl's own schema
+version doesn't change. Files are shared, so a notice another program wrote oddly is read as well as it can be (one
+without a code or a message is left out, a missing level reads as a warning and a missing time as the crawl's start),
+and a `notices` table of another shape reads as none; the writer won't continue a crawl whose table it couldn't store
+a notice in, and says so.
 
 ### URL summary
 

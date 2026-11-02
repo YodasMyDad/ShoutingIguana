@@ -11,6 +11,7 @@ internal sealed class CrawlScope
 {
     private const string WWW = "www.";
 
+    private readonly string _startHost;
     private readonly string _rootHost;
     private readonly string _wwwHost;
     private readonly string? _subdomainSuffix;
@@ -20,7 +21,8 @@ internal sealed class CrawlScope
 
     public CrawlScope(Uri startUri, bool includeSubdomains, bool stayInStartFolder)
     {
-        _rootHost = SiteHost(UrlNormalizer.GetHost(startUri));
+        _startHost = UrlNormalizer.GetHost(startUri);
+        _rootHost = SiteHost(_startHost);
         _wwwHost = WWW + _rootHost;
         _subdomainSuffix = includeSubdomains ? "." + _rootHost : null;
         _isDefaultPort = startUri.IsDefaultPort;
@@ -51,6 +53,17 @@ internal sealed class CrawlScope
 
     /// <summary>The host without a leading www., which names the site: www.example.com and example.com are one.</summary>
     public static string SiteHost(string host) => host.StartsWith(WWW, StringComparison.Ordinal) ? host[WWW.Length..] : host;
+
+    /// <summary>
+    /// The name one of the site's hosts goes by in progress and notices, the same wherever it appears: the start URL's
+    /// own host for it and its www twin, which are one site with one budget (a crawl from www.example.com says
+    /// www.example.com for example.com too), and any other host of the site, a subdomain, without a leading www.
+    /// </summary>
+    public string HostName(string host)
+    {
+        var siteHost = SiteHost(host);
+        return siteHost == _rootHost ? _startHost : siteHost;
+    }
 
     /// <summary>The folder pages are parsed and followed in: "/" for the whole site.</summary>
     public string StartFolder => _startFolder;

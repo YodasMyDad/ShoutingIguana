@@ -54,5 +54,8 @@ internal static class CrawlEndpoints
 
         api.MapGet("/api/crawls/{id}/alerts", (string id, CrawlManager crawls) =>
             TypedResults.Json(crawls.Alerts(id), SidecarJsonContext.Default.IReadOnlyListAlertDto));
+
+        api.MapGet("/api/crawls/{id}/history", (string id, CrawlManager crawls) =>
+            TypedResults.Json(crawls.History(id), SidecarJsonContext.Default.HistoryDto));
     }
 }
