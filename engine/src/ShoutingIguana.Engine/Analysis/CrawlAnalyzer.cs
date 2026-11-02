@@ -185,9 +185,10 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 
             // An instant meta refresh makes the page a redirect: nobody sees it, so only the refresh itself is reported.
             IPageRule[] redirectRules = [indexability];
+            var duplicates = new DuplicateRules(settings);
             ISiteRule[] siteRules =
             [
-                new InlinkRules(urls, linksComplete), new DuplicateRules(settings), new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks), hreflang,
+                new InlinkRules(urls, linksComplete), duplicates, new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks), hreflang,
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls),
                 new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList())),
                 new RobotsTxtRules(urls, reader.ReadRobots(), scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions
@@ -231,6 +232,19 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             }
 
             progress.Finish(pages);
+
+            // Pages an earlier version crawled have only the first lane of their content fingerprint, and any page could be
+            // the near copy of one of them, so with any the check can't be made.
+            if (duplicates.PagesWithoutFingerprint is > 0 and var unfingerprinted)
+            {
+                var why = duplicates.PagesWithFingerprint == 0
+                    ? "this crawl was made by an earlier version"
+                    : $"{RuleText.Count(unfingerprinted, "page", "pages")} in this crawl {(unfingerprinted == 1 ? "was" : "were")} fetched by an earlier version";
+                Skip(notes, skipped, $"Near-duplicate content wasn't checked: {why}, which didn't record what the check needs. Crawl again to check it.",
+                    SkippedCheckReasons.EARLIER_VERSION, $"{char.ToUpperInvariant(why[0])}{why[1..]}, which didn't record what this check needs. Crawl again to check it.",
+                    IssueCatalog.NEAR_DUPLICATE_CONTENT);
+            }
+
             progress.Start(AnalysisPhase.SiteRules, siteRules.Length);
             var rulesDone = 0;
             foreach (var rule in siteRules)

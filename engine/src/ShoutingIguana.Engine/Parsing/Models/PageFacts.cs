@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ShoutingIguana.Engine.Parsing.Models;
 
 /// <summary>
@@ -25,4 +27,12 @@ public sealed record PageFacts
     public int WordCount { get; init; }
     public ulong ContentHash { get; init; }
     public ulong SimHash { get; init; }
+
+    /// <summary>
+    /// Lanes 1 to 3 of the content fingerprint, <see cref="SimHash"/> being lane 0. They are stored in columns of their own
+    /// (<c>responses.simhash_1</c> to <c>_3</c>), not with the rest of the facts, and the analysis reads them back from
+    /// there. Null when the crawl didn't record them: it was made, or the page fetched, by an earlier version.
+    /// </summary>
+    [JsonIgnore]
+    public SimHashLanes? SimHashLanes { get; init; }
 }

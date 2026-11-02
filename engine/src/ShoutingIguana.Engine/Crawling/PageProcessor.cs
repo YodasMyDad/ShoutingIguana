@@ -196,6 +196,7 @@ internal sealed class PageProcessor(
             WordCount = isParsedHtml ? facts!.WordCount : null,
             ContentHash = isParsedHtml ? facts!.ContentHash : null,
             SimHash = isParsedHtml ? facts!.SimHash : null,
+            SimHashLanes = isParsedHtml ? facts!.SimHashLanes : null,
             Language = facts?.Language
         };
 

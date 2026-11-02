@@ -146,6 +146,15 @@ internal static class CrawlSchema
     public static readonly string[] NOTICE_COLUMNS = ["id", "at", "level", "code", "message", "data"];
 
     /// <summary>
+    /// The <c>responses</c> columns added since the table was first created: lanes 1 to 3 of a page's 256-bit content
+    /// fingerprint (<c>simhash</c> is lane 0), stored bit for bit as signed integers. The writer adds what's missing
+    /// whenever it opens a file, so an earlier engine's crawl gets them when it is continued, and its pages so far keep
+    /// null; so do the pages an earlier engine fetches when it continues a crawl this one started, its inserts naming only
+    /// the columns it knows. The crawl's schema version doesn't change, so either engine can read and continue either file.
+    /// </summary>
+    public static readonly (string Name, string Type)[] RESPONSE_COLUMNS = [("simhash_1", "INTEGER"), ("simhash_2", "INTEGER"), ("simhash_3", "INTEGER")];
+
+    /// <summary>
     /// Analysis results, created on first analysis and replaced as a whole by every later one. Severity and
     /// category are stored as text so the file explains itself in any SQLite browser. A file analysed by an earlier
     /// engine gets what it lacks on its next analysis: new tables here, new columns from <see cref="ANALYSIS_COLUMNS"/>.

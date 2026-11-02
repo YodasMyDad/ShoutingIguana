@@ -53,7 +53,8 @@ public static class HtmlPageParser
             BaseHref = baseHref,
             WordCount = fingerprint.WordCount,
             ContentHash = fingerprint.ContentHash,
-            SimHash = fingerprint.SimHash
+            SimHash = fingerprint.SimHash,
+            SimHashLanes = fingerprint.Lanes
         };
 
         return new ParsedPage(facts, [.. walker.Links, .. signals.Links]);

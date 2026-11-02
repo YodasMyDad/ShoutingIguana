@@ -28,10 +28,12 @@ public sealed class ContentFingerprintTests
     [Fact]
     public void FingerprintsOfPlainTextDontChange()
     {
-        // Values from before word joining was added: stored crawls compare against them.
+        // Values from before word joining was added, lane 0 from before the fingerprint had four lanes: stored crawls compare
+        // against them, and a crawl continued by a later engine compares its new pages with the lanes it stored.
         var result = ContentFingerprint.Compute("Garden kettles, copper lanterns and 12 velvet pillows for every season.");
 
-        Assert.Equal(new ContentFingerprintResult(11, 18091267895285211189UL, 8841941512683386144UL), result);
+        Assert.Equal((11, 18091267895285211189UL, 8841941512683386144UL), (result.WordCount, result.ContentHash, result.SimHash));
+        Assert.Equal(new SimHashLanes(1917921518557425498UL, 4227384739695081441UL, 14753103772142005898UL), result.Lanes);
     }
 
     [Theory]

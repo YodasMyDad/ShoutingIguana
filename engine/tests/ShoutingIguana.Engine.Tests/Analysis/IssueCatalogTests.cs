@@ -91,7 +91,8 @@ public sealed class IssueCatalogTests
     {
         Assert.Empty(new AnalysisSettings().Validate());
         Assert.NotEmpty(new AnalysisSettings { TitleMinLength = 70, TitleMaxLength = 60 }.Validate());
-        Assert.NotEmpty(new AnalysisSettings { NearDuplicateMaxDistance = 9 }.Validate());
+        Assert.NotEmpty(new AnalysisSettings { NearDuplicateMaxBits = 33 }.Validate());
+        Assert.Empty(new AnalysisSettings { NearDuplicateMaxBits = 0 }.Validate());
         Assert.NotEmpty(new AnalysisSettings { LargeImageBytes = 0 }.Validate());
     }
 }
