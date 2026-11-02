@@ -15,11 +15,13 @@ public enum CrawlPhase
     ReadingSitemaps,
 
     /// <summary>
-    /// The site's URLs that got no response (or met an unreadable robots.txt) are tried once more, with whatever they lead
-    /// to, after robots.txt's cool-down where it couldn't be read. It lasts to the end of the crawl.
+    /// The site's URLs that got no response (or met an unreadable robots.txt) get their one more try, after robots.txt's
+    /// cool-down where it couldn't be read: from when nothing else is left until the last of those tries is over. What
+    /// they lead to is fetched meanwhile. Whatever is fetched after that (the URLs only sitemaps list, say) is crawling
+    /// again, and URLs that get no response then are tried once more in another round of this.
     /// </summary>
     Retrying,
 
-    /// <summary>Nothing more is fetched: the last requests settle and the file is closed.</summary>
+    /// <summary>Nothing more is fetched: the last requests settle and the file is closed. Nothing is waited for.</summary>
     Finishing
 }

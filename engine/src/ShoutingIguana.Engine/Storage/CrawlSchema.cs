@@ -140,6 +140,12 @@ internal static class CrawlSchema
         """;
 
     /// <summary>
+    /// The columns of <see cref="NOTICES"/>, which the writer stores into and readers read by name. Another program can
+    /// have made the table its own way: readers then find no notices, and the writer refuses to continue the crawl.
+    /// </summary>
+    public static readonly string[] NOTICE_COLUMNS = ["id", "at", "level", "code", "message", "data"];
+
+    /// <summary>
     /// Analysis results, created on first analysis and replaced as a whole by every later one. Severity and
     /// category are stored as text so the file explains itself in any SQLite browser. A file analysed by an earlier
     /// engine gets what it lacks on its next analysis: new tables here, new columns from <see cref="ANALYSIS_COLUMNS"/>.

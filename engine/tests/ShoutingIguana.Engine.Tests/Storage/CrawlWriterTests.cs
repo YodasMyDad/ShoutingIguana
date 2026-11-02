@@ -231,12 +231,12 @@ public sealed class CrawlWriterTests : IAsyncLifetime
             }
         }
 
-        Assert.Equal(2_000, counters.Bytes);
+        Assert.Equal(2_000, counters.Current.Bytes);
 
         var resumed = new CrawlCounters();
         await using (CrawlWriter.Open(path, Options(), resume: true, resumed, NullLogger.Instance))
         {
-            Assert.Equal(2_000, resumed.Bytes);
+            Assert.Equal(2_000, resumed.Current.Bytes);
         }
     }
 
@@ -323,7 +323,7 @@ public sealed class CrawlWriterTests : IAsyncLifetime
         ], TestCrawls.Rows(path, URL_ROWS));
 
         // The site's own now, found and, while its answer stood, fetched; then fetched again, so not fetched yet.
-        Assert.Equal((2, 1), (counters.InternalFound, counters.InternalFetched));
+        Assert.Equal((2, 1), (counters.Current.InternalFound, counters.Current.InternalFetched));
         ProgressAgreement.AssertMatchesTheFile(counters, path);
     }
 
@@ -361,6 +361,53 @@ public sealed class CrawlWriterTests : IAsyncLifetime
 
         Assert.Contains(Row("https://www.example.com/", FetchMode.Crawl, 1, UrlState.Queued, SkipReason.None, DiscoverySource.Link), TestCrawls.Rows(path, URL_ROWS));
         Assert.Equal(0, TestCrawls.Count(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url = 'https://www.example.com/'"));
+        ProgressAgreement.AssertMatchesTheFile(counters, path);
+    }
+
+    /// <summary>
+    /// The URL limit is reached before the site links to its www version, which a probe found doesn't answer. No slot is
+    /// left, as for any URL the site finds then: it stays a probe, with the answer its probe got, and is never fetched
+    /// again, so the site's own URLs found and fetched stay within the limit, whether the probe's answer came first or not.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AProbeTheSiteLinksToOnceTheLimitIsReachedStaysAProbe(bool probeAnsweredFirst)
+    {
+        var path = _files.NewPath();
+        var start = new Uri("https://example.com/");
+        var (options, link) = Site(start);
+        var counters = new CrawlCounters();
+
+        await using (var writer = CrawlWriter.Open(path, options with { MaxUrls = 1 }, resume: false, counters, NullLogger.Instance))
+        {
+            // The home page takes the one slot; the probe, which takes none, is claimed next.
+            await SeedAsync(writer, link, start, ["https://www.example.com/"]);
+            var home = Assert.Single((await writer.ClaimAsync(10, 10, CancellationToken.None)).Internal);
+            var probe = Assert.Single((await writer.ClaimAsync(10, 10, CancellationToken.None)).Internal);
+            Assert.Equal(DiscoverySource.SiteVersion, probe.Source);
+            if (probeAnsweredFirst)
+            {
+                await RecordAsync(writer, probe, FetchOutcome.NetworkError);
+            }
+
+            await RecordAsync(writer, home, FetchOutcome.Success,
+                link("https://www.example.com/", LinkKind.Hyperlink), link("https://example.com/p1", LinkKind.Hyperlink));
+            if (!probeAnsweredFirst)
+            {
+                await RecordAsync(writer, probe, FetchOutcome.NetworkError);
+            }
+
+            Assert.Empty((await writer.ClaimAsync(10, 10, CancellationToken.None)).Internal);
+        }
+
+        Assert.Equal(
+        [
+            Row("https://example.com/", FetchMode.Crawl, 0, UrlState.Done, SkipReason.None, DiscoverySource.Seed),
+            Row("https://example.com/p1", FetchMode.Crawl, 1, UrlState.Skipped, SkipReason.UrlLimit, DiscoverySource.Link),
+            Row("https://www.example.com/", FetchMode.Check, 0, UrlState.Done, SkipReason.None, DiscoverySource.SiteVersion)
+        ], TestCrawls.Rows(path, URL_ROWS));
+        Assert.Equal((1, 1), (counters.Current.InternalFound, counters.Current.InternalFetched));
         ProgressAgreement.AssertMatchesTheFile(counters, path);
     }
 

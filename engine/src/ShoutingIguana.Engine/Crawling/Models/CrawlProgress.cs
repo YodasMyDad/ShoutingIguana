@@ -20,6 +20,7 @@ public sealed record CrawlProgress(
     double PagesPerSecond)
 {
     private static readonly IReadOnlyDictionary<int, long> NO_STATUS_CODES = new Dictionary<int, long>();
+    private static readonly IReadOnlyDictionary<CrawlWaitReason, int> NO_MORE_WAITS = new Dictionary<CrawlWaitReason, int>();
 
     public CrawlPhase Phase { get; init; }
 
@@ -42,9 +43,18 @@ public sealed record CrawlProgress(
     /// </summary>
     public long InternalFound { get; init; }
 
-    /// <summary>The site's own URLs fetched: what a URL limit counts.</summary>
+    /// <summary>The site's own URLs fetched: what a URL limit counts. Never more than <see cref="InternalFound"/>, nor the limit.</summary>
     public long InternalFetched { get; init; }
 
-    /// <summary>What holds part of the crawl up now, if anything: robots.txt, a crawl-delay, a backoff, a site that's down.</summary>
+    /// <summary>The crawl's URL limit, or null when it has none: with <see cref="InternalFetched"/>'s rate, what an ETA needs.</summary>
+    public int? MaxUrls { get; init; }
+
+    /// <summary>
+    /// What holds part of the crawl up now, if anything: robots.txt, a crawl-delay, a backoff, a site that's down. At most
+    /// five for each reason, the longest first; nothing once the crawl is finishing.
+    /// </summary>
     public IReadOnlyList<CrawlWait> Waits { get; init; } = [];
+
+    /// <summary>For each reason with more waits than <see cref="Waits"/> lists, how many more there are: hosts, as a rule.</summary>
+    public IReadOnlyDictionary<CrawlWaitReason, int> MoreWaits { get; init; } = NO_MORE_WAITS;
 }

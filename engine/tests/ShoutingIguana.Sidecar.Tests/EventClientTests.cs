@@ -1,4 +1,5 @@
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Events;
 using ShoutingIguana.Sidecar.Events.Models;
@@ -81,18 +82,40 @@ public sealed class EventClientTests
     {
         var hub = new EventHub(new SidecarOptions { DataDirectory = "data", StateDirectory = "state" });
         var early = hub.Connect();
+        hub.PublishCrawl(new CrawlEventDto("a", CrawlListStatus.Analyzing), crawlEnded: false);
         hub.PublishAnalysis(new AnalysisEventDto("a", AnalysisPhase.Reading, 0, 100));
         hub.PublishAnalysis(new AnalysisEventDto("a", AnalysisPhase.Reading, 100, 100));
         hub.PublishAnalysis(new AnalysisEventDto("a", AnalysisPhase.PageRules, 3, 60));
-        Assert.Equal(["hello", "analysis", "analysis", "analysis"], early.TakeAll()!.Select(sent => sent.Name));
+        Assert.Equal(["hello", "crawl", "analysis", "analysis", "analysis"], early.TakeAll()!.Select(sent => sent.Name));
 
+        // A stream that connects now learns from its hello that the crawl is being analysed, so the analysis event makes sense.
         var during = hub.Connect().TakeAll()!;
         Assert.Equal(["hello", "analysis"], during.Select(sent => sent.Name));
+        Assert.Equal("""{"live":[],"analyzing":["a"]}""", during[0].Data);
         Assert.Equal("""{"crawlId":"a","phase":"pageRules","done":3,"total":60}""", during[1].Data);
 
         hub.PublishCrawl(new CrawlEventDto("a", CrawlListStatus.Completed), crawlEnded: true);
-        Assert.Equal(["hello"], hub.Connect().TakeAll()!.Select(sent => sent.Name));
+        var after = hub.Connect().TakeAll()!;
+        Assert.Equal(["hello"], after.Select(sent => sent.Name));
+        Assert.Equal("""{"live":[],"analyzing":[]}""", after[0].Data);
     }
+
+    /// <summary>A crawl analysed as soon as it ends is announced as analysing next: a stream that connects then hears so too.</summary>
+    [Fact]
+    public void ACrawlAnalysedAsItEndsIsInTheHelloAsBeingAnalysed()
+    {
+        var hub = new EventHub(new SidecarOptions { DataDirectory = "data", StateDirectory = "state" });
+        hub.PublishProgress(ProgressEvent("a"));
+        Assert.Equal("""{"live":["a"],"analyzing":[]}""", hub.Connect().TakeAll()![0].Data);
+
+        hub.PublishCrawl(new CrawlEventDto("a", CrawlListStatus.Completed), crawlEnded: true);
+        hub.PublishCrawl(new CrawlEventDto("a", CrawlListStatus.Analyzing), crawlEnded: false);
+
+        Assert.Equal("""{"live":[],"analyzing":["a"]}""", hub.Connect().TakeAll()![0].Data);
+    }
+
+    private static ProgressEventDto ProgressEvent(string crawlId) =>
+        ProgressEventDto.From(crawlId, CrawlListStatus.Running, new CrawlProgress(CrawlStatus.Running, TimeSpan.Zero, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0), DateTime.UtcNow);
 
     private static SidecarEvent Progress(string crawlId, int fetched) => new("progress", $"{crawlId} {fetched}", crawlId);
 }

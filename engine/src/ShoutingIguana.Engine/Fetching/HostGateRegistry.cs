@@ -42,8 +42,12 @@ internal sealed class HostGateRegistry(CrawlScope scope, Func<bool, HostGate> cr
         return _siteGates.GetOrAdd(siteHost, gate);
     }
 
-    /// <summary>What spaces out the requests to each of the site's hosts now (example.com and www.example.com are one).</summary>
-    public IEnumerable<(string Host, HostGateState State)> ReadSiteStates() => _siteGates.Select(site => (site.Key, site.Value.ReadState()));
+    /// <summary>
+    /// What holds up the requests to each of the site's hosts now (example.com and www.example.com are one), each named as
+    /// <see cref="CrawlScope.HostName"/> names it.
+    /// </summary>
+    public IEnumerable<(string Host, HostGateState State)> ReadSiteStates() =>
+        _siteGates.Select(site => (scope.HostName(site.Key), site.Value.ReadState()));
 
     /// <summary>Whether the URL's exact origin (scheme, host and port) answers.</summary>
     public OriginReachability OriginOf(Uri uri) =>

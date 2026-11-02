@@ -2,9 +2,13 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Sidecar.Crawls;
 using ShoutingIguana.Sidecar.Tests.Support;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
@@ -18,6 +22,13 @@ namespace ShoutingIguana.Sidecar.Tests;
 public sealed class LiveDataTests : IAsyncLifetime
 {
     private static readonly string[] PHASES = ["starting", "readingRobotsTxt", "crawling", "readingSitemaps", "retrying", "finishing"];
+
+    /// <summary>A notice the engine never raised, so never stores: as if raised a moment ago and not stored yet.</summary>
+    private static readonly CrawlNotice UNSTORED = new(CrawlNoticeLevel.Warning, "not-stored-yet", "Raised, and not stored yet.")
+    {
+        Id = 1_000_000,
+        At = new DateTimeOffset(2026, 11, 2, 9, 0, 0, TimeSpan.Zero)
+    };
 
     private SyntheticSiteServer _site = null!;
     private TestSidecar _sidecar = null!;
@@ -46,15 +57,25 @@ public sealed class LiveDataTests : IAsyncLifetime
         AssertProgressAddsUp(progress);
         Assert.NotNull(progress["at"]);
         Assert.NotNull(progress["waits"]!.AsArray());
+        Assert.Empty(progress["moreWaits"]!.AsObject());
+
+        // No URL limit: there, and null, so an ETA knows there is none without asking for the options.
+        Assert.True(progress.AsObject().ContainsKey("maxUrls"));
+        Assert.Null(progress["maxUrls"]);
 
         await events.CrawlStatusAsync(id, "completed");
         await events.CrawlStatusAsync(id, "analyzing");
         await events.CrawlStatusAsync(id, "completed");
 
-        // The crawl's last numbers are the file's: by class, by code, and the site's own URLs.
+        // Every report's numbers agree with each other, mid-crawl as at the end: each is of one moment.
         List<SseEvent> seen = [.. events.Seen()];
-        var last = seen.Last(sent => sent.Name == "progress" && (string?)sent.Data["crawlId"] == id).Data;
-        AssertProgressAddsUp(last);
+        var reports = seen.Where(sent => sent.Name == "progress" && (string?)sent.Data["crawlId"] == id).Select(sent => sent.Data).ToList();
+        Assert.True(reports.Count >= 2, $"{reports.Count} progress events");
+        Assert.All(reports, AssertProgressAddsUp);
+
+        // The crawl's last numbers are the file's: by class, by code, and the site's own URLs. Nothing holds it up any more.
+        var last = reports[^1];
+        Assert.Empty(last["waits"]!.AsArray());
         Assert.Equal("completed", (string?)last["status"]);
         Assert.Equal("finishing", (string?)last["phase"]);
         Assert.Equal(Count(path, "SELECT COUNT(*) FROM responses"), (long?)last["fetched"]);
@@ -93,13 +114,15 @@ public sealed class LiveDataTests : IAsyncLifetime
         Assert.Equal(Count(path, $"SELECT COUNT(*) FROM responses WHERE outcome = {(int)FetchOutcome.Blocked}"), (long?)stored["data"]!["count"]);
         Assert.Equal(alerts.Select(alert => (long?)alert!["id"]).Order(), alerts.Select(alert => (long?)alert!["id"]));
 
-        // No longer live here: the history is counted back from the file, from a zero at the start.
+        // No longer live here: the history is counted back from the file, from a zero at the start, to where the crawl's
+        // last progress ended, the site's own URLs found included: the chart's line meets the headline.
         var history = await _sidecar.GetJsonAsync($"api/crawls/{id}/history");
         Assert.Null(history["liveFrom"]);
         var points = history["points"]!.AsArray();
         Assert.Equal(0, (long?)points[0]!["fetched"]);
         Assert.Equal((string?)history["startedAt"], (string?)points[0]!["at"]);
         Assert.Equal(Count(path, "SELECT COUNT(*) FROM responses"), (long?)points[^1]!["fetched"]);
+        Assert.Equal((long?)last["internalFound"], (long?)points[^1]!["internalFound"]);
         Assert.All(points, point => Assert.Null(point!["discovered"]));
     }
 
@@ -125,6 +148,7 @@ public sealed class LiveDataTests : IAsyncLifetime
             Assert.NotNull(point!["discovered"]);
             Assert.NotNull(point["queued"]);
             Assert.NotNull(point["elapsedMs"]);
+            Assert.InRange((long)point["internalFound"]!, (long)point["internalFetched"]!, long.MaxValue);
         });
         AssertRises(points);
 
@@ -146,6 +170,7 @@ public sealed class LiveDataTests : IAsyncLifetime
         Assert.True(earlier.Count >= 2 && later.Count >= 1, history.ToJsonString());
         Assert.All(earlier, point => Assert.Null(point!["discovered"]));
         Assert.All(later, point => Assert.NotNull(point!["discovered"]));
+        Assert.All(points, point => Assert.InRange((long)point!["internalFound"]!, (long)point["internalFetched"]!, long.MaxValue));
         Assert.InRange((long)earlier[^1]!["fetched"]!, 1, firstRun);
         AssertRises(points);
 
@@ -171,6 +196,122 @@ public sealed class LiveDataTests : IAsyncLifetime
 
         Execute(path, "DROP TABLE notices");
         Assert.Empty((await _sidecar.GetJsonAsync($"api/crawls/{id}/alerts")).AsArray());
+    }
+
+    /// <summary>
+    /// The engine stores each alert a second or so after raising it; GET /alerts for a crawl live here has the ones it
+    /// hasn't stored yet too. One the file never gets stands for those here, so the test needn't race the writer.
+    /// </summary>
+    [Fact]
+    public async Task AnAlertNotStoredYetIsReadWithTheStoredOnes()
+    {
+        var alerts = await AlertsWhileAnUnstoredOneIsLiveAsync(UNSTORED, forgetAfterReadingTheFile: false);
+
+        Assert.Contains(alerts, alert => (string?)alert!["code"] == UNSTORED.Code && (long?)alert["id"] == UNSTORED.Id);
+    }
+
+    /// <summary>
+    /// The crawl closes while GET /alerts reads its file: it stores its last alerts, and they're forgotten as stored, in
+    /// between. None is missed, as the unstored ones are taken before the file is read. Forced here by forgetting them
+    /// as soon as the file has been read.
+    /// </summary>
+    [Fact]
+    public async Task AnAlertStoredAsTheCrawlClosesIsNeverMissed()
+    {
+        var alerts = await AlertsWhileAnUnstoredOneIsLiveAsync(UNSTORED, forgetAfterReadingTheFile: true);
+
+        Assert.Contains(alerts, alert => (string?)alert!["code"] == UNSTORED.Code && (long?)alert["id"] == UNSTORED.Id);
+    }
+
+    /// <summary>
+    /// An alert is its id and when it was raised: a crash can lose the last alerts before they're stored, and the next run
+    /// gives their ids to new ones. One heard live keeps its place beside a stored one with its id and another time; here
+    /// the crawl's first stored alert, id 1.
+    /// </summary>
+    [Fact]
+    public async Task AnAlertIsItsIdAndItsTime()
+    {
+        var heard = UNSTORED with { Id = 1 };
+
+        var alerts = await AlertsWhileAnUnstoredOneIsLiveAsync(heard, forgetAfterReadingTheFile: false,
+            once: path => CrawlNoticeReader.Read(path).Any(notice => notice.Id == 1));
+
+        Assert.Single(alerts, alert => (long?)alert!["id"] == 1 && (string?)alert["code"] == heard.Code);
+        Assert.Single(alerts, alert => (long?)alert!["id"] == 1 && (string?)alert["code"] != heard.Code);
+    }
+
+    /// <summary>
+    /// A crawl that isn't live here has its history counted back from its file once, and kept until the file changes. Shown
+    /// by changing the file under it while keeping its size and modified time, which the kept history doesn't see; then
+    /// changing its modified time too, which it does.
+    /// </summary>
+    [Fact]
+    public async Task TheHistoryOfACrawlNotLiveHereIsKeptUntilItsFileChanges()
+    {
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "history.sicrawl"),
+            options: new Engine.Configuration.Models.CrawlOptions { StartUrl = _site.BaseUri.AbsoluteUri });
+        var id = Library.CrawlIds.For(path);
+        var first = (await _sidecar.GetJsonAsync($"api/crawls/{id}/history")).ToJsonString();
+
+        // Every fetch a minute later, in place: the same size, and the modified time put back.
+        var modified = File.GetLastWriteTimeUtc(path);
+        var size = new FileInfo(path).Length;
+        Execute(path, "UPDATE responses SET fetched_at = fetched_at + 60000");
+        File.SetLastWriteTimeUtc(path, modified);
+        Assert.Equal(size, new FileInfo(path).Length);
+        Assert.False(File.Exists(path + "-wal"));
+        Assert.Equal(first, (await _sidecar.GetJsonAsync($"api/crawls/{id}/history")).ToJsonString());
+
+        File.SetLastWriteTimeUtc(path, modified + TimeSpan.FromSeconds(2));
+        var changed = await _sidecar.GetJsonAsync($"api/crawls/{id}/history");
+        Assert.NotEqual(first, changed.ToJsonString());
+        Assert.Equal(Count(path, "SELECT MAX(fetched_at) FROM responses"),
+            new DateTimeOffset(At(changed["points"]!.AsArray()[^1]!)).ToUnixTimeMilliseconds());
+    }
+
+    /// <summary>
+    /// GET /alerts while a crawl runs here, slowly, after <paramref name="notice"/> was raised through it, unstored: the
+    /// alert event is awaited first, and then, if given, <paramref name="once"/> to hold of the crawl's file. With
+    /// <paramref name="forgetAfterReadingTheFile"/>, the crawl's unstored alerts are forgotten as soon as the file is read,
+    /// as they are when the crawl closes.
+    /// </summary>
+    private async Task<JsonArray> AlertsWhileAnUnstoredOneIsLiveAsync(CrawlNotice notice, bool forgetAfterReadingTheFile, Func<string, bool>? once = null)
+    {
+        var manager = _sidecar.Host.Services.GetRequiredService<CrawlManager>();
+        var log = _sidecar.Host.Services.GetRequiredService<AlertLog>();
+        manager.StartJob = (request, observer) =>
+        {
+            var job = new CrawlEngine(NullLoggerFactory.Instance).Start(request, observer);
+            observer.OnNotice(notice);
+            return job;
+        };
+        manager.AlertsFileRead = forgetAfterReadingTheFile ? log.Forget : null;
+
+        try
+        {
+            await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
+            var started = await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["maxRequestsPerSecond"] = 5, ["concurrency"] = 1 });
+            var id = (string)started["id"]!;
+            var path = (string)started["path"]!;
+            await events.NextAsync("alert", data => (string?)data["crawlId"] == id && (string?)data["code"] == notice.Code);
+            var deadline = DateTime.UtcNow + EventStreamReader.TIMEOUT;
+            while (once is not null && !once(path) && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(50);
+            }
+
+            Assert.True(once?.Invoke(path) ?? true, "The crawl's file never came to what the test waits for.");
+            var alerts = (await _sidecar.GetJsonAsync($"api/crawls/{id}/alerts")).AsArray();
+            Assert.Equal("running", (string?)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["status"]);
+            Assert.Equal(HttpStatusCode.Accepted, (await _sidecar.PostAsync($"api/crawls/{id}/stop")).Status);
+            await events.CrawlStatusAsync(id, "stopped");
+            return alerts;
+        }
+        finally
+        {
+            manager.StartJob = null;
+            manager.AlertsFileRead = null;
+        }
     }
 
     /// <summary>Every URL fetched is in one class, and each class's codes add up to it.</summary>

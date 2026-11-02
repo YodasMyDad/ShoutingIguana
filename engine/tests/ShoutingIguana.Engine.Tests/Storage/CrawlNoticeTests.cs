@@ -5,10 +5,13 @@ using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Crawling;
 using ShoutingIguana.Engine.Tests.Fetching;
 using ShoutingIguana.Engine.Tests.Support;
+using ShoutingIguana.Engine.Urls;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
 
@@ -105,6 +108,35 @@ public sealed class CrawlNoticeTests : IAsyncLifetime
         Assert.Equal(3, TestCrawls.Count(path, $"SELECT COUNT(*) FROM responses WHERE outcome = {(int)FetchOutcome.Blocked}"));
     }
 
+    /// <summary>
+    /// A crawl from www.example.com names example.com www.example.com too, as one site, so a blocked notice read back counts
+    /// the blocked responses of both; and only the site's own, not another site's blocked status checks.
+    /// </summary>
+    [Fact]
+    public async Task ABlockedNoticeCountsTheSitesBlockedResponsesUnderTheNameItsHostGoesBy()
+    {
+        var path = _files.NewPath();
+        var start = new Uri("https://www.example.com/");
+        var links = new OutLinkFactory(new CrawlScope(start, includeSubdomains: false, stayInStartFolder: false));
+        OutLink Link(string url) => links.Create(new Uri(url), LinkKind.Hyperlink, LinkFlags.None, LinkPosition.Content, null);
+        await using (var writer = CrawlWriter.Open(path, new CrawlOptions { StartUrl = start.AbsoluteUri }, resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+            await writer.DiscoverAsync([Link("https://www.example.com/a"), Link("https://example.com/b"), Link("https://www.example.org/c")],
+                DiscoverySource.Seed, null, CancellationToken.None);
+            var claim = await writer.ClaimAsync(10, 10, CancellationToken.None);
+            foreach (var item in claim.Internal.Concat(claim.External))
+            {
+                var blocked = new ResponseRow { UrlId = item.Id, FetchedAt = 0, Outcome = FetchOutcome.Blocked, StatusCode = 403, BlockReason = "Cloudflare challenge" };
+                await writer.RecordAsync(new PageRecord(item, blocked, [], false, null, null), CancellationToken.None);
+            }
+
+            writer.RecordNotice(Notice("blocked") with { Data = new CrawlNoticeData(Host: "www.example.com", Reason: "Cloudflare challenge", Count: 1) });
+        }
+
+        Assert.Equal(3, TestCrawls.Count(path, $"SELECT COUNT(*) FROM responses WHERE outcome = {(int)FetchOutcome.Blocked}"));
+        Assert.Equal(2, Assert.Single(CrawlNoticeReader.Read(path)).Data!.Count);
+    }
+
     /// <summary>Another program reading the crawl while it runs (a UI that opens it, si stats) finds a notice within moments.</summary>
     [Fact]
     public async Task ANoticeIsStoredWhileTheCrawlRuns()
@@ -196,6 +228,96 @@ public sealed class CrawlNoticeTests : IAsyncLifetime
         Assert.Equal(CrawlNoticeLevel.Error, stored[0].Level);
         Assert.Equal((CrawlNoticeLevel.Warning, (CrawlNoticeData?)null), (stored[1].Level, stored[1].Data));
         Assert.Equal((CrawlNoticeLevel.Info, (CrawlNoticeData?)null), (stored[2].Level, stored[2].Data));
+    }
+
+    /// <summary>
+    /// Another program made the table without this engine's NOT NULLs and left gaps: a notice with no code or message says
+    /// nothing and is left out; one with no level reads as a warning, and one with no time (or one past any calendar) as
+    /// raised when the crawl started.
+    /// </summary>
+    [Fact]
+    public async Task ANoticeWithGapsAnotherProgramLeftIsReadAsWellAsItCanBe()
+    {
+        var path = _files.NewPath();
+        await using (CrawlWriter.Open(path, Options(), resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+        }
+
+        Execute(path, """
+            DROP TABLE notices;
+            CREATE TABLE notices (id INTEGER PRIMARY KEY, at INTEGER, level TEXT, code TEXT, message TEXT, data TEXT);
+            INSERT INTO notices VALUES (1, 0, 'info', NULL, 'A notice without a code', NULL);
+            INSERT INTO notices VALUES (2, 0, 'info', 'no-message', NULL, NULL);
+            INSERT INTO notices VALUES (3, NULL, NULL, 'gaps', 'No time and no level', NULL);
+            INSERT INTO notices VALUES (4, 9223372036854775807, 'error', 'far-off', 'A time past any calendar', NULL);
+            """);
+
+        var stored = CrawlNoticeReader.Read(path);
+
+        var startedAt = DateTimeOffset.FromUnixTimeMilliseconds(TestCrawls.Count(path, "SELECT started_at FROM crawl"));
+        Assert.Equal([(3L, "gaps", CrawlNoticeLevel.Warning, startedAt), (4L, "far-off", CrawlNoticeLevel.Error, startedAt)],
+            stored.Select(notice => (notice.Id, notice.Code, notice.Level, notice.At)));
+    }
+
+    /// <summary>A notices table of another shape altogether, missing a column this engine writes, reads as having no notices.</summary>
+    [Fact]
+    public async Task ANoticesTableOfAnotherShapeReadsAsNone()
+    {
+        var path = _files.NewPath();
+        await using (CrawlWriter.Open(path, Options(), resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+        }
+
+        Execute(path, """
+            DROP TABLE notices;
+            CREATE TABLE notices (id INTEGER PRIMARY KEY, at INTEGER, text TEXT);
+            INSERT INTO notices VALUES (1, 0, 'Something');
+            """);
+
+        Assert.Empty(CrawlNoticeReader.Read(path));
+    }
+
+    /// <summary>
+    /// The writer stores every notice into the columns it made, so it refuses to continue a crawl whose notices table it
+    /// couldn't store one in, saying why, before writing anything: rather than fail at the open, or at the first notice.
+    /// </summary>
+    [Theory]
+    [InlineData("CREATE TABLE notices (id INTEGER PRIMARY KEY, at INTEGER, level TEXT, code TEXT, message TEXT)")]
+    [InlineData("CREATE TABLE notices (id INTEGER PRIMARY KEY, at INTEGER, level TEXT, code TEXT, message TEXT, data TEXT, run INTEGER NOT NULL)")]
+    [InlineData("CREATE TABLE notices (id TEXT PRIMARY KEY, at INTEGER, level TEXT, code TEXT, message TEXT, data TEXT)")]
+    [InlineData("CREATE TABLE notices (id INTEGER PRIMARY KEY, at INTEGER, level TEXT, code TEXT, message TEXT, data TEXT NOT NULL)")]
+    public async Task ACrawlWhoseNoticesTableCantTakeANoticeIsNotContinued(string table)
+    {
+        var path = _files.NewPath();
+        await using (CrawlWriter.Open(path, Options(), resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+        }
+
+        Execute(path, $"DROP TABLE notices; {table};");
+        var updatedAt = TestCrawls.Count(path, "SELECT updated_at FROM crawl");
+
+        var refused = Assert.Throws<InvalidOperationException>(() => CrawlWriter.Open(path, Options(), resume: true, new CrawlCounters(), NullLogger.Instance));
+        Assert.Contains("another program changed the table it keeps its alerts in", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(updatedAt, TestCrawls.Count(path, "SELECT updated_at FROM crawl"));
+        Assert.False(CrawlDatabase.IsInUse(path));
+    }
+
+    /// <summary>A column of its own that needs nothing from the writer (nullable, or with a default) is no reason to refuse.</summary>
+    [Fact]
+    public async Task ANoticesTableWithAColumnOfItsOwnTheWriterNeedNotFillIsContinued()
+    {
+        var path = _files.NewPath();
+        await using (CrawlWriter.Open(path, Options(), resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+        }
+
+        Execute(path, "ALTER TABLE notices ADD COLUMN seen INTEGER NOT NULL DEFAULT 0; ALTER TABLE notices ADD COLUMN note TEXT;");
+        await using (var writer = CrawlWriter.Open(path, Options(), resume: true, new CrawlCounters(), NullLogger.Instance))
+        {
+            writer.RecordNotice(Notice("kept"));
+        }
+
+        Assert.Equal(["kept"], CrawlNoticeReader.Read(path).Select(notice => notice.Code));
     }
 
     private CrawlOptions Options() => new() { StartUrl = _site.BaseUri.AbsoluteUri };

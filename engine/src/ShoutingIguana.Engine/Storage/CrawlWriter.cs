@@ -99,6 +99,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
             // A file from before notices were kept gets their table now, as it is continued.
             CrawlDatabase.Execute(connection, CrawlSchema.NOTICES);
+            CheckNoticesTable(connection, databasePath);
             var writer = new CrawlWriter(connection, fileLock, options, counters, logger);
             if (created)
             {
@@ -121,6 +122,40 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
             fileLock.Dispose();
             throw;
+        }
+    }
+
+    /// <summary>
+    /// The notices table may be another program's: CREATE TABLE IF NOT EXISTS keeps whatever is there. Every notice is stored
+    /// into the columns this engine made, so a table missing one, keyed by something other than the id, or with a column
+    /// of its own that must have a value, would fail the crawl at its first notice. Refused before anything is written,
+    /// in words that say why, as a file with views or triggers is.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The table isn't one this engine can store notices in.</exception>
+    private static void CheckNoticesTable(SqliteConnection connection, string databasePath)
+    {
+        Dictionary<string, (string Type, bool NotNull, bool HasDefault, bool IsKey)> columns = new(StringComparer.OrdinalIgnoreCase);
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT name, type, \"notnull\", dflt_value IS NOT NULL, pk FROM pragma_table_info('notices')";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                columns[reader.GetString(0)] = (reader.GetString(1), reader.GetBoolean(2), reader.GetBoolean(3), reader.GetInt32(4) > 0);
+            }
+        }
+
+        var hasEveryColumn = CrawlSchema.NOTICE_COLUMNS.All(columns.ContainsKey);
+        var keyedById = hasEveryColumn && columns["id"].IsKey && columns["id"].Type.Equals("INTEGER", StringComparison.OrdinalIgnoreCase) &&
+                        columns.Values.Count(column => column.IsKey) == 1;
+        var dataMayBeLeftOut = hasEveryColumn && !columns["data"].NotNull;
+        var othersNeedNothing = columns
+            .Where(column => !CrawlSchema.NOTICE_COLUMNS.Contains(column.Key, StringComparer.OrdinalIgnoreCase))
+            .All(column => !column.Value.NotNull || column.Value.HasDefault);
+        if (!(keyedById && dataMayBeLeftOut && othersNeedNothing))
+        {
+            throw new InvalidOperationException(
+                $"'{databasePath}' can't be continued: another program changed the table it keeps its alerts in (notices), so new ones couldn't be stored there.");
         }
     }
 
@@ -550,6 +585,14 @@ internal sealed class CrawlWriter : IAsyncDisposable
     {
         if (entry.IsProbe)
         {
+            // Adopting takes one of the URL limit's slots. Once none is left, the site finding a probe is like it finding
+            // any other URL then, which is skipped: the URL stays a probe, keeps the answer its probe got, and is never
+            // fetched again, so the site's own URLs found and fetched never pass the limit.
+            if (link.IsInternal && _urlLimitReached)
+            {
+                return;
+            }
+
             entry = Adopt(link, entry, depth, source, foundOnId);
         }
         else if (depth < entry.Depth)
@@ -672,7 +715,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
     /// click path), and the analysis judges it as one of the site's own URLs. If the probe already fetched it, it takes
     /// its slot under the URL limit now. If that fetch found anything but a page it is fetched again: where a redirect
     /// leads is then found by the site too and crawled as the site's own, and a probe's single try that failed gets the
-    /// retries the site's own URLs get.
+    /// retries the site's own URLs get. Never once the URL limit is reached (see <see cref="Rediscover"/>).
     /// </summary>
     private UrlEntry Adopt(OutLink link, UrlEntry entry, int depth, DiscoverySource source, int? foundOnId)
     {
@@ -885,6 +928,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
             }
         }
 
+        _counters.Publish();
         _logger.LogInformation("Resuming crawl with {Known} known URLs, {Queued} still queued", _urls.Count, queued);
     }
 
@@ -927,12 +971,14 @@ internal sealed class CrawlWriter : IAsyncDisposable
         _statements.SetTransaction(_transaction);
     }
 
+    /// <summary>Stores the batch, then publishes the counts as they stand: what progress reads is what the file has.</summary>
     private void CommitTransaction()
     {
         _transaction!.Commit();
         _transaction.Dispose();
         _transaction = null;
         _statements.SetTransaction(null);
+        _counters.Publish();
     }
 
     /// <summary>Abandons the batch a failure interrupted, so the connection is free to be closed.</summary>

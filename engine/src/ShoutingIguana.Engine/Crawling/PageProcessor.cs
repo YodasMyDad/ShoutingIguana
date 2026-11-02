@@ -23,23 +23,37 @@ internal sealed class PageProcessor(
     RobotsCache robots,
     OutLinkFactory links,
     ICrawlObserver observer,
+    CrawlScope scope,
+    HostGateRegistry gates,
     TimeProvider timeProvider)
 {
     private const int FORBIDDEN_SAMPLE_SIZE = 20;
+
+    // What the workers are doing, kept in one value so progress reads all three counts at once: URLs being fetched in
+    // the lowest bits, the site's URLs waiting for robots.txt above them, other sites' at the top. Each count is at most
+    // the crawl's workers, far below the 21 bits it has.
+    private const int WORK_BITS = 21;
+    private const long WORK_MASK = (1L << WORK_BITS) - 1;
+    private const long FETCHING = 1;
+    private const long SITE_WAITING_FOR_ROBOTS_TXT = 1L << WORK_BITS;
+    private const long OTHERS_WAITING_FOR_ROBOTS_TXT = 1L << (2 * WORK_BITS);
 
     private readonly ConcurrentDictionary<string, bool> _blockedHostsReported = new(StringComparer.Ordinal);
     private int _internalFetches;
     private int _internalForbidden;
     private int _forbiddenReported;
     private int _startLeftReported;
-    private int _waitingForRobotsTxt;
-    private int _fetching;
+    private long _work;
 
-    /// <summary>URLs whose origin's robots.txt is still being read, so they can't be asked for yet.</summary>
-    public int WaitingForRobotsTxt => Volatile.Read(ref _waitingForRobotsTxt);
-
-    /// <summary>URLs past robots.txt and being fetched: waiting on their host's spacing, being sent, or between retries.</summary>
-    public int Fetching => Volatile.Read(ref _fetching);
+    /// <summary>URLs waiting for their origin's robots.txt, and URLs being fetched, as one moment has them.</summary>
+    public WorkInProgress Work
+    {
+        get
+        {
+            var work = Interlocked.Read(ref _work);
+            return new WorkInProgress((int)((work >> WORK_BITS) & WORK_MASK), (int)(work >> (2 * WORK_BITS)), (int)(work & WORK_MASK));
+        }
+    }
 
     /// <summary>
     /// A probe of another version of the site (or where one redirects) must never hold up the crawl, so it gets a single
@@ -60,14 +74,19 @@ internal sealed class PageProcessor(
             if (!load.IsCompleted)
             {
                 // Counted only while it's still being read: once it has been, every URL on the origin passes straight on.
-                Interlocked.Increment(ref _waitingForRobotsTxt);
+                // The site's own are counted on their host's gate too, so progress can say whose robots.txt they wait for.
+                var waiting = item.IsInternal ? SITE_WAITING_FOR_ROBOTS_TXT : OTHERS_WAITING_FOR_ROBOTS_TXT;
+                var gate = item.IsInternal ? gates.For(uri) : null;
+                Interlocked.Add(ref _work, waiting);
+                gate?.AddRobotsTxtWaiter(1);
                 try
                 {
                     await load.WaitAsync(cancellationToken).ConfigureAwait(false);
                 }
                 finally
                 {
-                    Interlocked.Decrement(ref _waitingForRobotsTxt);
+                    gate?.AddRobotsTxtWaiter(-1);
+                    Interlocked.Add(ref _work, -waiting);
                 }
             }
 
@@ -87,14 +106,14 @@ internal sealed class PageProcessor(
 
         var body = item.Mode == FetchMode.Crawl ? FetchBody.Html : FetchBody.None;
         FetchResponse response;
-        Interlocked.Increment(ref _fetching);
+        Interlocked.Add(ref _work, FETCHING);
         try
         {
             response = await fetcher.FetchAsync(uri, body, cancellationToken, singleAttempt: isRetry || isProbe).ConfigureAwait(false);
         }
         finally
         {
-            Interlocked.Decrement(ref _fetching);
+            Interlocked.Add(ref _work, -FETCHING);
         }
 
         if (item.IsInternal)
@@ -222,19 +241,23 @@ internal sealed class PageProcessor(
         }
     }
 
+    /// <summary>The site's hosts are named as progress names them: the start URL's host for it and its www twin.</summary>
     private void WatchForBlocking(Uri uri, FetchResponse response)
     {
-        if (response is { Outcome: FetchOutcome.Blocked, BlockReason: { } reason } &&
-            _blockedHostsReported.TryAdd(UrlNormalizer.GetHost(uri), true))
+        if (response is { Outcome: FetchOutcome.Blocked, BlockReason: { } reason })
         {
             // Once per host: the first blocked response raises it, and the file counts the rest when it's read back.
-            observer.OnNotice(new CrawlNotice(
-                CrawlNoticeLevel.Warning,
-                "blocked",
-                $"{uri.Host} is blocking the crawler ({reason}). Try a slower crawl rate or a different user agent, or ask the site owner to allowlist the crawler.")
+            var host = scope.HostName(UrlNormalizer.GetHost(uri));
+            if (_blockedHostsReported.TryAdd(host, true))
             {
-                Data = new CrawlNoticeData(Host: UrlNormalizer.GetHost(uri), Reason: reason, Count: 1)
-            });
+                observer.OnNotice(new CrawlNotice(
+                    CrawlNoticeLevel.Warning,
+                    "blocked",
+                    $"{host} is blocking the crawler ({reason}). Try a slower crawl rate or a different user agent, or ask the site owner to allowlist the crawler.")
+                {
+                    Data = new CrawlNoticeData(Host: host, Reason: reason, Count: 1)
+                });
+            }
         }
 
         var fetches = Interlocked.Increment(ref _internalFetches);
@@ -246,7 +269,7 @@ internal sealed class PageProcessor(
                 "mostly-forbidden",
                 $"{forbidden} of the first {fetches} pages returned 403 Forbidden. The site may be blocking crawlers.")
             {
-                Data = new CrawlNoticeData(Host: UrlNormalizer.GetHost(uri), Count: forbidden, Sampled: fetches)
+                Data = new CrawlNoticeData(Host: scope.HostName(UrlNormalizer.GetHost(uri)), Count: forbidden, Sampled: fetches)
             });
         }
     }

@@ -14,18 +14,21 @@ namespace ShoutingIguana.Engine.Tests.Crawling;
 /// </summary>
 internal static class ProgressAgreement
 {
-    /// <summary>The writer's counts as they stand, for tests that drive the writer themselves.</summary>
-    public static void AssertMatchesTheFile(CrawlCounters counters, string path) =>
-        AssertMatchesTheFile(new CrawlProgress(CrawlStatus.Running, TimeSpan.Zero, counters.Discovered, counters.Queued, counters.InFlight,
-            counters.Fetched, counters.HtmlPages, counters.Redirects, counters.Errors, counters.Blocked, counters.RobotsDisallowed,
-            counters.Skipped, counters.Bytes, 0)
+    /// <summary>The counts the writer last published, for tests that drive the writer themselves.</summary>
+    public static void AssertMatchesTheFile(CrawlCounters counters, string path)
+    {
+        var counts = counters.Current;
+        AssertMatchesTheFile(new CrawlProgress(CrawlStatus.Running, TimeSpan.Zero, counts.Discovered, counts.Queued, counts.InFlight,
+            counts.Fetched, counts.HtmlPages, counts.Redirects, counts.Errors, counts.Blocked, counts.RobotsDisallowed,
+            counts.Skipped, counts.Bytes, 0)
         {
-            StatusClasses = counters.StatusClasses,
-            StatusCodes = counters.StatusCodes(),
-            NoResponse = counters.NoResponse,
-            InternalFound = counters.InternalFound,
-            InternalFetched = counters.InternalFetched
+            StatusClasses = counts.StatusClasses,
+            StatusCodes = counts.StatusCodes,
+            NoResponse = counts.NoResponse,
+            InternalFound = counts.InternalFound,
+            InternalFetched = counts.InternalFetched
         }, path);
+    }
 
     public static void AssertMatchesTheFile(CrawlProgress progress, string path)
     {
@@ -67,6 +70,12 @@ internal static class ProgressAgreement
         var siteUrl = $"u.is_internal = 1 AND u.source <> {(int)DiscoverySource.SiteVersion}";
         Assert.Equal(Count(path, $"SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE {siteUrl}"), progress.InternalFetched);
         Assert.Equal(Count(path, $"SELECT COUNT(*) FROM urls u WHERE {siteUrl} AND u.state <> {(int)UrlState.Skipped}"), progress.InternalFound);
+
+        // A crawl that has ended never passed its URL limit, whatever it found on the way: what an ETA heads for.
+        if (progress.MaxUrls is { } limit)
+        {
+            Assert.InRange(progress.InternalFound, progress.InternalFetched, limit);
+        }
     }
 
     private static long Count(string path, string sql)

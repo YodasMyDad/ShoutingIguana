@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Sidecar.Api.Models;
 
@@ -6,10 +7,14 @@ namespace ShoutingIguana.Sidecar.Events.Models;
 
 /// <summary>
 /// A live crawl's numbers, twice a second (the engine's pace). Counts include earlier runs of a continued crawl. The rate
-/// is of every URL fetched, pages and the rest alike (the engine calls it PagesPerSecond).
+/// is of every URL fetched, pages and the rest alike (the engine calls it PagesPerSecond). Every count is of one moment,
+/// so they agree with each other.
 /// </summary>
 /// <param name="At">When the numbers were taken, the time the history keeps them under.</param>
+/// <param name="MaxUrls">The crawl's URL limit, null when it has none: with <c>internalFetched</c>'s rate, an ETA.</param>
 /// <param name="StatusCodes">The URLs with a status that weren't blocked, by code: each class's codes add up to it.</param>
+/// <param name="Waits">At most five for each reason, the longest first.</param>
+/// <param name="MoreWaits">For each reason with more waits than are listed, how many more: "and 212 more hosts".</param>
 internal sealed record ProgressEventDto(
     string CrawlId,
     CrawlListStatus Status,
@@ -30,10 +35,12 @@ internal sealed record ProgressEventDto(
     CrawlPhase Phase,
     long InternalFound,
     long InternalFetched,
+    int? MaxUrls,
     StatusClassesDto StatusClasses,
     IReadOnlyDictionary<string, long> StatusCodes,
     NoResponseDto NoResponse,
-    IReadOnlyList<CrawlWaitDto> Waits)
+    IReadOnlyList<CrawlWaitDto> Waits,
+    IReadOnlyDictionary<string, int> MoreWaits)
 {
     public static ProgressEventDto From(string crawlId, CrawlListStatus status, CrawlProgress progress, DateTime at) => new(
         crawlId,
@@ -55,8 +62,11 @@ internal sealed record ProgressEventDto(
         progress.Phase,
         progress.InternalFound,
         progress.InternalFetched,
+        progress.MaxUrls,
         StatusClassesDto.From(progress.StatusClasses),
         progress.StatusCodes.ToDictionary(code => code.Key.ToString(CultureInfo.InvariantCulture), code => code.Value, StringComparer.Ordinal),
         NoResponseDto.From(progress.NoResponse),
-        [.. progress.Waits.Select(CrawlWaitDto.From)]);
+        [.. progress.Waits.Select(CrawlWaitDto.From)],
+        // Keyed by the reason's name as the waits spell it.
+        progress.MoreWaits.ToDictionary(more => JsonNamingPolicy.CamelCase.ConvertName(more.Key.ToString()), more => more.Value, StringComparer.Ordinal));
 }

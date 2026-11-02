@@ -28,17 +28,22 @@ public sealed class CrawlHistoryReaderTests : IAsyncLifetime
         _files.Dispose();
     }
 
+    /// <summary>
+    /// It ends where the crawl's last progress did, the site's own URLs found included, so a chart drawn from the file
+    /// meets the headline. The synthetic site's sitemap lists pages no link leads to, and its pages links the crawl skips.
+    /// </summary>
     [Fact]
     public async Task ACrawlsHistoryRunsFromNothingAtItsStartToWhatItFetched()
     {
         var path = _files.NewPath();
-        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(Options(), path)).Status);
+        var summary = await TestCrawls.RunAsync(Options(), path);
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
 
         var history = CrawlHistoryReader.Read(path);
 
         var stats = CrawlStatsReader.Read(path);
         Assert.Equal(stats.StartedAt, history.StartedAt);
-        Assert.Equal(new CrawlHistoryPoint(history.StartedAt, 0, 0, 0, 0, 0), history.Points[0]);
+        Assert.Equal(new CrawlHistoryPoint(history.StartedAt, 0, 0, 0, 0, 0, 0), history.Points[0]);
         AssertRises(history.Points);
         var last = history.Points[^1];
         Assert.Equal(stats.Outcomes.Values.Sum(), last.Fetched);
@@ -48,6 +53,35 @@ public sealed class CrawlHistoryReaderTests : IAsyncLifetime
         Assert.Equal(TestCrawls.Count(path, "SELECT COUNT(*) FROM responses WHERE outcome IN (2, 3, 6, 7, 8)"), last.Errors);
         Assert.Equal(stats.Outcomes.GetValueOrDefault(FetchOutcome.Blocked), last.Blocked);
         Assert.Equal(TestCrawls.Count(path, "SELECT MAX(fetched_at) FROM responses"), last.At.ToUnixTimeMilliseconds());
+        Assert.Equal((summary.Progress.InternalFound, summary.Progress.InternalFetched), (last.InternalFound, last.InternalFetched));
+        Assert.True(TestCrawls.Count(path, "SELECT COUNT(*) FROM urls WHERE is_internal = 1 AND state = 3") > 0, "The site has links the crawl skips.");
+    }
+
+    /// <summary>
+    /// A URL is found as the page that first links it is fetched; the start URL and the URLs only a sitemap lists, which
+    /// no page links, as the crawl starts. Here a page is fetched each second, in the order the crawl found them.
+    /// </summary>
+    [Fact]
+    public async Task TheSitesOwnUrlsCountAsFoundWhenThePageLinkingThemIsFetched()
+    {
+        var path = _files.NewPath();
+        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(Options(), path)).Status);
+        var started = TestCrawls.Count(path, "SELECT started_at FROM crawl");
+        Execute(path, $"UPDATE responses SET fetched_at = {started} + 1000 * url_id");
+
+        var history = CrawlHistoryReader.Read(path);
+
+        // Every URL was fetched, URL n in second n: by then, the URLs it linked first were found, and so was it (an adopted
+        // probe can be fetched before the page that made it the site's own). What no page linked was found at the start.
+        AssertRises(history.Points);
+        const string SITE_URL = "u.is_internal = 1 AND u.source <> 3 AND u.state <> 3";
+        Assert.All(history.Points.Skip(1), point =>
+        {
+            var second = point.At.ToUnixTimeMilliseconds() / 1000 - started / 1000;
+            Assert.Equal(TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls u WHERE {SITE_URL} AND (u.found_on_id IS NULL OR MIN(u.found_on_id, u.id) <= {second})"),
+                point.InternalFound);
+        });
+        Assert.Equal(TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls u WHERE {SITE_URL}"), history.Points[^1].InternalFound);
     }
 
     /// <summary>Ten thousand seconds of fetching, one a second, kept to the bound and spread evenly over them.</summary>
@@ -102,14 +136,19 @@ public sealed class CrawlHistoryReaderTests : IAsyncLifetime
 
     private CrawlOptions Options() => new() { StartUrl = _site.BaseUri.AbsoluteUri };
 
-    private static void AssertRises(IReadOnlyList<CrawlHistoryPoint> points) =>
+    /// <summary>Each point adds something fetched or found, and the site's own URLs are found by the time they're fetched.</summary>
+    private static void AssertRises(IReadOnlyList<CrawlHistoryPoint> points)
+    {
+        Assert.All(points, point => Assert.InRange(point.InternalFetched, 0, point.InternalFound));
         Assert.All(points.Zip(points.Skip(1)), pair =>
         {
             Assert.True(pair.Second.At >= pair.First.At);
-            Assert.True(pair.Second.Fetched > pair.First.Fetched);
+            Assert.True(pair.Second.Fetched >= pair.First.Fetched && pair.Second.InternalFound >= pair.First.InternalFound);
+            Assert.True(pair.Second.Fetched > pair.First.Fetched || pair.Second.InternalFound > pair.First.InternalFound);
             Assert.True(pair.Second.HtmlPages >= pair.First.HtmlPages && pair.Second.InternalFetched >= pair.First.InternalFetched);
             Assert.True(pair.Second.Errors >= pair.First.Errors && pair.Second.Blocked >= pair.First.Blocked);
         });
+    }
 
     private static void Execute(string path, string sql)
     {

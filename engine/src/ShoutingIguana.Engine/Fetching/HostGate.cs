@@ -34,6 +34,7 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
     private DateTimeOffset _lastStart = DateTimeOffset.MinValue;
     private DateTimeOffset _pausedUntil = DateTimeOffset.MinValue;
     private int _failuresInARow;
+    private int _waitingForRobotsTxt;
 
     /// <summary>The spacing added to the interval as it stands now. Tests read it; the gate works it out afresh at every start.</summary>
     public TimeSpan CurrentBackoff
@@ -47,7 +48,7 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
         }
     }
 
-    /// <summary>What spaces this host's requests out now, beyond the crawl's settings, for its progress to say.</summary>
+    /// <summary>What holds this host's requests up now, beyond the crawl's settings, for its progress to say.</summary>
     public HostGateState ReadState()
     {
         lock (_sync)
@@ -56,9 +57,16 @@ internal sealed class HostGate(int maxConcurrency, TimeSpan minimumInterval, Tim
             return new HostGateState(
                 _minimumInterval > _configuredInterval ? _minimumInterval : null,
                 BackoffAt(now),
-                _pausedUntil > now ? _pausedUntil - now : TimeSpan.Zero);
+                _pausedUntil > now ? _pausedUntil - now : TimeSpan.Zero,
+                Volatile.Read(ref _waitingForRobotsTxt));
         }
     }
+
+    /// <summary>
+    /// A URL of this host starts (1) or stops (-1) waiting for its origin's robots.txt, which only the first URLs of an
+    /// origin ever do: counted for progress, which says whose robots.txt the crawl waits for.
+    /// </summary>
+    public void AddRobotsTxtWaiter(int change) => Interlocked.Add(ref _waitingForRobotsTxt, change);
 
     /// <summary>Holds every request back for <paramref name="duration"/>, e.g. while the host is unreachable.</summary>
     public void Pause(TimeSpan duration)

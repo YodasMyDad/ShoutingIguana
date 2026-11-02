@@ -94,7 +94,7 @@ internal sealed class CrawlSession
         _robots = new RobotsCache(fetcher, _gates, _writer, scope, _options, userAgent.RobotsToken, _observer,
             timeProvider, loggerFactory.CreateLogger<RobotsCache>(), _stop.Token);
         _links = new OutLinkFactory(scope);
-        _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, timeProvider);
+        _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, scope, _gates, timeProvider);
         _sitemaps = new SitemapDiscoverer(_options, _fetcher, _gates, _robots, _writer, _links, _observer, _pause, timeProvider,
             loggerFactory.CreateLogger<SitemapDiscoverer>());
         _internalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.Concurrency * 2) { SingleWriter = true });
@@ -149,57 +149,69 @@ internal sealed class CrawlSession
     /// The crawl's counts as they stand, what it is doing, and what holds it up: counters and a few gates, nothing that
     /// grows with the crawl.
     /// </summary>
-    public CrawlProgress Snapshot()
+    public CrawlProgress Snapshot() => Snapshot(_counters.Current);
+
+    /// <summary>
+    /// Every count comes from <paramref name="counts"/>, the one record the writer published last, so one report's numbers
+    /// agree with each other; the workers' two counts come from one read too.
+    /// </summary>
+    private CrawlProgress Snapshot(CrawlCounts counts)
     {
         var status = _status;
         var phase = _phase;
+        var work = _processor.Work;
 
         // Nothing is being fetched, and something waits for robots.txt: that is all the crawl is doing.
-        if (phase == CrawlPhase.Crawling && _processor.WaitingForRobotsTxt > 0 && _processor.Fetching == 0)
+        if (phase == CrawlPhase.Crawling && work.WaitingForRobotsTxt > 0 && work.Fetching == 0)
         {
             phase = CrawlPhase.ReadingRobotsTxt;
         }
 
+        // Once it is finishing, nothing holds the crawl up any more, whatever its hosts' gates still say.
+        var (waits, moreWaits) = phase == CrawlPhase.Finishing ? CrawlWaits.Cap([]) : CrawlWaits.Cap(Waits(work));
         return new CrawlProgress(
             status == CrawlStatus.Running && _pause.IsPaused ? CrawlStatus.Paused : status,
             _elapsed.Elapsed,
-            _counters.Discovered,
-            _counters.Queued,
-            _counters.InFlight,
-            _counters.Fetched,
-            _counters.HtmlPages,
-            _counters.Redirects,
-            _counters.Errors,
-            _counters.Blocked,
-            _counters.RobotsDisallowed,
-            _counters.Skipped,
-            _counters.Bytes,
+            counts.Discovered,
+            counts.Queued,
+            counts.InFlight,
+            counts.Fetched,
+            counts.HtmlPages,
+            counts.Redirects,
+            counts.Errors,
+            counts.Blocked,
+            counts.RobotsDisallowed,
+            counts.Skipped,
+            counts.Bytes,
             Volatile.Read(ref _pagesPerSecond))
         {
             Phase = phase,
-            StatusClasses = _counters.StatusClasses,
-            StatusCodes = _counters.StatusCodes(),
-            NoResponse = _counters.NoResponse,
-            InternalFound = _counters.InternalFound,
-            InternalFetched = _counters.InternalFetched,
-            Waits = Waits(phase)
+            StatusClasses = counts.StatusClasses,
+            StatusCodes = counts.StatusCodes,
+            NoResponse = counts.NoResponse,
+            InternalFound = counts.InternalFound,
+            InternalFetched = counts.InternalFetched,
+            MaxUrls = _options.MaxUrls > 0 ? _options.MaxUrls : null,
+            Waits = waits,
+            MoreWaits = moreWaits
         };
     }
 
     /// <summary>
-    /// What holds the crawl up now. The site's gates are a handful; the outages are read only while there are some, and
-    /// robots.txt's cool-down, which looks at every origin's robots.txt, only while URLs it refused wait for their last try.
+    /// What holds the crawl up now. The site's gates are a handful (hundreds at most, with every subdomain included, which
+    /// <see cref="CrawlWaits.Cap"/> brings down to a few); the outages are read only while there are some, and robots.txt's
+    /// cool-down, which looks at every origin's robots.txt, only while something waits for it.
     /// </summary>
-    private List<CrawlWait> Waits(CrawlPhase phase)
+    private List<CrawlWait> Waits(WorkInProgress work)
     {
         List<CrawlWait> waits = [];
-        if (_processor.WaitingForRobotsTxt is > 0 and var waiting)
-        {
-            waits.Add(new CrawlWait(CrawlWaitReason.RobotsTxt, Urls: waiting));
-        }
-
         foreach (var (host, state) in _gates.ReadSiteStates())
         {
+            if (state.WaitingForRobotsTxt > 0)
+            {
+                waits.Add(new CrawlWait(CrawlWaitReason.RobotsTxt, host, Urls: state.WaitingForRobotsTxt));
+            }
+
             if (state.CrawlDelay is { } delay)
             {
                 waits.Add(new CrawlWait(CrawlWaitReason.CrawlDelay, host, Duration: delay));
@@ -216,18 +228,40 @@ internal sealed class CrawlSession
             }
         }
 
+        if (work.OthersWaitingForRobotsTxt > 0)
+        {
+            waits.Add(new CrawlWait(CrawlWaitReason.OtherSitesRobotsTxt, Urls: work.OthersWaitingForRobotsTxt));
+        }
+
         var now = _timeProvider.GetUtcNow();
         if (_gates.LongestOutage(now) is { } outage)
         {
             waits.Add(new CrawlWait(CrawlWaitReason.SiteDown, outage.Origin, Duration: outage.Duration));
         }
 
-        if (phase == CrawlPhase.Retrying && Volatile.Read(ref _refusedByRobots) > 0 && _robots.CoolDownEndsAt() is { } coolDownEnds && coolDownEnds > now)
+        if (RobotsTxtCoolDown(now) is { } coolDown)
         {
-            waits.Add(new CrawlWait(CrawlWaitReason.RobotsTxtCoolDown, Duration: coolDownEnds - now));
+            waits.Add(coolDown);
         }
 
         return waits;
+    }
+
+    /// <summary>
+    /// robots.txt's cool-down, in whatever phase, while something waits for it: URLs it refused, held back for a last try
+    /// that comes after it, or the sitemap discovery, which reads the sitemaps robots.txt declares once it's asked again.
+    /// </summary>
+    private CrawlWait? RobotsTxtCoolDown(DateTimeOffset now)
+    {
+        var refused = Volatile.Read(ref _refusedByRobots);
+        if (refused == 0 && !_robots.IsCoolDownWaitedOut)
+        {
+            return null;
+        }
+
+        return _robots.CoolDownEndsAt() is { } ends && ends > now
+            ? new CrawlWait(CrawlWaitReason.RobotsTxtCoolDown, Urls: refused > 0 ? refused : null, Duration: ends - now)
+            : null;
     }
 
     public async Task<CrawlSummary> RunAsync()
@@ -399,6 +433,17 @@ internal sealed class CrawlSession
             var producersDone = sitemaps.IsCompleted;
             var claim = await _writer.ClaimAsync(Math.Max(0, wantInternal), Math.Max(0, wantExternal), cancellationToken).ConfigureAwait(false);
 
+            // Said before the URLs are handed out, so none is fetched under the phase it ends.
+            if (claim.Internal.Count + claim.External.Count > 0)
+            {
+                // Something to fetch again: what the sitemaps list, as they're read; or, once the last tries are over (a
+                // retried URL leaves the held-back ones before it is recorded), whatever is left, such as those URLs.
+                if (_phase == CrawlPhase.ReadingSitemaps || (_phase == CrawlPhase.Retrying && !retrying && _retried.IsEmpty))
+                {
+                    _phase = CrawlPhase.Crawling;
+                }
+            }
+
             foreach (var item in claim.Internal)
             {
                 await _internalQueue.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
@@ -409,15 +454,7 @@ internal sealed class CrawlSession
                 await _externalQueue.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
             }
 
-            if (claim.Internal.Count + claim.External.Count > 0)
-            {
-                // Something to fetch again: what the sitemaps list, as they're read.
-                if (_phase == CrawlPhase.ReadingSitemaps)
-                {
-                    _phase = CrawlPhase.Crawling;
-                }
-            }
-            else
+            if (claim.Internal.Count + claim.External.Count == 0)
             {
                 // Read after claiming: workers only ever add to the held-back URLs, so if everything in flight at the
                 // claim is held back now, nothing else is still being fetched.
@@ -434,7 +471,7 @@ internal sealed class CrawlSession
                         return true;
                     }
 
-                    // From here to the end: the held-back URLs' one more try, after robots.txt's cool-down if it's due.
+                    // The held-back URLs' one more try, after robots.txt's cool-down if it's due, until the last is over.
                     _phase = CrawlPhase.Retrying;
                     if (!IsRobotsTxtCoolingDown())
                     {
@@ -562,15 +599,17 @@ internal sealed class CrawlSession
                         FetchOutcome.ProcessingError, exception.Message);
                 }
 
-                if (!Defer(record))
-                {
-                    await _writer.RecordAsync(record, cancellationToken).ConfigureAwait(false);
-                }
-
+                var deferred = Defer(record);
                 if (isRetry)
                 {
-                    // Its one more try is over, so its held-back record isn't needed any more.
+                    // Its one more try is over, so its held-back record isn't needed any more. Dropped before it's
+                    // recorded (Defer has read it), so a claim that returns what it led to finds the last tries over.
                     _retried.TryRemove(item.Id, out _);
+                }
+
+                if (!deferred)
+                {
+                    await _writer.RecordAsync(record, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -593,9 +632,10 @@ internal sealed class CrawlSession
         {
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
+                // One record of counts for the rate and the report, so the rate is of the numbers it goes out with.
+                var counts = _counters.Current;
                 var now = _elapsed.Elapsed;
-                var fetched = _counters.Fetched;
-                samples.Enqueue((now, fetched));
+                samples.Enqueue((now, counts.Fetched));
                 while (samples.Count > 1 && now - samples.Peek().At > TimeSpan.FromSeconds(RATE_WINDOW_SECONDS))
                 {
                     samples.Dequeue();
@@ -603,8 +643,8 @@ internal sealed class CrawlSession
 
                 var (oldestAt, oldestFetched) = samples.Peek();
                 var seconds = (now - oldestAt).TotalSeconds;
-                Volatile.Write(ref _pagesPerSecond, seconds > 0 ? (fetched - oldestFetched) / seconds : 0);
-                _observer.OnProgress(Snapshot());
+                Volatile.Write(ref _pagesPerSecond, seconds > 0 ? (counts.Fetched - oldestFetched) / seconds : 0);
+                _observer.OnProgress(Snapshot(counts));
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

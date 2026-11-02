@@ -76,4 +76,22 @@ public sealed class CrawlScopeTests
 
         Assert.True(scope.IsInStartFolder(new Uri("https://example.com/shop")));
     }
+
+    /// <summary>
+    /// Progress and notices name a host of the site one way: as the start URL has it, for the start's host and its www twin,
+    /// which are one site; a subdomain without its www.
+    /// </summary>
+    [Theory]
+    [InlineData("https://www.example.com/", "example.com", "www.example.com")]
+    [InlineData("https://www.example.com/", "www.example.com", "www.example.com")]
+    [InlineData("https://example.com/", "www.example.com", "example.com")]
+    [InlineData("https://Example.com/", "example.com", "example.com")]
+    [InlineData("https://example.com/", "www.blog.example.com", "blog.example.com")]
+    [InlineData("https://example.com/", "blog.example.com", "blog.example.com")]
+    public void TheSitesHostsAreNamedAsTheStartUrlHasThem(string start, string host, string name)
+    {
+        var scope = new CrawlScope(new Uri(start), includeSubdomains: true, stayInStartFolder: false);
+
+        Assert.Equal(name, scope.HostName(host));
+    }
 }

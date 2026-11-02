@@ -4,8 +4,11 @@ using ShoutingIguana.Engine.Crawling.Models;
 namespace ShoutingIguana.Sidecar.Events.Models;
 
 /// <summary>Something holding part of a live crawl up now. Which fields are there depends on the reason.</summary>
-/// <param name="Host">The site's host, or for <c>siteDown</c> the origin (scheme, host and port).</param>
-/// <param name="Urls">For <c>robotsTxt</c>: the URLs waiting.</param>
+/// <param name="Host">
+/// One of the site's hosts, as the engine names them: the start URL's host for it and its www twin, which are one site;
+/// another of the site's hosts without a leading www. For <c>siteDown</c>, the origin that is down.
+/// </param>
+/// <param name="Urls">For <c>robotsTxt</c> and <c>otherSitesRobotsTxt</c>: the URLs waiting. For <c>robotsTxtCoolDown</c>: the URLs it refused, if any.</param>
 /// <param name="DurationMs">
 /// <c>crawlDelay</c>: the delay. <c>backoff</c>: the extra spacing now. <c>heldBack</c> and <c>robotsTxtCoolDown</c>: how long
 /// until it ends. <c>siteDown</c>: how long it hasn't answered.

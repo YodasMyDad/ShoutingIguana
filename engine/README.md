@@ -128,23 +128,32 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
    `BytesDownloaded` is the bodies fetched, not the sizes that status checks were told.
 
 Progress (`CrawlProgress`, twice a second) costs the same at a million URLs as at ten. The writer keeps running totals
-as it stores each response, so a crawl's last counts are what its file holds, and the rest is read from a handful of
+as it stores each response, and publishes them as one record after each batch it stores, so one report's numbers are
+all of one moment and agree with each other, and a crawl's last counts are what its file holds. The rest is read from
 the site's host gates:
 
 - every URL fetched by status class (2xx to 5xx, another status, no response, blocked) and by status code, a block
   page's status being the firewall's rather than the site's, and why the URLs without a status have none;
-- the site's own URLs (internal, not the probes of its other versions) found and fetched, which a URL limit counts;
+- the site's own URLs (internal, not the probes of its other versions) found and fetched, which a URL limit counts and
+  they never pass, and the limit itself;
 - the phase: starting, reading robots.txt (nothing else can be fetched), crawling, reading sitemaps (nothing else is
-  left), retrying the URLs that got no response, finishing;
-- what holds it up now: URLs waiting for robots.txt, a crawl-delay, a backoff or Retry-After, an origin that's down,
-  robots.txt's cool-down.
+  left), retrying (the last tries of URLs that got no response, until they're over), finishing;
+- what holds it up now: the site's URLs waiting for its robots.txt and other sites' (link checks) waiting for theirs, a
+  crawl-delay, a backoff or Retry-After, an origin that's down, robots.txt's cool-down. At most five for each reason,
+  the longest first, with a count of the rest; none once the crawl is finishing.
+
+Progress and notices name one of the site's hosts the same way: the start URL's host for it and its www twin, which are
+one site with one budget, and a subdomain without its `www.` (`CrawlScope.HostName`). Origins (scheme, host and port)
+are named as they are.
 
 Every notice (the site blocking the crawler, robots.txt unreadable, the site down, the sitemaps read) is kept in the
 crawl file, numbered across runs, with the facts it's about (which host, how many responses were blocked), so any
 program that opens the crawl can show it (`CrawlNoticeReader`). `blocked` is said once per host, and
-`robots-unreachable` once per origin, in each run. `CrawlHistoryReader` counts a crawl's fetching over time back from the
-stored fetch times, for a chart of a crawl continued later; when each URL was found isn't stored, so it can't say how
-the found and queued counts grew.
+`robots-unreachable` once per origin, in each run. Read back, a `blocked` notice counts the host's blocked responses in
+the whole crawl, every run's. Ids carry on from the file's highest, so the last ones heard before a crash can be given
+again: a notice is its id and its time. `CrawlHistoryReader` counts a crawl's fetching over time back from the stored
+fetch times, for a chart of a crawl continued later, and the site's own URLs found, each from when the page that first
+linked it was fetched; the other found and queued counts can't be told, as when each URL was found isn't stored.
 
 Memory stays flat because the only thing in memory that grows with the crawl is a 128-bit key per URL (about
 40 bytes). The frontier, results and links all live on disk.
@@ -287,7 +296,10 @@ show up. The URL summary has no depth for them.
 The analysis tables are created when a crawl is first analysed, so a crawl file from an earlier engine opens as it
 always did and gets what it lacks on its next analysis. `notices` is created whenever the crawl writer opens a file,
 so an earlier engine's crawl gets it when it's continued, and reads as having none until then. The crawl's own schema
-version doesn't change.
+version doesn't change. Files are shared, so a notice another program wrote oddly is read as well as it can be (one
+without a code or a message is left out, a missing level reads as a warning and a missing time as the crawl's start),
+and a `notices` table of another shape reads as none; the writer won't continue a crawl whose table it couldn't store
+a notice in, and says so.
 
 ### URL summary
 
