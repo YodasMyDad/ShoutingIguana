@@ -386,3 +386,58 @@ test('toasts take the app’s look and focus ring, and follow the OS theme', asy
   await undo.click();
   await expect(library.getByRole('link', { name: site(), exact: true })).toBeVisible();
 });
+
+// 200% zoom of a 1280 × 800 window: a viewport half as wide, in CSS pixels, as WCAG 1.4.4 and 1.4.10 measure it.
+const ZOOMED = { width: 640, height: 400 };
+
+/** Whether anything on the page reaches past the window's right edge, and what. */
+const pastTheEdge = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('header *, main *')]
+      .filter((element) => {
+        const box = element.getBoundingClientRect();
+        return box.width > 0 && box.right > window.innerWidth + 0.5 && getComputedStyle(element).position !== 'fixed';
+      })
+      .map((element) => `${element.tagName.toLowerCase()}.${[...element.classList].join('.')}`),
+  );
+
+test('at 200% zoom, the top bar keeps the palette button in the window and its crumbs out from under it', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('region', { name: 'Library' }).getByRole('link', { name: site(), exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+  await page.setViewportSize(ZOOMED);
+  const header = page.locator('header').first();
+  // Nothing reaches past the window's edge or out of the bar.
+  expect(await pastTheEdge(page)).toEqual([]);
+  expect(await header.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  // The palette button narrows to its magnifier and keys, all of it in the window.
+  const palette = header.getByRole('button', { name: /Search or run a command/ });
+  const button = await palette.boundingBox();
+  const keys = await palette.locator('kbd').first().boundingBox();
+  expect(button && button.x + button.width).toBeLessThanOrEqual(ZOOMED.width);
+  expect(keys && button && keys.x + keys.width).toBeLessThanOrEqual((button?.x ?? 0) + (button?.width ?? 0));
+  // The crumbs truncate, the date first, and keep to their own room rather than run under the palette button.
+  const crumbs = header.getByRole('navigation', { name: 'Breadcrumb' });
+  expect(await crumbs.evaluate((element) => getComputedStyle(element).overflowX)).toBe('clip');
+  const room = await crumbs.boundingBox();
+  expect(room && button && room.x + room.width).toBeLessThanOrEqual(button?.x ?? 0);
+
+  // With the sidebar collapsed there's room for where you are: the palette button's words and the date give way
+  // first, so the crawl's name and its section show, most of each at least.
+  await page.getByRole('button', { name: 'Collapse the sidebar' }).click();
+  const widths = (locator: Locator) =>
+    locator.evaluate((element) => ({ shown: element.clientWidth, full: element.scrollWidth }));
+  const nameCrumb = crumbs.getByRole('listitem').filter({ hasText: site() }).locator('span.truncate');
+  // The sidebar narrows over its transition: measure once it's done.
+  await expect.poll(async () => (await widths(nameCrumb)).shown).toBeGreaterThan(0);
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  const name = await widths(nameCrumb);
+  const section = await widths(crumbs.locator('[aria-current="page"]'));
+  const date = await widths(crumbs.getByRole('listitem').filter({ hasText: / \d{4}, / }));
+  expect(date.shown).toBeLessThan(name.shown);
+  expect(name.shown).toBeGreaterThanOrEqual(name.full * 0.75);
+  expect(section.shown).toBeGreaterThanOrEqual(section.full * 0.75);
+  expect(await pastTheEdge(page)).toEqual([]);
+});
