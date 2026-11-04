@@ -8,19 +8,26 @@
   How it fits together:
   - This file is one `@theme` block, so each token is a CSS custom property on :root *and* a Tailwind utility where
     Tailwind has a namespace for it (colours: bg-surface, text-text-muted, border-border; radii: rounded-md; type:
-    text-13; shadows: shadow-2; easing: ease-out). Tailwind's own palette, scales and shadows are cleared first, so
-    bg-blue-500 or text-sm resolve to nothing; an arbitrary value such as text-[13px] still works, so review rejects it.
+    text-13; shadows: shadow-2; easing: ease-out; spacing: p-2.5). Tailwind's own palette, scales and shadows are
+    cleared first, so bg-blue-500, text-sm or p-13 resolve to nothing. An arbitrary value such as text-[13px] would
+    still compile: ESLint refuses them (eslint.config.js).
   - Tokens without a Tailwind namespace (layout sizes, density, durations) are used as `w-(--sidebar-width)` or
     `duration-(--duration-quick)`, or straight from CSS.
   - Themes: each colour holds its light and dark value with light-dark(). The page follows the OS through
     `color-scheme: light dark`; <html data-theme="light|dark"> overrides it.
   - Density: <html data-density="compact|standard|comfortable">, standard by default.
+  - Smaller windows: the `narrow:` variant is below 1360 px wide, as the layout tokens' own media query.
   - High contrast: under `forced-colors: active` the roles map to the system colours.
 */
+
+/* Below 1360 px wide (1280 x 800): the frame narrows. */
+@custom-variant narrow (@media (max-width: 1360px));
 
 @theme static {
   /* Tailwind's defaults are cleared: only these tokens exist. */
   --color-*: initial;
+  --spacing-*: initial;
+  --spacing: initial;
   --font-*: initial;
   --font-weight-*: initial;
   --text-*: initial;
@@ -40,8 +47,6 @@
   /* ------------------------------------------------------------------ Type */
   --font-sans: 'Inter', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  --font-features: 'cv11' 0, 'ss03' 0;
-  --font-features-figures: 'tnum' 1, 'lnum' 1;
 
   /* The scale: 11, 12, 13, 14, 16, 18, 21, 28, 36, 48. `text-13` sets the size and its line height. */
   --text-11: 11px;
@@ -88,8 +93,8 @@
   --tracking-wide: 0.01em; /* 11-12 px text */
 
   /* -------------------------------------------------------------- Spacing */
-  /* A 4 px scale: p-1 is 4 px, p-2.5 is 10 px, gap-8 is 32 px. The named steps are for hand-written CSS. */
-  --spacing: 4px;
+  /* A closed 4 px scale: p-1 is 4 px, p-2.5 is 10 px, gap-8 is 32 px, and nothing between (p-13 is no class). The
+     `--space-*` names are for hand-written CSS; Tailwind's `--spacing-*` steps below are the same values. */
   --space-0-5: 2px;
   --space-1: 4px;
   --space-1-5: 6px;
@@ -104,6 +109,21 @@
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
+  --spacing-0: 0px;
+  --spacing-0_5: var(--space-0-5);
+  --spacing-1: var(--space-1);
+  --spacing-1_5: var(--space-1-5);
+  --spacing-2: var(--space-2);
+  --spacing-2_5: var(--space-2-5);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-7: var(--space-7);
+  --spacing-8: var(--space-8);
+  --spacing-10: var(--space-10);
+  --spacing-12: var(--space-12);
+  --spacing-16: var(--space-16);
 
   /* ---------------------------------------------------------------- Radii */
   /* By the size of the thing, so hierarchy shows in the corners too. */
@@ -115,7 +135,7 @@
   --radius-full: 999px; /* the status pill, progress bars */
 
   /* ----------------------------------------------------------- Breakpoints */
-  --breakpoint-narrow: 1360px; /* below it, the frame narrows (1280 x 800) */
+  /* `wide:` is 1920 px and up. Below 1360 px is `narrow:`, a max-width variant (above). */
   --breakpoint-wide: 1920px;
   --container-content: 1136px;
 
@@ -123,6 +143,10 @@
   /* 150-200 ms, easing out; for orientation, not decoration. Reduced motion turns it off (base.css). */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  /* What transition-colors and the like use when a component names no duration or easing: the tokens', never
+     Tailwind's own. */
+  --default-transition-duration: var(--duration-quick);
+  --default-transition-timing-function: var(--ease-out);
   --animate-shimmer: shimmer var(--duration-shimmer) linear infinite;
   --animate-pulse: pulse var(--duration-pulse) var(--ease-in-out) infinite;
 
@@ -217,6 +241,10 @@
 
 :root {
   color-scheme: light dark;
+
+  /* Type features (not in the theme: Tailwind would read --font-* as font families). */
+  --type-features: 'cv11' 0, 'ss03' 0;
+  --type-features-figures: 'tnum' 1, 'lnum' 1;
 
   --elevation-0: none;
   --elevation-1:
@@ -320,10 +348,13 @@
   --status-label-width: 104px;
   --status-count-width: 52px;
   --facts-label-width: 104px;
+  --facts-columns: max-content 1fr; /* a list of facts: labels, then values */
   --percent-width: 40px;
   --search-width: 232px;
   --search-width-filter: 160px;
   --search-width-library: 260px;
+  --settings-nav-width: 192px;
+  --detail-max-height: 192px; /* an error's technical detail, before it scrolls */
   --palette-width: 640px;
   --palette-top: 12vh; /* the palette sits high, near where the eye already is */
   --palette-list-max: 60vh;
@@ -418,7 +449,9 @@
     --color-surface-sunken: Canvas;
     --color-surface-hover: Canvas;
     --color-surface-active: Canvas;
-    --color-surface-selected: Highlight;
+    /* Selected and current things keep the page's colours and get a Highlight outline (base.css): text on Highlight
+       would need HighlightText, which nothing here sets. */
+    --color-surface-selected: Canvas;
     --color-border-subtle: GrayText;
     --color-border: CanvasText;
     --color-border-strong: CanvasText;

@@ -27,7 +27,7 @@ export function SettingsScreen() {
   const current = SECTIONS.find((candidate) => candidate.id === section) ?? SECTIONS[0];
   return (
     <div className="flex gap-8 px-(--page-gutter) py-6">
-      <nav aria-label="Settings" className="w-48 shrink-0">
+      <nav aria-label="Settings" className="w-(--settings-nav-width) shrink-0">
         <ul className="flex flex-col gap-0.5">
           {SECTIONS.map((entry) => (
             <li key={entry.id}>
@@ -37,9 +37,7 @@ export function SettingsScreen() {
                 aria-current={entry.id === current.id ? 'page' : undefined}
                 className={clsx(
                   'flex h-(--nav-item-height) items-center rounded-md px-2.5 text-13',
-                  entry.id === current.id
-                    ? 'bg-surface-selected font-medium text-accent-text'
-                    : 'text-text-secondary hover:bg-surface-hover',
+                  entry.id === current.id ? 'si-current font-medium' : 'text-text-secondary hover:bg-surface-hover',
                 )}
               >
                 {entry.title}
@@ -136,7 +134,7 @@ function About() {
   }, []);
   return (
     <ScreenStub title="About" purpose="Shouting Iguana: an SEO crawler and site auditor.">
-      <dl className="grid max-w-(--content-max) grid-cols-[max-content_1fr] gap-x-6 gap-y-1 text-13">
+      <dl className="grid max-w-(--content-max) grid-cols-(--facts-columns) gap-x-6 gap-y-1 text-13">
         <Fact label="App">
           {shell ? `${shell.appVersion}${shell.debug ? ' (debug build)' : ''}` : 'Running in a browser'}
         </Fact>

@@ -21,3 +21,11 @@ export interface GridColumn<Row> {
 
 /** What Ctrl+C asks the data layer for: rows by index, fetched if they aren't loaded. */
 export type RowFetcher<Row> = (indices: readonly number[]) => Promise<readonly (Row | undefined)[]>;
+
+/** The rows in view, overscan included, as the grid tells the data layer. */
+export interface GridRange {
+  first: number;
+  last: number;
+  /** The scrollbar's thumb is held: rows fly past, so pages are fetched once it settles, and nothing is prefetched. */
+  scrubbing: boolean;
+}

@@ -29,6 +29,33 @@ export const ProblemErrorState: Story = {
   ),
 };
 
+/**
+ * A problem the engine meant (a sort on a column the analysis fills, with no analysis): no Try again, which would fail
+ * the same way, but what can work instead.
+ */
+export const ProblemTheEngineMeant: Story = {
+  render: () => (
+    <ErrorState
+      error={
+        new ProblemError({
+          type: 'needs-analysis',
+          title: 'Filtering or sorting by these columns needs an analysis, and this crawl hasn’t been analysed yet.',
+          status: 409,
+          reason: 'notAnalyzed',
+          columns: ['issues'],
+        })
+      }
+      onRetry={() => undefined}
+      actions={
+        <>
+          <Button size="sm">Analyse it</Button>
+          <Button size="sm">Clear the sort and filters</Button>
+        </>
+      }
+    />
+  ),
+};
+
 export const EngineUnreachable: Story = {
   render: () => (
     <ErrorState error={new SidecarUnreachableError(new TypeError('Failed to fetch'))} onRetry={() => undefined} />

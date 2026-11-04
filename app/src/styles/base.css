@@ -1,4 +1,8 @@
-/* Base rules, in tokens only. Placeholder styling: the design-system pass refines it. */
+/* Base rules, in tokens only. Placeholder styling: the design-system pass refines it.
+
+   State indicators meet WCAG 2.2 AA (1.4.11) in both themes: what's selected, highlighted or current carries the
+   accent rule (at least 3:1 against what's beside it), never a tint alone, and focus is an outline. Under forced
+   colours each is a Highlight outline on the page's own colours, so no text sits on Highlight unreadable. */
 
 @layer base {
   html,
@@ -14,13 +18,19 @@
     font-family: var(--font-sans);
     font-size: var(--text-14);
     line-height: var(--leading-14);
-    font-feature-settings: var(--font-features);
+    font-feature-settings: var(--type-features);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
 
   ::selection {
     background: var(--color-text-selection);
+  }
+
+  /* A placeholder is often a field's only visible label: text-muted, 4.5:1 at least, never Tailwind's faded text. */
+  ::placeholder {
+    color: var(--color-text-muted);
+    opacity: 1;
   }
 
   /* One focus ring everywhere. An outline, so it survives forced colours (shadows don't). */
@@ -33,7 +43,7 @@
   .figures,
   [data-figures] {
     font-variant-numeric: tabular-nums lining-nums;
-    font-feature-settings: var(--font-features-figures);
+    font-feature-settings: var(--type-features-figures);
   }
 
   code,
@@ -44,9 +54,24 @@
     font-size: var(--mono-scale);
   }
 
+  /* Scrollbar thumbs are where you are in a list: border-control, 3:1 against what's behind them. */
   * {
-    scrollbar-color: var(--color-border-strong) transparent;
+    scrollbar-color: var(--color-border-control) transparent;
   }
+
+  @media (forced-colors: active) {
+    ::selection {
+      background: Highlight;
+      color: HighlightText;
+    }
+  }
+}
+
+/* A panel that opens and closes (the sidebar): its width moves, at the motion tokens' pace. */
+@utility transition-width {
+  transition-property: width;
+  transition-duration: var(--default-transition-duration);
+  transition-timing-function: var(--default-transition-timing-function);
 }
 
 @layer components {
@@ -77,12 +102,30 @@
     border-radius: var(--radius-xs);
   }
 
+  /*
+    What's current in a list of places (the sidebar, Settings' sections) and what's highlighted in the palette: the
+    selected tint, its text in the accent, and the accent rule along its leading edge.
+  */
+  .si-current {
+    background: var(--color-surface-selected);
+    color: var(--color-accent-text);
+    box-shadow: inset var(--rule-width) 0 0 var(--color-accent);
+  }
+
   /* The grid primitive (src/grid/GridCore.tsx). Placeholder look; the design-system pass restyles it. */
   .si-grid {
     background: var(--color-surface);
     font-size: var(--grid-font-size);
     line-height: var(--grid-leading);
     outline: none;
+    /* The virtualiser owns the scroll position: the browser mustn't move it to keep some row "anchored". */
+    overflow-anchor: none;
+  }
+
+  /* The grid's own focus: an outline, so forced colours keep it. */
+  .si-grid:focus-visible {
+    outline: var(--hairline) solid var(--color-focus);
+    outline-offset: calc(var(--hairline) * -1);
   }
 
   .si-grid-row {
@@ -116,7 +159,8 @@
     font-variant-numeric: tabular-nums lining-nums;
   }
 
-  .si-grid-row:not(.si-grid-head):hover {
+  /* Hover is a hint, so it never covers a selection. */
+  .si-grid-row:not(.si-grid-head):not([data-selected]):hover {
     background: var(--color-surface-hover);
   }
 
@@ -124,14 +168,32 @@
     background: var(--color-surface-selected);
   }
 
+  /*
+    The selection's accent rule, along the rows' leading edge. It sits in a gutter that sticks to the grid's left edge,
+    so a grid scrolled sideways still shows which rows are selected.
+  */
+  .si-grid-gutter {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    /* No height of its own: in the rows' flow, a full-height gutter would add to what the grid can scroll. */
+    height: 0;
+    width: var(--rule-width);
+    pointer-events: none;
+  }
+
+  .si-grid-mark {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: var(--color-accent);
+  }
+
   /* The keyboard cursor: drawn on the active cell while the grid has focus. An outline survives forced colours. */
   .si-grid:focus-visible [data-active] {
     outline: var(--focus-width) solid var(--color-focus);
     outline-offset: calc(var(--focus-width) * -1);
-  }
-
-  .si-grid:focus-visible {
-    box-shadow: inset 0 0 0 var(--hairline) var(--color-focus);
   }
 
   /* Windowed: the custom scrollbar shows the vertical position, so the native vertical bar goes (the horizontal stays). */
@@ -146,7 +208,7 @@
   }
 
   .si-grid--windowed::-webkit-scrollbar-thumb {
-    background: var(--color-border-strong);
+    background: var(--color-border-control);
     border-radius: var(--radius-full);
   }
 
@@ -154,51 +216,13 @@
     background: transparent;
   }
 
-  @media (forced-colors: active) {
-    .si-scroll-thumb {
-      forced-color-adjust: none;
-      background: CanvasText;
-    }
-
-    .si-grid-row[data-selected] {
-      forced-color-adjust: none;
-      background: Highlight;
-      color: HighlightText;
-    }
+  /* The windowed grid's own scrollbar: the only sign of where you are in a million rows. */
+  .si-scroll-thumb {
+    background: var(--color-border-control);
   }
 
-  /* Toasts (Sonner), on the tokens. */
-  .si-toast {
-    --normal-bg: var(--color-surface-overlay);
-    --normal-text: var(--color-text);
-    --normal-border: var(--color-border);
-    --error-bg: var(--color-surface-overlay);
-    --error-text: var(--color-text);
-    --error-border: var(--color-error);
-    --success-bg: var(--color-surface-overlay);
-    --success-text: var(--color-text);
-    --success-border: var(--color-border);
-    width: var(--toast-width);
-    border-radius: var(--radius-md);
-    box-shadow: var(--elevation-3);
-    font-family: var(--font-sans);
-  }
-
-  .si-toast-title {
-    font-size: var(--text-13);
-    font-weight: var(--font-weight-semibold);
-  }
-
-  .si-toast-description {
-    color: var(--color-text-secondary);
-    font-size: var(--text-12);
-  }
-
-  .si-toast-action {
-    background: var(--color-accent-fill);
-    color: var(--color-text-on-accent);
-    border-radius: var(--radius-sm);
-    font-weight: var(--font-weight-medium);
+  .si-scroll-thumb:hover {
+    background: var(--color-text-muted);
   }
 
   /* The command palette's rows: the highlighted option has aria-selected. */
@@ -223,16 +247,11 @@
 
   .si-palette-item[aria-selected='true'] {
     background: var(--color-surface-selected);
+    box-shadow: inset var(--rule-width) 0 0 var(--color-accent);
   }
 
   .si-palette-item[aria-disabled='true'] {
     color: var(--color-text-muted);
-  }
-
-  @media (forced-colors: active) {
-    .si-palette-item[aria-selected='true'] {
-      outline: var(--focus-width) solid Highlight;
-    }
   }
 
   /* Refreshing: a thin line at the top of the panel; what's shown stays. */
@@ -250,6 +269,144 @@
     .si-progress-line {
       animation: progress-line 1.2s var(--ease-in-out) infinite;
     }
+  }
+
+  /*
+    High contrast: shadows and tints are gone, so what's selected, highlighted or current is a Highlight outline, on
+    the page's own colours. The grid's cursor on a selected row is CanvasText, so it stands out from the row's outline.
+  */
+  @media (forced-colors: active) {
+    .si-current,
+    .si-palette-item[aria-selected='true'],
+    .si-grid-row[data-selected] {
+      outline: var(--focus-width) solid Highlight;
+      outline-offset: calc(var(--focus-width) * -1);
+    }
+
+    .si-grid:focus-visible [data-selected] [data-active] {
+      outline-color: CanvasText;
+    }
+
+    .si-grid-mark,
+    .si-scroll-thumb {
+      forced-color-adjust: none;
+      background: Highlight;
+    }
+
+    .si-scroll-thumb:hover {
+      background: CanvasText;
+    }
+  }
+}
+
+/*
+  Toasts (Sonner, unstyled: every look is ours). Sonner injects its own stylesheet unlayered, and keeps a few rules
+  even for unstyled toasts (no outline on a focused toast, its own colours in its dark theme), so these rules are
+  unlayered too, and more specific than its: the app's colours and focus rings win, in every theme and under forced
+  colours. The colours are tokens, so a toast follows the OS when the app does.
+*/
+[data-sonner-toaster] [data-sonner-toast].si-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  box-sizing: border-box;
+  width: var(--toast-width);
+  padding: var(--space-3) var(--space-4);
+  border: var(--hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-overlay);
+  box-shadow: var(--elevation-3);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-13);
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-type='error'].si-toast {
+  border-color: var(--color-error);
+}
+
+[data-sonner-toaster] [data-sonner-toast].si-toast:focus-visible,
+[data-sonner-toaster] [data-sonner-toast].si-toast [data-button]:focus-visible,
+[data-sonner-toaster] [data-sonner-toast].si-toast [data-close-button]:focus-visible {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+[data-sonner-toaster] [data-sonner-toast].si-toast [data-content] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+[data-sonner-toaster] [data-sonner-toast].si-toast [data-title].si-toast-title {
+  color: var(--color-text);
+  font-size: var(--text-13);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-13);
+}
+
+[data-sonner-toaster] [data-sonner-toast].si-toast [data-description].si-toast-description {
+  color: var(--color-text-secondary);
+  font-size: var(--text-12);
+  line-height: var(--leading-12);
+}
+
+[data-sonner-toaster] [data-sonner-toast].si-toast [data-button].si-toast-action,
+[data-sonner-toaster] [data-sonner-toast].si-toast [data-button].si-toast-cancel {
+  flex-shrink: 0;
+  height: var(--control-height-xs);
+  padding: 0 var(--space-2-5);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--text-12);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+[data-sonner-toaster] [data-sonner-toast].si-toast [data-button].si-toast-action {
+  background: var(--color-accent-fill);
+  color: var(--color-text-on-accent);
+}
+
+[data-sonner-toaster] [data-sonner-toast].si-toast [data-button].si-toast-action:hover {
+  background: var(--color-accent-fill-hover);
+}
+
+[data-sonner-toaster] [data-sonner-toast].si-toast [data-button].si-toast-cancel {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+[data-sonner-toaster] [data-sonner-toast].si-toast [data-close-button].si-toast-close {
+  position: absolute;
+  top: calc(var(--space-2) * -1);
+  left: calc(var(--space-2) * -1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--chip-remove-size);
+  height: var(--chip-remove-size);
+  padding: 0;
+  border: var(--hairline) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-overlay);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+[data-sonner-toaster] [data-sonner-toast].si-toast [data-close-button].si-toast-close:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+@media (forced-colors: active) {
+  [data-sonner-toaster] [data-sonner-toast].si-toast,
+  [data-sonner-toaster] [data-sonner-toast].si-toast [data-button],
+  [data-sonner-toaster] [data-sonner-toast].si-toast [data-close-button] {
+    border: var(--hairline) solid CanvasText;
   }
 }
 

@@ -28,6 +28,19 @@ describe('stored settings', () => {
     });
   });
 
+  it('leaves the inspector at the layout’s own size until it’s resized', () => {
+    expect(DEFAULT_SETTINGS.inspectorWidth).toBeNull();
+    expect(DEFAULT_SETTINGS.inspectorHeight).toBeNull();
+    expect(readSettings({ inspectorWidth: null, inspectorHeight: 'tall' })).toMatchObject({
+      inspectorWidth: null,
+      inspectorHeight: null,
+    });
+    expect(readSettings({ inspectorWidth: 500, inspectorHeight: 300 })).toMatchObject({
+      inspectorWidth: 500,
+      inspectorHeight: 300,
+    });
+  });
+
   it('loads through a backend and saves changes', async () => {
     const saved: unknown[] = [];
     const backend: SettingsBackend = {

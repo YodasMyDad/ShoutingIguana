@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useModal } from '../app/overlays';
 import { useSidecarStatus } from '../shell/connection';
 
 /**
@@ -9,6 +10,8 @@ export function StoppingOverlay() {
   const status = useSidecarStatus();
   const ref = useRef<HTMLDivElement>(null);
   const stopping = status.state === 'stopping';
+  // The app behind it is inert, and its keys do nothing, until the window closes.
+  useModal(stopping);
 
   useEffect(() => {
     if (stopping) ref.current?.focus();

@@ -11,7 +11,7 @@ import { ErrorState } from '../feedback/ErrorState';
 import { notifyError, notifyUndo } from '../feedback/notify';
 import { SkeletonRows } from '../feedback/Skeleton';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
-import { formatBytes, formatCount, formatExactTime, formatRelativeTime } from '../lib/format';
+import { formatBytes, formatCount, formatCountOf, formatExactTime, formatRelativeTime } from '../lib/format';
 import { useLiveCrawl, useLiveIds } from '../live/liveStore';
 import { Button } from '../ui/Button';
 
@@ -140,11 +140,10 @@ function Library() {
         />
       </div>
 
-      {library.isPending ? (
-        showSkeleton ? (
-          <SkeletonRows rows={4} label="Loading the library" />
-        ) : null
-      ) : library.error && !library.data ? (
+      {showSkeleton ? (
+        // Once shown, the skeleton stays its minimum, even when the library comes a moment later.
+        <SkeletonRows rows={4} label="Loading the library" />
+      ) : library.isPending ? null : library.error && !library.data ? (
         <ErrorState
           error={library.error}
           title="The library couldn’t be read."
@@ -204,8 +203,10 @@ function LibraryRow({ item }: { item: CrawlListItem }) {
   const queryClient = useQueryClient();
   const live = useLiveCrawl(item.id);
   const status = effectiveStatus(item, live) ?? item.status;
-  const fetched = live?.progress && isLive(status) ? live.progress.fetched : item.fetchedUrlCount;
-  const pages = live?.progress && isLive(status) ? live.progress.htmlPages : item.pageCount;
+  // A file that couldn't be read says nothing about its counts: they show as "–", never 0.
+  const unreadable = status === 'unreadable';
+  const fetched = live?.progress && isLive(status) ? live.progress.fetched : unreadable ? null : item.fetchedUrlCount;
+  const pages = live?.progress && isLive(status) ? live.progress.htmlPages : unreadable ? null : item.pageCount;
 
   const remove = async () => {
     try {
@@ -245,25 +246,27 @@ function LibraryRow({ item }: { item: CrawlListItem }) {
       <td className="figures py-2 pr-4 text-right">{formatCount(fetched)}</td>
       <td className="figures py-2 pr-4 text-right">{formatCount(pages)}</td>
       <td className="py-2 pr-4">
-        {item.issues ? (
+        {unreadable ? (
+          <span className="text-text-muted">–</span>
+        ) : item.issues ? (
           <span className="figures flex gap-3">
             <span>
               <span aria-hidden="true" className="text-error-text">
                 ■{' '}
               </span>
-              {formatCount(item.issues.error)} errors
+              {formatCountOf(item.issues.error, 'error')}
             </span>
             <span>
               <span aria-hidden="true" className="text-warning-text">
                 ▲{' '}
               </span>
-              {formatCount(item.issues.warning)} warnings
+              {formatCountOf(item.issues.warning, 'warning')}
             </span>
             <span>
               <span aria-hidden="true" className="text-notice-text">
                 ●{' '}
               </span>
-              {formatCount(item.issues.notice)} notices
+              {formatCountOf(item.issues.notice, 'notice')}
             </span>
           </span>
         ) : (

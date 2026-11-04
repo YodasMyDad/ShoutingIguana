@@ -2,7 +2,7 @@
 // CLI for synthetic crawls, and crawl files for a data folder. Used by `npm run dev`, `npm run make:crawl` and the
 // end-to-end tests. Never touches the developer's dev-crawls folder or real library: it only ever copies out of it.
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
@@ -58,25 +58,7 @@ export function startSidecar({ port = 0, token, origins, dataDir, stateDir, onLo
   );
   createInterface({ input: child.stderr }).on('line', onLog);
   const exited = new Promise((resolve) => child.once('exit', (code) => resolve(code)));
-
-  const ready = new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('The sidecar wrote no ready line within 30 s')), 30_000);
-    createInterface({ input: child.stdout }).on('line', (line) => {
-      try {
-        const message = JSON.parse(line);
-        if (message.event === 'ready') {
-          clearTimeout(timer);
-          resolve(message);
-        }
-      } catch {
-        onLog(`stdout: ${line}`);
-      }
-    });
-    void exited.then((code) => {
-      clearTimeout(timer);
-      reject(new Error(`The sidecar exited with code ${code} before it was ready`));
-    });
-  });
+  const ready = readyLine(child, { onLog });
 
   /** Asks it to stop (stdin `shutdown`), and kills it only if it hasn't within the contract's 30 s and a margin. */
   async function stop() {
@@ -89,6 +71,35 @@ export function startSidecar({ port = 0, token, origins, dataDir, stateDir, onLo
   }
 
   return ready.then((message) => ({ port: message.port, version: message.version, child, stop }));
+}
+
+/**
+ * Resolves with a started sidecar's ready line (`{"event":"ready",…}` on stdout). Rejects if it exits first, or if
+ * there's none within `timeoutMs`: it is killed then, since one that isn't serving has nothing to shut down
+ * gracefully, and it mustn't outlive the run that gave up on it.
+ */
+export function readyLine(child, { onLog = () => undefined, timeoutMs = 30_000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`The sidecar wrote no ready line within ${timeoutMs / 1000} s`));
+    }, timeoutMs);
+    createInterface({ input: child.stdout }).on('line', (line) => {
+      try {
+        const message = JSON.parse(line);
+        if (message.event === 'ready') {
+          clearTimeout(timer);
+          resolve(message);
+        }
+      } catch {
+        onLog(`stdout: ${line}`);
+      }
+    });
+    child.once('exit', (code) => {
+      clearTimeout(timer);
+      reject(new Error(`The sidecar exited with code ${code} before it was ready`));
+    });
+  });
 }
 
 /** Builds the engine's CLI (`si`) into app/.engine-build, apart from every other build of the engine. */
@@ -141,20 +152,37 @@ export async function makeSyntheticCrawl({ out, pages = 60, root = engineRoot(),
   return out;
 }
 
-/** Copies a crawl file and its SQLite companions (-wal, -shm) into a folder. Never opens the original. */
+/** A SQLite database's companion files: its write-ahead log and the log's index. */
+const COMPANIONS = ['-wal', '-shm'];
+
+/**
+ * Copies a crawl file and its SQLite companions (-wal, -shm) into a folder. Never opens the original. Companions the
+ * target has from an earlier copy go first: SQLite would replay a stale write-ahead log onto the new copy.
+ */
 export function copyCrawl(source, folder) {
   mkdirSync(folder, { recursive: true });
   const target = path.join(folder, path.basename(source));
-  for (const suffix of ['', '-wal', '-shm']) {
+  for (const suffix of COMPANIONS) rmSync(target + suffix, { force: true });
+  for (const suffix of ['', ...COMPANIONS]) {
     if (existsSync(source + suffix)) copyFileSync(source + suffix, target + suffix);
   }
   return target;
 }
 
-/** Whether `target` is a current copy of `source`, by size and time, so big copies happen once. */
+/**
+ * Whether `target` is a current copy of `source`, by size and time, so big copies happen once: the crawl file and each
+ * companion alike (one the source has and the target hasn't, or the other way round, isn't current).
+ */
 export function isCurrentCopy(source, target) {
   if (!existsSync(target)) return false;
-  const a = statSync(source);
-  const b = statSync(target);
+  return ['', ...COMPANIONS].every((suffix) => isSameFile(source + suffix, target + suffix));
+}
+
+/** Both missing, or both there with the same size and the copy no older than the original. */
+function isSameFile(original, copy) {
+  const [hasOriginal, hasCopy] = [existsSync(original), existsSync(copy)];
+  if (!hasOriginal || !hasCopy) return hasOriginal === hasCopy;
+  const a = statSync(original);
+  const b = statSync(copy);
   return a.size === b.size && b.mtimeMs >= a.mtimeMs;
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { HISTORY_POINTS, LiveStore, PUBLISH_INTERVAL_MS, parseSidecarEvent, type LiveStoreClock } from './liveStore';
+import {
+  HISTORY_POINTS,
+  LiveStore,
+  MAX_ALERTS,
+  PUBLISH_INTERVAL_MS,
+  parseSidecarEvent,
+  type LiveStoreClock,
+} from './liveStore';
 
 /** A clock the test drives: time moves only when told, and the window can be hidden. */
 function manualClock() {
@@ -145,12 +152,94 @@ describe('parseSidecarEvent', () => {
     expect(parseSidecarEvent({ event: 'mystery', id: '', data: '{}' })).toBeNull();
   });
 
-  it('reads a bad count as 0, never NaN', () => {
+  it('reads a bad or missing count as unknown: never NaN, and never 0, which would say nothing happened', () => {
     const event = parseSidecarEvent({
       event: 'progress',
       id: '',
-      data: '{"crawlId":"a","status":"running","fetched":"lots"}',
+      data: '{"crawlId":"a","status":"running","fetched":"lots","queued":null,"discovered":12}',
     });
-    expect(event?.type === 'progress' && event.data.fetched).toBe(0);
+    expect(event?.type).toBe('progress');
+    if (event?.type !== 'progress') return;
+    expect(event.data.fetched).toBeNull();
+    expect(event.data.queued).toBeNull();
+    expect(event.data.inFlight).toBeNull();
+    expect(event.data.discovered).toBe(12);
+  });
+
+  it('drops a status the contract doesn’t have, and keeps only the contract’s fields of a status change', () => {
+    expect(parseSidecarEvent({ event: 'crawl', id: '', data: '{"crawlId":"a","status":"exploded"}' })).toBeNull();
+    expect(parseSidecarEvent({ event: 'progress', id: '', data: '{"crawlId":"a","status":7}' })).toBeNull();
+    expect(
+      parseSidecarEvent({
+        event: 'crawl',
+        id: '',
+        data: '{"crawlId":"a","status":"completed","error":3,"errorType":"crawl-busy","extra":true}',
+      }),
+    ).toEqual({ type: 'crawl', data: { crawlId: 'a', status: 'completed', errorType: 'crawl-busy' } });
+  });
+});
+
+describe('a new stream’s hello', () => {
+  it('ends the live status of every crawl it doesn’t list, so the library’s status shows again', () => {
+    const { clock, advance } = manualClock();
+    const store = new LiveStore(clock);
+    store.ingest(progress('a', 10));
+    store.ingest(progress('b', 20, 'paused'));
+    store.ingest({ event: 'crawl', id: '', data: '{"crawlId":"c","status":"analyzing"}' });
+    store.ingest({ event: 'analysis', id: '', data: '{"crawlId":"c","phase":"checks","done":1,"total":9}' });
+    store.ingest({ event: 'crawl', id: '', data: '{"crawlId":"d","status":"stopped"}' });
+    // The sidecar crashed and the shell started another: only b is live there.
+    store.ingest({ event: 'hello', id: '', data: '{"live":["b"]}' });
+    advance(PUBLISH_INTERVAL_MS);
+    const { crawls, live } = store.getState();
+    expect(live).toEqual(['b']);
+    expect(crawls.a?.status).toBeNull();
+    expect(crawls.b?.status).toBe('paused');
+    expect(crawls.c?.status).toBeNull();
+    expect(crawls.c?.analysis).toBeNull();
+    // A status that was never live is the library's to say anyway: left alone.
+    expect(crawls.d?.status).toBe('stopped');
+    // What it did is history, still there for the Overview.
+    expect(crawls.a?.progress?.fetched).toBe(10);
+  });
+
+  it('tells side-effect listeners what was true before it', () => {
+    const { clock } = manualClock();
+    const store = new LiveStore(clock);
+    store.ingest(progress('a', 10));
+    const before: (string | null | undefined)[] = [];
+    store.onEvent((event, previous) => {
+      if (event.type === 'hello') before.push(previous.crawls.a?.status);
+    });
+    store.ingest({ event: 'hello', id: '', data: '{"live":[]}' });
+    expect(before).toEqual(['running']);
+  });
+});
+
+describe('what the store keeps, so memory stays flat over a long crawl', () => {
+  it('keeps the newest alerts only, up to the cap', () => {
+    const { clock, advance } = manualClock();
+    const store = new LiveStore(clock);
+    for (let i = 0; i < MAX_ALERTS + 25; i++) {
+      store.ingest({
+        event: 'alert',
+        id: '',
+        data: JSON.stringify({ crawlId: 'a', level: 'info', code: `c${i}`, message: 'm', at: '2026-11-01T10:00:00Z' }),
+      });
+    }
+    advance(PUBLISH_INTERVAL_MS);
+    const alerts = store.getState().crawls.a?.alerts ?? [];
+    expect(alerts).toHaveLength(MAX_ALERTS);
+    expect(alerts[0]?.code).toBe('c25');
+    expect(alerts.at(-1)?.code).toBe(`c${MAX_ALERTS + 24}`);
+  });
+
+  it('leaves a gap in the rate history for a rate the stream didn’t give', () => {
+    const { clock, advance } = manualClock();
+    const store = new LiveStore(clock);
+    store.ingest(progress('a', 10));
+    store.ingest({ event: 'progress', id: '', data: '{"crawlId":"a","status":"running","urlsPerSecond":"fast"}' });
+    advance(PUBLISH_INTERVAL_MS);
+    expect(store.getState().crawls.a?.history).toEqual([1]);
   });
 });

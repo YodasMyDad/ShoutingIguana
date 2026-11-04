@@ -6,7 +6,7 @@ pub mod model;
 pub mod notify;
 pub mod sse;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, Read};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -20,7 +20,7 @@ use crate::sync::lock;
 use crate::tray::TrayHandle;
 use crate::window;
 use api::Api;
-use model::{Change, Ended, Event, LiveStatus, LiveView};
+use model::{Change, CrawlItem, Ended, Event, LiveStatus, LiveView};
 use sse::SseParser;
 
 const MIN_BACKOFF: Duration = Duration::from_millis(250);
@@ -36,6 +36,7 @@ pub fn start(app: AppHandle, shell: &Shell) {
         tray: shell.tray.clone(),
         told: HashMap::new(),
         baselines: HashMap::new(),
+        lost: HashSet::new(),
     };
     if let Err(error) = thread::Builder::new().name("live-events".to_owned()).spawn(move || follower.run()) {
         log::error!("Couldn't start the thread that follows the engine's events: {error}");
@@ -52,6 +53,8 @@ struct Follower {
     told: HashMap<String, (String, Option<String>, Option<String>)>,
     /// When each crawl had last been analysed as an analysis of it began, to tell a cancelled one.
     baselines: HashMap<String, Option<String>>,
+    /// Crawls that were crawling when their sidecar went: told about once the next one says they were interrupted.
+    lost: HashSet<String>,
 }
 
 impl Follower {
@@ -63,16 +66,13 @@ impl Follower {
             match self.link.next(followed, retry_at) {
                 Next::Closed => break,
                 Next::Gone => {
-                    // The sidecar went: nothing it said holds any more.
-                    let change = lock(&self.view).clear();
-                    self.tray.changed(change.menu);
+                    self.sidecar_lost();
                     (followed, retry_at, backoff) = (None, None, MIN_BACKOFF);
                 }
                 Next::Connected(connection) => {
                     if followed != Some(connection.generation) {
                         if followed.is_some() {
-                            let change = lock(&self.view).clear();
-                            self.tray.changed(change.menu);
+                            self.sidecar_lost();
                         }
                         followed = Some(connection.generation);
                         backoff = MIN_BACKOFF;
@@ -90,6 +90,41 @@ impl Follower {
         }
         lock(&self.view).clear();
         self.tray.changed(true);
+    }
+
+    /// The followed sidecar went: nothing it said holds any more. The crawls it was crawling are remembered, so the
+    /// next one can say how they ended: an engine that crashed in the tray mustn't lose a crawl without a word.
+    fn sidecar_lost(&mut self) {
+        let change = {
+            let mut view = lock(&self.view);
+            self.lost.extend(view.crawling().map(str::to_owned));
+            view.clear()
+        };
+        self.tray.changed(change.menu);
+    }
+
+    /// After a new sidecar's hello, with its library: tells each crawl the last sidecar took with it that is now
+    /// interrupted, unless the window is in front (its banner and the crawl's status say so there).
+    fn tell_interrupted(&mut self, items: &[CrawlItem]) {
+        if self.lost.is_empty() {
+            return;
+        }
+        let lost = std::mem::take(&mut self.lost);
+        if self.app.try_state::<Shell>().is_none_or(|shell| shell.is_quitting()) {
+            return;
+        }
+        for (item, notice) in notify::interrupted(&lost, items) {
+            let key = notify::ending_key(item);
+            if self.told.get(&item.id) == Some(&key) {
+                continue;
+            }
+            self.told.insert(item.id.clone(), key);
+            if window::is_in_front(&self.app) {
+                log::debug!("No notification for \"{}\": the window is in front and says it itself", notice.title);
+                continue;
+            }
+            notify::show(&self.app, notice.title, &notice.body);
+        }
     }
 
     /// Reads the stream until it ends. True if any event arrived.
@@ -134,6 +169,7 @@ impl Follower {
                 let change = match self.api.crawls(connection, None) {
                     Ok(items) => {
                         let resynced = lock(&self.view).resync(&items);
+                        self.tell_interrupted(&items);
                         Change { menu: change.menu || resynced.menu, progress: true, ..Change::default() }
                     }
                     Err(error) => {

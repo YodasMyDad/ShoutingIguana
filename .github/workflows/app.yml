@@ -1,6 +1,10 @@
 # v2 desktop app: static checks, unit tests and Storybook on every push; the end-to-end tests against the real
 # sidecar, with axe, on Windows (the shipping target, and WebView2's engine family); and the Tauri shell: its tests,
-# a release build, and a check that closing or killing the app leaves no sidecar behind.
+# the per-user NSIS installer (built, installed, run and uninstalled), a check that closing or killing the app leaves
+# no sidecar behind, and builds on Linux and on the shell's oldest supported Rust.
+#
+# Actions are pinned to a commit, with its tag beside it, as npm packages and crates are pinned to versions. The shell's
+# Rust is pinned in app/src-tauri/rust-toolchain.toml.
 name: App (v2)
 
 # The app builds the engine's sidecar and CLI, so an engine change can break it too.
@@ -12,6 +16,14 @@ on:
     paths: ['app/**', '!app/spike/**', '!app/design/**', 'engine/**', '.github/workflows/app.yml']
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request supersedes a run still going.
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   checks:
     name: Lint, types, unit tests, Storybook
@@ -21,9 +33,9 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: npm
@@ -34,6 +46,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # The scripts' own tests (ports, crawl copies, signing), on Node's test runner.
+      - run: node --test "scripts/**/*.test.mjs"
       # The fixtures are git-ignored, so the stories that read them show their error state here: it still builds.
       - run: npm run build-storybook
       - run: npm run build
@@ -47,16 +61,16 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: app/package-lock.json
 
       # Pinned to a feature band, as the engine's workflow does.
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: '10.0.4xx'
 
@@ -67,7 +81,7 @@ jobs:
       - run: npx playwright install chromium
       - run: npm run e2e
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
           name: playwright-report
@@ -75,49 +89,121 @@ jobs:
           retention-days: 7
 
   shell:
-    name: Tauri shell (Windows)
+    name: Tauri shell and installer (Windows)
     needs: checks
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     defaults:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: '10.0.4xx'
 
-      - uses: dtolnay/rust-toolchain@stable
+      # The toolchain rust-toolchain.toml names, with rustfmt and clippy.
+      - name: Rust
+        working-directory: app/src-tauri
+        run: rustup toolchain install
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: app/src-tauri
 
       - run: npm ci
 
-      # tauri-build needs the externalBin to exist before cargo can even test the crate.
+      # tauri-build needs the externalBin to exist before cargo can even test the crate. Unsigned here: there's no
+      # certificate on a CI run, and the signing step says so.
       - run: npm run build:sidecar -- --target x86_64-pc-windows-msvc
 
       - name: Shell tests
         working-directory: app/src-tauri
         run: |
           cargo fmt --check
-          cargo clippy --all-targets -- -D warnings
-          cargo test
+          cargo clippy --all-targets --locked -- -D warnings
+          cargo test --locked
 
-      - name: Release build (no installer)
-        run: npm run tauri build -- --no-bundle
+      # The release build and the per-user NSIS installer, as a release makes them.
+      - name: Release build and installer
+        run: npm run tauri build -- --bundles nsis
 
       - run: npx playwright install chromium
 
-      # Closing the window, or killing the shell, leaves no sidecar running; the app shows a library in WebView2.
+      # Closing the window, or killing the shell, leaves no sidecar running; the app shows a library in WebView2; and
+      # the installer installs it for this user, with .sicrawl opening it, and uninstalls it cleanly.
       - run: npm run check:orphans
       - run: npm run smoke:tauri
+      - name: Installer smoke test
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-installer.ps1
+
+  shell-msrv:
+    name: Tauri shell on its oldest Rust (Windows)
+    needs: checks
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: app/src-tauri
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The rust-version Cargo.toml promises, so it can't drift from what is tested.
+      - name: Rust
+        id: msrv
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^rust-version = "(.+)"').Matches[0].Groups[1].Value
+          rustup toolchain install $version --profile minimal
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: app/src-tauri
+          key: msrv
+
+      # tauri-build only needs the externalBin to exist: a check compiles the shell, it never runs the sidecar.
+      - name: Placeholder sidecar
+        shell: pwsh
+        run: New-Item -ItemType File -Force -Path binaries/si-sidecar-x86_64-pc-windows-msvc.exe | Out-Null
+
+      - run: cargo +${{ steps.msrv.outputs.version }} check --all-targets --locked
+
+  shell-linux:
+    name: Tauri shell (Linux)
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: app/src-tauri
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # WebKitGTK and the tray's indicator library, which Tauri builds against on Linux.
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+
+      - name: Rust
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: app/src-tauri
+
+      # The code for other platforms than Windows compiles, lints and passes its tests here. The externalBin only
+      # needs to exist for that.
+      - name: Placeholder sidecar
+        run: install -D -m 755 /dev/null binaries/si-sidecar-x86_64-unknown-linux-gnu
+
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked

@@ -3,7 +3,7 @@
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
-import { openUrl as openerOpenUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
+import { openUrl as openerOpenUrl } from '@tauri-apps/plugin-opener';
 import { isTauri } from '../lib/platform';
 import { ipc } from './ipc';
 
@@ -17,10 +17,13 @@ export async function openInBrowser(url: string): Promise<boolean> {
   return window.open(url, '_blank', 'noopener,noreferrer') !== null;
 }
 
-/** Shows a file in Explorer or Finder. Not possible from a plain browser. */
-export async function showInFolder(path: string): Promise<boolean> {
+/**
+ * Shows a library crawl's file in Explorer or Finder. It takes the crawl's id, not a path: the shell finds the file
+ * from the engine's library, so the page can't reveal anything else. Not possible from a plain browser.
+ */
+export async function showInFolder(crawlId: string): Promise<boolean> {
   if (!isTauri) return false;
-  await revealItemInDir(path);
+  await ipc.revealCrawlFile(crawlId);
   return true;
 }
 

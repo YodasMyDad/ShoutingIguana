@@ -1,8 +1,13 @@
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, type ReactNode } from 'react';
 import { api } from '../api/client';
-import { isProblem } from '../api/errors';
-import type { UrlRow } from '../api/grids';
+import { isProblem, type ProblemError } from '../api/errors';
+import type { SummaryReason, UrlRow } from '../api/grids';
+import { crawlQuery } from '../api/queries';
+import { isCrawling } from '../api/types';
+import { analyseCrawl } from '../crawl/actions';
+import { crawlControls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { notifyResult } from '../feedback/notify';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
@@ -10,7 +15,9 @@ import { useGridMetrics } from '../grid/metrics';
 import type { GridColumn } from '../grid/types';
 import { usePagedRows } from '../grid/usePagedRows';
 import { MAX_COPY_ROWS } from '../grid/tsv';
-import { formatBytes, formatCount, formatMilliseconds } from '../lib/format';
+import { formatBytes, formatCount, formatCountOf, formatMilliseconds } from '../lib/format';
+import { useLiveCrawl } from '../live/liveStore';
+import { Button } from '../ui/Button';
 
 /** Words for the indexability column: the reason it isn't indexable, or Indexable. */
 const INDEXABILITY: Record<string, string> = {
@@ -91,9 +98,25 @@ const COLUMNS: readonly GridColumn<UrlRow>[] = [
 /** What the query asks for: the columns shown, and statusClass, to tell "No response" from "not fetched". */
 const QUERY_COLUMNS = [...COLUMNS.map((column) => column.id), 'statusClass'];
 
+/** Why the analysis's columns are empty now, after the columns' names: the summary's reason, in plain words. */
+const UNAVAILABLE_BECAUSE: Record<SummaryReason, string> = {
+  crawling: 'fill in once the crawl has finished and been analysed',
+  notAnalyzed: 'need an analysis: this crawl hasn’t been analysed yet',
+  engineChanged: 'need this crawl analysed again: another version of Shouting Iguana analysed it',
+  crawlChanged: 'need this crawl analysed again: it was continued after its last analysis',
+};
+
+/** "Inlinks", "Inlinks and Issues", "Title, Inlinks and Issues". */
+function namesOf(ids: readonly string[]): string {
+  const names = COLUMNS.filter((column) => ids.includes(column.id)).map((column) => column.header);
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1) ?? ''}` : (names[0] ?? '');
+}
+
 /**
- * URLs: the main grid. Foundation version: the grid primitive over the URL query (served by the mock until E3), with
- * sort and quick search from the route. The column presets, chooser, filter bar and saved views are its slice.
+ * URLs: the main grid. Foundation version: the grid primitive over the URL query, with sort and quick search from the
+ * route. The column presets, chooser, filter bar and saved views are its slice. While the crawl runs, the count and
+ * rows refresh in place (the live bridge refreshes them at most once a second), and the analysis's columns say why
+ * they're empty.
  */
 export function UrlsScreen() {
   const { crawl: crawlId } = useParams({ from: '/crawls/$crawl/urls' });
@@ -103,6 +126,12 @@ export function UrlsScreen() {
   const sort = useMemo(() => search.sort ?? [], [search.sort]);
   const filters = useMemo(() => search.filter ?? [], [search.filter]);
   const q = search.q;
+
+  const item = useQuery(crawlQuery(crawlId)).data;
+  const live = useLiveCrawl(crawlId);
+  const crawlStatus = effectiveStatus(item, live);
+  const crawling = crawlStatus !== null && isCrawling(crawlStatus);
+  const canAnalyse = crawlControls(crawlStatus, item).canAnalyse;
 
   const queryKey = useMemo(
     () => ['grid', 'urls', crawlId, { sort, filters, q: q ?? '' }] as const,
@@ -136,8 +165,18 @@ export function UrlsScreen() {
     rows.rowCount === null || rows.unfilteredTotal === null
       ? null
       : rows.rowCount === rows.unfilteredTotal
-        ? `${formatCount(rows.rowCount)} URLs`
-        : `${formatCount(rows.rowCount)} of ${formatCount(rows.unfilteredTotal)} URLs`;
+        ? formatCountOf(rows.rowCount, 'URL')
+        : `${formatCount(rows.rowCount)} of ${formatCountOf(rows.unfilteredTotal, 'URL')}`;
+
+  const summary = rows.firstPage?.summary;
+  const unavailable = (rows.firstPage?.unavailable ?? []).filter((id) => COLUMNS.some((column) => column.id === id));
+  const analyse = (label: string) =>
+    canAnalyse ? (
+      <Button size="sm" command="crawl.analyse" onClick={() => void analyseCrawl(crawlId)}>
+        {label}
+      </Button>
+    ) : null;
+  const clearView = () => void navigate({ search: {} });
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -146,6 +185,12 @@ export function UrlsScreen() {
         <span className="figures text-13 text-text-muted" aria-live="polite">
           {count}
         </span>
+        {crawling ? (
+          <span className="inline-flex items-center gap-1.5 text-12 font-medium text-text-secondary">
+            <span aria-hidden="true" className="size-(--mark-size) rounded-full bg-accent motion-safe:animate-pulse" />
+            Live
+          </span>
+        ) : null}
         <input
           key={q ?? ''}
           type="search"
@@ -160,9 +205,26 @@ export function UrlsScreen() {
           className="ml-auto h-(--control-height-sm) w-(--search-width) rounded-sm border border-border-control bg-surface px-2.5 text-13"
         />
       </header>
+      {summary && !summary.available && unavailable.length > 0 ? (
+        <p role="status" className="mx-4 mb-2 flex items-center gap-3 text-13 text-text-secondary">
+          {namesOf(unavailable)} {UNAVAILABLE_BECAUSE[summary.reason ?? 'notAnalyzed']}.
+          {summary.reason === 'crawling'
+            ? null
+            : analyse(summary.reason === 'notAnalyzed' ? 'Analyse it' : 'Analyse again')}
+        </p>
+      ) : null}
       {rows.error && rows.rowCount === null ? (
-        isProblem(rows.error, 'not-found') ? (
-          <ErrorState error={rows.error} title="The engine doesn’t serve the URL grid yet: it arrives with E3." />
+        isProblem(rows.error, 'needs-analysis') ? (
+          <NeedsAnalysis error={rows.error} action={analyse('Analyse it')} onClear={clearView} />
+        ) : isProblem(rows.error, 'invalid-query') ? (
+          <ErrorState
+            error={rows.error}
+            actions={
+              <Button size="sm" onClick={clearView}>
+                Reset the view
+              </Button>
+            }
+          />
         ) : (
           <ErrorState error={rows.error} onRetry={rows.refetch} />
         )
@@ -182,14 +244,15 @@ export function UrlsScreen() {
           onActivate={(_index, row) => {
             if (row) void navigate({ search: (previous) => ({ ...previous, inspect: row.id }) });
           }}
-          busy={rows.isRefreshing}
+          // Live refreshes update in place: the progress line is for a refresh the user asked for.
+          busy={rows.isRefreshing && !crawling}
           emptyState={
             <div className="flex items-center gap-3 p-6 text-14 text-text-secondary">
               No URLs match these filters.
               <button
                 type="button"
                 className="text-accent-text underline underline-offset-(--underline-offset)"
-                onClick={() => void navigate({ search: {} })}
+                onClick={clearView}
               >
                 Clear them
               </button>
@@ -199,5 +262,25 @@ export function UrlsScreen() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * A sort or filter on a column the analysis fills, with no analysis to read: the engine's plain sentence says why, and
+ * the view offers what can work: analysing the crawl, or dropping the sort and filters. Trying again can't.
+ */
+function NeedsAnalysis({ error, action, onClear }: { error: ProblemError; action: ReactNode; onClear: () => void }) {
+  return (
+    <ErrorState
+      error={error}
+      actions={
+        <>
+          {error.reason === 'crawling' ? null : action}
+          <Button size="sm" onClick={onClear}>
+            Clear the sort and filters
+          </Button>
+        </>
+      }
+    />
   );
 }

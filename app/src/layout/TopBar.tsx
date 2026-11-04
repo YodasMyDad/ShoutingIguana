@@ -6,7 +6,7 @@ import { CRAWL_SECTIONS, sectionOf } from '../app/sections';
 import { setOverlay } from '../app/overlays';
 import { analyseCrawl, continueCrawl, pauseOrResume, stopCrawl } from '../crawl/actions';
 import { crawlControls, crawlName, effectiveStatus, statusLabel } from '../crawl/status';
-import { formatCount, formatExactTime } from '../lib/format';
+import { formatCountOf, formatExactTime } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
 import { Button } from '../ui/Button';
 import { Kbd } from '../ui/Kbd';
@@ -138,7 +138,7 @@ export function StatusPill({ status, fetched }: { status: CrawlStatus; fetched: 
       />
       {statusLabel(status)}
       {fetched !== null && (status === 'running' || status === 'paused' || status === 'stopping') ? (
-        <span className="figures text-text-muted">{formatCount(fetched)} URLs</span>
+        <span className="figures text-text-muted">{formatCountOf(fetched, 'URL')}</span>
       ) : null}
     </span>
   );

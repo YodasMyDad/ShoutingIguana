@@ -18,6 +18,26 @@ describe('the grid page cache', () => {
     expect(kept).toEqual([2, 3, 4]);
   });
 
+  it('trims back to the limit when pages that were still fetching land', async () => {
+    const client = new QueryClient();
+    capGridPages(client.getQueryCache(), 2);
+    const answers: (() => void)[] = [];
+    const fetches = [0, 1, 2, 3].map((page) =>
+      client.query({
+        queryKey: ['grid', 'urls', 'crawl', {}, page],
+        queryFn: () => new Promise<{ rows: number[] }>((resolve) => answers.push(() => resolve({ rows: [page] }))),
+        gcTime: 60_000,
+      }),
+    );
+    await Promise.resolve();
+    // Fetching, so nothing could go yet.
+    expect(client.getQueryCache().findAll({ queryKey: ['grid'] })).toHaveLength(4);
+    answers.forEach((answer) => answer());
+    await Promise.all(fetches);
+    await Promise.resolve();
+    expect(client.getQueryCache().findAll({ queryKey: ['grid'] })).toHaveLength(2);
+  });
+
   it('never touches other queries', async () => {
     const client = new QueryClient();
     capGridPages(client.getQueryCache(), 1);

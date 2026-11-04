@@ -14,6 +14,7 @@ export type ProblemType =
   | 'not-analyzed'
   | 'needs-analysis'
   | 'invalid-query'
+  | 'url-not-found'
   | 'not-found'
   | 'check-not-found'
   | 'bad-request'
@@ -128,6 +129,14 @@ export function isProblem(error: unknown, type?: ProblemType): error is ProblemE
 
 export function isAbort(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
+}
+
+/**
+ * Whether trying the same thing again could work: an API error says so itself (the engine meant a 404 or a 422);
+ * anything else, such as a failure while drawing a view, may have been passing.
+ */
+export function canRetry(error: unknown): boolean {
+  return error instanceof ApiError ? error.retryable : true;
 }
 
 /** Reads a problem body at the boundary: anything that doesn't match the contract's shape gives null. */

@@ -1,12 +1,11 @@
-// Where preferences live: tauri-plugin-store's settings.json in the shell, localStorage in a plain browser. Read once
+// Where preferences live: settings.json in the app's config folder in the shell, read and written through the shell's
+// two settings commands (the page gets no file access of its own), and localStorage in a plain browser. Read once
 // before the first render (so the theme never flashes), then written behind a short debounce on every change.
 import { useSyncExternalStore } from 'react';
-import type { Store } from '@tauri-apps/plugin-store';
 import { isTauri } from '../lib/platform';
+import { ipc } from '../shell/ipc';
 import { DEFAULT_SETTINGS, readSettings, type Settings } from './schema';
 
-const STORE_FILE = 'settings.json';
-const STORE_KEY = 'settings';
 const LOCAL_STORAGE_KEY = 'si.settings';
 const SAVE_DELAY_MS = 300;
 
@@ -34,25 +33,13 @@ export const localStorageBackend: SettingsBackend = {
   },
 };
 
-let tauriStore: Promise<Store> | null = null;
-
-function openTauriStore() {
-  tauriStore ??= import('@tauri-apps/plugin-store').then(({ load }) =>
-    load(STORE_FILE, { autoSave: false, defaults: {} }),
-  );
-  return tauriStore;
-}
-
-const tauriBackend: SettingsBackend = {
-  load: async () => (await openTauriStore()).get<unknown>(STORE_KEY),
-  save: async (settings) => {
-    const store = await openTauriStore();
-    await store.set(STORE_KEY, settings);
-    await store.save();
-  },
+/** The shell's settings commands: one file, which the shell checks is a JSON object of at most 64 KB. */
+export const shellBackend: SettingsBackend = {
+  load: () => ipc.settingsRead(),
+  save: (settings) => ipc.settingsWrite(JSON.stringify(settings)),
 };
 
-let backend: SettingsBackend = isTauri ? tauriBackend : localStorageBackend;
+let backend: SettingsBackend = isTauri ? shellBackend : localStorageBackend;
 let current: Settings = DEFAULT_SETTINGS;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 const listeners = new Set<() => void>();

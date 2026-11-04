@@ -2,7 +2,18 @@
 // failure becomes one of the typed errors in ./errors: a ProblemError for the contract's problem+json, otherwise
 // SidecarUnavailableError, SidecarUnreachableError or UnexpectedResponseError.
 import { ProblemError, UnexpectedResponseError, parseProblem } from './errors';
-import type { GridPage, GridQuery, UrlRow } from './grids';
+import type {
+  FacetsPage,
+  FacetsQuery,
+  GridPage,
+  GridQuery,
+  IssueGroupPage,
+  IssueRow,
+  UrlColumn,
+  UrlRef,
+  UrlRow,
+} from './grids';
+import type { HtmlSource, LinkPage, LinksQuery, UrlDetail } from './inspector';
 import { getTransport, type TransportRequest } from './transport';
 import type {
   AlertEvent,
@@ -113,8 +124,22 @@ export const api = {
       signal,
     ),
 
-  // Grids (E3, served by the mock until the engine has them). One fixed URL per grid, so one preflight per session.
+  // Grids (E3a). One fixed URL per grid, so one preflight per session.
+  urlColumns: (signal?: Signal) => get<UrlColumn[]>('/api/url-columns', signal),
   urls: (id: string, query: GridQuery, signal?: Signal) => post<GridPage<UrlRow>>(`${crawl(id)}/urls`, query, signal),
+  urlFacets: (id: string, query: FacetsQuery, signal?: Signal) =>
+    post<FacetsPage>(`${crawl(id)}/urls/facets`, query, signal),
+  /** A URL of the crawl by its text: `url-not-found` when the crawl has none, `invalid-query` when it isn't a URL. */
+  lookupUrl: (id: string, url: string, signal?: Signal) => post<UrlRef>(`${crawl(id)}/urls/lookup`, { url }, signal),
+  urlDetail: (id: string, urlId: number, signal?: Signal) => get<UrlDetail>(`${crawl(id)}/urls/${urlId}`, signal),
+  urlLinks: (id: string, urlId: number, direction: 'inlinks' | 'outlinks', query: LinksQuery, signal?: Signal) =>
+    post<LinkPage>(`${crawl(id)}/urls/${urlId}/${direction}`, query, signal),
+  urlSource: (id: string, urlId: number, signal?: Signal) =>
+    get<HtmlSource>(`${crawl(id)}/urls/${urlId}/source`, signal),
+  issueGroups: (id: string, checkId: string, page: { offset: number; limit: number }, signal?: Signal) =>
+    post<IssueGroupPage>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/groups`, page, signal),
+  issueRows: (id: string, checkId: string, query: GridQuery, signal?: Signal) =>
+    post<GridPage<IssueRow>>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/rows`, query, signal),
 };
 
 export type Api = typeof api;

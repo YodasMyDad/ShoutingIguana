@@ -3,7 +3,7 @@
 // and VITE_SIDECAR_TOKEN (a fixed development token). The mock transport needs neither.
 import { useSyncExternalStore } from 'react';
 import { isTauri } from '../lib/platform';
-import { ipc, type ShellSidecarState, type SidecarFailureReason } from './ipc';
+import { ipc, type ShellSidecarState, type SidecarFailureReason, type SidecarRestartReason } from './ipc';
 
 export interface SidecarConnection {
   baseUrl: string;
@@ -16,7 +16,14 @@ export interface SidecarConnection {
 export type SidecarStatus =
   | { state: 'starting'; generation: number }
   | { state: 'ready'; generation: number; connection: SidecarConnection }
-  | { state: 'restarting'; generation: number; attempt: number }
+  | {
+      state: 'restarting';
+      generation: number;
+      /** Restart `attempt` of at most `attempts` before the shell gives up. */
+      attempt: number;
+      attempts: number;
+      reason: SidecarRestartReason;
+    }
   | {
       state: 'failed';
       generation: number;
@@ -71,7 +78,13 @@ export function applyShellState(state: ShellSidecarState): void {
       });
       break;
     case 'restarting':
-      setStatus({ state: 'restarting', generation: state.generation, attempt: state.attempt });
+      setStatus({
+        state: 'restarting',
+        generation: state.generation,
+        attempt: state.attempt,
+        attempts: state.attempts,
+        reason: state.reason,
+      });
       break;
     case 'failed':
       setStatus({
@@ -100,6 +113,54 @@ export function setDirectConnection(connection: SidecarConnection | null): void 
           exitCode: null,
         },
   );
+}
+
+/**
+ * The longest a call waits for the engine. The shell gives up on a start well before this (three tries of at most
+ * 20 s each), so it only bounds a shell that stopped saying anything.
+ */
+export const CONNECTION_WAIT_MS = 90_000;
+
+/**
+ * The connection once a sidecar is ready: at once if it is, after the shell has started (or restarted) it if not, so
+ * calls made during a cold start or a restart go through instead of failing. Resolves null as soon as there's nothing
+ * to wait for: the engine failed, the app is quitting, nothing is starting one (no shell, no development sidecar), or
+ * `timeoutMs` passed. Rejects only when `signal` aborts.
+ */
+export function waitForConnection(
+  signal?: AbortSignal,
+  timeoutMs = CONNECTION_WAIT_MS,
+): Promise<SidecarConnection | null> {
+  const settled = (): SidecarConnection | null | undefined => {
+    if (status.state === 'ready') return status.connection;
+    // Generation 0 is before initConnection: nothing is starting an engine for this page.
+    if (status.state === 'starting' && status.generation === 0) return null;
+    return status.state === 'starting' || status.state === 'restarting' ? undefined : null;
+  };
+  const now = settled();
+  if (now !== undefined) return Promise.resolve(now);
+  if (signal?.aborted) return Promise.reject(abortReason(signal));
+  return new Promise((resolve, reject) => {
+    const finish = (settle: () => void) => {
+      clearTimeout(timer);
+      unsubscribe();
+      signal?.removeEventListener('abort', onAbort);
+      settle();
+    };
+    const onAbort = () => finish(() => reject(abortReason(signal)));
+    const timer = setTimeout(() => finish(() => resolve(null)), timeoutMs);
+    const unsubscribe = subscribeSidecarStatus(() => {
+      const next = settled();
+      if (next !== undefined) finish(() => resolve(next));
+    });
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/** What an aborted wait rejects with: the signal's reason, as fetch does, so callers tell it from a failure. */
+function abortReason(signal: AbortSignal | undefined): Error {
+  const reason: unknown = signal?.reason;
+  return reason instanceof Error ? reason : new DOMException('The operation was aborted.', 'AbortError');
 }
 
 /** Asks the shell to start the sidecar again after it failed. */

@@ -25,9 +25,3 @@ export function startAppearance(): () => void {
   apply();
   return subscribeSettings(apply);
 }
-
-/** The theme in use now: the setting, or the OS's when the setting is "system". */
-export function resolvedTheme(settings: Settings): 'light' | 'dark' {
-  if (settings.theme !== 'system') return settings.theme;
-  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}

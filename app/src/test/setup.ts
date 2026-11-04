@@ -1,38 +1,49 @@
-// jsdom lacks a few browser APIs the app uses; these stand-ins are enough for unit and component tests.
+// jsdom lacks a few browser APIs the app uses; these stand-ins are enough for unit and component tests. A test that
+// runs in plain Node (`@vitest-environment node`, such as the compiled tokens') has no DOM, and needs none of them.
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
-afterEach(() => cleanup());
+const hasDom = typeof window !== 'undefined';
 
-if (typeof window.matchMedia !== 'function') {
-  vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    dispatchEvent: () => false,
-  }));
-}
+if (hasDom) {
+  afterEach(() => cleanup());
 
-if (typeof window.ResizeObserver !== 'function') {
-  class ResizeObserverStub {
-    observe(): void {
-      // jsdom does no layout, so nothing ever resizes.
-    }
-    unobserve(): void {
-      // Nothing to stop observing.
-    }
-    disconnect(): void {
-      // Nothing to disconnect.
-    }
+  // Defined outright rather than stubbed: `unstubGlobals` puts stubs back after every test, and the toaster asks for
+  // the OS theme in every test that renders the app.
+  if (typeof window.matchMedia !== 'function') {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        dispatchEvent: () => false,
+      }),
+    });
   }
-  vi.stubGlobal('ResizeObserver', ResizeObserverStub);
-}
 
-if (typeof Element.prototype.scrollIntoView !== 'function') {
-  Element.prototype.scrollIntoView = () => undefined;
+  if (typeof window.ResizeObserver !== 'function') {
+    class ResizeObserverStub {
+      observe(): void {
+        // jsdom does no layout, so nothing ever resizes.
+      }
+      unobserve(): void {
+        // Nothing to stop observing.
+      }
+      disconnect(): void {
+        // Nothing to disconnect.
+      }
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+  }
+
+  if (typeof Element.prototype.scrollIntoView !== 'function') {
+    Element.prototype.scrollIntoView = () => undefined;
+  }
 }

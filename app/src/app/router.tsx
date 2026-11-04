@@ -2,7 +2,7 @@
 // Every view is a route (docs/v2-ui-ia.md, Routes). Code-based, so the tree is plain TypeScript and fully typed:
 // links, params and search params are checked at compile time. Redirects and not-found are thrown, as the router
 // expects (so the lint rule against throwing non-errors is off in this file). Each route renders RouteError when it fails, so one
-// broken view never takes the shell down. Home and the shell load with the app; every other screen is its own chunk,
+// broken view never takes the shell down; the shell's own parts have their boundaries in AppShell. Home and the shell load with the app; every other screen is its own chunk,
 // loaded when first opened, so the first paint carries as little code as possible.
 import type { QueryClient } from '@tanstack/react-query';
 import {
@@ -14,7 +14,7 @@ import {
   redirect,
   type RouterHistory,
 } from '@tanstack/react-router';
-import { RouteError } from '../feedback/RouteError';
+import { AppError, RouteError } from '../feedback/RouteError';
 import { AppShell } from '../layout/AppShell';
 import { CrawlLayout } from '../screens/CrawlLayout';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -26,6 +26,7 @@ import {
   validateInspectSearch,
   validateIssuesSearch,
   validateNewCrawlSearch,
+  validateNoSearch,
 } from '../routing/search';
 import { CRAWL_ID, isCrawlSection } from './sections';
 
@@ -35,6 +36,8 @@ export interface RouterContext {
 
 const rootRoute = createRootRouteWithContext<RouterContext>()({
   component: AppShell,
+  // The shell's parts and each screen have their own boundaries: this one is for the frame itself.
+  errorComponent: AppError,
   notFoundComponent: NotFoundScreen,
 });
 
@@ -90,6 +93,7 @@ const crawlIndexRoute = createRoute({
 const overviewRoute = createRoute({
   getParentRoute: () => crawlRoute,
   path: 'overview',
+  validateSearch: validateNoSearch,
   component: lazyRouteComponent(() => import('../screens/OverviewScreen'), 'OverviewScreen'),
 });
 
@@ -131,12 +135,14 @@ const robotsRoute = createRoute({
 const crawlSettingsRoute = createRoute({
   getParentRoute: () => crawlRoute,
   path: 'settings',
+  validateSearch: validateNoSearch,
   component: lazyRouteComponent(() => import('../screens/CrawlSettingsScreen'), 'CrawlSettingsScreen'),
 });
 
 export const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'settings/{-$section}',
+  validateSearch: validateNoSearch,
   component: lazyRouteComponent(() => import('../screens/SettingsScreen'), 'SettingsScreen'),
 });
 

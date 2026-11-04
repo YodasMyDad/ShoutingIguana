@@ -48,14 +48,81 @@ describe('the command registry', () => {
     expect(appEscape.run).toHaveBeenCalledOnce();
   });
 
-  it('does nothing for a disabled command', () => {
+  it('runs nothing for a disabled command, but keeps its key from the browser (F7 is caret browsing)', () => {
     const registry = new CommandRegistry(false);
     const pause = command({ id: 'pause', keys: ['f7'], enabled: () => false });
     registry.register([pause]);
     const event = keydown('F7');
     expect(registry.handleKeyDown(event)).toBe(false);
-    expect(event.defaultPrevented).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
+    expect(pause.run).not.toHaveBeenCalled();
     expect(registry.run('pause')).toBe(false);
+  });
+
+  it('keeps the keys the app owns everywhere from the browser, before their screens bring their commands', () => {
+    const registry = new CommandRegistry(false);
+    for (const key of ['e', 'f', 'p']) {
+      const event = keydown(key, { ctrlKey: true });
+      expect(registry.handleKeyDown(event)).toBe(false);
+      expect(event.defaultPrevented).toBe(true);
+    }
+    const typing = keydown('f');
+    registry.handleKeyDown(typing);
+    expect(typing.defaultPrevented).toBe(false);
+  });
+
+  it('runs a held key’s command once, and keeps the repeats from the browser', () => {
+    const registry = new CommandRegistry(false);
+    const pause = command({ id: 'pause', keys: ['f7'] });
+    registry.register([pause]);
+    registry.handleKeyDown(keydown('F7'));
+    const repeat = keydown('F7', { repeat: true });
+    expect(registry.handleKeyDown(repeat)).toBe(false);
+    expect(repeat.defaultPrevented).toBe(true);
+    expect(pause.run).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a screen’s command over the app’s, whatever order they were registered in', () => {
+    const registry = new CommandRegistry(false);
+    const screenEscape = command({ id: 'close', keys: ['escape'] });
+    registry.register([screenEscape], 'screen');
+    // The app re-registers its commands whenever a crawl's status changes: later, but still the app's.
+    const appEscape = command({ id: 'close', keys: ['escape'] });
+    registry.register([appEscape], 'app');
+    registry.handleKeyDown(keydown('Escape'));
+    expect(screenEscape.run).toHaveBeenCalledOnce();
+    expect(appEscape.run).not.toHaveBeenCalled();
+    expect(registry.get('close')).toBe(screenEscape);
+    expect(registry.list()).toEqual([screenEscape]);
+  });
+
+  it('leaves every key to an open overlay, but the one that toggles it', () => {
+    let modal = true;
+    const registry = new CommandRegistry({ mac: false, isModal: () => modal });
+    const pause = command({ id: 'pause', keys: ['f7'] });
+    const section = command({ id: 'section', keys: ['mod+1'], inInputs: true });
+    const palette = command({ id: 'palette', keys: ['mod+k'], inInputs: true, inOverlays: true });
+    registry.register([pause, section, palette]);
+    const f7 = keydown('F7');
+    expect(registry.handleKeyDown(f7)).toBe(false);
+    // Still the app's key, not the browser's.
+    expect(f7.defaultPrevented).toBe(true);
+    expect(registry.handleKeyDown(keydown('1', { ctrlKey: true }))).toBe(false);
+    expect(registry.handleKeyDown(keydown('k', { ctrlKey: true }))).toBe(true);
+    expect(pause.run).not.toHaveBeenCalled();
+    expect(section.run).not.toHaveBeenCalled();
+    modal = false;
+    expect(registry.handleKeyDown(keydown('F7'))).toBe(true);
+  });
+
+  it('says whether a command would take a key now, for the grid to leave Esc to it', () => {
+    let open = false;
+    const registry = new CommandRegistry(false);
+    registry.register([command({ id: 'inspector.close', keys: ['escape'], enabled: () => open })]);
+    expect(registry.claims(keydown('Escape'))).toBe(false);
+    open = true;
+    expect(registry.claims(keydown('Escape'))).toBe(true);
+    expect(registry.claims(keydown('Enter'))).toBe(false);
   });
 
   it('never fires a typing key in a text field, and other keys only when allowed there', () => {

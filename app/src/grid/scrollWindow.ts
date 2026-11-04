@@ -13,11 +13,20 @@ export interface ScrollSpace {
   /** The virtual height of all rows. */
   total: number;
   rowHeight: number;
+  /** The window's height: a whole number of rows, so every base is too, the last one included. */
   windowPx: number;
 }
 
+/**
+ * The window for rows of this height: WINDOW_PX cut down to a whole number of rows. 28 px rows don't divide 2,000,000,
+ * and a window that isn't whole rows leaves the last base short of the end, with the last row out of reach.
+ */
+export function windowFor(rowHeight: number, windowPx = WINDOW_PX): number {
+  return rowHeight > 0 ? Math.floor(windowPx / rowHeight) * rowHeight : windowPx;
+}
+
 export function createScrollSpace(total: number, rowHeight: number, windowPx = WINDOW_PX): ScrollSpace {
-  return { base: 0, total, rowHeight, windowPx };
+  return { base: 0, total, rowHeight, windowPx: windowFor(rowHeight, windowPx) };
 }
 
 /** Whether the space is windowed at all: only when the rows don't fit in one window. */

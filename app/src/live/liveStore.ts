@@ -2,7 +2,7 @@
 // second, and not at all while the window is hidden (in the tray), so a 2,900 URLs/s crawl never re-renders the grid
 // and a hidden window stays idle. Only components that select live data subscribe.
 import { useSyncExternalStore } from 'react';
-import { isLive } from '../api/types';
+import { isCrawlStatus, isLive } from '../api/types';
 import type {
   AlertEvent,
   AlertLevel,
@@ -20,10 +20,35 @@ export const MAX_ALERTS = 200;
 /** At most 4 renders a second. */
 export const PUBLISH_INTERVAL_MS = 250;
 
+const PROGRESS_COUNTS = [
+  'elapsedMs',
+  'discovered',
+  'queued',
+  'inFlight',
+  'fetched',
+  'htmlPages',
+  'redirects',
+  'errors',
+  'blocked',
+  'robotsDisallowed',
+  'skipped',
+  'bytesDownloaded',
+  'urlsPerSecond',
+] as const;
+
+type ProgressCount = (typeof PROGRESS_COUNTS)[number];
+
+/** A progress event as the store keeps it: a count the stream sent malformed is null, shown as "–", never 0. */
+export type LiveProgress = Omit<ProgressEvent, ProgressCount> & Record<ProgressCount, number | null>;
+
+/** A stream event as the store reads it at the boundary. */
+export type LiveEvent = Exclude<SidecarEvent, { type: 'progress' }> | { type: 'progress'; data: LiveProgress };
+
 export interface LiveCrawl {
   id: string;
+  /** This sidecar's live status for the crawl; null once a stream's `hello` no longer lists it as live. */
   status: CrawlStatus | null;
-  progress: ProgressEvent | null;
+  progress: LiveProgress | null;
   /** URLs per second, oldest first, for the sparkline. */
   history: readonly number[];
   /** Newest last. */
@@ -65,7 +90,7 @@ export class LiveStore {
   private lastPublishAt = Number.NEGATIVE_INFINITY;
   private missedWhileHidden = false;
   private readonly listeners = new Set<() => void>();
-  private readonly eventListeners = new Set<(event: SidecarEvent) => void>();
+  private readonly eventListeners = new Set<(event: LiveEvent, previous: LiveState) => void>();
 
   constructor(private readonly clock: LiveStoreClock = browserClock) {}
 
@@ -76,8 +101,11 @@ export class LiveStore {
     return () => this.listeners.delete(listener);
   };
 
-  /** Every event as it arrives, unbatched: for side effects such as refetching, never for rendering. */
-  onEvent(listener: (event: SidecarEvent) => void): () => void {
+  /**
+   * Every event as it arrives, unbatched, with the state from before it: for side effects such as refetching, never
+   * for rendering.
+   */
+  onEvent(listener: (event: LiveEvent, previous: LiveState) => void): () => void {
     this.eventListeners.add(listener);
     return () => this.eventListeners.delete(listener);
   }
@@ -85,8 +113,9 @@ export class LiveStore {
   ingest(message: SseMessage): void {
     const event = parseSidecarEvent(message);
     if (!event) return;
-    this.draft = applyEvent(this.draft, event);
-    this.eventListeners.forEach((listener) => listener(event));
+    const previous = this.draft;
+    this.draft = applyEvent(previous, event);
+    this.eventListeners.forEach((listener) => listener(event, previous));
     this.schedule();
   }
 
@@ -160,7 +189,7 @@ export function useLiveIds(store: LiveStore = liveStore): readonly string[] {
 // ------------------------------------------------------------------------------------------------ Event handling
 
 /** Reads one stream message at the boundary; anything that doesn't match the contract is dropped. */
-export function parseSidecarEvent(message: SseMessage): SidecarEvent | null {
+export function parseSidecarEvent(message: SseMessage): LiveEvent | null {
   let data: unknown;
   try {
     data = JSON.parse(message.data);
@@ -177,12 +206,20 @@ export function parseSidecarEvent(message: SseMessage): SidecarEvent | null {
     case 'library':
       return { type: 'library', data: {} };
     case 'progress':
-      return typeof record.crawlId === 'string' && typeof record.status === 'string'
-        ? { type: 'progress', data: withNumbers(record as unknown as ProgressEvent) }
+      return typeof record.crawlId === 'string' && isCrawlStatus(record.status)
+        ? { type: 'progress', data: withCounts(record.crawlId, record.status, record) }
         : null;
     case 'crawl':
-      return typeof record.crawlId === 'string' && typeof record.status === 'string'
-        ? { type: 'crawl', data: record as unknown as CrawlEvent }
+      return typeof record.crawlId === 'string' && isCrawlStatus(record.status)
+        ? {
+            type: 'crawl',
+            data: {
+              crawlId: record.crawlId,
+              status: record.status,
+              ...(typeof record.error === 'string' ? { error: record.error } : {}),
+              ...(typeof record.errorType === 'string' ? { errorType: record.errorType } : {}),
+            } satisfies CrawlEvent,
+          }
         : null;
     case 'alert':
       return typeof record.crawlId === 'string' && typeof record.message === 'string'
@@ -206,30 +243,17 @@ export function parseSidecarEvent(message: SseMessage): SidecarEvent | null {
   }
 }
 
-const PROGRESS_NUMBERS = [
-  'elapsedMs',
-  'discovered',
-  'queued',
-  'inFlight',
-  'fetched',
-  'htmlPages',
-  'redirects',
-  'errors',
-  'blocked',
-  'robotsDisallowed',
-  'skipped',
-  'bytesDownloaded',
-  'urlsPerSecond',
-] as const;
-
-/** Missing or malformed counts read as 0, so one bad field can't put NaN on screen. */
-function withNumbers(progress: ProgressEvent): ProgressEvent {
-  const fixed = { ...progress };
-  for (const key of PROGRESS_NUMBERS) {
-    const value = fixed[key] as unknown;
-    if (typeof value !== 'number' || !Number.isFinite(value)) fixed[key] = 0;
+/**
+ * A missing or malformed count reads as null, so it shows as "–": never NaN, and never 0, which would claim the crawl
+ * did nothing.
+ */
+function withCounts(crawlId: string, status: CrawlStatus, record: Record<string, unknown>): LiveProgress {
+  const counts = {} as Record<ProgressCount, number | null>;
+  for (const key of PROGRESS_COUNTS) {
+    const value = record[key];
+    counts[key] = typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
-  return fixed;
+  return { crawlId, status, ...counts };
 }
 
 function blankCrawl(id: string): LiveCrawl {
@@ -247,21 +271,35 @@ function updateCrawl(state: LiveState, id: string, update: (crawl: LiveCrawl) =>
   return { ...state, crawls: { ...state.crawls, [id]: crawl } };
 }
 
-export function applyEvent(state: LiveState, event: SidecarEvent): LiveState {
+export function applyEvent(state: LiveState, event: LiveEvent): LiveState {
   switch (event.type) {
-    case 'hello':
-      // A (re)connected stream: exactly these are live now. Their latest progress follows.
-      return { ...state, live: [...new Set(event.data.live)] };
+    case 'hello': {
+      // A (re)connected stream, maybe to a new sidecar after a crash: exactly these are live now, and their latest
+      // progress follows. Any other crawl stops looking live, so its status is the library's again (a crawl the old
+      // sidecar was running reads `interrupted`, with Continue).
+      const live = [...new Set(event.data.live)];
+      let crawls = state.crawls;
+      for (const crawl of Object.values(state.crawls)) {
+        if (crawl.status !== null && isLive(crawl.status) && !live.includes(crawl.id)) {
+          crawls = { ...crawls, [crawl.id]: { ...crawl, status: null, analysis: null } };
+        }
+      }
+      return { ...state, live, crawls };
+    }
     case 'progress': {
       const progress = event.data;
+      const rate = progress.urlsPerSecond;
       const next = updateCrawl(state, progress.crawlId, (crawl) => ({
         ...crawl,
         status: progress.status,
         progress,
+        // A rate the stream didn't give leaves a gap rather than a false 0 in the sparkline.
         history:
-          crawl.history.length >= HISTORY_POINTS
-            ? [...crawl.history.slice(crawl.history.length - HISTORY_POINTS + 1), progress.urlsPerSecond]
-            : [...crawl.history, progress.urlsPerSecond],
+          rate === null
+            ? crawl.history
+            : crawl.history.length >= HISTORY_POINTS
+              ? [...crawl.history.slice(crawl.history.length - HISTORY_POINTS + 1), rate]
+              : [...crawl.history, rate],
       }));
       return { ...next, live: withLive(next.live, progress.crawlId, progress.status) };
     }

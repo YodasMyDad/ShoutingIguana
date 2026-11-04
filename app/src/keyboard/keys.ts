@@ -29,11 +29,35 @@ export function parseChord(text: string): Chord {
   return chord;
 }
 
+/** The US layout's character for each punctuation key, for layouts that put another character there. */
+const CODE_CHARACTERS: Record<string, string> = {
+  Comma: ',',
+  Period: '.',
+  Slash: '/',
+  Semicolon: ';',
+  Quote: "'",
+  BracketLeft: '[',
+  BracketRight: ']',
+  Backslash: '\\',
+  Backquote: '`',
+  Minus: '-',
+  Equal: '=',
+};
+
+/**
+ * The key a chord names, from a key event. The character, as a Latin layout gives it, so Ctrl+Z is the key marked Z
+ * on AZERTY and Dvorak too; the physical key (`event.code`) where the character is one no chord names: a letter on a
+ * non-Latin layout (Ctrl+K types "л" on a Russian one), a digit a layout shifts (AZERTY's "&" for 1), punctuation
+ * outside ASCII.
+ */
 function eventKey(event: Pick<KeyboardEvent, 'key' | 'code'>): string {
   if (event.key === ' ') return 'space';
-  // With Ctrl or Alt held, some layouts report a different character for digits: go by the physical key.
-  if (/^Digit\d$/.test(event.code) && !/^\d$/.test(event.key)) return event.code.slice(5);
-  return event.key.toLowerCase();
+  const key = event.key.toLowerCase();
+  if (/^Key[A-Z]$/.test(event.code) && !/^[a-z]$/.test(key)) return event.code.slice(3).toLowerCase();
+  if (/^Digit\d$/.test(event.code) && !/^\d$/.test(key)) return event.code.slice(5);
+  const punctuation = CODE_CHARACTERS[event.code];
+  if (punctuation !== undefined && key.length === 1 && !/^[\x20-\x7e]$/.test(key)) return punctuation;
+  return key;
 }
 
 /** A key whose character already says whether Shift was held: `?`, `+`, `,`. Its Shift state isn't compared. */

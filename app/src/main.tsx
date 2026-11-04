@@ -1,6 +1,7 @@
 // Start-up, in the order that keeps the first paint fast and correct: preferences (so the theme never flashes), the
 // sidecar's connection (the shell is already starting it; this doesn't wait for it), then render. The shell paints
-// while the sidecar starts; screens show their skeletons until it's ready.
+// while the sidecar starts; screens show their skeletons until it's ready, as their calls wait for it. If start-up
+// itself fails, the window says so, with diagnostics to copy, rather than staying blank.
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { createQueryClient } from './app/queryClient';
@@ -13,7 +14,15 @@ import { startLiveBridge } from './live/liveBridge';
 import { startAppearance } from './settings/appearance';
 import { flushSettings, getSettings, loadSettings, updateSettings } from './settings/settingsStore';
 import { initConnection } from './shell/connection';
+import { refetchFailedQueriesOnFirstReady } from './shell/readiness';
+import { StartupFailure } from './shell/StartupFailure';
 import './styles/index.css';
+
+function rootElement(): HTMLElement {
+  const root = document.getElementById('root');
+  if (!root) throw new Error('index.html has no #root');
+  return root;
+}
 
 async function start() {
   // Only a mock build brings the mock and its fixtures in: the condition is a constant, so a real build drops it.
@@ -45,10 +54,11 @@ async function start() {
         ? router.navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl } })
         : router.navigate({ to: '/crawls/$crawl/overview', params: { crawl } })),
   });
+  refetchFailedQueriesOnFirstReady(queryClient);
 
-  const root = document.getElementById('root');
-  if (!root) throw new Error('index.html has no #root');
-  createRoot(root).render(<App router={router} queryClient={queryClient} />);
+  createRoot(rootElement()).render(<App router={router} queryClient={queryClient} />);
 }
 
-void start();
+start().catch((error: unknown) => {
+  createRoot(rootElement()).render(<StartupFailure error={error} />);
+});

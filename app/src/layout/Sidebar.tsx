@@ -10,9 +10,14 @@ import { formatCount } from '../lib/format';
 import { useLiveCrawl, useLiveIds } from '../live/liveStore';
 import { updateSettings, useSettings } from '../settings/settingsStore';
 
-const ITEM =
-  'flex h-(--nav-item-height) items-center gap-2 rounded-md px-2.5 text-13 text-text-secondary hover:bg-surface-hover hover:text-text';
-const ACTIVE = 'bg-surface-selected text-accent-text font-medium';
+// A place in the sidebar. Its colours are either the current place's or the rest's, never both stacked: Tailwind
+// would pick one by its own order, not ours.
+const ITEM = 'flex h-(--nav-item-height) items-center gap-2 rounded-md px-2.5 text-13';
+const OTHER = 'text-text-secondary hover:bg-surface-hover hover:text-text';
+/** The current place: the accent rule and colours (base.css `.si-current`), and a heavier weight. */
+const CURRENT = 'si-current font-medium';
+/** For a Link: the current place's look when it's the page shown, the others' otherwise. */
+const placeProps = { className: ITEM, activeProps: { className: CURRENT }, inactiveProps: { className: OTHER } };
 
 /** The sidebar (docs/v2-ui-ia.md, The shell): Home, the open crawl's sections, crawls running now, Settings. */
 export function Sidebar() {
@@ -25,7 +30,7 @@ export function Sidebar() {
     <nav
       aria-label="Main"
       className={clsx(
-        'flex shrink-0 flex-col gap-4 border-r border-border bg-surface-sunken p-2 transition-[width] duration-(--duration-panel) ease-out',
+        'flex shrink-0 flex-col gap-4 border-r border-border bg-surface-sunken p-2 transition-width duration-(--duration-panel) ease-out',
         collapsed ? 'w-(--sidebar-width-collapsed)' : 'w-(--sidebar-width)',
       )}
     >
@@ -45,14 +50,7 @@ export function Sidebar() {
 
       <ul className="flex flex-col gap-0.5">
         <li>
-          <Link
-            to="/"
-            search={{}}
-            className={ITEM}
-            activeProps={{ className: ACTIVE }}
-            activeOptions={{ exact: true }}
-            title="Home"
-          >
+          <Link to="/" search={{}} {...placeProps} activeOptions={{ exact: true }} title="Home">
             <span aria-hidden="true">⌂</span>
             {collapsed ? <span className="sr-only">Home</span> : 'Home'}
           </Link>
@@ -85,13 +83,7 @@ export function Sidebar() {
 
       <div className="mt-auto flex flex-col gap-2">
         <RunningCrawls collapsed={collapsed} />
-        <Link
-          to="/settings/{-$section}"
-          params={{}}
-          className={ITEM}
-          activeProps={{ className: ACTIVE }}
-          title="Settings"
-        >
+        <Link to="/settings/{-$section}" params={{}} {...placeProps} title="Settings">
           <span aria-hidden="true">⚙</span>
           {collapsed ? <span className="sr-only">Settings</span> : 'Settings'}
         </Link>
@@ -121,7 +113,7 @@ function SectionLink({
       ) : null}
     </>
   );
-  const props = { className: ITEM, activeProps: { className: ACTIVE }, title };
+  const props = { ...placeProps, title };
   switch (section.id) {
     case 'issues':
       return (
@@ -213,7 +205,7 @@ function RunningCrawl({ id, name, collapsed }: { id: string; name: string; colla
   const fetched = crawl?.progress?.fetched ?? null;
   return (
     <li>
-      <Link to="/crawls/$crawl/overview" params={{ crawl: id }} className={ITEM} title={name}>
+      <Link to="/crawls/$crawl/overview" params={{ crawl: id }} className={clsx(ITEM, OTHER)} title={name}>
         <span aria-hidden="true" className="size-(--mark-size) shrink-0 rounded-full bg-accent" />
         <span className={collapsed ? 'sr-only' : 'truncate'}>{name}</span>
         {collapsed || fetched === null ? null : (

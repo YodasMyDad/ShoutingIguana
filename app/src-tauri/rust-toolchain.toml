@@ -1,0 +1,7 @@
+# The Rust the shell is built and linted with, here and in CI, so a new stable release can't turn the build red with
+# new lints. Move it on deliberately, at least two weeks after a release, with `cargo clippy` clean. The oldest Rust
+# the shell must still build with is `rust-version` in Cargo.toml, which CI checks too.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

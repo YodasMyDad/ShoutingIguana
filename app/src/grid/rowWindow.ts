@@ -9,6 +9,7 @@ import {
   isWindowed,
   placeOffset,
   rebaseForScroll,
+  windowFor,
   type ScrollSpace,
 } from './scrollWindow';
 
@@ -39,6 +40,10 @@ export class RowWindowModel {
   private view: RowWindowView = { ...computeRange(0, 0, 1, 0), base: 0, bodyHeight: 0, windowed: false, viewport: 0 };
   private readonly listeners = new Set<() => void>();
   private readonly offsetListeners = new Set<(offset: number) => void>();
+  private readonly scrubListeners = new Set<(scrubbing: boolean) => void>();
+  /** The offset listeners last heard: a jump notifies at once, and its scroll event then has nothing new to say. */
+  private notifiedOffset: number | null = null;
+  private scrubbing = false;
 
   readonly subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -53,13 +58,34 @@ export class RowWindowModel {
     return () => this.offsetListeners.delete(listener);
   }
 
+  /** Whether the custom scrollbar's thumb is held: rows fly past, so the data layer waits for it to settle. */
+  isScrubbing(): boolean {
+    return this.scrubbing;
+  }
+
+  setScrubbing(scrubbing: boolean): void {
+    if (this.scrubbing === scrubbing) return;
+    this.scrubbing = scrubbing;
+    this.scrubListeners.forEach((listener) => listener(scrubbing));
+  }
+
+  onScrubbing(listener: (scrubbing: boolean) => void): () => void {
+    this.scrubListeners.add(listener);
+    return () => this.scrubListeners.delete(listener);
+  }
+
   configure(layout: RowWindowLayout): void {
     const previousRowHeight = this.layout.rowHeight;
     this.layout = { overscan: DEFAULT_OVERSCAN, ...layout };
     // A new density keeps the same row at the top, not the same pixel offset.
     const offset =
       previousRowHeight === layout.rowHeight ? this.offset() : (this.offset() / previousRowHeight) * layout.rowHeight;
-    this.space = { ...this.space, total: layout.count * layout.rowHeight, rowHeight: layout.rowHeight };
+    this.space = {
+      ...this.space,
+      total: layout.count * layout.rowHeight,
+      rowHeight: layout.rowHeight,
+      windowPx: windowFor(layout.rowHeight),
+    };
     // The rows changed (a new sort, more rows): keep the same virtual offset, re-based if it has to be.
     if (this.element) {
       const placed = placeOffset(this.space, offset, this.viewportHeight());
@@ -104,11 +130,11 @@ export class RowWindowModel {
     const element = this.element;
     if (!element) return;
     const placed = placeOffset(this.space, virtualOffset, this.viewportHeight());
-    const rebased = placed.base !== this.space.base;
     this.space.base = placed.base;
     element.scrollTop = placed.scrollTop;
-    // A re-base can leave scrollTop where it was, and then no scroll event fires: update directly.
-    if (rebased || Math.abs(element.scrollTop - placed.scrollTop) < 1) this.handleScroll();
+    // Render the jump in this task, not a frame later with its scroll event (and a re-base that leaves scrollTop
+    // where it was fires none at all). That event then finds nothing new, so listeners hear the jump once.
+    this.handleScroll();
   }
 
   private viewportHeight(): number {
@@ -126,6 +152,8 @@ export class RowWindowModel {
     }
     this.update();
     const offset = this.offset();
+    if (offset === this.notifiedOffset) return;
+    this.notifiedOffset = offset;
     this.offsetListeners.forEach((listener) => listener(offset));
   }
 
