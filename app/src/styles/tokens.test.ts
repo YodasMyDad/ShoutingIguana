@@ -49,6 +49,24 @@ describe('the tokens, compiled', () => {
     expect(rule('font-sans')).toContain('font-family');
   });
 
+  it('name Inter and JetBrains Mono, and load both from bundled faces', () => {
+    const css = build(['font-sans', 'font-mono']);
+    expect(css).toMatch(/--font-sans:\s*'Inter',/);
+    expect(css).toMatch(/--font-mono:\s*'JetBrains Mono',/);
+    expect(css.match(/@font-face/g)).toHaveLength(6);
+    for (const face of [
+      'Inter-Regular.woff2',
+      'Inter-Medium.woff2',
+      'Inter-SemiBold.woff2',
+      'JetBrainsMono-Regular.woff2',
+      'JetBrainsMono-Medium.woff2',
+      'JetBrainsMono-SemiBold.woff2',
+    ]) {
+      expect(css).toContain(face);
+      expect(readFileSync(path.resolve(import.meta.dirname, 'fonts', face)).byteLength).toBeGreaterThan(0);
+    }
+  });
+
   it('mean what they say by narrow: below 1360 px', () => {
     const css = build(['narrow:hidden']);
     expect(css).toMatch(/@media \(max-width: 1360px\)/);
