@@ -1,8 +1,7 @@
 import clsx from 'clsx';
-import { Info } from 'lucide-react';
+import { Info, MessageSquareWarning, MessageSquareX } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { IconSlot, type IconLike } from './Icon';
-import { SeverityMark } from './SeverityMark';
 
 export interface BannerProps {
   /**
@@ -25,9 +24,12 @@ export interface BannerProps {
 
 /**
  * A strip across a view (or, `inset`, inside a panel) for a state of the whole view: out of date, the engine lost,
- * reconnecting. It says why in plain words and offers the one action that helps. Warnings and errors carry the
- * severity's shape, so the strip isn't told by colour alone.
+ * reconnecting. It says why in plain words and offers the one action that helps. It's the app's message, never a
+ * finding: warnings and errors take the message tones and Lucide's message icons, not severity's colours and shapes,
+ * and the words say what happened, so the strip isn't told by colour alone.
  */
+const TONE_ICONS = { info: Info, warning: MessageSquareWarning, error: MessageSquareX } as const;
+
 export function Banner({
   tone = 'info',
   children,
@@ -44,13 +46,7 @@ export function Banner({
       className={clsx('si-banner', `si-banner--${tone}`, inset && 'si-banner--inset', className)}
     >
       <span className="si-banner__icon">
-        {icon ? (
-          <IconSlot icon={icon} size="md" />
-        ) : tone === 'info' ? (
-          <IconSlot icon={Info} size="md" />
-        ) : (
-          <SeverityMark severity={tone} size="md" decorative />
-        )}
+        <IconSlot icon={icon ?? TONE_ICONS[tone]} size="md" />
       </span>
       <div className="si-banner__body">
         <div>{children}</div>

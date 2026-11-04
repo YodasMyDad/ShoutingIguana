@@ -597,6 +597,31 @@ test.describe('the design system’s states', () => {
     });
   }
 
+  for (const colorScheme of ['light', 'dark'] as const) {
+    test(`the app’s messages take their own tones, not severity’s, readable at 4.5:1 (${colorScheme})`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme });
+      const host = await fixture(
+        page,
+        `<div class="si-banner si-banner--warning" id="caution"><span class="si-banner__body">Restarting the engine (2 of 3)…</span></div>
+         <div class="si-callout si-callout--warning" id="caution-callout"><span class="si-callout__body">3 checks were skipped</span></div>
+         <div class="si-banner si-banner--error" id="failure"><span class="si-banner__body">The engine keeps stopping.</span></div>
+         <span class="si-sev-badge si-sev-badge--warning" id="severity">Warning</span>`,
+      );
+      const background = async (id: string) =>
+        (await style(host.locator(`#${id}`), 'background-color'))['background-color'] ?? '';
+      const severity = await background('severity');
+      for (const id of ['caution', 'caution-callout']) {
+        expect(await background(id), id).not.toBe(severity);
+      }
+      for (const id of ['caution', 'caution-callout', 'failure']) {
+        const text = (await style(host.locator(`#${id}`), 'color')).color ?? '';
+        expect(contrast(text, await background(id)), id).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  }
+
   test('under forced colours, what’s disabled is GrayText: menu and palette items, checkboxes, switches', async ({
     page,
   }) => {

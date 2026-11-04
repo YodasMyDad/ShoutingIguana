@@ -1808,16 +1808,25 @@
     color: var(--color-accent-text);
   }
 
+  /* App messages, in the message tones (tokens.css), never the severity's. */
   .si-callout--warning {
-    background: var(--color-warning-subtle);
+    background: var(--color-message-caution-subtle);
     box-shadow: inset 0 0 0 var(--hairline) var(--color-border);
     color: var(--color-text);
   }
 
+  .si-callout--warning .si-callout__icon {
+    color: var(--color-message-caution);
+  }
+
   .si-callout--error {
-    background: var(--color-error-subtle);
+    background: var(--color-message-failure-subtle);
     box-shadow: inset 0 0 0 var(--hairline) var(--color-border);
     color: var(--color-text);
+  }
+
+  .si-callout--error .si-callout__icon {
+    color: var(--color-message-failure);
   }
 
   .si-banner {
@@ -1869,11 +1878,19 @@
   }
 
   .si-banner--warning {
-    background: var(--color-warning-subtle);
+    background: var(--color-message-caution-subtle);
+  }
+
+  .si-banner--warning .si-banner__icon {
+    color: var(--color-message-caution);
   }
 
   .si-banner--error {
-    background: var(--color-error-subtle);
+    background: var(--color-message-failure-subtle);
+  }
+
+  .si-banner--error .si-banner__icon {
+    color: var(--color-message-failure);
   }
 
   /* A banner inside a card or panel, rather than across the window. */
