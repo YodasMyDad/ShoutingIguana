@@ -18,7 +18,13 @@ type Story = StoryObj<typeof meta>;
 
 /** Text fields: the 3:1 edge, the focus ring as an outline, an inline error, disabled and read-only. */
 export const TextFields: Story = {
-  parameters: { pseudo: { hover: ['.is-hover .si-field'], focusWithin: ['.is-focus .si-field'] } },
+  parameters: {
+    pseudo: {
+      hover: ['.is-hover .si-field'],
+      focusWithin: ['.is-focus .si-field'],
+      focusVisible: ['.is-focus .si-field__input'],
+    },
+  },
   render: () => (
     <StoryFrame sheet>
       <div className="grid max-w-(--content-max) grid-cols-2 gap-6">
@@ -47,7 +53,7 @@ export const TextFields: Story = {
 
 /** Home's URL field: large, mono, the halo while focused, the Crawl button inside. */
 export const LaunchField: Story = {
-  parameters: { pseudo: { focusWithin: ['.is-focus .si-field'] } },
+  parameters: { pseudo: { focusWithin: ['.is-focus .si-field'], focusVisible: ['.is-focus .si-field__input'] } },
   render: () => (
     <StoryFrame>
       <TextField
@@ -85,7 +91,7 @@ export const LaunchField: Story = {
 
 /** Search boxes: the keys that focus it while empty, a clear button and Esc while filled. */
 export const SearchFields: Story = {
-  parameters: { pseudo: { focusWithin: ['.is-focus .si-field'] } },
+  parameters: { pseudo: { focusWithin: ['.is-focus .si-field'], focusVisible: ['.is-focus .si-field__input'] } },
   render: function SearchFields() {
     const [value, setValue] = useState('patio');
     return (

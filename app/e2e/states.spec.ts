@@ -572,6 +572,18 @@ test.describe('the design system’s states', () => {
     expect(await edge('unpressed')).not.toBe(rest);
   });
 
+  test('tabbing to the button inside a field shows one focus ring, the button’s', async ({ page }) => {
+    const field = page.getByRole('textbox', { name: 'Start URL' });
+    const box = field.locator('xpath=..');
+    await field.focus();
+    expect((await style(box, 'outline-style'))['outline-style']).toBe('solid');
+    await page.keyboard.press('Tab');
+    const crawl = box.locator('button[type="submit"]');
+    await expect(crawl).toBeFocused();
+    expect((await style(crawl, 'outline-style'))['outline-style']).toBe('solid');
+    expect((await style(box, 'outline-style'))['outline-style']).toBe('none');
+  });
+
   test('under forced colours, what’s disabled is GrayText: menu and palette items, checkboxes, switches', async ({
     page,
   }) => {

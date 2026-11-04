@@ -491,8 +491,9 @@
     border-color: var(--color-text-muted);
   }
 
-  /* The input's own ring would sit inside the box: the box draws it instead, as an outline. */
-  .si-field:focus-within {
+  /* The input's own ring would sit inside the box: the box draws it instead, as an outline. Only for the input's own
+     focus: a button inside the field (Home's Crawl) draws its own ring, and one ring shows at a time. */
+  .si-field:has(.si-field__input:focus-visible) {
     outline: var(--focus-width) solid var(--color-focus);
     outline-offset: calc(var(--hairline) * -1);
   }
@@ -501,7 +502,7 @@
     display: none;
   }
 
-  .si-field--lg:focus-within {
+  .si-field--lg:has(.si-field__input:focus-visible) {
     box-shadow:
       0 0 0 calc(var(--halo-width) + var(--hairline)) var(--color-accent-subtle),
       var(--elevation-2);
@@ -511,7 +512,7 @@
     border-color: var(--color-error);
   }
 
-  .si-field[data-invalid]:focus-within {
+  .si-field[data-invalid]:has(.si-field__input:focus-visible) {
     outline-color: var(--color-error);
   }
 
