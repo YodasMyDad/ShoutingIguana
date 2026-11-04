@@ -39,7 +39,9 @@ export function formatBytes(bytes: number | null | undefined): string {
 /** 312 ms under a second; otherwise as formatDuration. */
 export function formatMilliseconds(ms: number | null | undefined): string {
   if (ms === null || ms === undefined || !Number.isFinite(ms)) return '–';
-  return ms < 1000 ? `${integer.format(ms)} ms` : formatDuration(ms);
+  // Rounded first: 999.6 ms is a second, never "1,000 ms".
+  const whole = Math.round(ms);
+  return whole < 1000 ? `${integer.format(whole)} ms` : formatDuration(ms);
 }
 
 /** "1 min 12 s", "2 h 5 min", "8 s". A missing value is an en dash. */
