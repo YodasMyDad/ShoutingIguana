@@ -1333,6 +1333,23 @@
     padding: 0 var(--space-2);
   }
 
+  /* A chip that may shrink in a row of fixed width: its value is cut short with an ellipsis. */
+  .si-chip--truncate {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .si-chip--truncate .si-chip__main {
+    min-width: 0;
+  }
+
+  .si-chip--truncate .si-chip__value {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   /* ------------------------------------------------------------------ Cards */
   .si-card {
     min-width: 0;

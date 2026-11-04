@@ -202,8 +202,9 @@ export const NavItems: Story = {
 };
 
 /**
- * List rows, as the checks list uses them: the severity mark, the title, the count; selected with the accent rule;
- * skipped with its reason and the dashed badge.
+ * List rows, as the checks list uses them: one listbox, a group per category named by its `ListHeading`
+ * (`level="none"`, as only options belong in a listbox), the severity mark, the title, the count; selected with the
+ * accent rule; skipped with its reason and the dashed badge.
  */
 export const ListRows: Story = {
   parameters: { pseudo: { hover: ['.is-hover'], focusVisible: ['.is-focus'] } },
@@ -223,40 +224,42 @@ export const ListRows: Story = {
     return (
       <StoryFrame>
         <div className="si-card w-(--checks-width) p-2">
-          <ListHeading id="story-response-codes" meta="4 passed">
-            Response codes
-          </ListHeading>
-          <div role="listbox" aria-labelledby="story-response-codes">
-            {rows.map((row, index) => (
+          <div role="listbox" aria-label="Checks" tabIndex={-1}>
+            <div role="group" aria-labelledby="story-response-codes">
+              <ListHeading id="story-response-codes" level="none" meta="4 passed">
+                Response codes
+              </ListHeading>
+              {rows.map((row, index) => (
+                <ListRow
+                  key={row.id}
+                  asChild
+                  icon={<SeverityMark severity={row.severity} />}
+                  title={row.title}
+                  meta={<Num value={row.count} />}
+                  className={index === 0 ? 'is-hover' : index === 1 ? 'is-focus' : undefined}
+                >
+                  <div
+                    role="option"
+                    aria-selected={selected === row.id}
+                    tabIndex={selected === row.id ? 0 : -1}
+                    onClick={() => setSelected(row.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') setSelected(row.id);
+                    }}
+                  />
+                </ListRow>
+              ))}
               <ListRow
-                key={row.id}
                 asChild
-                icon={<SeverityMark severity={row.severity} />}
-                title={row.title}
-                meta={<Num value={row.count} />}
-                className={index === 0 ? 'is-hover' : index === 1 ? 'is-focus' : undefined}
+                muted
+                icon={<SeverityMark severity="skipped" />}
+                title="Orphan page"
+                meta={<Badge variant="dashed">Skipped</Badge>}
+                description="No sitemap could be read, so orphan pages weren’t checked."
               >
-                <div
-                  role="option"
-                  aria-selected={selected === row.id}
-                  tabIndex={selected === row.id ? 0 : -1}
-                  onClick={() => setSelected(row.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') setSelected(row.id);
-                  }}
-                />
+                <div role="option" aria-selected={false} tabIndex={-1} />
               </ListRow>
-            ))}
-            <ListRow
-              asChild
-              muted
-              icon={<SeverityMark severity="skipped" />}
-              title="Orphan page"
-              meta={<Badge variant="dashed">Skipped</Badge>}
-              description="No sitemap could be read, so orphan pages weren’t checked."
-            >
-              <div role="option" aria-selected={false} tabIndex={-1} />
-            </ListRow>
+            </div>
           </div>
         </div>
       </StoryFrame>
@@ -324,6 +327,18 @@ export const FilterChips: Story = {
           <FilterChip field="Status" value="4xx" variant="preview" />
           <FilterChip field="Check" value="Internal links without anchor text" size="sm" variant="preview" />
           <FilterChip field="Linked URL" value="/" size="sm" onRemove={() => undefined} />
+        </StateRow>
+        <StateRow label="Long value, truncated to its room">
+          <span className="flex w-(--popover-width) min-w-0 gap-2 overflow-hidden">
+            <FilterChip
+              field="Check"
+              value="Another version of the site answers with a page instead of redirecting to the main one"
+              variant="preview"
+              size="sm"
+              truncate
+            />
+            <FilterChip field="Detail" value="Root-relative: starts with /" variant="preview" size="sm" truncate />
+          </span>
         </StateRow>
       </StoryFrame>
     );

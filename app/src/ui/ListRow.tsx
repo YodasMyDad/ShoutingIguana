@@ -68,7 +68,10 @@ export function ListRow({
   );
 }
 
-/** A heading over a group of rows: "Response codes" with "4 passed" on the right. */
+/**
+ * A heading over a group of rows: "Response codes" with "4 passed" on the right. `level="none"` draws it without a
+ * heading's role, as the label of a group inside a listbox (`aria-labelledby` its `id`), where only options belong.
+ */
 export function ListHeading({
   children,
   meta,
@@ -78,9 +81,9 @@ export function ListHeading({
   children: ReactNode;
   meta?: ReactNode;
   id?: string | undefined;
-  level?: 2 | 3 | 4 | undefined;
+  level?: 2 | 3 | 4 | 'none' | undefined;
 }) {
-  const Heading = level === 2 ? 'h2' : level === 4 ? 'h4' : 'h3';
+  const Heading = level === 'none' ? 'div' : level === 2 ? 'h2' : level === 4 ? 'h4' : 'h3';
   return (
     <Heading id={id} className="si-list-heading">
       <span>{children}</span>

@@ -21,6 +21,11 @@ export interface FilterChipProps {
    */
   variant?: 'filter' | 'preview' | undefined;
   size?: 'sm' | 'md' | undefined;
+  /**
+   * May shrink, its value cut short with an ellipsis, where a row has only so much room (a group's link to its URLs):
+   * the whole sentence is its tooltip and accessible name.
+   */
+  truncate?: boolean | undefined;
   /** For the editor's trigger (a popover anchors on it). */
   ref?: Ref<HTMLButtonElement> | undefined;
   className?: string | undefined;
@@ -44,6 +49,7 @@ export function FilterChip({
   onRemove,
   variant = 'filter',
   size = 'md',
+  truncate = false,
   ref,
   className,
 }: FilterChipProps) {
@@ -69,8 +75,10 @@ export function FilterChip({
         preview && 'si-chip--preview',
         size === 'sm' && 'si-chip--sm',
         !removable && 'si-chip--static',
+        truncate && 'si-chip--truncate',
         className,
       )}
+      title={truncate ? words : undefined}
     >
       {onEdit && !preview ? (
         <Tooltip content="Edit the filter" hint={removable ? 'Delete removes it' : undefined}>
