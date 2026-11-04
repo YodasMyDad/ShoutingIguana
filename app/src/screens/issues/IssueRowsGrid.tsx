@@ -6,7 +6,7 @@ import type { Check } from '../../api/types';
 import { ErrorState } from '../../feedback/ErrorState';
 import { GridCore } from '../../grid/GridCore';
 import { useGridMetrics } from '../../grid/metrics';
-import { nextSort } from '../../grid/sort';
+import { nextSort, useHeaderHandoff } from '../../grid/sort';
 import type { GridColumn } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
@@ -55,6 +55,7 @@ export function IssueRowsGrid({
     [crawlId, check.id, sort],
   );
   const rows = usePagedRows<IssueRow>({ queryKey, fetchPage, rowHeight });
+  const handoff = useHeaderHandoff(sort);
 
   const urlWidth = Math.max(MIN_URL_WIDTH, (width ?? 720) - DETAIL_WIDTH - FRAME_SLACK);
   const columns = useMemo<GridColumn<IssueRow>[]>(() => {
@@ -102,7 +103,12 @@ export function IssueRowsGrid({
         onRangeChange={rows.onRangeChange}
         onScrollOffset={rows.onScrollOffset}
         fetchRows={rows.fetchRows}
-        onSort={(column) => onSortChange(nextSort(sort, column))}
+        onSort={(column, focused) => {
+          const next = nextSort(sort, column);
+          handoff.sorted(column, focused, next);
+          onSortChange(next);
+        }}
+        focusHeader={handoff.focusHeader}
         onActivate={(_index, row) => {
           if (row) onInspect(row.id);
         }}

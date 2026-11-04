@@ -521,6 +521,72 @@ describe('GridCore as a tree', () => {
     const header = screen.getByRole('columnheader', { name: 'Name' });
     expect(header).toHaveAttribute('aria-sort', 'ascending');
     fireEvent.click(screen.getByRole('button', { name: 'Size' }));
-    expect(sort).toHaveBeenCalledWith('size');
+    expect(sort).toHaveBeenCalledWith('size', false);
+  });
+});
+
+describe('GridCore with columns that sort', () => {
+  const sortable: GridColumn<Row>[] = columns.map((column) => ({ ...column, sortable: true }));
+
+  it('stays one stop for Tab: the cursor reaches the header with Up, and Enter or Space there sorts', () => {
+    const onSort = vi.fn();
+    const { grid, activeCell, onActivate } = setup({ columns: sortable, onSort });
+    // The header's buttons are for the pointer: Tab goes to the grid alone.
+    expect(screen.getAllByRole('button').map((button) => button.tabIndex)).toEqual([-1, -1]);
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowUp' });
+    expect(activeCell()).toHaveAttribute('role', 'columnheader');
+    expect(activeCell()).toHaveTextContent('URL');
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    expect(onSort).toHaveBeenLastCalledWith('url', true);
+    expect(onActivate).not.toHaveBeenCalled();
+    fireEvent.keyDown(grid, { key: 'ArrowRight' });
+    expect(activeCell()).toHaveTextContent('Status');
+    fireEvent.keyDown(grid, { key: ' ' });
+    expect(onSort).toHaveBeenLastCalledWith('status', true);
+    // Space sorted: it selected no row.
+    expect(grid.querySelectorAll('[aria-selected="true"]')).toHaveLength(0);
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    expect(activeCell()).toHaveAttribute('role', 'gridcell');
+    expect(activeCell()).toHaveTextContent('200');
+    expect(activeCell()).toHaveAttribute('aria-colindex', '2');
+  });
+
+  it('leaves the keys of a header control that has focus to it', () => {
+    const onSort = vi.fn();
+    const { grid, onActivate } = setup({ columns: sortable, onSort });
+    act(() => grid.focus());
+    const button = screen.getByRole('button', { name: 'URL' });
+    act(() => button.focus());
+    fireEvent.keyDown(button, { key: 'Enter' });
+    fireEvent.keyDown(button, { key: ' ' });
+    fireEvent.keyDown(button, { key: 'ArrowDown' });
+    expect(onActivate).not.toHaveBeenCalled();
+    expect(grid.querySelectorAll('[aria-selected="true"]')).toHaveLength(0);
+  });
+
+  it('keeps focus on the grid when a header is clicked, with the cursor on it', () => {
+    const onSort = vi.fn();
+    const { grid, activeCell } = setup({ columns: sortable, onSort });
+    const button = screen.getByRole('button', { name: 'Status' });
+    fireEvent.mouseDown(button);
+    fireEvent.click(button);
+    expect(grid).toHaveFocus();
+    expect(onSort).toHaveBeenCalledWith('status', true);
+    expect(activeCell()).toHaveTextContent('Status');
+  });
+
+  it('starts on the header it was handed, focused: the grid a sort from that header brought', () => {
+    const { grid, activeCell } = setup({ columns: sortable, onSort: vi.fn(), focusHeader: 'status' });
+    expect(grid).toHaveFocus();
+    expect(activeCell()).toHaveAttribute('role', 'columnheader');
+    expect(activeCell()).toHaveTextContent('Status');
+  });
+
+  it('keeps Up on the first row for a grid whose columns don’t sort', () => {
+    const { grid, activeCell } = setup();
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowUp' });
+    expect(activeCell()).toHaveTextContent('https://example.com/0');
   });
 });

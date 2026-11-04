@@ -179,6 +179,26 @@ describe('the Issues screen', () => {
     );
   });
 
+  it('sorts a flat check from the keyboard, keeping focus and the cursor on the header it sorted by', async () => {
+    sidecar();
+    const { router } = await open(`${ISSUES}/title-too-long`);
+    const grid = await screen.findByRole('grid', { name: /Title too long: affected pages/ });
+    await within(grid).findByText('78 characters');
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowUp' });
+    fireEvent.keyDown(grid, { key: 'ArrowRight' });
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    await waitFor(() =>
+      expect(router.state.location.search).toMatchObject({ sort: [{ column: 'detail', desc: false }] }),
+    );
+    expect(router.state.location.search).not.toHaveProperty('inspect');
+    // The sort brings a new grid: it has focus, and its cursor is where the user pressed.
+    await waitFor(() => expect(screen.getByRole('grid', { name: /Title too long/ })).not.toBe(grid));
+    const sorted = screen.getByRole('grid', { name: /Title too long/ });
+    expect(sorted).toHaveFocus();
+    expect(document.getElementById(sorted.getAttribute('aria-activedescendant') ?? '')).toHaveTextContent('Detail');
+  });
+
   it('copies the check’s URLs, one per line, and the open group’s when one is open', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });

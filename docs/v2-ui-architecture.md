@@ -256,9 +256,13 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   so in a toast; one that works is announced.
 - **Loading**: the first load's skeleton shows only after 150 ms, and once shown stays at least 300 ms, rows or not.
 - Give it a new `key` when the rows change meaning (another sort or filter): that resets the scroll and selection.
-- **Sorting from the header**: a column with `sortable` gets a button for a header, and the grid calls `onSort(id)`;
-  `grid/sort.ts` (`nextSort`) cycles ascending, descending, then the engine's order. The sort itself is the view's, in
-  its route.
+- **Sorting from the header**: a column with `sortable` gets a button for a header, and the grid calls
+  `onSort(id, focused)`; `grid/sort.ts` (`nextSort`) cycles ascending, descending, then the engine's order. The sort
+  itself is the view's, in its route. The grid stays one Tab stop: the buttons are for the pointer (out of the tab
+  order, and a press keeps focus on the grid), and the keyboard reaches the header the ARIA grid way: Up from the first
+  row puts the cursor on the header row, Left and Right move along it, Enter or Space sorts, Down goes back to the
+  rows. A sort brings a new grid (its `key`), so `useHeaderHandoff` hands the header to it (`focusHeader`): the new
+  grid starts focused, with the cursor where the user pressed. Keys pressed on a header control never reach the rows.
 - **Grouped rows** (`tree`): the grid becomes an ARIA `treegrid`. The caller maps its flat rows to a tree with four
   functions (`level`, `expanded`, `parent`, `onToggle`), so nothing is stored per row and a tree of thousands of groups
   pages and virtualises like any grid. Right on a closed group's first cell opens it, Left closes it or goes up from a
