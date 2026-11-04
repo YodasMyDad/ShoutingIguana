@@ -12,7 +12,6 @@ import { RefreshLine } from '../../ui/ProgressBar';
 import { SearchField } from '../../ui/SearchField';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { SeverityMark } from '../../ui/SeverityMark';
-import { outcomeWord } from '../../ui/severity';
 import { Switch } from '../../ui/Switch';
 import type { CheckEntry, CheckList } from './checkList';
 
@@ -44,15 +43,6 @@ export interface ChecksListProps {
 }
 
 const SEVERITY_LABELS: Record<Severity, string> = { error: 'Errors', warning: 'Warnings', notice: 'Notices' };
-
-/** What a screen reader hears for a row: its title, what it came to, and its count or reason. */
-function optionLabel(entry: CheckEntry): string {
-  const { check, outcome, count, skipReason } = entry;
-  const hidden = entry.hidden ? ', hidden' : '';
-  if (outcome === 'skipped') return `${check.title}: skipped. ${skipReason ?? 'The analysis notes say why.'}${hidden}`;
-  if (outcome === 'passed') return `${check.title}: passed${hidden}`;
-  return `${check.title}: ${outcomeWord(outcome).toLowerCase()}, ${formatCountOf(count ?? 0, 'URL')}${hidden}`;
-}
 
 /**
  * The checks list (docs/v2-ui-ia.md, Issues): the filter, the severity choice with its counts, then the checks by
@@ -256,13 +246,18 @@ function CheckOption({
   ) : outcome === 'passed' ? (
     <span className="text-12 text-text-muted">Passed</span>
   ) : (
-    <Num value={count ?? 0} />
+    <>
+      <Num value={count ?? 0} />
+      <span className="sr-only"> {count === 1 ? 'URL' : 'URLs'}</span>
+    </>
   );
   return (
     <ListRow
       asChild
       muted={skipped || outcome === 'passed' || entry.hidden}
-      icon={<SeverityMark severity={outcome} decorative />}
+      // The mark's word is part of the row's name ("Error Internal URL returns 4xx 9 URLs"); a skipped or passed
+      // check's own word is on the right already.
+      icon={<SeverityMark severity={outcome} decorative={skipped || outcome === 'passed'} />}
       title={check.title}
       meta={
         entry.hidden ? (
@@ -280,7 +275,6 @@ function CheckOption({
         ref={ref}
         role="option"
         aria-selected={selected}
-        aria-label={optionLabel(entry)}
         tabIndex={tabbable ? 0 : -1}
         title={check.title}
         onClick={onSelect}

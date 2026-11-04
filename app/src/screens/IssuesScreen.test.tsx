@@ -1,178 +1,21 @@
 import { createMemoryHistory } from '@tanstack/react-router';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GridPage, GridQuery, IssueGroup, IssueRow } from '../api/grids';
-import { setTransport, type TransportRequest } from '../api/transport';
-import type { Analysis, Check, Checks, CrawlListItem } from '../api/types';
+import type { GridQuery } from '../api/grids';
+import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { updateSettings } from '../settings/settingsStore';
-import { TEST_CRAWL_ID, fakeSidecar, json, problem, standardRoutes, testCrawlItem } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar } from '../test/fakeSidecar';
+import { ANCHOR_ROWS, ISSUES_ANALYSIS, issuesRoutes, type IssuesSidecarOptions } from '../test/issuesSidecar';
 
 const ISSUES = `/crawls/${TEST_CRAWL_ID}/issues`;
 
-const check = (id: string, category: string, severity: Check['severity'], title: string, grouping: Check['grouping']) =>
-  ({
-    id,
-    category,
-    severity,
-    title,
-    description: `What’s wrong with ${title}.`,
-    why: `Why ${title} matters.`,
-    fix: `How to fix ${title}.`,
-    learnMore:
-      id === 'empty-anchor-text' ? 'https://developers.google.com/search/docs/crawling-indexing/links-crawlable' : null,
-    grouping,
-  }) satisfies Check;
-
-const CHECKS: Checks = {
-  categories: [
-    { id: 'responseCodes', title: 'Response codes' },
-    { id: 'links', title: 'Links' },
-    { id: 'titles', title: 'Titles' },
-  ],
-  checks: [
-    check('internal-client-error', 'responseCodes', 'error', 'Internal URL returns 4xx', 'detail'),
-    check('internal-server-error', 'responseCodes', 'error', 'Internal URL returns 5xx', 'detail'),
-    check('empty-anchor-text', 'links', 'notice', 'Internal links without anchor text', 'relatedUrl'),
-    check('orphan-page', 'links', 'notice', 'Orphan page', 'none'),
-    check('title-too-long', 'titles', 'notice', 'Title too long', 'none'),
-  ],
-};
-
-const ANALYSIS: Analysis = {
-  analyzedAt: '2026-11-01T10:21:00Z',
-  engineVersion: 'test',
-  pagesAnalyzed: 6,
-  durationMs: 1_000,
-  isPartial: true,
-  outOfDate: false,
-  outOfDateReasons: [],
-  notes: ['No sitemap could be read, so orphan pages weren’t checked.'],
-  counts: [
-    { checkId: 'internal-client-error', count: 2 },
-    { checkId: 'internal-server-error', count: 0 },
-    { checkId: 'empty-anchor-text', count: 6 },
-    { checkId: 'title-too-long', count: 3 },
-  ],
-  skipped: [{ checkId: 'orphan-page', reason: { code: 'no-sitemap', text: 'No sitemap could be read.' } }],
-};
-
-/** The anchor-text check's rows: five pages link to the home page without text, one to /garden/. */
-const ANCHOR_ROWS: (IssueRow & { group: number })[] = [
-  ...[2, 3, 4, 5, 6].map((id) => ({
-    id,
-    url: `https://example.com/page-${id}/`,
-    detail: 'Links to 1 URL',
-    relatedUrl: 'https://example.com/',
-    group: 1,
-  })),
-  {
-    id: 7,
-    url: 'https://example.com/page-7/',
-    detail: 'Links to 1 URL',
-    relatedUrl: 'https://example.com/garden/',
-    group: 9,
-  },
-];
-
-const GROUPS: Record<string, IssueGroup[]> = {
-  'empty-anchor-text': [
-    { detail: null, relatedUrlId: 1, relatedUrl: 'https://example.com/', pages: 5, share: 5 / 6, likelyTemplate: true },
-    {
-      detail: null,
-      relatedUrlId: 9,
-      relatedUrl: 'https://example.com/garden/',
-      pages: 1,
-      share: 1 / 6,
-      likelyTemplate: false,
-    },
-  ],
-  'internal-client-error': [
-    { detail: 'HTTP 404', relatedUrlId: null, relatedUrl: null, pages: 2, share: 1, likelyTemplate: false },
-  ],
-};
-
-const ROWS: Record<string, (IssueRow & { group?: number })[]> = {
-  'empty-anchor-text': ANCHOR_ROWS,
-  'internal-client-error': [
-    { id: 10, url: 'https://example.com/old/', detail: 'HTTP 404' },
-    { id: 11, url: 'https://example.com/gone/', detail: 'HTTP 404' },
-  ],
-  'title-too-long': [
-    { id: 12, url: 'https://example.com/a/', detail: '78 characters' },
-    { id: 13, url: 'https://example.com/b/', detail: '64 characters' },
-    { id: 14, url: 'https://example.com/c/', detail: '91 characters' },
-  ],
-};
-
-function rowsPage(checkId: string, query: GridQuery): GridPage<IssueRow> {
-  let rows = ROWS[checkId] ?? [];
-  if (query.group) {
-    const id = query.group.relatedUrlId;
-    rows = rows.filter((row) => (row.group === undefined ? row.detail === query.group?.detail : row.group === id));
-  }
-  if (query.sort[0]?.column === 'detail') {
-    const desc = query.sort[0].desc;
-    rows = [...rows].sort((a, b) => (desc ? -1 : 1) * (a.detail ?? '').localeCompare(b.detail ?? ''));
-  }
-  const start = query.after ? Number(query.after) : (query.offset ?? 0);
-  const page = rows.slice(start, start + query.limit).map(({ group: _group, ...row }) => row);
-  const end = start + page.length;
-  return {
-    columns: ['id', ...(query.columns ?? ['url'])],
-    rows: page,
-    offset: query.after ? null : start,
-    matching: rows.length,
-    total: rows.length,
-    next: end < rows.length ? String(end) : null,
-    summary: { available: true, reason: null },
-    unavailable: [],
-  };
-}
-
-function sidecar(options: { item?: Partial<CrawlListItem>; analysis?: Analysis | null; checks?: Checks } = {}): {
-  requests: TransportRequest[];
-  analyse: ReturnType<typeof vi.fn>;
-} {
-  const item = testCrawlItem(options.item);
-  const analyse = vi.fn(() => new Response(null, { status: 202 }));
-  const transport = fakeSidecar([
-    ['GET', /^\/api\/checks$/, () => json(options.checks ?? CHECKS)],
-    [
-      'GET',
-      /^\/api\/crawls\/[0-9a-f]{16}\/analysis$/,
-      () =>
-        options.analysis === null
-          ? problem({ type: 'not-analyzed', title: 'This crawl hasn’t been analysed yet.', status: 404 })
-          : json(options.analysis ?? ANALYSIS),
-    ],
-    ['POST', /^\/api\/crawls\/[0-9a-f]{16}\/analyze$/, analyse],
-    [
-      'POST',
-      /^\/api\/crawls\/[0-9a-f]{16}\/issues\/([a-z0-9-]+)\/groups$/,
-      (request, match) => {
-        const groups = GROUPS[match[1] ?? ''] ?? [];
-        const { offset, limit } = request.body as { offset: number; limit: number };
-        return json({
-          checkId: match[1],
-          grouping: 'detail',
-          total: ANALYSIS.counts.find((count) => count.checkId === match[1])?.count ?? null,
-          groupCount: groups.length,
-          offset,
-          groups: groups.slice(offset, offset + limit),
-        });
-      },
-    ],
-    [
-      'POST',
-      /^\/api\/crawls\/[0-9a-f]{16}\/issues\/([a-z0-9-]+)\/rows$/,
-      (request, match) => json(rowsPage(match[1] ?? '', request.body as GridQuery)),
-    ],
-    ...standardRoutes(item).filter(([method, pattern]) => !(method === 'GET' && pattern.source.includes('checks'))),
-  ]);
+function sidecar(options: Omit<IssuesSidecarOptions, 'onAnalyse'> = {}) {
+  const analyse = vi.fn();
+  const transport = fakeSidecar(issuesRoutes({ ...options, onAnalyse: analyse }));
   setTransport(transport);
   return { requests: transport.requests, analyse };
 }
@@ -225,10 +68,10 @@ describe('the Issues screen', () => {
         .getAllByRole('group')
         .map((group) => group.getAttribute('aria-labelledby') !== null),
     ).toEqual([true, true, true]);
-    expect(within(list).getByRole('option', { name: 'Orphan page: skipped. No sitemap could be read.' })).toBeVisible();
+    expect(within(list).getByRole('option', { name: 'Orphan page Skipped No sitemap could be read.' })).toBeVisible();
     expect(within(list).queryByRole('option', { name: /Internal URL returns 5xx/ })).toBeNull();
     fireEvent.click(screen.getByRole('switch', { name: 'Show the check that passed' }));
-    expect(within(list).getByRole('option', { name: 'Internal URL returns 5xx: passed' })).toBeVisible();
+    expect(within(list).getByRole('option', { name: 'Internal URL returns 5xx Passed' })).toBeVisible();
   });
 
   it('moves the selection with the arrow keys, replacing the address, and a click is a new place', async () => {
@@ -381,7 +224,7 @@ describe('the Issues screen', () => {
 
   it('says when the issues are out of date, and offers to analyse again', async () => {
     const { analyse } = sidecar({
-      analysis: { ...ANALYSIS, outOfDate: true, outOfDateReasons: ['crawlChanged'] },
+      analysis: { ...ISSUES_ANALYSIS, outOfDate: true, outOfDateReasons: ['crawlChanged'] },
       item: { outOfDate: true },
     });
     await open(`${ISSUES}/internal-client-error`);
