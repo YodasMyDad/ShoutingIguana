@@ -40,9 +40,10 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `o
 `%LOCALAPPDATA%\Temp\claude\...\c67f90ea-...\scratchpad\checkpoint.md` is history. This section is the place to resume.
 
 Running since 2026-11-04, unmerged: the Issues screen (item 1 below) on `ui/issues` (worktree
-`.claude/worktrees/issues`, cut from `f1f1c2b`), and a read-only fresh-eyes review of the design system, whose findings
-go to a fixer. If a session ends before they report, relaunch each from its brief (the session's checkpoint, named in
-the owner's memory file); don't redo what a branch already committed.
+`.claude/worktrees/issues`). The slice is built (`c4482f4`), `ui/step-3` with the design-system fixes is merged into it
+(`38f9bc5`), and a fixer is working through its fresh-eyes review's 23 findings there. If a session ends before it
+reports, relaunch it from its brief (the session's checkpoint, named in the owner's memory file); don't redo what the
+branch already committed.
 
 Done on this branch, on top of `v2`:
 
@@ -64,13 +65,17 @@ Done on this branch, on top of `v2`:
   "Design system/" in Storybook, and `npm run test:stories` runs axe over every story (`-- --forced` for forced
   colours). The shell, Home, URLs, Settings, feedback and the palette use them. On the merge: 354 unit tests, 59
   stories with no violations in either theme, e2e 13 of 13.
+- The design system's fresh-eyes review found 25 defects, all fixed (merged `ui/ds-fixes`), each with a test seen to
+  fail with its fix reverted. The worst: under forced colours, focus was invisible on anything selected. Also one Esc
+  for a tooltip and the app, fields' clear reaching `onChange`, chip focus, ConfirmDialog errors, 200% zoom, reduced
+  motion, cached registry lookups, and app messages in their own tone (not the severity marks). On the merge: 389
+  unit tests, 14 script tests, stories clean in both themes and forced colours, e2e 27 of 27.
 
 Left, in this order:
 
-1. The Issues screen, running (above). Its fresh-eyes review comes after it.
-2. The design-system review's fixes.
-3. The clickable prototype, then the vertical slices in the UI brief.
-4. Later engine work the UI still needs: the links grid, sitemaps and robots (E3b), export (E5), full-text search and
+1. The Issues screen: its review's fixes (running, above), then merge.
+2. The clickable prototype, then the vertical slices in the UI brief.
+3. Later engine work the UI still needs: the links grid, sitemaps and robots (E3b), export (E5), full-text search and
    favicons (E6).
 
 Never edit the files in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls`.
