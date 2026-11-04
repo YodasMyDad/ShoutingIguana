@@ -1,5 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing;
 using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage.Models;
@@ -126,36 +129,71 @@ public static class UrlGridReader
 
     /// <summary>
     /// The crawl's URL with this text, normalised as the crawl stores URLs (the fragment goes, the scheme and host are
-    /// lowercased); a path starting with <c>/</c> is taken on the start URL's origin. Null when the crawl has no such URL.
+    /// lowercased). A path starting with <c>/</c> is taken on the site's origin (where the start URL's redirects end, then
+    /// the start URL's), and a URL without a scheme (<c>www.example.com/a</c>) takes that origin's. A URL on the site that
+    /// the crawl doesn't have as asked is looked for on the site's other versions (www or not, http or https), which the
+    /// engine treats as one site, and <see cref="UrlLookup.Requested"/> then says what was asked. Null when the crawl has none.
     /// </summary>
     /// <exception cref="UrlQueryException">The text isn't a URL.</exception>
-    public static UrlRef? Lookup(string databasePath, string text, CancellationToken cancellationToken = default)
+    public static UrlLookup? Lookup(string databasePath, string text, CancellationToken cancellationToken = default)
     {
         // Two lookups by key: nothing to interrupt once it's started.
         cancellationToken.ThrowIfCancellationRequested();
         using var connection = CrawlDatabase.OpenReader(databasePath);
-        var candidate = text.Trim();
-        if (candidate.StartsWith('/') && !candidate.StartsWith("//", StringComparison.Ordinal) &&
-            CrawlDatabase.Scalar(connection, "SELECT start_url FROM crawl WHERE id = 1") is string start && Uri.TryCreate(start, UriKind.Absolute, out var origin))
-        {
-            candidate = Uri.TryCreate(origin, candidate, out var resolved) ? resolved.AbsoluteUri : candidate;
-        }
-
-        if (!UrlNormalizer.TryNormalize(candidate, out var normalized))
-        {
-            throw UrlQueryException.For("url", "This isn't a URL: give one that starts with http:// or https://, or a path that starts with /.");
-        }
-
+        using var transaction = connection.BeginTransaction(deferred: true);
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id, url FROM urls WHERE url = $url";
-        command.Parameters.AddWithValue("$url", normalized);
-        using var reader = command.ExecuteReader();
-        return reader.Read() ? new UrlRef(reader.GetInt32(0), reader.GetString(1)) : null;
+        command.Transaction = transaction;
+        command.CommandText = "SELECT start_url FROM crawl WHERE id = 1";
+        var start = command.ExecuteScalar() is string startUrl && UrlNormalizer.TryNormalize(startUrl, out var normalized) ? normalized : null;
+        if (UrlLookupCandidates.Of(text, start is null ? null : Home(command, start), start) is not var (requested, candidates))
+        {
+            throw UrlQueryException.For("url", "This isn't a URL: give one, with or without http:// or https://, or a path that starts with /.");
+        }
+
+        foreach (var candidate in candidates)
+        {
+            command.CommandText = "SELECT id, url FROM urls WHERE url = $url";
+            command.Parameters.Clear();
+            command.Parameters.AddWithValue("$url", candidate);
+            using var reader = command.ExecuteReader();
+            if (reader.Read())
+            {
+                var url = reader.GetString(1);
+                return new UrlLookup(reader.GetInt32(0), url, url == requested ? null : requested);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Where the start URL's HTTP redirects end, as many hops as browsers follow: the site's home page.</summary>
+    private static string Home(SqliteCommand command, string start)
+    {
+        var current = start;
+        HashSet<string> seen = [start];
+        for (var hop = 0; hop < UrlTable.MAX_REDIRECT_HOPS; hop++)
+        {
+            command.CommandText = $"""
+                SELECT t.url FROM urls u JOIN responses r ON r.url_id = u.id JOIN urls t ON t.id = r.redirect_url_id
+                WHERE u.url = $url AND r.outcome = {(int)FetchOutcome.Redirect}
+                """;
+            command.Parameters.Clear();
+            command.Parameters.AddWithValue("$url", current);
+            if (command.ExecuteScalar() is not string next || !seen.Add(next))
+            {
+                break;
+            }
+
+            current = next;
+        }
+
+        return current;
     }
 
     /// <summary>One page of a grid, the URL grid or a check's rows, through a context already open.</summary>
     internal static UrlPage Read(GridReadContext context, UrlQuery query, GridScope scope)
     {
+        scope = scope with { TargetsStored = context.HasIssueTargets };
         RefuseWithoutSummary(context, query.Filters, query.Sort, scope);
         var compiled = UrlQueryCompiler.Compile(query, context.Mode, scope, context.Reason);
         if (compiled.Scope is { } own)
@@ -360,12 +398,32 @@ public static class UrlGridReader
     /// </summary>
     private static Dictionary<string, List<(long? Value, long Count)>> OnePass(GridReadContext context, CompiledQuery query, IReadOnlyList<string> facets)
     {
-        // Each field gives 0 to its largest value, which is unknown: a null, or a value no column has (a crafted file's).
+        // Each field gives 0 to its largest value, which is unknown: a null, or a value no column has (a crafted file's, which
+        // counts as unknown as it does when one facet is counted on its own).
         List<(string Name, string Sql, int Bits)> fields = [];
-        string Small(string facet, int bits) => $"(MIN(IFNULL({Key(context, query, facet)}, {Largest(bits)}), {Largest(bits)}) & {Largest(bits)})";
+        List<(string Alias, string Sql)> heavy = [];
 
-        // A number as itself plus one, 0 for null: status codes and depths are far smaller than the bits allow.
-        string Number(string facet) => $"MIN(MAX(IFNULL({Key(context, query, facet)} + 1, 0), 0), {Largest(NUMBER_BITS)})";
+        // A bare column is named again (reading it is free). A function or a CASE is named once, below, and every comparison
+        // uses that: otherwise si_resource_type runs per comparison and the crawl-mode facets miss their budget.
+        string Bind(string sql, string use)
+        {
+            if (!sql.Contains("CASE", StringComparison.Ordinal) && !sql.Contains("si_", StringComparison.Ordinal))
+            {
+                return use.Replace("v", sql, StringComparison.Ordinal);
+            }
+
+            var alias = "k" + heavy.Count.ToString(CultureInfo.InvariantCulture);
+            heavy.Add((alias, sql));
+            return use.Replace("v", alias, StringComparison.Ordinal);
+        }
+
+        string Small(string facet, int bits, int values) =>
+            Bind(Key(context, query, facet), $"CASE WHEN v >= 0 AND v < {Math.Min(values, Largest(bits))} THEN v ELSE {Largest(bits)} END");
+
+        // A number as itself plus one, 0 for null, and the largest for one that can't be packed (negative, or too large):
+        // status codes and depths are far smaller than the bits allow.
+        string Number(string facet) =>
+            Bind(Key(context, query, facet), $"CASE WHEN v IS NULL THEN 0 WHEN v >= 0 AND v < {Largest(NUMBER_BITS) - 1} THEN v + 1 ELSE {Largest(NUMBER_BITS)} END");
         if (facets.Contains("statusClass"))
         {
             fields.Add(("fetched", UrlColumns.Find("fetched", issueColumns: false)!.Sql(query.Mode)!, 1));
@@ -381,18 +439,19 @@ public static class UrlGridReader
             switch (facet)
             {
                 case "indexability" or "type":
-                    fields.Add((facet, Small(facet, ENUM_BITS), ENUM_BITS));
+                    fields.Add((facet, Small(facet, ENUM_BITS, Column(facet).Values.Count), ENUM_BITS));
                     break;
                 case "inSitemap":
-                    fields.Add((facet, Small(facet, 2), 2));
+                    fields.Add((facet, Small(facet, 2, 2), 2));
                     break;
                 case "depth":
                     fields.Add((facet, Number(facet), NUMBER_BITS));
                     break;
                 case "responseTime":
-                    // The bucket's place in RESPONSE_TIMES, by the lowest values it's past.
+                    // The bucket's place in RESPONSE_TIMES, by the lowest values it's past; unknown for null, or below the first.
                     var responseMs = Key(context, query, facet);
-                    fields.Add((facet, $"IFNULL({string.Join(" + ", RESPONSE_TIMES.Skip(1).Select(range => $"({responseMs} >= {range.Min})"))}, {Largest(3)})", 3));
+                    var buckets = string.Join(" + ", RESPONSE_TIMES.Skip(1).Select(range => $"(v >= {range.Min})"));
+                    fields.Add((facet, Bind(responseMs, $"CASE WHEN v >= 0 THEN {buckets} ELSE {Largest(3)} END"), 3));
                     break;
                 case "severity":
                     fields.Add((facet, string.Join(" | ", SEVERITIES.Select((severity, index) => $"(({severity.Sql}) << {index})")), SEVERITIES.Length));
@@ -407,8 +466,12 @@ public static class UrlGridReader
         }
 
         // Counted as they're read (si_tally), rather than grouped by SQLite, which sorts every row to group them: a third
-        // of the time on a million.
+        // of the time on a million. A crawl without a summary computes each heavy value once, then packs it.
         var packed = string.Join(" | ", fields.Select(field => $"(({field.Sql}) << {layout[field.Name].Shift})"));
+        if (heavy.Count > 0)
+        {
+            packed = $"(SELECT {packed} FROM (SELECT {string.Join(", ", heavy.Select(item => $"{item.Sql} AS {item.Alias}"))}))";
+        }
         var tallies = facets.ToDictionary(facet => facet, _ => new Dictionary<long, long>(), StringComparer.Ordinal);
         Dictionary<string, long> unknown = new(StringComparer.Ordinal);
         context.Tallies.Clear();
@@ -436,7 +499,8 @@ public static class UrlGridReader
 
                     var value = facet switch
                     {
-                        "statusClass" => StatusClass(Unpacked(Field("statusCode")), Field("fetched") != 0),
+                        // A status code too far out to pack is still a status code: another class.
+                        "statusClass" => Field("statusCode") == Largest(NUMBER_BITS) ? 4 : StatusClass(Unpacked(Field("statusCode")), Field("fetched") != 0),
                         "statusCode" or "depth" => Unpacked(Field(facet)),
                         "responseTime" => Field(facet) is var bucket && bucket < RESPONSE_TIMES.Length ? RESPONSE_TIMES[bucket].Min : (long?)null,
                         _ => Field(facet) is var small && small != Largest(layout[facet].Bits) ? small : (long?)null
@@ -507,25 +571,29 @@ public static class UrlGridReader
                         Min = bucket.range.Min,
                         Max = bucket.range.Max
                     }),
-                .. sorted.Where(group => group.Value is null).Select(group => new FacetBucket(null, group.Count, new UrlFilter("responseMs", FilterOperator.IsEmpty)))
+                .. sorted.Where(group => group.Value is null or < 0).GroupBy(_ => true)
+                    .Select(unknown => new FacetBucket(null, unknown.Sum(group => group.Count), new UrlFilter("responseMs", FilterOperator.IsEmpty)))
             ];
         }
 
-        // A value no column has (a crafted file's) counts as unknown, with the unknown ones.
+        // A value no column has (a crafted file's) counts as unknown, with the unknown ones, last.
         var column = Column(facet);
         return
         [
             .. sorted.Select(group => Bucket(column, group.Value, group.Count))
                 .GroupBy(bucket => bucket.Value)
                 .Select(same => same.Count() == 1 ? same.First() : same.First() with { Count = same.Sum(bucket => bucket.Count) })
+                .OrderBy(bucket => bucket.Value is null)
         ];
     }
 
     /// <summary>One value of a facet, with the filter that selects its URLs.</summary>
     private static FacetBucket Bucket(UrlColumnDefinition column, long? value, long count)
     {
-        // A value no column has (a crafted file's) is as good as unknown.
-        if (value is not { } known || (column.Type == UrlColumnType.Enum && (known < 0 || known >= column.Values.Count)))
+        // A value no column has (a crafted file's: an enum's number past its values, a negative depth or status, or one too large
+        // to pack, a boolean that's neither) is as good as unknown, as it is when facets are counted in one pass.
+        if (value is not { } known || known < 0 || (column.Type == UrlColumnType.Enum && known >= column.Values.Count) ||
+            (column.Type == UrlColumnType.Boolean && known > 1) || (column.Type == UrlColumnType.Number && known >= Largest(NUMBER_BITS) - 1))
         {
             return new FacetBucket(null, count, new UrlFilter(column.Id, FilterOperator.IsEmpty));
         }

@@ -105,6 +105,16 @@ internal sealed class GridReadContext : IDisposable
     /// <summary>The crawl has the analysis's indexability, where it judged a URL differently from the crawl.</summary>
     public bool HasEffectiveIndexability { get; private set; }
 
+    /// <summary>
+    /// The last analysis stored every other URL each issue is about, and the fault some checks group by (<c>issue_targets</c>,
+    /// <c>issue_faults</c>), as this engine's do (<see cref="CrawlSchema.ISSUE_TARGETS_SINCE"/>). An earlier engine's
+    /// analysis is grouped as that engine grouped it: by the issues' own detail and first other URL.
+    /// </summary>
+    public bool HasIssueTargets { get; private set; }
+
+    /// <summary>The links have the index by target and kind an analysis adds (<see cref="CrawlSchema.LINK_KINDS_INDEX"/>).</summary>
+    public bool HasLinkKindIndex { get; private set; }
+
     /// <summary>The crawl's indexability reason in crawl SQL: the analysis's where it judged a URL differently.</summary>
     public string Reason => HasEffectiveIndexability ? "COALESCE(e.indexability_reason, r.indexability_reason)" : "r.indexability_reason";
 
@@ -418,11 +428,24 @@ internal sealed class GridReadContext : IDisposable
             }
 
             HasEffectiveIndexability = IssueReader.HasTable(Connection, Transaction, "effective_indexability");
+            HasIssueTargets = Analysis?.AnalysisVersion >= CrawlSchema.ISSUE_TARGETS_SINCE && IssueReader.HasTable(Connection, Transaction, "issue_targets") &&
+                              IssueReader.HasTable(Connection, Transaction, "issue_faults");
+            HasLinkKindIndex = IndexColumns("ix_links_to_kind") == "links:to_id,kind";
 
             // A crawl running here or elsewhere changes from one read to the next; one interrupted stands still until it's
             // continued, which stamps it again.
             Stamp = new GridStamp(Path, updatedAt, Analysis?.AnalyzedAt.ToUnixTimeMilliseconds(), Mode, Live: Summary.Reason == SummaryUnavailableReason.Crawling);
         }
+    }
+
+    /// <summary>"table:column,column" of an index, so one another program made its own way isn't taken for the engine's.</summary>
+    private string IndexColumns(string index)
+    {
+        using var command = Command("""
+            SELECT m.tbl_name || ':' || (SELECT group_concat(name, ',') FROM (SELECT name FROM pragma_index_info($index) ORDER BY seqno))
+            FROM sqlite_master m WHERE m.type = 'index' AND m.name = $index
+            """, [new("$index", index)]);
+        return command.ExecuteScalar() as string ?? string.Empty;
     }
 
     private SummaryUnavailableReason UnavailableReason()

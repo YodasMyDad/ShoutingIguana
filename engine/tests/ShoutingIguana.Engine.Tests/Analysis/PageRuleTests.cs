@@ -159,7 +159,8 @@ public sealed class PageRuleTests
         var images = new ImageRules(SETTINGS, urls).Check(page).ToList();
 
         Assert.Equal(new IssueHit(IssueCatalog.BROKEN_INTERNAL_LINKS, page.UrlId, "2 broken URLs (the first redirects to a URL that returns HTTP 404)",
-            site.Id($"{site.Site}/old")), links.Single(hit => hit.Issue == IssueCatalog.BROKEN_INTERNAL_LINKS));
+            site.Id($"{site.Site}/old")) { Targets = [site.Id($"{site.Site}/old"), site.Id($"{site.Site}/loop-a")] },
+            links.Single(hit => hit.Issue == IssueCatalog.BROKEN_INTERNAL_LINKS));
         Assert.Equal(new IssueHit(IssueCatalog.LINKS_TO_REDIRECTS, page.UrlId, "1 redirecting URL", site.Id($"{site.Site}/moved")),
             links.Single(hit => hit.Issue == IssueCatalog.LINKS_TO_REDIRECTS));
 
@@ -167,6 +168,78 @@ public sealed class PageRuleTests
         Assert.Equal("1 broken URL (it redirects to a URL that returns HTTP 404)", links.Single(hit => hit.Issue == IssueCatalog.BROKEN_EXTERNAL_LINKS).Detail);
         Assert.Equal("1 image (it redirects to a URL that returns HTTP 404)", images.Single(hit => hit.Issue == IssueCatalog.IMAGE_BROKEN).Detail);
         Assert.Equal(site.Id($"{site.Site}/big.jpg"), images.Single(hit => hit.Issue == IssueCatalog.IMAGE_TOO_LARGE).RelatedUrlId);
+    }
+
+    /// <summary>
+    /// A page with several targets of one kind names every one, in the order it links to them, each once, so each target's
+    /// group on the Issues screen holds the page: not only its first, which the issue's related URL keeps.
+    /// </summary>
+    [Fact]
+    public void AnIssueNamesEveryTargetNotJustTheFirst()
+    {
+        var site = new RuleHarness();
+        foreach (var gone in new[] { "gone-1", "gone-2", "gone-3" })
+        {
+            site.Fetched($"{site.Site}/{gone}", FetchOutcome.ClientError, 404);
+        }
+
+        site.Fetched("https://other.example/a", FetchOutcome.ClientError, 410);
+        site.Fetched("https://other.example/b", FetchOutcome.Timeout, 0);
+        site.Fetched($"{site.Site}/moved-1", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/fine");
+        site.Fetched($"{site.Site}/moved-2", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/fine");
+        site.Ok($"{site.Site}/fine");
+        site.Fetched($"{site.Site}/big-1.jpg", FetchOutcome.Success, 200, size: 900_000, contentType: "image/jpeg");
+        site.Fetched($"{site.Site}/big-2.jpg", FetchOutcome.Success, 200, size: 300_000, contentType: "image/jpeg");
+        site.Fetched($"{site.Site}/missing-1.jpg", FetchOutcome.ClientError, 404);
+        site.Fetched($"{site.Site}/missing-2.jpg", FetchOutcome.ClientError, 404);
+        site.Fetched("http://cdn.example/a.js", FetchOutcome.Success, 200, contentType: "text/javascript");
+        site.Fetched("http://cdn.example/b.css", FetchOutcome.Success, 200, contentType: "text/css");
+        var page = site.Page($"{site.Site}/", RuleHarness.Html(
+            """<script src="http://cdn.example/a.js"></script><link rel="stylesheet" href="http://cdn.example/b.css">""",
+            """
+            <a href="/gone-2">a</a><a href="/gone-1">b</a><a href="/gone-2">c</a><a href="/gone-3">d</a>
+            <a href="https://other.example/a">e</a><a href="https://other.example/b">f</a>
+            <a href="/moved-2">g</a><a href="/moved-1">h</a>
+            <a href="/fine" rel="nofollow">i</a><a href="/moved-1" rel="nofollow">j</a>
+            <a href="/fine"></a><a href="/gone-3"><img src="/missing-1.jpg"></a>
+            <img src="/big-2.jpg" alt="x" width="1" height="2"><img src="/big-1.jpg" alt="x" width="1" height="2"><img src="/big-2.jpg" alt="y" width="1" height="2">
+            <img src="/missing-2.jpg" alt="x" width="1" height="2"><img src="/missing-1.jpg" alt="x" width="1" height="2">
+            """));
+        var urls = site.Table();
+        int Id(string path) => site.Id(path.StartsWith("http", StringComparison.Ordinal) ? path : $"{site.Site}{path}");
+        var hits = new LinkRules(urls).Check(page).Concat(new ImageRules(SETTINGS, urls).Check(page)).Concat(new SecurityRules(urls).Check(page))
+            .ToDictionary(hit => hit.Issue);
+
+        (IssueDefinition Check, string[] Targets)[] expected =
+        [
+            (IssueCatalog.BROKEN_INTERNAL_LINKS, ["/gone-2", "/gone-1", "/gone-3"]),
+            (IssueCatalog.BROKEN_EXTERNAL_LINKS, ["https://other.example/a", "https://other.example/b"]),
+            (IssueCatalog.LINKS_TO_REDIRECTS, ["/moved-2", "/moved-1"]),
+            (IssueCatalog.INTERNAL_NOFOLLOW_LINKS, ["/fine", "/moved-1"]),
+            (IssueCatalog.EMPTY_ANCHOR_TEXT, ["/fine", "/gone-3"]),
+            (IssueCatalog.IMAGE_BROKEN, ["/missing-1.jpg", "/missing-2.jpg"]),
+            (IssueCatalog.IMAGE_TOO_LARGE, ["/big-2.jpg", "/big-1.jpg"]),
+            (IssueCatalog.MIXED_CONTENT, ["http://cdn.example/a.js", "http://cdn.example/b.css"])
+        ];
+        foreach (var (check, targets) in expected)
+        {
+            var hit = hits[check];
+            Assert.Equal([.. targets.Select(Id)], hit.AllTargets);
+            Assert.Equal(Id(targets[0]), hit.RelatedUrlId);
+            Assert.StartsWith($"{targets.Length} ", hit.Detail!.Replace("Links to ", string.Empty, StringComparison.Ordinal));
+        }
+
+        // Hreflang alternates, broken and not indexable.
+        site.Fetched($"{site.Site}/fr", FetchOutcome.ClientError, 404);
+        site.Fetched($"{site.Site}/de", FetchOutcome.ServerError, 503);
+        site.Fetched($"{site.Site}/es", FetchOutcome.Redirect, 301, redirectTo: $"{site.Site}/fine");
+        site.Ok($"{site.Site}/it", IndexabilityReason.Noindex);
+        string Alternate(string code, string path) => $"<link rel=\"alternate\" hreflang=\"{code}\" href=\"{site.Site}{path}\">";
+        var en = site.Page($"{site.Site}/en", RuleHarness.Html(
+            Alternate("en", "/en") + Alternate("x-default", "/en") + Alternate("de", "/de") + Alternate("es", "/es") + Alternate("fr", "/fr") + Alternate("it", "/it")));
+        var hreflang = new HreflangRules(site.Table()).Check(en).ToDictionary(hit => hit.Issue);
+        Assert.Equal([Id("/de"), Id("/fr")], hreflang[IssueCatalog.HREFLANG_BROKEN_TARGET].AllTargets);
+        Assert.Equal([Id("/es"), Id("/it")], hreflang[IssueCatalog.HREFLANG_TO_NON_INDEXABLE].AllTargets);
     }
 
     [Fact]
@@ -186,7 +259,10 @@ public sealed class PageRuleTests
         var hit = new LinkRules(site.Table()).Check(page).Single(found => found.Issue == IssueCatalog.INTERNAL_NOFOLLOW_LINKS);
 
         // PDFs can be indexed, a query isn't a path, and a fetched URL is judged by what it returned.
-        Assert.Equal(new IssueHit(IssueCatalog.INTERNAL_NOFOLLOW_LINKS, page.UrlId, "Links to 4 URLs", site.Id($"{site.Site}/guide.pdf")), hit);
+        Assert.Equal(new IssueHit(IssueCatalog.INTERNAL_NOFOLLOW_LINKS, page.UrlId, "Links to 4 URLs", site.Id($"{site.Site}/guide.pdf"))
+        {
+            Targets = [site.Id($"{site.Site}/guide.pdf"), site.Id($"{site.Site}/download?file=a.jpg"), site.Id($"{site.Site}/pages/a.jpg"), site.Id($"{site.Site}/private")]
+        }, hit);
     }
 
     [Fact]

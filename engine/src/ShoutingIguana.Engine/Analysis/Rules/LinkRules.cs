@@ -57,31 +57,31 @@ internal sealed class LinkRules(UrlTable urls) : IPageRule
         if (brokenInternal.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.BROKEN_INTERNAL_LINKS, page.UrlId,
-                RuleText.BrokenTargets(urls, brokenInternal, "broken URL", "broken URLs"), brokenInternal.First);
+                RuleText.BrokenTargets(urls, brokenInternal, "broken URL", "broken URLs"), brokenInternal.First) { Targets = brokenInternal.Ids };
         }
 
         if (brokenExternal.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.BROKEN_EXTERNAL_LINKS, page.UrlId,
-                RuleText.BrokenTargets(urls, brokenExternal, "broken URL", "broken URLs"), brokenExternal.First);
+                RuleText.BrokenTargets(urls, brokenExternal, "broken URL", "broken URLs"), brokenExternal.First) { Targets = brokenExternal.Ids };
         }
 
         if (redirects.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.LINKS_TO_REDIRECTS, page.UrlId,
-                RuleText.Count(redirects.Count, "redirecting URL", "redirecting URLs"), redirects.First);
+                RuleText.Count(redirects.Count, "redirecting URL", "redirecting URLs"), redirects.First) { Targets = redirects.Ids };
         }
 
         if (nofollow.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.INTERNAL_NOFOLLOW_LINKS, page.UrlId,
-                $"Links to {RuleText.Count(nofollow.Count, "URL", "URLs")}", nofollow.First);
+                $"Links to {RuleText.Count(nofollow.Count, "URL", "URLs")}", nofollow.First) { Targets = nofollow.Ids };
         }
 
         if (withoutText.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.EMPTY_ANCHOR_TEXT, page.UrlId,
-                $"Links to {RuleText.Count(withoutText.Count, "URL", "URLs")}", withoutText.First);
+                $"Links to {RuleText.Count(withoutText.Count, "URL", "URLs")}", withoutText.First) { Targets = withoutText.Ids };
         }
     }
 }

@@ -24,9 +24,12 @@ internal sealed record IndexabilityTestDto(IndexabilityTestKind Test, TestOutcom
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public UrlTarget? Canonical { get; init; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CanonicalUrl { get; init; }
+
     public static IndexabilityTestDto From(IndexabilityTest test) => new(test.Test, test.Outcome)
     {
         StatusCode = test.StatusCode, MetaRefresh = test.MetaRefresh, Unreachable = test.Unreachable, Meta = test.Meta, Header = test.Header,
-        Canonical = test.Canonical
+        Canonical = test.Canonical, CanonicalUrl = test.CanonicalUrl
     };
 }

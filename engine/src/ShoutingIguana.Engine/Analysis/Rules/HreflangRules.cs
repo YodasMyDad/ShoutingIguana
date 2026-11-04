@@ -84,13 +84,13 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
 
         if (broken.Count > 0)
         {
-            yield return new IssueHit(IssueCatalog.HREFLANG_BROKEN_TARGET, page.UrlId, RuleText.Count(broken.Count, "URL", "URLs"), broken.First);
+            yield return new IssueHit(IssueCatalog.HREFLANG_BROKEN_TARGET, page.UrlId, RuleText.Count(broken.Count, "URL", "URLs"), broken.First) { Targets = broken.Ids };
         }
 
         if (nonIndexable.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.HREFLANG_TO_NON_INDEXABLE, page.UrlId,
-                RuleText.Count(nonIndexable.Count, "URL", "URLs"), nonIndexable.First);
+                RuleText.Count(nonIndexable.Count, "URL", "URLs"), nonIndexable.First) { Targets = nonIndexable.Ids };
         }
     }
 
@@ -131,7 +131,7 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
             if (missing.Count > 0)
             {
                 yield return new IssueHit(IssueCatalog.HREFLANG_MISSING_RETURN, pageId,
-                    $"{RuleText.Count(missing.Count, "alternate doesn't", "alternates don't")} link back", missing.First);
+                    $"{RuleText.Count(missing.Count, "alternate doesn't", "alternates don't")} link back", missing.First) { Targets = missing.Ids };
             }
 
             start = end;

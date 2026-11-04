@@ -36,6 +36,9 @@ public static class UrlInspectorReader
         [nameof(IssueSeverity.Error)] = 0, [nameof(IssueSeverity.Warning)] = 1, [nameof(IssueSeverity.Notice)] = 2
     };
 
+    /// <summary>Tests only: each page of links as its query runs, with its parameters, so its plan can be asked for.</summary>
+    internal static Action<string, IReadOnlyList<KeyValuePair<string, object>>>? Ran { get; set; }
+
     /// <summary>
     /// The URL with this id in full, or null when the crawl has none. A stored value this engine doesn't know (a newer
     /// engine's kind of link or outcome, a crafted file's) reads as unknown: null.
@@ -144,8 +147,10 @@ public static class UrlInspectorReader
         var hash = $"{direction}|{urlId}|{ofKinds}";
         var total = context.Count($"links|{hash}", () => Count(context, direction, urlId, kinds, ofKinds));
 
-        // Where the page starts: after a cursor's link; at an offset found on the index alone, when every kind is listed;
-        // or, for some kinds only, at an offset read through the links, from the far end past half way.
+        // Where the page starts: after a cursor's link; at an offset found on the index alone, when every kind is listed, or
+        // when some kinds of link to the URL are, on the index of each kind's (merged, in crawl order); otherwise, for some
+        // kinds of link from the URL, at an offset read through its links. From the far end past half way.
+        var merged = direction == LinkDirection.Inlinks && kinds.Count > 0 && context.HasLinkKindIndex;
         string from;
         long start = 0, skip = 0;
         var reverse = false;
@@ -176,19 +181,24 @@ public static class UrlInspectorReader
         var (status, indexable, fetched, join) = OtherEnd(context);
         var sourceNofollow = direction == LinkDirection.Inlinks ? "COALESCE(src.is_nofollow, 0)" : "$selfNofollow";
 
+        var order = reverse ? "DESC" : "ASC";
+        var limit = $"LIMIT {take.ToString(CultureInfo.InvariantCulture)} OFFSET {skip.ToString(CultureInfo.InvariantCulture)}";
+        var links = merged ? $"({Merged(kinds, query.After is null ? string.Empty : " AND rowid > $start")} ORDER BY 1 {order} {limit}) k JOIN links l ON l.rowid = k.link" : "links l";
         List<(LinkRow Link, long RowId)> rows = [];
         if (take > 0)
         {
+            KeyValuePair<string, object>[] values = [.. parameters, new("$start", start), new("$selfNofollow", SelfNofollow(context, urlId) ? 1 : 0)];
             using var command = context.Command($"""
                 SELECT o.id, o.url, l.kind, l.text, l.position, l.flags, l.fragment, {status}, {indexable}, {fetched}, {sourceNofollow}, l.rowid
-                FROM links l
+                FROM {links}
                 JOIN urls o ON o.id = l.{far}
                 {join}
                 {(direction == LinkDirection.Inlinks ? "LEFT JOIN responses src ON src.url_id = l.from_id" : string.Empty)}
-                WHERE {where}{from}
-                ORDER BY l.rowid {(reverse ? "DESC" : "ASC")}
-                LIMIT {take.ToString(CultureInfo.InvariantCulture)} OFFSET {skip.ToString(CultureInfo.InvariantCulture)}
-                """, parameters.Concat([new("$start", start), new("$selfNofollow", SelfNofollow(context, urlId) ? 1 : 0)]));
+                {(merged ? string.Empty : $"WHERE {where}{from}")}
+                ORDER BY l.rowid {order}
+                {(merged ? string.Empty : limit)}
+                """, values);
+            Ran?.Invoke(command.CommandText, values);
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
@@ -264,6 +274,17 @@ public static class UrlInspectorReader
 
         return null;
     }
+
+    /// <summary>
+    /// The ids of the links of some kinds to a URL, its own links to itself left out, as one list in crawl order: each kind's
+    /// on the index by target and kind, already in that order, merged as they're read, so reaching the middle of a nav
+    /// target's million hyperlinks, or of a stylesheet's million links, reads no table rows.
+    /// </summary>
+    /// <param name="range">More of each kind's condition: where a cursor left off.</param>
+    private static string Merged(IReadOnlyList<LinkKind> kinds, string range) => string.Join(" UNION ALL ", kinds.Select(kind => $"""
+        SELECT rowid AS link FROM links INDEXED BY ix_links_to_kind WHERE to_id = $id AND kind = {(int)kind}{range}
+          AND rowid NOT IN (SELECT rowid FROM links WHERE from_id = $id AND +to_id = $id)
+        """));
 
     /// <summary>
     /// The other end of a link as the grids show it: its status, whether it can be indexed, whether it was fetched; from
@@ -508,8 +529,10 @@ public static class UrlInspectorReader
                 }
                 : new IndexabilityTest(IndexabilityTestKind.RobotsTxt, context.Options.RespectRobotsTxt ? TestOutcome.Pass : TestOutcome.NotChecked);
 
-        // A noindex or a canonical is only read from a page that answered; one that didn't makes them moot.
+        // A noindex or a canonical is only read from a page that answered; one that didn't makes them moot. A file that answered
+        // has nothing but its headers to say either, and they were read when its details were stored.
         var page = self is { Fetched: true, Outcome: FetchOutcome.Success };
+        var judged = read || (details is not null && !self.IsHtml);
         IndexabilityTest noindex;
         IndexabilityTest canonical;
         if (!page || answered.Outcome == TestOutcome.Fail)
@@ -532,12 +555,12 @@ public static class UrlInspectorReader
             }
 
             noindex = new IndexabilityTest(IndexabilityTestKind.Noindex,
-                meta == true || header == true ? TestOutcome.Fail : read ? TestOutcome.Pass : TestOutcome.NotChecked)
+                meta == true || header == true ? TestOutcome.Fail : judged ? TestOutcome.Pass : TestOutcome.NotChecked)
             {
                 Meta = meta,
                 Header = header
             };
-            canonical = Canonical(context, self, details?.Page, read);
+            canonical = Canonical(context, self, details?.Page, judged);
         }
 
         return verdict with { Tests = [answered, robotsTxt, noindex, canonical] };
@@ -546,8 +569,10 @@ public static class UrlInspectorReader
     /// <summary>
     /// The canonical a search engine honours (the first in the head or a Link header) and whether it keeps the URL out: not
     /// when it names the URL itself, nor when it leads back to it through redirects or leads nowhere, which the analysis
-    /// ignores as Google does.
+    /// ignores as Google does. It's named as the page gives it, and as the URL the crawl has, when it has it: a page only
+    /// status-checked keeps no links, so a canonical in its Link header is no URL of the crawl's.
     /// </summary>
+    /// <param name="read">Everything that could say it was read: the page's HTML, or a file's headers.</param>
     private static IndexabilityTest Canonical(GridReadContext context, InspectedUrl self, PageFacts? facts, bool read)
     {
         if (facts?.Canonicals.FirstOrDefault(fact => fact.Url is not null && (fact.InHead || fact.FromHttpHeader)) is not { Url: { } target })
@@ -558,19 +583,22 @@ public static class UrlInspectorReader
 
         if (target == self.Url)
         {
-            return new IndexabilityTest(IndexabilityTestKind.Canonical, TestOutcome.Pass) { Canonical = new UrlTarget(self.Id, self.Url, self.Status) };
+            return new IndexabilityTest(IndexabilityTestKind.Canonical, TestOutcome.Pass)
+            {
+                Canonical = new UrlTarget(self.Id, self.Url, self.Status), CanonicalUrl = target
+            };
         }
 
         using var command = context.Command("SELECT id FROM urls WHERE url = $url", [new("$url", target)]);
         if (command.ExecuteScalar() is not long id || Inspected(context, (int)id) is not { } named)
         {
-            return new IndexabilityTest(IndexabilityTestKind.Canonical, TestOutcome.Fail);
+            return new IndexabilityTest(IndexabilityTestKind.Canonical, TestOutcome.Fail) { CanonicalUrl = target };
         }
 
         var ignored = Redirects(context, named).Final.Id == self.Id || IsBrokenThroughRedirects(context, named);
         return new IndexabilityTest(IndexabilityTestKind.Canonical, ignored ? TestOutcome.Pass : TestOutcome.Fail)
         {
-            Canonical = new UrlTarget(named.Id, named.Url, named.Status)
+            Canonical = new UrlTarget(named.Id, named.Url, named.Status), CanonicalUrl = target
         };
     }
 
@@ -619,7 +647,7 @@ public static class UrlInspectorReader
 
     private static ContentLimits Limits(AnalysisSettings settings, bool fromAnalysis) => new(
         settings.TitleMinLength, settings.TitleMaxLength, settings.DescriptionMinLength, settings.DescriptionMaxLength, settings.MinWordCount,
-        settings.SlowResponseMs, settings.LargePageBytes, fromAnalysis);
+        settings.SlowResponseMs, settings.LargePageBytes, settings.LargeImageBytes, settings.ImageAltMaxLength, settings.MaxUrlLength, fromAnalysis);
 
     private static StructuredDataBlock StructuredData(string block)
     {
@@ -725,11 +753,16 @@ public static class UrlInspectorReader
         return [.. issues.OrderBy(issue => issue.Order).ThenBy(issue => issue.Issue.CheckId, StringComparer.Ordinal).Select(issue => issue.Issue)];
     }
 
-    /// <summary>The issues on other URLs that name this one as the other URL involved, by check, most first.</summary>
+    /// <summary>
+    /// The issues on other URLs that name this one, by check, most first: as one of the URLs each is about (every broken
+    /// target of a page's links, not just its first), on the index by named URL; or, for an earlier engine's analysis,
+    /// as the first.
+    /// </summary>
     private static NamedByIssues NamedBy(GridReadContext context, int urlId)
     {
-        using var command = context.Command("""
-            SELECT issue, COUNT(*) FROM issues WHERE related_url_id = $id AND url_id <> $id GROUP BY issue ORDER BY 2 DESC, 1
+        using var command = context.Command($"""
+            SELECT issue, COUNT(*) FROM {(context.HasIssueTargets ? "issue_targets" : "issues")} WHERE related_url_id = $id AND url_id <> $id
+            GROUP BY issue ORDER BY 2 DESC, 1
             """, [new("$id", urlId)]);
         using var reader = command.ExecuteReader();
         List<CheckCount> checks = [];
@@ -743,7 +776,8 @@ public static class UrlInspectorReader
 
     /// <summary>
     /// The links of the asked kinds between the URL and others. The index on the URL's end counts its links of every kind
-    /// without reading them; its own links to itself, which that count holds, are few, and found through the other index.
+    /// without reading them, as the analysis's index by target and kind counts the links of some kinds to it; its own links
+    /// to itself, which that count holds, are few, and found through the other index.
     /// Hyperlinks to it are the URL summary's inlinks, which count those on the pages audited, and the few on the pages
     /// the analysis doesn't audit (Cloudflare's /cdn-cgi/ ones), which only parsed pages have: so a home page's two
     /// million are counted without reading each link for its kind.
@@ -764,7 +798,8 @@ public static class UrlInspectorReader
         }
 
         var near = direction == LinkDirection.Inlinks ? "to_id" : "from_id";
-        var all = context.Scalar($"SELECT COUNT(*) FROM links l WHERE l.{near} = $id{ofKinds}", parameters);
+        var byKind = direction == LinkDirection.Inlinks && kinds.Count > 0 && context.HasLinkKindIndex ? " INDEXED BY ix_links_to_kind" : string.Empty;
+        var all = context.Scalar($"SELECT COUNT(*) FROM links l{byKind} WHERE l.{near} = $id{ofKinds}", parameters);
 
         // Through the page's own links, never the other index: a home page has a million links to it, and few of its own.
         var own = context.Scalar($"SELECT COUNT(*) FROM links l WHERE l.from_id = $id AND +l.to_id = $id{ofKinds}", parameters);

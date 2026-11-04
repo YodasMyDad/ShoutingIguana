@@ -81,6 +81,7 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(UrlLookupRequest))]
 [JsonSerializable(typeof(UrlRef))]
 [JsonSerializable(typeof(UrlRequest))]
+[JsonSerializable(typeof(UrlLookup))]
 [JsonSerializable(typeof(UrlDetailDto))]
 [JsonSerializable(typeof(LinksRequest))]
 [JsonSerializable(typeof(LinkPageDto))]

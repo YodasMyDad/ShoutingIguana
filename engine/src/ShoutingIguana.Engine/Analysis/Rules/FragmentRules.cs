@@ -11,14 +11,20 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// Links to #fragments that match no id or named anchor on the target page. Same-page links are checked as each page
 /// is seen. For links to other pages, the pass keeps only the distinct (target, fragment) pairs as hashes, so a listing
 /// that links every product's #reviews costs one entry per product, not one per link. Each target's ids are then read
-/// once, and the links table is streamed to find the pages whose links miss.
+/// once, and the links table is streamed to find the pages whose links miss. An issue names every other page whose
+/// section is missing, and a section missing on the page itself as no other URL, so a template's "skip to #main" whose id
+/// is missing is one group of the pages it's on, not a group per page.
 /// </summary>
 /// <param name="readFacts">The stored facts of a URL (<see cref="AnalysisReader.ReadFacts"/>).</param>
 /// <param name="readFragmentLinks">Every link to a #fragment on another page (<see cref="AnalysisReader.ReadFragmentLinks"/>).</param>
 internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFacts, Func<IEnumerable<(int From, int To, string Fragment)>> readFragmentLinks)
     : ISiteRule
 {
-    private readonly Dictionary<int, (int Count, int FirstTarget)> _broken = [];
+    /// <summary>
+    /// Each page's links that miss, the other pages they miss on (0 for none yet; the first apart, as most have one), and
+    /// whether one misses on the page itself.
+    /// </summary>
+    private readonly Dictionary<int, (int Count, int First, List<int>? Others, bool Itself)> _broken = [];
 
     /// <summary>Each fragment as written and decoded: browsers look for an id matching either (see <see cref="Finds"/>).</summary>
     private readonly HashSet<(int Target, ulong Raw, ulong Decoded)> _wanted = [];
@@ -81,9 +87,14 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
             }
         }
 
-        foreach (var (pageId, (count, firstTarget)) in _broken)
+        foreach (var (pageId, (count, first, others, itself)) in _broken)
         {
-            yield return new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, pageId, RuleText.Count(count, "link", "links"), firstTarget);
+            yield return first == 0
+                ? new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, pageId, RuleText.Count(count, "link", "links"))
+                : new IssueHit(IssueCatalog.BROKEN_FRAGMENT_LINKS, pageId, RuleText.Count(count, "link", "links"), first)
+                {
+                    Targets = itself ? [first, .. others ?? [], IssueHit.NO_OTHER_URL] : [first, .. others ?? []]
+                };
         }
     }
 
@@ -111,6 +122,25 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
 
     private static ulong Hash(string text) => XxHash3.HashToUInt64(MemoryMarshal.AsBytes(text.AsSpan()));
 
-    private void Record(int pageId, int targetId) =>
-        _broken[pageId] = _broken.TryGetValue(pageId, out var current) ? (current.Count + 1, current.FirstTarget) : (1, targetId);
+    private void Record(int pageId, int targetId)
+    {
+        var (count, first, others, itself) = _broken.GetValueOrDefault(pageId);
+        if (targetId == pageId)
+        {
+            itself = true;
+        }
+        else
+        {
+            if (first == 0)
+            {
+                first = targetId;
+            }
+            else if (targetId != first && others?.Contains(targetId) != true)
+            {
+                (others ??= []).Add(targetId);
+            }
+        }
+
+        _broken[pageId] = (count + 1, first, others, itself);
+    }
 }

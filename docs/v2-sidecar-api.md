@@ -735,10 +735,18 @@ count (all of them by default):
 #### Lookup
 
 `POST /api/crawls/{id}/urls/lookup` finds a URL by its text, for the palette's "Go to URL…" and for walking links:
-`{ "url": "https://www.example.com/a?b=1#top" }` gives `{ "id": 12, "url": "https://www.example.com/a?b=1" }`. The
-text is normalised as the crawl stores URLs (the fragment goes, the scheme and host are lowercased); a path that
-starts with `/` is taken on the start URL's origin. `url-not-found` (404) says the crawl has no such URL, and
-`invalid-query` (422) that the text isn't a URL.
+`{ "url": "https://www.example.com/a?b=1#top" }` gives
+`{ "id": 12, "url": "https://www.example.com/a?b=1", "requested": null }`.
+
+- The text is normalised as the crawl stores URLs: the fragment goes, the scheme and host are lowercased.
+- A path that starts with `/` is taken on the site's origin: where the start URL's redirects end, then the start URL's
+  own. A crawl started at `example.com` that redirects to `https://www.example.com/` has its pages on the www origin,
+  and `/` is its home page there, not the redirect.
+- Text without a scheme takes that origin's: `www.example.com/a`, `example.com`, `//example.com/a`.
+- The engine treats the bare domain and www, and http and https, as one site. A URL on the site that the crawl doesn't
+  have as asked is looked for on its other versions. `url` is then the URL found, and **`requested`** the URL the text
+  stood for, which the crawl doesn't have; `requested` is null when `url` is the URL asked for.
+- `url-not-found` (404) says the crawl has none of them, and `invalid-query` (422) that the text isn't a URL.
 
 ### The inspector (E3a)
 
@@ -757,12 +765,13 @@ below, or past what an id holds), and `invalid-query` without one.
  "indexability":{"indexable":false,"reason":"canonicalised","judgedBy":"analysis",
    "tests":[{"test":"answered","outcome":"pass","statusCode":200},{"test":"robotsTxt","outcome":"pass"},
             {"test":"noindex","outcome":"pass","meta":false,"header":false},
-            {"test":"canonical","outcome":"fail","canonical":{"id":7,"url":"https://www.example.com/blog/","statusCode":200}}]},
+            {"test":"canonical","outcome":"fail","canonical":{"id":7,"url":"https://www.example.com/blog/","statusCode":200},
+             "canonicalUrl":"https://www.example.com/blog/"}]},
  "content":{"titles":[{"text":"Blog, page 2","length":12}],"descriptions":[],"h1s":[{"text":"Blog","length":4}],
             "headings":[1,3,0,0,0,0],"wordCount":412,"language":"en-GB","charset":"utf-8","robots":[],"metaRefresh":null,
             "images":12,"imagesMissingAlt":0},
  "limits":{"titleMin":30,"titleMax":60,"descriptionMin":70,"descriptionMax":155,"minWords":200,"slowResponseMs":1000,
-           "largePageBytes":1048576,"fromAnalysis":true},
+           "largePageBytes":1048576,"largeImageBytes":204800,"imageAltMaxLength":125,"maxUrlLength":115,"fromAnalysis":true},
  "links":{"inlinks":3,"followedInlinks":3,"nofollowInlinks":0,"linkingPages":2,"outlinks":45,"inSitemap":false},
  "headers":[{"name":"content-type","value":"text/html; charset=utf-8"}],
  "structuredData":[{"valid":true,"types":["BlogPosting"],"json":"{…}","error":null,"truncated":false}],
@@ -787,14 +796,15 @@ below, or past what an id holds), and `invalid-query` without one.
   `final` where they end. `loop` is true when they come back on themselves, and `tooLong` when there are more than 20.
 - **`indexability`** is the "Indexable, and why" checklist. Each test's `outcome` is `pass`, `fail` or `notChecked`
   (the crawl never read what decides it: a page only status-checked, a crawl that ignored robots.txt, a test that a
-  failure before it makes moot):
+  failure before it makes moot). A file that answered (an image, a stylesheet, a PDF) can say noindex or name a
+  canonical only in its headers, which were read, so it passes or fails those two on them:
 
   | Test | Passes when | With |
   | --- | --- | --- |
   | `answered` | The URL answered 2xx and doesn't move on with an instant meta refresh | `statusCode`, and `metaRefresh` (the target) when it does |
   | `robotsTxt` | robots.txt allowed the request | `unreachable`: true when robots.txt couldn't be read, which refuses everything |
   | `noindex` | No noindex in a robots meta tag or the `X-Robots-Tag` header | `meta` and `header`: where a noindex is |
-  | `canonical` | No canonical, one to the URL itself, or one that leads back to it or nowhere | `canonical`: the target `{ id, url, statusCode }` |
+  | `canonical` | No canonical, one to the URL itself, or one that leads back to it or nowhere | `canonical`: the target `{ id, url, statusCode }` when the crawl has it; `canonicalUrl`: the canonical as the page gives it, normalised, whether the crawl has it or not (a page only status-checked keeps no links, so its `Link` header's canonical may be no URL of the crawl's) |
 
   `indexable` and `reason` are the verdict, as the analysis judged it (`judgedBy: "analysis"`); without a URL summary
   they are the crawl's own judgement where the analysis hasn't seen the URL (`judgedBy: "crawl"`), and both are null
@@ -803,18 +813,20 @@ below, or past what an id holds), and `invalid-query` without one.
   order with their `length` as the checks measure it; `headings` counts H1 to H6, `images` the images and
   `imagesMissingAlt` those without alt text; `robots` lists the directives that apply to the crawler or to Googlebot;
   `metaRefresh` is `{ delaySeconds, url }` for a page with a meta refresh, else null.
-  **`limits`** are what the analysis judged them against: its stored settings (`fromAnalysis: true`), or the engine's
-  defaults before the first analysis (`fromAnalysis: false`).
+  **`limits`** are what the analysis judged the URL against: its stored settings (`fromAnalysis: true`), or the engine's
+  defaults before the first analysis (`fromAnalysis: false`). They include an image's (`largeImageBytes`, which
+  `image-too-large` goes by, and `imageAltMaxLength`) and a URL's (`maxUrlLength`).
 - **`links`** comes from the URL summary, and is null without one (`summary` says why). `type` is judged as the
   grid's column is.
 - **`headers`** are as stored: names lowercased, for internal URLs only. **`structuredData`** is each JSON-LD block,
   `valid` when it parses, with its `@type`s (those in a `@graph` included), or the parser's `error`; `truncated` when
   the page's block was cut at the parser's limit. **`hreflang`** is each annotation `{ language, href, url, target, inHead,
   fromHttpHeader }`, `target` being the URL it names in the crawl, with its status, or null.
-- **`issues`** are the checks that flagged this URL in the last analysis, errors first, with the other URL involved;
-  **`namedBy`** counts the issues on other URLs that name this one as theirs (the page linking to a 404, the page
-  canonicalised to it), by check. Both come from the last analysis whatever its state, as the Issues screen's do, and
-  are null before the first.
+- **`issues`** are the checks that flagged this URL in the last analysis, errors first, with the other URL involved (the
+  first, where there are several: "3 broken URLs" names the first of them). **`namedBy`** counts the issues on other
+  URLs that name this one among the URLs they're about, by check: every page linking to a 404, whether or not it's the
+  first broken link on the page; the pages canonicalised to it; the other pages of a duplicate cluster it's the first of.
+  Both come from the last analysis whatever its state, as the Issues screen's do, and are null before the first.
 - **`source.stored`** says whether `/source` has the HTML.
 
 `POST /api/crawls/{id}/urls/inlinks` and `/urls/outlinks` page the links to and from the URL whose id is in the body, a
@@ -855,8 +867,8 @@ catalog's to say, per check, and `GET /api/checks` gives it as each check's `gro
 
 | `grouping` | The check's issues are grouped by | Checks like |
 | --- | --- | --- |
-| `detail` | The detail and the other URL involved: the detail names the cause | `open-graph-missing` ("Missing og:image"), `internal-client-error` ("HTTP 404"), `structured-data-invalid` |
-| `relatedUrl` | The other URL alone: the detail is a count, and the URL is the cause | `broken-internal-links` (the broken target), `empty-anchor-text`, `canonicalised-page`, `title-duplicate` (the first page with that title) |
+| `detail` | The detail and the other URL involved: the detail names the cause, or the fault it's an instance of | `open-graph-missing` ("Missing og:image"), `internal-client-error` ("HTTP 404"), `structured-data-invalid` |
+| `relatedUrl` | Each other URL the issue is about: the detail is a count, and the URLs are the cause | `broken-internal-links` (each broken target), `empty-anchor-text`, `canonicalised-page`, `title-duplicate` (the cluster, named after its first page) |
 | `none` | Nothing: the detail is a measurement (78 characters, 1,250 ms, 3 images), or the same on every issue | `title-too-long`, `slow-response`, `noindex-page` |
 
 The UI lists a `none` check's URLs flat (`/rows` below), with the detail as a column.
@@ -871,12 +883,34 @@ The UI lists a `none` check's URLs flat (`/rows` below), with the detail as a co
 
 - Groups come largest first, then by detail and related URL. `total` is the check's flagged URLs, and `share` a
   group's part of them. A `relatedUrl` check's groups have no `detail`; a `none` check has no groups.
+- **A `relatedUrl` check groups a page under every URL its issue names**, not just the first one `/rows` and the
+  inspector show. A page linking to three broken URLs is in the group of each, and a broken link in the footer of
+  every page is one group of every page. So the groups' `pages` add up to more than `total`, and their shares to more
+  than 1. The group without a `relatedUrlId` holds the issues that name no other URL: for `broken-fragment-links`,
+  links to sections missing on the page itself, as a template's "skip to content" makes on every page (a page missing
+  sections there and on another page is in both groups).
+- **Duplicates are grouped by cluster**: `title-duplicate`, `description-duplicate`, `h1-duplicate`,
+  `duplicate-content` and `near-duplicate-content` have a group per set of pages that share the title (description,
+  H1, content), named after its first page, which is in it too.
+- **A few `detail` checks group by the fault each page's detail is an instance of**, as the detail itself differs on
+  every page, and the group's `detail` is the fault while its rows' `detail` stays each page's own. A fault a template
+  writes on every page is then one group:
+  - `canonical-relative` by the form of the URL: `Root-relative: starts with /`, `Protocol-relative: starts with //`
+    or `Relative to the page's own address`;
+  - `canonical-invalid` by what's wrong: `Empty`, `Uses javascript: instead of http(s)` (whatever the scheme) or
+    `Malformed URL`;
+  - `structured-data-invalid` by the parser's message without where it stopped, nor the character it stopped at:
+    `'…' is invalid after a value. Expected either ',', '}', or ']'.`.
 - **`likelyTemplate`** marks a group that one fix probably clears, being in the site's template: it holds at least half
   of the check's flagged URLs, and at least 10 of them, and either they share the other URL (the logo link without
-  text, a canonical every page names) or the detail names a fault in the page's own HTML (every page "Missing
-  og:image"). A detail that says how the URL itself answered (every 404 says "HTTP 404") is no evidence of a template.
-- A skipped check has `total` null and no groups, never 0. `check-not-found` is a check the engine doesn't know, and
-  `not-analyzed` a crawl never analysed.
+  text, a canonical every page names, the page itself for `broken-fragment-links`) or the detail names a fault in the
+  page's own HTML (every page "Missing og:image"). A detail that says how the URL itself answered (every 404 says "HTTP
+  404") is no evidence of a template. Where a check's detail takes only a value or two (`h1-missing`: no H1, or an
+  empty one; `snippet-blocked`), the hint says no more than that most of its pages share the fault.
+- A skipped check has `total` and `groupCount` null and no groups, never 0. `check-not-found` is a check the engine
+  doesn't know, and `not-analyzed` a crawl never analysed.
+- A crawl analysed by an engine from before these groups is grouped as that engine grouped it, by each issue's own
+  detail and first other URL, until it's analysed again (it's out of date: `engineChanged`).
 
 `POST /api/crawls/{id}/issues/{checkId}/rows` is the URL grid for one check: a row per URL the check flagged (an issue
 is one check on one URL, so a page linking to three broken URLs is one row, "3 broken URLs", naming the first). It
@@ -887,8 +921,9 @@ with `matching` the rows the filters match and `total` the check's flagged URLs,
   `relatedUrl` and `relatedStatusCode` (text and number, the other URL and its status, filters only). Without
   `columns`, a row has `url`, `detail` and `relatedUrl`.
 - **`group`** narrows the rows to one of the check's groups: `{ detail, relatedUrlId }` as `/groups` gave it, where
-  null matches null, and a `relatedUrl` check's group is its `relatedUrlId` alone. `total` is then the group's.
-  A `none` check has no groups to narrow to.
+  null matches null. A `relatedUrl` check's group is its `relatedUrlId` alone: the pages whose issue names it among its
+  URLs. A fault's group is its `detail`, the fault. `total` is then the group's. A `none` check has no groups to narrow
+  to.
 
 ```json
 {"group":{"detail":null,"relatedUrlId":1},"columns":["url","inlinks","detail"],"sort":[{"column":"inlinks","desc":true}],"limit":100}
@@ -1036,7 +1071,7 @@ it does today.
 
 ## Engine changes from the E3a review: queries and HTTP
 
-Each has a test that fails without it. The crawl's schema is unchanged. Measured on the 1M crawl (1,123,028 URLs),
+Each has a test that fails without it. These changes leave the crawl's schema unchanged. Measured on the 1M crawl (1,123,028 URLs),
 p95 on a 32-core machine, against `e81a98a`:
 
 - **Text filters, regular expressions and searches are read once into sets.** A common one cost 0.9–1.7 s a read on
@@ -1075,3 +1110,34 @@ p95 on a 32-core machine, against `e81a98a`:
   page just past half way, read from the far end, the most linked URLs' links by kind, the URL most issues name, and
   every read without the summary) and holds each class of read to its own gate at 100k (`--gate`, which CI runs), set
   from the class's growth from 100k to 1M, so a read that would miss 1 s at 1M fails at 100k.
+
+## Engine changes from the E3a review: groups, the inspector and lookup
+
+Each has a test that fails without it. `AnalysisFreshness.VERSION` is 4, so every earlier analysis is out of date
+(`engineChanged`) until the crawl is analysed again; until then its groups and "named by" are read as before.
+
+- **Every URL an issue names.** The rules that find several targets on a page (broken internal and external links,
+  links to redirects, nofollow links, links without text, broken section links, broken and large images, hreflang
+  without return links or to broken or non-indexable alternates, mixed content) name every one, and each analysis
+  stores them in `issue_targets` (`issue`, `related_url_id`, `url_id`). `issues` keeps one row per page and check, with
+  the first target, so issue counts don't change. The groups of a `relatedUrl` check, a group's rows (in `/rows`, and
+  in `/urls` with the check filter's `group`), and the inspector's `namedBy` read it. On the garden crawl, all 9 broken
+  internal URLs now have a group (5 had one), and all 126 large images (61 had).
+- **Duplicates and missing sections.** A duplicate is stored under its cluster's first page, so a cluster is one group.
+  A link to a section missing on the page itself no longer names the page as the other URL (`issues.related_url_id` is
+  null, or another page whose section is missing): those pages are one group without another URL.
+- **Faults.** `canonical-relative`, `canonical-invalid` and `structured-data-invalid` group by the fault their detail is
+  an instance of (`IssueDefinition.FaultOf`, stored in `issue_faults`), so a template's fault is one group with the
+  likely-template hint.
+- **Indexes.** `issue_targets` is keyed for a check's groups and a group's rows, and indexed by the URL named, for
+  "named by", which no longer reads every issue. The first analysis of a crawl adds `ix_links_to_kind` on
+  `links (to_id, kind)`, so the inspector's links of some kinds to a URL are counted, and reached at any offset, on it
+  alone.
+- **Lookup** takes a path on the origin the start URL's redirects end at, takes text without a scheme, and finds a URL
+  on the site's other versions, saying what was asked for (`requested`).
+- **The inspector.** A file's noindex and canonical tests pass or fail on its headers; the canonical test names the
+  canonical by its URL (`canonicalUrl`), whether the crawl has it or not; `limits` gain `largeImageBytes`,
+  `imageAltMaxLength` and `maxUrlLength`.
+- **Facets** count a value no column has, which only a crafted file holds, as unknown whichever way they're counted,
+  and never as another value: a negative indexability reason no longer reads as `none`, nor a negative time as
+  `0-249`. Its filter, `isEmpty`, opens only the nulls.

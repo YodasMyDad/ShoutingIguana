@@ -67,13 +67,13 @@ internal sealed class ImageRules(AnalysisSettings settings, UrlTable urls) : IPa
 
         if (broken.Count > 0)
         {
-            yield return new IssueHit(IssueCatalog.IMAGE_BROKEN, page.UrlId, RuleText.BrokenTargets(urls, broken, "image", "images"), broken.First);
+            yield return new IssueHit(IssueCatalog.IMAGE_BROKEN, page.UrlId, RuleText.BrokenTargets(urls, broken, "image", "images"), broken.First) { Targets = broken.Ids };
         }
 
         if (large.Count > 0)
         {
             yield return new IssueHit(IssueCatalog.IMAGE_TOO_LARGE, page.UrlId,
-                $"{RuleText.Count(large.Count, "image", "images")} over {RuleText.Size(settings.LargeImageBytes)}", large.First);
+                $"{RuleText.Count(large.Count, "image", "images")} over {RuleText.Size(settings.LargeImageBytes)}", large.First) { Targets = large.Ids };
         }
     }
 

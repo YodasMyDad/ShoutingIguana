@@ -191,8 +191,9 @@ internal static class CrawlSchema
             url_count INTEGER NOT NULL
         ) WITHOUT ROWID;
 
-        -- One row per flagged URL and issue. related_url_id is the other URL involved, when there is one:
-        -- the broken link target, the duplicate, the canonical, the redirect target.
+        -- One row per flagged URL and issue. related_url_id is the other URL involved, when there is one: the broken link
+        -- target (the first, where a page has several: issue_targets has them all), the duplicate, the canonical, the
+        -- redirect target.
         CREATE TABLE IF NOT EXISTS issues (
             issue TEXT NOT NULL,
             url_id INTEGER NOT NULL,
@@ -207,6 +208,31 @@ internal static class CrawlSchema
         -- (an index on a table without rowid ends with the rest of its key: url_id).
         CREATE INDEX IF NOT EXISTS ix_issues_group ON issues (issue, detail, related_url_id);
 
+        -- Every other URL each issue is about, where issues keeps only the first: each of a page's broken (redirecting,
+        -- nofollow, large...) targets, and the one other URL of the rest (the canonical, the redirect's end). A duplicate
+        -- names the first page of its cluster instead, which that page names too, so a cluster is one group. The Issues
+        -- screen groups a check's issues by the other URL from here, a page in each of its targets' groups, and the
+        -- inspector counts the issues naming a URL ("named by"), its own left out. An issue with no other URL has no row.
+        CREATE TABLE IF NOT EXISTS issue_targets (
+            issue TEXT NOT NULL,
+            related_url_id INTEGER NOT NULL,
+            url_id INTEGER NOT NULL,
+            PRIMARY KEY (issue, related_url_id, url_id)
+        ) WITHOUT ROWID;
+
+        -- The issues naming a URL, by check, without reading the others.
+        CREATE INDEX IF NOT EXISTS ix_issue_targets_named ON issue_targets (related_url_id, issue);
+
+        -- The fault a check's issues group by where each issue's detail is the page's own instance of it (a JSON-LD
+        -- parser's message with where in the block it failed, a canonical's href), so a fault in the site's template is one
+        -- group. Only for the checks the catalog gives a fault (IssueDefinition.FaultOf).
+        CREATE TABLE IF NOT EXISTS issue_faults (
+            issue TEXT NOT NULL,
+            fault TEXT NOT NULL,
+            url_id INTEGER NOT NULL,
+            PRIMARY KEY (issue, fault, url_id)
+        ) WITHOUT ROWID;
+
         -- Indexability as the analysis judged it, only where that differs from responses.indexability_reason: an
         -- instant meta refresh is a redirect, and a canonical leading back to the page or to a broken URL is ignored.
         -- Read COALESCE(e.indexability_reason, r.indexability_reason) for what search engines will see.
@@ -215,6 +241,20 @@ internal static class CrawlSchema
             indexability_reason INTEGER NOT NULL
         );
         """;
+
+    /// <summary>
+    /// The first <see cref="Analysis.AnalysisFreshness.VERSION"/> that stores <c>issue_targets</c> and <c>issue_faults</c>.
+    /// An analysis by an earlier one has neither, or left a later one's behind, as it doesn't know to clear them: readers
+    /// then group by the issues' own detail and first other URL, as that engine did.
+    /// </summary>
+    public const int ISSUE_TARGETS_SINCE = 4;
+
+    /// <summary>
+    /// The links to each URL by kind, which an analysis adds (a crawl doesn't need it, and a crawl continued since keeps it
+    /// up to date). The inspector counts a URL's links of some kinds on it alone, and reaches a page of them at any offset by
+    /// merging each kind's, already in crawl order: a nav target's million hyperlinks, a stylesheet's million links.
+    /// </summary>
+    public const string LINK_KINDS_INDEX = "CREATE INDEX IF NOT EXISTS ix_links_to_kind ON links (to_id, kind)";
 
     /// <summary>The <c>analysis</c> columns added since the table was first created, which files analysed earlier lack.</summary>
     public static readonly (string Name, string Type)[] ANALYSIS_COLUMNS =

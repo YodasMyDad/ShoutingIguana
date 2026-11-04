@@ -1,6 +1,7 @@
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Support;
@@ -485,12 +486,60 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
     {
         var url = $"{crawl.Server.BaseUri.AbsoluteUri.TrimEnd('/')}/p/7";
         var id = crawl.Reference.Rows.Single(row => (string?)row.Value["url"] == url).Key;
-        Assert.Equal(new UrlRef(id, url), UrlGridReader.Lookup(crawl.Path, url));
-        Assert.Equal(new UrlRef(id, url), UrlGridReader.Lookup(crawl.Path, "  " + url.Replace("http://", "HTTP://", StringComparison.Ordinal) + "#reviews "));
-        Assert.Equal(new UrlRef(id, url), UrlGridReader.Lookup(crawl.Path, "/p/7"));
+        var found = new UrlLookup(id, url, null);
+        Assert.Equal(found, UrlGridReader.Lookup(crawl.Path, url));
+        Assert.Equal(found, UrlGridReader.Lookup(crawl.Path, "  " + url.Replace("http://", "HTTP://", StringComparison.Ordinal) + "#reviews "));
+        Assert.Equal(found, UrlGridReader.Lookup(crawl.Path, "/p/7"));
         Assert.Null(UrlGridReader.Lookup(crawl.Path, "/no/such/page"));
         Assert.Contains("url", Assert.Throws<UrlQueryException>(() => UrlGridReader.Lookup(crawl.Path, "not a url")).Errors.Keys);
         Assert.Contains("url", Assert.Throws<UrlQueryException>(() => UrlGridReader.Lookup(crawl.Path, "ftp://example.com/")).Errors.Keys);
+        Assert.Contains("url", Assert.Throws<UrlQueryException>(() => UrlGridReader.Lookup(crawl.Path, "mailto:someone@example.com")).Errors.Keys);
+
+        // Pasted without a scheme, it takes the site's.
+        var authority = crawl.Server.BaseUri.Authority;
+        Assert.Equal(found, UrlGridReader.Lookup(crawl.Path, $"{authority}/p/7"));
+        Assert.Equal(found, UrlGridReader.Lookup(crawl.Path, $"//{authority}/p/7"));
+    }
+
+    /// <summary>
+    /// A crawl started at the bare domain over http, which redirects to https://www., as most do: its pages live on the
+    /// www origin, and the engine takes the bare domain and www, http and https, as one site.
+    /// </summary>
+    [Fact]
+    public void LookupFindsAPageWhereTheSiteLives()
+    {
+        var copy = crawl.Copy();
+        Change(copy, $"""
+            UPDATE crawl SET start_url = 'http://Example.com';
+            INSERT INTO urls (id, url, is_internal, fetch_mode, depth, state, skip_reason, source) VALUES
+                (900001, 'http://example.com/', 1, 0, 0, 2, 0, 0), (900002, 'https://www.example.com/', 1, 0, 1, 2, 0, 1),
+                (900003, 'https://www.example.com/rattan/', 1, 0, 1, 2, 0, 1), (900004, 'http://example.com/old/', 1, 0, 1, 2, 0, 1);
+            INSERT INTO responses (url_id, fetched_at, outcome, status_code, ttfb_ms, response_ms, redirect_url_id, is_html, title_count,
+                                   meta_description_count, h1_count, is_noindex, is_nofollow, indexability, indexability_reason, outlink_count)
+            VALUES (900001, 0, {(int)FetchOutcome.Redirect}, 301, 1, 1, 900002, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            """);
+        var home = new UrlLookup(900002, "https://www.example.com/", null);
+        var page = new UrlLookup(900003, "https://www.example.com/rattan/", null);
+
+        // A path is on the origin the start URL's redirects end at, not the start URL's: "/" is the home page, not the redirect.
+        Assert.Equal(home, UrlGridReader.Lookup(copy, "/"));
+        Assert.Equal(page, UrlGridReader.Lookup(copy, "/rattan/"));
+
+        // Only on the start URL's origin, it's found there, as another version of the URL asked for.
+        Assert.Equal(new UrlLookup(900004, "http://example.com/old/", "https://www.example.com/old/"), UrlGridReader.Lookup(copy, "/old/"));
+
+        // A URL on another version of the site is found on the version the crawl has, saying which was asked for.
+        Assert.Equal(page with { Requested = "https://example.com/rattan/" }, UrlGridReader.Lookup(copy, "https://example.com/rattan/"));
+        Assert.Equal(page with { Requested = "http://www.example.com/rattan/" }, UrlGridReader.Lookup(copy, "http://www.example.com/rattan/"));
+        Assert.Equal(page with { Requested = "https://example.com/rattan/" }, UrlGridReader.Lookup(copy, "example.com/rattan/"));
+        Assert.Equal(page, UrlGridReader.Lookup(copy, "www.example.com/rattan/"));
+        Assert.Equal(page, UrlGridReader.Lookup(copy, "//www.example.com/rattan/"));
+        Assert.Equal(home with { Requested = "https://example.com/" }, UrlGridReader.Lookup(copy, "example.com"));
+
+        // The URL as asked comes first, the seed included; another site's URL isn't looked for on this one's versions.
+        Assert.Equal(new UrlLookup(900001, "http://example.com/", null), UrlGridReader.Lookup(copy, "http://example.com/"));
+        Assert.Null(UrlGridReader.Lookup(copy, "https://example.org/rattan/"));
+        Assert.Null(UrlGridReader.Lookup(copy, "/no/such/page"));
     }
 
     /// <summary>The plan SQLite runs for a query's page, as its explanation reads.</summary>

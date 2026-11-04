@@ -40,7 +40,10 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
             var expected = ExpectedGroups(check, grouping);
             Assert.Equal(expected, page.Groups);
             Assert.Equal(expected.Count, page.GroupCount);
-            Assert.Equal(total, page.Groups.Sum(group => group.Pages));
+
+            // A page is in a group for each URL its issue names, so a check grouped by the other URL can count it more than once.
+            var pages = page.Groups.Sum(group => group.Pages);
+            Assert.True(grouping == IssueGrouping.RelatedUrl ? pages >= total : pages == total, $"{check}: {pages} pages in groups, {total} flagged");
 
             // Paged, the same groups in the same order.
             List<IssueGroup> paged = [];
@@ -57,16 +60,84 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
     }
 
     /// <summary>
-    /// A check grouped by the other URL names one on every issue, or its groups would fold into one. One grouped by detail
-    /// may leave it out: no detail is a group of its own (robots.txt's rules, against robots.txt that couldn't be read).
+    /// A check grouped by the other URL stores every issue under the URLs it names, its related URL among them, or under no
+    /// other URL (0) when it names none: only a link to a section missing on the page itself names none. A duplicate is
+    /// stored under its cluster's first page, which is stored under itself. One grouped by detail may leave the other URL
+    /// out: no detail is a group of its own (robots.txt's rules, against robots.txt that couldn't be read).
     /// </summary>
     [Fact]
-    public void ACheckGroupedByTheOtherUrlAlwaysNamesOne()
+    public void ACheckGroupedByTheOtherUrlStoresEveryIssueUnderTheUrlsItNames()
     {
+        string[] duplicates = ["title-duplicate", "description-duplicate", "h1-duplicate", "duplicate-content", "near-duplicate-content"];
         foreach (var check in Checks().Where(check => IssueCatalog.Find(check)!.Grouping == IssueGrouping.RelatedUrl))
         {
-            Assert.All(Flagged(check), issue => Assert.True(issue.Related is not null, $"{check} on URL {issue.Url} names no other URL"));
+            foreach (var issue in Flagged(check))
+            {
+                var targets = crawl.Reference.Targets[(check, issue.Url)];
+                if (duplicates.Contains(check))
+                {
+                    var first = Assert.Single(targets);
+                    Assert.True(first <= issue.Url && crawl.Reference.Targets[(check, first)].SequenceEqual([first]), $"{check} on URL {issue.Url} names {first}");
+                }
+                else if (issue.Related is { } related)
+                {
+                    Assert.Contains(related, targets);
+                    Assert.DoesNotContain(issue.Url, targets);
+                }
+                else
+                {
+                    Assert.Equal("broken-fragment-links", check);
+                    Assert.Equal([0], targets);
+                }
+            }
         }
+
+        // Every internal URL a page links to that answers with an error is named, as many as its detail counts, and nothing it
+        // doesn't link to (a redirect to an error, a loop and a timeout are broken too).
+        var links = TestCrawls.Rows(crawl.Path, $"SELECT from_id, to_id FROM links WHERE kind = 0 AND from_id <> to_id AND (flags & {(int)ShoutingIguana.Engine.Parsing.Models.LinkFlags.SamePage}) = 0")
+            .Select(row => row.Split(" | ").Select(int.Parse).ToArray()).ToLookup(row => row[0], row => row[1]);
+        foreach (var issue in Flagged("broken-internal-links"))
+        {
+            var targets = crawl.Reference.Targets[("broken-internal-links", issue.Url)];
+            var errors = links[issue.Url].Where(to => (bool)crawl.Reference.Rows[to]["isInternal"]! && crawl.Reference.Rows[to]["outcome"] is "clientError" or "serverError");
+            Assert.Superset(errors.ToHashSet(), targets.ToHashSet());
+            Assert.Subset(links[issue.Url].ToHashSet(), targets.ToHashSet());
+            Assert.StartsWith($"{targets.Count} broken URL", issue.Detail);
+        }
+    }
+
+    /// <summary>
+    /// An earlier engine's analysis stored only the first other URL, and leaves what a later one stored behind, as it doesn't
+    /// know to clear it: its groups are its issues' own, by detail and first other URL.
+    /// </summary>
+    [Fact]
+    public void AnEarlierEnginesAnalysisIsGroupedByItsIssuesOwn()
+    {
+        var copy = crawl.Copy();
+        Change(copy, "UPDATE analysis SET analysis_version = 3");
+        foreach (var check in Checks().Where(check => IssueCatalog.Find(check)!.Grouping != IssueGrouping.None))
+        {
+            var grouping = IssueCatalog.Find(check)!.Grouping;
+            var issues = Flagged(check);
+            List<IssueGroup> expected =
+            [
+                .. issues.GroupBy(issue => (Detail: grouping == IssueGrouping.RelatedUrl ? null : issue.Detail, issue.Related))
+                    .Select(group =>
+                    {
+                        var pages = group.LongCount();
+                        var template = IssueGroupReader.IsLikelyTemplate(grouping, pages, issues.Count, group.Key.Related is not null || check == "broken-fragment-links");
+                        return new IssueGroup(group.Key.Detail, group.Key.Related, group.Key.Related is { } id ? (string?)crawl.Reference.Rows[id]["url"] : null,
+                            pages, (double)pages / issues.Count, template);
+                    })
+                    .OrderByDescending(group => group.Pages).ThenBy(group => group.Detail, StringComparer.Ordinal).ThenBy(group => group.RelatedUrlId)
+            ];
+            Assert.Equal(expected, IssueGroupReader.ReadGroups(copy, check, 0, 1_000)!.Groups);
+        }
+
+        // Nor is a URL named by a later analysis's other URLs.
+        var gone = crawl.Reference.Rows.Single(row => ((string)row.Value["url"]!).EndsWith("/plants/gone", StringComparison.Ordinal)).Key;
+        var naming = crawl.Reference.Issues.Where(entry => entry.Key != gone).SelectMany(entry => entry.Value).Count(issue => issue.Related == gone);
+        Assert.Equal(naming, UrlInspectorReader.Read(copy, gone)!.NamedBy!.Total);
     }
 
     /// <summary>Each analysis indexes a check's issues as they're grouped, which the groups read without the table.</summary>
@@ -75,15 +146,32 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
     {
         using var connection = CrawlDatabase.OpenReader(crawl.Path);
         using var command = connection.CreateCommand();
-        command.CommandText = "EXPLAIN QUERY PLAN SELECT detail, related_url_id, COUNT(*) FROM issues WHERE issue = 'title-duplicate' GROUP BY detail, related_url_id";
-        using var reader = command.ExecuteReader();
-        List<string> plan = [];
-        while (reader.Read())
+        List<string> Plan(string sql)
         {
-            plan.Add(reader.GetString(3));
+            command.CommandText = "EXPLAIN QUERY PLAN " + sql;
+            using var reader = command.ExecuteReader();
+            List<string> plan = [];
+            while (reader.Read())
+            {
+                plan.Add(reader.GetString(3));
+            }
+
+            return plan;
         }
 
-        Assert.Contains(plan, step => step.Contains("COVERING INDEX ix_issues_group", StringComparison.Ordinal));
+        Assert.Contains(Plan("SELECT detail, related_url_id, COUNT(*) FROM issues WHERE issue = 'title-too-long' GROUP BY detail, related_url_id"),
+            step => step.Contains("COVERING INDEX ix_issues_group", StringComparison.Ordinal));
+
+        // The groups by other URL, and one group's URLs, on the key of the URLs each issue names; the issues naming a URL on
+        // the index by named URL; a fault's groups on its key.
+        Assert.Equal(["SEARCH issue_targets USING PRIMARY KEY (issue=?)"],
+            Plan("SELECT related_url_id, COUNT(*) FROM issue_targets WHERE issue = 'title-duplicate' GROUP BY related_url_id"));
+        Assert.All(Plan("SELECT url_id FROM issue_targets WHERE issue = 'title-duplicate' AND related_url_id = 7"), step =>
+            Assert.Matches(@"^SEARCH issue_targets USING (PRIMARY KEY|COVERING INDEX ix_issue_targets_named) \((issue=\? AND related_url_id=\?|related_url_id=\? AND issue=\?)\)$", step));
+        Assert.Equal(["SEARCH issue_targets USING COVERING INDEX ix_issue_targets_named (related_url_id=?)"],
+            Plan("SELECT issue, COUNT(*) FROM issue_targets WHERE related_url_id = 7 AND url_id <> 7 GROUP BY issue"));
+        Assert.Equal(["SEARCH issue_faults USING PRIMARY KEY (issue=?)"],
+            Plan("SELECT fault, COUNT(*) FROM issue_faults WHERE issue = 'structured-data-invalid' GROUP BY fault"));
     }
 
     [Theory]
@@ -157,8 +245,7 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
             var grouping = IssueCatalog.Find(check)!.Grouping;
             foreach (var group in IssueGroupReader.ReadGroups(crawl.Path, check, 0, 1_000)!.Groups)
             {
-                var expected = Flagged(check).Where(issue => issue.Related == group.RelatedUrlId && (grouping == IssueGrouping.RelatedUrl || issue.Detail == group.Detail))
-                    .Select(issue => issue.Url).Order().ToList();
+                var expected = Flagged(check).Where(issue => InGroup(check, grouping, issue, group)).Select(issue => issue.Url).Order().ToList();
                 Assert.Equal(group.Pages, expected.Count);
                 var key = new IssueGroupKey(group.Detail, group.RelatedUrlId);
                 var rows = IssueGroupReader.ReadRows(crawl.Path, check, new UrlQuery { Limit = 1_000 }, key)!.Page!;
@@ -234,6 +321,7 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
         Change(copy, "DELETE FROM issue_types WHERE id = $check", ("$check", check));
         var skipped = IssueGroupReader.ReadGroups(copy, check, 0, 100)!;
         Assert.Null(skipped.Total);
+        Assert.Null(skipped.GroupCount);
         Assert.Empty(skipped.Groups);
         Assert.Null(IssueGroupReader.ReadRows(copy, check, new UrlQuery())!.Page);
 
@@ -282,23 +370,40 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
         .. crawl.Reference.Issues.SelectMany(entry => entry.Value.Where(issue => issue.Issue == check).Select(issue => (entry.Key, issue.Detail, issue.Related)))
     ];
 
-    /// <summary>The check's groups worked out from its issues: largest first, then by detail and other URL, unknown first.</summary>
+    /// <summary>
+    /// The check's groups worked out from its issues: by every URL each names, as the analysis stored them (no URL a group of
+    /// its own), for a check grouped by the other URL; by the fault, for one with a fault; otherwise by detail and other URL.
+    /// Largest first, then by detail and other URL, unknown first.
+    /// </summary>
     private List<IssueGroup> ExpectedGroups(string check, IssueGrouping grouping)
     {
         var issues = Flagged(check);
         return
         [
-            .. issues.GroupBy(issue => (Detail: grouping == IssueGrouping.RelatedUrl ? null : issue.Detail, issue.Related))
+            .. issues.SelectMany(issue => Keys(check, grouping, issue).Select(key => (Key: key, issue.Url)))
+                .GroupBy(entry => entry.Key, entry => entry.Url)
                 .Select(group =>
                 {
                     var pages = group.LongCount();
-                    var template = pages >= 10 && pages * 2 >= issues.Count && (group.Key.Related is not null || grouping == IssueGrouping.PageDetail);
+                    var shares = group.Key.Related is not null || check == "broken-fragment-links";
+                    var template = pages >= 10 && pages * 2 >= issues.Count && (shares || grouping == IssueGrouping.PageDetail);
                     return new IssueGroup(group.Key.Detail, group.Key.Related, group.Key.Related is { } id ? (string?)crawl.Reference.Rows[id]["url"] : null,
                         pages, (double)pages / issues.Count, template);
                 })
                 .OrderByDescending(group => group.Pages).ThenBy(group => group.Detail, StringComparer.Ordinal).ThenBy(group => group.RelatedUrlId)
         ];
     }
+
+    /// <summary>The groups an issue is in: one per URL it names for a check grouped by the other URL, otherwise one.</summary>
+    private IEnumerable<(string? Detail, int? Related)> Keys(string check, IssueGrouping grouping, (int Url, string? Detail, int? Related) issue) =>
+        grouping == IssueGrouping.RelatedUrl
+            ? crawl.Reference.Targets[(check, issue.Url)].Select(target => ((string?)null, target == 0 ? null : (int?)target))
+            : IssueCatalog.Find(check)!.FaultOf is not null
+                ? [(crawl.Reference.Faults[(check, issue.Url)], null)]
+                : [(issue.Detail, issue.Related)];
+
+    private bool InGroup(string check, IssueGrouping grouping, (int Url, string? Detail, int? Related) issue, IssueGroup group) =>
+        Keys(check, grouping, issue).Contains((group.Detail, group.RelatedUrlId));
 
     private List<int> ByOffset(string check, UrlQuery query)
     {

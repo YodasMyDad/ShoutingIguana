@@ -26,7 +26,7 @@ internal static class GridEndpoints
 
         api.MapPost("/api/crawls/{id}/urls/lookup", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.LookupAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.UrlLookupRequest).ConfigureAwait(false),
-                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.UrlRef));
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.UrlLookup));
 
         api.MapPost("/api/crawls/{id}/urls/inspect", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.UrlAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.UrlRequest).ConfigureAwait(false),

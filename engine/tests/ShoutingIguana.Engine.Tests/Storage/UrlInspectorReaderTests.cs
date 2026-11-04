@@ -206,7 +206,7 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
         Assert.Null(content.MetaRefresh);
         Assert.Contains(product.Headers, header => header.Name == "content-type");
         Assert.True(product.SourceStored);
-        Assert.Equal(new ContentLimits(30, 60, 70, 155, 200, 1_000, 1_048_576, FromAnalysis: true), product.Limits);
+        Assert.Equal(new ContentLimits(30, 60, 70, 155, 200, 1_000, 1_048_576, 204_800, 125, 115, FromAnalysis: true), product.Limits);
 
         Assert.True(Inspect("/plants/image-srcset").Content!.ImagesMissingAlt >= 1);
         var delayed = Inspect("/plants/meta-refresh").Content!.MetaRefresh!;
@@ -234,6 +234,22 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
             english.Select(entry => (entry.Language, entry.Target!.Url, entry.Target.StatusCode ?? 0)));
         Assert.All(english, entry => Assert.True(entry.InHead));
         Assert.Contains(Inspect("/plants/hreflang-broken").Hreflang, entry => entry is { Language: "de", Target.StatusCode: 404 });
+    }
+
+    /// <summary>
+    /// A file that answered (an image, a stylesheet) has nothing but its headers to say noindex or name a canonical, and they
+    /// were read: both tests pass, rather than going unchecked, as they do for a page whose HTML wasn't read.
+    /// </summary>
+    [Fact]
+    public void AFileIsJudgedByTheHeadersItSent()
+    {
+        foreach (var path in new[] { "/img/1.jpg", "/static/site.css" })
+        {
+            var file = Inspect(path);
+            Assert.NotEmpty(file.Headers);
+            Assert.True(Test(file, IndexabilityTestKind.Noindex) is { Outcome: TestOutcome.Pass, Header: false, Meta: null }, path);
+            Assert.Equal(TestOutcome.Pass, Test(file, IndexabilityTestKind.Canonical).Outcome);
+        }
     }
 
     [Fact]
@@ -275,9 +291,9 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
             // Errors first, then warnings, then notices; by check within each.
             Assert.Equal(url.Issues!.OrderBy(issue => issue.Severity).ThenBy(issue => issue.CheckId, StringComparer.Ordinal), url.Issues!);
 
-            // The issues on other URLs that name this one, by check, most first.
-            var naming = crawl.Reference.Issues.Where(entry => entry.Key != id).SelectMany(entry => entry.Value).Where(issue => issue.Related == id)
-                .GroupBy(issue => issue.Issue).Select(group => new CheckCount(group.Key, group.Count()))
+            // The issues on other URLs that name this one among the URLs they're about, by check, most first.
+            var naming = crawl.Reference.Targets.Where(entry => entry.Key.Url != id && entry.Value.Contains(id))
+                .GroupBy(entry => entry.Key.Issue).Select(group => new CheckCount(group.Key, group.Count()))
                 .OrderByDescending(check => check.Count).ThenBy(check => check.CheckId, StringComparer.Ordinal).ToList();
             Assert.Equal(naming, url.NamedBy!.Checks);
             Assert.Equal(naming.Sum(check => check.Count), url.NamedBy.Total);
@@ -296,12 +312,12 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
         var copy = crawl.Copy();
         var thin = Id("/plants/thin");
         Change(copy, $"""
-            INSERT OR IGNORE INTO issues (issue, url_id, detail, related_url_id)
-            SELECT 'links-to-redirects', url_id, NULL, {thin} FROM url_summary WHERE url_id <> {thin} ORDER BY url_id LIMIT 1;
-            INSERT OR IGNORE INTO issues (issue, url_id, detail, related_url_id)
-            SELECT 'hreflang-missing-return', url_id, NULL, {thin} FROM url_summary WHERE url_id <> {thin} ORDER BY url_id DESC LIMIT 6;
+            INSERT OR IGNORE INTO issue_targets (issue, related_url_id, url_id)
+            SELECT 'links-to-redirects', {thin}, url_id FROM url_summary WHERE url_id <> {thin} ORDER BY url_id LIMIT 1;
+            INSERT OR IGNORE INTO issue_targets (issue, related_url_id, url_id)
+            SELECT 'hreflang-missing-return', {thin}, url_id FROM url_summary WHERE url_id <> {thin} ORDER BY url_id DESC LIMIT 6;
             """);
-        var expected = TestCrawls.Rows(copy, $"SELECT issue, url_id FROM issues WHERE related_url_id = {thin}").Select(line => line.Split(" | "))
+        var expected = TestCrawls.Rows(copy, $"SELECT issue, url_id FROM issue_targets WHERE related_url_id = {thin}").Select(line => line.Split(" | "))
             .Where(parts => parts[1] != thin.ToString(System.Globalization.CultureInfo.InvariantCulture))
             .GroupBy(parts => parts[0]).Select(group => new CheckCount(group.Key, group.Count()))
             .OrderByDescending(check => check.Count).ThenBy(check => check.CheckId, StringComparer.Ordinal).ToList();

@@ -67,7 +67,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
                 StringComparer.Ordinal));
     }
 
-    public async Task<UrlRef> LookupAsync(string id, UrlLookupRequest request, CancellationToken cancellationToken)
+    public async Task<UrlLookup> LookupAsync(string id, UrlLookupRequest request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
         if (string.IsNullOrWhiteSpace(request.Url))

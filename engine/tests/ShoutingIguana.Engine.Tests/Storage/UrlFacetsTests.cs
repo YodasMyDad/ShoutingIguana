@@ -142,6 +142,41 @@ public sealed class UrlFacetsTests(GridCrawl crawl)
         Assert.Equal(["inlinks"], refused.Columns);
     }
 
+    /// <summary>
+    /// A value no column has, which only a crafted file holds (an indexability reason past the enum's or negative, a negative
+    /// depth, status or time, an in-sitemap that's neither true nor false), counts as unknown however the facets are counted,
+    /// in one pass or each on its own, and never in another value's count, whose filter still opens exactly its URLs.
+    /// </summary>
+    [Fact]
+    public void ACraftedValueCountsAsUnknownAndNeverAsAnother()
+    {
+        var copy = crawl.Copy();
+        var pages = crawl.Reference.Rows.Where(row => (string?)row.Value["type"] == "page" && row.Value["statusCode"] is 200L).Select(row => row.Key).Take(4).ToList();
+        Change(copy, $"""
+            UPDATE url_summary SET indexability_reason = -16 WHERE url_id = {pages[0]};
+            UPDATE url_summary SET indexability_reason = 99, depth = -3 WHERE url_id = {pages[1]};
+            UPDATE url_summary SET response_ms = -5, in_sitemap = 2 WHERE url_id = {pages[2]};
+            UPDATE url_summary SET status_code = -5 WHERE url_id = {pages[3]};
+            """);
+        UrlFilter[] filters = [Boolean("isInternal", true)];
+        var together = UrlGridReader.Facets(copy, new UrlFacetQuery { Filters = filters });
+        foreach (var facet in UrlGridReader.FACETS.Where(facet => facet != "severity"))
+        {
+            var alone = UrlGridReader.Facets(copy, new UrlFacetQuery { Filters = filters, Facets = [facet] }).Facets[facet];
+            Assert.Equal(Describe(alone), Describe(together.Facets[facet]));
+            Assert.Equal(together.Matching, together.Facets[facet].Sum(bucket => bucket.Count));
+            foreach (var bucket in together.Facets[facet].Where(bucket => bucket.Value is not null))
+            {
+                var opened = UrlGridReader.Query(copy, new UrlQuery { Filters = [.. filters, bucket.Filter], Limit = 1 }).Matching;
+                Assert.True(bucket.Count == opened, $"{facet} {bucket.Value}: counted {bucket.Count}, its filter opens {opened}");
+            }
+        }
+
+        // A status code that can't be one is still a status code: the other class, as its column says.
+        Assert.Equal(UrlGridReader.Query(copy, new UrlQuery { Filters = [.. filters, Names("statusClass", FilterOperator.In, "other")] }).Matching,
+            together.Facets["statusClass"].Single(bucket => (string?)bucket.Value == "other").Count);
+    }
+
     /// <summary>A status outside 200 to 599, a server's own, is the class "other": filtered and counted alike, with or without a summary.</summary>
     [Fact]
     public void AnyOtherStatusIsTheOtherClass()
