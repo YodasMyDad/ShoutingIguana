@@ -14,7 +14,8 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from 'lucide-react';
-import { crawlQuery, libraryQuery } from '../api/queries';
+import { useMemo } from 'react';
+import { analysisQuery, checksQuery, crawlQuery, libraryQuery } from '../api/queries';
 import type { IssueCounts } from '../api/types';
 import { CRAWL_SECTIONS, type CrawlSection } from '../app/sections';
 import logoUrl from '../assets/iguana-64.png';
@@ -28,6 +29,7 @@ import { LiveDot } from '../ui/LiveBadge';
 import { NavItem } from '../ui/NavItem';
 import { SeverityMark } from '../ui/SeverityMark';
 import { SEVERITIES, type Severity } from '../ui/severity';
+import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
 
 /** Each section's icon, as the design draws the sidebar. */
 const SECTION_ICONS: Record<CrawlSection, LucideIcon> = {
@@ -45,7 +47,8 @@ export function Sidebar() {
   const collapsed = useSettings((settings) => settings.sidebarCollapsed);
   const { crawl: crawlId } = useParams({ strict: false });
   const crawl = useQuery({ ...crawlQuery(crawlId ?? ''), enabled: crawlId !== undefined }).data;
-  const issues = crawl?.issues ? crawl.issues.error + crawl.issues.warning + crawl.issues.notice : null;
+  const counts = useIssueCounts(crawlId, crawl?.issues != null);
+  const issues = counts ? counts.error + counts.warning + counts.notice : null;
 
   return (
     <nav
@@ -101,7 +104,7 @@ export function Sidebar() {
                 section={section}
                 collapsed={collapsed}
                 count={section.id === 'issues' ? issues : null}
-                issueCounts={section.id === 'issues' ? (crawl?.issues ?? null) : null}
+                issueCounts={section.id === 'issues' ? counts : null}
               />
             ))}
           </ul>
@@ -116,6 +119,22 @@ export function Sidebar() {
       </div>
     </nav>
   );
+}
+
+/**
+ * The open crawl's checks with issues, by severity, counted from the same check entries as the Issues list (the
+ * catalog's checks, as its last analysis found them, the hidden ones left out), so the two never disagree. Null until
+ * both are read, and for a crawl never analysed.
+ */
+function useIssueCounts(crawlId: string | undefined, analysed: boolean): IssueCounts | null {
+  const checks = useQuery({ ...checksQuery(), enabled: analysed }).data;
+  const analysis = useQuery({ ...analysisQuery(crawlId ?? ''), enabled: crawlId !== undefined && analysed }).data;
+  const hiddenIds = useSettings((settings) => settings.hiddenChecks);
+  return useMemo(() => {
+    if (!analysed || !checks || !analysis) return null;
+    const { error, warning, notice } = foundBySeverity(checkEntries(checks, analysis, new Set(hiddenIds)));
+    return { error, warning, notice };
+  }, [analysed, checks, analysis, hiddenIds]);
 }
 
 /** Each severity's words under Issues: "Errors 2". */

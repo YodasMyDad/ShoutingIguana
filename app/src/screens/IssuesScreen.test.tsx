@@ -522,6 +522,22 @@ describe('the Issues screen', () => {
     expect(selectedOption()).toHaveAccessibleName(/Internal links without anchor text/);
   });
 
+  it('counts the sidebar’s severities from the same checks as the list, never the stored ones', async () => {
+    // The library's counts are the stored analysis's, hidden checks and all: the list's are the catalog's.
+    sidecar({ item: { issues: { error: 2, warning: 6, notice: 11 } } });
+    await open(`${ISSUES}/internal-client-error`);
+    const bySeverity = await screen.findByRole('list', { name: 'Issues by severity' });
+    const count = (name: RegExp) => within(bySeverity).getByRole('link', { name }).textContent.replace(/\D/g, '');
+    await waitFor(() => expect(count(/Notices/)).toBe('2'));
+    expect(count(/Errors/)).toBe('1');
+    expect(count(/Warnings/)).toBe('0');
+    expect(screen.getByRole('radio', { name: /Notices/ })).toHaveTextContent('2');
+    // Hiding a check changes both alike.
+    act(() => updateSettings({ hiddenChecks: ['empty-anchor-text'] }));
+    await waitFor(() => expect(count(/Notices/)).toBe('1'));
+    expect(screen.getByRole('radio', { name: /Notices/ })).toHaveTextContent('1');
+  });
+
   it('lands on the first check to fix among the severity the address names', async () => {
     sidecar();
     const { router, history } = await open(`${ISSUES}?severity=${encodeURIComponent('["notice"]')}`);

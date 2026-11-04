@@ -139,6 +139,24 @@ export function answerSentence({ found, issues, passed, skipped }: AnalysisTotal
   return second ? `${first} ${second}` : first;
 }
 
+/**
+ * Checks that found issues, per severity, hidden ones left out: what the severity filter and the sidebar's Errors,
+ * Warnings and Notices count, from the same entries, so they can't disagree. `keep` narrows it further (the list's
+ * text filter).
+ */
+export function foundBySeverity(
+  entries: readonly CheckEntry[],
+  keep: (entry: CheckEntry) => boolean = () => true,
+): Record<Severity | 'all', number> {
+  const counts: Record<Severity | 'all', number> = { all: 0, error: 0, warning: 0, notice: 0 };
+  for (const entry of entries) {
+    if (entry.outcome === 'passed' || entry.outcome === 'skipped' || entry.hidden || !keep(entry)) continue;
+    counts.all++;
+    counts[entry.check.severity]++;
+  }
+  return counts;
+}
+
 const SEVERITY_RANK: Record<Severity, number> = { error: 0, warning: 1, notice: 2 };
 
 /**
@@ -186,7 +204,6 @@ export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], f
     categories.set(category.id, { id: category.id, title: category.title, passed: 0, entries: [] });
   }
 
-  const severityCounts: Record<Severity | 'all', number> = { all: 0, error: 0, warning: 0, notice: 0 };
   let hiddenCount = 0;
   let passedCount = 0;
   let unfiltered = 0;
@@ -200,11 +217,6 @@ export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], f
       category.passed++;
       passedCount++;
     }
-    const found = entry.outcome !== 'passed' && entry.outcome !== 'skipped';
-    if (found && text && !entry.hidden) {
-      severityCounts.all++;
-      severityCounts[entry.check.severity]++;
-    }
     // Shown at all: found and skipped checks always, passed ones when asked for, hidden ones when shown.
     const listed = entry.outcome !== 'passed' || filters.showPassed;
     if (!listed) continue;
@@ -217,6 +229,9 @@ export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], f
     category.entries.push(entry);
   }
 
+  const severityCounts = foundBySeverity(entries, (entry) =>
+    matchesText(entry, categories.get(entry.check.category)?.title ?? '', words),
+  );
   const shown = [...categories.values()].filter((category) => category.entries.length > 0);
   const visible = shown.flatMap((category) => category.entries);
   return {
