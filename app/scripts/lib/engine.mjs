@@ -186,3 +186,101 @@ function isSameFile(original, copy) {
   const b = statSync(copy);
   return a.size === b.size && b.mtimeMs >= a.mtimeMs;
 }
+
+/**
+ * @typedef {{ id: string, site: string | null, fileName: string, status: string, error?: string | null,
+ *   analyzedAt: string | null, outOfDate: boolean }} LibraryItem
+ * @typedef {{ port: number, stop: () => Promise<unknown> }} RunningSidecar
+ */
+
+/**
+ * Starts a sidecar (`start`, on `dataDir`) on a copy of `crawl` whose analysis stands, and resolves with it and the
+ * crawl's library item. The end-to-end tests assume one: with an out-of-date analysis the screens offer to analyse
+ * again (a Tab stop of its own, before the grid) and leave the analysis's columns empty. The sidecar judges, being the
+ * engine under test. `cached` marks the tests' own synthetic crawl: made with `remake(path)` when it's missing, and
+ * made again when an older engine analysed it, so the next run starts from a current one. Any other crawl is never
+ * touched: its copy is analysed again.
+ * @param {{ crawl: string, cached: boolean, dataDir: string, token: string, start: () => Promise<RunningSidecar>,
+ *   remake: (out: string) => Promise<unknown>, log?: (line: string) => void, timeoutMs?: number }} options
+ * @returns {Promise<{ sidecar: RunningSidecar, item: LibraryItem }>}
+ */
+export async function startOnCurrentCrawl({
+  crawl,
+  cached,
+  dataDir,
+  token,
+  start,
+  remake,
+  log = console.log,
+  timeoutMs = 600_000,
+}) {
+  if (cached && !existsSync(crawl)) await remake(crawl);
+  copyCrawl(crawl, dataDir);
+  let sidecar = await start();
+  try {
+    let item = await listedCrawl(sidecar, token);
+    if (analysisStands(item)) return { sidecar, item };
+    const why = await outOfDateBecause(sidecar, token, item);
+    if (cached) {
+      log(`${crawl}: its analysis ${why}. Making the synthetic crawl again with this engine…`);
+      await sidecar.stop();
+      for (const suffix of ['', ...COMPANIONS]) rmSync(crawl + suffix, { force: true });
+      await remake(crawl);
+      copyCrawl(crawl, dataDir);
+      sidecar = await start();
+    } else {
+      log(`${crawl}: its analysis ${why}. Analysing the tests' copy of it again (the original is left alone)…`);
+      await analyse(sidecar, token, item.id, timeoutMs);
+    }
+    item = await listedCrawl(sidecar, token);
+    if (!analysisStands(item)) {
+      throw new Error(
+        `The sidecar says ${item.fileName}'s analysis ${await outOfDateBecause(sidecar, token, item)}, even after ` +
+          `${cached ? 'making it again' : 'analysing it again'}${item.error ? `: ${item.error}` : ''}. Is the sidecar ` +
+          'older than the engine that made it? Build it again: npm run build:sidecar',
+      );
+    }
+    return { sidecar, item };
+  } catch (error) {
+    await sidecar.stop();
+    throw error;
+  }
+}
+
+/** Analysed, by this engine, since the crawl last changed (`outOfDate` is false before the first analysis). */
+const analysisStands = (/** @type {LibraryItem} */ item) => item.analyzedAt !== null && !item.outOfDate;
+
+/** A request to the sidecar, with its token. */
+function call(/** @type {RunningSidecar} */ sidecar, /** @type {string} */ token, route, init = {}) {
+  return fetch(`http://127.0.0.1:${sidecar.port}${route}`, { ...init, headers: { Authorization: `Bearer ${token}` } });
+}
+
+/** The one crawl in the tests' data folder, as the library lists it. */
+async function listedCrawl(sidecar, token) {
+  const response = await call(sidecar, token, '/api/crawls');
+  if (!response.ok) throw new Error(`The sidecar's library answered ${response.status}`);
+  const [first] = /** @type {LibraryItem[]} */ (await response.json());
+  if (!first) throw new Error('The sidecar lists no crawl in the e2e data folder');
+  return first;
+}
+
+/** "is out of date (engineChanged)", or "is missing" before the first analysis, for the log and errors. */
+async function outOfDateBecause(sidecar, token, /** @type {LibraryItem} */ item) {
+  if (item.analyzedAt === null) return 'is missing';
+  const response = await call(sidecar, token, `/api/crawls/${item.id}/analysis`);
+  const reasons = response.ok ? (await response.json()).outOfDateReasons : [];
+  return `is out of date${reasons?.length ? ` (${reasons.join(', ')})` : ''}`;
+}
+
+/** Analyses the crawl and waits for it to finish. The sidecar lists it as analysing before it answers 202. */
+async function analyse(sidecar, token, id, timeoutMs) {
+  const response = await call(sidecar, token, `/api/crawls/${id}/analyze`, { method: 'POST' });
+  if (response.status !== 202) {
+    throw new Error(`The sidecar wouldn't analyse the crawl: ${response.status} ${await response.text()}`);
+  }
+  const started = Date.now();
+  while ((await listedCrawl(sidecar, token)).status === 'analyzing') {
+    if (Date.now() - started > timeoutMs) throw new Error(`The analysis didn't finish within ${timeoutMs / 1000} s`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}

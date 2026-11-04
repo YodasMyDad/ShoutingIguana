@@ -60,8 +60,10 @@ answers for the few URLs the fixtures hold it for.
 
 `npm run e2e` builds the app for the test (`--mode e2e`), starts the sidecar on a temp data folder holding one crawl,
 and serves the build. The crawl is `SI_E2E_CRAWL` if set, otherwise a small synthetic crawl made with the CLI (kept in
-`.engine-build/crawls` for the next run). It needs `npm run build:sidecar` first, and Playwright's Chromium
-(`npx playwright install chromium`).
+`.engine-build/crawls` for the next run). The tests need its analysis to stand, as the sidecar judges it: a kept
+synthetic crawl an older engine analysed is made again, and an out-of-date `SI_E2E_CRAWL` has its copy analysed again
+(never the file itself). An out-of-date analysis would put its "Analyse again" offer on the screens, a Tab stop of its
+own. It needs `npm run build:sidecar` first, and Playwright's Chromium (`npx playwright install chromium`).
 
 ## Build the desktop app
 
