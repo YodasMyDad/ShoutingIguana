@@ -88,3 +88,19 @@ export function formatExactTime(iso: string | null | undefined): string {
   const then = Date.parse(iso);
   return Number.isNaN(then) ? '–' : exact.format(then);
 }
+
+/**
+ * A share as a percentage: "99.6%", "0.4%", "100%". One decimal under 10% and between 90% and 100%, whole numbers
+ * between. A share above nothing never reads "0%", nor one short of the whole "100%". No total is an en dash.
+ */
+export function formatPercent(part: number | null | undefined, total: number | null | undefined): string {
+  if (part === null || part === undefined || total === null || total === undefined) return '–';
+  if (!Number.isFinite(part) || !Number.isFinite(total) || total <= 0) return '–';
+  const share = (part / total) * 100;
+  if (share <= 0) return '0%';
+  if (share >= 100) return '100%';
+  if (share < 0.1) return '<0.1%';
+  if (share > 99.9) return '>99.9%';
+  const decimals = share < 10 || share > 90 ? 1 : 0;
+  return `${new Intl.NumberFormat(LOCALE, { maximumFractionDigits: decimals }).format(share)}%`;
+}
