@@ -290,6 +290,7 @@ function CheckOption({
         ref={ref}
         role="option"
         aria-selected={selected}
+        data-check={check.id}
         tabIndex={tabbable ? 0 : -1}
         title={check.title}
         onClick={onSelect}

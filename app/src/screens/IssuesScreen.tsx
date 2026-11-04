@@ -16,6 +16,7 @@ import { GRID_PAGE_GC_MS } from '../app/queryClient';
 import { isCrawling, type Severity } from '../api/types';
 import { analyseCrawl, cancelAnalysis } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
+import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
 import { notifyUndo } from '../feedback/notify';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
@@ -39,11 +40,19 @@ import {
   categoryTitle,
   checkEntries,
   firstCheckToFix,
+  type CheckEntry,
 } from './issues/checkList';
 import { checkUrlsReader, copyUrls } from './issues/copyUrls';
 import { groupRefOf } from './issues/groupTree';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
+
+/** A check as it's announced when J or K selects it: "Title too long, 3 URLs". */
+function checkWords(entry: CheckEntry): string {
+  if (entry.outcome === 'skipped') return `${entry.check.title}, skipped`;
+  if (entry.outcome === 'passed') return `${entry.check.title}, passed`;
+  return `${entry.check.title}, ${formatCountOf(entry.count ?? 0, 'URL')}`;
+}
 
 /**
  * Issues (docs/v2-ui-ia.md, Issues; flow 3, Triage): the answer first, the checks by category on the left, and the
@@ -233,12 +242,29 @@ export function IssuesScreen() {
     if (url) void openInBrowser(url);
   };
 
+  // J and K: focus in the list moves to the new check's option, as the arrow keys move it; focus in the check (its
+  // grid, its buttons), which goes with it, moves to the new check's title; anywhere else it stays, and the new check
+  // is announced.
+  const focusTitleOf = useRef<string | null>(null);
+  useEffect(() => {
+    if (!checkId || focusTitleOf.current !== checkId) return;
+    focusTitleOf.current = null;
+    titleRef.current?.focus();
+  }, [checkId]);
   const moveBy = (step: number) => {
     const visible = list?.visible ?? [];
     if (visible.length === 0) return;
     const at = visible.findIndex((entry) => entry.check.id === checkId);
     const next = visible[Math.max(0, Math.min(visible.length - 1, at < 0 ? 0 : at + step))];
-    if (next) choose(next.check.id, 'key');
+    if (!next || next.check.id === checkId) return;
+    const focused = document.activeElement;
+    const listbox = focused?.closest('[role="listbox"]');
+    choose(next.check.id, 'key');
+    if (listbox) {
+      const options = listbox.querySelectorAll<HTMLElement>('[data-check]');
+      [...options].find((option) => option.dataset.check === next.check.id)?.focus();
+    } else if (focused?.closest('[data-check-detail]')) focusTitleOf.current = next.check.id;
+    else announce(checkWords(next));
   };
 
   useCommands(
@@ -383,7 +409,7 @@ export function IssuesScreen() {
               filterRef={filterRef}
             />
           </Card>
-          <Card className="min-h-0 overflow-auto @max-split:overflow-visible">
+          <Card data-check-detail className="min-h-0 overflow-auto @max-split:overflow-visible">
             {selected ? (
               <CheckDetail
                 key={selected.check.id}

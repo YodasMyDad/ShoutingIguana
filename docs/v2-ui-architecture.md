@@ -433,4 +433,6 @@ are drawn for the app and are never swapped for Lucide's.
 - **Hidden checks** are a preference (`hiddenChecks` in the settings store), in every crawl, with Undo.
 - **Its commands** are in the registry's Issues group: Ctrl+F filters the checks, J and K move between them,
   Ctrl+Shift+C copies the check's (or the open group's) URLs, Ctrl+Shift+H hides or shows the check, and the palette
-  has show passed, show hidden, Learn more and Cancel the analysis. Every check is in the palette by its title.
+  has show passed, show hidden, Learn more and Cancel the analysis. Every check is in the palette by its title. J and
+  K take focus in the list to the new check's option, and focus in the check (which goes with it) to the new check's
+  title; anywhere else focus stays, and the new check is announced ("Title too long, 3 URLs").

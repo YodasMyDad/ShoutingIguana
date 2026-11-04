@@ -5,6 +5,7 @@ import type { GridQuery, IssueGroup } from '../api/grids';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
+import { onAnnounce } from '../feedback/announce';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { updateSettings } from '../settings/settingsStore';
@@ -97,6 +98,41 @@ describe('the Issues screen', () => {
     fireEvent.click(screen.getByRole('option', { name: /Orphan page/ }));
     await waitFor(() => expect(path(router)).toBe(`${ISSUES}/orphan-page`));
     expect(history.length).toBe(2);
+  });
+
+  it('moves focus with J and K from the list to the new option, and from the check to the new one’s title', async () => {
+    sidecar();
+    const { router } = await open(`${ISSUES}/internal-client-error`);
+    await screen.findByRole('listbox');
+    act(() => selectedOption()?.focus());
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'j' });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    expect(document.activeElement).toHaveAccessibleName(/Internal links without anchor text/);
+    // From the check's groups grid, which goes with the check: to the new check's title.
+    const grid = await screen.findByRole('treegrid');
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'k' });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/internal-client-error`));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Internal URL returns 4xx' })),
+    );
+  });
+
+  it('keeps focus where it is on J elsewhere, and announces the check it moved to', async () => {
+    const heard: string[] = [];
+    const stop = onAnnounce((message) => heard.push(message));
+    sidecar();
+    const { router } = await open(`${ISSUES}/empty-anchor-text`);
+    await screen.findByRole('listbox');
+    const all = screen.getByRole('radio', { name: /All/ });
+    act(() => all.focus());
+    fireEvent.keyDown(all, { key: 'j' });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/orphan-page`));
+    expect(all).toHaveFocus();
+    expect(heard).toContain('Orphan page, skipped');
+    fireEvent.keyDown(all, { key: 'j' });
+    await waitFor(() => expect(heard).toContain('Title too long, 3 URLs'));
+    stop();
   });
 
   it('filters by text and severity in the route, and clears them in one click when nothing matches', async () => {
