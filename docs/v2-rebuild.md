@@ -36,8 +36,13 @@ Discovery and the visual direction were settled on 2026-11-01 (direction B, "cla
 ## Where step 3 stands (2026-11-04)
 
 Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `origin/ui/step-3` at `e9edd0c`.
-`v2` and `master` were not moved. Nothing is running. The temp checkpoint under
+`v2` and `master` were not moved. The temp checkpoint under
 `%LOCALAPPDATA%\Temp\claude\...\c67f90ea-...\scratchpad\checkpoint.md` is history. This section is the place to resume.
+
+Running since 2026-11-04, each on its own branch cut from `5fdcbd8`, unmerged: items 1 and 3 below, the design-system
+pass on `ui/design-system` (worktree `.claude/worktrees/design-system`) and the forced-colours Tab test on
+`ui/forced-tab` (worktree `.claude/worktrees/forced-tab`). If a session ends before they report, relaunch each from its
+brief (the session's checkpoint, named in the owner's memory file); don't redo what the branch already committed.
 
 Done on this branch, on top of `v2`:
 
