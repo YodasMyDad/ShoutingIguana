@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { AddFilterChip, FilterChip } from './FilterChip';
 import { StatusCode } from './StatusCode';
@@ -25,14 +26,46 @@ describe('FilterChip', () => {
     );
     await userEvent.tab();
     expect(screen.getByRole('button', { name: 'Indexable is yes' })).toHaveFocus();
-    await userEvent.keyboard('{Delete}');
-    expect(onRemove).toHaveBeenCalledTimes(1);
     // The remove button is next, then the second chip.
     await userEvent.tab();
     await userEvent.tab();
     expect(screen.getByRole('button', { name: 'Depth is at least 4' })).toHaveFocus();
     await userEvent.keyboard('{Backspace}');
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    await userEvent.keyboard('{Delete}');
     expect(onRemove).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves focus on the next chip once one is removed, else the one before, else Add filter', async () => {
+    function Chips() {
+      const [chips, setChips] = useState(['4xx', '5xx', '3xx']);
+      return (
+        <div role="group" aria-label="Filters">
+          {chips.map((chip) => (
+            <FilterChip
+              key={chip}
+              field="Status"
+              value={chip}
+              onEdit={() => undefined}
+              onRemove={() => setChips((all) => all.filter((other) => other !== chip))}
+            />
+          ))}
+          <AddFilterChip />
+        </div>
+      );
+    }
+    render(<Chips />);
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: 'Status is 4xx' })).toHaveFocus();
+    await userEvent.keyboard('{Delete}');
+    expect(screen.getByRole('button', { name: 'Status is 5xx' })).toHaveFocus();
+    // The last chip's ✕: the one before it.
+    await userEvent.click(screen.getByRole('button', { name: 'Remove the filter Status is 3xx' }));
+    expect(screen.getByRole('button', { name: 'Status is 5xx' })).toHaveFocus();
+    // Focus moved by the app opens no tooltip.
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await userEvent.keyboard('{Backspace}');
+    expect(screen.getByRole('button', { name: 'Add filter' })).toHaveFocus();
   });
 
   it('names a value drawn with more than text by its words', () => {
