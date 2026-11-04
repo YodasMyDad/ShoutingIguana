@@ -293,9 +293,14 @@ slices.
   goes back where it was, else to the view's grid, else to the main area (`restoreFocus`); a navigation that removes
   the focused element puts focus in the new view.
 - **Esc**, innermost first: an open overlay (palette, `?` sheet, menu) closes; then the inspector; then the focused
-  grid's selection clears. The grid asks the registry (`claims`) before taking Esc itself.
+  grid's selection clears. The grid asks the registry (`claims`) before taking Esc itself. A tooltip isn't a step: the
+  Esc that closes it goes on to the rest (`keyboard/layers.ts` gives back the key Radix takes), except over a menu, a
+  popover or a dialog, which close one Esc at a time.
 - The same registry feeds button tooltips and `aria-keyshortcuts` (`Button`'s `command` prop), the `?` sheet, Settings
-  > Shortcuts and the palette. A key can't be listed without working.
+  > Shortcuts and the palette. A key can't be listed without working. Controls read it with `useCommandKeys`: one
+  subscription each, a ranking worked out once per change and keys that keep their identity, so a change renders
+  again only the controls whose keys changed, and a control without a command looks nothing up (grids put buttons and
+  URLs in their cells).
 - The grid's keys are registered with `scope: 'grid'`: listed, never dispatched (the focused grid handles them).
 - The palette is an ARIA combobox over a listbox on a Radix dialog. cmdk was the brief's pick, but its last release
   (1.1.1) leaves `aria-activedescendant` naming a stale or removed option, so screen readers hear the wrong command.
@@ -316,9 +321,12 @@ slices.
 - State indicators meet WCAG 2.2 AA (1.4.11): what's selected, current or highlighted carries the accent rule against
   its tint (`.si-current`, the grid's gutter, the palette's option), never the tint alone; text on it is 4.5:1 or
   more; placeholders are `text-muted`. High contrast maps the roles to system colours under `forced-colors: active`,
-  with `surface-selected` as `Canvas`: selected and current things get a `Highlight` outline on the page's own colours,
+  with `surface-selected` as `Canvas`: selected and current things get a `Highlight` mark on the page's own colours,
   so no text sits on Highlight unreadable, and selected text is HighlightText on Highlight. Focus rings, the grid's
-  included, are outlines, so they survive it.
+  included, are outlines, so they survive it. What can be selected and focused at once (a chosen segment, a pressed
+  toggle, the current place, a selected row) carries its mark as a Highlight ring inside its edge, not an outline, and
+  its focus ring is a CanvasText outline outside it, so both show (WCAG 2.4.7); what never takes focus itself (the
+  grid's rows, the palette's options) keeps the Highlight outline.
 - Fonts: Inter and JetBrains Mono are bundled (`styles/fonts.css`, the woff2 faces in `styles/fonts`), so the app
   looks the same offline; the platform's fonts follow them in the stacks.
 
@@ -333,23 +341,23 @@ screen, and one that a second screen needs moves here.
 
 | Need | Use |
 | --- | --- |
-| An action | `Button` (primary for the one main action in view, secondary, ghost, danger only for losing data; `loading` shows a spinner inside after 300 ms, at the same width; `command` gives its tooltip and `aria-keyshortcuts` from the registry; `asChild` for a link that acts as a button). `IconButton` when there's no room for words: its `label` is required and is its tooltip |
-| A hint | `Tooltip`: on hover after a rest, at once on keyboard focus, with the command's keys. Never the only place something is said |
+| An action | `Button` (primary for the one main action in view, secondary, ghost, danger only for losing data; `loading` shows a spinner inside after 300 ms, at the same width, gone the moment the work ends; `command` gives its tooltip and `aria-keyshortcuts` from the registry; `asChild` for a link that acts as a button). `IconButton` when there's no room for words: its `label` is required and is its tooltip |
+| A hint | `Tooltip`: on hover after a rest, at once on keyboard focus, with the command's keys. Never the only place something is said. It describes its trigger by what the trigger's name lacks (`triggerName`: the hint, the keys), or not at all, so nothing is read twice; keycaps inside a control are `aria-hidden`, its keys given as `aria-keyshortcuts` |
 | Text input | `TextField` (label, description, inline error, read-only, disabled, `lg` for Home's URL field) and `SearchField` (clear and Esc, the key that focuses it). Errors are inline, never toasts |
-| A choice | `Checkbox` for a form's choice, `Switch` for one that applies at once, `SegmentedControl` for one of a few in view (counts and icon-only segments; the arrows choose), `Select` for one of a short list, `Tabs` for views of one thing |
-| More actions | `DropdownMenu` and `ContextMenu` share `MenuItem` (with `command`, its keys on the right and disabled when it can't run), `MenuCheckboxItem`, `MenuRadioItem`, `MenuSeparator`, `MenuLabel`. `Popover` for content from a button; `Dialog` for what can't wait, `ConfirmDialog` only for what can't be undone |
+| A choice | `Checkbox` for a form's choice, `Switch` for one that applies at once, `SegmentedControl` for one of a few in view (counts and icon-only segments, a `description` per segment for what it means; the arrows choose), `Select` for one of a short list, `Tabs` for views of one thing |
+| More actions | `DropdownMenu` and `ContextMenu` share `MenuItem` (with `command`, its keys on the right and disabled when it can't run), `MenuCheckboxItem`, `MenuRadioItem`, `MenuSeparator`, `MenuLabel`. `Popover` for content from a button; `Dialog` for what can't wait, `ConfirmDialog` only for what can't be undone (a failed action keeps it open, saying why inside it) |
 | Severity | `SeverityMark` (shape and colour, the word its name) in dense rows; `SeverityBadge` (with the word) wherever there's room; `SeverityCount(s)` for counts. Notices are the quietest |
 | Status | `StatusPill` for a crawl's status (the words of `crawl/status.ts`), `LiveBadge` and `LiveDot` for what updates live, `StatusCode` for a status code's class (only that meaning), `Badge` for a label without colour (`dashed`: what didn't happen) |
-| Filters | `FilterChip` reads as a sentence, opens its editor, goes with ✕ or Delete; `AddFilterChip`; the `preview` chip beside a number that opens its URLs |
-| Numbers | `Num` (counts, bytes, ms, rates, percentages; the unit smaller and muted), `Duration`, `RelativeTime` (the exact time in its tooltip); `Stat` and `StatLink` (a figure that opens its URLs) in `Stats`, `MiniStat`s; `Meter` for a value on its check's scale; `ShareBar` for a share; `ProgressBar` with its phase; `RefreshLine` for a panel that's refreshing; `Spinner` only inside what's working |
-| Messages | `Callout` (insight, info, warning, error), `Banner` for a view's state with its one action, `EmptyState`, `FilteredEmptyState` (the filters and one-click clear), `SkippedState` (the reason in words) |
+| Filters | `FilterChip` reads as a sentence, opens its editor, goes with ✕ or Delete (focus moves on to the next chip, else the one before, else Add filter); `AddFilterChip`; the `preview` chip beside a number that opens its URLs |
+| Numbers | `Num` (counts, bytes, ms, rates, percentages; the unit smaller and muted), `Duration`, `RelativeTime` (kept current by one minute clock for the app, `lib/clock.ts`, idle while the window is hidden; the exact time in its tooltip and read after it); `Stat` and `StatLink` (a figure that opens its URLs) in `Stats`, `MiniStat`s; `Meter` for a value on its check's scale; `ShareBar` for a share; `ProgressBar` with its phase; `RefreshLine` for a panel that's refreshing; `Spinner` only inside what's working |
+| Messages | `Callout` (insight, info, warning, error), `Banner` for a view's state with its one action, `EmptyState`, `FilteredEmptyState` (the filters and one-click clear), `SkippedState` (the reason in words). A callout's or banner's warning and error are the app's messages, never a finding's severity: they take the message tones (`--color-message-caution*`, quiet as clarity's out-of-date note; `--color-message-failure*`, the error hue under its own name, as the destructive fills) and Lucide's message icons, never the severity marks |
 | URLs and places | `Url` (mono, truncated in the middle to its measured width, path-only on the crawl's origin, copy on click, open in the browser), `Favicon`, `TextLink` and `NavItem` (router links; the current place keeps `.si-current`), `ListRow` and `ListHeading`, `PageHeader`, `SectionHeader`, `GridHeader` with `ResultCount`, `Facts`, `Card` |
 
 The states rule: a component isn't done until each state it can be in (default, hover, focus-visible, active or
 pressed, disabled, loading, invalid, selected or current, long text, empty) has its look in `components.css` and its
 story, and passes axe in both themes. Every state indicator is 3:1 against what's beside it and never a tint alone;
 focus is the one outline from `base.css`; under forced colours edges become system colours and what's selected or
-current gets a Highlight outline. Icons are Lucide's, through `Icon` (decorative unless labelled); severity's shapes
+current gets a Highlight ring beside the focus ring. Icons are Lucide's, through `Icon` (decorative unless labelled); severity's shapes
 are drawn for the app and are never swapped for Lucide's.
 
 ## Feedback

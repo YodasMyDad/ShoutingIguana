@@ -233,6 +233,15 @@
   --color-destructive-fill-hover: light-dark(#a51f1f, #a32323);
   --color-destructive-text: light-dark(#c22828, #ff8a84);
 
+  /* App messages, only: a banner or callout about the app or what's shown (the engine restarting, checks skipped),
+     never a finding's severity. Caution is quiet, as clarity's out-of-date note is: the sunken surface and the
+     secondary text. A failure shares the error hue under its own name, as the destructive fills do, so severity keeps
+     its colours to itself. Their icons are Lucide's message shapes, never the severity marks. */
+  --color-message-caution: var(--color-text-secondary);
+  --color-message-caution-subtle: var(--color-surface-sunken);
+  --color-message-failure: light-dark(#c22828, #ff8a84);
+  --color-message-failure-subtle: light-dark(#fdeeee, #2b1416);
+
   /* Scrim behind dialogs; selection highlight */
   --color-scrim: light-dark(rgb(24 24 27 / 0.32), rgb(0 0 0 / 0.6));
   --color-text-selection: light-dark(#cfe5ff, #1f4c7c);
@@ -366,6 +375,7 @@
   --search-width: 232px;
   --search-width-filter: 160px;
   --search-width-library: 260px;
+  --library-status-width: 240px; /* Home's status column: a file's error wraps in it */
   --settings-nav-width: 192px;
   --detail-max-height: 192px; /* an error's technical detail, before it scrolls */
   --palette-width: 640px;
@@ -391,6 +401,7 @@
   --opacity-zero: 0.4; /* a severity mark beside a count of 0 */
   --opacity-track: 0.25; /* a spinner's track */
   --indeterminate-width: 33%; /* the block an indeterminate progress bar slides */
+  --indeterminate-stripe: 6px; /* its still stripes, with reduced motion */
 
   /* Figures: units set smaller and muted, so the number leads. */
   --unit-scale: 0.5em;
@@ -528,6 +539,10 @@
     --color-destructive-fill: ButtonText;
     --color-destructive-fill-hover: ButtonText;
     --color-destructive-text: CanvasText;
+    --color-message-caution: CanvasText;
+    --color-message-caution-subtle: Canvas;
+    --color-message-failure: CanvasText;
+    --color-message-failure-subtle: Canvas;
     --color-scrim: transparent;
     --color-text-selection: Highlight;
     --elevation-1: none;

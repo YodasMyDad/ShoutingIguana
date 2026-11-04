@@ -184,3 +184,30 @@ export const ConfirmDestructive: Story = {
     />
   ),
 };
+
+/**
+ * The action failed: the dialog stays open and says why in it, the plain cause first and the engine's words behind
+ * Details; the button tries again.
+ */
+export const ConfirmFailed: Story = {
+  play: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+      .find((button) => button.textContent === 'Delete crawl file')
+      ?.click();
+  },
+  render: () => (
+    <ConfirmDialog
+      open
+      onOpenChange={() => undefined}
+      title="Delete the crawl file of gardenfurnituresets.co.uk?"
+      description="The file and its 4,521 URLs are deleted from the disk. This can’t be undone."
+      confirmLabel="Delete crawl file"
+      destructive
+      errorTitle="The crawl file couldn’t be deleted."
+      onConfirm={() =>
+        Promise.reject(new Error('EBUSY: resource busy or locked, unlink gardenfurnituresets.co.uk.sicrawl'))
+      }
+    />
+  ),
+};

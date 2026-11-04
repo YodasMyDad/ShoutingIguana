@@ -2,7 +2,7 @@ import { Slot, Slottable } from '@radix-ui/react-slot';
 import clsx from 'clsx';
 import type { ButtonHTMLAttributes, MouseEvent, Ref } from 'react';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
-import { useAriaShortcut, useChord, useShortcut } from '../keyboard/registry';
+import { useCommandKeys } from '../keyboard/registry';
 import { IconSlot, type IconLike, type IconSize } from './Icon';
 import { Kbd } from './Kbd';
 import { Spinner } from './Spinner';
@@ -61,11 +61,14 @@ export function Button({
   onClick,
   ...rest
 }: ButtonProps) {
-  const shortcut = useShortcut(command ?? '');
-  const chord = useChord(command ?? '');
-  const ariaShortcut = useAriaShortcut(command ?? '');
-  const spinner = useDelayedLoading(loading, { delayMs: BUTTON_SPINNER_DELAY_MS });
+  // One lookup, and none without a command: grids put buttons in their cells.
+  const { shortcut, chord, ariaShortcut } = useCommandKeys(command);
+  // After 300 ms of work, and gone the moment it ends: a skeleton's minimum time would cover the label of a button that
+  // already takes presses again.
+  const spinner = useDelayedLoading(loading, { delayMs: BUTTON_SPINNER_DELAY_MS, minMs: 0 }) && loading;
   const label = title ?? (typeof children === 'string' ? children : undefined);
+  // What a screen reader calls it: its aria-label, or its words. The tooltip leaves that out of the description.
+  const name = rest['aria-label'] ?? (typeof children === 'string' ? children : undefined);
   // A tooltip when it adds something: a title, or the shortcut beside the label.
   const tip = title ?? (shortcut ? label : undefined);
   const iconSize = ICON_SIZES[size];
@@ -103,7 +106,8 @@ export function Button({
       <span className="si-btn__content">
         {spinner && icon ? <Spinner size={iconSize} /> : <IconSlot icon={icon} size={iconSize} />}
         {children}
-        {showShortcut && chord ? <Kbd chord={chord} size="sm" /> : null}
+        {/* Shown, not read: aria-keyshortcuts gives the keys, and the name stays the words ("Pause", not "Pause F7"). */}
+        {showShortcut && chord ? <Kbd chord={chord} size="sm" aria-hidden /> : null}
         <IconSlot icon={iconEnd} size={iconSize} />
       </span>
       {spinner && !icon ? (
@@ -114,7 +118,7 @@ export function Button({
     </button>
   );
   return (
-    <Tooltip content={tip} command={command}>
+    <Tooltip content={tip} chord={chord ?? undefined} triggerName={name}>
       {button}
     </Tooltip>
   );

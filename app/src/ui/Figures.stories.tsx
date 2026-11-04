@@ -165,6 +165,8 @@ export const Bars: Story = {
           <div className="grid gap-5">
             <ProgressBar label="Analysing: links" value={41} max={85} valueText="41 of 85 checks" />
             <ProgressBar label="Exporting" value={0.62} max={1} />
+            {/* Indeterminate: it slides; with reduced motion (the OS's setting, or `npm run test:stories --
+                --reduced-motion`) it's still stripes across the whole track. */}
             <ProgressBar label="Reading the crawl file" />
             <ProgressBar label="kestrel-legal.example" value={2388} max={6140} thin />
           </div>

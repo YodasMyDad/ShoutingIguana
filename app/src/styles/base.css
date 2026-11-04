@@ -349,11 +349,12 @@
   }
 
   /*
-    High contrast: shadows and tints are gone, so what's selected, highlighted or current is a Highlight outline, on
-    the page's own colours. The grid's cursor on a selected row is CanvasText, so it stands out from the row's outline.
+    High contrast: shadows and tints are gone, so what's selected or highlighted and never takes focus itself (the
+    grid's rows, the palette's options) is a Highlight outline, on the page's own colours. The grid's cursor on a
+    selected row is CanvasText, so it stands out from the row's outline. What can be selected and focused at once (the
+    current place, a chosen segment) gets a Highlight ring instead, beside the focus ring (components.css).
   */
   @media (forced-colors: active) {
-    .si-current,
     .si-palette-item[aria-selected='true'],
     .si-grid-row[data-selected] {
       outline: var(--focus-width) solid Highlight;

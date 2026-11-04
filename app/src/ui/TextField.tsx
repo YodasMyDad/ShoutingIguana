@@ -10,6 +10,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
+import { isKeyTaken } from '../keyboard/layers';
 import { Icon, IconSlot, type IconLike } from './Icon';
 import { Kbd } from './Kbd';
 import { SeverityMark } from './SeverityMark';
@@ -34,9 +35,12 @@ export interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElemen
   /** A chord that focuses the field, shown as keycaps while it's empty and not focused ("Ctrl F"). */
   shortcut?: string | undefined;
   /**
-   * Shows a clear button while there's text, and makes Esc clear it. Out of the tab order: Esc does the same from
-   * the field. Called after the field is emptied.
+   * Shows a clear button while there's text, and makes Esc clear it, even inside a dialog or popover. The button is
+   * out of the tab order: Esc does the same from the field. Clearing is a change, as typing is: `onChange` hears the
+   * empty value. On whenever there's an `onClear`.
    */
+  clearable?: boolean | undefined;
+  /** Called once the field is emptied by its clear button or Esc, after `onChange`. */
   onClear?: (() => void) | undefined;
   clearLabel?: string | undefined;
   /** For the wrapper: placement in its parent. */
@@ -58,6 +62,7 @@ export function TextField({
   icon,
   end,
   shortcut,
+  clearable: clearableProp,
   onClear,
   clearLabel = 'Clear',
   className,
@@ -78,7 +83,7 @@ export function TextField({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [filled, setFilled] = useState(() => String(value ?? defaultValue ?? '') !== '');
   const hasText = value === undefined ? filled : String(value) !== '';
-  const clearable = onClear !== undefined && hasText && !disabled && !readOnly;
+  const clearable = (clearableProp ?? onClear !== undefined) && hasText && !disabled && !readOnly;
 
   const setRef = (element: HTMLInputElement | null) => {
     inputRef.current = element;
@@ -88,7 +93,12 @@ export function TextField({
 
   const clear = () => {
     const input = inputRef.current;
-    if (input && value === undefined) input.value = '';
+    if (input) {
+      // As typing would: the value through the input's own setter, then an input event, so React's onChange hears
+      // it. A controlled field empties when its owner takes the new value; an uncontrolled one's owner hears it too.
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
     setFilled(false);
     onClear?.();
     input?.focus();
@@ -101,7 +111,9 @@ export function TextField({
 
   const keyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     onKeyDown?.(event);
-    if (event.defaultPrevented) return;
+    // The caller's handler took the key, or something before it did and didn't give it back: an overlay round the
+    // field gives Esc back so the field clears instead of the overlay closing (keyboard/layers.ts).
+    if (isKeyTaken(event.nativeEvent)) return;
     // Esc empties a field that has text; an empty one leaves Esc to what's around it (the inspector, an overlay).
     if (event.key === 'Escape' && clearable) {
       event.preventDefault();
@@ -146,6 +158,7 @@ export function TextField({
           aria-label={hideLabel ? label : undefined}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedByIds}
+          data-clearable={clearable ? '' : undefined}
         />
         {shortcut || clearable || end ? (
           <span className="si-field__end">

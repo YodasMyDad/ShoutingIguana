@@ -1,8 +1,10 @@
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
-import { useId, type ReactElement, type ReactNode } from 'react';
+import { useId, useRef, type ReactElement, type ReactNode } from 'react';
+import { keepEscapeForField } from '../keyboard/layers';
 import { IconButton } from './IconButton';
+import { quietNextFocus } from './quietFocus';
 
 const POPOVER_OFFSET = 6;
 const COLLISION_PADDING = 8;
@@ -24,7 +26,8 @@ export interface PopoverProps {
 
 /**
  * Content that floats above the page from a button: a filter's editor, a column's options. Focus moves into it and
- * back to the button when it closes (Esc, a click outside, or its close button). Non-modal: the page stays usable.
+ * back to the button when it closes (Esc, a click outside, or its close button). Esc in a field with text empties
+ * the field first. Non-modal: the page stays usable.
  */
 export function Popover({
   trigger,
@@ -38,15 +41,21 @@ export function Popover({
   className,
 }: PopoverProps) {
   const titleId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   return (
     <PopoverPrimitive.Root {...(open === undefined ? {} : { open })} {...(onOpenChange ? { onOpenChange } : {})}>
-      <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
+      <PopoverPrimitive.Trigger asChild ref={triggerRef}>
+        {trigger}
+      </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
           align={align}
           side={side}
           sideOffset={POPOVER_OFFSET}
           collisionPadding={COLLISION_PADDING}
+          onEscapeKeyDown={keepEscapeForField}
+          // Focus goes back to the button without its tooltip popping up, which would take the next Esc.
+          onCloseAutoFocus={() => quietNextFocus(triggerRef.current)}
           className={clsx('si-popover', className)}
           {...(title ? { 'aria-labelledby': titleId } : label ? { 'aria-label': label } : {})}
         >

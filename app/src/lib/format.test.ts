@@ -22,6 +22,9 @@ describe('formatting', () => {
     expect(formatBytes(18276352)).toBe('17.4 MB');
     expect(formatMilliseconds(312)).toBe('312 ms');
     expect(formatMilliseconds(5476)).toBe('5 s');
+    // Under a second only once rounded: never "1,000 ms".
+    expect(formatMilliseconds(999.4)).toBe('999 ms');
+    expect(formatMilliseconds(999.6)).toBe('1 s');
   });
 
   it('reads durations as the brief writes them', () => {

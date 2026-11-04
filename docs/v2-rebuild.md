@@ -39,9 +39,10 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `o
 `v2` and `master` were not moved. The temp checkpoint under
 `%LOCALAPPDATA%\Temp\claude\...\c67f90ea-...\scratchpad\checkpoint.md` is history. This section is the place to resume.
 
-Running since 2026-11-04, unmerged: item 1 below, the design-system pass on `ui/design-system` (worktree
-`.claude/worktrees/design-system`, cut from `5fdcbd8`). If a session ends before it reports, relaunch it from its brief
-(the session's checkpoint, named in the owner's memory file); don't redo what the branch already committed.
+Running since 2026-11-04, unmerged: the Issues screen (item 1 below) on `ui/issues` (worktree
+`.claude/worktrees/issues`, cut from `f1f1c2b`), and a read-only fresh-eyes review of the design system, whose findings
+go to a fixer. If a session ends before they report, relaunch each from its brief (the session's checkpoint, named in
+the owner's memory file); don't redo what a branch already committed.
 
 Done on this branch, on top of `v2`:
 
@@ -58,13 +59,16 @@ Done on this branch, on top of `v2`:
   search and the grid. The e2e setup (`startOnCurrentCrawl` in `app/scripts/lib/engine.mjs`) now remakes a stale
   cached crawl, or re-analyses the copy of a stale `SI_E2E_CRAWL`, and the test checks its precondition. 309 unit
   tests, 14 script tests, and the e2e suite (10 tests) passed twice in a row.
+- The design system (merged `ui/design-system`, 2026-11-04): Lucide icons, Radix primitives, and the components in
+  `app/src/ui/` in the clarity look, listed in the architecture doc's "Components". Each is shown in every state under
+  "Design system/" in Storybook, and `npm run test:stories` runs axe over every story (`-- --forced` for forced
+  colours). The shell, Home, URLs, Settings, feedback and the palette use them. On the merge: 354 unit tests, 59
+  stories with no violations in either theme, e2e 13 of 13.
 
 Left, in this order:
 
-1. The rest of the design system. Tokens exist. Storybook has the shell, feedback and the grid, not every component
-   state.
-2. The Issues screen, built on the design system once it's merged. It is still a stub. The why and learn-more texts
-   are already on each check. Its brief is written (the session's checkpoint folder, `brief-issues.md`).
+1. The Issues screen, running (above). Its fresh-eyes review comes after it.
+2. The design-system review's fixes.
 3. The clickable prototype, then the vertical slices in the UI brief.
 4. Later engine work the UI still needs: the links grid, sitemaps and robots (E3b), export (E5), full-text search and
    favicons (E6).

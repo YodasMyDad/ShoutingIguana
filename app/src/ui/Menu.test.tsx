@@ -3,8 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { commands } from '../keyboard/registry';
+import { Settings } from 'lucide-react';
 import { Button } from './Button';
+import { IconButton } from './IconButton';
 import { ContextMenu, DropdownMenu, MenuCheckboxItem, MenuItem, MenuSeparator } from './Menu';
+import { Popover } from './Popover';
 
 let unregister: (() => void) | undefined;
 afterEach(() => unregister?.());
@@ -84,6 +87,44 @@ describe('menus', () => {
     expect(await screen.findByRole('menu')).toBeVisible();
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('give focus back to an icon button without popping its tooltip, so the next Esc isn’t a tooltip’s', async () => {
+    render(
+      <DropdownMenu trigger={<IconButton label="View options" icon={Settings} />}>
+        <MenuItem onSelect={() => undefined}>Show full URLs</MenuItem>
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole('button', { name: 'View options' });
+    act(() => trigger.focus());
+    // Focus from the keyboard shows the tooltip.
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
+    await userEvent.keyboard('{Enter}');
+    expect(await screen.findByRole('menu')).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(trigger).toHaveFocus();
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    // A focus of the user's own shows it again.
+    act(() => trigger.blur());
+    act(() => trigger.focus());
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
+  });
+
+  it('and a popover, give focus back to its button without popping the button’s tooltip', async () => {
+    render(
+      <Popover trigger={<IconButton label="Columns" icon={Settings} />} title="Columns">
+        <button type="button">Show all</button>
+      </Popover>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Columns' });
+    act(() => trigger.focus());
+    await userEvent.keyboard('{Enter}');
+    expect(await screen.findByRole('dialog', { name: 'Columns' })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(trigger).toHaveFocus();
+    expect(screen.queryByRole('tooltip')).toBeNull();
   });
 
   it('open on a right-click, with the same items', async () => {

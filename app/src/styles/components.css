@@ -258,6 +258,10 @@
 
   .si-btn--secondary:hover:not(:disabled, [aria-disabled='true']) {
     background: var(--color-surface-hover);
+  }
+
+  /* A toggle that's on keeps its control edge under the pointer: hover is a hint, never a state's indicator. */
+  .si-btn--secondary:hover:not(:disabled, [aria-disabled='true'], [aria-pressed='true']) {
     border-color: var(--color-border-strong);
   }
 
@@ -482,12 +486,14 @@
     box-shadow: var(--elevation-2);
   }
 
-  .si-field:hover:not([data-disabled], [data-readonly]) {
+  /* An invalid field keeps its red edge under the pointer. */
+  .si-field:hover:not([data-disabled], [data-readonly], [data-invalid]) {
     border-color: var(--color-text-muted);
   }
 
-  /* The input's own ring would sit inside the box: the box draws it instead, as an outline. */
-  .si-field:focus-within {
+  /* The input's own ring would sit inside the box: the box draws it instead, as an outline. Only for the input's own
+     focus: a button inside the field (Home's Crawl) draws its own ring, and one ring shows at a time. */
+  .si-field:has(.si-field__input:focus-visible) {
     outline: var(--focus-width) solid var(--color-focus);
     outline-offset: calc(var(--hairline) * -1);
   }
@@ -496,7 +502,7 @@
     display: none;
   }
 
-  .si-field--lg:focus-within {
+  .si-field--lg:has(.si-field__input:focus-visible) {
     box-shadow:
       0 0 0 calc(var(--halo-width) + var(--hairline)) var(--color-accent-subtle),
       var(--elevation-2);
@@ -506,7 +512,7 @@
     border-color: var(--color-error);
   }
 
-  .si-field[data-invalid]:focus-within {
+  .si-field[data-invalid]:has(.si-field__input:focus-visible) {
     outline-color: var(--color-error);
   }
 
@@ -643,7 +649,8 @@
     cursor: pointer;
   }
 
-  .si-checkbox:hover:not(:disabled) {
+  /* Checked, it keeps the accent edge under the pointer. */
+  .si-checkbox:hover:not(:disabled, [data-state='checked'], [data-state='indeterminate']) {
     border-color: var(--color-text-muted);
   }
 
@@ -762,13 +769,18 @@
   }
 
   /* ------------------------------------------------------------------ Tabs */
+  /*
+    Tabs past the edge (a narrow inspector, 200% zoom) scroll sideways, with a thin scrollbar that says so to the
+    pointer. The hairline under them is an inset shadow, so the chosen tab's rule sits on it inside the list rather
+    than below it, where the list would clip it and scroll a pixel up and down.
+  */
   .si-tabs {
     display: flex;
     gap: var(--space-5);
     padding: 0 var(--space-5);
-    border-bottom: var(--hairline) solid var(--color-border-subtle);
+    box-shadow: inset 0 calc(var(--hairline) * -1) 0 var(--color-border-subtle);
     overflow-x: auto;
-    scrollbar-width: none;
+    scrollbar-width: thin;
   }
 
   /* Flush with the panel's own padding: the list keeps room for the first tab's focus ring. */
@@ -813,7 +825,7 @@
     content: '';
     position: absolute;
     right: var(--space-1);
-    bottom: calc(var(--hairline) * -1);
+    bottom: 0;
     left: var(--space-1);
     height: var(--rule-width);
     border-radius: var(--rule-width) var(--rule-width) 0 0;
@@ -1743,7 +1755,14 @@
     font-variant-numeric: tabular-nums lining-nums;
   }
 
-  /* Indeterminate: a block that slides, or a still third of the track with reduced motion. */
+  /*
+    Indeterminate: a block that slides across the track, moved with translate (no layout each frame), in the track's
+    own width (cqw). With reduced motion: still stripes across the whole track, which can't be read as a share done.
+  */
+  .si-bar-track:has(> .si-bar-fill--indeterminate) {
+    container-type: inline-size;
+  }
+
   .si-bar-fill--indeterminate {
     width: var(--indeterminate-width);
     animation: si-indeterminate var(--duration-shimmer) var(--ease-in-out) infinite;
@@ -1806,16 +1825,25 @@
     color: var(--color-accent-text);
   }
 
+  /* App messages, in the message tones (tokens.css), never the severity's. */
   .si-callout--warning {
-    background: var(--color-warning-subtle);
+    background: var(--color-message-caution-subtle);
     box-shadow: inset 0 0 0 var(--hairline) var(--color-border);
     color: var(--color-text);
   }
 
+  .si-callout--warning .si-callout__icon {
+    color: var(--color-message-caution);
+  }
+
   .si-callout--error {
-    background: var(--color-error-subtle);
+    background: var(--color-message-failure-subtle);
     box-shadow: inset 0 0 0 var(--hairline) var(--color-border);
     color: var(--color-text);
+  }
+
+  .si-callout--error .si-callout__icon {
+    color: var(--color-message-failure);
   }
 
   .si-banner {
@@ -1867,11 +1895,19 @@
   }
 
   .si-banner--warning {
-    background: var(--color-warning-subtle);
+    background: var(--color-message-caution-subtle);
+  }
+
+  .si-banner--warning .si-banner__icon {
+    color: var(--color-message-caution);
   }
 
   .si-banner--error {
-    background: var(--color-error-subtle);
+    background: var(--color-message-failure-subtle);
+  }
+
+  .si-banner--error .si-banner__icon {
+    color: var(--color-message-failure);
   }
 
   /* A banner inside a card or panel, rather than across the window. */
@@ -2079,12 +2115,8 @@
   /* A link in running text: underlined, so it isn't told apart by colour alone (WCAG 1.4.1). */
   .si-link--inline {
     text-decoration: underline;
-    text-decoration-color: var(--color-accent-border);
-    text-underline-offset: var(--underline-offset);
-  }
-
-  .si-link--inline:hover {
     text-decoration-color: currentColor;
+    text-underline-offset: var(--underline-offset);
   }
 
   .si-link--subtle {
@@ -2135,17 +2167,22 @@
     gap: var(--space-2);
   }
 
+  /* Short of room (a narrow column, 200% zoom), the actions go under the title, and a long title wraps. */
   .si-section-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2) var(--space-3);
   }
 
   .si-section-header__title {
     display: flex;
-    flex: none;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
     align-items: baseline;
-    gap: var(--space-3);
+    gap: 0 var(--space-3);
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-size: var(--text-18);
     line-height: var(--leading-18);
     font-weight: var(--font-weight-semibold);
@@ -2415,10 +2452,10 @@
 
 @keyframes si-indeterminate {
   from {
-    left: calc(var(--indeterminate-width) * -1);
+    translate: -100% 0;
   }
   to {
-    left: 100%;
+    translate: 100cqw 0;
   }
 }
 
@@ -2429,9 +2466,14 @@
     opacity: 0;
   }
 
-  .si-bar-fill--indeterminate {
-    left: 0;
+  .si-bar-fill.si-bar-fill--indeterminate {
+    width: 100%;
     animation: none;
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--color-accent) 0 var(--indeterminate-stripe),
+      transparent var(--indeterminate-stripe) calc(var(--indeterminate-stripe) * 2)
+    );
   }
 }
 
@@ -2488,26 +2530,84 @@
     color: currentColor;
   }
 
+  /* Disabled: GrayText, the system's own word for it, for the text, the edges, the thumb and the fill. */
   .si-btn:disabled,
   .si-btn[aria-disabled='true']:not([data-loading]),
   .si-segment:disabled,
   .si-field[data-disabled],
-  .si-choice[data-disabled] {
+  .si-choice[data-disabled],
+  .si-menu-item[data-disabled],
+  .si-palette-item[aria-disabled='true'] {
     color: GrayText;
     border-color: GrayText;
     opacity: 1;
   }
 
+  .si-checkbox:disabled,
+  .si-switch:disabled {
+    border-color: GrayText;
+  }
+
+  .si-checkbox[data-state='checked']:disabled,
+  .si-checkbox[data-state='indeterminate']:disabled,
+  .si-switch[data-state='checked']:disabled {
+    border-color: GrayText;
+    background: GrayText;
+    color: Canvas;
+  }
+
+  .si-switch:disabled .si-switch__thumb {
+    background: GrayText;
+  }
+
+  .si-switch[data-state='checked']:disabled .si-switch__thumb {
+    background: Canvas;
+  }
+
+  /*
+    What's pressed, chosen, current, selected or highlighted: a Highlight ring just inside its edge, drawn as the border
+    of a layer of its own. Focus is the outline, so on one of these it shows beside the ring rather than in its place
+    (WCAG 2.4.7): in CanvasText, outside the edge.
+  */
   .si-btn[aria-pressed='true'],
   .si-segment[aria-checked='true'],
   .si-segment[aria-pressed='true'],
+  .si-current,
   .si-menu-item[data-highlighted],
   .si-list-row[aria-selected='true'],
   .si-list-row[aria-current='page'],
   .si-list-row[aria-current='true'],
   .si-stat--link:hover {
-    outline: var(--focus-width) solid Highlight;
-    outline-offset: calc(var(--focus-width) * -1);
+    position: relative;
+  }
+
+  .si-btn[aria-pressed='true']::after,
+  .si-segment[aria-checked='true']::after,
+  .si-segment[aria-pressed='true']::after,
+  .si-current::after,
+  .si-menu-item[data-highlighted]::after,
+  .si-list-row[aria-selected='true']::after,
+  .si-list-row[aria-current='page']::after,
+  .si-list-row[aria-current='true']::after,
+  .si-stat--link:hover::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: var(--focus-width) solid Highlight;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  .si-btn[aria-pressed='true']:focus-visible,
+  .si-segment[aria-checked='true']:focus-visible,
+  .si-segment[aria-pressed='true']:focus-visible,
+  .si-current:focus-visible,
+  .si-list-row[aria-selected='true']:focus-visible,
+  .si-list-row[aria-current='page']:focus-visible,
+  .si-list-row[aria-current='true']:focus-visible,
+  .si-stat--link:hover:focus-visible {
+    outline: var(--focus-width) solid CanvasText;
+    outline-offset: var(--focus-offset);
   }
 
   .si-checkbox[data-state='checked'],
@@ -2569,6 +2669,11 @@
   .si-code__mark {
     border: var(--hairline) solid CanvasText;
     background: Canvas;
+  }
+
+  /* The hairline under the tabs is a shadow, which forced colours take away. */
+  .si-tabs {
+    border-bottom: var(--hairline) solid var(--color-border-subtle);
   }
 
   .si-sev-mark {

@@ -147,12 +147,14 @@ export const NavItems: Story = {
           <nav aria-label="Main" className="flex w-(--sidebar-width) flex-col gap-0.5">
             <NavItem to="/" label="Home" icon={Home} />
             <NavItem to="/crawls/$crawl/overview" params={{ crawl: CRAWL }} label="Overview" icon={Network} />
+            {/* The current place, focused: under forced colours its ring and the focus ring show together. */}
             <NavItem
               to="/crawls/$crawl/issues/{-$check}"
               params={{ crawl: CRAWL }}
               label="Issues"
               icon={TriangleAlert}
               count={19}
+              className="is-focus"
             />
             <NavItem
               to="/crawls/$crawl/urls"
@@ -204,7 +206,8 @@ export const NavItems: Story = {
 /**
  * List rows, as the checks list uses them: one listbox, a group per category named by its `ListHeading`
  * (`level="none"`, as only options belong in a listbox), the severity mark, the title, the count; selected with the
- * accent rule; skipped with its reason and the dashed badge.
+ * accent rule, and focused as well, so forced colours show its ring beside the focus ring; skipped with its reason and
+ * the dashed badge.
  */
 export const ListRows: Story = {
   parameters: { pseudo: { hover: ['.is-hover'], focusVisible: ['.is-focus'] } },
@@ -236,7 +239,7 @@ export const ListRows: Story = {
                   icon={<SeverityMark severity={row.severity} />}
                   title={row.title}
                   meta={<Num value={row.count} />}
-                  className={index === 0 ? 'is-hover' : index === 1 ? 'is-focus' : undefined}
+                  className={index === 0 ? 'is-hover' : index === 1 || selected === row.id ? 'is-focus' : undefined}
                 >
                   <div
                     role="option"
@@ -345,7 +348,10 @@ export const FilterChips: Story = {
   },
 };
 
-/** Headers: a page's large title with its answer, a section's title, and a grid screen's one line with its count. */
+/**
+ * Headers: a page's large title with its answer, a section's title (long, in a narrow column, it wraps), and a grid
+ * screen's one line with its count.
+ */
 export const Headers: Story = {
   render: () => (
     <StoryFrame>
@@ -361,6 +367,14 @@ export const Headers: Story = {
       />
       <SectionHeader title="Library" meta="7 sites, 11 crawls" />
       <SectionHeader title="Crawling now" size="sm" actions={<Button size="sm">Open</Button>} />
+      {/* A long title in a narrow column: the actions go under it, and it wraps. */}
+      <div className="w-(--checks-width)">
+        <SectionHeader
+          title="Pages whose canonical points at a redirected URL"
+          meta="82,904"
+          actions={<Button size="sm">Export</Button>}
+        />
+      </div>
       <GridHeader
         title="URLs"
         count={<ResultCount shown={264} total={4521} noun="URL" />}

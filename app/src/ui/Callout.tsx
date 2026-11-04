@@ -1,15 +1,15 @@
 import clsx from 'clsx';
-import { Info, Layers } from 'lucide-react';
+import { Info, Layers, MessageSquareWarning, MessageSquareX } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { IconSlot, type IconLike } from './Icon';
-import { SeverityMark } from './SeverityMark';
 
 export type CalloutTone = 'insight' | 'info' | 'warning' | 'error';
 
 export interface CalloutProps {
   /**
    * `insight` (the default): what the data says, quietly ("one fix clears the group"). `info`: something to know.
-   * `warning` and `error`: a problem with what's shown, with the severity's shape.
+   * `warning` and `error`: a problem with what's shown (checks skipped, robots.txt unread), in the message tones and
+   * Lucide's message icons: the app's message, never a finding's severity.
    */
   tone?: CalloutTone | undefined;
   title?: ReactNode;
@@ -23,16 +23,15 @@ export interface CalloutProps {
   className?: string | undefined;
 }
 
-function ToneIcon({ tone }: { tone: CalloutTone }) {
-  if (tone === 'warning' || tone === 'error') return <SeverityMark severity={tone} size="md" decorative />;
-  return <IconSlot icon={tone === 'insight' ? Layers : Info} size="md" />;
-}
+const TONE_ICONS = { insight: Layers, info: Info, warning: MessageSquareWarning, error: MessageSquareX } as const;
 
 /** A note in a panel: an insight from the data, information, or a problem with what's shown. */
 export function Callout({ tone = 'insight', title, children, icon, actions, role, className }: CalloutProps) {
   return (
     <div role={role} className={clsx('si-callout', tone !== 'insight' && `si-callout--${tone}`, className)}>
-      <span className="si-callout__icon">{icon ? <IconSlot icon={icon} size="md" /> : <ToneIcon tone={tone} />}</span>
+      <span className="si-callout__icon">
+        <IconSlot icon={icon ?? TONE_ICONS[tone]} size="md" />
+      </span>
       <div className="si-callout__body">
         {title ? <p className="si-callout__title">{title}</p> : null}
         <div>{children}</div>
