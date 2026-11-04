@@ -584,6 +584,19 @@ test.describe('the design system’s states', () => {
     expect((await style(box, 'outline-style'))['outline-style']).toBe('none');
   });
 
+  for (const colorScheme of ['light', 'dark'] as const) {
+    test(`a link in running text has an underline at 3:1 (${colorScheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme });
+      const host = await fixture(
+        page,
+        `<p class="text-text" style="background:var(--color-surface)">Read <a href="#guide" class="si-link si-link--inline">the guide</a>.</p>`,
+      );
+      const link = host.getByRole('link', { name: 'the guide' });
+      const underline = (await style(link, 'text-decoration-color'))['text-decoration-color'] ?? '';
+      expect(contrast(underline, await shownBackground(link))).toBeGreaterThanOrEqual(3);
+    });
+  }
+
   test('under forced colours, what’s disabled is GrayText: menu and palette items, checkboxes, switches', async ({
     page,
   }) => {
