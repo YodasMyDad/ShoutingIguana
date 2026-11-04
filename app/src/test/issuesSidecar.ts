@@ -137,6 +137,8 @@ export interface IssuesSidecarOptions {
   groups?: Record<string, IssueGroup[]>;
   rows?: Record<string, (IssueRow & { group?: number })[]>;
   onAnalyse?: () => void;
+  onCancelAnalysis?: () => void;
+  onContinue?: () => void;
 }
 
 /** The routes the Issues screen reads, with the standard ones (library, item, health) after them. */
@@ -171,6 +173,22 @@ export function issuesRoutes(options: IssuesSidecarOptions = {}): FakeRoute[] {
       () => {
         options.onAnalyse?.();
         return new Response(null, { status: 202 });
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/analyze\/cancel$/,
+      () => {
+        options.onCancelAnalysis?.();
+        return new Response(null, { status: 202 });
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/continue$/,
+      () => {
+        options.onContinue?.();
+        return json({ ...item, status: 'running' });
       },
     ],
     [

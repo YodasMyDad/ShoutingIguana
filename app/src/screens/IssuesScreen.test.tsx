@@ -1,5 +1,6 @@
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { QueryClient } from '@tanstack/react-query';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GridQuery, IssueGroup } from '../api/grids';
 import { setTransport } from '../api/transport';
@@ -9,7 +10,8 @@ import { onAnnounce } from '../feedback/announce';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { updateSettings } from '../settings/settingsStore';
-import { LOCATE_GROUP_LIMIT, LOCATE_GROUP_PAGE } from '../api/queries';
+import { LOCATE_GROUP_LIMIT, LOCATE_GROUP_PAGE, queryKeys } from '../api/queries';
+import type { CrawlListItem, CrawlStatus } from '../api/types';
 import { TEST_CRAWL_ID, fakeSidecar, type FakeRoute } from '../test/fakeSidecar';
 import {
   ANCHOR_ROWS,
@@ -21,11 +23,15 @@ import {
 
 const ISSUES = `/crawls/${TEST_CRAWL_ID}/issues`;
 
-function sidecar(options: Omit<IssuesSidecarOptions, 'onAnalyse'> = {}) {
+function sidecar(options: Omit<IssuesSidecarOptions, 'onAnalyse' | 'onCancelAnalysis' | 'onContinue'> = {}) {
   const analyse = vi.fn();
-  const transport = fakeSidecar(issuesRoutes({ ...options, onAnalyse: analyse }));
+  const cancel = vi.fn();
+  const resume = vi.fn();
+  const transport = fakeSidecar(
+    issuesRoutes({ ...options, onAnalyse: analyse, onCancelAnalysis: cancel, onContinue: resume }),
+  );
   setTransport(transport);
-  return { requests: transport.requests, analyse };
+  return { requests: transport.requests, analyse, cancel, resume };
 }
 
 async function open(path: string) {
@@ -34,10 +40,21 @@ async function open(path: string) {
   const router = createAppRouter(queryClient, history);
   render(<App router={router} queryClient={queryClient} />);
   await act(() => router.load());
-  return { router, history };
+  return { router, history, queryClient };
+}
+
+/** What the live layer does when the crawl's status changes. */
+function setStatus(queryClient: QueryClient, status: CrawlStatus) {
+  act(() => {
+    queryClient.setQueryData<CrawlListItem>(queryKeys.crawlItem(TEST_CRAWL_ID), (item) =>
+      item ? { ...item, status } : item,
+    );
+  });
 }
 
 const path = (router: Awaited<ReturnType<typeof open>>['router']) => router.state.location.pathname;
+/** The screen, without the top bar's own crawl controls. */
+const mainArea = () => document.getElementById('main') ?? document.body;
 const options = () => screen.getAllByRole('option');
 const selectedOption = () =>
   screen.getAllByRole('option').find((option) => option.getAttribute('aria-selected') === 'true');
@@ -345,6 +362,64 @@ describe('the Issues screen', () => {
     sidecar({ analysis: null, item: { analyzedAt: null, issues: null, status: 'running' } });
     await open(ISSUES);
     expect(await screen.findByText('Issues come when the crawl finishes')).toBeVisible();
+  });
+
+  it('moves focus to Cancel when its analysis starts, says it’s cancelling, and where focus went when it ends', async () => {
+    const heard: string[] = [];
+    const stop = onAnnounce((message) => heard.push(message));
+    const { analyse, cancel } = sidecar({
+      analysis: { ...ISSUES_ANALYSIS, outOfDate: true, outOfDateReasons: ['crawlChanged'] },
+      item: { outOfDate: true },
+    });
+    const { queryClient } = await open(`${ISSUES}/internal-client-error`);
+    const again = await within(mainArea()).findByRole('button', { name: 'Analyse again' });
+    act(() => again.focus());
+    fireEvent.click(again);
+    await waitFor(() => expect(analyse).toHaveBeenCalledOnce());
+    setStatus(queryClient, 'analyzing');
+    // The button that had focus went with its banner: focus is on the progress banner's Cancel.
+    const cancelButton = await screen.findByRole('button', { name: 'Cancel' });
+    expect(cancelButton).toHaveFocus();
+    fireEvent.click(cancelButton);
+    await waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+    // The engine takes a moment to stop it: the button says so.
+    expect(await screen.findByRole('button', { name: 'Cancelling…' })).toHaveAttribute('aria-busy', 'true');
+    setStatus(queryClient, 'completed');
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Issues' })).toHaveFocus());
+    expect(heard).toContain('Analysis cancelled. These are the issues from the last analysis.');
+    stop();
+  });
+
+  it('moves focus to Cancel when “Analyse it” starts the first analysis', async () => {
+    sidecar({ analysis: null, item: { analyzedAt: null, issues: null, status: 'stopped' } });
+    const { queryClient } = await open(ISSUES);
+    const analyseIt = await screen.findByRole('button', { name: 'Analyse it' });
+    act(() => analyseIt.focus());
+    fireEvent.click(analyseIt);
+    setStatus(queryClient, 'analyzing');
+    expect(await screen.findByRole('button', { name: 'Cancel' })).toHaveFocus();
+  });
+
+  it('says why a crawl never analysed can’t be, offering Continue for an interrupted one', async () => {
+    const { resume } = sidecar({ analysis: null, item: { analyzedAt: null, issues: null, status: 'interrupted' } });
+    await open(ISSUES);
+    expect(await screen.findByText(/It was interrupted before it finished\. Continue it/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Analyse it' })).toBeNull();
+    fireEvent.click(within(mainArea()).getByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(resume).toHaveBeenCalledOnce());
+  });
+
+  it('says why a crawl open in another window, or whose file is gone, can’t be analysed', async () => {
+    sidecar({ analysis: null, item: { analyzedAt: null, issues: null, status: 'inUse' } });
+    await open(ISSUES);
+    expect(await screen.findByText(/open in another Shouting Iguana window/)).toBeVisible();
+    const main = document.getElementById('main');
+    if (!main) throw new Error('No main');
+    expect(within(main).queryByRole('button', { name: /Continue|Analyse/ })).toBeNull();
+    cleanup();
+    sidecar({ analysis: null, item: { analyzedAt: null, issues: null, status: 'completed', missing: true } });
+    await open(ISSUES);
+    expect(await screen.findByText(/Its crawl file isn’t where it was/)).toBeVisible();
   });
 
   it('says when the issues are out of date, and offers to analyse again', async () => {

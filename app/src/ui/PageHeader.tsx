@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { formatCount, formatCountOf } from '../lib/format';
 
 export interface PageHeaderProps {
@@ -11,14 +11,17 @@ export interface PageHeaderProps {
   subtitle?: ReactNode;
   actions?: ReactNode;
   className?: string | undefined;
+  /** For focus to go to the title when what had it went away (the title is focusable from script only). */
+  titleRef?: Ref<HTMLHeadingElement> | undefined;
 }
 
 /** A page's large title (Home, Overview, Issues), its one-sentence answer, and its actions on the right. */
-export function PageHeader({ title, badge, subtitle, actions, className }: PageHeaderProps) {
+export function PageHeader({ title, badge, subtitle, actions, className, titleRef }: PageHeaderProps) {
   return (
     <header className={clsx('si-page-header', className)}>
       <div className="si-page-header__text">
-        <h1 className="si-page-header__title">
+        {/* Focusable from script only: where focus goes when what had it went away. */}
+        <h1 ref={titleRef} tabIndex={-1} className="si-page-header__title">
           {title}
           {badge}
         </h1>

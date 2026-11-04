@@ -1,6 +1,6 @@
-import { ChevronDown, ChevronUp, RefreshCw, X } from 'lucide-react';
-import { useId, useState } from 'react';
-import type { Analysis, AnalysisEvent } from '../../api/types';
+import { ChevronDown, ChevronUp, Play, RefreshCw, X } from 'lucide-react';
+import { useId, useState, type Ref } from 'react';
+import type { Analysis, AnalysisEvent, CrawlStatus } from '../../api/types';
 import { analysisPhaseWords, analysisProgressText, analysisStep, outOfDateWords } from '../../crawl/analysis';
 import { Skeleton } from '../../feedback/Skeleton';
 import { formatExactTime, formatRelativeTime } from '../../lib/format';
@@ -15,11 +15,17 @@ import { ProgressBar } from '../../ui/ProgressBar';
 export function AnalysisProgress({
   event,
   onCancel,
+  cancelling = false,
+  cancelRef,
   inset = true,
 }: {
   /** Null until the first `analysis` event arrives. */
   event: AnalysisEvent | null;
   onCancel: (() => void) | null;
+  /** Cancel was pressed: the engine is stopping it, which takes a moment. */
+  cancelling?: boolean;
+  /** Cancel, for focus to go to when the analysis started from a button that the banner replaces. */
+  cancelRef?: Ref<HTMLButtonElement> | undefined;
   inset?: boolean;
 }) {
   const phase = event ? analysisPhaseWords(event.phase) : 'Starting the analysis';
@@ -31,8 +37,15 @@ export function AnalysisProgress({
       icon={<LiveDot />}
       actions={
         onCancel ? (
-          <Button size="sm" icon={X} command="crawl.cancelAnalysis" onClick={onCancel}>
-            Cancel
+          <Button
+            ref={cancelRef}
+            size="sm"
+            icon={X}
+            command="crawl.cancelAnalysis"
+            loading={cancelling}
+            onClick={onCancel}
+          >
+            {cancelling ? 'Cancelling…' : 'Cancel'}
           </Button>
         ) : null
       }
@@ -151,26 +164,57 @@ function NoteList({ notes }: { notes: readonly string[] }) {
   );
 }
 
+/** Why a crawl that isn't running can't be analysed here, in plain words; null when it can be, or nothing says why. */
+function notAnalysableBecause(status: CrawlStatus | null, missing: boolean): string | null {
+  if (missing) return 'Its crawl file isn’t where it was (moved, renamed or deleted), so it can’t be analysed.';
+  switch (status) {
+    case 'interrupted':
+      return 'It was interrupted before it finished. Continue it, and it’s analysed as soon as it’s done.';
+    case 'inUse':
+      return 'It’s open in another Shouting Iguana window, so it can only be analysed there.';
+    case 'unreadable':
+      return 'Its crawl file can’t be read, so it can’t be analysed.';
+    default:
+      return null;
+  }
+}
+
 /**
  * Never analysed: why there are no issues yet, and what comes next. A running crawl is analysed when it finishes; one
- * that stopped can be analysed now.
+ * that stopped can be analysed now; one that was interrupted can be continued; one that can't be analysed here says
+ * why.
  */
 export function NotAnalysed({
   crawling,
   analysing,
   event,
   canAnalyse,
+  status,
+  missing,
   onAnalyse,
+  onContinue,
   onCancel,
+  cancelling = false,
+  cancelRef,
 }: {
   crawling: boolean;
   analysing: boolean;
   event: AnalysisEvent | null;
   canAnalyse: boolean;
+  /** The crawl's status, to say why it can't be analysed. */
+  status: CrawlStatus | null;
+  /** Its file isn't where the library says. */
+  missing: boolean;
   onAnalyse: () => void;
+  onContinue: () => void;
   onCancel: (() => void) | null;
+  cancelling?: boolean;
+  cancelRef?: Ref<HTMLButtonElement> | undefined;
 }) {
-  if (analysing) return <AnalysisProgress event={event} onCancel={onCancel} />;
+  if (analysing) {
+    return <AnalysisProgress event={event} onCancel={onCancel} cancelling={cancelling} cancelRef={cancelRef} />;
+  }
+  const blocked = crawling || canAnalyse ? null : notAnalysableBecause(status, missing);
   return (
     <Card>
       <EmptyState
@@ -178,16 +222,20 @@ export function NotAnalysed({
         level={2}
         panel
         actions={
-          !crawling && canAnalyse ? (
+          crawling ? null : canAnalyse ? (
             <Button variant="primary" icon={RefreshCw} command="crawl.analyse" onClick={onAnalyse}>
               Analyse it
+            </Button>
+          ) : status === 'interrupted' && !missing ? (
+            <Button variant="primary" icon={Play} command="crawl.continue" onClick={onContinue}>
+              Continue
             </Button>
           ) : null
         }
       >
         {crawling
           ? 'It’s analysed as soon as it’s done, and its issues show here. You can look through its URLs while it runs.'
-          : 'The analysis runs every check over the crawl’s pages. It takes a few seconds for most sites.'}
+          : (blocked ?? 'The analysis runs every check over the crawl’s pages. It takes a few seconds for most sites.')}
       </EmptyState>
     </Card>
   );

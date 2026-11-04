@@ -14,7 +14,7 @@ import {
 } from '../api/queries';
 import { GRID_PAGE_GC_MS } from '../app/queryClient';
 import { isCrawling, type Severity } from '../api/types';
-import { analyseCrawl, cancelAnalysis } from '../crawl/actions';
+import { analyseCrawl, cancelAnalysis, continueCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -267,6 +267,46 @@ export function IssuesScreen() {
     else announce(checkWords(next));
   };
 
+  // Analysing from here: the button pressed goes when the progress banner comes, so focus goes to its Cancel; when
+  // the banner goes, focus that was in it goes to the page's title. Starting and finishing are announced with the
+  // crawl's status (live/liveBridge.ts), and a cancel is announced here, as the status alone reads "finished".
+  const pageTitleRef = useRef<HTMLHeadingElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const startedHere = useRef(false);
+  const cancelRequested = useRef(false);
+  const [cancelling, setCancelling] = useState(false);
+  if (cancelling && !analysing) setCancelling(false);
+  const analyse = () => {
+    startedHere.current = true;
+    void analyseCrawl(crawlId);
+  };
+  const cancelHere = () => {
+    cancelRequested.current = true;
+    setCancelling(true);
+    void cancelAnalysis(crawlId);
+  };
+  const cancel = analysing ? cancelHere : null;
+  const wasAnalysing = useRef(analysing);
+  useEffect(() => {
+    if (analysing === wasAnalysing.current) return;
+    wasAnalysing.current = analysing;
+    const focusLost = document.activeElement === null || document.activeElement === document.body;
+    if (analysing) {
+      if (startedHere.current && focusLost) cancelRef.current?.focus();
+      startedHere.current = false;
+      return;
+    }
+    if (cancelRequested.current) {
+      announce(
+        neverAnalysed
+          ? 'Analysis cancelled. This crawl still hasn’t been analysed.'
+          : 'Analysis cancelled. These are the issues from the last analysis.',
+      );
+    }
+    cancelRequested.current = false;
+    if (focusLost) pageTitleRef.current?.focus();
+  }, [analysing, neverAnalysed]);
+
   useCommands(
     () => [
       {
@@ -338,17 +378,28 @@ export function IssuesScreen() {
         id: 'crawl.cancelAnalysis',
         title: 'Cancel the analysis',
         group: 'Crawl',
-        enabled: () => analysing,
-        run: () => cancelAnalysis(crawlId),
+        enabled: () => analysing && !cancelling,
+        run: cancelHere,
       },
     ],
-    [list, checkId, selected, copyReady, copying, copyTarget, showPassed, showHidden, hidden, analysing, crawlId],
+    [
+      list,
+      checkId,
+      selected,
+      copyReady,
+      copying,
+      copyTarget,
+      showPassed,
+      showHidden,
+      hidden,
+      analysing,
+      cancelling,
+      crawlId,
+    ],
   );
 
   const loading = (checks.isPending || analysis.isPending) && !checks.error && !analysis.error;
   const skeleton = useDelayedLoading(loading);
-  const analyse = () => void analyseCrawl(crawlId);
-  const cancel = analysing ? () => void cancelAnalysis(crawlId) : null;
 
   const subtitle = totals ? answerSentence(totals) : neverAnalysed ? 'No issues to show yet.' : undefined;
   let body;
@@ -363,8 +414,13 @@ export function IssuesScreen() {
         analysing={analysing}
         event={live?.analysis ?? null}
         canAnalyse={canAnalyse}
+        status={status}
+        missing={item?.missing === true}
         onAnalyse={analyse}
+        onContinue={() => void continueCrawl(crawlId)}
         onCancel={cancel}
+        cancelling={cancelling}
+        cancelRef={cancelRef}
       />
     );
   } else if (analysis.error || !analysis.data || !checks.data || !list) {
@@ -375,7 +431,14 @@ export function IssuesScreen() {
     const refreshing = (analysis.isFetching || checks.isFetching) && !loading;
     body = (
       <>
-        {analysing ? <AnalysisProgress event={live?.analysis ?? null} onCancel={cancel} /> : null}
+        {analysing ? (
+          <AnalysisProgress
+            event={live?.analysis ?? null}
+            onCancel={cancel}
+            cancelling={cancelling}
+            cancelRef={cancelRef}
+          />
+        ) : null}
         <AnalysisNotes
           analysis={analysis.data}
           crawling={crawling}
@@ -463,7 +526,7 @@ export function IssuesScreen() {
   return (
     <div className="@container h-full">
       <div className="flex h-full min-h-0 flex-col gap-5 px-(--page-gutter) pt-7 pb-6 @max-split:h-auto">
-        <PageHeader title="Issues" subtitle={subtitle} />
+        <PageHeader title="Issues" subtitle={subtitle} titleRef={pageTitleRef} />
         {body}
       </div>
     </div>

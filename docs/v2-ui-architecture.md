@@ -420,17 +420,26 @@ are drawn for the app and are never swapped for Lucide's.
   grid's rows; `copyUrls.ts` reads a check's rows 1,000 at a time with the `after` cursor. All unit-tested.
 - **The route holds the view**: the check in the path (the first to fix, with a replace, when there's none), and
   `severity`, `q`, `group` (a `{ detail, relatedUrlId }` as `/groups` gave it), `sort` (a flat check's) and `inspect`.
-  A click on a check is a new place; the arrow keys, the filter, the severity and opening a group replace.
+  A click on a check is a new place; the arrow keys, the filter, the severity and opening a group replace. The first to
+  fix is picked from the checks the severity and text filters keep (`CheckList.matching`), and a severity that leaves
+  the selected check out (the sidebar's Errors, Warnings, Notices) moves the selection to it, in place.
 - **One listbox** for the checks, a group per category named by `ListHeading level="none"`, options named by what they
   show; roving focus, so it is one Tab stop and Tab goes on to the check.
 - **Groups are a paged treegrid**: one group open at a time (the route's), its first 10 pages, then "Show all N pages
   in URLs" (`check` `in` with `group`). A group the route names is found by reading `/groups` from the largest, 1,000
-  at a time, then scrolled into view. The likely-template callout sits above the grid, for the open group or else the
+  at a time, as far as 50,000 (`issueGroupPlaceQuery`), then scrolled into view. One the check doesn't have (a link
+  from before a re-analysis), or past those 50,000, leaves the route with a toast saying so. Copy URLs copies the group
+  that was placed and is shown open, never the route's word for it. The likely-template callout sits above the grid, for the open group or else the
   largest that is one, as a fixed-height row can't hold a paragraph; the group's row carries a "Likely template" badge.
 - **The analysis's grids don't refresh live**: a running crawl doesn't change a check's groups or rows, so the live
   bridge's once-a-second refresh leaves `issueGroups` and `issueRows` pages alone (`liveGridPagesOf`); the analysis
   that follows the crawl refreshes them.
 - **Hidden checks** are a preference (`hiddenChecks` in the settings store), in every crawl, with Undo.
+- **Analysing from the screen**: "Analyse again" and "Analyse it" go when the progress banner comes, so focus goes to
+  its Cancel; Cancel then says "Cancelling…" until the engine stops; when the banner goes, focus that was in it goes to
+  the page's title. The start and the end are announced with the crawl's status (and the "Analysis finished" toast);
+  a cancel is announced here. A crawl never analysed that can't be (interrupted, open in another window, unreadable,
+  its file gone) says why, with Continue for an interrupted one.
 - **Its commands** are in the registry's Issues group: Ctrl+F filters the checks, J and K move between them,
   Ctrl+Shift+C copies the check's (or the open group's) URLs, Ctrl+Shift+H hides or shows the check, and the palette
   has show passed, show hidden, Learn more and Cancel the analysis. Every check is in the palette by its title. J and
