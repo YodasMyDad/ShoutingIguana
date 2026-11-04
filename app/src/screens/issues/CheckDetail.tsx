@@ -78,12 +78,12 @@ export function CheckDetail({
           {outcome === 'skipped' ? <Badge variant="dashed">Skipped</Badge> : null}
           {entry.hidden ? <Badge variant="outline">Hidden from the list</Badge> : null}
         </div>
-        <div className="flex items-start gap-4">
+        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
           <h2
             ref={titleRef}
             id={titleId}
             tabIndex={-1}
-            className="min-w-0 flex-1 text-21 font-semibold tracking-snug break-words outline-none"
+            className="min-w-0 grow basis-2/3 text-21 font-semibold tracking-snug break-words outline-none"
           >
             {check.title}
           </h2>

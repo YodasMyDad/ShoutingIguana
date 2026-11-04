@@ -1,4 +1,5 @@
-import { RefreshCw, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, RefreshCw, X } from 'lucide-react';
+import { useId, useState } from 'react';
 import type { Analysis, AnalysisEvent } from '../../api/types';
 import { analysisPhaseWords, analysisProgressText, analysisStep, outOfDateWords } from '../../crawl/analysis';
 import { Skeleton } from '../../feedback/Skeleton';
@@ -40,7 +41,8 @@ export function AnalysisProgress({
         <span>The crawl is being analysed. Issues update when it’s done{step ? `: ${step.toLowerCase()}` : ''}.</span>
         <ProgressBar
           label={phase}
-          value={event && event.total > 0 ? event.done : null}
+          // A phase that counts nothing worth saying (saving the results) moves on its own, rather than read 0%.
+          value={event && event.total > 0 && valueText ? event.done : null}
           max={event?.total ?? 100}
           {...(valueText ? { valueText } : {})}
           className="max-w-(--measure-text)"
@@ -91,14 +93,49 @@ export function AnalysisNotes({
           These issues are out of date: they’re from the analysis {when}.
         </Banner>
       ) : null}
-      {partial ? (
-        <Banner inset tone="warning" detail={<NoteList notes={analysis.notes} />}>
-          {analysis.isPartial === true
-            ? 'Some checks didn’t run on this crawl, so it may have more issues than these.'
-            : 'The analysis left notes about what it couldn’t check.'}
-        </Banner>
-      ) : null}
+      {partial ? <PartialNotes analysis={analysis} /> : null}
     </>
+  );
+}
+
+/**
+ * A partial analysis: says so in one line, with the notes a press away when there are several (they'd push the list
+ * off a small window), and in full when there's one. Each skipped check also gives its reason in the list.
+ */
+function PartialNotes({ analysis }: { analysis: Analysis }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const many = analysis.notes.length > 1;
+  return (
+    <Banner
+      inset
+      tone="warning"
+      detail={
+        !many || open ? (
+          <div id={id}>
+            <NoteList notes={analysis.notes} />
+          </div>
+        ) : undefined
+      }
+      actions={
+        many ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            iconEnd={open ? ChevronUp : ChevronDown}
+            aria-expanded={open}
+            aria-controls={open ? id : undefined}
+            onClick={() => setOpen((value) => !value)}
+          >
+            {open ? 'Hide the notes' : `Show the ${analysis.notes.length} notes`}
+          </Button>
+        ) : null
+      }
+    >
+      {analysis.isPartial === true
+        ? 'Some checks didn’t run on this crawl, so it may have more issues than these.'
+        : 'The analysis left notes about what it couldn’t check.'}
+    </Banner>
   );
 }
 

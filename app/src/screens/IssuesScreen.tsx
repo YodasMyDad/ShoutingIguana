@@ -339,7 +339,7 @@ export function IssuesScreen() {
             as="section"
             aria-label="Checks"
             aria-busy={refreshing}
-            className="relative flex min-h-0 flex-col overflow-hidden @max-split:max-h-(--checks-height-stacked)"
+            className="relative flex min-h-0 flex-col overflow-hidden"
           >
             <ChecksList
               list={list}

@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ChevronRight, Layers } from 'lucide-react';
-import { useCallback, useMemo, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { api } from '../../api/client';
 import type { CheckGroupRef, IssueGroup, IssueRow } from '../../api/grids';
 import { groupsAsGridPage, issueGroupRowsQuery, queryKeys } from '../../api/queries';
@@ -9,6 +9,7 @@ import type { Check } from '../../api/types';
 import { ErrorState } from '../../feedback/ErrorState';
 import { GridCore } from '../../grid/GridCore';
 import { useGridMetrics } from '../../grid/metrics';
+import type { RowWindowModel } from '../../grid/rowWindow';
 import type { GridColumn, GridRange, GridTree } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
@@ -59,7 +60,9 @@ const PAGES_WIDTH = 88;
 const SHARE_WIDTH = 176;
 const MIN_TEXT_WIDTH = 200;
 /** The frame's edges and the room a scrollbar may take. */
-const FRAME_SLACK = 12;
+const FRAME_SLACK = 24;
+/** A group's chip this short keeps its words beside the check's. */
+const SHORT_CHIP = 32;
 
 /** What the "Related URL" means here is the check's to say; the column says only that it's the other URL involved. */
 function relatedWords(group: IssueGroup, siteOrigin: string | null): string {
@@ -134,6 +137,15 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
   const loadedRows = firstRows.data?.rows ?? null;
   const openIndex = openGroup?.index ?? null;
   const openChildren = openGroup ? childRows(openGroup.group, loadedRows?.length ?? null) : 0;
+
+  // A group the route opens (a link, back or forward) may be thousands of rows down: bring it into view, with as many
+  // of its pages as fit. One opened here is already in view, so this moves nothing.
+  const model = useRef<RowWindowModel | null>(null);
+  useEffect(() => {
+    if (openIndex === null) return;
+    model.current?.scrollToIndex(openIndex + openChildren);
+    model.current?.scrollToIndex(openIndex);
+  }, [openIndex, openChildren, groupCount]);
   const layout = useMemo(() => {
     const opened: OpenGroup | null = openIndex === null ? null : { index: openIndex, children: openChildren };
     return treeLayout(groupCount ?? 0, opened);
@@ -219,7 +231,7 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
         <span data-tree-toggle aria-hidden="true" className="si-tree-toggle">
           <Icon icon={ChevronRight} size="sm" />
         </span>
-        <span className="min-w-0 truncate">{words}</span>
+        <span className="min-w-0 flex-1 truncate">{words}</span>
         {row.kind === 'group' && row.group.likelyTemplate ? (
           <Badge variant="outline" icon={Layers} className="ml-2 shrink-0">
             Likely template
@@ -229,7 +241,7 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
     );
     const relatedCell = (group: IssueGroup) =>
       group.relatedUrl ? (
-        <Url url={group.relatedUrl} siteOrigin={siteOrigin} copyable={false} />
+        <Url url={group.relatedUrl} siteOrigin={siteOrigin} copyable={false} openable={false} />
       ) : (
         <span className="text-text-muted">No other URL</span>
       );
@@ -307,7 +319,13 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
       if (row.kind === 'page') {
         return (
           <span className="flex min-w-0 items-center gap-3">
-            <Url url={row.row.url ?? ''} siteOrigin={siteOrigin} copyable={false} className="min-w-0 flex-1" />
+            <Url
+              url={row.row.url ?? ''}
+              siteOrigin={siteOrigin}
+              copyable={false}
+              openable={false}
+              className="min-w-0 flex-1"
+            />
             {row.row.detail && row.row.detail !== row.group.detail ? (
               <span className="max-w-1/2 shrink-0 truncate text-text-muted" title={row.row.detail}>
                 {row.row.detail}
@@ -319,6 +337,7 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
       }
       const { group } = row;
       const pages = group.pages === 1 ? 'Show the page in URLs' : `Show all ${formatCount(group.pages)} pages in URLs`;
+      const groupWords = grouping === 'relatedUrl' ? relatedWords(group, siteOrigin) : (group.detail ?? 'none');
       return (
         <span className="flex min-w-0 items-center gap-2 overflow-hidden">
           <TextLink
@@ -331,17 +350,15 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
             {pages}
           </TextLink>
           <FilterChip field="Check" value={check.title} variant="preview" size="sm" truncate />
-          {grouping === 'relatedUrl' ? (
-            <FilterChip
-              field="Related URL"
-              value={relatedWords(group, siteOrigin)}
-              variant="preview"
-              size="sm"
-              truncate
-            />
-          ) : (
-            <FilterChip field="Detail" value={group.detail ?? 'none'} variant="preview" size="sm" truncate />
-          )}
+          {/* The group's chip is usually short ("/", "HTTP 404"): it keeps its words, and the check's gives way. */}
+          <FilterChip
+            field={grouping === 'relatedUrl' ? 'Related URL' : 'Detail'}
+            value={groupWords}
+            variant="preview"
+            size="sm"
+            truncate
+            className={groupWords.length <= SHORT_CHIP ? 'shrink-0' : undefined}
+          />
         </span>
       );
     },
@@ -377,6 +394,7 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
           onRangeChange={(range) => groups.onRangeChange(toGroups(range))}
           onScrollOffset={groups.onScrollOffset}
           tree={tree}
+          modelRef={(value) => (model.current = value)}
           spanRow={spanRow}
           onActivate={(_index, row) => {
             if (row?.kind === 'page') onInspect(row.row.id);

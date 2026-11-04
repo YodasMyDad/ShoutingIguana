@@ -188,7 +188,7 @@ export function ChecksList({
           // Focus is on the options (one of them is in the tab order), never on the list itself.
           tabIndex={-1}
           onKeyDown={onKeyDown}
-          className="min-h-0 flex-1 overflow-auto px-2 pb-4"
+          className="min-h-0 flex-1 overflow-auto px-2 pb-4 @max-split:max-h-(--checks-height-stacked) @max-split:flex-none"
         >
           {list.categories.map((category) => {
             const headingId = `${id}-${category.id}`;

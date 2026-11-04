@@ -14,7 +14,7 @@ import { Url } from '../../ui/Url';
 
 const DETAIL_WIDTH = 260;
 const MIN_URL_WIDTH = 240;
-const FRAME_SLACK = 12;
+const FRAME_SLACK = 24;
 
 export interface IssueRowsGridProps {
   crawlId: string;
@@ -69,7 +69,7 @@ export function IssueRowsGrid({
         width: urlWidth,
         sortable: true,
         ...sorted('url'),
-        cell: (row) => <Url url={row.url ?? ''} siteOrigin={siteOrigin} copyable={false} />,
+        cell: (row) => <Url url={row.url ?? ''} siteOrigin={siteOrigin} copyable={false} openable={false} />,
         text: (row) => row.url ?? '',
       },
       {
