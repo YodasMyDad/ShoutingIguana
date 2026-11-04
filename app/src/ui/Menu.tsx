@@ -2,12 +2,13 @@ import * as ContextPrimitive from '@radix-ui/react-context-menu';
 import * as DropdownPrimitive from '@radix-ui/react-dropdown-menu';
 import clsx from 'clsx';
 import { Check } from 'lucide-react';
-import { createContext, useContext, type ReactElement, type ReactNode } from 'react';
+import { createContext, useContext, useRef, type ReactElement, type ReactNode } from 'react';
 import { ariaKeyShortcut, parseChord } from '../keyboard/keys';
 import { commands, useChord, useRegistryVersion } from '../keyboard/registry';
 import { isMac } from '../lib/platform';
 import { Icon, IconSlot, type IconLike } from './Icon';
 import { Kbd } from './Kbd';
+import { quietNextFocus } from './quietFocus';
 
 /** The gap between a menu and its trigger, and the room it keeps from the window's edges, in px. */
 const MENU_OFFSET = 4;
@@ -43,6 +44,7 @@ export function DropdownMenu({
   onOpenChange,
   className,
 }: DropdownMenuProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
   return (
     // Not modal: the page isn't hidden from screen readers or locked while a menu is open; Esc, a click outside or a
     // choice closes it, and focus goes back to its button.
@@ -51,7 +53,9 @@ export function DropdownMenu({
       {...(open === undefined ? {} : { open })}
       {...(onOpenChange ? { onOpenChange } : {})}
     >
-      <DropdownPrimitive.Trigger asChild>{trigger}</DropdownPrimitive.Trigger>
+      <DropdownPrimitive.Trigger asChild ref={triggerRef}>
+        {trigger}
+      </DropdownPrimitive.Trigger>
       <DropdownPrimitive.Portal>
         <DropdownPrimitive.Content
           align={align}
@@ -59,6 +63,8 @@ export function DropdownMenu({
           sideOffset={MENU_OFFSET}
           collisionPadding={COLLISION_PADDING}
           loop
+          // Focus goes back to the button without its tooltip popping up, which would take the next Esc.
+          onCloseAutoFocus={() => quietNextFocus(triggerRef.current)}
           className={clsx('si-menu', className)}
         >
           <KindContext.Provider value="dropdown">{children}</KindContext.Provider>

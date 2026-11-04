@@ -1,10 +1,11 @@
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
-import { createContext, useContext, type ReactElement, type ReactNode } from 'react';
+import { createContext, useContext, type FocusEvent, type ReactElement, type ReactNode } from 'react';
 import { formatChord, parseChord } from '../keyboard/keys';
 import { releaseKey } from '../keyboard/layers';
 import { useChord } from '../keyboard/registry';
 import { isMac } from '../lib/platform';
 import { Kbd } from './Kbd';
+import { takeQuietFocus } from './quietFocus';
 
 /** How long the pointer rests before a tooltip shows. Moving to the next one within the skip delay shows it at once. */
 export const TOOLTIP_DELAY_MS = 500;
@@ -20,6 +21,11 @@ const InProvider = createContext(false);
  * given back, so the same Esc does the app's Esc too (closes the inspector). Over a menu, a popover or a dialog it
  * isn't: those close innermost first, one Esc at a time.
  */
+/** Focus the app moved itself (a menu giving focus back to its button) opens nothing: the user didn't go there. */
+function stayShutOnQuietFocus(event: FocusEvent<HTMLElement>) {
+  if (takeQuietFocus(event.currentTarget)) event.preventDefault();
+}
+
 function giveEscapeBack(event: KeyboardEvent) {
   if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]') === null) releaseKey(event);
 }
@@ -82,7 +88,9 @@ export function Tooltip({
       : undefined;
   const tooltip = (
     <TooltipPrimitive.Root {...(open === undefined ? {} : { open })} {...(onOpenChange ? { onOpenChange } : {})}>
-      <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
+      <TooltipPrimitive.Trigger asChild onFocus={stayShutOnQuietFocus}>
+        {children}
+      </TooltipPrimitive.Trigger>
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Content
           side={side}
