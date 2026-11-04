@@ -476,6 +476,16 @@ function GridCoreInner<Row>({
     onContextMenu(position.row, position.col, { x: event.clientX, y: event.clientY });
   };
 
+  // Rows arriving while the grid has focus and no cursor (it was focused before its first page came, or while the
+  // skeleton showed): the cursor goes where focus arriving would have put it, so Enter works at once. Focus stays, and
+  // nothing scrolls.
+  const placeCursor = useEffectEvent(() => {
+    if (count === 0 || nav.active !== null || document.activeElement !== scrollRef.current) return;
+    const first = firstFullyVisible(model.offset(), rowHeight, view);
+    setNav((current) => (current.active ? current : { ...current, active: { row: first, col: 0 } }));
+  });
+  useEffect(() => placeCursor(), [count]);
+
   const onFocus = (event: FocusEvent<HTMLDivElement>) => {
     // Focus arriving on the grid lands on a cell: the last one, or the first row wholly in view (the top one can be
     // half under the sticky header). A click that focused it has already placed the cursor, which the functional

@@ -115,6 +115,37 @@ describe('GridCore', () => {
     expect(activeCell()).toHaveAttribute('aria-colindex', '2');
   });
 
+  it('puts the cursor on the first row when rows arrive while it has focus, so Enter works at once', () => {
+    const onActivate = vi.fn();
+    const props = {
+      label: 'URLs',
+      columns,
+      getRow: (index: number) => rows[index],
+      rowHeight: 32,
+      headerHeight: 32,
+      onActivate,
+    };
+    const { rerender } = render(<GridCore<Row> {...props} rowCount={null} />);
+    const grid = screen.getByRole('grid', { name: 'URLs' });
+    act(() => grid.focus());
+    expect(grid).not.toHaveAttribute('aria-activedescendant');
+    rerender(<GridCore<Row> {...props} rowCount={rows.length} />);
+    // Focus stays where it is, and nothing scrolled.
+    expect(grid).toHaveFocus();
+    expect(grid.scrollTop).toBe(0);
+    const active = document.getElementById(grid.getAttribute('aria-activedescendant') ?? '');
+    expect(active).toHaveTextContent('https://example.com/0');
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    expect(onActivate).toHaveBeenCalledWith(0, rows[0]);
+  });
+
+  it('leaves the cursor unset when rows arrive while it doesn’t have focus', () => {
+    const props = { label: 'URLs', columns, getRow: (index: number) => rows[index], rowHeight: 32, headerHeight: 32 };
+    const { rerender } = render(<GridCore<Row> {...props} rowCount={null} />);
+    rerender(<GridCore<Row> {...props} rowCount={rows.length} />);
+    expect(screen.getByRole('grid', { name: 'URLs' })).not.toHaveAttribute('aria-activedescendant');
+  });
+
   it('inspects the row under the cursor on Enter', () => {
     const { grid, onActivate } = setup();
     act(() => grid.focus());
