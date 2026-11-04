@@ -7,6 +7,7 @@ import { resetOverlaysForTests } from '../app/overlays';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
+import { updateSettings } from '../settings/settingsStore';
 import { applyShellState, resetConnectionForTests } from '../shell/connection';
 import { TEST_CRAWL_ID, fakeSidecar, standardRoutes } from '../test/fakeSidecar';
 
@@ -95,6 +96,19 @@ describe('stopping crawls while the app quits', () => {
     press('3', { ctrlKey: true });
     await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
     expect(router.state.location.pathname).toBe(`${CRAWL}/overview`);
+  });
+});
+
+describe('the sidebar, collapsed', () => {
+  afterEach(() => updateSettings({ sidebarCollapsed: false }));
+
+  it('names each place by its label, and its tooltip doesn’t read the label again', async () => {
+    updateSettings({ sidebarCollapsed: true });
+    await open('/');
+    const home = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Home' });
+    act(() => home.focus());
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
+    expect(home).toHaveAccessibleDescription('');
   });
 });
 

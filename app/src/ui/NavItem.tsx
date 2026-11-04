@@ -42,7 +42,12 @@ function NavAnchor({ ref, label, icon, count, end, collapsed = false, command, c
   );
   // Collapsed, the tooltip is the label; open, only the keys add anything, and they're worth a tooltip too.
   return (
-    <Tooltip content={collapsed || command ? label : undefined} command={command} side={collapsed ? 'right' : 'bottom'}>
+    <Tooltip
+      content={collapsed || command ? label : undefined}
+      command={command}
+      side={collapsed ? 'right' : 'bottom'}
+      triggerName={label}
+    >
       {anchor}
     </Tooltip>
   );

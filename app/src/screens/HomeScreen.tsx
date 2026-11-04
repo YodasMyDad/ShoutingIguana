@@ -90,9 +90,10 @@ function StartCrawlForm() {
         error={error}
         className="flex-1"
         end={
-          <Button variant="primary" size="lg" type="submit" loading={starting}>
+          <Button variant="primary" size="lg" type="submit" loading={starting} aria-keyshortcuts="Enter">
             Crawl
-            <Kbd chord="enter" size="sm" />
+            {/* Shown, not read: the button is named Crawl, and Enter is its aria-keyshortcuts. */}
+            <Kbd chord="enter" size="sm" aria-hidden />
           </Button>
         }
       />

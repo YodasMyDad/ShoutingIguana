@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -71,5 +71,13 @@ describe('SegmentedControl', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Errors 2' }));
     expect(screen.getByRole('radio', { name: 'Errors 2' })).toHaveAttribute('aria-checked', 'true');
     expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('names an icon-only segment by its label and count, and its tooltip doesn’t read the label again', async () => {
+    render(<SeverityFilter />);
+    const errors = screen.getByRole('radio', { name: 'Errors 2' });
+    act(() => errors.focus());
+    await screen.findByRole('tooltip');
+    expect(errors).toHaveAccessibleDescription('');
   });
 });

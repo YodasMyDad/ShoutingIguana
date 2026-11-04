@@ -66,6 +66,8 @@ export function Button({
   const ariaShortcut = useAriaShortcut(command ?? '');
   const spinner = useDelayedLoading(loading, { delayMs: BUTTON_SPINNER_DELAY_MS });
   const label = title ?? (typeof children === 'string' ? children : undefined);
+  // What a screen reader calls it: its aria-label, or its words. The tooltip leaves that out of the description.
+  const name = rest['aria-label'] ?? (typeof children === 'string' ? children : undefined);
   // A tooltip when it adds something: a title, or the shortcut beside the label.
   const tip = title ?? (shortcut ? label : undefined);
   const iconSize = ICON_SIZES[size];
@@ -103,7 +105,8 @@ export function Button({
       <span className="si-btn__content">
         {spinner && icon ? <Spinner size={iconSize} /> : <IconSlot icon={icon} size={iconSize} />}
         {children}
-        {showShortcut && chord ? <Kbd chord={chord} size="sm" /> : null}
+        {/* Shown, not read: aria-keyshortcuts gives the keys, and the name stays the words ("Pause", not "Pause F7"). */}
+        {showShortcut && chord ? <Kbd chord={chord} size="sm" aria-hidden /> : null}
         <IconSlot icon={iconEnd} size={iconSize} />
       </span>
       {spinner && !icon ? (
@@ -114,7 +117,7 @@ export function Button({
     </button>
   );
   return (
-    <Tooltip content={tip} command={command}>
+    <Tooltip content={tip} command={command} triggerName={name}>
       {button}
     </Tooltip>
   );

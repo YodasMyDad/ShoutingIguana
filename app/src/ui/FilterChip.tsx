@@ -96,6 +96,7 @@ export function FilterChip({
       remove(event.currentTarget);
     }
   };
+  const removeName = `Remove the filter ${words}`;
   const preview = variant === 'preview';
   const removable = onRemove !== undefined && !preview;
   return (
@@ -109,7 +110,7 @@ export function FilterChip({
       )}
     >
       {onEdit && !preview ? (
-        <Tooltip content="Edit the filter" hint={removable ? 'Delete removes it' : undefined}>
+        <Tooltip content="Edit the filter" hint={removable ? 'Delete removes it' : undefined} triggerName={words}>
           <button
             ref={ref}
             type="button"
@@ -126,11 +127,11 @@ export function FilterChip({
         <span className="si-chip__main">{sentence}</span>
       )}
       {removable ? (
-        <Tooltip content="Remove the filter">
+        <Tooltip content="Remove the filter" triggerName={removeName}>
           <button
             type="button"
             className="si-chip__remove"
-            aria-label={`Remove the filter ${words}`}
+            aria-label={removeName}
             onClick={(event) => remove(event.currentTarget)}
           >
             <Icon icon={X} size="sm" />

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -66,6 +66,18 @@ describe('FilterChip', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
     await userEvent.keyboard('{Backspace}');
     expect(screen.getByRole('button', { name: 'Add filter' })).toHaveFocus();
+  });
+
+  it('describes its buttons by what their names lack: the chip by its hint, the ✕ by nothing', async () => {
+    render(<FilterChip field="Status" value="4xx" onEdit={() => undefined} onRemove={() => undefined} />);
+    const chip = screen.getByRole('button', { name: 'Status is 4xx' });
+    act(() => chip.focus());
+    await screen.findByRole('tooltip');
+    expect(chip).toHaveAccessibleDescription('Edit the filter, Delete removes it');
+    const remove = screen.getByRole('button', { name: 'Remove the filter Status is 4xx' });
+    act(() => remove.focus());
+    await screen.findByRole('tooltip');
+    expect(remove).toHaveAccessibleDescription('');
   });
 
   it('names a value drawn with more than text by its words', () => {

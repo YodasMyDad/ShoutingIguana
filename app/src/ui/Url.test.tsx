@@ -81,6 +81,15 @@ describe('Url', () => {
     }
   });
 
+  it('is named by the full URL, and its tooltip describes it by the hint alone', async () => {
+    layOut(400);
+    render(<Url url={`${SITE}/`} />);
+    const copy = screen.getByRole('button', { name: `${SITE}/` });
+    act(() => copy.focus());
+    await screen.findByRole('tooltip');
+    expect(copy).toHaveAccessibleDescription('Click to copy');
+  });
+
   it('offers to open a web URL in the browser, and nothing else', () => {
     layOut(400);
     const { rerender } = render(<Url url={`${SITE}/`} />);

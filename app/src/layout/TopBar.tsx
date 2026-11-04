@@ -6,7 +6,9 @@ import { CRAWL_SECTIONS, sectionOf } from '../app/sections';
 import { setOverlay } from '../app/overlays';
 import { analyseCrawl, continueCrawl, pauseOrResume, stopCrawl } from '../crawl/actions';
 import { crawlControls, crawlName, effectiveStatus } from '../crawl/status';
+import { ariaKeyShortcut, parseChord } from '../keyboard/keys';
 import { formatExactTime } from '../lib/format';
+import { isMac } from '../lib/platform';
 import { useLiveCrawl } from '../live/liveStore';
 import { Button } from '../ui/Button';
 import { Favicon } from '../ui/Favicon';
@@ -146,13 +148,14 @@ export function TopBar() {
       <button
         type="button"
         onClick={() => setOverlay('palette')}
+        aria-keyshortcuts={ariaKeyShortcut(parseChord('mod+k'), isMac)}
         // Narrowed (200% zoom), its words give way before the crumbs do, down to the magnifier and the keys.
         className="ml-auto flex h-(--control-height) w-(--search-width) shrink-100 items-center gap-2 rounded-sm border border-border bg-surface pr-1.5 pl-2.5 text-13 text-text-muted shadow-control hover:border-border-strong hover:text-text-secondary"
       >
         <Icon icon={Search} size="sm" />
         {/* No width of its own (w-0), so the button can narrow to the magnifier and the keys. */}
         <span className="w-0 flex-1 truncate text-left">Search or run a command…</span>
-        <Kbd chord="mod+k" size="sm" />
+        <Kbd chord="mod+k" size="sm" aria-hidden />
       </button>
     </header>
   );

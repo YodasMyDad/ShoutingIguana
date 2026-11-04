@@ -75,7 +75,7 @@ export function SegmentedControl<T extends string>({
           </ToggleGroup.Item>
         );
         return option.iconOnly ? (
-          <Tooltip key={option.value} content={option.label}>
+          <Tooltip key={option.value} content={option.label} triggerName={option.label}>
             {item}
           </Tooltip>
         ) : (
