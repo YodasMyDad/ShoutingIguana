@@ -771,8 +771,10 @@
     scrollbar-width: none;
   }
 
+  /* Flush with the panel's own padding: the list keeps room for the first tab's focus ring. */
   .si-tabs--flush {
-    padding: 0;
+    margin: 0 calc(var(--space-1) * -1);
+    padding: 0 var(--space-1);
   }
 
   .si-tab {
@@ -782,7 +784,9 @@
     align-items: center;
     gap: var(--space-1-5);
     height: var(--tab-height);
-    padding: 0;
+    /* Room for the focus ring beside the words, taken back by the margin, so the words sit where they would. */
+    margin: 0 calc(var(--space-1) * -1);
+    padding: 0 var(--space-1);
     border: 0;
     background: none;
     color: var(--color-text-secondary);
@@ -808,9 +812,9 @@
   .si-tab[aria-selected='true']::after {
     content: '';
     position: absolute;
-    right: 0;
+    right: var(--space-1);
     bottom: calc(var(--hairline) * -1);
-    left: 0;
+    left: var(--space-1);
     height: var(--rule-width);
     border-radius: var(--rule-width) var(--rule-width) 0 0;
     background: var(--color-accent);

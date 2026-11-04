@@ -66,6 +66,10 @@ const stories = Object.values(index.entries).filter(
 );
 if (shots) mkdirSync(shots, { recursive: true });
 
+// Run in the page: the story's root has content, or its dialog or menu has opened in a portal outside it.
+const RENDERED = `(document.querySelector('#storybook-root')?.childElementCount ?? 0) > 0 ||
+  document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]') !== null`;
+
 const browser = await chromium.launch();
 const problems = [];
 try {
@@ -83,7 +87,8 @@ try {
       await page.goto(
         `http://127.0.0.1:${port}/iframe.html?id=${story.id}&viewMode=story&globals=theme:${theme};density:${density}`,
       );
-      await page.waitForSelector('#storybook-root > *', { timeout: 15_000 }).catch(() => undefined);
+      // A story has rendered once its root has content, or its dialog or menu has opened in a portal.
+      await page.waitForFunction(RENDERED, undefined, { timeout: 15_000 }).catch(() => undefined);
       await page.waitForTimeout(wait);
       const results = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
