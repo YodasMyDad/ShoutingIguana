@@ -549,7 +549,7 @@ gets `needs-analysis` rather than failing, and the UI offers to analyse it. An a
 the checks or thresholds changed keeps its summary, shown behind the out-of-date notice. E3 adds:
 
 - `/urls`, its facets and lookup (E3a, below);
-- `/urls/{urlId}`, the inspector (E3a);
+- `/urls/inspect`, `/urls/inlinks`, `/urls/outlinks` and `/urls/source` (E3a, the URL's id in the body);
 - `/issues/{checkId}/groups` and `/rows` (E3a);
 - `/links` (E3b);
 - `/sitemaps` (E3b);
@@ -787,8 +787,9 @@ below, or past what an id holds), and `invalid-query` without one.
 
 - **`discovery`** is how the crawl first found it: `foundVia` is the kind of link (`hyperlink`, `image`, `canonical`,
   `redirect`...), `fetchMode` is `crawl` (fetched, parsed, its links followed) or `check` (status only), `state` is
-  `queued`, `fetching`, `done` or `skipped`, and `notFetchedBecause` why a skipped URL wasn't fetched (`noFollow`,
-  `notFollowedByOption`, `resourcesDisabled`, `externalsDisabled`, `depthLimit`, `urlLimit`).
+  `queued`, `fetching`, `done` or `skipped`, and `notFetchedBecause` why a skipped URL wasn't fetched (`none` when no
+  narrower reason was stored, `noFollow`, `notFollowedByOption`, `resourcesDisabled`, `externalsDisabled`,
+  `depthLimit`, `urlLimit`). A URL that was fetched has `notFetchedBecause` null.
 - **`response`** is null for a URL never fetched.
 - **A value this engine doesn't know** (a newer engine's, a crafted file's) is null, as an unknown one is: discovery's
   `source`, `fetchMode`, `state`, `foundVia` and `notFetchedBecause`, the response's `outcome`, the verdict's `reason`,

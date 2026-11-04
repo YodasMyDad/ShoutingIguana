@@ -205,15 +205,24 @@ const GROUPINGS: Record<string, CheckGrouping> = {
   'title-too-short': 'none',
 };
 
-/** The catalog as the fixtures saved it, from before E3a: its checks may lack `grouping`. */
+/** The catalog as the fixtures saved it: older than `grouping`, `why` and `learnMore`. */
 export type SavedChecks = Omit<Checks, 'checks'> & {
-  checks: (Omit<Check, 'grouping'> & { grouping?: CheckGrouping })[];
+  checks: (Omit<Check, 'grouping' | 'why' | 'learnMore'> & {
+    grouping?: CheckGrouping;
+    why?: string;
+    learnMore?: string | null;
+  })[];
 };
 
 export function adaptChecks(raw: SavedChecks): Checks {
   return {
     ...raw,
-    checks: raw.checks.map((check) => ({ ...check, grouping: check.grouping ?? GROUPINGS[check.id] ?? 'detail' })),
+    checks: raw.checks.map((check) => ({
+      ...check,
+      grouping: check.grouping ?? GROUPINGS[check.id] ?? 'detail',
+      why: check.why ?? '',
+      learnMore: check.learnMore ?? null,
+    })),
   };
 }
 

@@ -75,8 +75,14 @@ export interface Check {
   category: string;
   severity: Severity;
   title: string;
+  /** What is wrong. */
   description: string;
+  /** Why it matters. */
+  why: string;
+  /** What to do about it. */
   fix: string;
+  /** A page that explains the check, or null. */
+  learnMore: string | null;
   /** How its issues group on the Issues screen (E3a). */
   grouping: CheckGrouping;
 }
