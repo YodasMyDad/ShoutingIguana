@@ -21,10 +21,17 @@ public static class AnalysisFreshness
     /// 4 stores every other URL an issue is about and the fault some checks group by (<c>issue_targets</c>,
     /// <c>issue_faults</c>), and indexes the links to a URL by kind. 5 also judges near duplicates on four SimHash
     /// lanes (256 bits, within <c>NearDuplicateMaxBits</c>) and skips that check when a crawl didn't record them.
+    /// 6 drops the FAQPage rich-result requirement (Google removed FAQ rich results), rejects UN M.49 hreflang
+    /// regions, parses JSON-LD strictly, requires a JobPosting location or <c>jobLocationType</c>, flags HTML past
+    /// Googlebot's crawl limit, and changes the severity of <c>blocked-by-robots</c>, <c>description-missing</c>,
+    /// <c>h1-missing</c> and <c>duplicate-site-version</c>.
     /// </summary>
-    public const int VERSION = 5;
+    public const int VERSION = 6;
 
-    /// <summary>The catalog's check ids with their categories and severities, hashed. Titles and texts don't count.</summary>
+    /// <summary>
+    /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and
+    /// learn-more links don't count.
+    /// </summary>
     public static string ChecksFingerprint { get; } = Fingerprint(IssueCatalog.All);
 
     /// <summary>Why the analysis no longer stands, or nothing when it does.</summary>

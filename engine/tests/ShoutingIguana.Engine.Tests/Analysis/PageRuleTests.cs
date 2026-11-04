@@ -292,16 +292,23 @@ public sealed class PageRuleTests
     }
 
     [Fact]
-    public void StructuredDataHandlesTypeArraysGraphsAndLenientJson()
+    public void StructuredDataRequiresValidJsonAndThePropertiesGoogleStillRequires()
     {
         var site = new RuleHarness();
         var rules = new StructuredDataRules();
         string Script(string json) => $"<script type=\"application/ld+json\">{json}</script>";
 
-        var faq = site.Page($"{site.Site}/a", RuleHarness.Html(Script("""{"@context":"https://schema.org","@type":["WebPage","FAQPage"],"mainEntity":[{"@type":"Question"}],}""")));
+        // Google stopped showing FAQ rich results, so a FAQPage needs nothing.
+        var faq = site.Page($"{site.Site}/a", RuleHarness.Html(Script("""{"@context":"https://schema.org","@type":"FAQPage"}""")));
         var graph = site.Page($"{site.Site}/b", RuleHarness.Html(Script("""{"@context":"https://schema.org","@graph":[{"@type":"Organization","name":"Acme"},{"@type":"schema:Product","name":"Widget"}]}""")));
         var broken = site.Page($"{site.Site}/c", RuleHarness.Html(Script("""{"@type": "Product" "name": "x"}""")));
         var noindex = site.Page($"{site.Site}/d", RuleHarness.Html(Script("""{"@type":"Product"}""")), IndexabilityReason.Noindex);
+        var trailingComma = site.Page($"{site.Site}/e", RuleHarness.Html(Script("""{"@type":"Organization","name":"Acme",}""")));
+        var comment = site.Page($"{site.Site}/f", RuleHarness.Html(Script("""{"@type":"Organization","name":"Acme" /* note */}""")));
+        var remoteJob = site.Page($"{site.Site}/g", RuleHarness.Html(Script(
+            """{"@context":"https://schema.org","@type":"JobPosting","title":"Engineer","description":"Build things","datePosted":"2026-01-01","hiringOrganization":{"@type":"Organization","name":"Acme"},"jobLocationType":"TELECOMMUTE"}""")));
+        var jobWithoutLocation = site.Page($"{site.Site}/h", RuleHarness.Html(Script(
+            """{"@context":"https://schema.org","@type":"JobPosting","title":"Engineer","description":"Build things","datePosted":"2026-01-01","hiringOrganization":{"@type":"Organization","name":"Acme"}}""")));
 
         Assert.Empty(Issues(rules, faq));
         var missing = rules.Check(graph).Single();
@@ -309,6 +316,10 @@ public sealed class PageRuleTests
         Assert.Equal("Product: needs offers or review or aggregateRating", missing.Detail);
         Assert.Equal([IssueCatalog.STRUCTURED_DATA_INVALID], Issues(rules, broken));
         Assert.Empty(Issues(rules, noindex));
+        Assert.Equal([IssueCatalog.STRUCTURED_DATA_INVALID], Issues(rules, trailingComma));
+        Assert.Equal([IssueCatalog.STRUCTURED_DATA_INVALID], Issues(rules, comment));
+        Assert.Empty(Issues(rules, remoteJob));
+        Assert.Equal("JobPosting: needs jobLocation or jobLocationType", rules.Check(jobWithoutLocation).Single().Detail);
     }
 
     [Fact]

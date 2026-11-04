@@ -196,7 +196,9 @@ Built in stages:
 `GET /api/checks` returns two lists:
 
 - `categories: [{ id, title }]`, where the title is a plain name such as "Meta descriptions";
-- `checks: [{ id, category, severity, title, description, fix, grouping }]`, in catalog order. `grouping` (E3a) is how
+- `checks: [{ id, category, severity, title, description, fix, why, learnMore, grouping }]`, in catalog order.
+  `description` is what is wrong, `why` is why it matters and `fix` is what to do. `learnMore` is an absolute URL, or
+  null when no authoritative page exists. `grouping` (E3a) is how
   the check's issues group: see [Issue groups](#issue-groups-e3a).
 
 Both come from `IssueCatalog`. The engine gets public category titles, so the UI hard-codes none.

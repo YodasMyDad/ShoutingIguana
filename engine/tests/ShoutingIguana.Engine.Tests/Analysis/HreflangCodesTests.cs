@@ -11,7 +11,6 @@ public sealed class HreflangCodesTests
     [InlineData("PT-br")]
     [InlineData("zh-Hant")]
     [InlineData("zh-Hant-TW")]
-    [InlineData("es-419")]
     [InlineData("sr-RS")]
     [InlineData("nb-NO")]
     [InlineData("x-default")]
@@ -19,6 +18,7 @@ public sealed class HreflangCodesTests
 
     [Theory]
     [InlineData("en-UK")]
+    [InlineData("es-419")]
     [InlineData("en_GB")]
     [InlineData("uk-UA-extra-part")]
     [InlineData("english")]

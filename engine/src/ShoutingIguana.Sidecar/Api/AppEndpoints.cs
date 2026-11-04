@@ -14,7 +14,7 @@ internal static class AppEndpoints
     private static readonly ChecksDto CHECKS = new(
         [.. Enum.GetValues<IssueCategory>().Select(category => new CategoryDto(category, category.DisplayName()))],
         [.. IssueCatalog.All.Select(check => new CheckDto(check.Id, check.Category, check.Severity, check.Title, check.Description, check.Fix,
-            GridRequests.Grouping(check.Grouping)))]);
+            check.Why, check.LearnMore, GridRequests.Grouping(check.Grouping)))]);
 
     public static void Map(IEndpointRouteBuilder api)
     {

@@ -166,7 +166,7 @@ pages count: a genuine 403 from a site behind one of those firewalls stays a 403
 
 ## SEO analysis
 
-When a crawl completes, `CrawlAnalyzer` runs 85 checks over what was stored and writes the issues into the same
+When a crawl completes, `CrawlAnalyzer` runs 86 checks over what was stored and writes the issues into the same
 file. It never refetches or reparses anything, so any crawl can be analysed again with new rules or thresholds
 (`si analyze`). It refuses a crawl that is still running. A rule that fails on one page (page content is untrusted)
 is logged with the URL and skipped for that page, and the analysis notes say which rule failed on how many pages.
@@ -176,8 +176,9 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   collect what they need during the same pass (hashes, alternates, fragments) and report at the end:
   duplicates, orphans, redirect chains, hreflang return links, sitemaps, robots.txt.
 - **Catalog.** `Analysis/IssueCatalog.cs` defines every issue: a stable id (`title-too-long`), category,
-  severity (Error, Warning or Notice), title, why it matters, and how to fix it. Ids are stored in crawl files,
-  so never change one.
+  severity (Error, Warning or Notice), title, what is wrong, why it matters, how to fix it, and an optional
+  learn-more link. Ids are stored in crawl files, so never change one. The checks fingerprint is the id, category
+  and severity only, so wording doesn't expire an analysis.
 - **Scope.** Content checks (titles, descriptions, headings, word count, duplicates, Open Graph, URL style,
   rich-result requirements, hreflang) look only at indexable pages. Technical checks look at every page the
   crawler parsed; status-checked URLs (outside the start folder, iframes) and Cloudflare's `/cdn-cgi/`
@@ -221,10 +222,11 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   H1; their titles and descriptions must still differ.
 - **Other sites.** A status many sites only send crawlers (401, 403, 405, 429, 503, 999) doesn't make an external
   link, canonical, alternate or image "broken".
-- **Site versions.** The bare domain and `www`, over http and https, are one site to the crawler but separate sites to
-  search engines. Each version of the start URL must redirect to the main one, the home page's origin.
+- **Site versions.** The bare domain and `www`, over http and https, are one site to the crawler. Google treats the
+  versions as duplicate URLs and picks one, preferring HTTPS. Each version of the start URL must redirect to the main
+  one, the home page's origin.
   - One that answers with a page, directly or at the end of its redirects on another version, is flagged
-    `duplicate-site-version`.
+    `duplicate-site-version` (a Warning). Probes aren't parsed, so a canonical on the other version isn't seen.
   - One that is dead, fails, is blocked or is disallowed isn't: a dead `www` twin is normal.
   - The probes aren't the site's URLs, so the response-code checks leave them out, and so do the robots.txt checks
     for an origin only probes went to. Once the site links there, they count like any URL.
