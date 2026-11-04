@@ -2481,16 +2481,50 @@
     opacity: 1;
   }
 
+  /*
+    What's pressed, chosen, current, selected or highlighted: a Highlight ring just inside its edge, drawn as the border
+    of a layer of its own. Focus is the outline, so on one of these it shows beside the ring rather than in its place
+    (WCAG 2.4.7): in CanvasText, outside the edge.
+  */
   .si-btn[aria-pressed='true'],
   .si-segment[aria-checked='true'],
   .si-segment[aria-pressed='true'],
+  .si-current,
   .si-menu-item[data-highlighted],
   .si-list-row[aria-selected='true'],
   .si-list-row[aria-current='page'],
   .si-list-row[aria-current='true'],
   .si-stat--link:hover {
-    outline: var(--focus-width) solid Highlight;
-    outline-offset: calc(var(--focus-width) * -1);
+    position: relative;
+  }
+
+  .si-btn[aria-pressed='true']::after,
+  .si-segment[aria-checked='true']::after,
+  .si-segment[aria-pressed='true']::after,
+  .si-current::after,
+  .si-menu-item[data-highlighted]::after,
+  .si-list-row[aria-selected='true']::after,
+  .si-list-row[aria-current='page']::after,
+  .si-list-row[aria-current='true']::after,
+  .si-stat--link:hover::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: var(--focus-width) solid Highlight;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  .si-btn[aria-pressed='true']:focus-visible,
+  .si-segment[aria-checked='true']:focus-visible,
+  .si-segment[aria-pressed='true']:focus-visible,
+  .si-current:focus-visible,
+  .si-list-row[aria-selected='true']:focus-visible,
+  .si-list-row[aria-current='page']:focus-visible,
+  .si-list-row[aria-current='true']:focus-visible,
+  .si-stat--link:hover:focus-visible {
+    outline: var(--focus-width) solid CanvasText;
+    outline-offset: var(--focus-offset);
   }
 
   .si-checkbox[data-state='checked'],

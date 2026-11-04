@@ -1,6 +1,7 @@
 // What can only be seen in a real browser: state indicators' contrast in both themes and under forced colours (WCAG
 // 2.2 AA, 1.4.11 and 1.4.3), focus coming back after an overlay, the grid keeping its cursor in view, and toasts in
-// the app's own look. Against the real sidecar, with axe at zero violations.
+// the app's own look. Against the real sidecar, with axe at zero violations. A state no screen shows yet is measured on
+// markup with the design system's classes (`fixture`), against the app's own stylesheet.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
@@ -54,6 +55,44 @@ const shownBackground = (locator: Locator) =>
       if (colour !== 'rgba(0, 0, 0, 0)' && colour !== 'transparent') return colour;
     }
     return 'rgb(255, 255, 255)';
+  });
+
+/** Focuses an element as the keyboard does, so `:focus-visible` matches as it would after Tab. */
+async function keyboardFocus(locator: Locator) {
+  await locator.page().keyboard.press('Shift');
+  await locator.focus();
+  expect(await locator.evaluate((element) => element.matches(':focus-visible'))).toBe(true);
+}
+
+/**
+ * Markup with the design system's classes, added to the app's page: for a state no screen shows yet, measured against
+ * the app's own stylesheet. Removed by the next navigation.
+ */
+async function fixture(page: Page, html: string) {
+  await page.evaluate((markup) => {
+    document.getElementById('si-fixture')?.remove();
+    const host = document.createElement('div');
+    host.id = 'si-fixture';
+    host.style.padding = '16px';
+    host.innerHTML = markup;
+    document.body.append(host);
+  }, html);
+  return page.locator('#si-fixture');
+}
+
+/** The focus ring and the selection's ring of a focused element: an outline, and the border of its `::after`. */
+const rings = (locator: Locator) =>
+  locator.evaluate((element) => {
+    const own = getComputedStyle(element);
+    const after = getComputedStyle(element, '::after');
+    return {
+      outlineStyle: own.outlineStyle,
+      outlineColour: own.outlineColor,
+      outlineOffset: parseFloat(own.outlineOffset),
+      ringStyle: after.borderTopStyle,
+      ringColour: after.borderTopColor,
+      ringWidth: parseFloat(after.borderTopWidth),
+    };
   });
 
 async function openUrlGrid(page: Page) {
@@ -170,20 +209,55 @@ for (const colorScheme of ['light', 'dark'] as const) {
   });
 }
 
-test('under forced colours, the chosen segment is outlined and every segment stays readable', async ({ page }) => {
+test('under forced colours, the chosen segment is ringed and every segment stays readable', async ({ page }) => {
   await page.emulateMedia({ forcedColors: 'active' });
   await page.goto('/settings');
   const density = page.getByRole('radiogroup', { name: 'Density' });
   const chosen = density.getByRole('radio', { checked: true });
-  const outline = await style(chosen, 'outline-style', 'outline-color', 'color');
-  expect(outline['outline-style']).toBe('solid');
-  expect(contrast(outline['outline-color'] ?? '', await shownBackground(chosen))).toBeGreaterThanOrEqual(3);
+  const ring = await rings(chosen);
+  expect(ring.ringStyle).toBe('solid');
+  expect(ring.ringWidth).toBeGreaterThanOrEqual(2);
+  expect(contrast(ring.ringColour, await shownBackground(chosen))).toBeGreaterThanOrEqual(3);
   for (const segment of await density.getByRole('radio').all()) {
     expect(
       contrast((await style(segment, 'color')).color ?? '', await shownBackground(segment)),
     ).toBeGreaterThanOrEqual(4.5);
   }
 });
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`under forced colours, focus shows beside what's chosen, pressed, current or selected (${colorScheme})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ forcedColors: 'active', colorScheme });
+    await page.goto('/settings');
+    const background = await shownBackground(page.locator('main'));
+    const chosen = page.getByRole('radiogroup', { name: 'Density' }).getByRole('radio', { checked: true });
+    const current = page.getByRole('navigation', { name: 'Settings' }).locator('a[aria-current="page"]');
+    await expect(current).toHaveCount(1);
+    const host = await fixture(
+      page,
+      `<button type="button" class="si-btn si-btn--secondary" aria-pressed="true" id="pressed">Show passed</button>
+       <div style="width:240px"><button type="button" class="si-list-row si-list-row--plain" aria-selected="true" id="row">
+         <span class="si-list-row__title">Robots.txt</span><span></span></button>
+       <a href="#here" class="si-list-row si-list-row--plain" aria-current="page" id="place">
+         <span class="si-list-row__title">Sitemaps</span><span></span></a></div>`,
+    );
+    for (const target of [chosen, current, host.locator('#pressed'), host.locator('#row'), host.locator('#place')]) {
+      await keyboardFocus(target);
+      const seen = await rings(target);
+      const name = (await target.textContent()) ?? '';
+      // The focus ring: an outline outside the edge. The selection: a ring of its own inside it, in another colour.
+      expect(seen.outlineStyle, name).toBe('solid');
+      expect(seen.outlineOffset, name).toBeGreaterThanOrEqual(0);
+      expect(seen.ringStyle, name).toBe('solid');
+      expect(seen.ringWidth, name).toBeGreaterThanOrEqual(2);
+      expect(seen.ringColour, name).not.toBe(seen.outlineColour);
+      expect(contrast(seen.outlineColour, background), name).toBeGreaterThanOrEqual(3);
+      expect(contrast(seen.ringColour, background), name).toBeGreaterThanOrEqual(3);
+    }
+  });
+}
 
 test('under forced colours, what is selected or current is outlined, and every state stays readable', async ({
   page,
@@ -219,9 +293,13 @@ test('under forced colours, what is selected or current is outlined, and every s
   expect(contrast(cell['outline-color'] ?? '', await shownBackground(cursor))).toBeGreaterThanOrEqual(3);
 
   const current = page.getByRole('navigation', { name: 'Main' }).locator('a[aria-current="page"]');
-  const place = await style(current, 'outline-style', 'color');
-  expect(place['outline-style']).toBe('solid');
-  expect(contrast(place.color ?? '', await shownBackground(current))).toBeGreaterThanOrEqual(4.5);
+  const place = await rings(current);
+  expect(place.ringStyle).toBe('solid');
+  expect(place.ringWidth).toBeGreaterThanOrEqual(2);
+  expect(contrast(place.ringColour, await shownBackground(current))).toBeGreaterThanOrEqual(3);
+  expect(contrast((await style(current, 'color')).color ?? '', await shownBackground(current))).toBeGreaterThanOrEqual(
+    4.5,
+  );
 
   await page.keyboard.press('Control+k');
   const option = page.getByRole('dialog', { name: 'Command palette' }).locator('[role="option"][aria-selected="true"]');

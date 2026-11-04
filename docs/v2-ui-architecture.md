@@ -299,9 +299,12 @@ slices.
 - State indicators meet WCAG 2.2 AA (1.4.11): what's selected, current or highlighted carries the accent rule against
   its tint (`.si-current`, the grid's gutter, the palette's option), never the tint alone; text on it is 4.5:1 or
   more; placeholders are `text-muted`. High contrast maps the roles to system colours under `forced-colors: active`,
-  with `surface-selected` as `Canvas`: selected and current things get a `Highlight` outline on the page's own colours,
+  with `surface-selected` as `Canvas`: selected and current things get a `Highlight` mark on the page's own colours,
   so no text sits on Highlight unreadable, and selected text is HighlightText on Highlight. Focus rings, the grid's
-  included, are outlines, so they survive it.
+  included, are outlines, so they survive it. What can be selected and focused at once (a chosen segment, a pressed
+  toggle, the current place, a selected row) carries its mark as a Highlight ring inside its edge, not an outline, and
+  its focus ring is a CanvasText outline outside it, so both show (WCAG 2.4.7); what never takes focus itself (the
+  grid's rows, the palette's options) keeps the Highlight outline.
 - Fonts: Inter and JetBrains Mono are bundled (`styles/fonts.css`, the woff2 faces in `styles/fonts`), so the app
   looks the same offline; the platform's fonts follow them in the stacks.
 
@@ -332,7 +335,7 @@ The states rule: a component isn't done until each state it can be in (default, 
 pressed, disabled, loading, invalid, selected or current, long text, empty) has its look in `components.css` and its
 story, and passes axe in both themes. Every state indicator is 3:1 against what's beside it and never a tint alone;
 focus is the one outline from `base.css`; under forced colours edges become system colours and what's selected or
-current gets a Highlight outline. Icons are Lucide's, through `Icon` (decorative unless labelled); severity's shapes
+current gets a Highlight ring beside the focus ring. Icons are Lucide's, through `Icon` (decorative unless labelled); severity's shapes
 are drawn for the app and are never swapped for Lucide's.
 
 ## Feedback

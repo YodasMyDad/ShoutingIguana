@@ -158,7 +158,12 @@ type SeverityFilter = 'all' | 'error' | 'warning' | 'notice';
 
 /** Segmented controls: text, icons with counts (the Issues filter, "All 19 / 2 / 6 / 11"), icons alone. */
 export const Segmented: Story = {
-  parameters: { pseudo: { hover: ['.is-hover button:nth-child(2)'], focusVisible: ['.is-focus button:nth-child(3)'] } },
+  parameters: {
+    pseudo: {
+      hover: ['.is-hover button:nth-child(2)'],
+      focusVisible: ['.is-focus button:nth-child(3)', '.is-focus-chosen [aria-checked="true"]'],
+    },
+  },
   render: function Segmented() {
     const [severity, setSeverity] = useState<SeverityFilter>('all');
     const [density, setDensity] = useState('standard');
@@ -217,6 +222,19 @@ export const Segmented: Story = {
             value="standard"
             onValueChange={() => undefined}
             className="is-hover is-focus"
+            options={[
+              { value: 'compact', label: 'Compact' },
+              { value: 'standard', label: 'Standard' },
+              { value: 'comfortable', label: 'Comfortable' },
+            ]}
+          />
+        </StateRow>
+        <StateRow label="Chosen, focus">
+          <SegmentedControl
+            label="Density"
+            value="standard"
+            onValueChange={() => undefined}
+            className="is-focus-chosen"
             options={[
               { value: 'compact', label: 'Compact' },
               { value: 'standard', label: 'Standard' },

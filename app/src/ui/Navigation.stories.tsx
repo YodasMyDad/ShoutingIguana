@@ -147,12 +147,14 @@ export const NavItems: Story = {
           <nav aria-label="Main" className="flex w-(--sidebar-width) flex-col gap-0.5">
             <NavItem to="/" label="Home" icon={Home} />
             <NavItem to="/crawls/$crawl/overview" params={{ crawl: CRAWL }} label="Overview" icon={Network} />
+            {/* The current place, focused: under forced colours its ring and the focus ring show together. */}
             <NavItem
               to="/crawls/$crawl/issues/{-$check}"
               params={{ crawl: CRAWL }}
               label="Issues"
               icon={TriangleAlert}
               count={19}
+              className="is-focus"
             />
             <NavItem
               to="/crawls/$crawl/urls"
@@ -202,8 +204,8 @@ export const NavItems: Story = {
 };
 
 /**
- * List rows, as the checks list uses them: the severity mark, the title, the count; selected with the accent rule;
- * skipped with its reason and the dashed badge.
+ * List rows, as the checks list uses them: the severity mark, the title, the count; selected with the accent rule, and
+ * focused as well, so forced colours show its ring beside the focus ring; skipped with its reason and the dashed badge.
  */
 export const ListRows: Story = {
   parameters: { pseudo: { hover: ['.is-hover'], focusVisible: ['.is-focus'] } },
@@ -234,7 +236,7 @@ export const ListRows: Story = {
                 icon={<SeverityMark severity={row.severity} />}
                 title={row.title}
                 meta={<Num value={row.count} />}
-                className={index === 0 ? 'is-hover' : index === 1 ? 'is-focus' : undefined}
+                className={index === 0 ? 'is-hover' : index === 1 || selected === row.id ? 'is-focus' : undefined}
               >
                 <div
                   role="option"
