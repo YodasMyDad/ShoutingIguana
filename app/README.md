@@ -56,6 +56,7 @@ answers for the few URLs the fixtures hold it for.
 | `npm test` | Vitest unit and component tests (`npm run test:watch` while working) |
 | `npm run e2e` | Playwright against the real sidecar, with axe: zero violations allowed. `e2e/states.spec.ts` also checks what only a browser shows: state indicators at 3:1 and their text at 4.5:1 in both themes and under forced colours, focus coming back after an overlay, the grid's cursor kept in view, and toasts in the app's look |
 | `npm run build-storybook` | Storybook builds |
+| `npm run test:stories` | axe on every story of the built Storybook, in both themes: zero violations allowed (`-- --forced` under forced colours, `-- --shots=<folder>` to screenshot each) |
 | `node --test "scripts/**/*.test.mjs"` | The scripts' own tests: ports, crawl copies, signing |
 
 `npm run e2e` builds the app for the test (`--mode e2e`), starts the sidecar on a temp data folder holding one crawl,

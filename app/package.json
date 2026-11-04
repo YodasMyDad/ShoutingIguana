@@ -21,6 +21,7 @@
     "e2e": "playwright test",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
+    "test:stories": "node scripts/check-stories.mjs",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "make:crawl": "node scripts/make-crawl.mjs",
     "tauri": "tauri",
