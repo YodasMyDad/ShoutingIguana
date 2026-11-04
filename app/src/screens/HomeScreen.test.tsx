@@ -6,6 +6,7 @@ import type { CrawlListItem } from '../api/types';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
+import { wholeText } from '../test/text';
 import { fakeSidecar, json, standardRoutes, testCrawlItem } from '../test/fakeSidecar';
 
 async function open(library: () => Response | Promise<Response>) {
@@ -43,9 +44,9 @@ describe('Home’s library', () => {
   it('counts each severity in good English', async () => {
     await open(() => json([testCrawlItem({ issues: { error: 1, warning: 2, notice: 1 } })]));
     const row = await rowOf('example.com');
-    expect(within(row).getByText('1 error')).toBeVisible();
-    expect(within(row).getByText('2 warnings')).toBeVisible();
-    expect(within(row).getByText('1 notice')).toBeVisible();
+    expect(within(row).getByText(wholeText('1 error'))).toBeVisible();
+    expect(within(row).getByText(wholeText('2 warnings'))).toBeVisible();
+    expect(within(row).getByText(wholeText('1 notice'))).toBeVisible();
   });
 
   it('keeps its skeleton up for its minimum once shown, even when the library comes a moment later', async () => {

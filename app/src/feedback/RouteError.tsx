@@ -1,5 +1,6 @@
 import { useQueryErrorResetBoundary } from '@tanstack/react-query';
 import { Link, useRouter, type ErrorComponentProps } from '@tanstack/react-router';
+import { Button } from '../ui/Button';
 import { ErrorState } from './ErrorState';
 
 /**
@@ -19,13 +20,11 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
         void router.invalidate();
       }}
       actions={
-        <Link
-          to="/"
-          search={{}}
-          className="inline-flex h-(--control-height-sm) items-center rounded-sm border border-border px-3 text-13 text-text-secondary hover:bg-surface-hover"
-        >
-          Go to Home
-        </Link>
+        <Button asChild size="sm">
+          <Link to="/" search={{}}>
+            Go to Home
+          </Link>
+        </Button>
       }
     />
   );

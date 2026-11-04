@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { useLive } from '../live/liveStore';
 import { restartSidecar, useSidecarStatus, type SidecarStatus } from '../shell/connection';
+import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 
 /** How long the event stream may be reconnecting before the banner says so: a blip shouldn't flash a banner. */
@@ -43,16 +44,18 @@ export function SidecarBanner() {
   }
   if (status.state === 'failed') {
     return (
-      <Banner tone="error">
-        <span>
-          {FAILURE_TITLES[status.reason]}
-          {status.message ? <span className="block text-12 text-text-secondary">{status.message}</span> : null}
-        </span>
-        {status.reason === 'not-configured' ? null : (
-          <Button size="sm" onClick={() => void restartSidecar()}>
-            Try again
-          </Button>
-        )}
+      <Banner
+        tone="error"
+        detail={status.message}
+        actions={
+          status.reason === 'not-configured' ? null : (
+            <Button size="sm" onClick={() => void restartSidecar()}>
+              Try again
+            </Button>
+          )
+        }
+      >
+        {FAILURE_TITLES[status.reason]}
       </Banner>
     );
   }
@@ -60,24 +63,6 @@ export function SidecarBanner() {
     return <Banner tone="warning">Reconnecting to the engine…</Banner>;
   }
   return null;
-}
-
-function Banner({ tone, children }: { tone: 'warning' | 'error'; children: ReactNode }) {
-  return (
-    <div
-      role={tone === 'error' ? 'alert' : 'status'}
-      className={
-        tone === 'error'
-          ? 'flex items-center gap-3 border-b border-border bg-error-subtle px-4 py-2 text-13 text-text'
-          : 'flex items-center gap-3 border-b border-border bg-warning-subtle px-4 py-2 text-13 text-text'
-      }
-    >
-      <span aria-hidden="true" className={tone === 'error' ? 'text-error-text' : 'text-warning-text'}>
-        {tone === 'error' ? '■' : '▲'}
-      </span>
-      {children}
-    </div>
-  );
 }
 
 /** True once `value` has stayed true for `delayMs`. */

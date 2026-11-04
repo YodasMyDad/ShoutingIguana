@@ -1,6 +1,6 @@
-import * as Dialog from '@radix-ui/react-dialog';
 import clsx from 'clsx';
 import { restoreFocus, setOverlay, useOverlay } from '../app/overlays';
+import { Dialog } from '../ui/Dialog';
 import { Kbd } from '../ui/Kbd';
 import { COMMAND_GROUPS, commands, useRegistryVersion } from './registry';
 
@@ -8,28 +8,21 @@ import { COMMAND_GROUPS, commands, useRegistryVersion } from './registry';
 export function ShortcutSheet() {
   const open = useOverlay() === 'shortcuts';
   return (
-    <Dialog.Root open={open} onOpenChange={(next) => setOverlay(next ? 'shortcuts' : null)}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-scrim" />
-        <Dialog.Content
-          // Opened with `?`, there's no trigger for Radix to give focus back to: put it where it was.
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            restoreFocus();
-          }}
-          className="fixed top-1/2 left-1/2 z-40 flex max-h-(--dialog-max-height) w-(--palette-width) max-w-full -translate-1/2 flex-col rounded-xl border border-border bg-surface-overlay shadow-4"
-        >
-          <div className="flex items-center border-b border-border-subtle px-5 py-3">
-            <Dialog.Title className="text-16 font-semibold">Keyboard shortcuts</Dialog.Title>
-            <Dialog.Close className="ml-auto rounded-sm px-2 text-text-muted hover:bg-surface-hover" aria-label="Close">
-              ✕
-            </Dialog.Close>
-          </div>
-          <Dialog.Description className="sr-only">Every shortcut in the app, by where it works.</Dialog.Description>
-          <ShortcutList scrollable />
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => setOverlay(next ? 'shortcuts' : null)}
+      title="Keyboard shortcuts"
+      description="Every shortcut in the app, by where it works."
+      size="wide"
+      flush
+      // Opened with `?`, there's no trigger for Radix to give focus back to: put it where it was.
+      onCloseAutoFocus={(event) => {
+        event.preventDefault();
+        restoreFocus();
+      }}
+    >
+      <ShortcutList scrollable />
+    </Dialog>
   );
 }
 

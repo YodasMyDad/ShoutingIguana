@@ -61,7 +61,8 @@ export default defineConfig([
     extends: [jsxA11y.configs.recommended],
     plugins: { 'react-refresh': reactRefresh },
     rules: {
-      'react-refresh/only-export-components': ['error', { allowConstantExport: true }],
+      // The router's createLink makes a typed link out of a component: the ui/ links (TextLink, NavItem, StatLink).
+      'react-refresh/only-export-components': ['error', { allowConstantExport: true, extraHOCs: ['createLink'] }],
       // docs/v2-ui-architecture.md, "Rules every slice follows": crawled text renders as text, never HTML (6), and
       // components use tokens only, never arbitrary values such as w-[37px] or [mask:x] (2).
       'no-restricted-syntax': [

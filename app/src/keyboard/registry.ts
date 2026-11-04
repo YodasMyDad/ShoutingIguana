@@ -267,6 +267,12 @@ export function useShortcut(id: string, registry = commands): string | null {
   return registry.shortcut(id);
 }
 
+/** A command's first chord (`mod+k`), for keycaps in tooltips and menus, or null. */
+export function useChord(id: string, registry = commands): string | null {
+  useRegistryVersion(registry);
+  return registry.get(id)?.keys?.[0] ?? null;
+}
+
 /** A command's chords for `aria-keyshortcuts`, or null. */
 export function useAriaShortcut(id: string, registry = commands): string | null {
   useRegistryVersion(registry);

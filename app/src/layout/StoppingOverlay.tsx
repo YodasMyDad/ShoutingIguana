@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useModal } from '../app/overlays';
 import { useSidecarStatus } from '../shell/connection';
+import { Spinner } from '../ui/Spinner';
 
 /**
  * The window's "Stopping crawls…" state while the app quits: the shell has asked the engine to stop every crawl
@@ -28,9 +29,9 @@ export function StoppingOverlay() {
       tabIndex={-1}
       className="fixed inset-0 z-50 flex items-center justify-center bg-scrim outline-none"
     >
-      <div className="flex w-(--dialog-width) max-w-full flex-col gap-2 rounded-lg border border-border bg-surface-overlay p-6 shadow-4">
-        <p id="stopping-title" className="flex items-center gap-2 text-16 font-semibold">
-          <span aria-hidden="true" className="size-(--mark-size) rounded-full bg-accent motion-safe:animate-pulse" />
+      <div className="flex w-(--dialog-width) max-w-full flex-col gap-2 rounded-xl border border-border bg-surface-overlay p-6 shadow-4">
+        <p id="stopping-title" className="flex items-center gap-2.5 text-16 font-semibold tracking-snug">
+          <Spinner size="md" className="text-accent-text" />
           Stopping crawls…
         </p>
         <p id="stopping-detail" className="text-13 text-text-secondary">

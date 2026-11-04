@@ -43,7 +43,7 @@ export function CommandPalette() {
         group: command.group,
         title: command.title,
         keywords: command.keywords ?? [],
-        ...(command.keys?.[0] ? { hint: <Kbd chord={command.keys[0]} className="inline-flex gap-0.5" /> } : {}),
+        ...(command.keys?.[0] ? { hint: <Kbd chord={command.keys[0]} size="sm" /> } : {}),
         run: () => commands.run(command.id),
       }));
     if (crawlId && checks) {
@@ -80,7 +80,7 @@ export function CommandPalette() {
   return (
     <Dialog.Root open={open} onOpenChange={(next) => setOverlay(next ? 'palette' : null)}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-scrim" />
+        <Dialog.Overlay className="si-dialog-overlay" />
         <Dialog.Content
           aria-describedby={undefined}
           // Opened from the keyboard there's no trigger for Radix to give focus back to: put it where it was.

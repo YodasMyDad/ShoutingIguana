@@ -1,23 +1,41 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from '@tanstack/react-router';
+import { useParams } from '@tanstack/react-router';
 import clsx from 'clsx';
+import {
+  Bot,
+  House,
+  LayoutDashboard,
+  Link as LinkIcon,
+  List,
+  Network,
+  PanelLeft,
+  Settings,
+  SlidersHorizontal,
+  TriangleAlert,
+  type LucideIcon,
+} from 'lucide-react';
 import { crawlQuery, libraryQuery } from '../api/queries';
-import { CRAWL_SECTIONS } from '../app/sections';
+import { CRAWL_SECTIONS, type CrawlSection } from '../app/sections';
 import logoUrl from '../assets/iguana-64.png';
 import { crawlName } from '../crawl/status';
-import { useShortcut } from '../keyboard/registry';
-import { formatCount } from '../lib/format';
+import { formatExactTime } from '../lib/format';
 import { useLiveCrawl, useLiveIds } from '../live/liveStore';
 import { updateSettings, useSettings } from '../settings/settingsStore';
+import { Favicon } from '../ui/Favicon';
+import { IconButton } from '../ui/IconButton';
+import { LiveDot } from '../ui/LiveBadge';
+import { NavItem } from '../ui/NavItem';
 
-// A place in the sidebar. Its colours are either the current place's or the rest's, never both stacked: Tailwind
-// would pick one by its own order, not ours.
-const ITEM = 'flex h-(--nav-item-height) items-center gap-2 rounded-md px-2.5 text-13';
-const OTHER = 'text-text-secondary hover:bg-surface-hover hover:text-text';
-/** The current place: the accent rule and colours (base.css `.si-current`), and a heavier weight. */
-const CURRENT = 'si-current font-medium';
-/** For a Link: the current place's look when it's the page shown, the others' otherwise. */
-const placeProps = { className: ITEM, activeProps: { className: CURRENT }, inactiveProps: { className: OTHER } };
+/** Each section's icon, as the design draws the sidebar. */
+const SECTION_ICONS: Record<CrawlSection, LucideIcon> = {
+  overview: LayoutDashboard,
+  issues: TriangleAlert,
+  urls: List,
+  links: LinkIcon,
+  sitemaps: Network,
+  robots: Bot,
+  settings: SlidersHorizontal,
+};
 
 /** The sidebar (docs/v2-ui-ia.md, The shell): Home, the open crawl's sections, crawls running now, Settings. */
 export function Sidebar() {
@@ -30,43 +48,48 @@ export function Sidebar() {
     <nav
       aria-label="Main"
       className={clsx(
-        'flex shrink-0 flex-col gap-4 border-r border-border bg-surface-sunken p-2 transition-width duration-(--duration-panel) ease-out',
-        collapsed ? 'w-(--sidebar-width-collapsed)' : 'w-(--sidebar-width)',
+        'flex shrink-0 flex-col gap-5 border-r border-border-subtle bg-canvas p-3 transition-width duration-(--duration-panel) ease-out',
+        collapsed ? 'w-(--sidebar-width-collapsed) px-2' : 'w-(--sidebar-width)',
       )}
     >
-      <div className="flex h-(--topbar-height) items-center gap-2 px-1">
-        <img src={logoUrl} alt="" className="size-7 shrink-0" />
-        {collapsed ? null : <span className="text-14 font-semibold tracking-snug">Shouting Iguana</span>}
-        <button
-          type="button"
-          onClick={() => updateSettings({ sidebarCollapsed: !collapsed })}
-          aria-label={collapsed ? 'Expand the sidebar' : 'Collapse the sidebar'}
+      <div className={clsx('flex h-(--control-height) items-center gap-2.5', collapsed ? 'flex-col' : 'pl-1')}>
+        {collapsed ? null : (
+          <>
+            <img src={logoUrl} alt="" className="size-(--favicon-lg) shrink-0" />
+            <span className="flex-1 truncate text-14 font-semibold tracking-snug">Shouting Iguana</span>
+          </>
+        )}
+        <IconButton
+          label={collapsed ? 'Expand the sidebar' : 'Collapse the sidebar'}
+          icon={PanelLeft}
+          size="sm"
+          command="view.sidebar"
           aria-expanded={!collapsed}
-          className="ml-auto rounded-sm px-1.5 text-text-muted hover:bg-surface-hover"
-        >
-          {collapsed ? '»' : '«'}
-        </button>
+          onClick={() => updateSettings({ sidebarCollapsed: !collapsed })}
+        />
       </div>
 
       <ul className="flex flex-col gap-0.5">
         <li>
-          <Link to="/" search={{}} {...placeProps} activeOptions={{ exact: true }} title="Home">
-            <span aria-hidden="true">⌂</span>
-            {collapsed ? <span className="sr-only">Home</span> : 'Home'}
-          </Link>
+          <NavItem to="/" search={{}} activeOptions={{ exact: true }} label="Home" icon={House} collapsed={collapsed} />
         </li>
       </ul>
 
       {crawlId ? (
-        <section aria-label={crawlName(crawl)} className="flex flex-col gap-0.5">
-          {collapsed ? null : (
-            <h2
-              className="truncate px-2.5 pb-1 text-12 font-medium text-text-muted"
-              title={crawl?.startUrl ?? undefined}
-            >
-              {crawlName(crawl)}
-            </h2>
-          )}
+        <section aria-label={crawlName(crawl)} className="flex flex-col gap-1.5">
+          <div className={clsx('flex items-center gap-2.5 py-1', collapsed ? 'justify-center' : 'px-2')}>
+            <Favicon site={crawl?.site ?? crawlName(crawl)} size="lg" />
+            {collapsed ? null : (
+              <div className="flex min-w-0 flex-col">
+                <h2 className="truncate text-13 font-semibold" title={crawl?.startUrl ?? undefined}>
+                  {crawlName(crawl)}
+                </h2>
+                {crawl?.startedAt ? (
+                  <span className="truncate text-12 text-text-muted">{formatExactTime(crawl.startedAt)}</span>
+                ) : null}
+              </div>
+            )}
+          </div>
           <ul className="flex flex-col gap-0.5">
             {CRAWL_SECTIONS.map((section) => (
               <SectionLink
@@ -83,10 +106,9 @@ export function Sidebar() {
 
       <div className="mt-auto flex flex-col gap-2">
         <RunningCrawls collapsed={collapsed} />
-        <Link to="/settings/{-$section}" params={{}} {...placeProps} title="Settings">
-          <span aria-hidden="true">⚙</span>
-          {collapsed ? <span className="sr-only">Settings</span> : 'Settings'}
-        </Link>
+        <div className="border-t border-border-subtle pt-2">
+          <NavItem to="/settings/{-$section}" params={{}} label="Settings" icon={Settings} collapsed={collapsed} />
+        </div>
       </div>
     </nav>
   );
@@ -103,72 +125,54 @@ function SectionLink({
   collapsed: boolean;
   count: number | null;
 }) {
-  const shortcut = useShortcut(`section.${section.id}`);
-  const title = shortcut ? `${section.title} (${shortcut})` : section.title;
-  const content = (
-    <>
-      <span className={collapsed ? 'sr-only' : 'truncate'}>{section.title}</span>
-      {count !== null && !collapsed ? (
-        <span className="figures ml-auto text-12 text-text-muted">{formatCount(count)}</span>
-      ) : null}
-    </>
-  );
-  const props = { ...placeProps, title };
+  const props = {
+    label: section.title,
+    icon: SECTION_ICONS[section.id],
+    collapsed,
+    count,
+    command: `section.${section.id}`,
+  };
   switch (section.id) {
     case 'issues':
       return (
         <li>
-          <Link to="/crawls/$crawl/issues/{-$check}" params={{ crawl: crawlId }} {...props}>
-            {content}
-          </Link>
+          <NavItem to="/crawls/$crawl/issues/{-$check}" params={{ crawl: crawlId }} {...props} />
         </li>
       );
     case 'urls':
       return (
         <li>
-          <Link to="/crawls/$crawl/urls" params={{ crawl: crawlId }} {...props}>
-            {content}
-          </Link>
+          <NavItem to="/crawls/$crawl/urls" params={{ crawl: crawlId }} {...props} />
         </li>
       );
     case 'links':
       return (
         <li>
-          <Link to="/crawls/$crawl/links" params={{ crawl: crawlId }} {...props}>
-            {content}
-          </Link>
+          <NavItem to="/crawls/$crawl/links" params={{ crawl: crawlId }} {...props} />
         </li>
       );
     case 'sitemaps':
       return (
         <li>
-          <Link to="/crawls/$crawl/sitemaps/{-$sitemap}" params={{ crawl: crawlId }} {...props}>
-            {content}
-          </Link>
+          <NavItem to="/crawls/$crawl/sitemaps/{-$sitemap}" params={{ crawl: crawlId }} {...props} />
         </li>
       );
     case 'robots':
       return (
         <li>
-          <Link to="/crawls/$crawl/robots/{-$origin}" params={{ crawl: crawlId }} {...props}>
-            {content}
-          </Link>
+          <NavItem to="/crawls/$crawl/robots/{-$origin}" params={{ crawl: crawlId }} {...props} />
         </li>
       );
     case 'settings':
       return (
         <li>
-          <Link to="/crawls/$crawl/settings" params={{ crawl: crawlId }} {...props}>
-            {content}
-          </Link>
+          <NavItem to="/crawls/$crawl/settings" params={{ crawl: crawlId }} {...props} />
         </li>
       );
     default:
       return (
         <li>
-          <Link to="/crawls/$crawl/overview" params={{ crawl: crawlId }} {...props}>
-            {content}
-          </Link>
+          <NavItem to="/crawls/$crawl/overview" params={{ crawl: crawlId }} {...props} />
         </li>
       );
   }
@@ -180,9 +184,9 @@ function RunningCrawls({ collapsed }: { collapsed: boolean }) {
   const library = useQuery(libraryQuery()).data;
   if (live.length === 0) return null;
   return (
-    <section aria-label="Running crawls" className="flex flex-col gap-0.5 border-t border-border-subtle pt-2">
+    <section aria-label="Running crawls" className="flex flex-col gap-0.5">
       {collapsed ? null : (
-        <h2 className="px-2.5 text-12 font-medium text-text-muted">
+        <h2 className="px-2.5 pb-1 text-12 font-medium text-text-muted">
           {live.length === 1 ? '1 crawling' : `${live.length} crawling`}
         </h2>
       )}
@@ -205,13 +209,14 @@ function RunningCrawl({ id, name, collapsed }: { id: string; name: string; colla
   const fetched = crawl?.progress?.fetched ?? null;
   return (
     <li>
-      <Link to="/crawls/$crawl/overview" params={{ crawl: id }} className={clsx(ITEM, OTHER)} title={name}>
-        <span aria-hidden="true" className="size-(--mark-size) shrink-0 rounded-full bg-accent" />
-        <span className={collapsed ? 'sr-only' : 'truncate'}>{name}</span>
-        {collapsed || fetched === null ? null : (
-          <span className="figures ml-auto text-12 text-text-muted">{formatCount(fetched)}</span>
-        )}
-      </Link>
+      <NavItem
+        to="/crawls/$crawl/overview"
+        params={{ crawl: id }}
+        label={name}
+        icon={<LiveDot />}
+        count={fetched}
+        collapsed={collapsed}
+      />
     </li>
   );
 }

@@ -1,0 +1,2569 @@
+/*
+  The component library's look (src/ui), in tokens only. The source is direction B, clarity
+  (app/design/directions/clarity/app.css), under `si-` names.
+
+  - Every component has every state here: hover, focus (the one ring in base.css, an outline), pressed or active,
+    disabled, loading, invalid, selected or current. A state is never a tint alone: it carries a 3:1 mark too (the
+    accent rule, the control edge, the underline).
+  - Under forced colours (the end of this file) every edge, mark and selected state is redrawn in system colours.
+  - Reduced motion: base.css stops every animation and transition; nothing here relies on moving to be understood.
+*/
+
+@layer components {
+  /* ------------------------------------------------------------------ Icons */
+  .si-icon {
+    flex: none;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  .si-icon--xs {
+    width: var(--icon-xs);
+    height: var(--icon-xs);
+  }
+
+  .si-icon--sm {
+    width: var(--icon-sm);
+    height: var(--icon-sm);
+  }
+
+  .si-icon--md {
+    width: var(--icon-md);
+    height: var(--icon-md);
+  }
+
+  .si-icon--lg {
+    width: var(--icon-lg);
+    height: var(--icon-lg);
+  }
+
+  /* --------------------------------------------------------------- Severity */
+  /* The shapes: an octagon for errors, a triangle for warnings, a circle for notices; skipped is a dashed circle. */
+  .si-sev-mark {
+    flex: none;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  .si-sev-mark__shape--error {
+    fill: var(--color-error);
+  }
+
+  .si-sev-mark__shape--warning {
+    fill: var(--color-warning);
+    stroke: var(--color-warning-edge);
+  }
+
+  .si-sev-mark__shape--notice {
+    fill: var(--color-notice);
+  }
+
+  .si-sev-mark__glyph {
+    stroke: var(--color-surface);
+    fill: none;
+  }
+
+  .si-sev-mark__dot {
+    fill: var(--color-surface);
+  }
+
+  .si-sev-mark--warning .si-sev-mark__glyph {
+    stroke: var(--color-warning-glyph);
+  }
+
+  .si-sev-mark--warning .si-sev-mark__dot {
+    fill: var(--color-warning-glyph);
+  }
+
+  .si-sev-mark--skipped,
+  .si-sev-mark--passed {
+    color: var(--color-text-muted);
+    fill: none;
+    stroke: currentColor;
+  }
+
+  /* Shape, colour and word. */
+  .si-sev {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+  }
+
+  .si-sev--error {
+    color: var(--color-error-text);
+  }
+
+  .si-sev--warning {
+    color: var(--color-warning-text);
+  }
+
+  .si-sev--notice {
+    color: var(--color-notice-text);
+  }
+
+  .si-sev--skipped,
+  .si-sev--passed {
+    color: var(--color-text-secondary);
+  }
+
+  .si-sev-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    height: var(--control-height-xs);
+    padding: 0 var(--space-2-5) 0 var(--space-1-5);
+    border-radius: var(--radius-full);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+  }
+
+  .si-sev-badge--error {
+    background: var(--color-error-subtle);
+    color: var(--color-error-text);
+  }
+
+  .si-sev-badge--warning {
+    background: var(--color-warning-subtle);
+    color: var(--color-warning-text);
+  }
+
+  .si-sev-badge--notice {
+    background: var(--color-notice-subtle);
+    color: var(--color-notice-text);
+  }
+
+  .si-sev-badge--skipped,
+  .si-sev-badge--passed {
+    background: transparent;
+    color: var(--color-text-secondary);
+    box-shadow: inset 0 0 0 var(--hairline) var(--color-border-strong);
+  }
+
+  .si-sevcounts {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    white-space: nowrap;
+  }
+
+  .si-sevcount {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-sevcount__word {
+    color: var(--color-text-secondary);
+  }
+
+  .si-sevcount--zero,
+  .si-sevcount--zero .si-sevcount__word {
+    color: var(--color-text-muted);
+  }
+
+  .si-sevcount--zero .si-sev-mark {
+    opacity: var(--opacity-zero);
+  }
+
+  /* ---------------------------------------------------------------- Buttons */
+  .si-btn {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1-5);
+    height: var(--control-height);
+    padding: 0 var(--space-3);
+    border: var(--hairline) solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: var(--text-13);
+    font-weight: var(--font-weight-medium);
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      background-color var(--duration-instant) var(--ease-out),
+      border-color var(--duration-instant) var(--ease-out),
+      color var(--duration-instant) var(--ease-out);
+  }
+
+  .si-btn--sm {
+    height: var(--control-height-sm);
+    padding: 0 var(--space-2-5);
+  }
+
+  .si-btn--lg {
+    height: var(--button-height-lg);
+    padding: 0 var(--space-4);
+    font-size: var(--text-14);
+  }
+
+  .si-btn--xl {
+    height: var(--control-height-lg);
+    padding: 0 var(--space-5);
+    font-size: var(--text-14);
+  }
+
+  /* Icon only: square. */
+  .si-btn--icon {
+    width: var(--control-height);
+    padding: 0;
+  }
+
+  .si-btn--icon.si-btn--sm {
+    width: var(--control-height-sm);
+  }
+
+  .si-btn--icon.si-btn--xs {
+    width: var(--control-height-xs);
+    height: var(--control-height-xs);
+    border-radius: var(--radius-xs);
+  }
+
+  .si-btn--icon.si-btn--lg {
+    width: var(--button-height-lg);
+  }
+
+  .si-btn--primary {
+    background: var(--color-accent-fill);
+    color: var(--color-text-on-accent);
+    box-shadow: var(--elevation-control), var(--highlight-accent);
+  }
+
+  .si-btn--primary:hover:not(:disabled, [aria-disabled='true']) {
+    background: var(--color-accent-fill-hover);
+  }
+
+  .si-btn--secondary {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    box-shadow: var(--elevation-control), var(--highlight-top);
+  }
+
+  .si-btn--secondary .si-icon {
+    color: var(--color-text-secondary);
+  }
+
+  .si-btn--secondary:hover:not(:disabled, [aria-disabled='true']) {
+    background: var(--color-surface-hover);
+    border-color: var(--color-border-strong);
+  }
+
+  .si-btn--ghost {
+    color: var(--color-text-secondary);
+  }
+
+  .si-btn--ghost:hover:not(:disabled, [aria-disabled='true']) {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  .si-btn--danger {
+    background: var(--color-destructive-fill);
+    color: var(--color-text-on-accent);
+    box-shadow: var(--elevation-control), var(--highlight-accent);
+  }
+
+  .si-btn--danger:hover:not(:disabled, [aria-disabled='true']) {
+    background: var(--color-destructive-fill-hover);
+  }
+
+  /* Pressed with the pointer. */
+  .si-btn--secondary:active:not(:disabled, [aria-disabled='true']),
+  .si-btn--ghost:active:not(:disabled, [aria-disabled='true']) {
+    background: var(--color-surface-active);
+  }
+
+  .si-btn--primary:active:not(:disabled, [aria-disabled='true']),
+  .si-btn--danger:active:not(:disabled, [aria-disabled='true']) {
+    box-shadow: none;
+  }
+
+  /* A toggle that's on: the selected segment's look, its 3:1 control edge the indicator. */
+  .si-btn[aria-pressed='true'] {
+    background: var(--color-surface);
+    border-color: var(--color-border-control);
+    color: var(--color-text);
+    box-shadow: var(--elevation-control);
+  }
+
+  .si-btn[aria-pressed='true'] .si-icon {
+    color: var(--color-accent-text);
+  }
+
+  /* Disabled: faded and inert. A button that's working (data-loading) keeps its look. */
+  .si-btn:disabled,
+  .si-btn[aria-disabled='true']:not([data-loading]) {
+    opacity: var(--opacity-disabled);
+    cursor: default;
+  }
+
+  .si-btn[data-loading] {
+    cursor: progress;
+  }
+
+  /* The spinner covers the content, which keeps its room: the button never changes width. */
+  .si-btn__content {
+    display: inline-flex;
+    align-items: center;
+    gap: inherit;
+  }
+
+  /* Transparent, not hidden: the label stays the button's name. */
+  .si-btn[data-spinner='cover'] .si-btn__content {
+    opacity: 0;
+  }
+
+  .si-btn__spinner {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+  }
+
+  .si-btn .si-kbd {
+    margin-left: var(--space-1);
+  }
+
+  .si-btn--primary .si-kbd,
+  .si-btn--danger .si-kbd {
+    border-color: var(--color-accent-border);
+    background: transparent;
+    color: var(--color-text-on-accent);
+  }
+
+  .si-btn--ghost .si-kbd {
+    background: transparent;
+  }
+
+  /* -------------------------------------------------------------- Keycaps */
+  .si-kbd-group {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-0-5);
+    font-family: var(--font-sans);
+  }
+
+  .si-kbd {
+    display: inline-grid;
+    place-items: center;
+    min-width: var(--kbd-size);
+    height: var(--kbd-size);
+    padding: 0 var(--space-1);
+    border: var(--hairline) solid var(--color-border);
+    border-radius: var(--radius-xs);
+    background: var(--color-surface-sunken);
+    color: var(--color-text-muted);
+    font-family: var(--font-sans);
+    font-size: var(--text-11);
+    font-weight: var(--font-weight-medium);
+    line-height: 1;
+  }
+
+  .si-kbd--sm {
+    min-width: var(--kbd-size-sm);
+    height: var(--kbd-size-sm);
+  }
+
+  /* --------------------------------------------------------------- Spinner */
+  .si-spinner {
+    flex: none;
+    display: inline-block;
+    vertical-align: middle;
+    animation: si-spin var(--duration-spin) linear infinite;
+  }
+
+  .si-spinner__track {
+    opacity: var(--opacity-track);
+  }
+
+  /* --------------------------------------------------------------- Tooltip */
+  .si-tooltip {
+    z-index: 60;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    max-width: var(--tooltip-max-width);
+    padding: var(--space-1-5) var(--space-2-5);
+    border: var(--hairline) solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-overlay);
+    box-shadow: var(--elevation-3), var(--highlight-top);
+    color: var(--color-text);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    font-weight: var(--font-weight-medium);
+    overflow-wrap: anywhere;
+  }
+
+  .si-tooltip__text {
+    min-width: 0;
+  }
+
+  .si-tooltip__hint {
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-regular);
+  }
+
+  .si-tooltip .si-kbd {
+    flex: none;
+  }
+
+  /* --------------------------------------------------------- Text fields */
+  .si-field-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1-5);
+    min-width: 0;
+  }
+
+  .si-field-label {
+    color: var(--color-text);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .si-field-description {
+    color: var(--color-text-secondary);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-field-error {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-1-5);
+    color: var(--color-error-text);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .si-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: var(--control-height);
+    min-width: 0;
+    padding: 0 var(--space-1) 0 var(--space-2-5);
+    border: var(--hairline) solid var(--color-border-control);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: var(--text-13);
+    cursor: text;
+  }
+
+  .si-field--sm {
+    height: var(--control-height-sm);
+  }
+
+  /* The launch field on Home: large, mono, with a soft halo when focused. */
+  .si-field--lg {
+    height: var(--control-height-lg);
+    gap: var(--space-3);
+    padding: 0 var(--space-1-5) 0 var(--space-4);
+    border-radius: var(--radius-xl);
+    font-size: var(--text-16);
+    box-shadow: var(--elevation-2);
+  }
+
+  .si-field:hover:not([data-disabled], [data-readonly]) {
+    border-color: var(--color-text-muted);
+  }
+
+  /* The input's own ring would sit inside the box: the box draws it instead, as an outline. */
+  .si-field:focus-within {
+    outline: var(--focus-width) solid var(--color-focus);
+    outline-offset: calc(var(--hairline) * -1);
+  }
+
+  .si-field:focus-within .si-field__hint {
+    display: none;
+  }
+
+  .si-field--lg:focus-within {
+    box-shadow:
+      0 0 0 calc(var(--halo-width) + var(--hairline)) var(--color-accent-subtle),
+      var(--elevation-2);
+  }
+
+  .si-field[data-invalid] {
+    border-color: var(--color-error);
+  }
+
+  .si-field[data-invalid]:focus-within {
+    outline-color: var(--color-error);
+  }
+
+  .si-field[data-disabled] {
+    opacity: var(--opacity-disabled);
+    cursor: default;
+  }
+
+  .si-field[data-readonly] {
+    border-color: var(--color-border);
+    background: var(--color-surface-sunken);
+  }
+
+  .si-field__input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    caret-color: var(--color-accent);
+  }
+
+  .si-field__input:focus-visible {
+    outline: none;
+  }
+
+  .si-field__input:disabled {
+    cursor: default;
+  }
+
+  .si-field--mono .si-field__input {
+    font-family: var(--font-mono);
+  }
+
+  .si-field--mono .si-field__input::placeholder {
+    font-family: var(--font-sans);
+  }
+
+  /* The app draws its own clear button. */
+  .si-field__input::-webkit-search-cancel-button,
+  .si-field__input::-webkit-search-decoration {
+    appearance: none;
+  }
+
+  .si-field__icon {
+    flex: none;
+    color: var(--color-text-muted);
+  }
+
+  .si-field__end {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .si-field__hint {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    margin-right: var(--space-1);
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+  }
+
+  .si-field__clear {
+    display: grid;
+    place-items: center;
+    width: var(--chip-remove-size);
+    height: var(--chip-remove-size);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+
+  .si-field__clear:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  /* ----------------------------------------------- Checkboxes and switches */
+  .si-choice {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    color: var(--color-text);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+  }
+
+  .si-choice[data-disabled] {
+    opacity: var(--opacity-disabled);
+  }
+
+  .si-choice__text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-0-5);
+    min-width: 0;
+  }
+
+  .si-choice__label {
+    cursor: pointer;
+  }
+
+  .si-choice[data-disabled] .si-choice__label {
+    cursor: default;
+  }
+
+  .si-choice__description {
+    color: var(--color-text-secondary);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-checkbox {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: var(--checkbox-size);
+    height: var(--checkbox-size);
+    margin-top: var(--space-0-5);
+    padding: 0;
+    border: var(--hairline) solid var(--color-border-control);
+    border-radius: var(--radius-xs);
+    background: var(--color-surface);
+    color: var(--color-text-on-accent);
+    cursor: pointer;
+  }
+
+  .si-checkbox:hover:not(:disabled) {
+    border-color: var(--color-text-muted);
+  }
+
+  .si-checkbox[data-state='checked'],
+  .si-checkbox[data-state='indeterminate'] {
+    border-color: var(--color-accent-fill);
+    background: var(--color-accent-fill);
+  }
+
+  .si-checkbox:disabled {
+    cursor: default;
+  }
+
+  .si-switch {
+    position: relative;
+    flex: none;
+    width: var(--switch-width);
+    height: var(--switch-height);
+    margin-top: var(--hairline);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-full);
+    background: var(--color-surface);
+    box-shadow: inset 0 0 0 var(--hairline) var(--color-border-control);
+    cursor: pointer;
+  }
+
+  .si-switch__thumb {
+    position: absolute;
+    top: var(--switch-inset);
+    left: var(--switch-inset);
+    width: var(--switch-knob);
+    height: var(--switch-knob);
+    border-radius: var(--radius-full);
+    background: var(--color-border-control);
+    transition: transform var(--duration-quick) var(--ease-out);
+  }
+
+  .si-switch[data-state='checked'] {
+    background: var(--color-accent-fill);
+    box-shadow: none;
+  }
+
+  .si-switch[data-state='checked'] .si-switch__thumb {
+    background: var(--color-text-on-accent);
+    transform: translateX(calc(var(--switch-width) - var(--switch-knob) - 2 * var(--switch-inset)));
+  }
+
+  .si-switch:disabled {
+    cursor: default;
+  }
+
+  /* ------------------------------------------------------ Segmented control */
+  .si-segmented {
+    display: inline-flex;
+    gap: var(--space-0-5);
+    padding: var(--space-0-5);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-hover);
+  }
+
+  .si-segmented--fill {
+    display: flex;
+    width: 100%;
+  }
+
+  .si-segment {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1-5);
+    height: var(--segment-height);
+    padding: 0 var(--space-2-5);
+    border: var(--hairline) solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-family: inherit;
+    font-size: var(--text-13);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .si-segmented--fill .si-segment {
+    flex: 1;
+    padding: 0 var(--space-1-5);
+  }
+
+  .si-segment:hover:not(:disabled) {
+    color: var(--color-text);
+  }
+
+  .si-segment[aria-checked='true'],
+  .si-segment[aria-pressed='true'] {
+    background: var(--color-surface);
+    border-color: var(--color-border-control);
+    box-shadow: var(--elevation-control);
+    color: var(--color-text);
+  }
+
+  .si-segment:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: default;
+  }
+
+  .si-segment--icon {
+    width: var(--segment-icon-width);
+    padding: 0;
+  }
+
+  .si-segment__count {
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-regular);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* ------------------------------------------------------------------ Tabs */
+  .si-tabs {
+    display: flex;
+    gap: var(--space-5);
+    padding: 0 var(--space-5);
+    border-bottom: var(--hairline) solid var(--color-border-subtle);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  /* Flush with the panel's own padding: the list keeps room for the first tab's focus ring. */
+  .si-tabs--flush {
+    margin: 0 calc(var(--space-1) * -1);
+    padding: 0 var(--space-1);
+  }
+
+  .si-tab {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-1-5);
+    height: var(--tab-height);
+    /* Room for the focus ring beside the words, taken back by the margin, so the words sit where they would. */
+    margin: 0 calc(var(--space-1) * -1);
+    padding: 0 var(--space-1);
+    border: 0;
+    background: none;
+    color: var(--color-text-secondary);
+    font-family: inherit;
+    font-size: var(--text-13);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .si-tab:hover:not(:disabled) {
+    color: var(--color-text);
+  }
+
+  .si-tab:focus-visible {
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  .si-tab[aria-selected='true'] {
+    color: var(--color-text);
+  }
+
+  .si-tab[aria-selected='true']::after {
+    content: '';
+    position: absolute;
+    right: var(--space-1);
+    bottom: calc(var(--hairline) * -1);
+    left: var(--space-1);
+    height: var(--rule-width);
+    border-radius: var(--rule-width) var(--rule-width) 0 0;
+    background: var(--color-accent);
+  }
+
+  .si-tab:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: default;
+  }
+
+  .si-tab__count {
+    padding: 0 var(--space-1-5);
+    border-radius: var(--radius-full);
+    background: var(--color-surface-hover);
+    color: var(--color-text-secondary);
+    font-size: var(--text-11);
+    line-height: var(--leading-12);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-tab-panel:focus-visible {
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  /* ------------------------------------------------ Menus, popovers, dialogs */
+  .si-menu,
+  .si-popover {
+    z-index: 50;
+    border: var(--hairline) solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-overlay);
+    box-shadow: var(--elevation-3), var(--highlight-top);
+    color: var(--color-text);
+  }
+
+  .si-menu {
+    min-width: var(--menu-min-width);
+    max-height: var(--radix-dropdown-menu-content-available-height, var(--dialog-max-height));
+    padding: var(--space-1);
+    overflow-y: auto;
+    font-size: var(--text-13);
+  }
+
+  .si-menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: var(--list-row-height);
+    padding: 0 var(--space-2) 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+    line-height: var(--leading-13);
+    cursor: default;
+    outline: none;
+    user-select: none;
+  }
+
+  /* Highlighted, from the pointer or the keys: the palette's look, the accent rule against the tint. */
+  .si-menu-item[data-highlighted] {
+    background: var(--color-surface-selected);
+    box-shadow: inset var(--rule-width) 0 0 var(--color-accent);
+  }
+
+  .si-menu-item[data-disabled] {
+    color: var(--color-text-muted);
+  }
+
+  .si-menu-item--danger {
+    color: var(--color-destructive-text);
+  }
+
+  .si-menu-item__icon {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: var(--icon-md);
+    color: var(--color-text-muted);
+  }
+
+  .si-menu-item[data-highlighted] .si-menu-item__icon {
+    color: var(--color-text-secondary);
+  }
+
+  .si-menu-item--danger .si-menu-item__icon {
+    color: currentColor;
+  }
+
+  .si-menu-item__label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .si-menu-item__end {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: var(--space-4);
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+  }
+
+  .si-menu-item__check {
+    color: var(--color-accent-text);
+  }
+
+  .si-menu-separator {
+    height: var(--hairline);
+    margin: var(--space-1) calc(var(--space-1) * -1);
+    background: var(--color-border-subtle);
+  }
+
+  .si-menu-label {
+    padding: var(--space-2) var(--space-2) var(--space-1);
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .si-popover {
+    width: var(--popover-width);
+    max-width: calc(100vw - 2 * var(--space-4));
+    padding: var(--space-4);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+  }
+
+  .si-popover__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: calc(var(--space-1) * -1) calc(var(--space-1) * -1) var(--space-2) 0;
+  }
+
+  .si-popover__title {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .si-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: var(--color-scrim);
+  }
+
+  .si-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    width: var(--dialog-width);
+    max-width: calc(100vw - 2 * var(--space-4));
+    max-height: var(--dialog-max-height);
+    border: var(--hairline) solid var(--color-border);
+    border-radius: var(--radius-xl);
+    background: var(--color-surface-overlay);
+    box-shadow: var(--elevation-4), var(--highlight-top);
+    color: var(--color-text);
+    transform: translate(-50%, -50%);
+  }
+
+  .si-dialog--wide {
+    width: var(--palette-width);
+  }
+
+  .si-dialog:focus-visible {
+    outline: none;
+  }
+
+  .si-dialog__head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-4) var(--space-3) var(--space-5);
+    border-bottom: var(--hairline) solid var(--color-border-subtle);
+  }
+
+  .si-dialog__heading {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+    padding-top: var(--space-1);
+  }
+
+  .si-dialog__title {
+    font-size: var(--text-16);
+    line-height: var(--leading-16);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--tracking-snug);
+  }
+
+  .si-dialog__description {
+    color: var(--color-text-secondary);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+  }
+
+  .si-dialog__body {
+    min-height: 0;
+    padding: var(--space-5);
+    overflow: auto;
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+  }
+
+  .si-dialog__foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-5) var(--space-4);
+    border-top: var(--hairline) solid var(--color-border-subtle);
+  }
+
+  /* ------------------------------------------------------------------ Badges */
+  .si-badge {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-1);
+    height: var(--badge-height);
+    padding: 0 var(--space-1-5);
+    border-radius: var(--radius-xs);
+    background: var(--color-surface-hover);
+    color: var(--color-text-secondary);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+  }
+
+  .si-badge--accent {
+    background: var(--color-accent-subtle);
+    color: var(--color-accent-text);
+  }
+
+  .si-badge--outline {
+    background: transparent;
+    box-shadow: inset 0 0 0 var(--hairline) var(--color-border-strong);
+  }
+
+  .si-badge--dashed {
+    border: var(--hairline) dashed var(--color-border-control);
+    background: transparent;
+  }
+
+  /* A crawl's status: always a word. Busy states are the accent with a live dot; the rest are quiet. */
+  .si-status-pill {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-1-5);
+    height: var(--segment-height);
+    padding: 0 var(--space-2-5);
+    border-radius: var(--radius-full);
+    background: var(--color-surface);
+    box-shadow: inset 0 0 0 var(--hairline) var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+  }
+
+  .si-status-pill .si-icon {
+    color: var(--color-text-muted);
+  }
+
+  .si-status-pill--live {
+    background: var(--color-accent-subtle);
+    box-shadow: inset 0 0 0 var(--hairline) var(--color-accent-border);
+    color: var(--color-accent-text);
+  }
+
+  .si-status-pill--plain {
+    height: auto;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .si-status-pill--plain.si-status-pill--live {
+    background: none;
+    box-shadow: none;
+  }
+
+  .si-status-pill__count {
+    margin-left: var(--space-0-5);
+    padding-left: var(--space-2);
+    border-left: var(--hairline) solid var(--color-border);
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-status-pill--live .si-status-pill__count {
+    border-left-color: var(--color-accent-border);
+  }
+
+  .si-live-badge {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-2);
+    height: var(--control-height-xs);
+    padding: 0 var(--space-2-5);
+    border-radius: var(--radius-full);
+    background: var(--color-accent-subtle);
+    color: var(--color-accent-text);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--tracking-normal);
+  }
+
+  .si-live-dot {
+    position: relative;
+    flex: none;
+    width: var(--mark-size);
+    height: var(--mark-size);
+    border-radius: var(--radius-full);
+    background: var(--color-accent);
+  }
+
+  .si-live-dot--pulse::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--color-accent);
+    animation: si-live-pulse var(--duration-pulse) var(--ease-out) infinite;
+  }
+
+  /* ------------------------------------------------------------ Status codes */
+  .si-code {
+    --mark: var(--color-no-response);
+    --mark-text: var(--color-no-response-text);
+    --mark-subtle: var(--color-no-response-subtle);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    font-weight: var(--font-weight-medium);
+    font-variant-numeric: tabular-nums lining-nums;
+    white-space: nowrap;
+  }
+
+  .si-code--2xx {
+    --mark: var(--color-2xx);
+    --mark-text: var(--color-2xx-text);
+    --mark-subtle: var(--color-2xx-subtle);
+  }
+
+  .si-code--3xx {
+    --mark: var(--color-3xx);
+    --mark-text: var(--color-3xx-text);
+    --mark-subtle: var(--color-3xx-subtle);
+  }
+
+  .si-code--4xx {
+    --mark: var(--color-4xx);
+    --mark-text: var(--color-4xx-text);
+    --mark-subtle: var(--color-4xx-subtle);
+  }
+
+  .si-code--5xx {
+    --mark: var(--color-5xx);
+    --mark-text: var(--color-5xx-text);
+    --mark-subtle: var(--color-5xx-subtle);
+  }
+
+  .si-code__mark {
+    flex: none;
+    display: inline-block;
+    width: var(--mark-size);
+    height: var(--mark-size);
+    border-radius: var(--mark-radius);
+    background: var(--mark);
+  }
+
+  .si-code--flag {
+    height: var(--code-flag-height);
+    padding: 0 var(--space-1-5) 0 var(--space-1);
+    border-radius: var(--radius-xs);
+    background: var(--mark-subtle);
+    color: var(--mark-text);
+  }
+
+  .si-code__reason {
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-regular);
+  }
+
+  /* ------------------------------------------------------------ Filter chips */
+  .si-chip {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-0-5);
+    height: var(--chip-height);
+    padding: 0 var(--space-0-5) 0 0;
+    border: var(--hairline) solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    box-shadow: var(--elevation-control);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+    white-space: nowrap;
+  }
+
+  .si-chip:hover {
+    border-color: var(--color-border-strong);
+  }
+
+  .si-chip__main {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    height: 100%;
+    padding: 0 var(--space-1) 0 var(--space-2-5);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+  }
+
+  button.si-chip__main {
+    cursor: pointer;
+  }
+
+  .si-chip__main:focus-visible {
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  .si-chip__field {
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .si-chip__op {
+    color: var(--color-text-muted);
+  }
+
+  .si-chip__value {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    color: var(--color-text);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .si-chip__remove {
+    display: grid;
+    place-items: center;
+    width: var(--chip-remove-size);
+    height: var(--chip-remove-size);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+
+  .si-chip__remove:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  .si-chip--static .si-chip__main {
+    padding-right: var(--space-2-5);
+  }
+
+  .si-chip--add {
+    gap: var(--space-1-5);
+    padding: 0 var(--space-2-5) 0 var(--space-2);
+    border-style: dashed;
+    border-color: var(--color-border-strong);
+    background: transparent;
+    box-shadow: none;
+    color: var(--color-text-secondary);
+    font-family: inherit;
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+  }
+
+  .si-chip--add:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  .si-chip--preview {
+    box-shadow: none;
+  }
+
+  .si-chip--preview:hover {
+    border-color: var(--color-border);
+  }
+
+  .si-chip--sm {
+    height: var(--control-height-xs);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-chip--sm .si-chip__main {
+    padding: 0 var(--space-2);
+  }
+
+  /* ------------------------------------------------------------------ Cards */
+  .si-card {
+    min-width: 0;
+    border: var(--hairline) solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    box-shadow: var(--elevation-1), var(--highlight-top);
+  }
+
+  .si-card--flush {
+    overflow: hidden;
+  }
+
+  .si-card__header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5) 0;
+  }
+
+  .si-card__title {
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .si-card__meta {
+    color: var(--color-text-muted);
+    font-size: var(--text-13);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-card__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: auto;
+  }
+
+  .si-card__body {
+    padding: var(--space-4) var(--space-5) var(--space-5);
+  }
+
+  .si-card__body--tight {
+    padding-top: var(--space-2);
+    padding-bottom: var(--space-3);
+  }
+
+  .si-card__foot {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2-5);
+    padding: var(--space-3) var(--space-5);
+    border-top: var(--hairline) solid var(--color-border-subtle);
+    color: var(--color-text-secondary);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+  }
+
+  .si-card__foot > .si-icon {
+    margin-top: var(--space-0-5);
+    color: var(--color-text-muted);
+  }
+
+  /* ---------------------------------------------------------------- Figures */
+  .si-stats {
+    display: grid;
+    grid-template-columns: repeat(var(--stat-columns, 4), minmax(0, 1fr));
+  }
+
+  .si-stat {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: var(--space-5) var(--space-6);
+    border-left: var(--hairline) solid var(--color-border-subtle);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .si-stat:first-child {
+    border-left: 0;
+  }
+
+  .si-stats > .si-stat:first-child {
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  }
+
+  .si-stats > .si-stat:last-child {
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  }
+
+  .si-stat--link {
+    cursor: pointer;
+  }
+
+  .si-stat--link:hover {
+    background: var(--color-surface-hover);
+  }
+
+  .si-stat--link:focus-visible {
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  .si-stat__label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    color: var(--color-text-secondary);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .si-stat__value {
+    margin-top: var(--space-2);
+    color: var(--color-text);
+    font-size: var(--stat-value-size);
+    line-height: var(--stat-value-leading);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--tracking-figure);
+    font-variant-numeric: tabular-nums lining-nums;
+    white-space: nowrap;
+  }
+
+  .si-stat__value--md {
+    font-size: var(--text-28);
+    line-height: var(--leading-28);
+  }
+
+  .si-stat__value--sm {
+    font-size: var(--text-21);
+    line-height: var(--leading-21);
+    letter-spacing: var(--tracking-snug);
+  }
+
+  /* A value that isn't a number: "Skipped", "Not analysed yet". Words, never 0. */
+  .si-stat__value--words {
+    color: var(--color-text-secondary);
+    font-size: var(--text-16);
+    line-height: var(--leading-16);
+    letter-spacing: var(--tracking-normal);
+    white-space: normal;
+  }
+
+  .si-stat__context {
+    margin-top: var(--space-2);
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-stat--compact {
+    padding: 0;
+    border-left: 0;
+  }
+
+  .si-stat--compact .si-stat__label {
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-stat--compact .si-stat__value {
+    margin-top: var(--space-0-5);
+  }
+
+  /* Units are set smaller and muted, so the number leads: 22 min 26 s, 117 ms. */
+  /* The space before a unit is a character (so it copies and reads as "312 ms"), set at the unit's size. */
+  .si-unit {
+    color: var(--color-text-muted);
+    font-size: var(--unit-scale-inline);
+    letter-spacing: 0;
+  }
+
+  .si-stat__value .si-unit {
+    font-size: var(--unit-scale);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .si-stat__value--sm .si-unit {
+    font-size: var(--unit-scale-inline);
+  }
+
+  .si-mini-stats {
+    display: grid;
+    grid-template-columns: repeat(var(--stat-columns, 3), minmax(0, 1fr));
+    border: var(--hairline) solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-sunken);
+  }
+
+  .si-mini-stat {
+    min-width: 0;
+    padding: var(--space-3) var(--space-3) var(--space-2-5);
+    border-left: var(--hairline) solid var(--color-border-subtle);
+  }
+
+  .si-mini-stat:first-child {
+    border-left: 0;
+  }
+
+  .si-mini-stat__label {
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-mini-stat__value {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-0-5);
+    font-size: var(--text-21);
+    line-height: var(--leading-21);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--tracking-snug);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-mini-stat__context {
+    margin-top: var(--space-0-5);
+    overflow: hidden;
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* --------------------------------------------------------- Meters and bars */
+  /* A value drawn on the scale the analysis used: the allowed range, its limits, and the part that's out of it. */
+  .si-meter {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1-5);
+    min-width: 0;
+  }
+
+  .si-meter__head {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-meter__value {
+    color: var(--color-text);
+    font-weight: var(--font-weight-medium);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-meter__track {
+    position: relative;
+    height: var(--bar-height-meter);
+    border-radius: var(--radius-full);
+    background: var(--color-chart-track);
+  }
+
+  .si-meter__range,
+  .si-meter__over {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: var(--radius-full);
+  }
+
+  .si-meter__range {
+    background: var(--color-border-strong);
+  }
+
+  .si-meter__over--error {
+    background: var(--color-error);
+  }
+
+  .si-meter__over--warning {
+    background: var(--color-warning-edge);
+  }
+
+  .si-meter__over--notice {
+    background: var(--color-notice);
+  }
+
+  .si-meter__limit {
+    position: absolute;
+    top: calc(var(--space-0-5) * -1);
+    bottom: calc(var(--space-0-5) * -1);
+    width: var(--hairline);
+    background: var(--color-chart-limit);
+  }
+
+  .si-meter__mark {
+    position: absolute;
+    top: 50%;
+    width: var(--rule-width);
+    height: var(--meter-mark-height);
+    border-radius: var(--radius-full);
+    background: var(--color-text);
+    box-shadow: 0 0 0 var(--rule-width) var(--color-surface-raised);
+    transform: translate(-50%, -50%);
+  }
+
+  .si-meter__legend {
+    position: relative;
+    height: var(--leading-11);
+    color: var(--color-text-muted);
+    font-size: var(--text-11);
+    line-height: var(--leading-11);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-meter__tick {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+
+  .si-bar-track {
+    position: relative;
+    display: block;
+    height: var(--bar-height);
+    overflow: hidden;
+    border-radius: var(--radius-full);
+    background: var(--color-chart-track);
+  }
+
+  .si-bar-track--thin {
+    height: var(--bar-height-thin);
+  }
+
+  .si-bar-track--meter {
+    height: var(--bar-height-meter);
+  }
+
+  .si-bar-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    display: block;
+    border-radius: inherit;
+    background: var(--color-accent);
+  }
+
+  /* A share above zero never disappears. */
+  .si-bar-fill--some {
+    min-width: var(--bar-min);
+  }
+
+  .si-share {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2-5);
+    min-width: 0;
+  }
+
+  .si-share .si-bar-track {
+    flex: 1;
+  }
+
+  .si-share__pct {
+    flex: none;
+    min-width: var(--percent-width);
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    font-variant-numeric: tabular-nums lining-nums;
+    text-align: right;
+  }
+
+  .si-progress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1-5);
+    min-width: 0;
+  }
+
+  .si-progress__head {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    color: var(--color-text-secondary);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-progress__value {
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* Indeterminate: a block that slides, or a still third of the track with reduced motion. */
+  .si-bar-fill--indeterminate {
+    width: var(--indeterminate-width);
+    animation: si-indeterminate var(--duration-shimmer) var(--ease-in-out) infinite;
+  }
+
+  /* ------------------------------------------------------ Callouts, banners */
+  .si-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2-5);
+    padding: var(--space-2-5) var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-sunken);
+    box-shadow: inset 0 0 0 var(--hairline) var(--color-border-subtle);
+    color: var(--color-text-secondary);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+  }
+
+  .si-callout__icon {
+    display: inline-flex;
+    flex: none;
+    margin-top: var(--space-0-5);
+    color: var(--color-text-muted);
+  }
+
+  .si-callout__body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-0-5);
+    min-width: 0;
+  }
+
+  .si-callout__title {
+    color: var(--color-text);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .si-callout__actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-2);
+    margin: calc(var(--space-1) * -1) 0;
+  }
+
+  .si-callout code {
+    color: var(--color-text);
+    font-size: var(--text-12);
+  }
+
+  .si-callout--info {
+    background: var(--color-accent-subtle);
+    box-shadow: inset 0 0 0 var(--hairline) var(--color-accent-border);
+    color: var(--color-text);
+  }
+
+  .si-callout--info .si-callout__icon {
+    color: var(--color-accent-text);
+  }
+
+  .si-callout--warning {
+    background: var(--color-warning-subtle);
+    box-shadow: inset 0 0 0 var(--hairline) var(--color-border);
+    color: var(--color-text);
+  }
+
+  .si-callout--error {
+    background: var(--color-error-subtle);
+    box-shadow: inset 0 0 0 var(--hairline) var(--color-border);
+    color: var(--color-text);
+  }
+
+  .si-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: var(--control-height-lg);
+    padding: var(--space-2) var(--space-4);
+    border-bottom: var(--hairline) solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+  }
+
+  .si-banner__icon {
+    display: inline-flex;
+    flex: none;
+    color: var(--color-text-muted);
+  }
+
+  .si-banner__body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-0-5);
+    min-width: 0;
+  }
+
+  .si-banner__detail {
+    color: var(--color-text-secondary);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-banner__actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .si-banner--info {
+    background: var(--color-accent-subtle);
+  }
+
+  .si-banner--info .si-banner__icon {
+    color: var(--color-accent-text);
+  }
+
+  .si-banner--warning {
+    background: var(--color-warning-subtle);
+  }
+
+  .si-banner--error {
+    background: var(--color-error-subtle);
+  }
+
+  /* A banner inside a card or panel, rather than across the window. */
+  .si-banner--inset {
+    min-height: 0;
+    border: var(--hairline) solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  /* ---------------------------------------------------------- Empty states */
+  .si-empty {
+    display: grid;
+    justify-items: start;
+    gap: var(--space-2);
+    padding: var(--space-2) 0 var(--space-1);
+  }
+
+  .si-empty--panel {
+    padding: var(--space-8) var(--space-6);
+  }
+
+  .si-empty--row {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-4);
+  }
+
+  .si-empty__icon {
+    display: grid;
+    place-items: center;
+    width: var(--icon-box-lg);
+    height: var(--icon-box-lg);
+    margin-bottom: var(--space-1);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-hover);
+    color: var(--color-text-secondary);
+  }
+
+  .si-empty--row .si-empty__icon {
+    margin: 0;
+  }
+
+  .si-empty__content {
+    display: grid;
+    justify-items: start;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .si-empty__title {
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .si-empty__text {
+    max-width: var(--measure-text);
+    color: var(--color-text-secondary);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+  }
+
+  .si-empty__chips,
+  .si-empty__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
+  }
+
+  /* ------------------------------------------------------------------ URLs */
+  /* Monospace; the host muted and the path strong; truncated in the middle, so the host and the end stay. */
+  .si-url {
+    position: relative;
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    font-family: var(--font-mono);
+    font-size: var(--mono-scale);
+    white-space: nowrap;
+  }
+
+  .si-url--inline {
+    display: inline-block;
+    vertical-align: bottom;
+  }
+
+  .si-url--wrap {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .si-url__copy {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: copy;
+  }
+
+  /* The full URL: what screen readers, find-in-page and the layout's width read. It takes no height. */
+  .si-url__full {
+    display: block;
+    height: 0;
+    overflow: hidden;
+  }
+
+  .si-url--wrap .si-url__full {
+    height: auto;
+  }
+
+  .si-url__shown {
+    display: block;
+    overflow: hidden;
+    text-overflow: clip;
+  }
+
+  .si-url__origin {
+    color: var(--color-text-muted);
+  }
+
+  .si-url__path {
+    color: var(--color-text);
+  }
+
+  /* The open-in-browser button has its own room at the end, so it never covers the end of the URL. */
+  .si-url--openable {
+    padding-right: calc(var(--control-height-xs) + var(--space-0-5));
+  }
+
+  .si-url__open {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    opacity: 0;
+    transform: translateY(-50%);
+  }
+
+  .si-url:hover .si-url__open,
+  .si-url:focus-within .si-url__open {
+    opacity: 1;
+  }
+
+  /* -------------------------------------------------------------- Favicons */
+  .si-favicon {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    overflow: hidden;
+    border-radius: var(--radius-xs);
+    background: var(--color-surface);
+    box-shadow: 0 0 0 var(--hairline) var(--color-border);
+    color: var(--color-text-secondary);
+    font-family: var(--font-sans);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1;
+  }
+
+  .si-favicon--sm {
+    width: var(--favicon-sm);
+    height: var(--favicon-sm);
+    font-size: var(--text-11);
+  }
+
+  .si-favicon--md {
+    width: var(--favicon-md);
+    height: var(--favicon-md);
+    font-size: var(--text-12);
+  }
+
+  .si-favicon--lg {
+    width: var(--favicon-lg);
+    height: var(--favicon-lg);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-14);
+  }
+
+  .si-favicon__image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  /* ----------------------------------------------------------------- Links */
+  .si-link {
+    border-radius: var(--radius-xs);
+    color: var(--color-accent-text);
+    font-weight: var(--font-weight-medium);
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .si-link:hover {
+    text-decoration: underline;
+    text-underline-offset: var(--underline-offset);
+  }
+
+  /* A link in running text: underlined, so it isn't told apart by colour alone (WCAG 1.4.1). */
+  .si-link--inline {
+    text-decoration: underline;
+    text-decoration-color: var(--color-accent-border);
+    text-underline-offset: var(--underline-offset);
+  }
+
+  .si-link--inline:hover {
+    text-decoration-color: currentColor;
+  }
+
+  .si-link--subtle {
+    color: inherit;
+    font-weight: inherit;
+  }
+
+  .si-link--subtle:hover {
+    color: var(--color-accent-text);
+  }
+
+  /* ------------------------------------------------------------- Headers */
+  .si-page-header {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-4);
+  }
+
+  .si-page-header__text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .si-page-header__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-size: var(--text-28);
+    line-height: var(--leading-28);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--tracking-tight);
+  }
+
+  .si-page-header__subtitle {
+    margin-top: var(--space-1-5);
+    max-width: var(--container-content);
+    color: var(--color-text-secondary);
+    font-size: var(--text-14);
+    line-height: var(--leading-14);
+  }
+
+  .si-page-header__actions,
+  .si-section-header__actions,
+  .si-grid-header__actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .si-section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .si-section-header__title {
+    display: flex;
+    flex: none;
+    align-items: baseline;
+    gap: var(--space-3);
+    font-size: var(--text-18);
+    line-height: var(--leading-18);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--tracking-snug);
+  }
+
+  .si-section-header--sm .si-section-header__title {
+    font-size: var(--text-16);
+    line-height: var(--leading-16);
+  }
+
+  .si-section-header__meta {
+    color: var(--color-text-muted);
+    font-size: var(--text-13);
+    font-weight: var(--font-weight-regular);
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-section-header__actions {
+    margin-left: auto;
+  }
+
+  /* Grid screens: one line, so the rows get the room. */
+  .si-grid-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: var(--control-height-lg);
+  }
+
+  .si-grid-header__title {
+    font-size: var(--text-18);
+    line-height: var(--leading-18);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--tracking-snug);
+  }
+
+  .si-grid-header__actions {
+    margin-left: auto;
+  }
+
+  .si-result-count {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-1-5);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-result-count__n {
+    color: var(--color-text);
+    font-size: var(--text-18);
+    line-height: var(--leading-18);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--tracking-snug);
+  }
+
+  .si-result-count__of {
+    color: var(--color-text-secondary);
+    font-size: var(--text-13);
+  }
+
+  /* ------------------------------------------------------ Navigation items */
+  .si-nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2-5);
+    height: var(--nav-item-height);
+    padding: 0 var(--space-2-5);
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    font-size: var(--text-13);
+    font-weight: var(--font-weight-medium);
+    text-decoration: none;
+    transition:
+      background-color var(--duration-instant) var(--ease-out),
+      color var(--duration-instant) var(--ease-out);
+  }
+
+  .si-nav-item:hover:not(.si-current) {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  .si-nav-item__icon {
+    color: var(--color-text-muted);
+  }
+
+  .si-nav-item.si-current .si-nav-item__icon {
+    color: var(--color-accent-text);
+  }
+
+  .si-nav-item__label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .si-nav-item__count {
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    font-weight: var(--font-weight-regular);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .si-nav-item.si-current .si-nav-item__count {
+    color: var(--color-text-secondary);
+  }
+
+  .si-nav-item--collapsed {
+    justify-content: center;
+    padding: 0;
+  }
+
+  /* -------------------------------------------------------------- List rows */
+  .si-list-row {
+    display: grid;
+    grid-template-columns: var(--icon-md) minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--space-2-5);
+    row-gap: var(--space-0-5);
+    width: 100%;
+    min-height: var(--list-row-height);
+    padding: var(--space-1-5) var(--space-2-5);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+    text-align: start;
+    text-decoration: none;
+  }
+
+  .si-list-row--plain {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  :is(button, a).si-list-row {
+    cursor: pointer;
+  }
+
+  .si-list-row:is(button, a, [role='option']):hover:not(
+      [aria-selected='true'],
+      [aria-current='page'],
+      [aria-current='true']
+    ) {
+    background: var(--color-surface-hover);
+  }
+
+  .si-list-row:focus-visible {
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  /* Selected: the tint and the accent rule (3:1), never the tint alone. */
+  .si-list-row[aria-selected='true'],
+  .si-list-row[aria-current='page'],
+  .si-list-row[aria-current='true'] {
+    background: var(--color-surface-selected);
+    box-shadow: inset var(--rule-width) 0 0 var(--color-accent);
+  }
+
+  .si-list-row[aria-selected='true'] .si-list-row__title,
+  .si-list-row[aria-current='page'] .si-list-row__title,
+  .si-list-row[aria-current='true'] .si-list-row__title {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .si-list-row__icon {
+    display: inline-flex;
+  }
+
+  .si-list-row__title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .si-list-row__meta {
+    color: var(--color-text-secondary);
+    font-variant-numeric: tabular-nums lining-nums;
+    white-space: nowrap;
+  }
+
+  .si-list-row__description {
+    grid-column: 2 / -1;
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    white-space: normal;
+  }
+
+  .si-list-row--plain .si-list-row__description {
+    grid-column: 1 / -1;
+  }
+
+  .si-list-row--muted .si-list-row__title {
+    color: var(--color-text-secondary);
+  }
+
+  .si-list-row[aria-disabled='true'] {
+    opacity: var(--opacity-disabled);
+    cursor: default;
+  }
+
+  .si-list-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-2-5) var(--space-1-5);
+    color: var(--color-text-secondary);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .si-list-heading__meta {
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-regular);
+  }
+
+  /* ------------------------------------------------------------------ Facts */
+  .si-facts {
+    display: grid;
+    grid-template-columns: var(--facts-label-width) minmax(0, 1fr);
+    gap: var(--space-3) var(--space-4);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+  }
+
+  .si-facts--auto {
+    grid-template-columns: var(--facts-columns);
+  }
+
+  .si-facts__label {
+    color: var(--color-text-muted);
+  }
+
+  .si-facts__value {
+    min-width: 0;
+    color: var(--color-text);
+    overflow-wrap: anywhere;
+  }
+}
+
+@keyframes si-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes si-live-pulse {
+  from {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.8);
+  }
+}
+
+@keyframes si-indeterminate {
+  from {
+    left: calc(var(--indeterminate-width) * -1);
+  }
+  to {
+    left: 100%;
+  }
+}
+
+/* Reduced motion: still marks. The live dot keeps its dot and loses its pulse; a still spinner is still busy. */
+@media (prefers-reduced-motion: reduce) {
+  .si-live-dot--pulse::after {
+    animation: none;
+    opacity: 0;
+  }
+
+  .si-bar-fill--indeterminate {
+    left: 0;
+    animation: none;
+  }
+}
+
+/*
+  High contrast. The browser forces text, backgrounds and borders to system colours; these give back what it takes
+  away: edges for controls that had only a shadow or a tint, a Highlight outline for what's selected, current or
+  highlighted, and system colours for the marks and bars drawn as backgrounds. The severity shapes keep their own
+  system colours (tokens.css), drawn with `forced-color-adjust: none` so the glyph stays cut out of the shape.
+*/
+@media (forced-colors: active) {
+  .si-btn,
+  .si-chip,
+  .si-badge,
+  .si-sev-badge,
+  .si-status-pill,
+  .si-live-badge,
+  .si-segmented,
+  .si-kbd,
+  .si-favicon,
+  .si-tooltip,
+  .si-menu,
+  .si-popover,
+  .si-dialog,
+  .si-card,
+  .si-callout,
+  .si-mini-stats {
+    border: var(--hairline) solid CanvasText;
+  }
+
+  .si-status-pill--plain {
+    border: 0;
+  }
+
+  /* A filled button keeps its fill: Highlight under HighlightText, drawn as it is, so the browser's backplate (Canvas
+     behind every run of text) doesn't sit under white text. Disabled, it's an outline in GrayText. */
+  .si-btn--primary,
+  .si-btn--danger {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .si-btn--primary:is(:disabled, [aria-disabled='true']:not([data-loading])),
+  .si-btn--danger:is(:disabled, [aria-disabled='true']:not([data-loading])) {
+    border-color: GrayText;
+    background: Canvas;
+    color: GrayText;
+  }
+
+  .si-btn--primary .si-kbd,
+  .si-btn--danger .si-kbd {
+    border-color: currentColor;
+    color: currentColor;
+  }
+
+  .si-btn:disabled,
+  .si-btn[aria-disabled='true']:not([data-loading]),
+  .si-segment:disabled,
+  .si-field[data-disabled],
+  .si-choice[data-disabled] {
+    color: GrayText;
+    border-color: GrayText;
+    opacity: 1;
+  }
+
+  .si-btn[aria-pressed='true'],
+  .si-segment[aria-checked='true'],
+  .si-segment[aria-pressed='true'],
+  .si-menu-item[data-highlighted],
+  .si-list-row[aria-selected='true'],
+  .si-list-row[aria-current='page'],
+  .si-list-row[aria-current='true'],
+  .si-stat--link:hover {
+    outline: var(--focus-width) solid Highlight;
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  .si-checkbox[data-state='checked'],
+  .si-checkbox[data-state='indeterminate'],
+  .si-switch[data-state='checked'],
+  .si-switch__thumb,
+  .si-tab[aria-selected='true']::after,
+  .si-bar-fill,
+  .si-meter__range,
+  .si-meter__over--error,
+  .si-meter__over--warning,
+  .si-meter__over--notice,
+  .si-meter__mark,
+  .si-live-dot,
+  .si-live-dot--pulse::after,
+  .si-code__mark {
+    forced-color-adjust: none;
+  }
+
+  .si-checkbox[data-state='checked'],
+  .si-checkbox[data-state='indeterminate'] {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .si-switch {
+    border: var(--hairline) solid ButtonText;
+  }
+
+  .si-switch__thumb {
+    background: ButtonText;
+  }
+
+  .si-switch[data-state='checked'] {
+    border-color: Highlight;
+    background: Highlight;
+  }
+
+  .si-switch[data-state='checked'] .si-switch__thumb {
+    background: HighlightText;
+  }
+
+  .si-tab[aria-selected='true']::after,
+  .si-bar-fill,
+  .si-live-dot,
+  .si-live-dot--pulse::after,
+  .si-meter__range {
+    background: Highlight;
+  }
+
+  .si-meter__over--error,
+  .si-meter__over--warning,
+  .si-meter__over--notice,
+  .si-meter__mark {
+    background: CanvasText;
+  }
+
+  .si-code__mark {
+    border: var(--hairline) solid CanvasText;
+    background: Canvas;
+  }
+
+  .si-sev-mark {
+    forced-color-adjust: none;
+  }
+
+  .si-sev-mark--skipped,
+  .si-sev-mark--passed {
+    color: CanvasText;
+  }
+
+  .si-field[data-invalid] {
+    border-style: dashed;
+  }
+}

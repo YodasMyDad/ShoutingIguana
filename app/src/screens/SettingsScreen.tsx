@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from '@tanstack/react-router';
-import clsx from 'clsx';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useParams } from '@tanstack/react-router';
+import { useEffect, useState } from 'react';
 import { healthQuery } from '../api/queries';
 import { ShortcutList } from '../keyboard/ShortcutSheet';
 import { isTauri } from '../lib/platform';
 import type { Density, ThemePreference } from '../settings/schema';
 import { updateSettings, useSettings } from '../settings/settingsStore';
 import { ipc, type ShellInfo } from '../shell/ipc';
+import { Fact, Facts } from '../ui/Facts';
+import { NavItem } from '../ui/NavItem';
+import { SegmentedControl } from '../ui/SegmentedControl';
 import { ScreenStub } from './ScreenStub';
 
 const SECTIONS = [
@@ -31,17 +33,13 @@ export function SettingsScreen() {
         <ul className="flex flex-col gap-0.5">
           {SECTIONS.map((entry) => (
             <li key={entry.id}>
-              <Link
+              <NavItem
                 to="/settings/{-$section}"
                 params={{ section: entry.id === 'general' ? undefined : entry.id }}
+                activeOptions={{ exact: true }}
                 aria-current={entry.id === current.id ? 'page' : undefined}
-                className={clsx(
-                  'flex h-(--nav-item-height) items-center rounded-md px-2.5 text-13',
-                  entry.id === current.id ? 'si-current font-medium' : 'text-text-secondary hover:bg-surface-hover',
-                )}
-              >
-                {entry.title}
-              </Link>
+                label={entry.title}
+              />
             </li>
           ))}
         </ul>
@@ -91,6 +89,7 @@ function General() {
   );
 }
 
+/** One setting chosen from a few, all in view: the segmented control, its legend, and what the choice means. */
 function Choice<T extends string>({
   legend,
   value,
@@ -102,23 +101,16 @@ function Choice<T extends string>({
   options: { value: T; label: string; hint?: string }[];
   onChange: (value: T) => void;
 }) {
+  const hint = options.find((option) => option.value === value)?.hint;
   return (
-    <fieldset className="flex flex-col gap-2">
-      <legend className="pb-1 text-14 font-medium">{legend}</legend>
-      {options.map((option) => (
-        <label key={option.value} className="flex items-center gap-2 text-13">
-          <input
-            type="radio"
-            name={legend}
-            value={option.value}
-            checked={value === option.value}
-            onChange={() => onChange(option.value)}
-          />
-          {option.label}
-          {option.hint ? <span className="text-text-muted">{option.hint}</span> : null}
-        </label>
-      ))}
-    </fieldset>
+    <div className="flex flex-col items-start gap-2">
+      {/* The control's own name is the legend: this is its visible copy. */}
+      <span aria-hidden="true" className="text-14 font-medium">
+        {legend}
+      </span>
+      <SegmentedControl<T> label={legend} value={value} options={options} onValueChange={onChange} />
+      {hint ? <span className="text-12 text-text-muted">{hint}</span> : null}
+    </div>
   );
 }
 
@@ -134,23 +126,20 @@ function About() {
   }, []);
   return (
     <ScreenStub title="About" purpose="Shouting Iguana: an SEO crawler and site auditor.">
-      <dl className="grid max-w-(--content-max) grid-cols-(--facts-columns) gap-x-6 gap-y-1 text-13">
-        <Fact label="App">
+      <Facts auto className="max-w-(--content-max)">
+        <Fact label="App" className="font-mono text-12">
           {shell ? `${shell.appVersion}${shell.debug ? ' (debug build)' : ''}` : 'Running in a browser'}
         </Fact>
-        <Fact label="Engine">{health.data ? health.data.engineVersion : health.error ? 'Not connected' : '…'}</Fact>
-        <Fact label="Data folder">{health.data?.dataDir ?? '–'}</Fact>
-        <Fact label="Logs">{shell?.logDir ?? health.data?.stateDir ?? '–'}</Fact>
-      </dl>
+        <Fact label="Engine" className="font-mono text-12">
+          {health.data ? health.data.engineVersion : health.error ? 'Not connected' : '…'}
+        </Fact>
+        <Fact label="Data folder" className="font-mono text-12">
+          {health.data?.dataDir ?? '–'}
+        </Fact>
+        <Fact label="Logs" className="font-mono text-12">
+          {shell?.logDir ?? health.data?.stateDir ?? '–'}
+        </Fact>
+      </Facts>
     </ScreenStub>
-  );
-}
-
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <>
-      <dt className="text-text-muted">{label}</dt>
-      <dd className="font-mono text-12 break-all">{children}</dd>
-    </>
   );
 }

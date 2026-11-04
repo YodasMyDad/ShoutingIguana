@@ -35,7 +35,8 @@ Webview (React, app/src) ──────────────────�
 | `src/layout` | The shell's layout: sidebar, top bar, inspector slot, banners, the stopping overlay |
 | `src/screens` | One file per route. Home and the URLs grid work; the rest are stubs for their slices |
 | `src/app` | The router, the query client, overlays, sections, the root component |
-| `src/styles` | `tokens.css` (every design value), `base.css`, the Tailwind entry |
+| `src/ui` | The component library: buttons, fields, menus, severity, figures, URLs and the rest (see Components) |
+| `src/styles` | `tokens.css` (every design value), `base.css`, `components.css` (the library's look), the Tailwind entry |
 | `src/crawl` | Crawl status words, the crawl actions, opening crawl files |
 | `src-tauri` | The shell (see below) |
 | `scripts` | Building the sidecar, `npm run dev`, synthetic crawls, the orphan check, the shell smoke test |
@@ -301,7 +302,38 @@ slices.
   with `surface-selected` as `Canvas`: selected and current things get a `Highlight` outline on the page's own colours,
   so no text sits on Highlight unreadable, and selected text is HighlightText on Highlight. Focus rings, the grid's
   included, are outlines, so they survive it.
-- Fonts: Inter and JetBrains Mono are named first in the stacks but not bundled yet (the design-system pass adds them).
+- Fonts: Inter and JetBrains Mono are bundled (`styles/fonts.css`, the woff2 faces in `styles/fonts`), so the app
+  looks the same offline; the platform's fonts follow them in the stacks.
+
+## Components
+
+`src/ui` is the component library every screen is made of, one component per file, in direction B's look
+(`styles/components.css`, ported from `app/design/directions/clarity/app.css` under `si-` names). Each is in Storybook
+under **Design system** in every state, forced where it can't be reached without touching (hover, focus and active
+through `storybook-addon-pseudo-states`), in both themes and under forced colours; `npm run test:stories` runs axe on
+every story. Screens compose these and write layout with the tokens; a look that only one screen has stays in its
+screen, and one that a second screen needs moves here.
+
+| Need | Use |
+| --- | --- |
+| An action | `Button` (primary for the one main action in view, secondary, ghost, danger only for losing data; `loading` shows a spinner inside after 300 ms, at the same width; `command` gives its tooltip and `aria-keyshortcuts` from the registry; `asChild` for a link that acts as a button). `IconButton` when there's no room for words: its `label` is required and is its tooltip |
+| A hint | `Tooltip`: on hover after a rest, at once on keyboard focus, with the command's keys. Never the only place something is said |
+| Text input | `TextField` (label, description, inline error, read-only, disabled, `lg` for Home's URL field) and `SearchField` (clear and Esc, the key that focuses it). Errors are inline, never toasts |
+| A choice | `Checkbox` for a form's choice, `Switch` for one that applies at once, `SegmentedControl` for one of a few in view (counts and icon-only segments; the arrows choose), `Select` for one of a short list, `Tabs` for views of one thing |
+| More actions | `DropdownMenu` and `ContextMenu` share `MenuItem` (with `command`, its keys on the right and disabled when it can't run), `MenuCheckboxItem`, `MenuRadioItem`, `MenuSeparator`, `MenuLabel`. `Popover` for content from a button; `Dialog` for what can't wait, `ConfirmDialog` only for what can't be undone |
+| Severity | `SeverityMark` (shape and colour, the word its name) in dense rows; `SeverityBadge` (with the word) wherever there's room; `SeverityCount(s)` for counts. Notices are the quietest |
+| Status | `StatusPill` for a crawl's status (the words of `crawl/status.ts`), `LiveBadge` and `LiveDot` for what updates live, `StatusCode` for a status code's class (only that meaning), `Badge` for a label without colour (`dashed`: what didn't happen) |
+| Filters | `FilterChip` reads as a sentence, opens its editor, goes with ✕ or Delete; `AddFilterChip`; the `preview` chip beside a number that opens its URLs |
+| Numbers | `Num` (counts, bytes, ms, rates, percentages; the unit smaller and muted), `Duration`, `RelativeTime` (the exact time in its tooltip); `Stat` and `StatLink` (a figure that opens its URLs) in `Stats`, `MiniStat`s; `Meter` for a value on its check's scale; `ShareBar` for a share; `ProgressBar` with its phase; `RefreshLine` for a panel that's refreshing; `Spinner` only inside what's working |
+| Messages | `Callout` (insight, info, warning, error), `Banner` for a view's state with its one action, `EmptyState`, `FilteredEmptyState` (the filters and one-click clear), `SkippedState` (the reason in words) |
+| URLs and places | `Url` (mono, truncated in the middle to its measured width, path-only on the crawl's origin, copy on click, open in the browser), `Favicon`, `TextLink` and `NavItem` (router links; the current place keeps `.si-current`), `ListRow` and `ListHeading`, `PageHeader`, `SectionHeader`, `GridHeader` with `ResultCount`, `Facts`, `Card` |
+
+The states rule: a component isn't done until each state it can be in (default, hover, focus-visible, active or
+pressed, disabled, loading, invalid, selected or current, long text, empty) has its look in `components.css` and its
+story, and passes axe in both themes. Every state indicator is 3:1 against what's beside it and never a tint alone;
+focus is the one outline from `base.css`; under forced colours edges become system colours and what's selected or
+current gets a Highlight outline. Icons are Lucide's, through `Icon` (decorative unless labelled); severity's shapes
+are drawn for the app and are never swapped for Lucide's.
 
 ## Feedback
 
@@ -341,5 +373,6 @@ slices.
 - The engine's E3b to E6: the links, sitemaps and robots grids, analysis progress, export, search, favicons.
 - A grid sorted by something other than crawl order keeps its selection by row index while a crawl adds rows, so a
   live refresh can move rows under it: selecting by row id comes with the full grid.
-- Fonts, icons and the final look, from the design-system pass.
+- Each screen's own pieces, built from the components by its slice: the checks list's layout, the explanation band,
+  charts, the inspector's sections. A piece two screens need joins `src/ui`.
 - Drag-and-drop of `.sicrawl` files (the shell already delivers drops through Tauri's drag-drop event).

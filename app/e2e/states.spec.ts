@@ -137,6 +137,54 @@ for (const colorScheme of ['light', 'dark'] as const) {
   });
 }
 
+// The design system's own indicators (src/ui): the chosen segment's control edge, a field's edge and its focus ring.
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`the chosen segment and a field's edge and focus ring stand out at 3:1 (${colorScheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme });
+    await page.goto('/settings');
+    const density = page.getByRole('radiogroup', { name: 'Density' });
+    const chosen = density.getByRole('radio', { checked: true });
+    await expect(chosen).toBeVisible();
+    const segment = await style(chosen, 'border-top-color', 'background-color', 'color');
+    const track = (await style(density, 'background-color'))['background-color'] ?? '';
+    const edge = segment['border-top-color'] ?? '';
+    // The edge against the track around it and against the segment's own fill; its words on that fill.
+    expect(contrast(edge, track)).toBeGreaterThanOrEqual(3);
+    expect(contrast(edge, segment['background-color'] ?? '')).toBeGreaterThanOrEqual(3);
+    expect(contrast(segment.color ?? '', segment['background-color'] ?? '')).toBeGreaterThanOrEqual(4.5);
+    const other = density.getByRole('radio', { checked: false }).first();
+    expect(contrast((await style(other, 'color')).color ?? '', track)).toBeGreaterThanOrEqual(4.5);
+    await expectNoViolations(page);
+
+    await page.goto('/');
+    const field = page.getByRole('textbox', { name: 'Start URL' });
+    const box = field.locator('xpath=..');
+    const around = await shownBackground(box.locator('xpath=..'));
+    expect(contrast((await style(box, 'border-top-color'))['border-top-color'] ?? '', around)).toBeGreaterThanOrEqual(
+      3,
+    );
+    await field.focus();
+    const ring = await style(box, 'outline-style', 'outline-color');
+    expect(ring['outline-style']).toBe('solid');
+    expect(contrast(ring['outline-color'] ?? '', around)).toBeGreaterThanOrEqual(3);
+  });
+}
+
+test('under forced colours, the chosen segment is outlined and every segment stays readable', async ({ page }) => {
+  await page.emulateMedia({ forcedColors: 'active' });
+  await page.goto('/settings');
+  const density = page.getByRole('radiogroup', { name: 'Density' });
+  const chosen = density.getByRole('radio', { checked: true });
+  const outline = await style(chosen, 'outline-style', 'outline-color', 'color');
+  expect(outline['outline-style']).toBe('solid');
+  expect(contrast(outline['outline-color'] ?? '', await shownBackground(chosen))).toBeGreaterThanOrEqual(3);
+  for (const segment of await density.getByRole('radio').all()) {
+    expect(
+      contrast((await style(segment, 'color')).color ?? '', await shownBackground(segment)),
+    ).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
 test('under forced colours, what is selected or current is outlined, and every state stays readable', async ({
   page,
 }) => {
