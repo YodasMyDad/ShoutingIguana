@@ -25,7 +25,7 @@ export interface SelectProps<T extends string> {
 
 /**
  * A choice from a short list, as a menu button: the button shows what's chosen ("Newest first"), the menu the
- * options with a dot on the chosen one. For long lists or typing to filter, use a combobox instead.
+ * options with a tick on the chosen one. For long lists or typing to filter, use a combobox instead.
  */
 export function Select<T extends string>({
   label,

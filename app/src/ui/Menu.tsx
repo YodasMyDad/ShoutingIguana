@@ -1,7 +1,7 @@
 import * as ContextPrimitive from '@radix-ui/react-context-menu';
 import * as DropdownPrimitive from '@radix-ui/react-dropdown-menu';
 import clsx from 'clsx';
-import { Check, Dot } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { createContext, useContext, type ReactElement, type ReactNode } from 'react';
 import { ariaKeyShortcut, parseChord } from '../keyboard/keys';
 import { commands, useChord, useRegistryVersion } from '../keyboard/registry';
@@ -207,7 +207,7 @@ export function MenuRadioGroup({
   );
 }
 
-/** One of a few ("Newest first"): a dot where the icon goes on the chosen one. */
+/** One of a few ("Newest first"): a tick where the icon goes on the chosen one. */
 export function MenuRadioItem({ value, children, shortcut, disabled }: ItemCommon & { value: string }) {
   const Parts = useParts();
   const { keys, aria } = useKeys(shortcut, undefined);
@@ -215,7 +215,7 @@ export function MenuRadioItem({ value, children, shortcut, disabled }: ItemCommo
     <Parts.RadioItem value={value} disabled={disabled} aria-keyshortcuts={aria} className="si-menu-item">
       <span className="si-menu-item__icon si-menu-item__check">
         <Parts.ItemIndicator>
-          <Icon icon={Dot} size="lg" />
+          <Icon icon={Check} size="md" />
         </Parts.ItemIndicator>
       </span>
       <span className="si-menu-item__label">{children}</span>

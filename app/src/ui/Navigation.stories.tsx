@@ -9,6 +9,7 @@ import { Favicon } from './Favicon';
 import { LiveBadge } from './LiveBadge';
 import { ListHeading, ListRow } from './ListRow';
 import { NavItem } from './NavItem';
+import { Num } from './Num';
 import { GridHeader, PageHeader, ResultCount, SectionHeader } from './PageHeader';
 import { SearchField } from './SearchField';
 import { Badge } from './Badge';
@@ -212,6 +213,12 @@ export const ListRows: Story = {
       { id: '4xx', severity: 'error', title: 'Internal URL returns 4xx', count: 9 },
       { id: 'broken', severity: 'error', title: 'Links to broken internal URLs', count: 5 },
       { id: 'anchor', severity: 'notice', title: 'Internal links without anchor text', count: 265 },
+      {
+        id: 'long',
+        severity: 'warning',
+        title: 'Another version of the site answers with a page instead of redirecting to the main one',
+        count: 82_904,
+      },
     ] as const;
     return (
       <StoryFrame>
@@ -226,7 +233,7 @@ export const ListRows: Story = {
                 asChild
                 icon={<SeverityMark severity={row.severity} />}
                 title={row.title}
-                meta={row.count}
+                meta={<Num value={row.count} />}
                 className={index === 0 ? 'is-hover' : index === 1 ? 'is-focus' : undefined}
               >
                 <div

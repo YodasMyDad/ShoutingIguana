@@ -243,7 +243,12 @@ export const Segmented: Story = {
 
 /** A menu-button select, and tabs with counts. */
 export const SelectAndTabs: Story = {
-  parameters: { pseudo: { hover: ['.is-hover'], focusVisible: ['.is-focus'] } },
+  parameters: {
+    pseudo: {
+      hover: ['.is-hover', '.is-tabs [role="tab"]:nth-child(3)'],
+      focusVisible: ['.is-focus', '.is-tabs [role="tab"]:nth-child(4)'],
+    },
+  },
   render: function SelectAndTabs() {
     const [sort, setSort] = useState('newest');
     return (
@@ -271,8 +276,31 @@ export const SelectAndTabs: Story = {
             ]}
           />
         </StateRow>
+        <StateRow label="Hover · focus">
+          <Select
+            label="Sort"
+            value={sort}
+            onValueChange={setSort}
+            className="is-hover"
+            options={[
+              { value: 'newest', label: 'Newest first' },
+              { value: 'oldest', label: 'Oldest first' },
+            ]}
+          />
+          <Select
+            label="Sort"
+            value={sort}
+            onValueChange={setSort}
+            className="is-focus"
+            options={[
+              { value: 'newest', label: 'Newest first' },
+              { value: 'oldest', label: 'Oldest first' },
+            ]}
+          />
+        </StateRow>
         <Tabs
           label="Inspector sections"
+          className="is-tabs"
           flush
           tabs={[
             { value: 'summary', label: 'Summary', content: <p className="pt-4 text-13">The URL’s summary.</p> },
