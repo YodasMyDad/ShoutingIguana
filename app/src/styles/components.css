@@ -2440,13 +2440,31 @@
     border: var(--hairline) solid CanvasText;
   }
 
-  .si-btn--ghost:not([aria-pressed='true']),
-  .si-btn--icon.si-btn--ghost:not([aria-pressed='true']) {
-    border-color: transparent;
-  }
-
   .si-status-pill--plain {
     border: 0;
+  }
+
+  /* A filled button keeps its fill: Highlight under HighlightText, drawn as it is, so the browser's backplate (Canvas
+     behind every run of text) doesn't sit under white text. Disabled, it's an outline in GrayText. */
+  .si-btn--primary,
+  .si-btn--danger {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .si-btn--primary:is(:disabled, [aria-disabled='true']:not([data-loading])),
+  .si-btn--danger:is(:disabled, [aria-disabled='true']:not([data-loading])) {
+    border-color: GrayText;
+    background: Canvas;
+    color: GrayText;
+  }
+
+  .si-btn--primary .si-kbd,
+  .si-btn--danger .si-kbd {
+    border-color: currentColor;
+    color: currentColor;
   }
 
   .si-btn:disabled,

@@ -410,6 +410,14 @@
   [data-sonner-toaster] [data-sonner-toast].si-toast [data-close-button] {
     border: var(--hairline) solid CanvasText;
   }
+
+  /* The action keeps its fill, as a primary button does (components.css): no backplate under its white text. */
+  [data-sonner-toaster] [data-sonner-toast].si-toast [data-button].si-toast-action {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
 }
 
 @keyframes progress-line {
