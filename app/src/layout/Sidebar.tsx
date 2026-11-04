@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { crawlQuery, libraryQuery } from '../api/queries';
+import type { IssueCounts } from '../api/types';
 import { CRAWL_SECTIONS, type CrawlSection } from '../app/sections';
 import logoUrl from '../assets/iguana-64.png';
 import { crawlName } from '../crawl/status';
@@ -25,6 +26,8 @@ import { Favicon } from '../ui/Favicon';
 import { IconButton } from '../ui/IconButton';
 import { LiveDot } from '../ui/LiveBadge';
 import { NavItem } from '../ui/NavItem';
+import { SeverityMark } from '../ui/SeverityMark';
+import { SEVERITIES, type Severity } from '../ui/severity';
 
 /** Each section's icon, as the design draws the sidebar. */
 const SECTION_ICONS: Record<CrawlSection, LucideIcon> = {
@@ -98,6 +101,7 @@ export function Sidebar() {
                 section={section}
                 collapsed={collapsed}
                 count={section.id === 'issues' ? issues : null}
+                issueCounts={section.id === 'issues' ? (crawl?.issues ?? null) : null}
               />
             ))}
           </ul>
@@ -114,16 +118,22 @@ export function Sidebar() {
   );
 }
 
+/** Each severity's words under Issues: "Errors 2". */
+const SEVERITY_LABELS: Record<Severity, string> = { error: 'Errors', warning: 'Warnings', notice: 'Notices' };
+
 function SectionLink({
   crawlId,
   section,
   collapsed,
   count,
+  issueCounts = null,
 }: {
   crawlId: string;
   section: (typeof CRAWL_SECTIONS)[number];
   collapsed: boolean;
   count: number | null;
+  /** Checks with issues, by severity: each opens the list filtered to it. */
+  issueCounts?: IssueCounts | null;
 }) {
   const props = {
     label: section.title,
@@ -136,7 +146,31 @@ function SectionLink({
     case 'issues':
       return (
         <li>
-          <NavItem to="/crawls/$crawl/issues/{-$check}" params={{ crawl: crawlId }} {...props} />
+          <NavItem
+            to="/crawls/$crawl/issues/{-$check}"
+            params={{ crawl: crawlId }}
+            activeOptions={{ includeSearch: false }}
+            {...props}
+          />
+          {issueCounts && !collapsed ? (
+            <ul aria-label="Issues by severity" className="flex flex-col gap-0.5 pt-0.5">
+              {SEVERITIES.map((severity) => (
+                <li key={severity}>
+                  <NavItem
+                    to="/crawls/$crawl/issues/{-$check}"
+                    params={{ crawl: crawlId }}
+                    search={{ severity: [severity] }}
+                    activeOptions={{ includeSearch: true, exact: false }}
+                    activeProps={{ 'aria-current': undefined }}
+                    label={SEVERITY_LABELS[severity]}
+                    icon={<SeverityMark severity={severity} decorative />}
+                    count={issueCounts[severity]}
+                    className="pl-8"
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </li>
       );
     case 'urls':
