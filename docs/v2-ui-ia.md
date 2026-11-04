@@ -27,7 +27,8 @@ delegation of the stage sign-offs.
 ```
 
 - **Sidebar.**
-  - Collapsible to icons.
+  - Collapsible to icons. A window narrower than 1024 px (200% zoom on a 1280 px one) shows it collapsed to start
+    with; opening it there lasts while the window stays narrow, and leaves the wider window's choice alone.
   - Home first.
   - The open crawl's sections, with live counts.
   - At the bottom: crawls running in the background, each a link with its progress, and app Settings.
