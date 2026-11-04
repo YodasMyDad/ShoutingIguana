@@ -626,3 +626,24 @@ test.describe('the design system’s states', () => {
     expect(await get('#switch-on-off', 'background-color')).toBe(gray);
   });
 });
+
+test('a crawl’s error in the library wraps in its status column instead of widening the page', async ({ page }) => {
+  await page.goto('/');
+  const library = page.getByRole('region', { name: 'Library' });
+  const row = library.getByRole('row').filter({ has: page.getByRole('link', { name: site(), exact: true }) });
+  await expect(row).toBeVisible();
+  // The line a file that couldn't be read gets under its status (HomeScreen's LibraryRow), at its longest.
+  const line = await row
+    .getByRole('cell')
+    .nth(1)
+    .evaluate((cell) => {
+      const error = document.createElement('span');
+      error.className = 'block text-12 text-text-muted';
+      error.textContent = 'Another program has the file open, so it couldn’t be read: close it, then try again.';
+      (cell.firstElementChild ?? cell).append(error);
+      return { height: error.getBoundingClientRect().height, line: parseFloat(getComputedStyle(error).lineHeight) };
+    });
+  expect(line.height).toBeGreaterThan(line.line);
+  const main = page.locator('main');
+  expect(await main.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});

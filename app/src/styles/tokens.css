@@ -360,6 +360,7 @@
   --search-width: 232px;
   --search-width-filter: 160px;
   --search-width-library: 260px;
+  --library-status-width: 240px; /* Home's status column: a file's error wraps in it */
   --settings-nav-width: 192px;
   --detail-max-height: 192px; /* an error's technical detail, before it scrolls */
   --palette-width: 640px;
