@@ -42,11 +42,30 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `o
 **Paused on 2026-11-04 by the owner, who ran low on usage.** Nothing is running. Three pieces of work were started from
 `e0780d0` (`f3c0b6c` plus a docs commit), each on its own local branch, unmerged and not pushed:
 
-- the Overview slice: `ui/overview`, worktree `.claude/worktrees/overview`;
-- the URL inspector slice: `ui/inspector`, worktree `.claude/worktrees/inspector`;
-- engine E3b: `ui/e3b`, worktree `.claude/worktrees/e3b`.
+- **The Overview slice**, on `ui/overview` (worktree `.claude/worktrees/overview`), at `0a8f280` (WIP).
+  - **Done:** visx is pinned (`@visx/shape`, `scale` and `group` 4.0.0), and the E4 progress, alert and history types
+    are added. Typecheck passes and the unit tests pass (488).
+  - **Next:** the live store's E4 fields, from the plan in the handoff folder (`livestore-e4-plan.md`).
+  - **Owner to confirm:** Pause, Resume and Stop stay in the top bar only, as in design B. The screen's banners carry
+    each state's next action instead.
+- **The URL inspector slice**, on `ui/inspector` (worktree `.claude/worktrees/inspector`), at `3a25a89` (WIP).
+  - **Done:** CodeMirror 6 is pinned. The inspector's words for the engine's values, and the "Indexable, and why"
+    checklist, are written, but not tested or used yet. Typecheck passes and the unit tests pass (488).
+  - **Next:** the checklist's tests, then the values drawn on their limits.
+  - **Engine findings:**
+    - An issue in the inspector doesn't name its group key, so the three fault-grouped checks can't link to their
+      group.
+    - A URL blocked by robots.txt reads `fetched: true` with no status.
+- **Engine E3b**, on `ui/e3b` (worktree `.claude/worktrees/e3b`), at `e0780d0`. No code yet.
+  - **Done:** the contract is decided but not written, in the handoff:
+    - links come from a `link_summary` table the analysis builds;
+    - one sitemap's URLs are the URL grid scoped to it;
+    - robots.txt is three POSTs, with the matched rule worked out at read time by the crawl's own matcher;
+    - a `subject` field (`page` or `url`) goes on each check.
+  - **Base bench:** 52.9 s and 198 MB peak, flat, measured under load; compare E3b against it.
+  - **Next:** write the E3b section of the API doc.
 
-Each agent was told to stop at a clean point, commit (unfinished work as `WIP:`) and write a handoff. To resume:
+Each agent stopped at a clean point and wrote a handoff. To resume:
 
 1. Read each branch's log and its handoff (`handoff-<name>.md` in the session's checkpoint folder, which the owner's
    memory file names, next to the briefs `brief-<name>.md`).
