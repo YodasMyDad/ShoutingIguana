@@ -12,7 +12,7 @@ import { installKeyboard } from '../keyboard/registry';
 import { updateSettings } from '../settings/settingsStore';
 import { LOCATE_GROUP_LIMIT, LOCATE_GROUP_PAGE, queryKeys } from '../api/queries';
 import type { CrawlListItem, CrawlStatus } from '../api/types';
-import { TEST_CRAWL_ID, fakeSidecar, type FakeRoute } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, problem, type FakeRoute } from '../test/fakeSidecar';
 import {
   ANCHOR_ROWS,
   ISSUES_ANALYSIS,
@@ -210,6 +210,38 @@ describe('the Issues screen', () => {
     fireEvent.keyDown(grid, { key: 'ArrowLeft' });
     fireEvent.keyDown(grid, { key: 'ArrowLeft' });
     await waitFor(() => expect(router.state.location.search).not.toHaveProperty('group'));
+  });
+
+  it('says so when an open group’s pages can’t be read, with Try again, instead of placeholders that never fill', async () => {
+    let fail = true;
+    const routes = issuesRoutes();
+    const rows = routes.find(([method, pattern]) => method === 'POST' && pattern.source.includes('rows'));
+    if (!rows) throw new Error('No rows route');
+    const failing: FakeRoute = [
+      'POST',
+      rows[1],
+      (request, match) =>
+        fail && (request.body as GridQuery).group
+          ? problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 })
+          : rows[2](request, match),
+    ];
+    setTransport(fakeSidecar([failing, ...routes]));
+    await open(`${ISSUES}/empty-anchor-text?group=${encodeURIComponent('{"detail":null,"relatedUrlId":1}')}`);
+    const grid = await screen.findByRole('treegrid');
+    const retry = await screen.findByRole('button', { name: 'Try again' });
+    expect(screen.getByText('The group’s pages couldn’t be read.')).toBeVisible();
+    // The group stays open with its link to all its pages, and nothing waits for pages that won't come.
+    expect(within(grid).getByRole('row', { expanded: true })).toBeVisible();
+    expect(within(grid).getByRole('link', { name: 'Show all 5 pages in URLs' })).toBeVisible();
+    expect(
+      within(grid)
+        .getAllByRole('row')
+        .filter((row) => row.getAttribute('aria-busy') === 'true'),
+    ).toEqual([]);
+    fail = false;
+    fireEvent.click(retry);
+    expect(await within(grid).findByText('/page-2/')).toBeVisible();
+    expect(screen.queryByText('The group’s pages couldn’t be read.')).toBeNull();
   });
 
   it('reopens the group the address names', async () => {

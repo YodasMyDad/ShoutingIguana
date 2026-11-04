@@ -134,8 +134,11 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
     enabled: openGroup !== null,
   });
   const loadedRows = firstRows.data?.rows ?? null;
+  // Its first pages couldn't be read: no placeholders that would never fill, only its link to all of them, and the
+  // error above the grid with Try again.
+  const rowsFailed = firstRows.isError && loadedRows === null;
   const openIndex = openGroup?.index ?? null;
-  const openChildren = openGroup ? childRows(openGroup.group, loadedRows?.length ?? null) : 0;
+  const openChildren = openGroup ? (rowsFailed ? 1 : childRows(openGroup.group, loadedRows?.length ?? null)) : 0;
 
   // A group the route opens (a link, back or forward) may be thousands of rows down: bring it into view, with as many
   // of its pages as fit. One opened here is already in view, so this moves nothing.
@@ -379,6 +382,14 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
   return (
     <div className="flex flex-col gap-3">
       {insight ? <TemplateCallout group={insight} total={total} grouping={grouping} siteOrigin={siteOrigin} /> : null}
+      {rowsFailed ? (
+        <ErrorState
+          error={firstRows.error}
+          title="The group’s pages couldn’t be read."
+          onRetry={() => void firstRows.refetch()}
+          compact
+        />
+      ) : null}
       <div ref={measure} className="flex max-h-(--evidence-max-height) min-h-0 flex-col" style={{ height }}>
         <GridCore<TreeRow>
           key={queryKey.join('|')}
