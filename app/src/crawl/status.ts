@@ -38,7 +38,10 @@ export function statusAnnouncement(site: string, status: CrawlStatus): string {
 }
 
 /** The status to show: this sidecar's live one while it's working on the crawl, else the library's. */
-export function effectiveStatus(item: CrawlListItem | undefined, live: LiveCrawl | undefined): CrawlStatus | null {
+export function effectiveStatus(
+  item: CrawlListItem | undefined,
+  live: Pick<LiveCrawl, 'status'> | undefined,
+): CrawlStatus | null {
   if (live?.status && isLive(live.status)) return live.status;
   return item?.status ?? live?.status ?? null;
 }

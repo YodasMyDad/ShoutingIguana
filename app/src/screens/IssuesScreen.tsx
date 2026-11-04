@@ -22,7 +22,7 @@ import { notifyUndo } from '../feedback/notify';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { useCommands } from '../keyboard/registry';
 import { formatCountOf } from '../lib/format';
-import { useLiveCrawl } from '../live/liveStore';
+import { useLive } from '../live/liveStore';
 import { updateSettings, useSettings } from '../settings/settingsStore';
 import { useInspector } from '../routing/inspector';
 import { openInBrowser } from '../shell/os';
@@ -69,8 +69,11 @@ export function IssuesScreen() {
   const checks = useQuery(checksQuery());
   const analysis = useQuery(analysisQuery(crawlId));
   const item = useQuery(crawlQuery(crawlId)).data;
-  const live = useLiveCrawl(crawlId);
-  const status = effectiveStatus(item, live);
+  // Only what the screen shows of the live crawl: its status and the analysis's progress. The whole crawl changes on
+  // every progress tick (4 a second while it runs), which would draw the screen again each time.
+  const liveStatus = useLive((state) => state.crawls[crawlId]?.status);
+  const analysisEvent = useLive((state) => state.crawls[crawlId]?.analysis ?? null);
+  const status = effectiveStatus(item, liveStatus === undefined ? undefined : { status: liveStatus });
   const crawling = status !== null && isCrawling(status);
   const analysing = status === 'analyzing';
   const canAnalyse = crawlControls(status, item).canAnalyse;
@@ -412,7 +415,7 @@ export function IssuesScreen() {
       <NotAnalysed
         crawling={crawling}
         analysing={analysing}
-        event={live?.analysis ?? null}
+        event={analysisEvent}
         canAnalyse={canAnalyse}
         status={status}
         missing={item?.missing === true}
@@ -432,12 +435,7 @@ export function IssuesScreen() {
     body = (
       <>
         {analysing ? (
-          <AnalysisProgress
-            event={live?.analysis ?? null}
-            onCancel={cancel}
-            cancelling={cancelling}
-            cancelRef={cancelRef}
-          />
+          <AnalysisProgress event={analysisEvent} onCancel={cancel} cancelling={cancelling} cancelRef={cancelRef} />
         ) : null}
         <AnalysisNotes
           analysis={analysis.data}
