@@ -1,0 +1,405 @@
+import { createMemoryHistory } from '@tanstack/react-router';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GridPage, GridQuery, IssueGroup, IssueRow } from '../api/grids';
+import { setTransport, type TransportRequest } from '../api/transport';
+import type { Analysis, Check, Checks, CrawlListItem } from '../api/types';
+import { App } from '../app/App';
+import { createQueryClient } from '../app/queryClient';
+import { createAppRouter } from '../app/router';
+import { installKeyboard } from '../keyboard/registry';
+import { updateSettings } from '../settings/settingsStore';
+import { TEST_CRAWL_ID, fakeSidecar, json, problem, standardRoutes, testCrawlItem } from '../test/fakeSidecar';
+
+const ISSUES = `/crawls/${TEST_CRAWL_ID}/issues`;
+
+const check = (id: string, category: string, severity: Check['severity'], title: string, grouping: Check['grouping']) =>
+  ({
+    id,
+    category,
+    severity,
+    title,
+    description: `What’s wrong with ${title}.`,
+    why: `Why ${title} matters.`,
+    fix: `How to fix ${title}.`,
+    learnMore:
+      id === 'empty-anchor-text' ? 'https://developers.google.com/search/docs/crawling-indexing/links-crawlable' : null,
+    grouping,
+  }) satisfies Check;
+
+const CHECKS: Checks = {
+  categories: [
+    { id: 'responseCodes', title: 'Response codes' },
+    { id: 'links', title: 'Links' },
+    { id: 'titles', title: 'Titles' },
+  ],
+  checks: [
+    check('internal-client-error', 'responseCodes', 'error', 'Internal URL returns 4xx', 'detail'),
+    check('internal-server-error', 'responseCodes', 'error', 'Internal URL returns 5xx', 'detail'),
+    check('empty-anchor-text', 'links', 'notice', 'Internal links without anchor text', 'relatedUrl'),
+    check('orphan-page', 'links', 'notice', 'Orphan page', 'none'),
+    check('title-too-long', 'titles', 'notice', 'Title too long', 'none'),
+  ],
+};
+
+const ANALYSIS: Analysis = {
+  analyzedAt: '2026-11-01T10:21:00Z',
+  engineVersion: 'test',
+  pagesAnalyzed: 6,
+  durationMs: 1_000,
+  isPartial: true,
+  outOfDate: false,
+  outOfDateReasons: [],
+  notes: ['No sitemap could be read, so orphan pages weren’t checked.'],
+  counts: [
+    { checkId: 'internal-client-error', count: 2 },
+    { checkId: 'internal-server-error', count: 0 },
+    { checkId: 'empty-anchor-text', count: 6 },
+    { checkId: 'title-too-long', count: 3 },
+  ],
+  skipped: [{ checkId: 'orphan-page', reason: { code: 'no-sitemap', text: 'No sitemap could be read.' } }],
+};
+
+/** The anchor-text check's rows: five pages link to the home page without text, one to /garden/. */
+const ANCHOR_ROWS: (IssueRow & { group: number })[] = [
+  ...[2, 3, 4, 5, 6].map((id) => ({
+    id,
+    url: `https://example.com/page-${id}/`,
+    detail: 'Links to 1 URL',
+    relatedUrl: 'https://example.com/',
+    group: 1,
+  })),
+  {
+    id: 7,
+    url: 'https://example.com/page-7/',
+    detail: 'Links to 1 URL',
+    relatedUrl: 'https://example.com/garden/',
+    group: 9,
+  },
+];
+
+const GROUPS: Record<string, IssueGroup[]> = {
+  'empty-anchor-text': [
+    { detail: null, relatedUrlId: 1, relatedUrl: 'https://example.com/', pages: 5, share: 5 / 6, likelyTemplate: true },
+    {
+      detail: null,
+      relatedUrlId: 9,
+      relatedUrl: 'https://example.com/garden/',
+      pages: 1,
+      share: 1 / 6,
+      likelyTemplate: false,
+    },
+  ],
+  'internal-client-error': [
+    { detail: 'HTTP 404', relatedUrlId: null, relatedUrl: null, pages: 2, share: 1, likelyTemplate: false },
+  ],
+};
+
+const ROWS: Record<string, (IssueRow & { group?: number })[]> = {
+  'empty-anchor-text': ANCHOR_ROWS,
+  'internal-client-error': [
+    { id: 10, url: 'https://example.com/old/', detail: 'HTTP 404' },
+    { id: 11, url: 'https://example.com/gone/', detail: 'HTTP 404' },
+  ],
+  'title-too-long': [
+    { id: 12, url: 'https://example.com/a/', detail: '78 characters' },
+    { id: 13, url: 'https://example.com/b/', detail: '64 characters' },
+    { id: 14, url: 'https://example.com/c/', detail: '91 characters' },
+  ],
+};
+
+function rowsPage(checkId: string, query: GridQuery): GridPage<IssueRow> {
+  let rows = ROWS[checkId] ?? [];
+  if (query.group) {
+    const id = query.group.relatedUrlId;
+    rows = rows.filter((row) => (row.group === undefined ? row.detail === query.group?.detail : row.group === id));
+  }
+  if (query.sort[0]?.column === 'detail') {
+    const desc = query.sort[0].desc;
+    rows = [...rows].sort((a, b) => (desc ? -1 : 1) * (a.detail ?? '').localeCompare(b.detail ?? ''));
+  }
+  const start = query.after ? Number(query.after) : (query.offset ?? 0);
+  const page = rows.slice(start, start + query.limit).map(({ group: _group, ...row }) => row);
+  const end = start + page.length;
+  return {
+    columns: ['id', ...(query.columns ?? ['url'])],
+    rows: page,
+    offset: query.after ? null : start,
+    matching: rows.length,
+    total: rows.length,
+    next: end < rows.length ? String(end) : null,
+    summary: { available: true, reason: null },
+    unavailable: [],
+  };
+}
+
+function sidecar(options: { item?: Partial<CrawlListItem>; analysis?: Analysis | null; checks?: Checks } = {}): {
+  requests: TransportRequest[];
+  analyse: ReturnType<typeof vi.fn>;
+} {
+  const item = testCrawlItem(options.item);
+  const analyse = vi.fn(() => new Response(null, { status: 202 }));
+  const transport = fakeSidecar([
+    ['GET', /^\/api\/checks$/, () => json(options.checks ?? CHECKS)],
+    [
+      'GET',
+      /^\/api\/crawls\/[0-9a-f]{16}\/analysis$/,
+      () =>
+        options.analysis === null
+          ? problem({ type: 'not-analyzed', title: 'This crawl hasn’t been analysed yet.', status: 404 })
+          : json(options.analysis ?? ANALYSIS),
+    ],
+    ['POST', /^\/api\/crawls\/[0-9a-f]{16}\/analyze$/, analyse],
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/issues\/([a-z0-9-]+)\/groups$/,
+      (request, match) => {
+        const groups = GROUPS[match[1] ?? ''] ?? [];
+        const { offset, limit } = request.body as { offset: number; limit: number };
+        return json({
+          checkId: match[1],
+          grouping: 'detail',
+          total: ANALYSIS.counts.find((count) => count.checkId === match[1])?.count ?? null,
+          groupCount: groups.length,
+          offset,
+          groups: groups.slice(offset, offset + limit),
+        });
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/issues\/([a-z0-9-]+)\/rows$/,
+      (request, match) => json(rowsPage(match[1] ?? '', request.body as GridQuery)),
+    ],
+    ...standardRoutes(item).filter(([method, pattern]) => !(method === 'GET' && pattern.source.includes('checks'))),
+  ]);
+  setTransport(transport);
+  return { requests: transport.requests, analyse };
+}
+
+async function open(path: string) {
+  const queryClient = createQueryClient();
+  const history = createMemoryHistory({ initialEntries: [path] });
+  const router = createAppRouter(queryClient, history);
+  render(<App router={router} queryClient={queryClient} />);
+  await act(() => router.load());
+  return { router, history };
+}
+
+const path = (router: Awaited<ReturnType<typeof open>>['router']) => router.state.location.pathname;
+const options = () => screen.getAllByRole('option');
+const selectedOption = () =>
+  screen.getAllByRole('option').find((option) => option.getAttribute('aria-selected') === 'true');
+
+let uninstall: () => void = () => undefined;
+beforeEach(() => {
+  uninstall = installKeyboard();
+});
+afterEach(() => {
+  uninstall();
+  updateSettings({ hiddenChecks: [] });
+  setTransport(fakeSidecar([]));
+});
+
+describe('the Issues screen', () => {
+  it('answers first, and selects the first check to fix in place of the address it came to', async () => {
+    sidecar();
+    const { router, history } = await open(ISSUES);
+    expect(
+      await screen.findByText('3 checks found 11 issues on this crawl. 1 passed and 1 was skipped.'),
+    ).toBeVisible();
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/internal-client-error`));
+    // Replaced, so back doesn't come here to be sent on again.
+    expect(history.length).toBe(1);
+    expect(await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 })).toBeVisible();
+    expect(screen.getByText('What’s wrong with Internal URL returns 4xx.')).toBeVisible();
+    expect(screen.getByText('Why Internal URL returns 4xx matters.')).toBeVisible();
+  });
+
+  it('lists checks by category, a skipped one with its reason, and the passed ones only when asked', async () => {
+    sidecar();
+    await open(`${ISSUES}/internal-client-error`);
+    const list = await screen.findByRole('listbox', { name: 'Checks' });
+    expect(
+      within(list)
+        .getAllByRole('group')
+        .map((group) => group.getAttribute('aria-labelledby') !== null),
+    ).toEqual([true, true, true]);
+    expect(within(list).getByRole('option', { name: 'Orphan page: skipped. No sitemap could be read.' })).toBeVisible();
+    expect(within(list).queryByRole('option', { name: /Internal URL returns 5xx/ })).toBeNull();
+    fireEvent.click(screen.getByRole('switch', { name: 'Show the check that passed' }));
+    expect(within(list).getByRole('option', { name: 'Internal URL returns 5xx: passed' })).toBeVisible();
+  });
+
+  it('moves the selection with the arrow keys, replacing the address, and a click is a new place', async () => {
+    sidecar();
+    const { router, history } = await open(`${ISSUES}/internal-client-error`);
+    await screen.findByRole('listbox');
+    const first = selectedOption();
+    expect(first).toHaveAttribute('tabindex', '0');
+    act(() => first?.focus());
+    fireEvent.keyDown(first!, { key: 'ArrowDown' });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    expect(document.activeElement).toHaveAccessibleName(/Internal links without anchor text/);
+    expect(history.length).toBe(1);
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'End' });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/title-too-long`));
+    fireEvent.click(screen.getByRole('option', { name: /Orphan page/ }));
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/orphan-page`));
+    expect(history.length).toBe(2);
+  });
+
+  it('filters by text and severity in the route, and clears them in one click when nothing matches', async () => {
+    sidecar();
+    const { router } = await open(`${ISSUES}/internal-client-error`);
+    const filter = await screen.findByRole('searchbox', { name: 'Filter checks' });
+    fireEvent.change(filter, { target: { value: 'anchor' } });
+    expect(options().map((option) => option.textContent)).toEqual([expect.stringContaining('anchor text')]);
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ q: 'anchor' }));
+    fireEvent.click(screen.getByRole('radio', { name: /Errors/ }));
+    expect(await screen.findByText('No checks match these filters.')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear the filters' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
+    expect(options().length).toBeGreaterThan(3);
+  });
+
+  it('focuses the check filter with Ctrl+F', async () => {
+    sidecar();
+    await open(`${ISSUES}/internal-client-error`);
+    const filter = await screen.findByRole('searchbox', { name: 'Filter checks' });
+    fireEvent.keyDown(document.body, { key: 'f', ctrlKey: true });
+    expect(filter).toHaveFocus();
+  });
+
+  it('shows a skipped check’s reason, never 0, and a passed check plainly', async () => {
+    sidecar();
+    await open(`${ISSUES}/orphan-page`);
+    expect(await screen.findByText('This check was skipped on this crawl')).toBeVisible();
+    expect(screen.getAllByText('No sitemap could be read.').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Pages affected')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Copy URLs' })).toBeNull();
+  });
+
+  it('opens a group to show its first pages and its link to all of them, then closes it', async () => {
+    sidecar();
+    const { router } = await open(`${ISSUES}/empty-anchor-text`);
+    const grid = await screen.findByRole('treegrid', { name: /grouped by related URL/ });
+    expect(await screen.findByText('Likely in the site’s template')).toBeVisible();
+    await within(grid).findByText('5');
+    const rows = () => within(grid).getAllByRole('row').slice(1);
+    expect(rows().map((row) => row.getAttribute('aria-expanded'))).toEqual(['false', 'false']);
+    fireEvent.pointerDown(grid.querySelector('[data-tree-toggle]')!, { button: 0 });
+    await waitFor(() =>
+      expect(router.state.location.search).toMatchObject({ group: { detail: null, relatedUrlId: 1 } }),
+    );
+    expect(await within(grid).findByText('/page-2/')).toBeVisible();
+    const link = within(grid).getByRole('link', { name: 'Show all 5 pages in URLs' });
+    expect(decodeURIComponent(link.getAttribute('href') ?? '')).toContain('"group":{"detail":null,"relatedUrlId":1}');
+    expect(rows()[0]).toHaveAttribute('aria-expanded', 'true');
+    expect(rows().filter((row) => row.getAttribute('aria-level') === '2')).toHaveLength(6);
+    // Enter on a page opens the inspector; Left on its group closes it.
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 2 }));
+    fireEvent.keyDown(grid, { key: 'ArrowLeft' });
+    fireEvent.keyDown(grid, { key: 'ArrowLeft' });
+    await waitFor(() => expect(router.state.location.search).not.toHaveProperty('group'));
+  });
+
+  it('reopens the group the address names', async () => {
+    sidecar();
+    await open(`${ISSUES}/empty-anchor-text?group=${encodeURIComponent('{"detail":null,"relatedUrlId":9}')}`);
+    const grid = await screen.findByRole('treegrid');
+    expect(await within(grid).findByText('/page-7/')).toBeVisible();
+    expect(within(grid).getByRole('link', { name: 'Show the page in URLs' })).toBeVisible();
+  });
+
+  it('lists a check that doesn’t group flat, with its detail, sorting from the header', async () => {
+    const { requests } = sidecar();
+    const { router } = await open(`${ISSUES}/title-too-long`);
+    const grid = await screen.findByRole('grid', { name: /Title too long: affected pages/ });
+    expect(await within(grid).findByText('78 characters')).toBeVisible();
+    fireEvent.click(within(grid).getByRole('button', { name: 'Detail' }));
+    await waitFor(() =>
+      expect(router.state.location.search).toMatchObject({ sort: [{ column: 'detail', desc: false }] }),
+    );
+    await waitFor(() =>
+      expect(
+        requests.some(
+          (request) =>
+            request.path.endsWith('/title-too-long/rows') && (request.body as GridQuery).sort[0]?.column === 'detail',
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it('copies the check’s URLs, one per line, and the open group’s when one is open', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    sidecar();
+    await open(`${ISSUES}/empty-anchor-text`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy URLs' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(writeText.mock.calls[0]?.[0]).toBe(ANCHOR_ROWS.map((row) => row.url).join('\n'));
+    expect(await screen.findByText('Copied 6 URLs')).toBeVisible();
+  });
+
+  it('copies the open group’s URLs with Ctrl+Shift+C', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    sidecar();
+    await open(`${ISSUES}/empty-anchor-text?group=${encodeURIComponent('{"detail":null,"relatedUrlId":9}')}`);
+    await screen.findByRole('button', { name: 'Copy URLs' });
+    fireEvent.keyDown(document.body, { key: 'C', ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(writeText.mock.calls[0]?.[0]).toBe('https://example.com/page-7/');
+  });
+
+  it('hides a check, remembered, moving on to the next, with Undo', async () => {
+    sidecar();
+    const { router } = await open(`${ISSUES}/internal-client-error`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide this check' }));
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    expect(screen.queryByRole('option', { name: /Internal URL returns 4xx/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Show 1 hidden check' })).toBeVisible();
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+    expect(await screen.findByRole('option', { name: /Internal URL returns 4xx/ })).toBeVisible();
+  });
+
+  it('offers to analyse a crawl that never was, and says a running one is analysed when it finishes', async () => {
+    const { analyse } = sidecar({ analysis: null, item: { analyzedAt: null, issues: null, status: 'stopped' } });
+    await open(ISSUES);
+    expect(await screen.findByText('This crawl hasn’t been analysed yet')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Analyse it' }));
+    await waitFor(() => expect(analyse).toHaveBeenCalledOnce());
+
+    sidecar({ analysis: null, item: { analyzedAt: null, issues: null, status: 'running' } });
+    await open(ISSUES);
+    expect(await screen.findByText('Issues come when the crawl finishes')).toBeVisible();
+  });
+
+  it('says when the issues are out of date, and offers to analyse again', async () => {
+    const { analyse } = sidecar({
+      analysis: { ...ANALYSIS, outOfDate: true, outOfDateReasons: ['crawlChanged'] },
+      item: { outOfDate: true },
+    });
+    await open(`${ISSUES}/internal-client-error`);
+    const banner = (await screen.findByText(/These issues are out of date/)).closest<HTMLElement>('[role="status"]');
+    if (!banner) throw new Error('No banner');
+    expect(within(banner).getByText('The crawl was continued after it was analysed.')).toBeVisible();
+    fireEvent.click(within(banner).getByRole('button', { name: 'Analyse again' }));
+    await waitFor(() => expect(analyse).toHaveBeenCalledOnce());
+  });
+
+  it('counts the checks with issues by severity under Issues in the sidebar, each opening the list filtered', async () => {
+    sidecar({ item: { issues: { error: 1, warning: 0, notice: 2 } } });
+    const { router } = await open(`${ISSUES}/internal-client-error`);
+    const bySeverity = await screen.findByRole('list', { name: 'Issues by severity' });
+    const notices = within(bySeverity).getByRole('link', { name: /Notices/ });
+    expect(notices).toHaveTextContent('2');
+    fireEvent.click(notices);
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ severity: ['notice'] }));
+    expect(await screen.findByRole('radio', { name: /Notices/ })).toHaveAttribute('aria-checked', 'true');
+  });
+});

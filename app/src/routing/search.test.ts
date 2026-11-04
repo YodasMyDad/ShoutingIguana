@@ -141,4 +141,26 @@ describe('search params', () => {
     expect(parseFilters([{ column: 'check', op: 'in', values: ['a'], group: { detail: 5 } }])).toBeUndefined();
     expect(parseFilters([{ column: 'check', op: 'in', values: ['a'], group: 'x' }])).toBeUndefined();
   });
+
+  it('reads the Issues view: one of each severity, the group in view, a flat check’s sort', () => {
+    expect(
+      validateIssuesSearch({
+        severity: ['error', 'error', 'notice'],
+        q: 'anchor',
+        group: { detail: null, relatedUrlId: 1 },
+        sort: '-detail',
+        inspect: 7,
+      }),
+    ).toEqual({
+      severity: ['error', 'notice'],
+      q: 'anchor',
+      group: { detail: null, relatedUrlId: 1 },
+      sort: [{ column: 'detail', desc: true }],
+      inspect: 7,
+    });
+    // The group of the issues that name no other URL is a group too; a list or a bad id is none.
+    expect(validateIssuesSearch({ group: {} }).group).toEqual({ detail: null, relatedUrlId: null });
+    expect(validateIssuesSearch({ group: [1] }).group).toBeUndefined();
+    expect(validateIssuesSearch({ group: { detail: 'Missing og:image', relatedUrlId: -1 } }).group).toBeUndefined();
+  });
 });

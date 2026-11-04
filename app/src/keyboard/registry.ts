@@ -18,9 +18,9 @@ import {
   type Chord,
 } from './keys';
 
-export type CommandGroup = 'Go to' | 'Crawl' | 'View' | 'App' | 'In grids';
+export type CommandGroup = 'Go to' | 'Crawl' | 'Issues' | 'View' | 'App' | 'In grids';
 
-export const COMMAND_GROUPS: readonly CommandGroup[] = ['Go to', 'Crawl', 'View', 'App', 'In grids'];
+export const COMMAND_GROUPS: readonly CommandGroup[] = ['Go to', 'Crawl', 'Issues', 'View', 'App', 'In grids'];
 
 /** Who registered a command: the app's shell, or the screen on show, whose commands win. */
 export type Precedence = 'app' | 'screen';

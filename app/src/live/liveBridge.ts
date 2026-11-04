@@ -5,7 +5,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { ApiError } from '../api/errors';
 import { api } from '../api/client';
-import { gridPagesOf, queryKeys } from '../api/queries';
+import { gridPagesOf, liveGridPagesOf, queryKeys } from '../api/queries';
 import { getTransport } from '../api/transport';
 import type { CrawlEvent, CrawlListItem, CrawlStatus } from '../api/types';
 import { isCrawling, isLive } from '../api/types';
@@ -119,7 +119,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     const last = gridRefreshedAt.get(crawlId);
     if (last !== undefined && now - last < LIVE_GRID_REFRESH_MS) return;
     gridRefreshedAt.set(crawlId, now);
-    void queryClient.invalidateQueries(gridPagesOf(crawlId), { cancelRefetch: false });
+    void queryClient.invalidateQueries(liveGridPagesOf(crawlId), { cancelRefetch: false });
   }
 
   function onCrawlEvent(event: CrawlEvent) {

@@ -73,6 +73,15 @@ export async function analyseCrawl(id: string): Promise<void> {
   }
 }
 
+/** Cancels a running analysis: nothing it did is kept, and the last analysis stands. */
+export async function cancelAnalysis(id: string): Promise<void> {
+  try {
+    await api.cancelAnalysis(id);
+  } catch (error) {
+    notifyError(error, { id: crawlToast(id, 'cancel-analysis'), retry: () => void cancelAnalysis(id) });
+  }
+}
+
 /** Starts a crawl of `startUrl` with the user's defaults. Field problems come back for the form to show inline. */
 export async function startCrawl(
   startUrl: string,
