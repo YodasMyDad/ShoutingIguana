@@ -2,6 +2,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
+import { ErrorState } from '../feedback/ErrorState';
 import { keepEscapeForField } from '../keyboard/layers';
 import { Button } from './Button';
 import { IconButton } from './IconButton';
@@ -99,8 +100,14 @@ export interface ConfirmDialogProps {
   cancelLabel?: string | undefined;
   /** In the destructive colour, for an action that loses data. */
   destructive?: boolean | undefined;
-  /** May be async: the button shows its spinner meanwhile, and the dialog closes when it's done. */
+  /**
+   * May be async: the button shows its spinner meanwhile, and the dialog closes when it's done. If it throws or
+   * rejects, the dialog stays open and says why in it (the plain cause, the detail behind Details); the button tries
+   * again.
+   */
   onConfirm: () => unknown;
+  /** What didn't happen, as the failure's headline: "The crawl file couldn't be deleted." By default the error's own. */
+  errorTitle?: string | undefined;
 }
 
 /** Confirms an irreversible action, naming what will be lost. Cancel has focus first, so Enter never destroys. */
@@ -113,14 +120,25 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   destructive = false,
   onConfirm,
+  errorTitle,
 }: ConfirmDialogProps) {
   const [working, setWorking] = useState(false);
+  const [failure, setFailure] = useState<{ error: unknown } | null>(null);
+  // A failure belongs to the time it happened: opened again, the dialog starts clean.
+  const [openBefore, setOpenBefore] = useState(open);
+  if (open !== openBefore) {
+    setOpenBefore(open);
+    if (open) setFailure(null);
+  }
   const cancelRef = useRef<HTMLButtonElement>(null);
   const confirm = async () => {
     setWorking(true);
+    setFailure(null);
     try {
       await onConfirm();
       onOpenChange(false);
+    } catch (error) {
+      setFailure({ error });
     } finally {
       setWorking(false);
     }
@@ -147,6 +165,10 @@ export function ConfirmDialog({
           </Button>
         </>
       }
-    />
+    >
+      {failure ? (
+        <ErrorState error={failure.error} {...(errorTitle === undefined ? {} : { title: errorTitle })} flush />
+      ) : null}
+    </Dialog>
   );
 }

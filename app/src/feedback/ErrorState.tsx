@@ -17,6 +17,7 @@ export function ErrorState({
   retryLabel = 'Try again',
   actions,
   compact = false,
+  flush = false,
 }: {
   error: unknown;
   /** Overrides the error's own plain title, when the view can say it better. */
@@ -27,6 +28,8 @@ export function ErrorState({
   /** What else the view offers: what to do about it ("Analyse it"), or a way out ("Go to Home"). */
   actions?: ReactNode;
   compact?: boolean;
+  /** No padding of its own, inside something that has it: a dialog's body. */
+  flush?: boolean;
 }) {
   const detail = errorDetail(error);
   const [open, setOpen] = useState(false);
@@ -41,7 +44,7 @@ export function ErrorState({
   };
 
   return (
-    <div role="alert" className={compact ? 'flex gap-3 p-4' : 'flex gap-3 p-8'}>
+    <div role="alert" className={flush ? 'flex gap-3' : compact ? 'flex gap-3 p-4' : 'flex gap-3 p-8'}>
       <span className="pt-0.5">
         <SeverityMark severity="error" size="md" decorative />
       </span>
