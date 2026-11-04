@@ -196,10 +196,10 @@ test('under forced colours, the selected check and the open group stay visible, 
   await page.emulateMedia({ forcedColors: 'active' });
   await openIssues(page);
   const selected = page.getByRole('listbox', { name: 'Checks' }).getByRole('option', { selected: true });
-  // Selected is outlined in Highlight, not told by a tint that forced colours remove.
-  const outline = await selected.evaluate((element) => getComputedStyle(element).outlineStyle);
-  const shadow = await selected.evaluate((element) => getComputedStyle(element).boxShadow);
-  expect(outline !== 'none' || shadow !== 'none').toBe(true);
+  // Selected is ringed in Highlight (drawn by its ::after, beside the focus ring), not told by a tint that forced
+  // colours remove.
+  const ring = await selected.evaluate((element) => getComputedStyle(element, '::after').borderTopStyle);
+  expect(ring).toBe('solid');
   await page.getByRole('option', { name: /Duplicate title/ }).click();
   const groups = page.getByRole('treegrid');
   await groups.focus();
