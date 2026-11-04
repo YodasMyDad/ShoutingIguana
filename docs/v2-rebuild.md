@@ -22,7 +22,7 @@ v2 is a fresh solution that ports the useful logic.
 | --- | --- | --- |
 | 1 | Headless engine, storage and CLI (`si`), proven on a generated 100k-page site, with the benchmark in CI | Done: `3e556be` |
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
-| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md) | Next: read [the UI brief](v2-ui-brief.md), then [Handoff to step 3](#handoff-to-step-3-the-ui) |
+| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md) | In progress on `ui/step-3` at `e9edd0c`. Pick up at [Where step 3 stands](#where-step-3-stands-2026-11-04) |
 | 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | Later |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
 
@@ -30,6 +30,39 @@ v2 is a fresh solution that ports the useful logic.
 enterprise level" UI and UX. The old app was "clunky and a bit all over the place". **[The UI brief](v2-ui-brief.md)
 sets the bar and the process**: discovery, sign-off on mockups and a clickable prototype, vertical slices, and a
 definition of done for every screen. It also covers the performance budgets and the engine work the UI needs.
+Discovery and the visual direction were settled on 2026-11-01 (direction B, "clarity"). Do not restart them.
+
+## Where step 3 stands (2026-11-04)
+
+Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `origin/ui/step-3` at `e9edd0c`.
+`v2` and `master` were not moved. Nothing is running. The temp checkpoint under
+`%LOCALAPPDATA%\Temp\claude\...\c67f90ea-...\scratchpad\checkpoint.md` is history. This section is the place to resume.
+
+Done on this branch, on top of `v2`:
+
+- The grid readers, the inspector, live crawl data, and the app shell and front-end review fixes are merged.
+- The client uses `POST /urls/inspect`, `/urls/inlinks`, `/urls/outlinks` and `/urls/source`.
+- Near-duplicates use four SimHash lanes. `AnalysisFreshness.VERSION` is 6.
+- The catalog has 86 checks. FAQPage no longer requires `mainEntity`. `es-419` is an invalid hreflang. JSON-LD is
+  strict. A remote JobPosting needs `jobLocation` or `jobLocationType`. New check `html-past-crawl-limit`.
+  `blocked-by-robots`, `description-missing` and `h1-missing` are Notices. `duplicate-site-version` is a Warning.
+  Each check has `why` and `learnMore`, and `GET /api/checks` returns them.
+- Inter and JetBrains Mono are bundled (roman 400, 500 and 600) in `app/src/styles/fonts/`.
+
+Left, in this order:
+
+1. The rest of the design system. Tokens exist. Storybook has the shell, feedback and the grid, not every component
+   state.
+2. The Issues screen. It is still a stub. The why and learn-more texts are already on each check.
+3. One end-to-end test is still red and has not been re-run: under forced colours, Tab from the URL search does not
+   focus the grid (`app/e2e/states.spec.ts`). That screen's code did not change. A stale dev crawl can put an Analyse
+   button between the search box and the grid. Do not edit the files in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls`.
+4. The clickable prototype, then the vertical slices in the UI brief.
+5. Later engine work the UI still needs: the links grid, sitemaps and robots (E3b), export (E5), full-text search and
+   favicons (E6).
+
+The catalog branch was verified before its merge: 1,104 tests, and the 100k bench found every planted issue. The
+merge itself was clean. CI on `v2` does not run this branch.
 
 ## Status
 
