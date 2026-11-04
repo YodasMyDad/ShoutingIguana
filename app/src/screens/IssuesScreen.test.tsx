@@ -333,5 +333,39 @@ describe('the Issues screen', () => {
     fireEvent.click(notices);
     await waitFor(() => expect(router.state.location.search).toMatchObject({ severity: ['notice'] }));
     expect(await screen.findByRole('radio', { name: /Notices/ })).toHaveAttribute('aria-checked', 'true');
+    // The selected check is one the list shows: the first notice to fix, not the error it was on.
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    expect(selectedOption()).toHaveAccessibleName(/Internal links without anchor text/);
+  });
+
+  it('lands on the first check to fix among the severity the address names', async () => {
+    sidecar();
+    const { router, history } = await open(`${ISSUES}?severity=${encodeURIComponent('["notice"]')}`);
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    expect(history.length).toBe(1);
+  });
+
+  it('says there’s no check to show when the severity the address names found nothing', async () => {
+    sidecar();
+    const { router } = await open(`${ISSUES}?severity=${encodeURIComponent('["warning"]')}`);
+    expect(await screen.findByRole('heading', { name: 'No check to show', level: 2 })).toBeVisible();
+    expect(screen.queryByText('No issues found')).toBeNull();
+    expect(path(router)).toBe(ISSUES);
+  });
+
+  it('moves the selection to the first to fix when the severity chosen leaves the selected check out', async () => {
+    sidecar();
+    const { router, history } = await open(
+      `${ISSUES}/internal-client-error?group=${encodeURIComponent('{"detail":"HTTP 404","relatedUrlId":null}')}`,
+    );
+    fireEvent.click(await screen.findByRole('radio', { name: /Notices/ }));
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    // In place of the check it was on, and without that check's group.
+    expect(history.length).toBe(1);
+    expect(router.state.location.search).toEqual({ severity: ['notice'] });
+    // The text filter narrows the list without moving the selection.
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter checks' }), { target: { value: 'title' } });
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ q: 'title' }));
+    expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`);
   });
 });

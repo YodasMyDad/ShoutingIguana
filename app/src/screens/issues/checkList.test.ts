@@ -202,6 +202,16 @@ describe('the list', () => {
     expect(passed.passedCount).toBe(CHECKS.checks.length);
   });
 
+  it('keeps every check the severity and text filters keep, listed or not, for the first to fix', () => {
+    const hidden = new Set(['broken-internal-links']);
+    const errors = build({ severity: ['error'] }, hidden);
+    // Passed and hidden ones included: the first to fix leaves them out by its own rules.
+    expect(ids(errors.matching)).toEqual(['internal-client-error', 'internal-server-error', 'broken-internal-links']);
+    expect(firstCheckToFix(errors.matching)?.check.id).toBe('internal-client-error');
+    expect(firstCheckToFix(build({ severity: ['notice'] }).matching)?.check.id).toBe('empty-anchor-text');
+    expect(firstCheckToFix(build({ q: 'title' }).matching)?.check.id).toBe('title-too-long');
+  });
+
   it('leaves hidden checks out, counting what the filters would show, and lists them when shown', () => {
     const hidden = new Set(['empty-anchor-text', 'internal-server-error']);
     const list = build({}, hidden);

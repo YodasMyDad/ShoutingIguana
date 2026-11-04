@@ -46,6 +46,11 @@ export interface CheckList {
   all: CheckEntry[];
   /** The rows the list shows, in order: what the arrow keys move through. */
   visible: CheckEntry[];
+  /**
+   * Every check the severity and text filters keep, whether the list shows it or not (passed, hidden): where the
+   * first check to fix is picked from, so it's one the filters are about.
+   */
+  matching: CheckEntry[];
   /** Checks that found issues, per severity, as the severity filter counts them (text filter and hidden applied). */
   severityCounts: Record<Severity | 'all', number>;
   /** Hidden checks the filters would otherwise show. */
@@ -185,10 +190,12 @@ export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], f
   let hiddenCount = 0;
   let passedCount = 0;
   let unfiltered = 0;
+  const matching: CheckEntry[] = [];
   for (const entry of entries) {
     const category = categories.get(entry.check.category);
     if (!category) continue;
     const text = matchesText(entry, category.title, words);
+    if (text && severities.has(entry.check.severity)) matching.push(entry);
     if (entry.outcome === 'passed' && !entry.hidden) {
       category.passed++;
       passedCount++;
@@ -216,6 +223,7 @@ export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], f
     categories: shown,
     all: [...entries],
     visible,
+    matching,
     severityCounts,
     hiddenCount,
     passedCount,

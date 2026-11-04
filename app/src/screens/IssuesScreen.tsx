@@ -105,15 +105,25 @@ export function IssuesScreen() {
     [checks.data, entries, severity, q, showPassed, showHidden, hidden],
   );
   const totals = entries ? analysisTotals(entries) : null;
-  const first = entries ? firstCheckToFix(entries) : null;
+  // The first to fix among the checks the filters keep: landing on Errors picks an error.
+  const first = list ? firstCheckToFix(list.matching) : null;
   const selected = entries?.find((entry) => entry.check.id === checkId) ?? null;
   const found = selected !== null && selected.outcome !== 'passed' && selected.outcome !== 'skipped';
+  // A severity that leaves the selected check out of the list (the sidebar's Warnings, the severity control, a link)
+  // moves the selection to the first to fix among what it lists. The text filter doesn't: it narrows while typing.
+  const outOfSeverity = selected !== null && severity !== 'all' && selected.check.severity !== severity;
 
-  // No check in the path: the first to fix, replacing the address so back doesn't bounce here again.
+  // No check in the path, or one the severity leaves out: the first to fix, replacing the address so back doesn't
+  // bounce here again.
   useEffect(() => {
-    if (checkId || !first) return;
-    void navigate({ params: { crawl: crawlId, check: first.check.id }, search: (previous) => previous, replace: true });
-  }, [checkId, first, crawlId, navigate]);
+    if ((checkId && !outOfSeverity) || !first || first.check.id === checkId) return;
+    void navigate({
+      params: { crawl: crawlId, check: first.check.id },
+      search: (previous) =>
+        checkId ? { ...previous, group: undefined, sort: undefined, inspect: undefined } : previous,
+      replace: true,
+    });
+  }, [checkId, outOfSeverity, first, crawlId, navigate]);
 
   // The groups' first page, shared with the groups grid (the same query): the header's group count comes from it.
   const groupsPage = useQuery({
@@ -397,6 +407,11 @@ export function IssuesScreen() {
             ) : checkId ? (
               <EmptyState title="This check isn’t in this version of Shouting Iguana" level={2} panel>
                 The link names a check this version doesn’t have. Pick one from the list.
+              </EmptyState>
+            ) : totals && totals.found > 0 ? (
+              // Checks found issues, but none the filters keep: there's nothing to pick for them.
+              <EmptyState title="No check to show" level={2} panel>
+                None of the checks these filters keep found an issue. Pick one from the list, or clear the filters.
               </EmptyState>
             ) : (
               <EmptyState
