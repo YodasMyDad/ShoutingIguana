@@ -1,12 +1,20 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ChevronRight, Layers } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, type ReactNode } from 'react';
 import { api } from '../../api/client';
 import type { CheckGroupRef, IssueGroup, IssueRow } from '../../api/grids';
-import { groupsAsGridPage, issueGroupRowsQuery, queryKeys } from '../../api/queries';
+import {
+  LOCATE_GROUP_LIMIT,
+  groupsAsGridPage,
+  issueGroupPlaceQuery,
+  issueGroupRowsQuery,
+  queryKeys,
+  type GroupPlace,
+} from '../../api/queries';
 import type { Check } from '../../api/types';
 import { ErrorState } from '../../feedback/ErrorState';
+import { notifyResult } from '../../feedback/notify';
 import { GridCore } from '../../grid/GridCore';
 import { useGridMetrics } from '../../grid/metrics';
 import type { RowWindowModel } from '../../grid/rowWindow';
@@ -22,15 +30,7 @@ import { ShareBar } from '../../ui/ShareBar';
 import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
 import { urlDisplay } from '../../ui/urlText';
-import {
-  FIRST_GROUP_ROWS,
-  childRows,
-  groupFilter,
-  groupRefOf,
-  sameGroup,
-  treeLayout,
-  type OpenGroup,
-} from './groupTree';
+import { FIRST_GROUP_ROWS, childRows, groupFilter, groupRefOf, treeLayout, type OpenGroup } from './groupTree';
 
 /** A row of the tree: a group, one of the open group's first pages, or its link to all of them. */
 type TreeRow =
@@ -52,9 +52,8 @@ function wrap<K extends object>(cache: WeakMap<K, TreeRow>, key: K, make: () => 
   return row;
 }
 
-/** Where one of a check's groups is: read in pages of 1,000 from the largest, as far as 50,000 groups. */
-const LOCATE_PAGE = 1_000;
-const LOCATE_PAGES = 50;
+/** The placement query's stand-in while no group is open (it doesn't run then). */
+const NO_GROUP: CheckGroupRef = { detail: null, relatedUrlId: null };
 
 const PAGES_WIDTH = 88;
 const SHARE_WIDTH = 176;
@@ -104,31 +103,31 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
   const groups = usePagedRows<IssueGroup>({ queryKey, fetchPage, rowHeight });
   const groupCount = groups.rowCount;
 
-  // The open group: where it is among the groups, read from the pages loaded, else looked for from the largest. A
-  // group opened here is placed at once (setQueryData below), so only a route from elsewhere has to look.
+  // The open group: where it is among the groups, looked for from the largest. A group opened here is placed at once
+  // (setQueryData below), so only a route from elsewhere has to look.
   const openRef = open ? groupRefOf(open) : null;
   const placement = useQuery({
-    queryKey: queryKeys.issueGroupPlace(crawlId, check.id, openRef),
-    queryFn: async ({ signal }): Promise<{ index: number; group: IssueGroup } | null> => {
-      if (!openRef) return null;
-      for (let page = 0; page < LOCATE_PAGES; page++) {
-        const answer = await api.issueGroups(
-          crawlId,
-          check.id,
-          { offset: page * LOCATE_PAGE, limit: LOCATE_PAGE },
-          signal,
-        );
-        const at = answer.groups.findIndex((group) => sameGroup(groupRefOf(group), openRef));
-        const group = answer.groups[at];
-        if (group) return { index: page * LOCATE_PAGE + at, group };
-        if (answer.groups.length < LOCATE_PAGE) return null;
-      }
-      return null;
-    },
+    ...issueGroupPlaceQuery(crawlId, check.id, openRef ?? NO_GROUP),
     enabled: openRef !== null && groupCount !== null,
-    staleTime: Infinity,
   });
-  const openGroup = openRef ? (placement.data ?? null) : null;
+  const place = openRef ? placement.data : undefined;
+  const openGroup = place !== undefined && place.index !== null ? place : null;
+
+  // A group the route names that the check doesn't have (a link from before the crawl was analysed again), or that
+  // can't be found: it isn't shown open, so the route stops naming it (Copy URLs then copies the check's), and says so.
+  const missing = place?.index === null ? place.missing : null;
+  const dropMissing = useEffectEvent((reason: 'gone' | 'beyond') => {
+    notifyResult(reason === 'gone' ? 'That group isn’t in this check now' : 'That group couldn’t be found', {
+      description:
+        reason === 'gone'
+          ? 'The crawl was analysed again since the link was made. These are the check’s groups now.'
+          : `It isn’t among the check’s ${formatCount(LOCATE_GROUP_LIMIT)} largest groups.`,
+    });
+    onOpenChange(null);
+  });
+  useEffect(() => {
+    if (missing) dropMissing(missing);
+  }, [missing, openRef?.detail, openRef?.relatedUrlId]);
 
   const firstRows = useQuery({
     ...issueGroupRowsQuery(crawlId, check.id, openRef ?? { detail: null, relatedUrlId: null }, FIRST_GROUP_ROWS),
@@ -197,10 +196,8 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
           return place.group;
         }
         const ref = groupRefOf(group);
-        queryClient.setQueryData(queryKeys.issueGroupPlace(crawlId, check.id, ref), {
-          index: place.group,
-          group,
-        });
+        const placed: GroupPlace = { index: place.group, group };
+        queryClient.setQueryData(queryKeys.issueGroupPlace(crawlId, check.id, ref), placed);
         onOpenChange(ref);
         // Nothing above it is open now, so its row is its place among the groups.
         return place.group;

@@ -1,15 +1,22 @@
 import { createMemoryHistory } from '@tanstack/react-router';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GridQuery } from '../api/grids';
+import type { GridQuery, IssueGroup } from '../api/grids';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { updateSettings } from '../settings/settingsStore';
-import { TEST_CRAWL_ID, fakeSidecar } from '../test/fakeSidecar';
-import { ANCHOR_ROWS, ISSUES_ANALYSIS, issuesRoutes, type IssuesSidecarOptions } from '../test/issuesSidecar';
+import { LOCATE_GROUP_LIMIT, LOCATE_GROUP_PAGE } from '../api/queries';
+import { TEST_CRAWL_ID, fakeSidecar, type FakeRoute } from '../test/fakeSidecar';
+import {
+  ANCHOR_ROWS,
+  ISSUES_ANALYSIS,
+  ISSUE_GROUPS,
+  issuesRoutes,
+  type IssuesSidecarOptions,
+} from '../test/issuesSidecar';
 
 const ISSUES = `/crawls/${TEST_CRAWL_ID}/issues`;
 
@@ -215,10 +222,70 @@ describe('the Issues screen', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
     sidecar();
     await open(`${ISSUES}/empty-anchor-text?group=${encodeURIComponent('{"detail":null,"relatedUrlId":9}')}`);
-    await screen.findByRole('button', { name: 'Copy URLs' });
+    // Once the group is shown open: what's copied is what's shown.
+    expect(await within(await screen.findByRole('treegrid')).findByText('/page-7/')).toBeVisible();
     fireEvent.keyDown(document.body, { key: 'C', ctrlKey: true, shiftKey: true });
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
     expect(writeText.mock.calls[0]?.[0]).toBe('https://example.com/page-7/');
+  });
+
+  it('copies the check’s URLs, not a group the check no longer has, and drops that group from the address', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    sidecar();
+    const { router } = await open(
+      `${ISSUES}/empty-anchor-text?group=${encodeURIComponent('{"detail":null,"relatedUrlId":999}')}`,
+    );
+    expect(await screen.findByText('That group isn’t in this check now')).toBeVisible();
+    await waitFor(() => expect(router.state.location.search).not.toHaveProperty('group'));
+    const grid = screen.getByRole('treegrid');
+    expect(within(grid).queryAllByRole('row', { expanded: true })).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy URLs' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(String(writeText.mock.calls[0]?.[0]).split('\n')).toHaveLength(6);
+  });
+
+  it('says when the group the address names is past the groups it looks through, and drops it', async () => {
+    const many: IssueGroup[] = Array.from({ length: LOCATE_GROUP_LIMIT + 1 }, (_, index) => ({
+      detail: null,
+      relatedUrlId: 1_000 + index,
+      relatedUrl: `https://example.com/target-${index}/`,
+      pages: 1,
+      share: 1 / (LOCATE_GROUP_LIMIT + 1),
+      likelyTemplate: false,
+    }));
+    sidecar({ groups: { ...ISSUE_GROUPS, 'empty-anchor-text': many } });
+    const last = `{"detail":null,"relatedUrlId":${1_000 + LOCATE_GROUP_LIMIT}}`;
+    const { router } = await open(`${ISSUES}/empty-anchor-text?group=${encodeURIComponent(last)}`);
+    expect(await screen.findByText('That group couldn’t be found')).toBeVisible();
+    expect(screen.getByText('It isn’t among the check’s 50,000 largest groups.')).toBeVisible();
+    await waitFor(() => expect(router.state.location.search).not.toHaveProperty('group'));
+  });
+
+  it('copies nothing while the group the address names is still being looked for', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const routes = issuesRoutes();
+    const groups = routes.find(([method, pattern]) => method === 'POST' && pattern.source.includes('groups'));
+    if (!groups) throw new Error('No groups route');
+    // The grid's pages come; the search for the route's group doesn't.
+    const hold: FakeRoute = [
+      'POST',
+      groups[1],
+      (request, match) =>
+        (request.body as { limit: number }).limit === LOCATE_GROUP_PAGE
+          ? new Promise<Response>(() => undefined)
+          : groups[2](request, match),
+    ];
+    setTransport(fakeSidecar([hold, ...routes]));
+    await open(`${ISSUES}/empty-anchor-text?group=${encodeURIComponent('{"detail":null,"relatedUrlId":9}')}`);
+    await within(await screen.findByRole('treegrid')).findByText('5');
+    const copy = screen.getByRole('button', { name: 'Copy URLs' });
+    expect(copy).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(copy);
+    fireEvent.keyDown(document.body, { key: 'C', ctrlKey: true, shiftKey: true });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(writeText).not.toHaveBeenCalled();
   });
 
   it('hides a check, remembered, moving on to the next, with Undo', async () => {

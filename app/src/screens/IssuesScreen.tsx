@@ -4,7 +4,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import { GRID_PAGE_SIZE, type CheckGroupRef, type GridPage, type GridSort, type IssueGroup } from '../api/grids';
-import { analysisQuery, checksQuery, crawlQuery, groupsAsGridPage, queryKeys } from '../api/queries';
+import {
+  analysisQuery,
+  checksQuery,
+  crawlQuery,
+  groupsAsGridPage,
+  issueGroupPlaceQuery,
+  queryKeys,
+} from '../api/queries';
 import { GRID_PAGE_GC_MS } from '../app/queryClient';
 import { isCrawling, type Severity } from '../api/types';
 import { analyseCrawl, cancelAnalysis } from '../crawl/actions';
@@ -34,6 +41,7 @@ import {
   firstCheckToFix,
 } from './issues/checkList';
 import { checkUrlsReader, copyUrls } from './issues/copyUrls';
+import { groupRefOf } from './issues/groupTree';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
@@ -185,20 +193,25 @@ export function IssuesScreen() {
     notifyUndo(`Hid “${title}” from the list`, () => setHidden(id, false));
   };
 
-  const copyTarget = found ? (search.group ?? null) : null;
+  // What Copy URLs copies: the group the groups grid placed and shows open, else the check's URLs. A group the route
+  // names that isn't placed yet can't be copied; one the check doesn't have is dropped from the route (IssueGroups).
+  const routeGroup = found && selected.check.grouping !== 'none' ? (search.group ?? null) : null;
+  const placement = useQuery({
+    ...issueGroupPlaceQuery(crawlId, checkId ?? '', routeGroup ?? { detail: null, relatedUrlId: null }),
+    // Read only: the groups grid looks for it, and this hears what it found.
+    enabled: false,
+  });
+  const place = routeGroup ? placement.data : undefined;
+  const placed = place && place.index !== null ? place.group : null;
+  const copyTarget = placed ? groupRefOf(placed) : null;
+  const copyReady = found && (routeGroup === null || placed !== null);
   const onCopy = async () => {
-    if (!selected || !found || copying) return;
-    const groupPages =
-      copyTarget === null
-        ? null
-        : (groupsPage.data?.rows.find(
-            (group) => group.detail === copyTarget.detail && group.relatedUrlId === copyTarget.relatedUrlId,
-          )?.pages ?? null);
+    if (!selected || !copyReady || copying) return;
     setCopying(true);
     try {
       await copyUrls({
         read: checkUrlsReader(crawlId, selected.check.id, copyTarget),
-        expected: copyTarget === null ? selected.count : groupPages,
+        expected: placed ? placed.pages : selected.count,
       });
     } finally {
       setCopying(false);
@@ -253,7 +266,7 @@ export function IssuesScreen() {
         group: 'Issues',
         keys: ['mod+shift+c'],
         keywords: ['copy', 'urls', 'clipboard'],
-        enabled: () => found && !copying,
+        enabled: () => copyReady && !copying,
         run: onCopy,
       },
       {
@@ -293,7 +306,7 @@ export function IssuesScreen() {
         run: () => cancelAnalysis(crawlId),
       },
     ],
-    [list, checkId, selected, found, copying, copyTarget, showPassed, showHidden, hidden, analysing, crawlId],
+    [list, checkId, selected, copyReady, copying, copyTarget, showPassed, showHidden, hidden, analysing, crawlId],
   );
 
   const loading = (checks.isPending || analysis.isPending) && !checks.error && !analysis.error;
@@ -376,7 +389,7 @@ export function IssuesScreen() {
                 onSortChange={onSortChange}
                 onInspect={onInspect}
                 onCopy={() => void onCopy()}
-                copying={copying}
+                copying={copying || (found && !copyReady)}
                 onHideChange={onHideChange}
                 onLearnMore={onLearnMore}
                 titleRef={titleRef}

@@ -28,7 +28,7 @@ export const queryKeys = {
   issueGroupRows: (id: string, checkId: string, group: CheckGroupRef, limit: number) =>
     ['crawl', id, 'issues', checkId, 'group', group, limit] as const,
   /** Where one of a check's groups is among its groups, to open it from the route. */
-  issueGroupPlace: (id: string, checkId: string, group: CheckGroupRef | null) =>
+  issueGroupPlace: (id: string, checkId: string, group: CheckGroupRef) =>
     ['crawl', id, 'issues', checkId, 'place', group] as const,
   /**
    * Grid pages live under their own prefix, so the page cache can be capped (see queryClient.ts). Every grid's keys
@@ -131,6 +131,35 @@ export const issueGroupRowsQuery = (id: string, checkId: string, group: CheckGro
         { group, columns: ['url', 'detail', 'relatedUrl'], filters: [], sort: [], offset: 0, limit },
         signal,
       ),
+    staleTime: Infinity,
+  });
+
+/** Where a check's groups are looked for, from the largest: pages of 1,000, as far as 50,000 groups. */
+export const LOCATE_GROUP_PAGE = 1_000;
+export const LOCATE_GROUP_LIMIT = 50_000;
+
+/**
+ * Where one of a check's groups is among its groups (largest first), or why it isn't placed: `gone`, the check has no
+ * such group (it was analysed again since the link was made); `beyond`, it isn't among the groups looked through.
+ */
+export type GroupPlace = { index: number; group: IssueGroup } | { index: null; missing: 'gone' | 'beyond' };
+
+/** Finds a group the route names among the check's groups. A group opened from the grid is placed at once instead. */
+export const issueGroupPlaceQuery = (id: string, checkId: string, group: CheckGroupRef) =>
+  queryOptions({
+    queryKey: queryKeys.issueGroupPlace(id, checkId, group),
+    queryFn: async ({ signal }): Promise<GroupPlace> => {
+      for (let offset = 0; offset < LOCATE_GROUP_LIMIT; offset += LOCATE_GROUP_PAGE) {
+        const answer = await api.issueGroups(id, checkId, { offset, limit: LOCATE_GROUP_PAGE }, signal);
+        const at = answer.groups.findIndex(
+          (candidate) => candidate.detail === group.detail && candidate.relatedUrlId === group.relatedUrlId,
+        );
+        const found = answer.groups[at];
+        if (found) return { index: offset + at, group: found };
+        if (answer.groups.length < LOCATE_GROUP_PAGE) return { index: null, missing: 'gone' };
+      }
+      return { index: null, missing: 'beyond' };
+    },
     staleTime: Infinity,
   });
 
