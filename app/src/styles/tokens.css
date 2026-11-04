@@ -140,6 +140,12 @@
   --container-content: 1136px;
   /* Issues stacks its checks list over the selected check in a main area narrower than this (200% zoom at 1280 px). */
   --container-split: 880px;
+  /*
+    A top bar narrower than these (200% zoom) gives its crawl controls' room to where you are: their keys go first,
+    then their words (still their names), leaving the icons.
+  */
+  --container-topbar-keys: 800px;
+  --container-topbar-words: 640px;
 
   /* --------------------------------------------------------------- Motion */
   /* 150-200 ms, easing out; for orientation, not decoration. Reduced motion turns it off (base.css). */
