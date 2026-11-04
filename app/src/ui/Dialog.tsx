@@ -2,6 +2,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
+import { useModal } from '../app/overlays';
 import { ErrorState } from '../feedback/ErrorState';
 import { keepEscapeForField } from '../keyboard/layers';
 import { Button } from './Button';
@@ -30,8 +31,8 @@ export interface DialogProps {
 }
 
 /**
- * A modal dialog: the page behind is inert, focus moves in and comes back, Esc closes it (or first empties the field
- * with text that has focus, as Esc in a field does everywhere). Only for what can't wait or can't be undone;
+ * A modal dialog: the page behind is inert and the app's shortcuts leave it alone, focus moves in and comes back, Esc
+ * closes it (or first empties the field with text that has focus, as Esc in a field does everywhere). Only for what can't wait or can't be undone;
  * everything reversible uses Undo instead (docs/v2-ui-brief.md, Feedback and motion).
  */
 export function Dialog({
@@ -48,6 +49,8 @@ export function Dialog({
   flush = false,
   className,
 }: DialogProps) {
+  // Modal for the app too: its shortcuts (F7, F8, Ctrl+K) don't act behind the dialog, and the shell is inert.
+  useModal(open);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>

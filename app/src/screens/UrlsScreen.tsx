@@ -4,26 +4,30 @@ import { RefreshCw } from 'lucide-react';
 import { useCallback, useMemo, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { isProblem, type ProblemError } from '../api/errors';
-import type { SummaryReason, UrlRow } from '../api/grids';
-import { crawlQuery } from '../api/queries';
+import type { GridFilter, SummaryReason, UrlRow } from '../api/grids';
+import { checksQuery, crawlQuery } from '../api/queries';
 import { isCrawling } from '../api/types';
 import { analyseCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { notifyResult } from '../feedback/notify';
+import { LOOKING_UP, filterSentences } from '../grid/filterSentence';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
 import { useGridMetrics } from '../grid/metrics';
 import type { GridColumn } from '../grid/types';
 import { usePagedRows } from '../grid/usePagedRows';
+import { useInspector } from '../routing/inspector';
 import { MAX_COPY_ROWS } from '../grid/tsv';
 import { formatBytes, formatCount, formatMilliseconds } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
 import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { FilteredEmptyState } from '../ui/EmptyState';
+import { FilterChip } from '../ui/FilterChip';
 import { LiveBadge } from '../ui/LiveBadge';
 import { GridHeader, ResultCount } from '../ui/PageHeader';
 import { SearchField } from '../ui/SearchField';
+import { siteOriginOf, urlDisplay } from '../ui/urlText';
 
 /** Words for the indexability column: the reason it isn't indexable, or Indexable. */
 const INDEXABILITY: Record<string, string> = {
@@ -149,6 +153,8 @@ export function UrlsScreen() {
     [crawlId, sort, filters, q],
   );
   const rows = usePagedRows<UrlRow>({ queryKey, fetchPage, rowHeight });
+  const inspector = useInspector();
+  const inspecting = search.inspect !== undefined;
 
   const columns = useMemo(
     () =>
@@ -181,6 +187,16 @@ export function UrlsScreen() {
       </Button>
     ) : null;
   const clearView = () => void navigate({ search: {} });
+  const chips = (
+    <ActiveFilters
+      crawlId={crawlId}
+      siteOrigin={siteOriginOf(item?.startUrl)}
+      filters={filters}
+      onChange={(next) =>
+        void navigate({ search: (previous) => ({ ...previous, filter: next.length > 0 ? next : undefined }) })
+      }
+    />
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -205,6 +221,11 @@ export function UrlsScreen() {
           />
         }
       />
+      {filters.length > 0 ? (
+        <div role="group" aria-label="Filters" className="flex flex-wrap items-center gap-2 px-6 pb-3">
+          {chips}
+        </div>
+      ) : null}
       {summary && !summary.available && unavailable.length > 0 ? (
         <Banner inset className="mx-6 mb-3">
           <span className="inline-flex flex-wrap items-center gap-3">
@@ -244,11 +265,23 @@ export function UrlsScreen() {
           fetchRows={rows.fetchRows}
           onCopy={onCopy}
           onActivate={(_index, row) => {
-            if (row) void navigate({ search: (previous) => ({ ...previous, inspect: row.id }) });
+            if (row) inspector.open(row.id);
+          }}
+          // While it's open, the inspector follows the cursor, in place.
+          onActiveRowChange={(index) => {
+            const row = inspecting && index !== null ? rows.getRow(index) : undefined;
+            if (row) inspector.open(row.id);
           }}
           // Live refreshes update in place: the progress line is for a refresh the user asked for.
           busy={rows.isRefreshing && !crawling}
-          emptyState={<FilteredEmptyState title="No URLs match these filters." level="none" onClear={clearView} />}
+          emptyState={
+            <FilteredEmptyState
+              title="No URLs match these filters."
+              level="none"
+              filters={filters.length > 0 ? chips : undefined}
+              onClear={clearView}
+            />
+          }
           className="mx-6 mb-4 flex-1 rounded-lg border border-border shadow-1"
         />
       )}
@@ -273,5 +306,81 @@ function NeedsAnalysis({ error, action, onClear }: { error: ProblemError; action
         </>
       }
     />
+  );
+}
+
+/**
+ * The view's filters as chips that read as sentences ("Check is Internal links without anchor text", "Related URL is
+ * /"), each removable. A stand-in for the URL grid's filter bar, its own slice: it reads every filter the route can
+ * hold, and edits none yet.
+ */
+function ActiveFilters({
+  crawlId,
+  siteOrigin,
+  filters,
+  onChange,
+}: {
+  crawlId: string;
+  /** URLs on the crawl's origin read as their path, as the grid shows them. */
+  siteOrigin: string | null;
+  filters: readonly GridFilter[];
+  onChange: (filters: GridFilter[]) => void;
+}) {
+  const checks = useQuery({ ...checksQuery(), enabled: filters.some((filter) => filter.column === 'check') });
+  const relatedIds = filters.flatMap((filter) =>
+    'group' in filter && filter.group.relatedUrlId !== null ? [filter.group.relatedUrlId] : [],
+  );
+  const related = useQuery({
+    queryKey: ['crawl', crawlId, 'urlText', relatedIds, siteOrigin],
+    queryFn: async ({ signal }) => {
+      const page = await api.urls(
+        crawlId,
+        { columns: ['url'], filters: [{ column: 'id', op: 'in', values: relatedIds }], sort: [], limit: 100 },
+        signal,
+      );
+      return new Map(page.rows.map((row) => [row.id, row.url ? urlDisplay(row.url, siteOrigin).shown : '']));
+    },
+    enabled: relatedIds.length > 0,
+    staleTime: Infinity,
+  });
+  // Names, never ids: while they're read, a placeholder; when they can't be, plain words.
+  const checkWords = (id: string | number) => {
+    if (checks.data)
+      return checks.data.checks.find((check) => check.id === id)?.title ?? 'a check this version doesn’t have';
+    return checks.isError ? 'a check whose name couldn’t be read' : LOOKING_UP;
+  };
+  const relatedWords = (urlId: number) => {
+    if (related.data) return related.data.get(urlId) ?? 'a URL that isn’t in this crawl';
+    return related.isError ? 'a URL that couldn’t be read' : LOOKING_UP;
+  };
+  const words = {
+    column: (id: string) => (id === 'check' ? 'Check' : (COLUMNS.find((column) => column.id === id)?.header ?? id)),
+    value: (column: string, value: string | number) => (column === 'check' ? checkWords(value) : String(value)),
+  };
+  return (
+    <>
+      {filters.flatMap((filter, index) =>
+        filterSentences(filter, words, relatedWords).map((sentence, part) => (
+          <FilterChip
+            key={`${index}-${part}`}
+            field={sentence.field}
+            op={sentence.op}
+            value={sentence.value}
+            truncate
+            onRemove={() =>
+              onChange(
+                part === 0
+                  ? filters.filter((_, other) => other !== index)
+                  : filters.map((other, at) => {
+                      if (at !== index || !('group' in other)) return other;
+                      const { group: _group, ...rest } = other;
+                      return rest;
+                    }),
+              )
+            }
+          />
+        )),
+      )}
+    </>
   );
 }

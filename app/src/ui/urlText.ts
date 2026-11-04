@@ -120,3 +120,13 @@ export function originLength(shown: string, origin: string): number {
   while (index < shown.length && index < origin.length && shown[index] === origin[index]) index++;
   return index;
 }
+
+/** A crawl's own scheme and host, from its start URL, so URLs on it can show their path. Null when there's none. */
+export function siteOriginOf(startUrl: string | null | undefined): string | null {
+  if (!startUrl) return null;
+  try {
+    return new URL(startUrl).origin;
+  } catch {
+    return null;
+  }
+}

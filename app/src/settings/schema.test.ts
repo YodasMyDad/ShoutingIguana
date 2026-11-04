@@ -28,6 +28,13 @@ describe('stored settings', () => {
     });
   });
 
+  it('keeps the hidden checks as check ids, each once', () => {
+    expect(
+      readSettings({ hiddenChecks: ['title-too-long', 'title-too-long', 'Bad Id', 5, 'orphan-page'] }).hiddenChecks,
+    ).toEqual(['title-too-long', 'orphan-page']);
+    expect(readSettings({ hiddenChecks: 'title-too-long' }).hiddenChecks).toEqual([]);
+  });
+
   it('leaves the inspector at the layout’s own size until it’s resized', () => {
     expect(DEFAULT_SETTINGS.inspectorWidth).toBeNull();
     expect(DEFAULT_SETTINGS.inspectorHeight).toBeNull();

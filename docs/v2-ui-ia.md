@@ -27,7 +27,8 @@ delegation of the stage sign-offs.
 ```
 
 - **Sidebar.**
-  - Collapsible to icons.
+  - Collapsible to icons. A window narrower than 1024 px (200% zoom on a 1280 px one) shows it collapsed to start
+    with; opening it there lasts while the window stays narrow, and leaves the wider window's choice alone.
   - Home first.
   - The open crawl's sections, with live counts.
   - At the bottom: crawls running in the background, each a link with its progress, and app Settings.
@@ -54,7 +55,7 @@ links and "reopen where I left off" all work.
 | `/new?url=` | New crawl settings, pre-filled |
 | `/crawls/:crawl` | Goes to the crawl's last view: Overview the first time |
 | `/crawls/:crawl/overview` | Live crawl, then the answer |
-| `/crawls/:crawl/issues/:check?` | Issues, with a check selected. Params: `severity`, `q`, `group`, `inspect` |
+| `/crawls/:crawl/issues/:check?` | Issues, with a check selected (the first to fix when none is). Params: `severity`, `q`, `group` (the open group, as `{ detail, relatedUrlId }`), `sort` (a check that doesn't group), `inspect` |
 | `/crawls/:crawl/urls` | URLs. Params: `view`, `filter`, `sort`, `cols`, `q`, `inspect` |
 | `/crawls/:crawl/links` | Links. Same params as URLs |
 | `/crawls/:crawl/sitemaps/:sitemap?` | Sitemaps, and one sitemap's URLs |
@@ -102,10 +103,14 @@ links and "reopen where I left off" all work.
 
 - The checks list, grouped by category and filterable by severity and search. Its rows show severity, title and pages
   affected. Skipped checks are always listed in their category, with their reasons: hiding them would read as
-  clean. "Show all checks" adds the ones that passed.
+  clean. "Show the N checks that passed" adds the ones that passed. The filters, that switch and the hidden checks'
+  count sit above the list, so Tab goes from the list to the selected check.
 - The selected check shows what's wrong, why it matters and how to fix it.
-- Its rows are grouped by detail, so a template fault is one row with its count; expand a row for its URLs.
-- Actions: export, copy URLs, hide the check.
+- Its rows are grouped by detail or by the other URL involved, as the catalog says for each check, so a template
+  fault is one row with its count; open a group for its first pages and all of them in URLs. A check whose detail is a
+  measurement lists its URLs flat. One group is open at a time.
+- Actions: copy URLs (the check's, or the open group's), hide the check (remembered, with Undo). Export comes with the
+  engine's export (E5).
 
 **URLs.**
 
@@ -157,7 +162,8 @@ Actions: open in browser, copy the URL.
    - Open a group's URLs, and press Enter on one for the inspector.
    - Esc closes it, and Alt+Left goes back to where you were.
 4. **Inspect a URL.** From any row (Enter or double-click), or the palette ("Go to URL…"). Its inlinks and outlinks
-   are links themselves, so you can walk the site, and back and forward retrace your steps.
+   are links themselves, so you can walk the site, and back and forward retrace your steps. Moving the grid's cursor
+   moves the inspector with it, in place. Esc closes it to the view as it was before it opened, however far you walked.
 5. **Hand over.**
    - On any grid, Export (Ctrl+E) offers CSV or Excel of what you see: these filters, these columns.
    - On Issues, it offers this check, or every check with a summary sheet.

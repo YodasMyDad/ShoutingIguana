@@ -74,7 +74,7 @@ const finite = (value: unknown): number | undefined =>
  * value isn't one, so the filter that carries it is dropped rather than widened to the whole check.
  */
 function groupRef(value: unknown): CheckGroupRef | null {
-  if (typeof value !== 'object' || value === null) return null;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const detail = record.detail ?? null;
   const relatedUrlId = record.relatedUrlId ?? null;
@@ -158,19 +158,26 @@ export function validateNewCrawlSearch(search: Record<string, unknown>): NewCraw
 }
 
 export interface IssuesSearch {
+  /** The severities listed: one, from the list's filter or the sidebar's counts. Every one when left out. */
   severity?: Severity[] | undefined;
+  /** Filters the checks by title. */
   q?: string | undefined;
-  /** The expanded detail group. */
-  group?: string | undefined;
+  /** The selected check's group in view, opened: `detail` and `relatedUrlId` as `/groups` gave them. */
+  group?: CheckGroupRef | undefined;
+  /** How a check that doesn't group sorts its URLs. */
+  sort?: GridSort[] | undefined;
   /** The URL open in the inspector, by its id in the crawl file. */
   inspect?: number | undefined;
 }
 
 export function validateIssuesSearch(search: Record<string, unknown>): IssuesSearch {
   return strictSearch(search, {
-    severity: list<Severity>(search.severity, (entry) => SEVERITIES.find((severity) => severity === entry)),
+    severity: list<Severity>(search.severity, (entry) => SEVERITIES.find((severity) => severity === entry))?.filter(
+      (severity, index, all) => all.indexOf(severity) === index,
+    ),
     q: text(search.q),
-    group: text(search.group),
+    group: groupRef(search.group) ?? undefined,
+    sort: parseSort(search.sort),
     inspect: positiveInteger(search.inspect),
   });
 }

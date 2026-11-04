@@ -116,3 +116,93 @@ export const FilteredToNothing: Story = { args: { rows: 0 } };
 export const Compact: Story = { args: { density: 'compact' } };
 
 export const Comfortable: Story = { args: { density: 'comfortable' } };
+
+interface GroupDemoRow {
+  kind: 'group' | 'row';
+  group: number;
+  row?: number;
+}
+
+/** 5,000 groups of 3 to 12 rows each: the treegrid the Issues screen groups a check's rows with. */
+function GroupedDemo({ density, sorted }: { density: Density; sorted: 'ascending' | 'descending' | undefined }) {
+  const metrics = DENSITY_METRICS[density];
+  const groupCount = 5_000;
+  const sizeOf = (group: number) => 3 + ((group * 7) % 10);
+  const [open, setOpen] = useState<number | null>(0);
+  const [sort, setSort] = useState(sorted);
+  const children = open === null ? 0 : sizeOf(open);
+  const place = (index: number): GroupDemoRow => {
+    if (open === null || index <= open) return { kind: 'group', group: index };
+    if (index <= open + children) return { kind: 'row', group: open, row: index - open - 1 };
+    return { kind: 'group', group: index - children };
+  };
+  const groupColumns: GridColumn<GroupDemoRow>[] = [
+    {
+      id: 'detail',
+      header: 'Detail',
+      width: 420,
+      sortable: true,
+      ...(sort ? { sort } : {}),
+      cell: (row) => (
+        <span className="flex items-center">
+          <span data-tree-toggle aria-hidden="true" className="si-tree-toggle">
+            ›
+          </span>
+          Missing og:image, template {row.group + 1}
+        </span>
+      ),
+      text: (row) => `Missing og:image, template ${row.group + 1}`,
+    },
+    {
+      id: 'pages',
+      header: 'Pages',
+      width: 96,
+      numeric: true,
+      cell: (row) => sizeOf(row.group),
+      text: (row) => String(sizeOf(row.group)),
+    },
+  ];
+  return (
+    <div className="flex h-screen flex-col gap-2 bg-canvas p-4">
+      <GridCore<GroupDemoRow>
+        label="Grouped pages"
+        columns={groupColumns}
+        rowCount={groupCount + children}
+        getRow={place}
+        rowHeight={metrics.rowHeight}
+        headerHeight={metrics.headerHeight}
+        onSort={() => setSort((current) => (current === 'ascending' ? 'descending' : 'ascending'))}
+        spanRow={(row) =>
+          row.kind === 'row' ? (
+            <span className="font-mono">
+              https://www.example.com/template-{row.group + 1}/page-{(row.row ?? 0) + 1}/
+            </span>
+          ) : null
+        }
+        tree={{
+          level: (index) => (place(index).kind === 'group' ? 1 : 2),
+          expanded: (index) => {
+            const row = place(index);
+            return row.kind === 'group' ? row.group === open : undefined;
+          },
+          parent: (index) => (place(index).kind === 'row' ? open : null),
+          onToggle: (index, opening) => {
+            const { group } = place(index);
+            setOpen(opening ? group : null);
+            return group;
+          },
+        }}
+        className="flex-1 rounded-lg border border-border"
+      />
+    </div>
+  );
+}
+
+/**
+ * Rows grouped under rows that open and close (the ARIA treegrid pattern): Right opens a group, Left closes it or goes
+ * up to its group, Enter or a double-click toggles, and a sortable header sorts. One group open at a time.
+ */
+export const Grouped: StoryObj<typeof GroupedDemo> = {
+  render: (args) => <GroupedDemo {...args} />,
+  args: { density: 'standard', sorted: 'ascending' },
+};

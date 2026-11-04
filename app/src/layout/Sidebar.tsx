@@ -14,17 +14,23 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from 'lucide-react';
-import { crawlQuery, libraryQuery } from '../api/queries';
+import { useMemo } from 'react';
+import { analysisQuery, checksQuery, crawlQuery, libraryQuery } from '../api/queries';
+import type { IssueCounts } from '../api/types';
 import { CRAWL_SECTIONS, type CrawlSection } from '../app/sections';
 import logoUrl from '../assets/iguana-64.png';
 import { crawlName } from '../crawl/status';
 import { formatExactTime } from '../lib/format';
 import { useLiveCrawl, useLiveIds } from '../live/liveStore';
-import { updateSettings, useSettings } from '../settings/settingsStore';
+import { useSettings } from '../settings/settingsStore';
 import { Favicon } from '../ui/Favicon';
 import { IconButton } from '../ui/IconButton';
 import { LiveDot } from '../ui/LiveBadge';
 import { NavItem } from '../ui/NavItem';
+import { SeverityMark } from '../ui/SeverityMark';
+import { toggleSidebar, useSidebarCollapsed } from './sidebarState';
+import { SEVERITIES, type Severity } from '../ui/severity';
+import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
 
 /** Each section's icon, as the design draws the sidebar. */
 const SECTION_ICONS: Record<CrawlSection, LucideIcon> = {
@@ -39,10 +45,11 @@ const SECTION_ICONS: Record<CrawlSection, LucideIcon> = {
 
 /** The sidebar (docs/v2-ui-ia.md, The shell): Home, the open crawl's sections, crawls running now, Settings. */
 export function Sidebar() {
-  const collapsed = useSettings((settings) => settings.sidebarCollapsed);
+  const collapsed = useSidebarCollapsed();
   const { crawl: crawlId } = useParams({ strict: false });
   const crawl = useQuery({ ...crawlQuery(crawlId ?? ''), enabled: crawlId !== undefined }).data;
-  const issues = crawl?.issues ? crawl.issues.error + crawl.issues.warning + crawl.issues.notice : null;
+  const counts = useIssueCounts(crawlId, crawl?.issues != null);
+  const issues = counts ? counts.error + counts.warning + counts.notice : null;
 
   return (
     <nav
@@ -65,7 +72,7 @@ export function Sidebar() {
           size="sm"
           command="view.sidebar"
           aria-expanded={!collapsed}
-          onClick={() => updateSettings({ sidebarCollapsed: !collapsed })}
+          onClick={toggleSidebar}
         />
       </div>
 
@@ -98,6 +105,7 @@ export function Sidebar() {
                 section={section}
                 collapsed={collapsed}
                 count={section.id === 'issues' ? issues : null}
+                issueCounts={section.id === 'issues' ? counts : null}
               />
             ))}
           </ul>
@@ -114,16 +122,38 @@ export function Sidebar() {
   );
 }
 
+/**
+ * The open crawl's checks with issues, by severity, counted from the same check entries as the Issues list (the
+ * catalog's checks, as its last analysis found them, the hidden ones left out), so the two never disagree. Null until
+ * both are read, and for a crawl never analysed.
+ */
+function useIssueCounts(crawlId: string | undefined, analysed: boolean): IssueCounts | null {
+  const checks = useQuery({ ...checksQuery(), enabled: analysed }).data;
+  const analysis = useQuery({ ...analysisQuery(crawlId ?? ''), enabled: crawlId !== undefined && analysed }).data;
+  const hiddenIds = useSettings((settings) => settings.hiddenChecks);
+  return useMemo(() => {
+    if (!analysed || !checks || !analysis) return null;
+    const { error, warning, notice } = foundBySeverity(checkEntries(checks, analysis, new Set(hiddenIds)));
+    return { error, warning, notice };
+  }, [analysed, checks, analysis, hiddenIds]);
+}
+
+/** Each severity's words under Issues: "Errors 2". */
+const SEVERITY_LABELS: Record<Severity, string> = { error: 'Errors', warning: 'Warnings', notice: 'Notices' };
+
 function SectionLink({
   crawlId,
   section,
   collapsed,
   count,
+  issueCounts = null,
 }: {
   crawlId: string;
   section: (typeof CRAWL_SECTIONS)[number];
   collapsed: boolean;
   count: number | null;
+  /** Checks with issues, by severity: each opens the list filtered to it. */
+  issueCounts?: IssueCounts | null;
 }) {
   const props = {
     label: section.title,
@@ -136,7 +166,31 @@ function SectionLink({
     case 'issues':
       return (
         <li>
-          <NavItem to="/crawls/$crawl/issues/{-$check}" params={{ crawl: crawlId }} {...props} />
+          <NavItem
+            to="/crawls/$crawl/issues/{-$check}"
+            params={{ crawl: crawlId }}
+            activeOptions={{ includeSearch: false }}
+            {...props}
+          />
+          {issueCounts && !collapsed ? (
+            <ul aria-label="Issues by severity" className="flex flex-col gap-0.5 pt-0.5">
+              {SEVERITIES.map((severity) => (
+                <li key={severity}>
+                  <NavItem
+                    to="/crawls/$crawl/issues/{-$check}"
+                    params={{ crawl: crawlId }}
+                    search={{ severity: [severity] }}
+                    activeOptions={{ includeSearch: true, exact: false }}
+                    activeProps={{ 'aria-current': undefined }}
+                    label={SEVERITY_LABELS[severity]}
+                    icon={<SeverityMark severity={severity} decorative />}
+                    count={issueCounts[severity]}
+                    className="pl-8"
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </li>
       );
     case 'urls':

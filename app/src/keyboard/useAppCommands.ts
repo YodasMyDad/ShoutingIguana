@@ -8,6 +8,7 @@ import { getOverlay, setOverlay } from '../app/overlays';
 import { analyseCrawl, continueCrawl, pauseOrResume, stopCrawl } from '../crawl/actions';
 import { pickAndOpenCrawls } from '../crawl/openFiles';
 import { crawlControls, effectiveStatus } from '../crawl/status';
+import { toggleSidebar } from '../layout/sidebarState';
 import { isTauri } from '../lib/platform';
 import { useLiveCrawl } from '../live/liveStore';
 import type { Density, ThemePreference } from '../settings/schema';
@@ -243,7 +244,7 @@ export function useAppCommands(): void {
         id: 'view.sidebar',
         title: 'Show or hide the sidebar',
         group: 'View',
-        run: () => updateSettings((settings) => ({ sidebarCollapsed: !settings.sidebarCollapsed })),
+        run: toggleSidebar,
       },
       {
         id: 'view.zoomIn',

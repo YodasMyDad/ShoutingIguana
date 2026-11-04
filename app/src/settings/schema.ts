@@ -24,6 +24,8 @@ export interface Settings {
   lastViewByCrawl: Record<string, string>;
   /** Where the app was when it closed: a path with its search, reopened at the next start. */
   lastLocation: string | null;
+  /** Checks hidden from the Issues list (by id), in every crawl, until shown again. */
+  hiddenChecks: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -36,12 +38,16 @@ export const DEFAULT_SETTINGS: Settings = {
   inspectorHeight: null,
   lastViewByCrawl: {},
   lastLocation: null,
+  hiddenChecks: [],
 };
 
 export const INSPECTOR_WIDTH_RANGE = { min: 320, max: 960 } as const;
 export const INSPECTOR_HEIGHT_RANGE = { min: 200, max: 720 } as const;
 export const ZOOM_RANGE = { min: 0.5, max: 2 } as const;
 const MAX_REMEMBERED_CRAWLS = 200;
+/** The catalog has about 90 checks; ids are its kebab-case names. */
+const MAX_HIDDEN_CHECKS = 200;
+const CHECK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 function oneOf<T extends string>(value: unknown, options: readonly T[], fallback: T): T {
   return options.includes(value as T) ? (value as T) : fallback;
@@ -82,5 +88,10 @@ export function readSettings(value: unknown): Settings {
       !stored.lastLocation.startsWith('//')
         ? stored.lastLocation
         : null,
+    hiddenChecks: Array.isArray(stored.hiddenChecks)
+      ? [
+          ...new Set(stored.hiddenChecks.filter((id): id is string => typeof id === 'string' && CHECK_ID.test(id))),
+        ].slice(0, MAX_HIDDEN_CHECKS)
+      : DEFAULT_SETTINGS.hiddenChecks,
   };
 }

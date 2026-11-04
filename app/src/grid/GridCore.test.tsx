@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { announce } from '../feedback/announce';
 import { notifyError } from '../feedback/notify';
@@ -114,6 +115,37 @@ describe('GridCore', () => {
     expect(activeCell()).toHaveAttribute('aria-colindex', '2');
   });
 
+  it('puts the cursor on the first row when rows arrive while it has focus, so Enter works at once', () => {
+    const onActivate = vi.fn();
+    const props = {
+      label: 'URLs',
+      columns,
+      getRow: (index: number) => rows[index],
+      rowHeight: 32,
+      headerHeight: 32,
+      onActivate,
+    };
+    const { rerender } = render(<GridCore<Row> {...props} rowCount={null} />);
+    const grid = screen.getByRole('grid', { name: 'URLs' });
+    act(() => grid.focus());
+    expect(grid).not.toHaveAttribute('aria-activedescendant');
+    rerender(<GridCore<Row> {...props} rowCount={rows.length} />);
+    // Focus stays where it is, and nothing scrolled.
+    expect(grid).toHaveFocus();
+    expect(grid.scrollTop).toBe(0);
+    const active = document.getElementById(grid.getAttribute('aria-activedescendant') ?? '');
+    expect(active).toHaveTextContent('https://example.com/0');
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    expect(onActivate).toHaveBeenCalledWith(0, rows[0]);
+  });
+
+  it('leaves the cursor unset when rows arrive while it doesn’t have focus', () => {
+    const props = { label: 'URLs', columns, getRow: (index: number) => rows[index], rowHeight: 32, headerHeight: 32 };
+    const { rerender } = render(<GridCore<Row> {...props} rowCount={null} />);
+    rerender(<GridCore<Row> {...props} rowCount={rows.length} />);
+    expect(screen.getByRole('grid', { name: 'URLs' })).not.toHaveAttribute('aria-activedescendant');
+  });
+
   it('inspects the row under the cursor on Enter', () => {
     const { grid, onActivate } = setup();
     act(() => grid.focus());
@@ -159,6 +191,22 @@ describe('GridCore', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
     expect(fetchRows).toHaveBeenCalledWith(Array.from({ length: 98 }, (_, index) => index + 2));
     expect(String(writeText.mock.calls[0]?.[0]).split('\r\n')).toHaveLength(101);
+  });
+
+  it('leaves out rows that still can’t be read, and announces what it copied, not what was selected', async () => {
+    const fetchRows = vi.fn((indices: readonly number[]) =>
+      Promise.resolve(indices.map((index) => (index % 2 === 0 ? rows[index] : undefined))),
+    );
+    const { grid, writeText, onCopy } = setup({ getRow: (index) => (index < 2 ? rows[index] : undefined), fetchRows });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'a', ctrlKey: true });
+    fireEvent.keyDown(grid, { key: 'c', ctrlKey: true });
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    const lines = String(writeText.mock.calls[0]?.[0]).split('\r\n').slice(1);
+    expect(lines).toHaveLength(51);
+    expect(lines.filter((line) => line.replace(/\t/g, '') === '')).toEqual([]);
+    expect(announce).toHaveBeenCalledWith('Copied 51 rows. 49 rows couldn’t be read.');
+    expect(onCopy).toHaveBeenCalledWith({ rows: 51, truncated: false, cell: false });
   });
 
   it('shows placeholder rows for rows whose page has not arrived', () => {
@@ -362,5 +410,230 @@ describe('GridCore', () => {
     expect(onRangeChange).toHaveBeenLastCalledWith(expect.objectContaining({ scrubbing: true }));
     act(() => model?.setScrubbing(false));
     expect(onRangeChange).toHaveBeenLastCalledWith(expect.objectContaining({ first: 34, scrubbing: false }));
+  });
+});
+
+/** A tree of groups: group g has `size` rows, and one group at most is open (an accordion, as Issues has it). */
+function TreeGrid({ onActivate, sort }: { onActivate?: (index: number) => void; sort?: (column: string) => void }) {
+  const groups = [
+    { name: 'Group A', size: 2 },
+    { name: 'Group B', size: 3 },
+    { name: 'Group C', size: 1 },
+  ];
+  const [open, setOpen] = useState<number | null>(null);
+  type TreeRow = { kind: 'group'; group: number } | { kind: 'row'; group: number; row: number } | { kind: 'more' };
+  const flat: TreeRow[] = groups.flatMap((group, index): TreeRow[] => [
+    { kind: 'group', group: index },
+    ...(open === index
+      ? [
+          ...Array.from({ length: group.size }, (_, row): TreeRow => ({ kind: 'row', group: index, row })),
+          { kind: 'more' } as const,
+        ]
+      : []),
+  ]);
+  const treeColumns: GridColumn<TreeRow>[] = [
+    {
+      id: 'name',
+      header: 'Name',
+      width: 200,
+      sortable: true,
+      sort: 'ascending',
+      cell: (row) =>
+        row.kind === 'group' ? (
+          <>
+            <span data-tree-toggle>›</span>
+            {groups[row.group]?.name}
+          </>
+        ) : null,
+      text: (row) => (row.kind === 'group' ? (groups[row.group]?.name ?? '') : ''),
+    },
+    {
+      id: 'size',
+      header: 'Size',
+      width: 80,
+      sortable: true,
+      cell: (row) => (row.kind === 'group' ? groups[row.group]?.size : null),
+      text: () => '',
+    },
+  ];
+  return (
+    <GridCore<TreeRow>
+      label="Groups"
+      columns={treeColumns}
+      rowCount={flat.length}
+      getRow={(index) => flat[index]}
+      rowHeight={32}
+      headerHeight={32}
+      onActivate={(index) => onActivate?.(index)}
+      {...(sort ? { onSort: sort } : {})}
+      spanRow={(row) =>
+        row.kind === 'row'
+          ? `${groups[row.group]?.name ?? ''} row ${row.row + 1}`
+          : row.kind === 'more'
+            ? 'Show all'
+            : null
+      }
+      tree={{
+        level: (index) => (flat[index]?.kind === 'group' ? 1 : 2),
+        expanded: (index) => {
+          const row = flat[index];
+          return row?.kind === 'group' ? row.group === open : undefined;
+        },
+        parent: (index) => {
+          const row = flat[index];
+          if (row?.kind === 'group' || row === undefined) return null;
+          return flat.findIndex((candidate) => candidate.kind === 'group' && candidate.group === open);
+        },
+        onToggle: (index, opening) => {
+          const row = flat[index];
+          if (row?.kind !== 'group') return undefined;
+          setOpen(opening ? row.group : null);
+          return row.group;
+        },
+      }}
+    />
+  );
+}
+
+describe('GridCore as a tree', () => {
+  const activeCell = (grid: HTMLElement) => {
+    const id = grid.getAttribute('aria-activedescendant');
+    return id ? document.getElementById(id) : null;
+  };
+  const rowOf = (grid: HTMLElement) => activeCell(grid)?.closest('[role="row"]');
+
+  it('is a treegrid whose group rows say their level and whether they are open', () => {
+    render(<TreeGrid />);
+    const grid = screen.getByRole('treegrid', { name: 'Groups' });
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row).toHaveAttribute('aria-level', '1');
+      expect(row).toHaveAttribute('aria-expanded', 'false');
+    }
+    expect(grid).toHaveAttribute('aria-rowcount', '4');
+  });
+
+  it('opens a group with Right and closes it with Left, on its first cell', () => {
+    render(<TreeGrid />);
+    const grid = screen.getByRole('treegrid');
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    fireEvent.keyDown(grid, { key: 'ArrowRight' });
+    expect(rowOf(grid)).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByRole('row').filter((row) => row.getAttribute('aria-level') === '2')).toHaveLength(4);
+    // Into the group, then Left goes back up to its row, then closes it.
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    expect(activeCell(grid)).toHaveTextContent('Group B row 1');
+    expect(activeCell(grid)).toHaveAttribute('aria-colspan', '2');
+    fireEvent.keyDown(grid, { key: 'ArrowLeft' });
+    expect(activeCell(grid)).toHaveTextContent('Group B');
+    fireEvent.keyDown(grid, { key: 'ArrowLeft' });
+    expect(rowOf(grid)).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('keeps the cursor on a group whose row moved when the open group above it closed', () => {
+    render(<TreeGrid />);
+    const grid = screen.getByRole('treegrid');
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'Enter' }); // opens A: B is now row 4
+    fireEvent.keyDown(grid, { key: 'End', ctrlKey: true });
+    fireEvent.keyDown(grid, { key: 'ArrowUp' });
+    fireEvent.keyDown(grid, { key: 'Home' });
+    expect(activeCell(grid)).toHaveTextContent('Group B');
+    fireEvent.keyDown(grid, { key: 'Enter' }); // opens B, closing A above it
+    expect(activeCell(grid)).toHaveTextContent('Group B');
+    expect(rowOf(grid)).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('activates a row in a group on Enter, and opens a group by its chevron or a double-click', () => {
+    const onActivate = vi.fn();
+    render(<TreeGrid onActivate={onActivate} />);
+    const grid = screen.getByRole('treegrid');
+    const chevron = document.querySelectorAll('[data-tree-toggle]')[2];
+    if (!chevron) throw new Error('No chevron for the third group');
+    fireEvent.pointerDown(chevron, { button: 0 });
+    expect(screen.getAllByRole('row').filter((row) => row.getAttribute('aria-level') === '2')).toHaveLength(2);
+    expect(onActivate).not.toHaveBeenCalled();
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    expect(onActivate).toHaveBeenCalledWith(3);
+    fireEvent.doubleClick(screen.getByText('Group A'));
+    expect(screen.getByText('Group A').closest('[role="row"]')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('sorts from a sortable column’s header, which says its direction', () => {
+    const sort = vi.fn();
+    render(<TreeGrid sort={sort} />);
+    const header = screen.getByRole('columnheader', { name: 'Name' });
+    expect(header).toHaveAttribute('aria-sort', 'ascending');
+    fireEvent.click(screen.getByRole('button', { name: 'Size' }));
+    expect(sort).toHaveBeenCalledWith('size', false);
+  });
+});
+
+describe('GridCore with columns that sort', () => {
+  const sortable: GridColumn<Row>[] = columns.map((column) => ({ ...column, sortable: true }));
+
+  it('stays one stop for Tab: the cursor reaches the header with Up, and Enter or Space there sorts', () => {
+    const onSort = vi.fn();
+    const { grid, activeCell, onActivate } = setup({ columns: sortable, onSort });
+    // The header's buttons are for the pointer: Tab goes to the grid alone.
+    expect(screen.getAllByRole('button').map((button) => button.tabIndex)).toEqual([-1, -1]);
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowUp' });
+    expect(activeCell()).toHaveAttribute('role', 'columnheader');
+    expect(activeCell()).toHaveTextContent('URL');
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    expect(onSort).toHaveBeenLastCalledWith('url', true);
+    expect(onActivate).not.toHaveBeenCalled();
+    fireEvent.keyDown(grid, { key: 'ArrowRight' });
+    expect(activeCell()).toHaveTextContent('Status');
+    fireEvent.keyDown(grid, { key: ' ' });
+    expect(onSort).toHaveBeenLastCalledWith('status', true);
+    // Space sorted: it selected no row.
+    expect(grid.querySelectorAll('[aria-selected="true"]')).toHaveLength(0);
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    expect(activeCell()).toHaveAttribute('role', 'gridcell');
+    expect(activeCell()).toHaveTextContent('200');
+    expect(activeCell()).toHaveAttribute('aria-colindex', '2');
+  });
+
+  it('leaves the keys of a header control that has focus to it', () => {
+    const onSort = vi.fn();
+    const { grid, onActivate } = setup({ columns: sortable, onSort });
+    act(() => grid.focus());
+    const button = screen.getByRole('button', { name: 'URL' });
+    act(() => button.focus());
+    fireEvent.keyDown(button, { key: 'Enter' });
+    fireEvent.keyDown(button, { key: ' ' });
+    fireEvent.keyDown(button, { key: 'ArrowDown' });
+    expect(onActivate).not.toHaveBeenCalled();
+    expect(grid.querySelectorAll('[aria-selected="true"]')).toHaveLength(0);
+  });
+
+  it('keeps focus on the grid when a header is clicked, with the cursor on it', () => {
+    const onSort = vi.fn();
+    const { grid, activeCell } = setup({ columns: sortable, onSort });
+    const button = screen.getByRole('button', { name: 'Status' });
+    fireEvent.mouseDown(button);
+    fireEvent.click(button);
+    expect(grid).toHaveFocus();
+    expect(onSort).toHaveBeenCalledWith('status', true);
+    expect(activeCell()).toHaveTextContent('Status');
+  });
+
+  it('starts on the header it was handed, focused: the grid a sort from that header brought', () => {
+    const { grid, activeCell } = setup({ columns: sortable, onSort: vi.fn(), focusHeader: 'status' });
+    expect(grid).toHaveFocus();
+    expect(activeCell()).toHaveAttribute('role', 'columnheader');
+    expect(activeCell()).toHaveTextContent('Status');
+  });
+
+  it('keeps Up on the first row for a grid whose columns don’t sort', () => {
+    const { grid, activeCell } = setup();
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowUp' });
+    expect(activeCell()).toHaveTextContent('https://example.com/0');
   });
 });

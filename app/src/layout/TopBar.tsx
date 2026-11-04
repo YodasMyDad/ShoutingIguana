@@ -18,6 +18,11 @@ import { Kbd } from '../ui/Kbd';
 import { StatusPill } from '../ui/StatusPill';
 import { TextLink } from '../ui/TextLink';
 
+/** A crawl control's words: in a top bar short of room, read but not shown, so the button keeps its name. */
+function ControlWords({ children }: { children: string }) {
+  return <span className="@max-topbar-words/topbar:sr-only">{children}</span>;
+}
+
 // The crawl's status pill is the design system's now (ui/StatusPill.tsx); it's still exported from here, where it began.
 export { StatusPill };
 
@@ -36,7 +41,7 @@ export function TopBar() {
   const section = CRAWL_SECTIONS.find((candidate) => candidate.id === sectionOf(pathname));
 
   return (
-    <header className="flex h-(--topbar-height) shrink-0 items-center gap-3 border-b border-border-subtle bg-canvas pr-4 pl-3">
+    <header className="@container/topbar flex h-(--topbar-height) shrink-0 items-center gap-3 border-b border-border-subtle bg-canvas pr-4 pl-3">
       <div className="flex gap-0.5">
         <IconButton
           label="Back"
@@ -103,7 +108,8 @@ export function TopBar() {
       </nav>
 
       {crawlId && status ? (
-        <div className="flex items-center gap-2">
+        // Short of room (200% zoom with a running crawl's Pause and Stop), the controls' keys go, then their words.
+        <div className="flex shrink-0 items-center gap-2 @max-topbar-keys/topbar:[&_kbd]:hidden">
           <StatusPill status={status} fetched={live?.progress?.fetched ?? crawl?.fetchedUrlCount ?? null} />
           {controls.canPause ? (
             <Button
@@ -113,7 +119,7 @@ export function TopBar() {
               showShortcut
               onClick={() => void pauseOrResume(crawlId, status)}
             >
-              Pause
+              <ControlWords>Pause</ControlWords>
             </Button>
           ) : null}
           {controls.canResume ? (
@@ -124,22 +130,22 @@ export function TopBar() {
               showShortcut
               onClick={() => void pauseOrResume(crawlId, status)}
             >
-              Resume
+              <ControlWords>Resume</ControlWords>
             </Button>
           ) : null}
           {controls.canStop ? (
             <Button size="sm" icon={Square} command="crawl.stop" showShortcut onClick={() => void stopCrawl(crawlId)}>
-              Stop
+              <ControlWords>Stop</ControlWords>
             </Button>
           ) : null}
           {controls.canContinue ? (
             <Button size="sm" icon={Play} command="crawl.continue" onClick={() => void continueCrawl(crawlId)}>
-              Continue
+              <ControlWords>Continue</ControlWords>
             </Button>
           ) : null}
           {controls.canAnalyse && crawl?.outOfDate ? (
             <Button size="sm" icon={RefreshCw} command="crawl.analyse" onClick={() => void analyseCrawl(crawlId)}>
-              Analyse again
+              <ControlWords>Analyse again</ControlWords>
             </Button>
           ) : null}
         </div>

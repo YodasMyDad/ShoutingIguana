@@ -2,7 +2,7 @@
 // what to refresh. Freshness comes from events (`library`, `crawl`), not polling: reads stay fresh until told.
 import { queryOptions, type QueryFilters } from '@tanstack/react-query';
 import { api } from './client';
-import type { GridQuery } from './grids';
+import type { CheckGroupRef, GridPage, GridQuery, GridSort, IssueGroup, IssueGroupPage, IssueRow } from './grids';
 
 export const queryKeys = {
   health: ['health'] as const,
@@ -19,6 +19,17 @@ export const queryKeys = {
   alerts: (id: string) => ['crawl', id, 'alerts'] as const,
   issues: (id: string, checkId: string, offset: number, limit: number) =>
     ['crawl', id, 'issues', checkId, offset, limit] as const,
+  /** A check's groups, as grid pages (`usePagedRows` adds the page size and number). */
+  issueGroupsGrid: (id: string, checkId: string) => ['grid', 'issueGroups', id, checkId] as const,
+  /** A check's rows, sorted, as grid pages: the URLs of a check that doesn't group. */
+  issueRowsGrid: (id: string, checkId: string, sort: readonly GridSort[]) =>
+    ['grid', 'issueRows', id, checkId, { sort }] as const,
+  /** The first pages of one of a check's groups, shown under it when it's open. */
+  issueGroupRows: (id: string, checkId: string, group: CheckGroupRef, limit: number) =>
+    ['crawl', id, 'issues', checkId, 'group', group, limit] as const,
+  /** Where one of a check's groups is among its groups, to open it from the route. */
+  issueGroupPlace: (id: string, checkId: string, group: CheckGroupRef) =>
+    ['crawl', id, 'issues', checkId, 'place', group] as const,
   /**
    * Grid pages live under their own prefix, so the page cache can be capped (see queryClient.ts). Every grid's keys
    * are `['grid', <grid>, <crawl id>, <query>, ...]`, so a crawl's pages can be found (gridPagesOf).
@@ -31,6 +42,20 @@ export const queryKeys = {
 /** Every page of every grid of one crawl: what a change to the crawl makes stale. */
 export function gridPagesOf(crawlId: string): QueryFilters {
   return { queryKey: queryKeys.gridPrefix, predicate: (query) => query.queryKey[2] === crawlId };
+}
+
+/**
+ * The grids that read the last analysis (a check's groups and rows): a running crawl doesn't change them, so the live
+ * refresh leaves them be; the analysis that follows the crawl refreshes them.
+ */
+export const ANALYSIS_GRIDS: readonly string[] = ['issueGroups', 'issueRows'];
+
+/** The pages of one crawl's grids that a running crawl changes: every grid but the analysis's. */
+export function liveGridPagesOf(crawlId: string): QueryFilters {
+  return {
+    queryKey: queryKeys.gridPrefix,
+    predicate: (query) => query.queryKey[2] === crawlId && !ANALYSIS_GRIDS.includes(String(query.queryKey[1])),
+  };
 }
 
 export const healthQuery = () =>
@@ -78,6 +103,63 @@ export const alertsQuery = (id: string) =>
   queryOptions({
     queryKey: queryKeys.alerts(id),
     queryFn: ({ signal }) => api.alerts(id, signal),
+    staleTime: Infinity,
+  });
+
+/** A page of a check's groups in the grid's shape: a group is a row, and the groups are what "match". */
+export function groupsAsGridPage(page: IssueGroupPage): GridPage<IssueGroup> {
+  return {
+    columns: [],
+    rows: page.groups,
+    offset: page.offset,
+    matching: page.groupCount,
+    total: page.total,
+    next: null,
+    summary: { available: true, reason: null },
+    unavailable: [],
+  };
+}
+
+/** The first rows of one of a check's groups, with what the tree shows of them. */
+export const issueGroupRowsQuery = (id: string, checkId: string, group: CheckGroupRef, limit: number) =>
+  queryOptions({
+    queryKey: queryKeys.issueGroupRows(id, checkId, group, limit),
+    queryFn: ({ signal }): Promise<GridPage<IssueRow>> =>
+      api.issueRows(
+        id,
+        checkId,
+        { group, columns: ['url', 'detail', 'relatedUrl'], filters: [], sort: [], offset: 0, limit },
+        signal,
+      ),
+    staleTime: Infinity,
+  });
+
+/** Where a check's groups are looked for, from the largest: pages of 1,000, as far as 50,000 groups. */
+export const LOCATE_GROUP_PAGE = 1_000;
+export const LOCATE_GROUP_LIMIT = 50_000;
+
+/**
+ * Where one of a check's groups is among its groups (largest first), or why it isn't placed: `gone`, the check has no
+ * such group (it was analysed again since the link was made); `beyond`, it isn't among the groups looked through.
+ */
+export type GroupPlace = { index: number; group: IssueGroup } | { index: null; missing: 'gone' | 'beyond' };
+
+/** Finds a group the route names among the check's groups. A group opened from the grid is placed at once instead. */
+export const issueGroupPlaceQuery = (id: string, checkId: string, group: CheckGroupRef) =>
+  queryOptions({
+    queryKey: queryKeys.issueGroupPlace(id, checkId, group),
+    queryFn: async ({ signal }): Promise<GroupPlace> => {
+      for (let offset = 0; offset < LOCATE_GROUP_LIMIT; offset += LOCATE_GROUP_PAGE) {
+        const answer = await api.issueGroups(id, checkId, { offset, limit: LOCATE_GROUP_PAGE }, signal);
+        const at = answer.groups.findIndex(
+          (candidate) => candidate.detail === group.detail && candidate.relatedUrlId === group.relatedUrlId,
+        );
+        const found = answer.groups[at];
+        if (found) return { index: offset + at, group: found };
+        if (answer.groups.length < LOCATE_GROUP_PAGE) return { index: null, missing: 'gone' };
+      }
+      return { index: null, missing: 'beyond' };
+    },
     staleTime: Infinity,
   });
 

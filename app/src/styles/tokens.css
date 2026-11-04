@@ -138,6 +138,14 @@
   /* `wide:` is 1920 px and up. Below 1360 px is `narrow:`, a max-width variant (above). */
   --breakpoint-wide: 1920px;
   --container-content: 1136px;
+  /* Issues stacks its checks list over the selected check in a main area narrower than this (200% zoom at 1280 px). */
+  --container-split: 880px;
+  /*
+    A top bar narrower than these (200% zoom) gives its crawl controls' room to where you are: their keys go first,
+    then their words (still their names), leaving the icons.
+  */
+  --container-topbar-keys: 800px;
+  --container-topbar-words: 640px;
 
   /* --------------------------------------------------------------- Motion */
   /* 150-200 ms, easing out; for orientation, not decoration. Reduced motion turns it off (base.css). */
@@ -298,6 +306,10 @@
   --inspector-width-min: 320px;
   --inspector-height: 320px; /* docked at the bottom */
   --checks-width: 372px;
+  --issues-columns: var(--checks-width) minmax(0, 1fr); /* the checks list, then the selected check */
+  --checks-height-stacked: max(50vh, 18rem); /* the checks list's rows above the selected check, when they stack */
+  --evidence-max-height: 64vh; /* a check's affected pages: its grid scrolls inside this */
+  --explain-columns: repeat(auto-fit, minmax(13rem, 1fr)); /* what's wrong, why it matters, how to fix it */
   --content-max: 1136px;
   --page-gutter: var(--space-8);
   --sheet-inset: var(--space-2);

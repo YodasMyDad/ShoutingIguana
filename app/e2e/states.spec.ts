@@ -424,9 +424,9 @@ test('at 200% zoom, the top bar keeps the palette button in the window and its c
   const room = await crumbs.boundingBox();
   expect(room && button && room.x + room.width).toBeLessThanOrEqual(button?.x ?? 0);
 
-  // With the sidebar collapsed there's room for where you are: the palette button's words and the date give way
-  // first, so the crawl's name and its section show, most of each at least.
-  await page.getByRole('button', { name: 'Collapse the sidebar' }).click();
+  // A window this narrow shows the sidebar collapsed to icons, which leaves room for where you are: the palette
+  // button's words and the date give way first, so the crawl's name and its section show, most of each at least.
+  await expect(page.getByRole('button', { name: 'Expand the sidebar' })).toHaveAttribute('aria-expanded', 'false');
   const widths = (locator: Locator) =>
     locator.evaluate((element) => ({ shown: element.clientWidth, full: element.scrollWidth }));
   const nameCrumb = crumbs.getByRole('listitem').filter({ hasText: site() }).locator('span.truncate');
