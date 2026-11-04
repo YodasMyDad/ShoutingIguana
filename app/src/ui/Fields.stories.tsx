@@ -259,7 +259,7 @@ export const Segmented: Story = {
   },
 };
 
-/** A menu-button select, and tabs with counts. */
+/** A menu-button select, and tabs with counts, also in a panel too narrow for them all. */
 export const SelectAndTabs: Story = {
   parameters: {
     pseudo: {
@@ -328,6 +328,21 @@ export const SelectAndTabs: Story = {
             { value: 'source', label: 'Source', disabled: true, content: null },
           ]}
         />
+        {/* In a narrow panel: the tabs past the edge scroll, with a thin scrollbar that says so. */}
+        <div className="w-(--checks-width)">
+          <Tabs
+            label="Inspector sections, narrow"
+            flush
+            tabs={[
+              { value: 'summary', label: 'Summary', content: null },
+              { value: 'issues', label: 'Issues', count: 5, content: null },
+              { value: 'inlinks', label: 'Inlinks', count: 1_204, content: null },
+              { value: 'outlinks', label: 'Outlinks', count: 86, content: null },
+              { value: 'headers', label: 'Headers', content: null },
+              { value: 'source', label: 'Source', content: null },
+            ]}
+          />
+        </div>
       </StoryFrame>
     );
   },

@@ -449,6 +449,60 @@ test.describe('the design system’s states', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 
+  test('a long section title wraps in a narrow column instead of running out of it', async ({ page }) => {
+    const host = await fixture(
+      page,
+      `<div style="width:320px" id="column"><div class="si-section-header">
+         <h2 class="si-section-header__title">Pages whose canonical points at a redirected URL<span class="si-section-header__meta">82,904</span></h2>
+         <div class="si-section-header__actions"><button type="button" class="si-btn si-btn--ghost">Export</button></div>
+       </div></div>`,
+    );
+    const column = await host.locator('#column').boundingBox();
+    const title = host.locator('h2');
+    const box = await title.boundingBox();
+    const action = await host.getByRole('button', { name: 'Export' }).boundingBox();
+    expect(column && box && action).toBeTruthy();
+    if (!column || !box || !action) return;
+    expect(box.x + box.width).toBeLessThanOrEqual(column.x + column.width + 0.5);
+    expect(action.x + action.width).toBeLessThanOrEqual(column.x + column.width + 0.5);
+    // All of it shows: wrapped, not cut.
+    expect(await title.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  });
+
+  test('tabs past the edge show a scrollbar, and the list never scrolls up and down', async ({ page }) => {
+    const tabs = ['Overview', 'Response', 'Headers', 'Links', 'Images', 'Structured data', 'Hreflang', 'Source'];
+    const markup = (id: string) =>
+      `<div class="si-tabs" role="tablist" id="${id}">${tabs
+        .map(
+          (name, index) =>
+            `<button type="button" class="si-tab" role="tab" aria-selected="${String(index === 0)}">${name}</button>`,
+        )
+        .join('')}</div>`;
+    const host = await fixture(
+      page,
+      `<div style="width:300px">${markup('narrow')}</div><div style="width:1000px">${markup('wide')}</div>`,
+    );
+    const measure = (locator: Locator) =>
+      locator.evaluate((element) => ({
+        overflowing: element.scrollWidth > element.clientWidth,
+        // A scrollbar shows what's past the edge to the pointer. (Headless Chromium hides scrollbars, so this is the
+        // style that asks for one.)
+        scrollbar: getComputedStyle(element).scrollbarWidth,
+        scrollsUpAndDown: element.scrollHeight > element.clientHeight,
+      }));
+    const narrow = await measure(host.locator('#narrow'));
+    expect(narrow).toEqual({ overflowing: true, scrollbar: 'thin', scrollsUpAndDown: false });
+    expect((await measure(host.locator('#wide'))).scrollsUpAndDown).toBe(false);
+    // The chosen tab's rule is drawn in full, at the list's very bottom, over its hairline.
+    const rule = await host.locator('#wide [aria-selected="true"]').evaluate((element) => ({
+      bottom: getComputedStyle(element, '::after').bottom,
+      tab: element.getBoundingClientRect().bottom,
+      list: element.parentElement?.getBoundingClientRect().bottom,
+    }));
+    expect(rule.bottom).toBe('0px');
+    expect(rule.tab).toBe(rule.list);
+  });
+
   test('an indeterminate bar slides by translate, and under reduced motion stripes the whole track', async ({
     page,
   }) => {
@@ -491,26 +545,6 @@ test.describe('the design system’s states', () => {
       expect(still.width, forcedColors).toBeCloseTo(still.track, 0);
       expect(still.image, forcedColors).toContain('repeating-linear-gradient');
     }
-  });
-
-  test('a long section title wraps in a narrow column instead of running out of it', async ({ page }) => {
-    const host = await fixture(
-      page,
-      `<div style="width:320px" id="column"><div class="si-section-header">
-         <h2 class="si-section-header__title">Pages whose canonical points at a redirected URL<span class="si-section-header__meta">82,904</span></h2>
-         <div class="si-section-header__actions"><button type="button" class="si-btn si-btn--ghost">Export</button></div>
-       </div></div>`,
-    );
-    const column = await host.locator('#column').boundingBox();
-    const title = host.locator('h2');
-    const box = await title.boundingBox();
-    const action = await host.getByRole('button', { name: 'Export' }).boundingBox();
-    expect(column && box && action).toBeTruthy();
-    if (!column || !box || !action) return;
-    expect(box.x + box.width).toBeLessThanOrEqual(column.x + column.width + 0.5);
-    expect(action.x + action.width).toBeLessThanOrEqual(column.x + column.width + 0.5);
-    // All of it shows: wrapped, not cut.
-    expect(await title.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   });
 
 });
