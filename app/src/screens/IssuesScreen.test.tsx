@@ -244,6 +244,34 @@ describe('the Issues screen', () => {
     expect(screen.queryByText('The group’s pages couldn’t be read.')).toBeNull();
   });
 
+  it('copies every group with Ctrl+A and Ctrl+C, reading the pages of groups not read yet', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const heard: string[] = [];
+    const stop = onAnnounce((message) => heard.push(message));
+    const many: IssueGroup[] = Array.from({ length: 450 }, (_, index) => ({
+      detail: null,
+      relatedUrlId: 1_000 + index,
+      relatedUrl: `https://example.com/target-${index}/`,
+      pages: 1,
+      share: 1 / 450,
+      likelyTemplate: false,
+    }));
+    sidecar({ groups: { ...ISSUE_GROUPS, 'empty-anchor-text': many } });
+    await open(`${ISSUES}/empty-anchor-text`);
+    const grid = await screen.findByRole('treegrid');
+    await within(grid).findAllByRole('row', { expanded: false });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'a', ctrlKey: true });
+    fireEvent.keyDown(grid, { key: 'c', ctrlKey: true });
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    const lines = String(writeText.mock.calls[0]?.[0]).split('\r\n').slice(1);
+    expect(lines).toHaveLength(450);
+    expect(lines.at(-1)).toContain('https://example.com/target-449/');
+    expect(heard).toContain('Copied 450 rows.');
+    stop();
+  });
+
   it('reopens the group the address names', async () => {
     sidecar();
     await open(`${ISSUES}/empty-anchor-text?group=${encodeURIComponent('{"detail":null,"relatedUrlId":9}')}`);

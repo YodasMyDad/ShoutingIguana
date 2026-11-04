@@ -253,7 +253,9 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   rows that aren't loaded). Crawled text is the site's, so a copied row's value starting with =, +, -, @, a tab or a
   carriage return gets a `'` in front (OWASP's advice against CSV injection): a spreadsheet shows it as text, without
   the quote. With nothing selected, Ctrl+C copies the cell under the cursor exactly as it is. A copy that fails says
-  so in a toast; one that works is announced.
+  so in a toast; one that works is announced, with the rows it copied: a row that still can't be read, or has no
+  text (a group's link to its rows), is left out, never copied as a blank line. A treegrid's `fetchRows` maps its
+  rows to the pages they come from (Issues' groups).
 - **Loading**: the first load's skeleton shows only after 150 ms, and once shown stays at least 300 ms, rows or not.
 - Give it a new `key` when the rows change meaning (another sort or filter): that resets the scroll and selection.
 - **Sorting from the header**: a column with `sortable` gets a button for a header, and the grid calls

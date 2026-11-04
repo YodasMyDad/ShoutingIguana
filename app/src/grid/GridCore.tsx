@@ -290,16 +290,28 @@ function GridCoreInner<Row>({
     return false;
   };
 
-  /** The rows as text: rows that aren't loaded are fetched first. Throws when a page can't be. */
+  /**
+   * The rows as text: rows that aren't loaded are fetched first. A row that still isn't there, or that has no text
+   * (a group's link to all its rows), is left out rather than copied as a blank line: `rows` is what was copied,
+   * `unread` what couldn't be. Throws when a page can't be fetched.
+   */
   const selectionText = async (indices: readonly number[]) => {
     const missing = indices.filter((index) => getRow(index) === undefined);
     const fetched = missing.length && fetchRows ? await fetchRows(missing) : [];
     const byIndex = new Map(missing.map((index, i) => [index, fetched[i]]));
     const rows = indices.map((index) => getRow(index) ?? byIndex.get(index));
-    return toTsv(
-      columns.map((column) => column.header),
-      rows.map((row) => columns.map((column) => (row === undefined ? '' : column.text(row)))),
-    );
+    const lines = rows
+      .filter((row) => row !== undefined)
+      .map((row) => columns.map((column) => column.text(row)))
+      .filter((cells) => cells.some((cell) => cell !== ''));
+    return {
+      text: toTsv(
+        columns.map((column) => column.header),
+        lines,
+      ),
+      rows: lines.length,
+      unread: rows.filter((row) => row === undefined).length,
+    };
   };
 
   /**
@@ -319,13 +331,24 @@ function GridCoreInner<Row>({
         onCopy?.({ rows: 1, truncated: false, cell: true });
         return;
       }
-      if (!(await copyText(await selectionText(pick.indices)))) throw new ClipboardRefused();
-      announce(`Copied ${formatCountOf(pick.indices.length, 'row')}.`);
-      onCopy?.({ rows: pick.indices.length, truncated: pick.truncated, cell: false });
+      const copied = await selectionText(pick.indices);
+      if (copied.rows === 0) throw new NothingToCopy();
+      if (!(await copyText(copied.text))) throw new ClipboardRefused();
+      // What was copied, never what was selected: rows that weren't there aren't counted.
+      announce(
+        copied.unread > 0
+          ? `Copied ${formatCountOf(copied.rows, 'row')}. ${formatCountOf(copied.unread, 'row')} couldn’t be read.`
+          : `Copied ${formatCountOf(copied.rows, 'row')}.`,
+      );
+      onCopy?.({ rows: copied.rows, truncated: pick.truncated, cell: false });
     } catch (error) {
       notifyError(error, {
         title: pick.indices.length > 0 ? 'The rows couldn’t be copied.' : 'The cell couldn’t be copied.',
-        ...(error instanceof ClipboardRefused ? { description: 'The clipboard didn’t take it. Try again.' } : {}),
+        ...(error instanceof ClipboardRefused
+          ? { description: 'The clipboard didn’t take it. Try again.' }
+          : error instanceof NothingToCopy
+            ? { description: 'None of the selected rows could be read.' }
+            : {}),
       });
     }
   };
@@ -822,6 +845,13 @@ const PlaceholderRow = memo(function PlaceholderRow({
 class ClipboardRefused extends Error {
   constructor() {
     super('The clipboard refused the text.');
+  }
+}
+
+/** None of the selected rows could be read: nothing to put on the clipboard. */
+class NothingToCopy extends Error {
+  constructor() {
+    super('None of the selected rows could be read.');
   }
 }
 

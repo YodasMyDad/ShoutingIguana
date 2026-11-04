@@ -162,6 +162,22 @@ describe('GridCore', () => {
     expect(String(writeText.mock.calls[0]?.[0]).split('\r\n')).toHaveLength(101);
   });
 
+  it('leaves out rows that still can’t be read, and announces what it copied, not what was selected', async () => {
+    const fetchRows = vi.fn((indices: readonly number[]) =>
+      Promise.resolve(indices.map((index) => (index % 2 === 0 ? rows[index] : undefined))),
+    );
+    const { grid, writeText, onCopy } = setup({ getRow: (index) => (index < 2 ? rows[index] : undefined), fetchRows });
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'a', ctrlKey: true });
+    fireEvent.keyDown(grid, { key: 'c', ctrlKey: true });
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    const lines = String(writeText.mock.calls[0]?.[0]).split('\r\n').slice(1);
+    expect(lines).toHaveLength(51);
+    expect(lines.filter((line) => line.replace(/\t/g, '') === '')).toEqual([]);
+    expect(announce).toHaveBeenCalledWith('Copied 51 rows. 49 rows couldn’t be read.');
+    expect(onCopy).toHaveBeenCalledWith({ rows: 51, truncated: false, cell: false });
+  });
+
   it('shows placeholder rows for rows whose page has not arrived', () => {
     setup({ getRow: () => undefined });
     const busyRows = screen.getAllByRole('row').filter((row) => row.getAttribute('aria-busy') === 'true');

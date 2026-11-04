@@ -18,7 +18,7 @@ import { notifyResult } from '../../feedback/notify';
 import { GridCore } from '../../grid/GridCore';
 import { useGridMetrics } from '../../grid/metrics';
 import type { RowWindowModel } from '../../grid/rowWindow';
-import type { GridColumn, GridRange, GridTree } from '../../grid/types';
+import type { GridColumn, GridRange, GridTree, RowFetcher } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
 import { formatCount } from '../../lib/format';
@@ -168,6 +168,25 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
       return row ? wrap(pageRows, row, () => ({ kind: 'page', row, group })) : undefined;
     },
     [layout, getGroup, openGroup, openChildren, loadedRows],
+  );
+
+  // Copying a selection that spans groups not read yet (Ctrl+A, Ctrl+C on thousands): their pages are fetched, as the
+  // flat grids' are. Rows under the open group are its first pages, which are loaded or not there.
+  const fetchGroups = groups.fetchRows;
+  const fetchRows = useCallback<RowFetcher<TreeRow>>(
+    async (indices) => {
+      const places = indices.map((index) => layout.place(index));
+      const wanted = places.flatMap((place) => (place.kind === 'group' ? [place.group] : []));
+      const fetched = await fetchGroups(wanted);
+      const byGroup = new Map(wanted.map((group, at) => [group, fetched[at]]));
+      return indices.map((index, at) => {
+        const place = places[at];
+        if (place?.kind !== 'group') return getRow(index);
+        const group = getGroup(place.group) ?? byGroup.get(place.group);
+        return group ? wrap(groupRows, group, () => ({ kind: 'group', group })) : undefined;
+      });
+    },
+    [layout, fetchGroups, getGroup, getRow],
   );
 
   const toGroups = useCallback(
@@ -402,6 +421,7 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
           onRangeChange={(range) => groups.onRangeChange(toGroups(range))}
           onScrollOffset={groups.onScrollOffset}
           tree={tree}
+          fetchRows={fetchRows}
           modelRef={(value) => (model.current = value)}
           spanRow={spanRow}
           onActivate={(_index, row) => {
