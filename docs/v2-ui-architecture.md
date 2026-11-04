@@ -33,7 +33,7 @@ Webview (React, app/src) ──────────────────�
 | `src/settings` | Preferences: schema, store (the shell's settings commands, or `localStorage`), appearance |
 | `src/feedback` | The loading rule, skeletons, toasts, error states, route errors, announcements |
 | `src/layout` | The shell's layout: sidebar, top bar, inspector slot, banners, the stopping overlay |
-| `src/screens` | One file per route. Home and the URLs grid work; the rest are stubs for their slices |
+| `src/screens` | One file per route, a screen's own pieces in a folder beside it (`screens/issues/`). Home, Issues and the URLs grid work; the rest are stubs for their slices |
 | `src/app` | The router, the query client, overlays, sections, the root component |
 | `src/ui` | The component library: buttons, fields, menus, severity, figures, URLs and the rest (see Components) |
 | `src/styles` | `tokens.css` (every design value), `base.css`, `components.css` (the library's look), the Tailwind entry |
@@ -213,7 +213,9 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   address without it. Sorts are trimmed to 3 (each column once) and filters to 20, as the contract allows; a range
   that can't match and a group anywhere but on one check are dropped. Optional fields accept `undefined`, which
   removes a param.
-- The inspector reads the current view's checked `inspect`, so it opens only on a view that has one.
+- The inspector reads the current view's checked `inspect`, so it opens only on a view that has one. It opens and
+  closes in place (a replace): it follows the grid's cursor, so back and forward step between views, and Alt+Left after
+  Esc goes back to where the user came from, not to the URL that was open.
 - `/crawls/:crawl` opens the crawl's last view. The app reopens where it was left.
 - Each screen's route renders `RouteError` when it fails (Try again where it could work, and Go to Home); the shell
   keeps working around it. Each part of the shell (sidebar, top bar, the engine's banner, the inspector) has its own
@@ -254,8 +256,23 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   so in a toast; one that works is announced.
 - **Loading**: the first load's skeleton shows only after 150 ms, and once shown stays at least 300 ms, rows or not.
 - Give it a new `key` when the rows change meaning (another sort or filter): that resets the scroll and selection.
+- **Sorting from the header**: a column with `sortable` gets a button for a header, and the grid calls `onSort(id)`;
+  `grid/sort.ts` (`nextSort`) cycles ascending, descending, then the engine's order. The sort itself is the view's, in
+  its route.
+- **Grouped rows** (`tree`): the grid becomes an ARIA `treegrid`. The caller maps its flat rows to a tree with four
+  functions (`level`, `expanded`, `parent`, `onToggle`), so nothing is stored per row and a tree of thousands of groups
+  pages and virtualises like any grid. Right on a closed group's first cell opens it, Left closes it or goes up from a
+  row in it to its group, Enter and a double-click toggle a group (and activate any other row), and an element with
+  `data-tree-toggle` (the chevron, `.si-tree-toggle`) toggles on press. `onToggle` returns where the group's row is
+  afterwards when opening it moved it (Issues opens one group at a time, so opening one closes another above it): the
+  cursor stays on it. Rows carry `aria-level` and `aria-expanded`; placeholders keep their level.
+- **Span rows** (`spanRow`): a row drawn as one cell across every column (`aria-colspan`), such as a group's pages and
+  its "Show all N pages in URLs"; it is the cursor's cell whatever the cursor's column. Columns' `text` still gives
+  every row's words for copying.
+- Columns are fixed widths: a grid in a panel (Issues') shares the panel's measured width (`grid/useElementWidth.ts`)
+  among them. Keep focusable controls out of cells (`Url` with `openable={false}`), so the grid stays one Tab stop.
 
-The full grid (TanStack Table's column model, presets, chooser, filter bar, saved views, grouping) wraps this in the
+The full grid (TanStack Table's column model, presets, chooser, filter bar, saved views) wraps this in the
 slices.
 
 ## Keyboard
@@ -368,11 +385,40 @@ are drawn for the app and are never swapped for Lucide's.
 
 ## Left for the slices
 
-- Every screen except Home: Overview (live and done), Issues, the full URL and Links grids, Sitemaps, robots.txt,
+- Every screen except Home and Issues: Overview (live and done), the full URL and Links grids, Sitemaps, robots.txt,
   New crawl, the crawl's settings, the inspector's content, the rest of Settings.
-- The engine's E3b to E6: the links, sitemaps and robots grids, analysis progress, export, search, favicons.
+- The engine's E3b to E6: the links, sitemaps and robots grids, export, search, favicons. Analysis progress (E4) is in
+  use on Issues (`crawl/analysis.ts` words its phases, for Overview too).
+- Export (E5) on Issues: this check, or every check with a summary sheet, and Ctrl+E. Until the engine has it, Issues
+  offers Copy URLs and no Export button.
+- The URL grid's filter bar: it shows the route's filters as removable chips that read as sentences
+  (`grid/filterSentence.ts`), so a group's "Show all N pages in URLs" lands somewhere legible, but nothing edits them.
 - A grid sorted by something other than crawl order keeps its selection by row index while a crawl adds rows, so a
   live refresh can move rows under it: selecting by row id comes with the full grid.
-- Each screen's own pieces, built from the components by its slice: the checks list's layout, the explanation band,
-  charts, the inspector's sections. A piece two screens need joins `src/ui`.
+- Each screen's own pieces, built from the components by its slice: the explanation band, charts, the inspector's
+  sections. A piece two screens need joins `src/ui`.
 - Drag-and-drop of `.sicrawl` files (the shell already delivers drops through Tauri's drag-drop event).
+
+## Issues (the first slice)
+
+`screens/IssuesScreen.tsx` and `screens/issues/`. What it settled, for the slices after it:
+
+- **Pure first.** `checkList.ts` builds the list (each check's outcome, categories in catalog order, the filters,
+  passed, skipped, hidden), the answer sentence and the first check to fix; `groupTree.ts` maps the open group onto the
+  grid's rows; `copyUrls.ts` reads a check's rows 1,000 at a time with the `after` cursor. All unit-tested.
+- **The route holds the view**: the check in the path (the first to fix, with a replace, when there's none), and
+  `severity`, `q`, `group` (a `{ detail, relatedUrlId }` as `/groups` gave it), `sort` (a flat check's) and `inspect`.
+  A click on a check is a new place; the arrow keys, the filter, the severity and opening a group replace.
+- **One listbox** for the checks, a group per category named by `ListHeading level="none"`, options named by what they
+  show; roving focus, so it is one Tab stop and Tab goes on to the check.
+- **Groups are a paged treegrid**: one group open at a time (the route's), its first 10 pages, then "Show all N pages
+  in URLs" (`check` `in` with `group`). A group the route names is found by reading `/groups` from the largest, 1,000
+  at a time, then scrolled into view. The likely-template callout sits above the grid, for the open group or else the
+  largest that is one, as a fixed-height row can't hold a paragraph; the group's row carries a "Likely template" badge.
+- **The analysis's grids don't refresh live**: a running crawl doesn't change a check's groups or rows, so the live
+  bridge's once-a-second refresh leaves `issueGroups` and `issueRows` pages alone (`liveGridPagesOf`); the analysis
+  that follows the crawl refreshes them.
+- **Hidden checks** are a preference (`hiddenChecks` in the settings store), in every crawl, with Undo.
+- **Its commands** are in the registry's Issues group: Ctrl+F filters the checks, J and K move between them,
+  Ctrl+Shift+C copies the check's (or the open group's) URLs, Ctrl+Shift+H hides or shows the check, and the palette
+  has show passed, show hidden, Learn more and Cancel the analysis. Every check is in the palette by its title.
