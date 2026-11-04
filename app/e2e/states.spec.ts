@@ -441,3 +441,56 @@ test('at 200% zoom, the top bar keeps the palette button in the window and its c
   expect(section.shown).toBeGreaterThanOrEqual(section.full * 0.75);
   expect(await pastTheEdge(page)).toEqual([]);
 });
+
+// The design system's states that only a browser shows, on markup with its classes (see `fixture`).
+test.describe('the design system’s states', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  });
+
+  test('an indeterminate bar slides by translate, and under reduced motion stripes the whole track', async ({
+    page,
+  }) => {
+    const markup = `<div style="width:300px"><div class="si-bar-track" role="progressbar" aria-label="Working"><span class="si-bar-fill si-bar-fill--indeterminate" id="fill"></span></div></div>`;
+    let host = await fixture(page, markup);
+    const motion = await host.locator('#fill').evaluate((element) => {
+      const [animation] = element.getAnimations();
+      const effect = animation?.effect;
+      if (!animation || !(effect instanceof KeyframeEffect)) return null;
+      const timing = ['offset', 'easing', 'composite', 'computedOffset'];
+      const properties = effect
+        .getKeyframes()
+        .flatMap((frame) => Object.keys(frame).filter((key) => !timing.includes(key)));
+      const track = element.parentElement?.getBoundingClientRect();
+      animation.pause();
+      animation.currentTime = 0;
+      const start = element.getBoundingClientRect();
+      // Just before the end: at the end itself, the next pass has begun.
+      animation.currentTime = Number(effect.getComputedTiming().duration) - 1;
+      const end = element.getBoundingClientRect();
+      return { properties: [...new Set(properties)], startRight: start.right, endLeft: end.left, track };
+    });
+    expect(motion).not.toBeNull();
+    // No layout every frame: the block moves with translate, from off the track's left to off its right.
+    expect(motion?.properties).toEqual(['translate']);
+    expect(motion?.startRight).toBeLessThanOrEqual((motion?.track?.left ?? 0) + 0.5);
+    expect(motion?.endLeft).toBeGreaterThanOrEqual((motion?.track?.right ?? 0) - 0.5);
+
+    for (const forcedColors of ['none', 'active'] as const) {
+      await page.emulateMedia({ reducedMotion: 'reduce', forcedColors });
+      host = await fixture(page, markup);
+      const still = await host.locator('#fill').evaluate((element) => ({
+        animations: element.getAnimations().length,
+        width: element.getBoundingClientRect().width,
+        track: element.parentElement?.getBoundingClientRect().width ?? 0,
+        image: getComputedStyle(element).backgroundImage,
+      }));
+      // Still, and across the whole track as stripes: never a solid third that reads as "33% done".
+      expect(still.animations, forcedColors).toBe(0);
+      expect(still.width, forcedColors).toBeCloseTo(still.track, 0);
+      expect(still.image, forcedColors).toContain('repeating-linear-gradient');
+    }
+  });
+
+});

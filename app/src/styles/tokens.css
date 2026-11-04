@@ -385,6 +385,7 @@
   --opacity-zero: 0.4; /* a severity mark beside a count of 0 */
   --opacity-track: 0.25; /* a spinner's track */
   --indeterminate-width: 33%; /* the block an indeterminate progress bar slides */
+  --indeterminate-stripe: 6px; /* its still stripes, with reduced motion */
 
   /* Figures: units set smaller and muted, so the number leads. */
   --unit-scale: 0.5em;

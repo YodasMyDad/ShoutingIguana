@@ -5,6 +5,7 @@
 //   npm run test:stories
 //   npm run test:stories -- --filter=design-system --shots=test-results/design-system
 //   npm run test:stories -- --forced            # under forced colours (Windows contrast themes)
+//   npm run test:stories -- --reduced-motion    # with the OS asking for reduced motion
 //
 // Options: --port (6006 by default; SI_STORYBOOK_PORT too), --filter (a story id contains it), --themes=light,dark,
 // --density=standard, --wait (ms to let a story settle, 700 by default).
@@ -26,6 +27,7 @@ const port = Number(args.port ?? process.env.SI_STORYBOOK_PORT ?? 6006);
 const themes = (args.themes ?? 'light,dark').split(',');
 const density = args.density ?? 'standard';
 const forced = args.forced === 'true';
+const still = args['reduced-motion'] === 'true';
 const wait = Number(args.wait ?? 700);
 const shots = args.shots ? path.resolve(appDir, args.shots) : null;
 
@@ -78,6 +80,7 @@ try {
       viewport: { width: 1440, height: 900 },
       colorScheme: theme === 'dark' ? 'dark' : 'light',
       forcedColors: forced ? 'active' : 'none',
+      reducedMotion: still ? 'reduce' : 'no-preference',
     });
     const page = await context.newPage();
     const errors = [];
@@ -100,7 +103,7 @@ try {
       }
       for (const error of errors) problems.push(`${theme} ${story.id}: the story threw: ${error}`);
       if (shots) {
-        const suffix = `${theme}${forced ? '-forced' : ''}${density === 'standard' ? '' : `-${density}`}`;
+        const suffix = `${theme}${forced ? '-forced' : ''}${still ? '-still' : ''}${density === 'standard' ? '' : `-${density}`}`;
         await page.screenshot({ path: path.join(shots, `${story.id}-${suffix}.png`), fullPage: true });
       }
     }
@@ -112,7 +115,7 @@ try {
 }
 
 console.log(
-  `${stories.length} stories, ${themes.length} theme${themes.length === 1 ? '' : 's'}${forced ? ', forced colours' : ''}: ${problems.length === 0 ? 'no violations' : `${problems.length} problems`}`,
+  `${stories.length} stories, ${themes.length} theme${themes.length === 1 ? '' : 's'}${forced ? ', forced colours' : ''}${still ? ', reduced motion' : ''}: ${problems.length === 0 ? 'no violations' : `${problems.length} problems`}`,
 );
 for (const problem of problems) console.log(`  ${problem}`);
 process.exitCode = problems.length === 0 ? 0 : 1;

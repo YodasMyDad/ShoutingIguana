@@ -1726,7 +1726,14 @@
     font-variant-numeric: tabular-nums lining-nums;
   }
 
-  /* Indeterminate: a block that slides, or a still third of the track with reduced motion. */
+  /*
+    Indeterminate: a block that slides across the track, moved with translate (no layout each frame), in the track's
+    own width (cqw). With reduced motion: still stripes across the whole track, which can't be read as a share done.
+  */
+  .si-bar-track:has(> .si-bar-fill--indeterminate) {
+    container-type: inline-size;
+  }
+
   .si-bar-fill--indeterminate {
     width: var(--indeterminate-width);
     animation: si-indeterminate var(--duration-shimmer) var(--ease-in-out) infinite;
@@ -2398,10 +2405,10 @@
 
 @keyframes si-indeterminate {
   from {
-    left: calc(var(--indeterminate-width) * -1);
+    translate: -100% 0;
   }
   to {
-    left: 100%;
+    translate: 100cqw 0;
   }
 }
 
@@ -2412,9 +2419,14 @@
     opacity: 0;
   }
 
-  .si-bar-fill--indeterminate {
-    left: 0;
+  .si-bar-fill.si-bar-fill--indeterminate {
+    width: 100%;
     animation: none;
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--color-accent) 0 var(--indeterminate-stripe),
+      transparent var(--indeterminate-stripe) calc(var(--indeterminate-stripe) * 2)
+    );
   }
 }
 
