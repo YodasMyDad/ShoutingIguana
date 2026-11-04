@@ -1,6 +1,6 @@
 // Which app-wide overlay is open (the command palette or the shortcut sheet: one at a time), and what being modal means
 // for the rest of the app:
-// - while anything modal is open (an overlay, or "Stopping crawls…"), the app behind it is inert (AppShell) and the
+// - while anything modal is open (an overlay, a dialog, or "Stopping crawls…"), the app behind it is inert (AppShell) and the
 //   shortcut registry leaves its keys alone (keyboard/registry.ts), so F7 or Ctrl+1 never act behind it;
 // - when an overlay closes, focus goes back where it was, or somewhere sensible when that's gone: the view's grid, else
 //   its main area. Overlays opened from the keyboard have no trigger for Radix to give focus back to.

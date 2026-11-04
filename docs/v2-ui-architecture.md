@@ -299,10 +299,10 @@ slices.
 - A key that belongs to a command is taken from the browser even while the command can't run (F7 would start caret
   browsing), and so are Ctrl+E, Ctrl+F and Ctrl+P before their screens bring their commands. A held key runs its
   command once.
-- While anything modal is open (the palette, the `?` sheet, "Stopping crawls…"), the app behind it is `inert` and the
-  registry runs none of its keys, but the one that toggles the overlay (`inOverlays`). When an overlay closes, focus
-  goes back where it was, else to the view's grid, else to the main area (`restoreFocus`); a navigation that removes
-  the focused element puts focus in the new view.
+- While anything modal is open (the palette, the `?` sheet, a dialog, "Stopping crawls…"), the app behind it is
+  `inert` and the registry runs none of its keys, but the one that toggles the overlay (`inOverlays`). When an
+  overlay closes, focus goes back where it was, else to the view's grid, else to the main area (`restoreFocus`); a
+  navigation that removes the focused element puts focus in the new view.
 - **Esc**, innermost first: an open overlay (palette, `?` sheet, menu) closes; then the inspector; then the focused
   grid's selection clears. The grid asks the registry (`claims`) before taking Esc itself. A tooltip isn't a step: the
   Esc that closes it goes on to the rest (`keyboard/layers.ts` gives back the key Radix takes), except over a menu, a

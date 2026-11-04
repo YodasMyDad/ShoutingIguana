@@ -1,8 +1,59 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { commands, installKeyboard } from '../keyboard/registry';
 import { ConfirmDialog } from './Dialog';
+
+describe('Dialog', () => {
+  it('owns the keyboard while open: the app’s shortcuts don’t act behind it, its own keys and Esc do', async () => {
+    const stop = vi.fn();
+    const palette = vi.fn();
+    const uninstall = installKeyboard();
+    const unregister = commands.register(
+      [
+        { id: 'test.stop', title: 'Stop the crawl', group: 'Crawl', keys: ['f8'], run: stop },
+        { id: 'test.palette', title: 'Open the palette', group: 'App', keys: ['mod+k'], run: palette },
+      ],
+      'app',
+    );
+    const onOpenChange = vi.fn();
+    const { rerender } = render(
+      <ConfirmDialog
+        open
+        onOpenChange={onOpenChange}
+        title="Stop the crawl?"
+        description="It can be continued later."
+        confirmLabel="Stop crawl"
+        onConfirm={() => undefined}
+      />,
+    );
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    await waitFor(() => expect(cancel).toHaveFocus());
+    fireEvent.keyDown(cancel, { key: 'F8' });
+    fireEvent.keyDown(cancel, { key: 'k', ctrlKey: true });
+    expect(stop).not.toHaveBeenCalled();
+    expect(palette).not.toHaveBeenCalled();
+    // The dialog's own Esc still closes it.
+    fireEvent.keyDown(cancel, { key: 'Escape' });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    // Closed, the app's keys work again.
+    rerender(
+      <ConfirmDialog
+        open={false}
+        onOpenChange={onOpenChange}
+        title="Stop the crawl?"
+        description="It can be continued later."
+        confirmLabel="Stop crawl"
+        onConfirm={() => undefined}
+      />,
+    );
+    fireEvent.keyDown(document.body, { key: 'F8' });
+    expect(stop).toHaveBeenCalledOnce();
+    unregister();
+    uninstall();
+  });
+});
 
 describe('ConfirmDialog', () => {
   it('stays open when the action fails, says why in the dialog, and tries again from the same button', async () => {
