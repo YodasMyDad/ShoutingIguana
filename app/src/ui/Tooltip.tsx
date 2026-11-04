@@ -1,6 +1,7 @@
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import { createContext, useContext, type ReactElement, type ReactNode } from 'react';
 import { formatChord, parseChord } from '../keyboard/keys';
+import { releaseKey } from '../keyboard/layers';
 import { useChord } from '../keyboard/registry';
 import { isMac } from '../lib/platform';
 import { Kbd } from './Kbd';
@@ -13,6 +14,15 @@ const TOOLTIP_OFFSET = 6;
 const COLLISION_PADDING = 8;
 
 const InProvider = createContext(false);
+
+/**
+ * Esc on an open tooltip closes it, and Radix takes the key for that. With nothing but the app under it, the key is
+ * given back, so the same Esc does the app's Esc too (closes the inspector). Over a menu, a popover or a dialog it
+ * isn't: those close innermost first, one Esc at a time.
+ */
+function giveEscapeBack(event: KeyboardEvent) {
+  if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]') === null) releaseKey(event);
+}
 
 /** One provider for the app, so moving from one tooltip to the next skips the delay. */
 export function TooltipProvider({ children }: { children: ReactNode }) {
@@ -44,9 +54,9 @@ export interface TooltipProps {
 }
 
 /**
- * A tooltip: after a short rest of the pointer, or at once on keyboard focus, and gone with Esc or a click. Its text is
- * the trigger's description for screen readers while it shows; the trigger's name stays its own. Shortcuts come from
- * the command registry, as `Button`'s `command` does.
+ * A tooltip: after a short rest of the pointer, or at once on keyboard focus, and gone with Esc (which still does the
+ * app's Esc) or a click. Its text is the trigger's description for screen readers while it shows; the trigger's name
+ * stays its own. Shortcuts come from the command registry, as `Button`'s `command` does.
  */
 export function Tooltip({
   content,
@@ -80,6 +90,7 @@ export function Tooltip({
           sideOffset={TOOLTIP_OFFSET}
           collisionPadding={COLLISION_PADDING}
           className="si-tooltip"
+          onEscapeKeyDown={giveEscapeBack}
           {...(spoken ? { 'aria-label': spoken } : {})}
         >
           <span className="si-tooltip__text">

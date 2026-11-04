@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { releaseKey } from './layers';
 import { CommandRegistry, type Command } from './registry';
 
 function keydown(key: string, init: KeyboardEventInit = {}, target: EventTarget = document.body) {
@@ -123,6 +124,23 @@ describe('the command registry', () => {
     open = true;
     expect(registry.claims(keydown('Escape'))).toBe(true);
     expect(registry.claims(keydown('Enter'))).toBe(false);
+  });
+
+  it('leaves a key something else took, but acts on one a tooltip took only to close itself', () => {
+    const registry = new CommandRegistry(false);
+    const close = command({ id: 'inspector.close', keys: ['escape'] });
+    registry.register([close]);
+    const taken = keydown('Escape');
+    taken.preventDefault();
+    expect(registry.claims(taken)).toBe(false);
+    expect(registry.handleKeyDown(taken)).toBe(false);
+    expect(close.run).not.toHaveBeenCalled();
+    const released = keydown('Escape');
+    released.preventDefault();
+    releaseKey(released);
+    expect(registry.claims(released)).toBe(true);
+    expect(registry.handleKeyDown(released)).toBe(true);
+    expect(close.run).toHaveBeenCalledOnce();
   });
 
   it('never fires a typing key in a text field, and other keys only when allowed there', () => {

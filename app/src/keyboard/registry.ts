@@ -17,6 +17,7 @@ import {
   typesCharacter,
   type Chord,
 } from './keys';
+import { isKeyTaken } from './layers';
 
 export type CommandGroup = 'Go to' | 'Crawl' | 'View' | 'App' | 'In grids';
 
@@ -148,6 +149,7 @@ export class CommandRegistry {
    * inspector comes before clearing the grid's selection.
    */
   claims(event: KeyboardEvent): boolean {
+    if (isKeyTaken(event) || event.isComposing) return false;
     const command = this.match(event);
     return command !== null && this.canRunNow(command);
   }
@@ -156,10 +158,11 @@ export class CommandRegistry {
    * The app's one keydown handler. Runs at most one command, and only when nothing else took the key. A key that
    * belongs to a command is taken even while the command can't run, so the browser never acts on it instead (F7
    * would start caret browsing); so are the reserved keys. While an overlay is open it owns the keyboard: the app's
-   * keys do nothing behind it, except the one that toggles it.
+   * keys do nothing behind it, except the one that toggles it. A key a tooltip took only to close itself still counts
+   * (keyboard/layers.ts).
    */
   handleKeyDown(event: KeyboardEvent): boolean {
-    if (event.defaultPrevented || event.isComposing) return false;
+    if (isKeyTaken(event) || event.isComposing) return false;
     const command = this.match(event);
     if (!command) {
       if (this.isReserved(event)) event.preventDefault();

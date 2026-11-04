@@ -276,7 +276,9 @@ slices.
   goes back where it was, else to the view's grid, else to the main area (`restoreFocus`); a navigation that removes
   the focused element puts focus in the new view.
 - **Esc**, innermost first: an open overlay (palette, `?` sheet, menu) closes; then the inspector; then the focused
-  grid's selection clears. The grid asks the registry (`claims`) before taking Esc itself.
+  grid's selection clears. The grid asks the registry (`claims`) before taking Esc itself. A tooltip isn't a step: the
+  Esc that closes it goes on to the rest (`keyboard/layers.ts` gives back the key Radix takes), except over a menu, a
+  popover or a dialog, which close one Esc at a time.
 - The same registry feeds button tooltips and `aria-keyshortcuts` (`Button`'s `command` prop), the `?` sheet, Settings
   > Shortcuts and the palette. A key can't be listed without working.
 - The grid's keys are registered with `scope: 'grid'`: listed, never dispatched (the focused grid handles them).

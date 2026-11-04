@@ -1,5 +1,5 @@
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
@@ -116,5 +116,42 @@ describe('Esc in the URL grid', () => {
     expect(selected()).toHaveLength(1);
     press('Escape');
     expect(selected()).toHaveLength(0);
+  });
+
+  /** The URL grid with its second row inspected. */
+  async function inspect() {
+    const router = await open(`${CRAWL}/urls`);
+    const grid = await screen.findByRole('grid', { name: 'URLs' });
+    const cell = await screen.findByText('https://example.com/a');
+    act(() => grid.focus());
+    fireEvent.pointerDown(cell, { button: 0 });
+    press('Enter');
+    const inspector = await screen.findByRole('complementary', { name: 'Inspector' });
+    return { router, grid, inspector };
+  }
+
+  it('closes a tooltip and the inspector with one Esc, from a button in the inspector', async () => {
+    const { router, inspector } = await inspect();
+    const dock = within(inspector).getByRole('button', { name: 'Dock at the bottom' });
+    // Focus from the keyboard opens the button's tooltip at once.
+    act(() => dock.focus());
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
+    press('Escape');
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Inspector' })).toBeNull());
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(router.state.location.search).not.toHaveProperty('inspect');
+  });
+
+  it('closes the inspector with one Esc in the grid while a tooltip shows elsewhere', async () => {
+    const { router, grid } = await inspect();
+    act(() => grid.focus());
+    fireEvent.pointerMove(screen.getByRole('button', { name: 'Back' }), { pointerType: 'mouse' });
+    expect(await screen.findByRole('tooltip', {}, { timeout: 1500 })).toBeInTheDocument();
+    expect(grid).toHaveFocus();
+    press('Escape');
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Inspector' })).toBeNull());
+    expect(router.state.location.search).not.toHaveProperty('inspect');
+    // The grid's selection is the next Esc's.
+    expect(screen.getAllByRole('row').filter((row) => row.getAttribute('aria-selected') === 'true')).toHaveLength(1);
   });
 });
