@@ -12,6 +12,17 @@ The WPF app in `src/` is being replaced by a cross-platform engine in `engine/` 
 goes there; `src/` is legacy and only gets critical fixes. **Start with `docs/v2-rebuild.md`**: the plan, decisions,
 status and open owner decisions. Update it at the end of each step.
 
+### Current work
+
+Step 3, the UI, is on branch `ui/step-3` and is pushed. The folder you were opened in is often `v2`, which does not
+contain that work. Before any UI or engine work, read `docs/v2-rebuild.md` on `ui/step-3`, section **Where step 3
+stands**. That section is the only status. Update it before you stop, including what is left, and push `ui/step-3`.
+Do not treat the October status in `v2`'s copy of the doc as the current task, and do not redo work the section
+lists as done.
+
+On this machine the branch is checked out at `.claude/worktrees/ui-step-3`. If that folder is missing, check the
+branch out. Do not commit UI work onto `v2` or `master`. Pushing `master`, or releasing, still needs an explicit yes.
+
 - Solution: `engine/ShoutingIguana.Engine.slnx`. Test with `dotnet test engine/ShoutingIguana.Engine.slnx`.
 - CLI: `dotnet run --project engine/src/ShoutingIguana.Cli -- crawl <url>` (also `analyze`, `issues`, `stats`, `testsite`, `bench`).
 - Gate: `si bench --pages 100000` must find every planted page and issue, flag nothing else, and keep memory flat; CI

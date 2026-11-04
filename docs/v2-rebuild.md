@@ -2,7 +2,8 @@
 
 The single place to pick up the rebuild. Technical detail lives in [engine/README.md](../engine/README.md) and the
 rules for working in the code in [CLAUDE.md](../CLAUDE.md). Update the status and open items here at the end of every
-step.
+step. For step 3, **Where step 3 stands** below is the only status. `v2`'s copy of this doc only points here. Update
+this section before you stop, then push `ui/step-3`.
 
 ## Why
 
