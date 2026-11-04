@@ -161,11 +161,16 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
 
 - `api/client.ts` has a function for every E1, E2 and E3a call: the URL grid, its columns, facets and lookup, the
   inspector (one URL, its links both ways, its HTML) and a check's groups and rows. `api/grids.ts` and
-  `api/inspector.ts` type them as the sidecar's code at 46a2703 answers, which differs from the contract's text in a
-  few places, each noted where it's typed:
-  - a wrong JSON type anywhere but a filter's `value` or `values` is `bad-request` (400), not `invalid-query`;
-  - `outcome`, `noindex`, `nofollow`, `h1Count` and `ttfbMs` don't sort (go by `/api/url-columns`' `sortable`);
-  - a page's `offset` is null when it was read from a cursor, and `matching` and `total` are null for a skipped check;
+  `api/inspector.ts` type them as the sidecar answers them:
+  - the inspector, its links and its HTML are POSTs (`/urls/inspect`, `/urls/inlinks`, `/urls/outlinks`,
+    `/urls/source`) with `{ urlId }` in the body;
+  - lookup returns `requested`, null when the URL found is the one asked for;
+  - a skipped check has `groupCount`, `matching` and `total` null, never 0, and a page read on from `after` has
+    `offset` null;
+  - the canonical test includes `canonicalUrl`, and `limits` includes `largeImageBytes`, `imageAltMaxLength` and
+    `maxUrlLength`;
+  - an enum value this engine doesn't know is null (`source`, `fetchMode`, `state`, `foundVia`, `notFetchedBecause`,
+    `outcome`, the verdict's `reason`, a link's `kind` and `position`);
   - columns without the URL summary are left out of `columns` and of every row, and listed in `unavailable`;
   - the `2000+` response-time facet filters with `gte`, and the severity facets on `errors`, `warnings`, `notices`
     and `issues`.

@@ -10,7 +10,7 @@ import type {
   IssueGroupPage,
   IssueRow,
   UrlColumn,
-  UrlRef,
+  UrlLookup,
   UrlRow,
 } from './grids';
 import type { HtmlSource, LinkPage, LinksQuery, UrlDetail } from './inspector';
@@ -130,12 +130,15 @@ export const api = {
   urlFacets: (id: string, query: FacetsQuery, signal?: Signal) =>
     post<FacetsPage>(`${crawl(id)}/urls/facets`, query, signal),
   /** A URL of the crawl by its text: `url-not-found` when the crawl has none, `invalid-query` when it isn't a URL. */
-  lookupUrl: (id: string, url: string, signal?: Signal) => post<UrlRef>(`${crawl(id)}/urls/lookup`, { url }, signal),
-  urlDetail: (id: string, urlId: number, signal?: Signal) => get<UrlDetail>(`${crawl(id)}/urls/${urlId}`, signal),
+  lookupUrl: (id: string, url: string, signal?: Signal) => post<UrlLookup>(`${crawl(id)}/urls/lookup`, { url }, signal),
+  /** One URL in full. `url-not-found` for an id the crawl doesn't have, `invalid-query` without one. */
+  urlDetail: (id: string, urlId: number, signal?: Signal) =>
+    post<UrlDetail>(`${crawl(id)}/urls/inspect`, { urlId }, signal),
   urlLinks: (id: string, urlId: number, direction: 'inlinks' | 'outlinks', query: LinksQuery, signal?: Signal) =>
-    post<LinkPage>(`${crawl(id)}/urls/${urlId}/${direction}`, query, signal),
+    post<LinkPage>(`${crawl(id)}/urls/${direction}`, { urlId, ...query }, signal),
+  /** The stored HTML, streamed as one JSON object. `bytes` is null for a page over 512 MB. */
   urlSource: (id: string, urlId: number, signal?: Signal) =>
-    get<HtmlSource>(`${crawl(id)}/urls/${urlId}/source`, signal),
+    post<HtmlSource>(`${crawl(id)}/urls/source`, { urlId }, signal),
   issueGroups: (id: string, checkId: string, page: { offset: number; limit: number }, signal?: Signal) =>
     post<IssueGroupPage>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/groups`, page, signal),
   issueRows: (id: string, checkId: string, query: GridQuery, signal?: Signal) =>

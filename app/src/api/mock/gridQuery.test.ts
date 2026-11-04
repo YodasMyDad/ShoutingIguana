@@ -70,7 +70,7 @@ describe('the mock grid query (E3a)', () => {
   });
 });
 
-describe('the mock’s answers, as the sidecar gives them at 46a2703', () => {
+describe('the mock’s answers, as the sidecar gives them', () => {
   const analysed = { available: true, reason: null } as const;
   const crawling = { available: false, reason: 'crawling' } as const;
   const scored = rows.map((row, index) => ({ ...row, issues: index, inlinks: index * 2 }));
@@ -160,7 +160,7 @@ describe('the mock’s answers, as the sidecar gives them at 46a2703', () => {
   });
 
   it('counts facets with the filter that opens each count', () => {
-    const page = answerFacets(
+    const answer = answerFacets(
       [
         ...scored,
         {
@@ -177,15 +177,115 @@ describe('the mock’s answers, as the sidecar gives them at 46a2703', () => {
       { facets: ['responseTime', 'severity', 'statusClass'] },
       analysed,
     );
-    expect(page.facets.responseTime?.find((bucket) => bucket.value === '2000+')).toMatchObject({
+    expect(answer.ok).toBe(true);
+    if (!answer.ok) return;
+    expect(answer.page.facets.responseTime?.find((bucket) => bucket.value === '2000+')).toMatchObject({
       count: 2,
       min: 2000,
       filter: { column: 'responseMs', op: 'gte', value: 2000 },
     });
-    expect(page.facets.statusClass?.map((bucket) => [bucket.value, bucket.count])).toEqual([
+    expect(answer.page.facets.statusClass?.map((bucket) => [bucket.value, bucket.count])).toEqual([
       ['2xx', 3],
       ['4xx', 2],
     ]);
-    expect(answerFacets(scored, { facets: ['severity', 'type'] }, crawling).unavailable).toEqual(['severity']);
+    const without = answerFacets(scored, { facets: ['severity', 'type'] }, crawling);
+    expect(without.ok && without.page.unavailable).toEqual(['severity']);
+  });
+
+  it('breaks ties by id in the last key’s direction, and folds only ASCII letters', () => {
+    const tied = [
+      { id: 1, url: 'https://a/1', title: 'Same', statusCode: 200 },
+      { id: 2, url: 'https://a/2', title: 'Same', statusCode: 200 },
+      { id: 3, url: 'https://a/3', title: 'Σ', statusCode: 404 },
+    ];
+    expect(ids(runGridQuery(tied, { filters: [], sort: [{ column: 'statusCode', desc: false }], limit: 10 }))).toEqual([
+      1, 2, 3,
+    ]);
+    expect(ids(runGridQuery(tied, { filters: [], sort: [{ column: 'statusCode', desc: true }], limit: 10 }))).toEqual([
+      3, 2, 1,
+    ]);
+    expect(
+      ids(runGridQuery(tied, { filters: [{ column: 'title', op: 'contains', value: 'σ' }], sort: [], limit: 10 })),
+    ).toEqual([]);
+    expect(
+      ids(runGridQuery(tied, { filters: [{ column: 'title', op: 'contains', value: 'SAME' }], sort: [], limit: 10 })),
+    ).toEqual([1, 2]);
+  });
+
+  it('refuses an offset with a cursor, an extra operator field, a null in a list and a pattern that can’t run', () => {
+    const both = answerGridQuery(rows, { filters: [], sort: [], offset: 1, after: 'x', limit: 1 }, analysed);
+    expect(both.ok).toBe(false);
+    if (both.ok) return;
+    expect(both.problem.errors).toHaveProperty('after');
+
+    const extra = answerGridQuery(
+      rows,
+      {
+        filters: [{ column: 'statusCode', op: 'eq', value: 200, values: [1] } as never],
+        sort: [],
+        limit: 10,
+      },
+      analysed,
+    );
+    expect(extra.ok).toBe(false);
+    if (extra.ok) return;
+    expect(extra.problem.errors).toHaveProperty('filters[0].values');
+
+    const nulled = answerGridQuery(
+      rows,
+      {
+        filters: [{ column: 'statusClass', op: 'in', values: ['2xx', null as unknown as string] }],
+        sort: [],
+        limit: 10,
+      },
+      analysed,
+    );
+    expect(nulled.ok).toBe(false);
+    if (nulled.ok) return;
+    expect(nulled.problem.errors).toHaveProperty('filters[0].values');
+
+    const complex = answerGridQuery(
+      rows,
+      { filters: [{ column: 'title', op: 'regex', value: 'a{5000}' }], sort: [], limit: 10 },
+      analysed,
+    );
+    expect(complex.ok).toBe(false);
+    if (complex.ok) return;
+    expect(complex.problem.errors?.['filters[0].value']?.[0]).toMatch(/too complex/);
+  });
+
+  it('reads on from its own cursor, and refuses one from another query or one that isn’t a cursor', () => {
+    const sort = [{ column: 'statusCode', desc: false }] as const;
+    const first = answerGridQuery(rows, { filters: [], sort: [...sort], limit: 1 }, analysed);
+    expect(first.ok).toBe(true);
+    if (!first.ok || first.page.next === null) return;
+    expect(first.page.offset).toBe(0);
+    const next = answerGridQuery(rows, { filters: [], sort: [...sort], after: first.page.next, limit: 2 }, analysed);
+    expect(next.ok && next.page.offset).toBeNull();
+    // 200s tie, id ascending, so 1 then 3; the next page is 3 then the 404.
+    expect(next.ok && ids(next.page)).toEqual([3, 2]);
+
+    const other = answerGridQuery(
+      rows,
+      { filters: [], sort: [{ column: 'statusCode', desc: true }], after: first.page.next, limit: 1 },
+      analysed,
+    );
+    expect(other.ok).toBe(false);
+    if (other.ok) return;
+    expect(other.problem.errors?.after?.[0]).toMatch(/another query/);
+
+    const garbage = answerGridQuery(rows, { filters: [], sort: [], after: 'nope', limit: 1 }, analysed);
+    expect(garbage.ok).toBe(false);
+    if (garbage.ok) return;
+    expect(garbage.problem.type).toBe('invalid-query');
+  });
+
+  it('refuses a filter on the summary’s columns instead of counting them, and an unknown facet', () => {
+    const filtered = answerFacets(scored, { filters: [{ column: 'inlinks', op: 'gt', value: 0 }] }, crawling);
+    expect(filtered.ok).toBe(false);
+    if (filtered.ok) return;
+    expect(filtered.problem.type).toBe('needs-analysis');
+    const facet = answerFacets(scored, { facets: ['noSuch' as 'type'] }, analysed);
+    expect(facet.ok).toBe(false);
   });
 });

@@ -12,7 +12,7 @@ const KEY_STEP = 16;
 /**
  * Where the URL inspector opens (docs/v2-ui-ia.md, The shell): on the right or docked at the bottom, resizable by
  * pointer or keyboard, closed with Esc. It opens for `?inspect=<url id>` on any view, so back and forward retrace
- * it. The inspector's content is its own slice (it needs E3's `/urls/{urlId}`).
+ * it. The inspector's content is its own slice (it reads `POST /urls/inspect`).
  */
 export function InspectorSlot() {
   const navigate = useNavigate();

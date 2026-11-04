@@ -1,6 +1,6 @@
 // The grid queries (E3a in docs/v2-sidecar-api.md, "URLs", "Facets", "Lookup" and "Issue groups"): a POST with a JSON
-// body to one fixed URL per grid. The shapes are the sidecar's at 46a2703; where its code and the contract's text
-// differ, the code is what's typed here, and the difference is noted.
+// body to one fixed URL per grid. The shapes are the sidecar's. A wrong JSON type on a field whose type is fixed is
+// `bad-request` (400); a filter's `value` and `values` are checked against the column, under `invalid-query` (422).
 
 export interface GridSort {
   column: string;
@@ -65,9 +65,9 @@ export const GRID_FILTER_OPS: readonly GridFilterOp[] = [
 ];
 
 /**
- * A grid query. The sidecar answers a wrong JSON type anywhere but a filter's `value` or `values` with `bad-request`
- * (400), not `invalid-query`: the contract's text says 422 for both (the code at 46a2703 wins). Arrays never hold
- * nulls.
+ * A grid query. A null in `columns`, `filters`, `sort` or `values`, a field the operator doesn't take, a pattern that
+ * doesn't compile or is too complex, and a cursor from another query or whose row has changed or gone, are
+ * `invalid-query`. Arrays never hold nulls.
  */
 export interface GridQuery {
   /** What each row carries; `id` always comes first. The sidecar's default is `["url"]`. */
@@ -207,8 +207,8 @@ export interface UrlColumn {
   /** Read from the URL summary: unavailable without a current analysis. */
   needsAnalysis: boolean;
   /**
-   * The contract says every number, enum and boolean column sorts; at 46a2703 `outcome`, `noindex`, `nofollow`,
-   * `h1Count` and `ttfbMs` don't. Go by this flag.
+   * False for columns read per response (`outcome`, `noindex`, `nofollow`, `h1Count`, `ttfbMs`,
+   * `redirectTargetStatusCode`) and for text other than `url`. Go by this flag.
    */
   sortable: boolean;
   /** False for `metaRobots` and `xRobotsTag`, shown only. */
@@ -232,9 +232,9 @@ export interface FacetsQuery {
 }
 
 /**
- * A value's count, and the filter that selects exactly those URLs. At 46a2703 the `2000+` response-time bucket filters
- * with `gte`, not `between`, and the severity buckets filter on `errors`, `warnings` and `notices` (`gte` 1) and on
- * `issues` (`eq` 0) for `none`.
+ * A value's count, and the filter that selects exactly those URLs. The `2000+` response-time bucket filters with `gte`,
+ * not `between`. The severity buckets filter on `errors`, `warnings` and `notices` (`gte` 1), and on `issues` (`eq` 0)
+ * for `none`.
  */
 export interface FacetBucket {
   value: string | number | boolean | null;
@@ -254,10 +254,19 @@ export interface FacetsPage {
   facets: Partial<Record<FacetId, FacetBucket[]>>;
 }
 
-/** A URL of the crawl, by its id: what lookup gives, and what the inspector links to. */
+/** A URL of the crawl, by its id: what the inspector links to. */
 export interface UrlRef {
   id: number;
   url: string;
+}
+
+/** A URL found by its text (`POST /urls/lookup`). */
+export interface UrlLookup extends UrlRef {
+  /**
+   * The URL the text stood for, normalised, when the crawl has it only on another version of the site (www or not, http
+   * or https). Null when `url` is the one asked for.
+   */
+  requested: string | null;
 }
 
 // ---------------------------------------------------------------------------------------------------- Issue groups
@@ -282,8 +291,8 @@ export interface IssueGroupPage {
   grouping: CheckGrouping;
   /** The check's flagged URLs; null for a skipped check, never 0. */
   total: number | null;
-  /** 0 for a `none` check and a skipped one. */
-  groupCount: number;
+  /** Null for a skipped check, never 0. 0 for a check that doesn't group (`none`). */
+  groupCount: number | null;
   offset: number;
   groups: IssueGroup[];
 }

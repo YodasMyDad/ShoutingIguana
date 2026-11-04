@@ -1,6 +1,6 @@
-// The URL grid's columns as the sidecar lists them (`GET /api/url-columns` at 46a2703), for the mock: their types,
-// which need the URL summary, which sort and filter, and each enum's values. The operators each type takes are the
-// contract's (docs/v2-sidecar-api.md, URLs).
+// The URL grid's columns as the sidecar lists them (`GET /api/url-columns`), for the mock: their types, which need
+// the URL summary, which sort and filter, and each enum's values. The operators each type takes are the contract's
+// (docs/v2-sidecar-api.md, URLs).
 import type { GridFilterOp, UrlColumn, UrlColumnType } from '../grids';
 
 const column = (
@@ -36,7 +36,7 @@ export const URL_COLUMNS: readonly UrlColumn[] = [
   column('type', 'enum', { values: ['page', 'image', 'script', 'stylesheet', 'font', 'media', 'pdf', 'other'] }),
   column('statusCode', 'number'),
   column('statusClass', 'enum', { values: ['2xx', '3xx', '4xx', '5xx', 'other', 'noResponse'] }),
-  // Not sortable at 46a2703, though the contract says every enum, boolean and number column sorts.
+  // Read from each response, so they filter but don't sort.
   column('outcome', 'enum', {
     sortable: false,
     values: [

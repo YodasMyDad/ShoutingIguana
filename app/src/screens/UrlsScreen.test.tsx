@@ -22,8 +22,8 @@ import {
 const URLS = `/crawls/${TEST_CRAWL_ID}/urls`;
 
 /**
- * A sidecar whose URL grid answers as the mock does, from the contract's rules at 46a2703: the analysis's columns
- * left out without a summary, a sort or filter on them refused, a query it can't run refused.
+ * A sidecar whose URL grid answers as the mock does: the analysis's columns left out without a summary, a sort or
+ * filter on them refused, a query it can't run refused.
  */
 function sidecar(options: {
   status?: CrawlStatus;
@@ -102,7 +102,7 @@ describe('the URL grid without the URL summary', () => {
 
   it('turns a query the engine can’t run into a plain sentence, with a way back', async () => {
     sidecar({ summary: { available: true, reason: null } });
-    // `outcome` doesn't sort at 46a2703.
+    // `outcome` filters, but doesn't sort.
     const { router } = await open(`${URLS}?sort=-outcome`);
     expect(await screen.findByText('This view’s query can’t be run.')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();

@@ -1,6 +1,6 @@
 // The URL inspector's reads (E3a in docs/v2-sidecar-api.md, "The inspector"): one URL in full, its links both ways,
-// and its stored HTML. The shapes are the sidecar's at 46a2703. Optional members (`?:`) are left out when they don't
-// apply, never sent as null.
+// and its stored HTML. Each is a POST to one fixed URL per crawl, with the URL's id in the body. Optional members
+// (`?:`) are left out when they don't apply, never sent as null. A stored value this engine doesn't know is null.
 import type { IndexabilityReason, SummaryState, UrlOutcome, UrlRef, UrlSource, UrlType } from './grids';
 import type { Severity } from './types';
 
@@ -23,29 +23,51 @@ export type LinkKind =
   | 'metaRefresh'
   | 'redirect';
 
-/** Why a URL found wasn't fetched. At 46a2703 a skipped URL can also say `none`, which the contract doesn't list. */
+/**
+ * Why a URL found wasn't fetched. `none` is what the sidecar serialises for `SkipReason.None`; the contract's list of
+ * reasons doesn't name it. An unknown stored value is null, not this.
+ */
 export type NotFetchedBecause =
   'none' | 'noFollow' | 'notFollowedByOption' | 'resourcesDisabled' | 'externalsDisabled' | 'depthLimit' | 'urlLimit';
 
+export const LINK_KINDS = [
+  'hyperlink',
+  'image',
+  'script',
+  'stylesheet',
+  'iframe',
+  'media',
+  'icon',
+  'canonical',
+  'hreflang',
+  'pagination',
+  'metaRefresh',
+  'redirect',
+] as const satisfies readonly LinkKind[];
+
 export interface UrlDiscovery {
-  source: UrlSource;
+  /** Null when the stored source is one this engine doesn't know. */
+  source: UrlSource | null;
   /** Null for a URL only a sitemap lists. */
   depth: number | null;
   foundOn: UrlRef | null;
+  /** Null when it wasn't found through a link, or the kind is one this engine doesn't know. */
   foundVia: LinkKind | null;
-  /** `crawl`: fetched, parsed, its links followed; `check`: status only. */
-  fetchMode: 'crawl' | 'check';
-  state: 'queued' | 'fetching' | 'done' | 'skipped';
+  /** `crawl`: fetched, parsed, its links followed; `check`: status only. Null when unknown. */
+  fetchMode: 'crawl' | 'check' | null;
+  /** Null when unknown. */
+  state: 'queued' | 'fetching' | 'done' | 'skipped' | null;
   notFetchedBecause: NotFetchedBecause | null;
 }
 
 /**
- * How the URL answered. Null only when the crawl has no response stored for it; a URL "not checked" (its host stopped
- * answering) has one, with `fetched: false` and `outcome: notChecked` (the contract's text says null).
+ * How the URL answered. Null when the crawl has no response stored for it (never fetched). A URL not checked, its host
+ * having stopped answering, has one, with `fetched: false` and `outcome: notChecked`. `outcome` is null when the stored
+ * value is one this engine doesn't know.
  */
 export interface UrlResponse {
   fetched: boolean;
-  outcome: UrlOutcome;
+  outcome: UrlOutcome | null;
   statusCode: number | null;
   contentType: string | null;
   httpVersion: string | null;
@@ -87,6 +109,8 @@ export interface IndexabilityTest {
   header?: boolean;
   /** Left out when the canonical's target isn't in the crawl, even when the test fails. */
   canonical?: UrlTarget;
+  /** The canonical as the page gives it, normalised, whether or not the crawl has that URL. Left out when there is none. */
+  canonicalUrl?: string;
 }
 
 export interface Indexability {
@@ -129,6 +153,12 @@ export interface ContentLimits {
   minWords: number;
   slowResponseMs: number;
   largePageBytes: number;
+  /** An image bigger than this is too large (`image-too-large`). */
+  largeImageBytes: number;
+  /** Alt text longer than this is too long (`image-alt-too-long`). */
+  imageAltMaxLength: number;
+  /** A URL longer than this is too long (`url-too-long`). */
+  maxUrlLength: number;
   fromAnalysis: boolean;
 }
 
@@ -165,7 +195,7 @@ export interface UrlIssue {
   related: UrlRef | null;
 }
 
-/** `GET /api/crawls/{id}/urls/{urlId}`: one URL in full. */
+/** `POST /api/crawls/{id}/urls/inspect` with `{ urlId }`: one URL in full. */
 export interface UrlDetail extends UrlRef {
   isInternal: boolean;
   type: UrlType;
@@ -203,10 +233,12 @@ export interface LinksQuery {
 
 /** A link to or from the URL: `id`, `url` and the status columns are the other end's. */
 export interface LinkRow extends UrlRef {
-  kind: LinkKind;
+  /** Null when the stored kind is one this engine doesn't know. */
+  kind: LinkKind | null;
   /** Anchor text, alt text, or an hreflang link's language. */
   text: string | null;
-  position: LinkPosition;
+  /** Null when the stored position is one this engine doesn't know. */
+  position: LinkPosition | null;
   flags: LinkFlag[];
   /** Whether search engines follow it: hyperlinks only. */
   followed: boolean | null;
@@ -224,7 +256,10 @@ export interface LinkPage {
   next: string | null;
 }
 
-/** `GET /api/crawls/{id}/urls/{urlId}/source`. `bytes` is left out for HTML over 512 MB unpacked. */
+/**
+ * `POST /api/crawls/{id}/urls/source` with `{ urlId }`. Written as the HTML is unpacked. `bytes` is the size unpacked,
+ * before any cut at 16 MB, or null for a page over 512 MB, which isn't unpacked that far.
+ */
 export type HtmlSource =
-  | { stored: true; html: string; bytes?: number; truncated: boolean }
+  | { stored: true; html: string; bytes: number | null; truncated: boolean }
   | { stored: false; reason: 'notStored' | 'notPage' };

@@ -39,6 +39,36 @@ describe('the API client', () => {
     expect(init?.cache).toBeUndefined();
   });
 
+  it('posts the inspector, its links and its source with the URL id in the body', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(Response.json({ stored: false, reason: 'notPage' })));
+    await api.urlDetail('0123456789abcdef', 12);
+    await api.urlLinks('0123456789abcdef', 12, 'inlinks', { kinds: ['hyperlink'], limit: 50 });
+    await api.urlSource('0123456789abcdef', 12);
+    const calls = fetchMock.mock.calls.map((call) => {
+      const init = call[1];
+      const raw = init?.body;
+      const body: unknown = typeof raw === 'string' ? (JSON.parse(raw) as unknown) : null;
+      return { method: init?.method, url: call[0], body };
+    });
+    expect(calls).toEqual([
+      {
+        method: 'POST',
+        url: 'http://127.0.0.1:5000/api/crawls/0123456789abcdef/urls/inspect',
+        body: { urlId: 12 },
+      },
+      {
+        method: 'POST',
+        url: 'http://127.0.0.1:5000/api/crawls/0123456789abcdef/urls/inlinks',
+        body: { urlId: 12, kinds: ['hyperlink'], limit: 50 },
+      },
+      {
+        method: 'POST',
+        url: 'http://127.0.0.1:5000/api/crawls/0123456789abcdef/urls/source',
+        body: { urlId: 12 },
+      },
+    ]);
+  });
+
   it('posts grid queries as JSON to one fixed URL per grid', async () => {
     fetchMock.mockResolvedValue(Response.json({ offset: 200, rows: [], total: 0, unfilteredTotal: 0 }));
     await api.urls('0123456789abcdef', { offset: 200, limit: 200, sort: [], filters: [] });

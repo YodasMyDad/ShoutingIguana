@@ -42,7 +42,7 @@ another checkout of the engine, such as a clean worktree while someone edits thi
 
 The mock needs the fixtures, which git ignores. Make them with `node app/design/data/extract/run-all.mjs` (from the
 repo root; see `design/data/README.md`). Without them, every mock answer says so. It answers the grids as the sidecar
-does at 46a2703, failures included: a running or unanalysed crawl has no URL summary (its columns are left out and
+does, failures included: a running or unanalysed crawl has no URL summary (its columns are left out and
 named), a sort or filter on them is `needs-analysis`, a query the engine can't run is `invalid-query`. The inspector
 answers for the few URLs the fixtures hold it for.
 

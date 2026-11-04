@@ -12,9 +12,9 @@ import type {
   IssueGroupPage,
   IssueRow,
   SummaryState,
-  UrlRef,
+  UrlLookup,
 } from '../grids';
-import type { LinkPage, LinksQuery } from '../inspector';
+import { LINK_KINDS, type LinkKind, type LinkPage, type LinksQuery } from '../inspector';
 import type { Transport, TransportRequest } from '../transport';
 import {
   isCrawling,
@@ -45,7 +45,15 @@ import {
   type LiveSnapshot,
   type SavedChecks,
 } from './fixtures';
-import { answerFacets, answerGridQuery } from './gridQuery';
+import {
+  answerFacets,
+  answerGridQuery,
+  decodePageCursor,
+  encodePageCursor,
+  pagingErrors,
+  queryErrors,
+  withPagingDefaults,
+} from './gridQuery';
 import { URL_COLUMNS } from './urlColumns';
 
 /** Every answer waits this long, so loading states behave as they will against the sidecar. */
@@ -107,6 +115,50 @@ const urlNotFound = (url: string): ProblemBody => ({
   detail: url,
 });
 
+const invalidQuery = (errors: Record<string, string[]>): ProblemBody => {
+  const detail = Object.values(errors)[0]?.[0];
+  return {
+    type: 'invalid-query',
+    title: 'This view’s query can’t be run.',
+    status: 422,
+    ...(detail !== undefined ? { detail } : {}),
+    errors,
+  };
+};
+
+const badRequest = (title: string): ProblemBody => ({ type: 'bad-request', title, status: 400 });
+
+/** A URL's id from a body: none is `invalid-query`; one no URL could have is `url-not-found`. */
+function readUrlId(body: unknown): number | ProblemBody {
+  if (typeof body !== 'object' || body === null) return badRequest('This call needs a JSON body.');
+  const urlId = (body as { urlId?: unknown }).urlId;
+  if (urlId === undefined || urlId === null) return invalidQuery({ urlId: ['Give the URL’s id.'] });
+  if (typeof urlId !== 'number' || !Number.isInteger(urlId)) {
+    return badRequest('The request body isn’t the JSON this call takes.');
+  }
+  if (urlId < 1 || urlId > 2_147_483_647) return urlNotFound(`URL ${urlId}`);
+  return urlId;
+}
+
+/** A kind named twice, a null, or a name that isn't one, keyed by `kinds[n]`. A list that isn't one is `bad-request`. */
+function kindErrors(kinds: unknown): { errors: Record<string, string[]> } | { problem: ProblemBody } | null {
+  if (kinds === undefined) return null;
+  if (!Array.isArray(kinds)) return { problem: badRequest('The request body isn’t the JSON this call takes.') };
+  const errors: Record<string, string[]> = {};
+  const seen = new Set<string>();
+  kinds.forEach((name, index) => {
+    if (typeof name !== 'string' || !LINK_KINDS.includes(name as LinkKind)) {
+      const called = name == null ? '' : String(name);
+      errors[`kinds[${index}]`] = [`There’s no kind of link called ‘${called}’: there are ${LINK_KINDS.join(', ')}.`];
+    } else if (seen.has(name)) {
+      errors[`kinds[${index}]`] = [`‘${name}’ is named twice: name each kind of link once.`];
+    } else {
+      seen.add(name);
+    }
+  });
+  return Object.keys(errors).length > 0 ? { errors } : null;
+}
+
 const notAnalyzed = (): ProblemBody => ({
   type: 'not-analyzed',
   title: 'This crawl hasn’t been analysed yet.',
@@ -127,19 +179,67 @@ const sampleLacks = (what: string): ProblemBody => ({
   detail: 'The mock serves the design fixtures, which hold the inspector for a few URLs of the garden crawl.',
 });
 
+const siteHost = (hostname: string) => hostname.toLowerCase().replace(/^www\./, '');
+
 /**
- * A URL as the crawl stores it, from what was typed: a path starting with / is on the start URL's origin, the fragment
- * goes, the scheme and host are lowercased. Null for text that isn't a URL.
+ * The URL the text stands for, then the same path on the site's other versions (www or not, http or https). Null when
+ * the text isn't a URL. A path starting with `/` is taken on the start URL's origin.
  */
-function normaliseUrl(text: string, startUrl: string | null): string | null {
+function lookupCandidates(text: string, startUrl: string | null): { requested: string; candidates: string[] } | null {
+  const trimmed = text.trim();
+  if (trimmed === '') return null;
+  let origin: URL | null = null;
+  if (startUrl) {
+    try {
+      origin = new URL(startUrl);
+    } catch {
+      origin = null;
+    }
+  }
+  const scheme = origin?.protocol === 'http:' ? 'http:' : 'https:';
+  let candidate = trimmed;
+  if (candidate.startsWith('/') && !candidate.startsWith('//')) {
+    if (!origin) return null;
+    try {
+      const resolved = new URL(candidate, origin);
+      resolved.hash = '';
+      if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return null;
+      return { requested: resolved.href, candidates: siteVersions(resolved, origin) };
+    } catch {
+      return null;
+    }
+  }
+  if (candidate.startsWith('//')) candidate = `${scheme}${candidate}`;
+  else if (!/^[A-Za-z][A-Za-z0-9+.-]*:(?![0-9])/.test(candidate)) candidate = `${scheme}//${candidate}`;
+  let asked: URL;
   try {
-    const url = text.startsWith('/') && startUrl ? new URL(text, startUrl) : new URL(text);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-    url.hash = '';
-    return url.href;
+    asked = new URL(candidate);
   } catch {
     return null;
   }
+  if (asked.protocol !== 'http:' && asked.protocol !== 'https:') return null;
+  asked.hash = '';
+  const requested = asked.href;
+  const versions = origin && siteHost(asked.hostname) === siteHost(origin.hostname) ? siteVersions(asked, origin) : [];
+  return { requested, candidates: [requested, ...versions.filter((url) => url !== requested)] };
+}
+
+/** The same path and query on the start URL's origin and its other versions, the origin itself first. */
+function siteVersions(asked: URL, start: URL): string[] {
+  const root = siteHost(start.hostname);
+  const hosts = root.includes('.') && !/^\d/.test(root) ? [start.hostname, root, `www.${root}`] : [start.hostname];
+  const schemes = [start.protocol, start.protocol === 'https:' ? 'http:' : 'https:'];
+  const urls: string[] = [];
+  for (const protocol of schemes) {
+    for (const hostname of hosts) {
+      const copy = new URL(asked.href);
+      copy.protocol = protocol;
+      copy.hostname = hostname;
+      copy.hash = '';
+      urls.push(copy.href);
+    }
+  }
+  return [...new Set(urls)];
 }
 
 /** A share of a check's URLs, with at least this many, is a likely template fault: one fix clears it. */
@@ -147,14 +247,14 @@ const TEMPLATE_SHARE = 0.5;
 const TEMPLATE_MIN_PAGES = 10;
 
 /** A check's issues grouped by their cause (E3a, Issue groups), largest first. */
-function issueGroups(
+export function issueGroups(
   checkId: string,
   grouping: CheckGrouping,
   rows: readonly IssueRow[] | null,
   offset: number,
   limit: number,
 ): IssueGroupPage {
-  if (rows === null) return { checkId, grouping, total: null, groupCount: 0, offset, groups: [] };
+  if (rows === null) return { checkId, grouping, total: null, groupCount: null, offset, groups: [] };
   const total = rows.length;
   if (grouping === 'none') return { checkId, grouping, total, groupCount: 0, offset, groups: [] };
   const groups = new Map<string, IssueGroup>();
@@ -525,7 +625,11 @@ export function createMockTransport(): Transport {
       async ([, id = ''], request) => {
         const item = await itemOrNull(id);
         if (!item) return problem(crawlNotFound(id));
-        const answer = answerGridQuery(await crawlRows(id), request.body as GridQuery, summaryOf(item));
+        const body = (request.body ?? {}) as GridQuery;
+        if (body.group !== undefined) {
+          return problem(badRequest('Only a check’s rows take a group: filter by the check, with its group, instead.'));
+        }
+        const answer = answerGridQuery(await crawlRows(id), body, summaryOf(item));
         return answer.ok ? json(answer.page) : problem(answer.problem);
       },
     ],
@@ -536,7 +640,8 @@ export function createMockTransport(): Transport {
         const item = await itemOrNull(id);
         if (!item) return problem(crawlNotFound(id));
         const query: FacetsQuery = (request.body as FacetsQuery | undefined) ?? {};
-        return json(answerFacets(await crawlRows(id), query, summaryOf(item)));
+        const answer = answerFacets(await crawlRows(id), query, summaryOf(item));
+        return answer.ok ? json(answer.page) : problem(answer.problem);
       },
     ],
     [
@@ -546,26 +651,36 @@ export function createMockTransport(): Transport {
         const item = await itemOrNull(id);
         if (!item) return problem(crawlNotFound(id));
         const url = (request.body as { url?: unknown } | undefined)?.url;
-        const text = typeof url === 'string' ? url.trim() : '';
-        const wanted = normaliseUrl(text, item.startUrl);
-        if (wanted === null) {
-          return problem({
-            type: 'invalid-query',
-            title: 'This view’s query can’t be run.',
-            status: 422,
-            detail: 'That isn’t a URL.',
-            errors: { url: ['That isn’t a URL.'] },
-          });
+        if (typeof url !== 'string' || url.trim() === '') {
+          return problem(invalidQuery({ url: ['Give a URL, or a path that starts with /.'] }));
         }
-        const row = (await crawlRows(id)).find((candidate) => candidate.url === wanted);
-        return row ? json({ id: row.id, url: row.url } satisfies UrlRef) : problem(urlNotFound(wanted));
+        const looked = lookupCandidates(url, item.startUrl);
+        if (looked === null) {
+          return problem(
+            invalidQuery({
+              url: ['This isn’t a URL: give one, with or without http:// or https://, or a path that starts with /.'],
+            }),
+          );
+        }
+        const rows = await crawlRows(id);
+        const row = looked.candidates
+          .map((candidate) => rows.find((item) => item.url === candidate))
+          .find((found) => found !== undefined);
+        if (!row?.url) return problem(urlNotFound(looked.requested));
+        return json({
+          id: row.id,
+          url: row.url,
+          requested: row.url === looked.requested ? null : looked.requested,
+        } satisfies UrlLookup);
       },
     ],
     [
-      'GET',
-      /^\/api\/crawls\/([0-9a-f]{16})\/urls\/(\d+)$/,
-      async ([, id = '', urlId = '']) => {
-        const found = await inspected(id, Number(urlId));
+      'POST',
+      /^\/api\/crawls\/([0-9a-f]{16})\/urls\/inspect$/,
+      async ([, id = ''], request) => {
+        const urlId = readUrlId(request.body);
+        if (typeof urlId !== 'number') return problem(urlId);
+        const found = await inspected(id, urlId);
         if (found instanceof Response) return found;
         const rows = await crawlRows(id);
         const idOf = (url: string) => rows.find((row) => row.url === url)?.id ?? null;
@@ -574,25 +689,64 @@ export function createMockTransport(): Transport {
     ],
     [
       'POST',
-      /^\/api\/crawls\/([0-9a-f]{16})\/urls\/(\d+)\/(inlinks|outlinks)$/,
-      async ([, id = '', urlId = '', direction = 'inlinks'], request) => {
-        const found = await inspected(id, Number(urlId));
+      /^\/api\/crawls\/([0-9a-f]{16})\/urls\/(inlinks|outlinks)$/,
+      async ([, id = '', direction = 'inlinks'], request) => {
+        const urlId = readUrlId(request.body);
+        if (typeof urlId !== 'number') return problem(urlId);
+        const query = (request.body ?? {}) as LinksQuery & { urlId?: number };
+        const kinds = kindErrors(query.kinds);
+        if (kinds && 'problem' in kinds) return problem(kinds.problem);
+        if (kinds) return problem(invalidQuery(kinds.errors));
+        const offset = query.offset ?? 0;
+        const limit = query.limit ?? 100;
+        const paging = pagingErrors(offset, limit, query.after);
+        if (Object.keys(paging).length > 0) return problem(invalidQuery(paging));
+        const found = await inspected(id, urlId);
         if (found instanceof Response) return found;
-        const query = (request.body ?? {}) as LinksQuery;
-        const all = adaptLinks(found.raw, direction === 'outlinks' ? 'outlinks' : 'inlinks').filter(
-          (link) => !query.kinds?.length || query.kinds.includes(link.kind),
+        const way = direction === 'outlinks' ? 'outlinks' : 'inlinks';
+        const selected = [...(query.kinds ?? [])].sort();
+        const all = adaptLinks(found.raw, way).filter(
+          (link) => selected.length === 0 || (link.kind !== null && selected.includes(link.kind)),
         );
-        const offset = Math.max(0, query.offset ?? 0);
-        const limit = Math.min(1_000, Math.max(1, query.limit ?? 100));
-        const rows = all.slice(offset, offset + limit);
-        return json({ rows, offset, total: all.length, next: null } satisfies LinkPage);
+        const scope = `${way}|${urlId}|${selected.join(',')}`;
+        let start = offset;
+        if (query.after !== undefined) {
+          const cursor = decodePageCursor(query.after);
+          const same = decodePageCursor(encodePageCursor(scope, 0, ''));
+          if (cursor === null || same === null) {
+            return problem(invalidQuery({ after: ['This isn’t a cursor a page of this grid gave.'] }));
+          }
+          if (cursor.h !== same.h) {
+            return problem(
+              invalidQuery({ after: ['This cursor belongs to another query: start from an offset again.'] }),
+            );
+          }
+          if (cursor.i < 0 || cursor.i >= all.length) {
+            return problem(
+              invalidQuery({
+                after: ['The row this cursor stopped at isn’t in the crawl any more: start from an offset again.'],
+              }),
+            );
+          }
+          start = cursor.i + 1;
+        }
+        const rows = all.slice(start, start + limit);
+        const more = start + rows.length < all.length;
+        return json({
+          rows,
+          offset: query.after !== undefined ? null : offset,
+          total: all.length,
+          next: more && rows.length > 0 ? encodePageCursor(scope, start + rows.length - 1, '') : null,
+        } satisfies LinkPage);
       },
     ],
     [
-      'GET',
-      /^\/api\/crawls\/([0-9a-f]{16})\/urls\/(\d+)\/source$/,
-      async ([, id = '', urlId = '']) => {
-        const found = await inspected(id, Number(urlId));
+      'POST',
+      /^\/api\/crawls\/([0-9a-f]{16})\/urls\/source$/,
+      async ([, id = ''], request) => {
+        const urlId = readUrlId(request.body);
+        if (typeof urlId !== 'number') return problem(urlId);
+        const found = await inspected(id, urlId);
         if (found instanceof Response) return found;
         const source = adaptSource(found.raw);
         return source ? json(source) : problem(sampleLacks('the HTML of this URL'));
@@ -614,10 +768,29 @@ export function createMockTransport(): Transport {
         const grouping: CheckGrouping = check?.grouping ?? 'none';
         const issueRows = skipped ? [] : await joinedIssueRows(id, checkId);
         if (what === 'groups') {
-          const body = (request.body ?? {}) as { offset?: number; limit?: number };
-          return json(issueGroups(checkId, grouping, skipped ? null : issueRows, body.offset ?? 0, body.limit ?? 100));
+          const body = (request.body ?? {}) as { offset?: unknown; limit?: unknown };
+          if (
+            (body.offset != null && typeof body.offset !== 'number') ||
+            (body.limit != null && typeof body.limit !== 'number')
+          ) {
+            return problem(badRequest('The request body isn’t the JSON this call takes.'));
+          }
+          const offset = typeof body.offset === 'number' ? body.offset : 0;
+          const limit = typeof body.limit === 'number' ? body.limit : 100;
+          const paging = pagingErrors(offset, limit);
+          if (Object.keys(paging).length > 0) return problem(invalidQuery(paging));
+          return json(issueGroups(checkId, grouping, skipped ? null : issueRows, offset, limit));
         }
-        const query = request.body as GridQuery;
+        const query = withPagingDefaults(request.body ?? {});
+        if (query.columns === undefined || query.columns.length === 0) query.columns = ['url', 'detail', 'relatedUrl'];
+        const errors = queryErrors(query, true);
+        if (grouping === 'none' && query.group !== undefined) {
+          const message = 'This check lists its issues without groups, so there’s no group to narrow them to.';
+          const existing = Object.hasOwn(errors, 'group') ? errors.group : undefined;
+          if (existing === undefined) errors.group = [message];
+          else existing.push(message);
+        }
+        if (Object.keys(errors).length > 0) return problem(invalidQuery(errors));
         if (skipped) {
           return json({
             columns: ['id'],
@@ -637,15 +810,7 @@ export function createMockTransport(): Transport {
                 row.relatedUrlId === query.group?.relatedUrlId,
             )
           : issueRows;
-        const { group: _group, ...rest } = query;
-        const answer = answerGridQuery(
-          inGroup,
-          { ...rest, columns: rest.columns ?? ['url', 'detail', 'relatedUrl'] },
-          summaryOf(item),
-          {
-            issueRows: true,
-          },
-        );
+        const answer = answerGridQuery(inGroup, query, summaryOf(item), { issueRows: true });
         return answer.ok ? json(answer.page) : problem(answer.problem);
       },
     ],
