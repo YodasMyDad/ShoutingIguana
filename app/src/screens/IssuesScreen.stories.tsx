@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
-import type { IssueGroup, IssueRow } from '../api/grids';
+import type { GridQuery, IssueGroup, IssueRow } from '../api/grids';
 import { queryKeys } from '../api/queries';
 import { setTransport } from '../api/transport';
 import type { Analysis, Checks } from '../api/types';
@@ -12,12 +12,13 @@ import { createAppRouter } from '../app/router';
 import { liveStore } from '../live/liveStore';
 import { updateSettings } from '../settings/settingsStore';
 import { setDirectConnection } from '../shell/connection';
-import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, json, problem, type FakeRoute } from '../test/fakeSidecar';
 import {
   ISSUES_ANALYSIS,
   ISSUES_CHECKS,
   ISSUE_GROUPS,
   ISSUE_ROWS,
+  issueRowsPage,
   issuesRoutes,
   type IssuesSidecarOptions,
 } from '../test/issuesSidecar';
@@ -220,6 +221,88 @@ export const HiddenChecks: Story = {
     },
   ],
   render: () => <IssuesApp path={`${ISSUES}/empty-anchor-text`} />,
+};
+
+const ENGINE_FAILED = () =>
+  problem({
+    type: 'internal',
+    title: 'Something went wrong in the engine.',
+    status: 500,
+    detail: 'SqliteException: database disk image is malformed',
+  });
+
+/** A check's groups can't be read: the compact error in the check, with Try again. */
+export const GroupsReadError: Story = {
+  loaders: [() => own({}, [['POST', /\/issues\/empty-anchor-text\/groups$/, ENGINE_FAILED]])],
+  render: () => <IssuesApp path={`${ISSUES}/empty-anchor-text`} />,
+};
+
+/** An open group's first pages can't be read: it stays open with its link to all of them, and says so above. */
+export const GroupPagesReadError: Story = {
+  loaders: [
+    () =>
+      own({}, [
+        [
+          'POST',
+          /\/issues\/empty-anchor-text\/rows$/,
+          (request) =>
+            (request.body as GridQuery).group
+              ? ENGINE_FAILED()
+              : json(issueRowsPage('empty-anchor-text', request.body as GridQuery)),
+        ],
+      ]),
+  ],
+  render: () => (
+    <IssuesApp
+      path={`${ISSUES}/empty-anchor-text?group=${encodeURIComponent(JSON.stringify({ detail: null, relatedUrlId: 1 }))}`}
+    />
+  ),
+};
+
+/** A link to a check this version doesn't have: the list as ever, and the detail says so. */
+export const UnknownCheck: Story = {
+  loaders: [() => own()],
+  render: () => <IssuesApp path={`${ISSUES}/a-check-from-a-newer-version`} />,
+};
+
+const MANY_GROUPS: IssueGroup[] = Array.from({ length: 5_152 }, (_, index) => ({
+  detail: `Garden furniture set ${String(index + 1)} | Example Gardens`,
+  relatedUrlId: null,
+  relatedUrl: null,
+  pages: Math.max(1, 40 - Math.floor(index / 130)),
+  share: 1 / 5_152,
+  likelyTemplate: false,
+}));
+
+/** Thousands of groups (the 100k crawl's duplicate titles): paged and virtualised like any grid. */
+export const ThousandsOfGroups: Story = {
+  loaders: [
+    () =>
+      own({
+        checks: {
+          ...ISSUES_CHECKS,
+          checks: ISSUES_CHECKS.checks.map((check) =>
+            check.id === 'internal-client-error' ? { ...check, title: 'Duplicate title', grouping: 'detail' } : check,
+          ),
+        },
+        analysis: {
+          ...ISSUES_ANALYSIS,
+          counts: ISSUES_ANALYSIS.counts.map((count) =>
+            count.checkId === 'internal-client-error'
+              ? { ...count, count: MANY_GROUPS.reduce((sum, group) => sum + group.pages, 0) }
+              : count,
+          ),
+        },
+        groups: { ...ISSUE_GROUPS, 'internal-client-error': MANY_GROUPS },
+      }),
+  ],
+  render: () => <IssuesApp path={`${ISSUES}/internal-client-error`} />,
+};
+
+/** A skipped check with no reason of its own, and no notes to point to: the list and the check say so plainly. */
+export const SkippedWithoutReasonOrNotes: Story = {
+  loaders: [() => own({ analysis: { ...ISSUES_ANALYSIS, skipped: [], notes: [], isPartial: true } })],
+  render: () => <IssuesApp path={`${ISSUES}/orphan-page`} />,
 };
 
 const LONG_TITLE = 'Another version of the site answers with a page instead of redirecting to the main one';
