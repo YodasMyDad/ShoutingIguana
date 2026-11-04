@@ -63,7 +63,9 @@ export function Button({
 }: ButtonProps) {
   // One lookup, and none without a command: grids put buttons in their cells.
   const { shortcut, chord, ariaShortcut } = useCommandKeys(command);
-  const spinner = useDelayedLoading(loading, { delayMs: BUTTON_SPINNER_DELAY_MS });
+  // After 300 ms of work, and gone the moment it ends: a skeleton's minimum time would cover the label of a button that
+  // already takes presses again.
+  const spinner = useDelayedLoading(loading, { delayMs: BUTTON_SPINNER_DELAY_MS, minMs: 0 }) && loading;
   const label = title ?? (typeof children === 'string' ? children : undefined);
   // What a screen reader calls it: its aria-label, or its words. The tooltip leaves that out of the description.
   const name = rest['aria-label'] ?? (typeof children === 'string' ? children : undefined);

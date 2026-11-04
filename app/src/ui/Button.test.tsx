@@ -42,6 +42,31 @@ describe('Button', () => {
     expect(screen.getByRole('button', { name: 'Analyse again' })).toBe(button);
   });
 
+  it('takes its spinner away the moment the work ends, as it takes presses again', () => {
+    vi.useFakeTimers();
+    const onClick = vi.fn();
+    const { rerender } = render(
+      <Button loading onClick={onClick}>
+        Save
+      </Button>,
+    );
+    act(() => {
+      vi.advanceTimersByTime(BUTTON_SPINNER_DELAY_MS + 100);
+    });
+    const button = screen.getByRole('button', { name: 'Save' });
+    expect(spinnerOf(button)).not.toBeNull();
+    rerender(
+      <Button loading={false} onClick={onClick}>
+        Save
+      </Button>,
+    );
+    expect(spinnerOf(button)).toBeNull();
+    expect(button).not.toHaveAttribute('data-spinner');
+    expect(button).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
   it('puts the spinner in place of its icon, when it has one', () => {
     vi.useFakeTimers();
     render(
