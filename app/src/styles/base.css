@@ -198,6 +198,81 @@
     outline-offset: calc(var(--focus-width) * -1);
   }
 
+  /* A sortable column's header: the whole header is the button, its arrow says the direction. */
+  .si-grid-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    margin-inline: calc(var(--space-1) * -1);
+    padding-inline: var(--space-1);
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .si-grid-sort:hover {
+    color: var(--color-text);
+  }
+
+  .si-grid-sort .si-icon {
+    color: var(--color-text-muted);
+  }
+
+  .si-grid-sort--active,
+  .si-grid-sort--active .si-icon {
+    color: var(--color-text);
+  }
+
+  .si-grid-cell--numeric .si-grid-sort {
+    flex-direction: row-reverse;
+  }
+
+  /* A row drawn as one cell: a group's link to all its rows. */
+  .si-grid-cell--span {
+    grid-column: 1 / -1;
+  }
+
+  /* In a tree, a group's rows sit under its title, past its chevron. */
+  .si-grid-row[data-level='2'] > .si-grid-cell:first-child {
+    padding-inline-start: calc(var(--grid-cell-x) + var(--tree-indent));
+  }
+
+  /* A group's row: its title a little heavier than the rows in it, and its chevron, turned down while it's open. */
+  .si-grid-row[aria-expanded] {
+    font-weight: var(--font-weight-medium);
+  }
+
+  .si-tree-toggle {
+    display: inline-grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: var(--chevron-box);
+    height: var(--chevron-box);
+    margin-inline-end: calc(var(--tree-indent) - var(--chevron-box));
+    border-radius: var(--radius-xs);
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+
+  .si-tree-toggle:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  .si-grid-row[aria-expanded='true'] .si-tree-toggle {
+    rotate: 90deg;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .si-tree-toggle {
+      transition: rotate var(--duration-quick) var(--ease-out);
+    }
+  }
+
   /* Windowed: the custom scrollbar shows the vertical position, so the native vertical bar goes (the horizontal stays). */
   .si-grid--windowed {
     scrollbar-color: auto;

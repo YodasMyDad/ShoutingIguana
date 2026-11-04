@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { announce } from '../feedback/announce';
 import { notifyError } from '../feedback/notify';
@@ -362,5 +363,164 @@ describe('GridCore', () => {
     expect(onRangeChange).toHaveBeenLastCalledWith(expect.objectContaining({ scrubbing: true }));
     act(() => model?.setScrubbing(false));
     expect(onRangeChange).toHaveBeenLastCalledWith(expect.objectContaining({ first: 34, scrubbing: false }));
+  });
+});
+
+/** A tree of groups: group g has `size` rows, and one group at most is open (an accordion, as Issues has it). */
+function TreeGrid({ onActivate, sort }: { onActivate?: (index: number) => void; sort?: (column: string) => void }) {
+  const groups = [
+    { name: 'Group A', size: 2 },
+    { name: 'Group B', size: 3 },
+    { name: 'Group C', size: 1 },
+  ];
+  const [open, setOpen] = useState<number | null>(null);
+  type TreeRow = { kind: 'group'; group: number } | { kind: 'row'; group: number; row: number } | { kind: 'more' };
+  const flat: TreeRow[] = groups.flatMap((group, index): TreeRow[] => [
+    { kind: 'group', group: index },
+    ...(open === index
+      ? [
+          ...Array.from({ length: group.size }, (_, row): TreeRow => ({ kind: 'row', group: index, row })),
+          { kind: 'more' } as const,
+        ]
+      : []),
+  ]);
+  const treeColumns: GridColumn<TreeRow>[] = [
+    {
+      id: 'name',
+      header: 'Name',
+      width: 200,
+      sortable: true,
+      sort: 'ascending',
+      cell: (row) =>
+        row.kind === 'group' ? (
+          <>
+            <span data-tree-toggle>›</span>
+            {groups[row.group]?.name}
+          </>
+        ) : null,
+      text: (row) => (row.kind === 'group' ? (groups[row.group]?.name ?? '') : ''),
+    },
+    {
+      id: 'size',
+      header: 'Size',
+      width: 80,
+      sortable: true,
+      cell: (row) => (row.kind === 'group' ? groups[row.group]?.size : null),
+      text: () => '',
+    },
+  ];
+  return (
+    <GridCore<TreeRow>
+      label="Groups"
+      columns={treeColumns}
+      rowCount={flat.length}
+      getRow={(index) => flat[index]}
+      rowHeight={32}
+      headerHeight={32}
+      onActivate={(index) => onActivate?.(index)}
+      {...(sort ? { onSort: sort } : {})}
+      spanRow={(row) =>
+        row.kind === 'row'
+          ? `${groups[row.group]?.name ?? ''} row ${row.row + 1}`
+          : row.kind === 'more'
+            ? 'Show all'
+            : null
+      }
+      tree={{
+        level: (index) => (flat[index]?.kind === 'group' ? 1 : 2),
+        expanded: (index) => {
+          const row = flat[index];
+          return row?.kind === 'group' ? row.group === open : undefined;
+        },
+        parent: (index) => {
+          const row = flat[index];
+          if (row?.kind === 'group' || row === undefined) return null;
+          return flat.findIndex((candidate) => candidate.kind === 'group' && candidate.group === open);
+        },
+        onToggle: (index, opening) => {
+          const row = flat[index];
+          if (row?.kind !== 'group') return undefined;
+          setOpen(opening ? row.group : null);
+          return row.group;
+        },
+      }}
+    />
+  );
+}
+
+describe('GridCore as a tree', () => {
+  const activeCell = (grid: HTMLElement) => {
+    const id = grid.getAttribute('aria-activedescendant');
+    return id ? document.getElementById(id) : null;
+  };
+  const rowOf = (grid: HTMLElement) => activeCell(grid)?.closest('[role="row"]');
+
+  it('is a treegrid whose group rows say their level and whether they are open', () => {
+    render(<TreeGrid />);
+    const grid = screen.getByRole('treegrid', { name: 'Groups' });
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row).toHaveAttribute('aria-level', '1');
+      expect(row).toHaveAttribute('aria-expanded', 'false');
+    }
+    expect(grid).toHaveAttribute('aria-rowcount', '4');
+  });
+
+  it('opens a group with Right and closes it with Left, on its first cell', () => {
+    render(<TreeGrid />);
+    const grid = screen.getByRole('treegrid');
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    fireEvent.keyDown(grid, { key: 'ArrowRight' });
+    expect(rowOf(grid)).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByRole('row').filter((row) => row.getAttribute('aria-level') === '2')).toHaveLength(4);
+    // Into the group, then Left goes back up to its row, then closes it.
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    expect(activeCell(grid)).toHaveTextContent('Group B row 1');
+    expect(activeCell(grid)).toHaveAttribute('aria-colspan', '2');
+    fireEvent.keyDown(grid, { key: 'ArrowLeft' });
+    expect(activeCell(grid)).toHaveTextContent('Group B');
+    fireEvent.keyDown(grid, { key: 'ArrowLeft' });
+    expect(rowOf(grid)).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('keeps the cursor on a group whose row moved when the open group above it closed', () => {
+    render(<TreeGrid />);
+    const grid = screen.getByRole('treegrid');
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'Enter' }); // opens A: B is now row 4
+    fireEvent.keyDown(grid, { key: 'End', ctrlKey: true });
+    fireEvent.keyDown(grid, { key: 'ArrowUp' });
+    fireEvent.keyDown(grid, { key: 'Home' });
+    expect(activeCell(grid)).toHaveTextContent('Group B');
+    fireEvent.keyDown(grid, { key: 'Enter' }); // opens B, closing A above it
+    expect(activeCell(grid)).toHaveTextContent('Group B');
+    expect(rowOf(grid)).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('activates a row in a group on Enter, and opens a group by its chevron or a double-click', () => {
+    const onActivate = vi.fn();
+    render(<TreeGrid onActivate={onActivate} />);
+    const grid = screen.getByRole('treegrid');
+    const chevron = document.querySelectorAll('[data-tree-toggle]')[2];
+    if (!chevron) throw new Error('No chevron for the third group');
+    fireEvent.pointerDown(chevron, { button: 0 });
+    expect(screen.getAllByRole('row').filter((row) => row.getAttribute('aria-level') === '2')).toHaveLength(2);
+    expect(onActivate).not.toHaveBeenCalled();
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    expect(onActivate).toHaveBeenCalledWith(3);
+    fireEvent.doubleClick(screen.getByText('Group A'));
+    expect(screen.getByText('Group A').closest('[role="row"]')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('sorts from a sortable column’s header, which says its direction', () => {
+    const sort = vi.fn();
+    render(<TreeGrid sort={sort} />);
+    const header = screen.getByRole('columnheader', { name: 'Name' });
+    expect(header).toHaveAttribute('aria-sort', 'ascending');
+    fireEvent.click(screen.getByRole('button', { name: 'Size' }));
+    expect(sort).toHaveBeenCalledWith('size');
   });
 });

@@ -1,7 +1,9 @@
 // The grid primitive: a fixed-height windowed virtualiser with the ARIA grid pattern, full keyboard use, row
-// selection and copy as tab-separated text. The full grid (column presets, chooser, filter bar, saved views,
-// grouping) wraps this in the slices; every grid in the app is this component.
+// selection and copy as tab-separated text. Rows can be grouped (`tree`): groups that open to show their rows, as the
+// ARIA treegrid pattern has them, which the Issues screen uses to group a check's rows by detail. The full grid
+// (column presets, chooser, filter bar, saved views) wraps this in the slices; every grid in the app is this component.
 import clsx from 'clsx';
+import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
 import {
   memo,
   useEffect,
@@ -28,11 +30,12 @@ import { INITIAL_NAV, gridKey, gridPointer, type GridNavState, type GridPosition
 import { DEFAULT_OVERSCAN, firstFullyVisible, rowsPerPage, scrollLeftToReveal } from './rowRange';
 import { useRowWindow, type RowWindowModel } from './rowWindow';
 import { windowFor } from './scrollWindow';
-import { clampSelection, effectiveRanges, selectedIndices, type Range } from './selection';
+import { EMPTY_SELECTION, clampSelection, effectiveRanges, selectOnly, selectedIndices, type Range } from './selection';
 import { MAX_COPY_ROWS, toTsv } from './tsv';
-import type { GridColumn, GridRange, RowFetcher } from './types';
+import type { GridColumn, GridRange, GridTree, RowFetcher } from './types';
 import { VirtualScrollbar } from './VirtualScrollbar';
 import { RefreshLine } from '../ui/ProgressBar';
+import { Icon } from '../ui/Icon';
 
 export interface GridCopyResult {
   /** Rows copied, or 1 for a single cell. */
@@ -77,6 +80,20 @@ export interface GridCoreProps<Row> {
   className?: string;
   /** Tests and stories: the virtualiser's model, to drive scrolling. */
   modelRef?: (model: RowWindowModel) => void;
+  /**
+   * Grouped rows, as the ARIA treegrid pattern has them: the grid is a `treegrid`, each row says its level and whether
+   * it's open, Right on a closed group's first cell opens it, Left closes it or moves from a row in a group to the
+   * group's row, and Enter or a double-click opens and closes a group. An element with `data-tree-toggle` in a row
+   * (its chevron) opens and closes it when pressed.
+   */
+  tree?: GridTree;
+  /**
+   * A row drawn as one cell across every column (a group's link to all its rows), or null for the row's own cells. Its
+   * cell is the cursor's wherever the cursor's column is.
+   */
+  spanRow?: (row: Row, index: number) => ReactNode;
+  /** A sortable column's header was pressed: sort by it, or change its direction. */
+  onSort?: (column: string) => void;
 }
 
 const SKELETON_ROWS = 12;
@@ -107,6 +124,9 @@ function GridCoreInner<Row>({
   busy = false,
   className,
   modelRef,
+  tree,
+  spanRow,
+  onSort,
 }: GridCoreProps<Row>) {
   const id = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -157,6 +177,12 @@ function GridCoreInner<Row>({
   const selection = clampSelection(nav.selection, count);
   const ranges = effectiveRanges(selection);
   const cellId = (row: number, col: number) => `${id}-r${row}-c${col}`;
+  /** Whether the row at an index is drawn as one cell: only a loaded row can be. */
+  const spans = (index: number) => {
+    const row = spanRow ? getRow(index) : undefined;
+    return row !== undefined && spanRow?.(row, index) != null;
+  };
+  const activeCellId = active ? cellId(active.row, spans(active.row) ? 0 : active.col) : undefined;
 
   const indices: number[] = [];
   for (let index = view.first; index <= view.last; index++) indices.push(index);
@@ -180,6 +206,59 @@ function GridCoreInner<Row>({
       model.scrollToIndex(reveal);
       if (next.active) revealColumn(next.active.col);
     }
+  };
+
+  /**
+   * Opens or closes a group, keeping the cursor on its row (which moves when a group above it closes) and the
+   * selection on it only if it was a plain click's.
+   */
+  const toggle = (row: number, open: boolean) => {
+    if (!tree) return;
+    const moved = tree.onToggle(row, open);
+    const at = typeof moved === 'number' ? moved : row;
+    apply(
+      {
+        active: { row: at, col: active?.row === row ? active.col : 0 },
+        selection: nav.follow ? selectOnly(at) : EMPTY_SELECTION,
+        follow: nav.follow,
+      },
+      at,
+    );
+  };
+
+  /** The tree's own keys: Right and Left on a row's first cell, and Enter on a group. Returns whether it took the key. */
+  const treeKey = (event: KeyboardEvent<HTMLDivElement>): boolean => {
+    if (!tree || !active || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
+    const firstCell = active.col === 0 || spans(active.row);
+    const expanded = tree.expanded(active.row);
+    if (event.key === 'Enter' && expanded !== undefined) {
+      toggle(active.row, !expanded);
+      return true;
+    }
+    if (!firstCell) return false;
+    if (event.key === 'ArrowRight' && expanded === false) {
+      toggle(active.row, true);
+      return true;
+    }
+    if (event.key === 'ArrowLeft') {
+      if (expanded === true) {
+        toggle(active.row, false);
+        return true;
+      }
+      const parent = tree.parent(active.row);
+      if (parent !== null) {
+        apply(
+          {
+            active: { row: parent, col: 0 },
+            selection: nav.follow ? selectOnly(parent) : nav.selection,
+            follow: nav.follow,
+          },
+          parent,
+        );
+        return true;
+      }
+    }
+    return false;
   };
 
   /** The rows as text: rows that aren't loaded are fetched first. Throws when a page can't be. */
@@ -229,6 +308,10 @@ function GridCoreInner<Row>({
     if (mod && event.key.toLowerCase() === 'c' && textSelected) return;
     // Esc closes what's open around the grid (the inspector) before it clears the grid's selection.
     if (event.key === 'Escape' && commands.claims(event.nativeEvent)) return;
+    if (treeKey(event)) {
+      event.preventDefault();
+      return;
+    }
     const result = gridKey(
       { active, selection, follow: nav.follow },
       { key: event.key, shift: event.shiftKey, mod, alt: event.altKey },
@@ -256,6 +339,12 @@ function GridCoreInner<Row>({
     if (event.button !== 0) return;
     const position = positionOf(event.target);
     if (!position) return;
+    // A group's chevron opens or closes it on press, as a button would.
+    const expanded = tree?.expanded(position.row);
+    if (expanded !== undefined && event.target instanceof Element && event.target.closest('[data-tree-toggle]')) {
+      toggle(position.row, !expanded);
+      return;
+    }
     apply(
       gridPointer({ active, selection, follow: nav.follow }, position, {
         shift: event.shiftKey,
@@ -267,7 +356,12 @@ function GridCoreInner<Row>({
 
   const onDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
     const position = positionOf(event.target);
-    if (position) onActivate?.(position.row, getRow(position.row));
+    if (!position) return;
+    // The chevron's own press has opened or closed the group already.
+    if (event.target instanceof Element && event.target.closest('[data-tree-toggle]')) return;
+    const expanded = tree?.expanded(position.row);
+    if (expanded !== undefined) toggle(position.row, !expanded);
+    else onActivate?.(position.row, getRow(position.row));
   };
 
   const onContextMenuEvent = (event: MouseEvent<HTMLDivElement>) => {
@@ -295,13 +389,13 @@ function GridCoreInner<Row>({
       {busy ? <RefreshLine /> : null}
       <div
         ref={scrollRef}
-        role="grid"
+        role={tree ? 'treegrid' : 'grid'}
         aria-label={label}
         aria-rowcount={loading ? -1 : count + 1}
         aria-colcount={columns.length}
         aria-multiselectable="true"
         aria-busy={loading || busy}
-        aria-activedescendant={active ? cellId(active.row, active.col) : undefined}
+        aria-activedescendant={activeCellId}
         tabIndex={0}
         onKeyDown={onKeyDown}
         onFocus={onFocus}
@@ -323,7 +417,27 @@ function GridCoreInner<Row>({
                 aria-sort={column.sort}
                 className={clsx('si-grid-cell', column.numeric && 'si-grid-cell--numeric')}
               >
-                {column.header}
+                {column.sortable && onSort ? (
+                  <button
+                    type="button"
+                    className={clsx('si-grid-sort', column.sort && 'si-grid-sort--active')}
+                    onClick={() => onSort(column.id)}
+                  >
+                    {column.header}
+                    <Icon
+                      icon={
+                        column.sort === 'ascending'
+                          ? ArrowUp
+                          : column.sort === 'descending'
+                            ? ArrowDown
+                            : ChevronsUpDown
+                      }
+                      size="xs"
+                    />
+                  </button>
+                ) : (
+                  column.header
+                )}
               </div>
             ))}
           </div>
@@ -378,6 +492,8 @@ function GridCoreInner<Row>({
                 columns={columns.length}
                 activeCol={active?.row === index ? active.col : -1}
                 cellIdPrefix={id}
+                level={tree?.level(index)}
+                expanded={tree?.expanded(index)}
               />
             ) : (
               <GridRow
@@ -391,6 +507,9 @@ function GridCoreInner<Row>({
                 selected={inRanges(ranges, index)}
                 activeCol={active?.row === index ? active.col : -1}
                 cellIdPrefix={id}
+                level={tree?.level(index)}
+                expanded={tree?.expanded(index)}
+                span={spanRow?.(row, index) ?? null}
               />
             );
           })}
@@ -403,6 +522,9 @@ function GridCoreInner<Row>({
               activeCol={active.col}
               cellIdPrefix={id}
               selected={inRanges(ranges, active.row)}
+              level={tree?.level(active.row)}
+              expanded={tree?.expanded(active.row)}
+              spans={spans(active.row)}
             />
           ) : null}
         </div>
@@ -434,6 +556,18 @@ interface GridRowProps<Row> {
   /** The active cell's column in this row, or -1. */
   activeCol: number;
   cellIdPrefix: string;
+  /** In a tree: the row's level (1 for a group), and whether it's open (undefined for a row that doesn't open). */
+  level?: number | undefined;
+  expanded?: boolean | undefined;
+  /** The row's one cell across every column, or null for its own cells. */
+  span?: ReactNode;
+}
+
+/** A row's place in a tree, for its `role="row"`. */
+function treeAttributes(level: number | undefined, expanded: boolean | undefined) {
+  return level === undefined
+    ? {}
+    : { 'aria-level': level, ...(expanded === undefined ? {} : { 'aria-expanded': expanded }) };
 }
 
 const GridRow = memo(function GridRow<Row>({
@@ -446,30 +580,51 @@ const GridRow = memo(function GridRow<Row>({
   selected,
   activeCol,
   cellIdPrefix,
+  level,
+  expanded,
+  span = null,
 }: GridRowProps<Row>) {
   return (
     <div
       role="row"
       aria-rowindex={index + 2}
       aria-selected={selected}
+      {...treeAttributes(level, expanded)}
       data-selected={selected || undefined}
+      data-level={level}
       className="si-grid-row absolute left-0"
       style={{ transform: `translateY(${top}px)`, height, width }}
     >
-      {columns.map((column, col) => (
+      {span !== null ? (
         <div
-          key={column.id}
-          id={`${cellIdPrefix}-r${index}-c${col}`}
+          id={`${cellIdPrefix}-r${index}-c0`}
           role="gridcell"
-          aria-colindex={col + 1}
+          aria-colindex={1}
+          aria-colspan={columns.length}
           data-row={index}
-          data-col={col}
-          data-active={col === activeCol || undefined}
-          className={clsx('si-grid-cell', column.numeric && 'si-grid-cell--numeric', column.mono && 'font-mono')}
+          data-col={0}
+          data-active={activeCol >= 0 || undefined}
+          className="si-grid-cell si-grid-cell--span"
         >
-          {column.cell(row)}
+          {span}
         </div>
-      ))}
+      ) : null}
+      {span !== null
+        ? null
+        : columns.map((column, col) => (
+            <div
+              key={column.id}
+              id={`${cellIdPrefix}-r${index}-c${col}`}
+              role="gridcell"
+              aria-colindex={col + 1}
+              data-row={index}
+              data-col={col}
+              data-active={col === activeCol || undefined}
+              className={clsx('si-grid-cell', column.numeric && 'si-grid-cell--numeric', column.mono && 'font-mono')}
+            >
+              {column.cell(row)}
+            </div>
+          ))}
     </div>
   );
 }) as <Row>(props: GridRowProps<Row>) => ReactNode;
@@ -481,6 +636,9 @@ function OffscreenRow<Row>({
   activeCol,
   cellIdPrefix,
   selected,
+  level,
+  expanded,
+  spans,
 }: {
   index: number;
   row: Row | undefined;
@@ -488,10 +646,20 @@ function OffscreenRow<Row>({
   activeCol: number;
   cellIdPrefix: string;
   selected: boolean;
+  level: number | undefined;
+  expanded: boolean | undefined;
+  /** Drawn as one cell: its first cell stands for it. */
+  spans: boolean;
 }) {
   return (
-    <div role="row" aria-rowindex={index + 2} aria-selected={selected} className="sr-only">
-      {columns.map((column, col) => (
+    <div
+      role="row"
+      aria-rowindex={index + 2}
+      aria-selected={selected}
+      {...treeAttributes(level, expanded)}
+      className="sr-only"
+    >
+      {(spans ? columns.slice(0, 1) : columns).map((column, col) => (
         <div
           key={column.id}
           id={`${cellIdPrefix}-r${index}-c${col}`}
@@ -514,6 +682,8 @@ const PlaceholderRow = memo(function PlaceholderRow({
   columns,
   activeCol,
   cellIdPrefix,
+  level,
+  expanded,
 }: {
   index: number;
   top: number;
@@ -524,11 +694,14 @@ const PlaceholderRow = memo(function PlaceholderRow({
   activeCol: number;
   /** Null for the first load's skeleton, whose rows aren't real yet. */
   cellIdPrefix: string | null;
+  level?: number | undefined;
+  expanded?: boolean | undefined;
 }) {
   return (
     <div
       role="row"
       aria-rowindex={index + 2}
+      {...treeAttributes(level, expanded)}
       aria-busy="true"
       className="si-grid-row absolute left-0"
       style={{ transform: `translateY(${top}px)`, height, width }}

@@ -13,10 +13,30 @@ export interface GridColumn<Row> {
   mono?: boolean;
   /** `ascending` or `descending` when the grid is sorted by this column. */
   sort?: 'ascending' | 'descending';
+  /** Its header is a button that sorts by it (the grid's `onSort`). */
+  sortable?: boolean;
   /** What the cell shows. Crawled text renders as text, never as HTML. */
   cell: (row: Row) => ReactNode;
   /** The cell as plain text, for copying and for the accessible name of rich cells. */
   text: (row: Row) => string;
+}
+
+/**
+ * Rows grouped under rows that open and close (the ARIA treegrid pattern), by index into the grid's rows: a group's
+ * row, then its rows while it's open.
+ */
+export interface GridTree {
+  /** 1 for a group's row, 2 for a row in a group. */
+  level: (index: number) => number;
+  /** Whether a group is open; undefined for a row that doesn't open. */
+  expanded: (index: number) => boolean | undefined;
+  /** The row of the group a row is in, or null for a group's own row. */
+  parent: (index: number) => number | null;
+  /**
+   * Opens or closes the group at an index. Returns its row's index afterwards when that moved (opening one group
+   * closed another above it).
+   */
+  onToggle: (index: number, open: boolean) => number | undefined;
 }
 
 /** What Ctrl+C asks the data layer for: rows by index, fetched if they aren't loaded. */
