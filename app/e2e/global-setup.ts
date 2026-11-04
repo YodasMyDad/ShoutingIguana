@@ -1,14 +1,15 @@
 // Starts what the end-to-end tests run against, and returns the teardown:
 // 1. a temp data folder holding one crawl: SI_E2E_CRAWL's file, or a small synthetic crawl made with the CLI;
 // 2. the real sidecar (the one the shell bundles) on that folder, with a fresh state folder, allowing only the
-//    preview server's origin;
+//    preview server's origin. The crawl's analysis must stand, as the tests assume: a cached synthetic crawl an
+//    older engine analysed is made again, and SI_E2E_CRAWL's copy is analysed again (startOnCurrentCrawl);
 // 3. the app built for it (`--mode e2e`, the sidecar's port and token baked in, as `npm run dev` passes them), served
 //    by `vite preview`.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { appRoot, copyCrawl, makeSyntheticCrawl, startSidecar } from '../scripts/lib/engine.mjs';
+import { appRoot, makeSyntheticCrawl, startOnCurrentCrawl, startSidecar } from '../scripts/lib/engine.mjs';
 import { E2E_SIDECAR_PORT, PREVIEW_PORT } from '../scripts/ports.mjs';
 
 /** Tests only: a sidecar on 127.0.0.1 over a temp folder. Never a release token. */
@@ -33,28 +34,25 @@ export default async function globalSetup() {
   const dataDir = path.join(temp, 'data');
   const stateDir = path.join(temp, 'state');
 
-  let crawl = process.env.SI_E2E_CRAWL;
-  if (!crawl) {
-    crawl = path.join(appRoot, '.engine-build', 'crawls', 'e2e-synthetic.sicrawl');
-    if (!existsSync(crawl)) await makeSyntheticCrawl({ out: crawl, pages: 40 });
-  }
-  copyCrawl(path.resolve(crawl), dataDir);
-
-  const sidecar = await startSidecar({
-    port: E2E_SIDECAR_PORT,
-    token: E2E_TOKEN,
-    origins: [`http://localhost:${PREVIEW_PORT}`],
+  const given = process.env.SI_E2E_CRAWL;
+  const { sidecar, item } = await startOnCurrentCrawl({
+    crawl: given ? path.resolve(given) : path.join(appRoot, '.engine-build', 'crawls', 'e2e-synthetic.sicrawl'),
+    cached: !given,
     dataDir,
-    stateDir,
+    token: E2E_TOKEN,
+    start: () =>
+      startSidecar({
+        port: E2E_SIDECAR_PORT,
+        token: E2E_TOKEN,
+        origins: [`http://localhost:${PREVIEW_PORT}`],
+        dataDir,
+        stateDir,
+      }),
+    remake: (out) => makeSyntheticCrawl({ out, pages: 40 }),
   });
 
   // What the library says the crawl is, for the tests to look for.
-  const library = (await (
-    await fetch(`http://127.0.0.1:${sidecar.port}/api/crawls`, { headers: { Authorization: `Bearer ${E2E_TOKEN}` } })
-  ).json()) as { site: string | null; fileName: string }[];
-  const first = library[0];
-  if (!first) throw new Error('The sidecar lists no crawl in the e2e data folder');
-  process.env.SI_E2E_SITE = first.site ?? first.fileName;
+  process.env.SI_E2E_SITE = item.site ?? item.fileName;
 
   const env = { ...process.env, VITE_SIDECAR_PORT: String(sidecar.port), VITE_SIDECAR_TOKEN: E2E_TOKEN };
   const vite = path.join(appRoot, 'node_modules', 'vite', 'bin', 'vite.js');
