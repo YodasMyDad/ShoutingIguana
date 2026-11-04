@@ -272,6 +272,31 @@ describe('the Issues screen', () => {
     stop();
   });
 
+  it('shows both parts of a group that has a detail and a URL, and one wording for a group with no detail', async () => {
+    const groups: IssueGroup[] = [
+      {
+        detail: 'HTTP 404',
+        relatedUrlId: 9,
+        relatedUrl: 'https://example.com/garden/',
+        pages: 1,
+        share: 0.5,
+        likelyTemplate: false,
+      },
+      { detail: null, relatedUrlId: null, relatedUrl: null, pages: 1, share: 0.5, likelyTemplate: false },
+    ];
+    sidecar({ groups: { ...ISSUE_GROUPS, 'internal-client-error': groups } });
+    await open(`${ISSUES}/internal-client-error?group=${encodeURIComponent('{"detail":"HTTP 404","relatedUrlId":9}')}`);
+    const grid = await screen.findByRole('treegrid');
+    const more = (await within(grid).findByRole('link', { name: 'Show the page in URLs' })).closest<HTMLElement>(
+      '[role="gridcell"]',
+    );
+    if (!more) throw new Error('No link row');
+    expect(more).toHaveTextContent('Detail is HTTP 404');
+    expect(more).toHaveTextContent('Related URL is /garden/');
+    // The group without a detail reads as the URL grid's chip will: "none".
+    expect(within(grid).getByText('None')).toBeVisible();
+  });
+
   it('reopens the group the address names', async () => {
     sidecar();
     await open(`${ISSUES}/empty-anchor-text?group=${encodeURIComponent('{"detail":null,"relatedUrlId":9}')}`);

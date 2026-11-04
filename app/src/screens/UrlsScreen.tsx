@@ -11,7 +11,7 @@ import { analyseCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { notifyResult } from '../feedback/notify';
-import { filterSentences } from '../grid/filterSentence';
+import { LOOKING_UP, filterSentences } from '../grid/filterSentence';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
 import { useGridMetrics } from '../grid/metrics';
 import type { GridColumn } from '../grid/types';
@@ -326,7 +326,7 @@ function ActiveFilters({
   filters: readonly GridFilter[];
   onChange: (filters: GridFilter[]) => void;
 }) {
-  const checks = useQuery({ ...checksQuery(), enabled: filters.some((filter) => filter.column === 'check') }).data;
+  const checks = useQuery({ ...checksQuery(), enabled: filters.some((filter) => filter.column === 'check') });
   const relatedIds = filters.flatMap((filter) =>
     'group' in filter && filter.group.relatedUrlId !== null ? [filter.group.relatedUrlId] : [],
   );
@@ -342,16 +342,25 @@ function ActiveFilters({
     },
     enabled: relatedIds.length > 0,
     staleTime: Infinity,
-  }).data;
+  });
+  // Names, never ids: while they're read, a placeholder; when they can't be, plain words.
+  const checkWords = (id: string | number) => {
+    if (checks.data)
+      return checks.data.checks.find((check) => check.id === id)?.title ?? 'a check this version doesn’t have';
+    return checks.isError ? 'a check whose name couldn’t be read' : LOOKING_UP;
+  };
+  const relatedWords = (urlId: number) => {
+    if (related.data) return related.data.get(urlId) ?? 'a URL that isn’t in this crawl';
+    return related.isError ? 'a URL that couldn’t be read' : LOOKING_UP;
+  };
   const words = {
     column: (id: string) => (id === 'check' ? 'Check' : (COLUMNS.find((column) => column.id === id)?.header ?? id)),
-    value: (column: string, value: string | number) =>
-      column === 'check' ? (checks?.checks.find((check) => check.id === value)?.title ?? String(value)) : String(value),
+    value: (column: string, value: string | number) => (column === 'check' ? checkWords(value) : String(value)),
   };
   return (
     <>
       {filters.flatMap((filter, index) =>
-        filterSentences(filter, words, (id) => related?.get(id) ?? null).map((sentence, part) => (
+        filterSentences(filter, words, relatedWords).map((sentence, part) => (
           <FilterChip
             key={`${index}-${part}`}
             field={sentence.field}

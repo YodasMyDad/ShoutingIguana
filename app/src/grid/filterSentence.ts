@@ -36,19 +36,27 @@ const OPS: Record<string, string> = {
 
 const shown = (value: string | number) => (typeof value === 'number' ? formatCount(value) : value);
 
+/** A check's group whose issues have no detail: "Detail is none", as the groups grid says "None". */
+export const NO_DETAIL = 'none';
+
+/** What a value being looked up reads as until it arrives: "Check is Loading…". */
+export const LOOKING_UP = 'Loading…';
+
 /** "a, b or c". */
 function either(values: readonly string[]): string {
   return values.length > 1 ? `${values.slice(0, -1).join(', ')} or ${values.at(-1) ?? ''}` : (values[0] ?? '');
 }
 
 /**
- * The chips a filter reads as. A check's group is a second chip, "Detail is HTTP 404" or "Related URL is /", so the
- * check and its group can be read, and removed, one at a time.
+ * The chips a filter reads as. A check's group is a chip of its own, "Detail is HTTP 404" or "Related URL is /", and
+ * a group that has both (a temporary redirect's "302" and where it goes) is both, so the check and its group can be
+ * read, and removed, one at a time. `relatedUrl` gives a related URL's words: the URL, `LOOKING_UP`, or plain words for
+ * one that couldn't be read; without it, "another URL".
  */
 export function filterSentences(
   filter: GridFilter,
   words: FilterWords,
-  relatedUrl?: (urlId: number) => string | null,
+  relatedUrl?: (urlId: number) => string,
 ): FilterSentence[] {
   const field = words.column(filter.column);
   const valueWords = (value: string | number) => words.value?.(filter.column, value) ?? shown(value);
@@ -70,11 +78,15 @@ export function filterSentences(
       const sentence = { field, op: OPS[filter.op] ?? 'is', value: either(filter.values.map(valueWords)) };
       const group = filter.group;
       if (!group) return [sentence];
-      if (group.relatedUrlId !== null) {
-        const url = relatedUrl?.(group.relatedUrlId) ?? null;
-        return [sentence, { field: 'Related URL', op: 'is', value: url ?? `URL ${formatCount(group.relatedUrlId)}` }];
+      const parts = [sentence];
+      // A group by related URL has no detail of its own; one by detail may also name a URL.
+      if (group.detail !== null || group.relatedUrlId === null) {
+        parts.push({ field: 'Detail', op: 'is', value: group.detail ?? NO_DETAIL });
       }
-      return [sentence, { field: 'Detail', op: 'is', value: group.detail ?? 'none' }];
+      if (group.relatedUrlId !== null) {
+        parts.push({ field: 'Related URL', op: 'is', value: relatedUrl?.(group.relatedUrlId) ?? 'another URL' });
+      }
+      return parts;
     }
     default:
       return [{ field, op: OPS[filter.op] ?? filter.op, value: valueWords(filter.value) }];

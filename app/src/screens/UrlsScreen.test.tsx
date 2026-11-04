@@ -1,15 +1,16 @@
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GridQuery, SummaryState, UrlRow } from '../api/grids';
 import { answerGridQuery } from '../api/mock/gridQuery';
 import { gridPagesOf } from '../api/queries';
 import { setTransport, type TransportRequest } from '../api/transport';
-import type { CrawlStatus } from '../api/types';
+import type { Checks, CrawlStatus } from '../api/types';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
+import { ISSUES_CHECKS } from '../test/issuesSidecar';
 import { wholeText } from '../test/text';
 import {
   TEST_CRAWL_ID,
@@ -32,6 +33,10 @@ function sidecar(options: {
   analyzedAt?: string | null;
   summary: SummaryState;
   rows?: UrlRow[];
+  /** The catalog: the Issues tests' by default; `pending` never answers, `error` fails. */
+  checks?: Checks | 'pending' | 'error';
+  /** Reading a related URL's text (the grid filtered to its id) fails. */
+  relatedFails?: boolean;
 }) {
   const item = testCrawlItem({
     status: options.status ?? 'completed',
@@ -45,12 +50,26 @@ function sidecar(options: {
       'POST',
       /^\/api\/crawls\/[0-9a-f]{16}\/urls$/,
       async (request: TransportRequest) => {
+        const query = request.body as GridQuery;
+        if (options.relatedFails && query.filters.some((filter) => filter.column === 'id')) {
+          return problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 });
+        }
         if (state.hold) await state.hold;
         const answer = answerGridQuery(state.rows, request.body as GridQuery, options.summary);
         return answer.ok ? json(answer.page) : problem(answer.problem);
       },
     ],
     ['POST', /^\/api\/crawls\/[0-9a-f]{16}\/analyze$/, analyse],
+    [
+      'GET',
+      /^\/api\/checks$/,
+      () =>
+        options.checks === 'pending'
+          ? new Promise<Response>(() => undefined)
+          : options.checks === 'error'
+            ? problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 })
+            : json(options.checks ?? ISSUES_CHECKS),
+    ],
     ...routes,
   ]);
   setTransport(transport);
@@ -154,7 +173,8 @@ describe('the URL grid opened from a check’s group', () => {
     ];
     const { router } = await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}`);
     const chips = await screen.findByRole('group', { name: 'Filters' });
-    expect(within(chips).getByText('empty-anchor-text')).toBeVisible();
+    // The check by its title, never its id.
+    expect(await within(chips).findByText('Internal links without anchor text')).toBeVisible();
     expect(await within(chips).findByText('/', { exact: true })).toBeVisible();
     fireEvent.click(within(chips).getByRole('button', { name: 'Remove the filter Related URL is /' }));
     await waitFor(() =>
@@ -162,8 +182,28 @@ describe('the URL grid opened from a check’s group', () => {
         filter: [{ column: 'check', op: 'in', values: ['empty-anchor-text'] }],
       }),
     );
-    fireEvent.click(within(chips).getByRole('button', { name: 'Remove the filter Check is empty-anchor-text' }));
+    fireEvent.click(
+      within(chips).getByRole('button', { name: 'Remove the filter Check is Internal links without anchor text' }),
+    );
     await waitFor(() => expect(router.state.location.search).toEqual({}));
+  });
+
+  it('shows a placeholder while the names are read, and plain words when they can’t be, never ids', async () => {
+    const filter = [
+      { column: 'check', op: 'in', values: ['empty-anchor-text'], group: { detail: null, relatedUrlId: 1 } },
+    ];
+    sidecar({ summary: { available: true, reason: null }, checks: 'pending' });
+    await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}`);
+    const chips = await screen.findByRole('group', { name: 'Filters' });
+    expect(within(chips).getByRole('button', { name: 'Remove the filter Check is Loading…' })).toBeVisible();
+    expect(within(chips).queryByText('empty-anchor-text')).toBeNull();
+    cleanup();
+    sidecar({ summary: { available: true, reason: null }, checks: 'error', relatedFails: true });
+    await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}`);
+    const failed = await screen.findByRole('group', { name: 'Filters' });
+    expect(await within(failed).findByText('a check whose name couldn’t be read')).toBeVisible();
+    expect(await within(failed).findByText('a URL that couldn’t be read')).toBeVisible();
+    expect(within(failed).queryByText(/URL 1$/)).toBeNull();
   });
 });
 

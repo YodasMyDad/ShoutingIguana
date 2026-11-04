@@ -15,6 +15,7 @@ import {
 import type { Check } from '../../api/types';
 import { ErrorState } from '../../feedback/ErrorState';
 import { notifyResult } from '../../feedback/notify';
+import { NO_DETAIL } from '../../grid/filterSentence';
 import { GridCore } from '../../grid/GridCore';
 import { useGridMetrics } from '../../grid/metrics';
 import type { RowWindowModel } from '../../grid/rowWindow';
@@ -61,6 +62,8 @@ const SHARE_WIDTH = 176;
 const MIN_TEXT_WIDTH = 200;
 /** The frame's edges and the room a scrollbar may take. */
 const FRAME_SLACK = 24;
+/** A group without a detail, in the grid's Detail column: the chips' "Detail is none", in a cell's case. */
+const NO_DETAIL_SHOWN = 'None';
 /** A group's chip this short keeps its words beside the check's. */
 const SHORT_CHIP = 32;
 
@@ -317,7 +320,7 @@ export function IssueGroups({
               cell: (row) => {
                 const group = text(row);
                 if (!group) return null;
-                const detail = group.detail ?? 'No detail';
+                const detail = group.detail ?? NO_DETAIL_SHOWN;
                 return groupTitle(row, detail, detail);
               },
               text: (row) =>
@@ -385,7 +388,14 @@ export function IssueGroups({
       }
       const { group } = row;
       const pages = group.pages === 1 ? 'Show the page in URLs' : `Show all ${formatCount(group.pages)} pages in URLs`;
-      const groupWords = grouping === 'relatedUrl' ? relatedWords(group, siteOrigin) : (group.detail ?? 'none');
+      // The group's own parts, as the URL grid's chips will read them: its related URL, or its detail and any URL.
+      const parts =
+        grouping === 'relatedUrl'
+          ? [{ field: 'Related URL', value: relatedWords(group, siteOrigin) }]
+          : [
+              { field: 'Detail', value: group.detail ?? NO_DETAIL },
+              ...(group.relatedUrl ? [{ field: 'Related URL', value: relatedWords(group, siteOrigin) }] : []),
+            ];
       return (
         <span className="flex min-w-0 items-center gap-2 overflow-hidden">
           <TextLink
@@ -398,15 +408,18 @@ export function IssueGroups({
             {pages}
           </TextLink>
           <FilterChip field="Check" value={check.title} variant="preview" size="sm" truncate />
-          {/* The group's chip is usually short ("/", "HTTP 404"): it keeps its words, and the check's gives way. */}
-          <FilterChip
-            field={grouping === 'relatedUrl' ? 'Related URL' : 'Detail'}
-            value={groupWords}
-            variant="preview"
-            size="sm"
-            truncate
-            className={groupWords.length <= SHORT_CHIP ? 'shrink-0' : undefined}
-          />
+          {/* The group's chips are usually short ("/", "HTTP 404"): they keep their words, and the check's gives way. */}
+          {parts.map((part) => (
+            <FilterChip
+              key={part.field}
+              field={part.field}
+              value={part.value}
+              variant="preview"
+              size="sm"
+              truncate
+              className={part.value.length <= SHORT_CHIP ? 'shrink-0' : undefined}
+            />
+          ))}
         </span>
       );
     },
@@ -499,8 +512,8 @@ function TemplateCallout({
         </>
       ) : (
         <>
-          The same detail, “{group.detail ?? 'none'}”, on {share}, so it’s likely in the site’s template: one fix clears
-          the group.
+          The same detail, “{group.detail ?? NO_DETAIL}”, on {share}, so it’s likely in the site’s template: one fix
+          clears the group.
         </>
       )}
     </Callout>

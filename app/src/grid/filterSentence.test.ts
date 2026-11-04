@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterSentences } from './filterSentence';
+import { NO_DETAIL, filterSentences } from './filterSentence';
 
 const words = {
   column: (id: string) => ({ statusCode: 'Status', check: 'Check', depth: 'Depth', title: 'Title' })[id] ?? id,
@@ -51,5 +51,26 @@ describe('a filter as a sentence', () => {
       { field: 'Check', op: 'is', value: 'internal-client-error' },
       { field: 'Detail', op: 'is', value: 'HTTP 404' },
     ]);
+  });
+
+  it('shows both parts of a group that has a detail and a related URL, and one wording for no detail', () => {
+    const group = (detail: string | null, relatedUrlId: number | null) =>
+      filterSentences(
+        { column: 'check', op: 'in', values: ['redirect-temporary'], group: { detail, relatedUrlId } },
+        words,
+        () => '/new/',
+      );
+    expect(group('302', 7).slice(1)).toEqual([
+      { field: 'Detail', op: 'is', value: '302' },
+      { field: 'Related URL', op: 'is', value: '/new/' },
+    ]);
+    expect(group(null, null).slice(1)).toEqual([{ field: 'Detail', op: 'is', value: NO_DETAIL }]);
+    // A related URL with no words to give reads as plain words, never its id.
+    expect(
+      filterSentences(
+        { column: 'check', op: 'in', values: ['empty-anchor-text'], group: { detail: null, relatedUrlId: 1234 } },
+        words,
+      ).at(-1),
+    ).toEqual({ field: 'Related URL', op: 'is', value: 'another URL' });
   });
 });
