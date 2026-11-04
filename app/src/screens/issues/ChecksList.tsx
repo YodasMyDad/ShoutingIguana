@@ -1,5 +1,5 @@
 import { EyeOff } from 'lucide-react';
-import { useId, useRef, type KeyboardEvent, type Ref } from 'react';
+import { useEffect, useId, useRef, type KeyboardEvent, type Ref } from 'react';
 import type { Severity } from '../../api/types';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
@@ -69,6 +69,20 @@ export function ChecksList({
 }: ChecksListProps) {
   const id = useId();
   const options = useRef(new Map<string, HTMLDivElement>());
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // The selected check is in view in the list, whoever picked it (a link, back, the first to fix), scrolling the list
+  // alone: never the page around it.
+  useEffect(() => {
+    const list = listRef.current;
+    const option = selectedId ? options.current.get(selectedId) : undefined;
+    if (!list || !option) return;
+    const top = option.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
+    const bottom = top + option.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top - option.offsetHeight;
+    else if (bottom > list.scrollTop + list.clientHeight)
+      list.scrollTop = bottom - list.clientHeight + option.offsetHeight;
+  }, [selectedId]);
   const visible = list.visible;
   const selectedIndex = visible.findIndex((entry) => entry.check.id === selectedId);
   // The one row Tab lands on: the selected check, or the first when it isn't listed.
@@ -183,6 +197,7 @@ export function ChecksList({
         </EmptyState>
       ) : (
         <div
+          ref={listRef}
           role="listbox"
           aria-label="Checks"
           // Focus is on the options (one of them is in the tab order), never on the list itself.
