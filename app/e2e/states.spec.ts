@@ -547,4 +547,29 @@ test.describe('the design system’s states', () => {
     }
   });
 
+  test('hover never takes away a state’s edge: a pressed toggle, an invalid field, a checked box', async ({ page }) => {
+    const host = await fixture(
+      page,
+      `<button type="button" class="si-btn si-btn--secondary" aria-pressed="true" id="pressed">Show passed</button>
+       <button type="button" class="si-btn si-btn--secondary" aria-pressed="false" id="unpressed">Show skipped</button>
+       <div class="si-field" data-invalid="" id="invalid" style="width:240px"><input class="si-field__input" aria-label="Start URL" aria-invalid="true" value="x"></div>
+       <button type="button" class="si-checkbox" role="checkbox" aria-checked="true" data-state="checked" aria-label="Render" id="checked"></button>`,
+    );
+    // Once the hover's transition is done.
+    const edge = async (id: string) => {
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      return (await style(host.locator(`#${id}`), 'border-top-color'))['border-top-color'];
+    };
+    for (const id of ['pressed', 'invalid', 'checked']) {
+      const rest = await edge(id);
+      await host.locator(`#${id}`).hover();
+      expect(await edge(id), id).toBe(rest);
+      await page.mouse.move(0, 0);
+    }
+    // Hover itself still shows where there's no state to keep.
+    const rest = await edge('unpressed');
+    await host.locator('#unpressed').hover();
+    expect(await edge('unpressed')).not.toBe(rest);
+  });
+
 });

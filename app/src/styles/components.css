@@ -258,6 +258,10 @@
 
   .si-btn--secondary:hover:not(:disabled, [aria-disabled='true']) {
     background: var(--color-surface-hover);
+  }
+
+  /* A toggle that's on keeps its control edge under the pointer: hover is a hint, never a state's indicator. */
+  .si-btn--secondary:hover:not(:disabled, [aria-disabled='true'], [aria-pressed='true']) {
     border-color: var(--color-border-strong);
   }
 
@@ -482,7 +486,8 @@
     box-shadow: var(--elevation-2);
   }
 
-  .si-field:hover:not([data-disabled], [data-readonly]) {
+  /* An invalid field keeps its red edge under the pointer. */
+  .si-field:hover:not([data-disabled], [data-readonly], [data-invalid]) {
     border-color: var(--color-text-muted);
   }
 
@@ -643,7 +648,8 @@
     cursor: pointer;
   }
 
-  .si-checkbox:hover:not(:disabled) {
+  /* Checked, it keeps the accent edge under the pointer. */
+  .si-checkbox:hover:not(:disabled, [data-state='checked'], [data-state='indeterminate']) {
     border-color: var(--color-text-muted);
   }
 
