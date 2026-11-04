@@ -22,6 +22,8 @@ export interface DialogProps {
   onCloseAutoFocus?: ((event: Event) => void) | undefined;
   /** Its body scrolls: a named, focusable region, so the arrows scroll it. */
   scrollLabel?: string | undefined;
+  /** The body without padding or scrolling of its own, for content that has both (the shortcut list). */
+  flush?: boolean | undefined;
   className?: string | undefined;
 }
 
@@ -40,6 +42,7 @@ export function Dialog({
   onOpenAutoFocus,
   onCloseAutoFocus,
   scrollLabel,
+  flush = false,
   className,
 }: DialogProps) {
   return (
@@ -62,10 +65,11 @@ export function Dialog({
               ) : null}
             </div>
             <DialogPrimitive.Close asChild>
-              <IconButton label="Close" icon={X} size="sm" />
+              <IconButton label="Close" icon={X} size="sm" tooltip={false} />
             </DialogPrimitive.Close>
           </div>
-          {children ? (
+          {children && flush ? children : null}
+          {children && !flush ? (
             <div
               className="si-dialog__body"
               {...(scrollLabel ? { role: 'region', 'aria-label': scrollLabel, tabIndex: 0 } : {})}

@@ -110,7 +110,8 @@ export function TextField({
     }
   };
 
-  const describedByIds = clsx(describedBy, description && descriptionId, error && errorId) || undefined;
+  // What's wrong is read first, then the help.
+  const describedByIds = clsx(describedBy, error && errorId, description && descriptionId) || undefined;
   const iconSize = size === 'lg' ? 'lg' : size === 'sm' ? 'sm' : 'md';
 
   return (

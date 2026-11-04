@@ -78,41 +78,40 @@ export function Button({
     onClick?.(event);
   };
 
-  const Comp = asChild ? Slot : 'button';
-  const button = (
-    <Comp
-      {...(asChild ? {} : { type: type === 'submit' ? 'submit' : type === 'reset' ? 'reset' : 'button' })}
-      aria-keyshortcuts={ariaShortcut ?? undefined}
-      aria-pressed={pressed}
-      aria-busy={loading || undefined}
-      {...(loading ? { 'aria-disabled': true, 'data-loading': '' } : {})}
+  const common = {
+    'aria-keyshortcuts': ariaShortcut ?? undefined,
+    'aria-pressed': pressed,
+    'aria-busy': loading || undefined,
+    ...(loading ? { 'aria-disabled': true, 'data-loading': '' } : {}),
+    className: clsx('si-btn', `si-btn--${variant}`, size !== 'md' && `si-btn--${size}`, className),
+    onClick: press,
+    ...rest,
+  };
+  // The slot's children are its own (no fragment round them), so it finds the child to render as the button.
+  const button = asChild ? (
+    <Slot {...common}>
+      <IconSlot icon={icon} size={iconSize} />
+      <Slottable>{children}</Slottable>
+      <IconSlot icon={iconEnd} size={iconSize} />
+    </Slot>
+  ) : (
+    <button
+      {...common}
+      type={type === 'submit' ? 'submit' : type === 'reset' ? 'reset' : 'button'}
       data-spinner={spinner && !icon ? 'cover' : undefined}
-      className={clsx('si-btn', `si-btn--${variant}`, size !== 'md' && `si-btn--${size}`, className)}
-      onClick={press}
-      {...rest}
     >
-      {asChild ? (
-        <>
-          <IconSlot icon={icon} size={iconSize} />
-          <Slottable>{children}</Slottable>
-          <IconSlot icon={iconEnd} size={iconSize} />
-        </>
-      ) : (
-        <>
-          <span className="si-btn__content">
-            {spinner && icon ? <Spinner size={iconSize} /> : <IconSlot icon={icon} size={iconSize} />}
-            {children}
-            {showShortcut && chord ? <Kbd chord={chord} size="sm" /> : null}
-            <IconSlot icon={iconEnd} size={iconSize} />
-          </span>
-          {spinner && !icon ? (
-            <span className="si-btn__spinner">
-              <Spinner size={iconSize} />
-            </span>
-          ) : null}
-        </>
-      )}
-    </Comp>
+      <span className="si-btn__content">
+        {spinner && icon ? <Spinner size={iconSize} /> : <IconSlot icon={icon} size={iconSize} />}
+        {children}
+        {showShortcut && chord ? <Kbd chord={chord} size="sm" /> : null}
+        <IconSlot icon={iconEnd} size={iconSize} />
+      </span>
+      {spinner && !icon ? (
+        <span className="si-btn__spinner">
+          <Spinner size={iconSize} />
+        </span>
+      ) : null}
+    </button>
   );
   return (
     <Tooltip content={tip} command={command}>

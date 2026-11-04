@@ -1,6 +1,9 @@
+import { Check, ChevronDown, Copy } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { canRetry, errorDetail, errorTitle } from '../api/errors';
 import { copyText } from '../lib/clipboard';
+import { Button } from '../ui/Button';
+import { SeverityMark } from '../ui/SeverityMark';
 import { announce } from './announce';
 
 /**
@@ -38,46 +41,46 @@ export function ErrorState({
   };
 
   return (
-    <div role="alert" className={compact ? 'flex flex-col gap-2 p-4' : 'flex flex-col items-start gap-3 p-8'}>
-      <p className="text-14 font-medium text-text">{title ?? errorTitle(error)}</p>
-      {title ? <p className="text-13 text-text-secondary">{errorTitle(error)}</p> : null}
-      <div className="flex flex-wrap gap-2">
-        {retry ? (
-          <button
-            type="button"
-            onClick={retry}
-            className="h-(--control-height-sm) rounded-sm bg-accent-fill px-3 text-13 font-medium text-text-on-accent hover:bg-accent-fill-hover"
-          >
-            {retryLabel}
-          </button>
-        ) : null}
-        {actions}
-        {detail ? (
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-controls={detailId}
-            onClick={() => setOpen((value) => !value)}
-            className="h-(--control-height-sm) rounded-sm border border-border px-3 text-13 text-text-secondary hover:bg-surface-hover"
-          >
-            Details
-          </button>
+    <div role="alert" className={compact ? 'flex gap-3 p-4' : 'flex gap-3 p-8'}>
+      <span className="pt-0.5">
+        <SeverityMark severity="error" size="md" decorative />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-3">
+        <div className="flex flex-col gap-0.5">
+          <p className="text-14 font-semibold text-text">{title ?? errorTitle(error)}</p>
+          {title ? <p className="text-13 text-text-secondary">{errorTitle(error)}</p> : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {retry ? (
+            <Button variant="primary" size="sm" onClick={retry}>
+              {retryLabel}
+            </Button>
+          ) : null}
+          {actions}
+          {detail ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              iconEnd={ChevronDown}
+              aria-expanded={open}
+              aria-controls={detailId}
+              onClick={() => setOpen((value) => !value)}
+            >
+              Details
+            </Button>
+          ) : null}
+        </div>
+        {detail && open ? (
+          <div id={detailId} className="flex w-full max-w-(--container-content) flex-col items-start gap-2">
+            <pre className="max-h-(--detail-max-height) w-full overflow-auto rounded-md border border-border-subtle bg-surface-sunken p-3 font-mono text-12 whitespace-pre-wrap text-text-secondary">
+              {detail}
+            </pre>
+            <Button size="sm" variant="ghost" icon={copied ? Check : Copy} onClick={() => void copy()}>
+              {copied ? 'Copied' : 'Copy details'}
+            </Button>
+          </div>
         ) : null}
       </div>
-      {detail && open ? (
-        <div id={detailId} className="flex w-full max-w-(--container-content) flex-col gap-2">
-          <pre className="max-h-(--detail-max-height) overflow-auto rounded-sm border border-border-subtle bg-surface-sunken p-3 font-mono text-12 whitespace-pre-wrap text-text-secondary">
-            {detail}
-          </pre>
-          <button
-            type="button"
-            onClick={() => void copy()}
-            className="self-start text-12 text-accent-text underline underline-offset-(--underline-offset)"
-          >
-            {copied ? 'Copied' : 'Copy details'}
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }

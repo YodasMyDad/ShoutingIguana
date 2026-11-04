@@ -1095,6 +1095,18 @@
     color: var(--color-accent-text);
   }
 
+  .si-status-pill--plain {
+    height: auto;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .si-status-pill--plain.si-status-pill--live {
+    background: none;
+    box-shadow: none;
+  }
+
   .si-status-pill__count {
     margin-left: var(--space-0-5);
     padding-left: var(--space-2);
@@ -2431,6 +2443,10 @@
   .si-btn--ghost:not([aria-pressed='true']),
   .si-btn--icon.si-btn--ghost:not([aria-pressed='true']) {
     border-color: transparent;
+  }
+
+  .si-status-pill--plain {
+    border: 0;
   }
 
   .si-btn:disabled,

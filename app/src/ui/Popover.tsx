@@ -56,7 +56,7 @@ export function Popover({
                 {title}
               </h2>
               <PopoverPrimitive.Close asChild>
-                <IconButton label="Close" icon={X} size="sm" />
+                <IconButton label="Close" icon={X} size="sm" tooltip={false} />
               </PopoverPrimitive.Close>
             </div>
           ) : null}

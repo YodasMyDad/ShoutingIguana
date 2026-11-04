@@ -9,6 +9,7 @@ import type { CrawlStatus } from '../api/types';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
+import { wholeText } from '../test/text';
 import {
   TEST_CRAWL_ID,
   TEST_URL_ROWS,
@@ -120,7 +121,7 @@ describe('the URL grid while the crawl runs', () => {
     });
     const { queryClient } = await open(URLS);
     const header = (await screen.findByRole('heading', { level: 1, name: 'URLs' })).parentElement!;
-    expect(await within(header).findByText('3 URLs')).toBeVisible();
+    expect(await within(header).findByText(wholeText('3 URLs'))).toBeVisible();
     expect(within(header).getByText('Live')).toBeVisible();
     state.rows = [...TEST_URL_ROWS, { id: 4, url: 'https://example.com/c', statusCode: 200, statusClass: '2xx' }];
     let release: () => void = () => undefined;
@@ -133,7 +134,7 @@ describe('the URL grid while the crawl runs', () => {
     expect(screen.queryByRole('progressbar', { name: 'Refreshing' })).toBeNull();
     state.hold = null;
     act(() => release());
-    expect(await within(header).findByText('4 URLs')).toBeVisible();
+    expect(await within(header).findByText(wholeText('4 URLs'))).toBeVisible();
     expect(await screen.findByText('https://example.com/c')).toBeVisible();
     expect(screen.getByRole('grid', { name: 'URLs' })).toHaveAttribute('aria-busy', 'false');
     expect(screen.queryByRole('progressbar', { name: 'Refreshing' })).toBeNull();

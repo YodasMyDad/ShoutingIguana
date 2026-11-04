@@ -31,16 +31,26 @@ const COUNTED: ReadonlySet<CrawlStatus> = new Set(['running', 'paused', 'stoppin
 export function StatusPill({
   status,
   fetched,
+  variant = 'pill',
   className,
 }: {
   status: CrawlStatus;
   fetched: number | null;
+  /** `plain`: the icon and the word without the pill, for a table's status column (the library's). */
+  variant?: 'pill' | 'plain' | undefined;
   className?: string | undefined;
 }) {
   const live = LIVE.has(status);
   const icon = ICONS[status] ?? Ban;
   return (
-    <span className={clsx('si-status-pill', live && 'si-status-pill--live', className)}>
+    <span
+      className={clsx(
+        'si-status-pill',
+        live && 'si-status-pill--live',
+        variant === 'plain' && 'si-status-pill--plain',
+        className,
+      )}
+    >
       {live ? <LiveDot pulse={status !== 'stopping'} /> : <Icon icon={icon} size="sm" />}
       {statusLabel(status)}
       {fetched !== null && COUNTED.has(status) ? (

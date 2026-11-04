@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { RefreshCw } from 'lucide-react';
 import { useCallback, useMemo, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { isProblem, type ProblemError } from '../api/errors';
@@ -15,9 +16,14 @@ import { useGridMetrics } from '../grid/metrics';
 import type { GridColumn } from '../grid/types';
 import { usePagedRows } from '../grid/usePagedRows';
 import { MAX_COPY_ROWS } from '../grid/tsv';
-import { formatBytes, formatCount, formatCountOf, formatMilliseconds } from '../lib/format';
+import { formatBytes, formatCount, formatMilliseconds } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
+import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
+import { FilteredEmptyState } from '../ui/EmptyState';
+import { LiveBadge } from '../ui/LiveBadge';
+import { GridHeader, ResultCount } from '../ui/PageHeader';
+import { SearchField } from '../ui/SearchField';
 
 /** Words for the indexability column: the reason it isn't indexable, or Indexable. */
 const INDEXABILITY: Record<string, string> = {
@@ -162,17 +168,15 @@ export function UrlsScreen() {
   };
 
   const count =
-    rows.rowCount === null || rows.unfilteredTotal === null
-      ? null
-      : rows.rowCount === rows.unfilteredTotal
-        ? formatCountOf(rows.rowCount, 'URL')
-        : `${formatCount(rows.rowCount)} of ${formatCountOf(rows.unfilteredTotal, 'URL')}`;
+    rows.rowCount === null || rows.unfilteredTotal === null ? null : (
+      <ResultCount shown={rows.rowCount} total={rows.unfilteredTotal} noun="URL" />
+    );
 
   const summary = rows.firstPage?.summary;
   const unavailable = (rows.firstPage?.unavailable ?? []).filter((id) => COLUMNS.some((column) => column.id === id));
   const analyse = (label: string) =>
     canAnalyse ? (
-      <Button size="sm" command="crawl.analyse" onClick={() => void analyseCrawl(crawlId)}>
+      <Button size="sm" icon={RefreshCw} command="crawl.analyse" onClick={() => void analyseCrawl(crawlId)}>
         {label}
       </Button>
     ) : null;
@@ -180,38 +184,36 @@ export function UrlsScreen() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex items-center gap-3 px-4 py-2">
-        <h1 className="text-16 font-semibold">URLs</h1>
-        <span className="figures text-13 text-text-muted" aria-live="polite">
-          {count}
-        </span>
-        {crawling ? (
-          <span className="inline-flex items-center gap-1.5 text-12 font-medium text-text-secondary">
-            <span aria-hidden="true" className="size-(--mark-size) rounded-full bg-accent motion-safe:animate-pulse" />
-            Live
-          </span>
-        ) : null}
-        <input
-          key={q ?? ''}
-          type="search"
-          aria-label="Search URLs and titles"
-          placeholder="Search URLs and titles"
-          defaultValue={q ?? ''}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter') return;
-            const value = event.currentTarget.value.trim();
-            void navigate({ search: (previous) => ({ ...previous, q: value || undefined }) });
-          }}
-          className="ml-auto h-(--control-height-sm) w-(--search-width) rounded-sm border border-border-control bg-surface px-2.5 text-13"
-        />
-      </header>
+      <GridHeader
+        title="URLs"
+        count={count}
+        badge={crawling ? <LiveBadge /> : null}
+        className="px-6 pt-2 pb-1"
+        actions={
+          <SearchField
+            key={q ?? ''}
+            label="Search URLs and titles"
+            placeholder="Search URLs and titles"
+            defaultValue={q ?? ''}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return;
+              const value = event.currentTarget.value.trim();
+              void navigate({ search: (previous) => ({ ...previous, q: value || undefined }) });
+            }}
+            onClear={() => void navigate({ search: (previous) => ({ ...previous, q: undefined }) })}
+            className="w-(--search-width)"
+          />
+        }
+      />
       {summary && !summary.available && unavailable.length > 0 ? (
-        <p role="status" className="mx-4 mb-2 flex items-center gap-3 text-13 text-text-secondary">
-          {namesOf(unavailable)} {UNAVAILABLE_BECAUSE[summary.reason ?? 'notAnalyzed']}.
-          {summary.reason === 'crawling'
-            ? null
-            : analyse(summary.reason === 'notAnalyzed' ? 'Analyse it' : 'Analyse again')}
-        </p>
+        <Banner inset className="mx-6 mb-3">
+          <span className="inline-flex flex-wrap items-center gap-3">
+            {namesOf(unavailable)} {UNAVAILABLE_BECAUSE[summary.reason ?? 'notAnalyzed']}.
+            {summary.reason === 'crawling'
+              ? null
+              : analyse(summary.reason === 'notAnalyzed' ? 'Analyse it' : 'Analyse again')}
+          </span>
+        </Banner>
       ) : null}
       {rows.error && rows.rowCount === null ? (
         isProblem(rows.error, 'needs-analysis') ? (
@@ -246,19 +248,8 @@ export function UrlsScreen() {
           }}
           // Live refreshes update in place: the progress line is for a refresh the user asked for.
           busy={rows.isRefreshing && !crawling}
-          emptyState={
-            <div className="flex items-center gap-3 p-6 text-14 text-text-secondary">
-              No URLs match these filters.
-              <button
-                type="button"
-                className="text-accent-text underline underline-offset-(--underline-offset)"
-                onClick={clearView}
-              >
-                Clear them
-              </button>
-            </div>
-          }
-          className="mx-4 mb-4 flex-1 rounded-lg border border-border"
+          emptyState={<FilteredEmptyState title="No URLs match these filters." level="none" onClear={clearView} />}
+          className="mx-6 mb-4 flex-1 rounded-lg border border-border shadow-1"
         />
       )}
     </div>
