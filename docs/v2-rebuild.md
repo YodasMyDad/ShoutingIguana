@@ -39,11 +39,20 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `o
 `v2` and `master` were not moved. The temp checkpoint under
 `%LOCALAPPDATA%\Temp\claude\...\c67f90ea-...\scratchpad\checkpoint.md` is history. This section is the place to resume.
 
-Running since 2026-11-04, each on its own branch cut from `f3c0b6c`, unmerged: the Overview slice
-(`ui/overview`, worktree `.claude/worktrees/overview`), the URL inspector slice (`ui/inspector`, worktree
-`.claude/worktrees/inspector`) and engine E3b (`ui/e3b`, worktree `.claude/worktrees/e3b`). If a session ends before
-they report, relaunch each from its brief (the session's checkpoint, named in the owner's memory file); don't redo what
-a branch already committed. Each slice gets a fresh-eyes review and its fixes before it merges.
+**Paused on 2026-11-04 by the owner, who ran low on usage.** Nothing is running. Three pieces of work were started from
+`e0780d0` (`f3c0b6c` plus a docs commit), each on its own local branch, unmerged and not pushed:
+
+- the Overview slice: `ui/overview`, worktree `.claude/worktrees/overview`;
+- the URL inspector slice: `ui/inspector`, worktree `.claude/worktrees/inspector`;
+- engine E3b: `ui/e3b`, worktree `.claude/worktrees/e3b`.
+
+Each agent was told to stop at a clean point, commit (unfinished work as `WIP:`) and write a handoff. To resume:
+
+1. Read each branch's log and its handoff (`handoff-<name>.md` in the session's checkpoint folder, which the owner's
+   memory file names, next to the briefs `brief-<name>.md`).
+2. Relaunch an agent per branch from its brief plus its handoff, to carry on from the last commit. Don't redo what a
+   branch already committed.
+3. Each slice gets a fresh-eyes review and its fixes before it merges.
 
 Done on this branch, on top of `v2`:
 
