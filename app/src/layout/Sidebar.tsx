@@ -22,12 +22,13 @@ import logoUrl from '../assets/iguana-64.png';
 import { crawlName } from '../crawl/status';
 import { formatExactTime } from '../lib/format';
 import { useLiveCrawl, useLiveIds } from '../live/liveStore';
-import { updateSettings, useSettings } from '../settings/settingsStore';
+import { useSettings } from '../settings/settingsStore';
 import { Favicon } from '../ui/Favicon';
 import { IconButton } from '../ui/IconButton';
 import { LiveDot } from '../ui/LiveBadge';
 import { NavItem } from '../ui/NavItem';
 import { SeverityMark } from '../ui/SeverityMark';
+import { toggleSidebar, useSidebarCollapsed } from './sidebarState';
 import { SEVERITIES, type Severity } from '../ui/severity';
 import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
 
@@ -44,7 +45,7 @@ const SECTION_ICONS: Record<CrawlSection, LucideIcon> = {
 
 /** The sidebar (docs/v2-ui-ia.md, The shell): Home, the open crawl's sections, crawls running now, Settings. */
 export function Sidebar() {
-  const collapsed = useSettings((settings) => settings.sidebarCollapsed);
+  const collapsed = useSidebarCollapsed();
   const { crawl: crawlId } = useParams({ strict: false });
   const crawl = useQuery({ ...crawlQuery(crawlId ?? ''), enabled: crawlId !== undefined }).data;
   const counts = useIssueCounts(crawlId, crawl?.issues != null);
@@ -71,7 +72,7 @@ export function Sidebar() {
           size="sm"
           command="view.sidebar"
           aria-expanded={!collapsed}
-          onClick={() => updateSettings({ sidebarCollapsed: !collapsed })}
+          onClick={toggleSidebar}
         />
       </div>
 
