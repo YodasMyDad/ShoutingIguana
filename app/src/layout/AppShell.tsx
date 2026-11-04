@@ -23,7 +23,7 @@ const ShortcutSheet = lazy(() => loadShortcuts().then((module) => ({ default: mo
 
 /**
  * The shell (docs/v2-ui-ia.md): the sidebar, the top bar, the main area and the inspector's slot, plus the
- * app-wide overlays. Structure only; the visual design comes with the design-system pass.
+ * app-wide overlays. Its parts take their look from the design system (src/ui, styles/components.css).
  *
  * - While anything modal is open (the palette, the `?` sheet, "Stopping crawls…"), everything behind it is inert:
  *   neither the keyboard nor a screen reader can reach it. Toasts and the live regions stay outside, so they're heard.

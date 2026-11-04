@@ -32,6 +32,7 @@ import { clampSelection, effectiveRanges, selectedIndices, type Range } from './
 import { MAX_COPY_ROWS, toTsv } from './tsv';
 import type { GridColumn, GridRange, RowFetcher } from './types';
 import { VirtualScrollbar } from './VirtualScrollbar';
+import { RefreshLine } from '../ui/ProgressBar';
 
 export interface GridCopyResult {
   /** Rows copied, or 1 for a single cell. */
@@ -291,7 +292,7 @@ function GridCoreInner<Row>({
   const style = { '--grid-template': template } as CSSProperties;
   return (
     <div className={clsx('si-grid-frame relative flex min-h-0 flex-col overflow-hidden', className)}>
-      {busy ? <div role="progressbar" aria-label="Refreshing" className="si-progress-line" /> : null}
+      {busy ? <RefreshLine /> : null}
       <div
         ref={scrollRef}
         role="grid"

@@ -1,4 +1,5 @@
-/* Base rules, in tokens only. Placeholder styling: the design-system pass refines it.
+/* Base rules, in tokens only: the page, the one focus ring, figures, skeletons, the current place, the grid primitive,
+   the palette's rows and toasts. The component library's look is in components.css.
 
    State indicators meet WCAG 2.2 AA (1.4.11) in both themes: what's selected, highlighted or current carries the
    accent rule (at least 3:1 against what's beside it), never a tint alone, and focus is an outline. Under forced
@@ -112,7 +113,8 @@
     box-shadow: inset var(--rule-width) 0 0 var(--color-accent);
   }
 
-  /* The grid primitive (src/grid/GridCore.tsx). Placeholder look; the design-system pass restyles it. */
+  /* The grid primitive (src/grid/GridCore.tsx), in clarity's look: a sheet, a 12 px header in the secondary text, row
+     rules, and selection as the tint with the accent rule. */
   .si-grid {
     background: var(--color-surface);
     font-size: var(--grid-font-size);
@@ -136,9 +138,9 @@
   }
 
   .si-grid-head {
-    background: var(--color-surface-raised);
+    background: var(--color-surface);
     border-bottom-color: var(--color-border);
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
     font-size: var(--text-12);
     font-weight: var(--font-weight-medium);
   }
