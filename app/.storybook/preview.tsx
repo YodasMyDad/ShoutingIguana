@@ -2,6 +2,7 @@ import type { Preview } from '@storybook/react-vite';
 import { createMockTransport } from '../src/api/mock/mockTransport';
 import { setTransport } from '../src/api/transport';
 import { setDirectConnection } from '../src/shell/connection';
+import { TooltipProvider } from '../src/ui/Tooltip';
 import '../src/styles/index.css';
 
 // Every story talks to the mock sidecar, which serves the design fixtures (app/design/data/fixtures). Without them,
@@ -29,7 +30,11 @@ const preview: Preview = {
       const root = document.documentElement;
       root.dataset.theme = String(context.globals.theme ?? 'light');
       root.dataset.density = String(context.globals.density ?? 'standard');
-      return <Story />;
+      return (
+        <TooltipProvider>
+          <Story />
+        </TooltipProvider>
+      );
     },
   ],
   parameters: {

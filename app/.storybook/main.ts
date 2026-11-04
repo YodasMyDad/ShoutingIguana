@@ -5,7 +5,8 @@ import type { StorybookConfig } from '@storybook/react-vite';
 // transport. Only the app's stories: never the spike's or the design work's.
 const config: StorybookConfig = {
   stories: ['../src/**/*.stories.@(ts|tsx)'],
-  addons: ['@storybook/addon-a11y'],
+  // Pseudo-states forces hover, focus and active on chosen elements, so every state can be reviewed without touching.
+  addons: ['@storybook/addon-a11y', 'storybook-addon-pseudo-states'],
   framework: { name: '@storybook/react-vite', options: {} },
   core: { disableTelemetry: true },
 };

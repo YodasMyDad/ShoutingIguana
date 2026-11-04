@@ -1,8 +1,10 @@
-/* The app's one stylesheet entry: Tailwind, the tokens, the bundled faces, then the base rules every screen shares. */
+/* The app's one stylesheet entry: Tailwind, the tokens, the bundled faces, the base rules every screen shares, then the
+   component library's look (src/ui). */
 @import 'tailwindcss';
 @import './tokens.css';
 @import './fonts.css';
 @import './base.css';
+@import './components.css';
 
 /* Only the app's own source makes utilities: never the spike, the design work or the shell. */
 @source not '../../spike';
