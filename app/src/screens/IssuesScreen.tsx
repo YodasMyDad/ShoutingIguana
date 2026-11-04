@@ -21,6 +21,7 @@ import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
 import { PageHeader } from '../ui/PageHeader';
 import { SeverityMark } from '../ui/SeverityMark';
+import { siteOriginOf } from '../ui/urlText';
 import { AnalysisNotes, AnalysisProgress, IssuesSkeleton, NotAnalysed } from './issues/AnalysisState';
 import { CheckDetail } from './issues/CheckDetail';
 import { ChecksList, type SelectedBy, type SeverityFilter } from './issues/ChecksList';
@@ -35,16 +36,6 @@ import {
 import { checkUrlsReader, copyUrls } from './issues/copyUrls';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
-
-/** The crawl's own origin, so URLs on it show their path. */
-function originOf(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    return new URL(url).origin;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Issues (docs/v2-ui-ia.md, Issues; flow 3, Triage): the answer first, the checks by category on the left, and the
@@ -378,7 +369,7 @@ export function IssuesScreen() {
                 categoryTitle={categoryTitle(checks.data, selected.check)}
                 analysis={analysis.data}
                 groupCount={groupsPage.data?.matching ?? null}
-                siteOrigin={originOf(item?.startUrl)}
+                siteOrigin={siteOriginOf(item?.startUrl)}
                 group={search.group}
                 onGroupChange={onGroupChange}
                 sort={sort}

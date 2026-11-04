@@ -26,6 +26,7 @@ import { FilterChip } from '../ui/FilterChip';
 import { LiveBadge } from '../ui/LiveBadge';
 import { GridHeader, ResultCount } from '../ui/PageHeader';
 import { SearchField } from '../ui/SearchField';
+import { siteOriginOf, urlDisplay } from '../ui/urlText';
 
 /** Words for the indexability column: the reason it isn't indexable, or Indexable. */
 const INDEXABILITY: Record<string, string> = {
@@ -186,6 +187,7 @@ export function UrlsScreen() {
   const chips = (
     <ActiveFilters
       crawlId={crawlId}
+      siteOrigin={siteOriginOf(item?.startUrl)}
       filters={filters}
       onChange={(next) =>
         void navigate({ search: (previous) => ({ ...previous, filter: next.length > 0 ? next : undefined }) })
@@ -306,10 +308,13 @@ function NeedsAnalysis({ error, action, onClear }: { error: ProblemError; action
  */
 function ActiveFilters({
   crawlId,
+  siteOrigin,
   filters,
   onChange,
 }: {
   crawlId: string;
+  /** URLs on the crawl's origin read as their path, as the grid shows them. */
+  siteOrigin: string | null;
   filters: readonly GridFilter[];
   onChange: (filters: GridFilter[]) => void;
 }) {
@@ -318,14 +323,14 @@ function ActiveFilters({
     'group' in filter && filter.group.relatedUrlId !== null ? [filter.group.relatedUrlId] : [],
   );
   const related = useQuery({
-    queryKey: ['crawl', crawlId, 'urlText', relatedIds],
+    queryKey: ['crawl', crawlId, 'urlText', relatedIds, siteOrigin],
     queryFn: async ({ signal }) => {
       const page = await api.urls(
         crawlId,
         { columns: ['url'], filters: [{ column: 'id', op: 'in', values: relatedIds }], sort: [], limit: 100 },
         signal,
       );
-      return new Map(page.rows.map((row) => [row.id, row.url ?? '']));
+      return new Map(page.rows.map((row) => [row.id, row.url ? urlDisplay(row.url, siteOrigin).shown : '']));
     },
     enabled: relatedIds.length > 0,
     staleTime: Infinity,

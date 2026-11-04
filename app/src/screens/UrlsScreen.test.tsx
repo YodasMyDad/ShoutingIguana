@@ -121,10 +121,8 @@ describe('the URL grid opened from a check’s group', () => {
     const { router } = await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}`);
     const chips = await screen.findByRole('group', { name: 'Filters' });
     expect(within(chips).getByText('empty-anchor-text')).toBeVisible();
-    expect(await within(chips).findByText('https://example.com/')).toBeVisible();
-    fireEvent.click(
-      within(chips).getByRole('button', { name: 'Remove the filter Related URL is https://example.com/' }),
-    );
+    expect(await within(chips).findByText('/', { exact: true })).toBeVisible();
+    fireEvent.click(within(chips).getByRole('button', { name: 'Remove the filter Related URL is /' }));
     await waitFor(() =>
       expect(router.state.location.search).toEqual({
         filter: [{ column: 'check', op: 'in', values: ['empty-anchor-text'] }],
