@@ -153,7 +153,13 @@ test('under forced colours, what is selected or current is outlined, and every s
   expect(contrast(hovered.color ?? '', await shownBackground(row))).toBeGreaterThanOrEqual(4.5);
   await page.mouse.move(0, 0);
 
-  // The grid's own focus, and the cursor on the selected row, by keyboard.
+  // The grid's own focus, and the cursor on the selected row, by keyboard. Tab goes from the search to the grid when
+  // the crawl's analysis stands, as global-setup sees to: an out-of-date one puts its offer to analyse again between
+  // them, a Tab stop of its own, in the order they're shown.
+  await expect(
+    page.getByRole('button', { name: /^Analyse/ }),
+    'the crawl’s analysis is out of date: the e2e setup should have made it again or analysed its copy',
+  ).toHaveCount(0);
   await page.getByRole('searchbox', { name: 'Search URLs and titles' }).focus();
   await page.keyboard.press('Tab');
   await expect(grid).toBeFocused();
