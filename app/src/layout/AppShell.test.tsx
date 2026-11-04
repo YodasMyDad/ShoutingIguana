@@ -9,7 +9,8 @@ import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { updateSettings } from '../settings/settingsStore';
 import { applyShellState, resetConnectionForTests } from '../shell/connection';
-import { TEST_CRAWL_ID, fakeSidecar, standardRoutes } from '../test/fakeSidecar';
+import { liveStore } from '../live/liveStore';
+import { TEST_CRAWL_ID, fakeSidecar, standardRoutes, testCrawlItem } from '../test/fakeSidecar';
 
 const CRAWL = `/crawls/${TEST_CRAWL_ID}`;
 
@@ -109,6 +110,24 @@ describe('the sidebar, collapsed', () => {
     act(() => home.focus());
     expect(await screen.findByRole('tooltip')).toBeInTheDocument();
     expect(home).toHaveAccessibleDescription('');
+  });
+});
+
+describe('the sidebar, on a running crawl’s Overview', () => {
+  afterEach(() => liveStore.reset());
+
+  it('draws one current place: the crawl’s Overview, not also its running-crawl link', async () => {
+    setTransport(fakeSidecar(standardRoutes(testCrawlItem({ status: 'running' }))));
+    await open(`${CRAWL}/overview`);
+    act(() => liveStore.ingest({ event: 'hello', id: '', data: JSON.stringify({ live: [TEST_CRAWL_ID] }) }));
+    const running = await screen.findByRole('region', { name: 'Running crawls' });
+    const link = within(running).getByRole('link');
+    expect(link).toHaveAttribute('aria-current', 'page');
+    expect(link).not.toHaveClass('si-current');
+    const current = within(screen.getByRole('navigation', { name: 'Main' }))
+      .getAllByRole('link')
+      .filter((element) => element.classList.contains('si-current'));
+    expect(current.map((element) => element.textContent)).toEqual(['Overview']);
   });
 });
 

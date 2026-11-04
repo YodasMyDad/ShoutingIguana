@@ -17,11 +17,28 @@ type NavAnchorProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'children'> 
   collapsed?: boolean | undefined;
   /** The command that goes here (Ctrl+1 to Ctrl+7): its keys join the tooltip. */
   command?: string | undefined;
+  /**
+   * Draws the current place's look while it's the page shown (the default). False for a second way to a place that
+   * has its own item, as a running crawl's link to its Overview: one item looks current, and the link stays
+   * `aria-current`.
+   */
+  markCurrent?: boolean | undefined;
 };
 
-function NavAnchor({ ref, label, icon, count, end, collapsed = false, command, className, ...rest }: NavAnchorProps) {
+function NavAnchor({
+  ref,
+  label,
+  icon,
+  count,
+  end,
+  collapsed = false,
+  command,
+  markCurrent = true,
+  className,
+  ...rest
+}: NavAnchorProps) {
   // The router marks the page shown with aria-current="page": that's the current place, drawn with `.si-current`.
-  const current = rest['aria-current'] === 'page';
+  const current = markCurrent && rest['aria-current'] === 'page';
   const anchor = (
     <a
       ref={ref}
