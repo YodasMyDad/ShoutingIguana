@@ -80,4 +80,22 @@ describe('SegmentedControl', () => {
     await screen.findByRole('tooltip');
     expect(errors).toHaveAccessibleDescription('');
   });
+
+  it('reads what each choice means as its segment’s description, chosen or not', () => {
+    render(
+      <SegmentedControl
+        label="Density"
+        value="standard"
+        onValueChange={() => undefined}
+        options={[
+          { value: 'compact', label: 'Compact', description: 'Rows of 28 px' },
+          { value: 'standard', label: 'Standard', description: 'Rows of 32 px' },
+          { value: 'comfortable', label: 'Comfortable' },
+        ]}
+      />,
+    );
+    expect(screen.getByRole('radio', { name: 'Compact' })).toHaveAccessibleDescription('Rows of 28 px');
+    expect(screen.getByRole('radio', { name: 'Standard' })).toHaveAccessibleDescription('Rows of 32 px');
+    expect(screen.getByRole('radio', { name: 'Comfortable' })).not.toHaveAttribute('aria-describedby');
+  });
 });

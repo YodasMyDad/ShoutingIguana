@@ -108,8 +108,18 @@ function Choice<T extends string>({
       <span aria-hidden="true" className="text-14 font-medium">
         {legend}
       </span>
-      <SegmentedControl<T> label={legend} value={value} options={options} onValueChange={onChange} />
-      {hint ? <span className="text-12 text-text-muted">{hint}</span> : null}
+      {/* Each option's hint is its segment's description, so it's heard on the segment; the chosen one's shows. */}
+      <SegmentedControl<T>
+        label={legend}
+        value={value}
+        options={options.map((option) => ({ ...option, description: option.hint }))}
+        onValueChange={onChange}
+      />
+      {hint ? (
+        <span aria-hidden="true" className="text-12 text-text-muted">
+          {hint}
+        </span>
+      ) : null}
     </div>
   );
 }
