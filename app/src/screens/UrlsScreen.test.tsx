@@ -1,6 +1,6 @@
 import { createMemoryHistory } from '@tanstack/react-router';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GridQuery, SummaryState, UrlRow } from '../api/grids';
 import { answerGridQuery } from '../api/mock/gridQuery';
 import { gridPagesOf } from '../api/queries';
@@ -9,6 +9,7 @@ import type { CrawlStatus } from '../api/types';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
+import { installKeyboard } from '../keyboard/registry';
 import { wholeText } from '../test/text';
 import {
   TEST_CRAWL_ID,
@@ -130,6 +131,43 @@ describe('the URL grid opened from a check’s group', () => {
     );
     fireEvent.click(within(chips).getByRole('button', { name: 'Remove the filter Check is empty-anchor-text' }));
     await waitFor(() => expect(router.state.location.search).toEqual({}));
+  });
+});
+
+describe('the inspector on the URL grid', () => {
+  let uninstall: () => void = () => undefined;
+  beforeEach(() => {
+    uninstall = installKeyboard();
+  });
+  afterEach(() => uninstall());
+
+  it('opens on Enter and follows the cursor in place, so back after Esc leaves the screen', async () => {
+    sidecar({ summary: { available: true, reason: null } });
+    const history = createMemoryHistory({
+      initialEntries: [`/crawls/${TEST_CRAWL_ID}/overview`, URLS],
+      initialIndex: 1,
+    });
+    const queryClient = createQueryClient();
+    const router = createAppRouter(queryClient, history);
+    render(<App router={router} queryClient={queryClient} />);
+    await act(() => router.load());
+    const grid = await screen.findByRole('grid', { name: 'URLs' });
+    await within(grid).findByText('https://example.com/a');
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    expect(await screen.findByRole('complementary', { name: 'Inspector' })).toBeVisible();
+    expect(router.state.location.search).toMatchObject({ inspect: TEST_URL_ROWS[0]?.id });
+    // The cursor moves, and the inspector with it, in place.
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: TEST_URL_ROWS[1]?.id }));
+    expect(history.length).toBe(2);
+    fireEvent.keyDown(grid, { key: 'Escape' });
+    await waitFor(() => expect(router.state.location.search).not.toHaveProperty('inspect'));
+    await act(async () => {
+      history.back();
+      await router.load();
+    });
+    expect(router.state.location.pathname).toBe(`/crawls/${TEST_CRAWL_ID}/overview`);
   });
 });
 

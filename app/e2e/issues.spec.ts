@@ -101,6 +101,48 @@ test('back from a group’s URLs on a small window, the open group is in view in
   await expect(tree.getByRole('row', { expanded: true })).toBeInViewport();
 });
 
+test('the inspector follows the URL grid’s cursor in place: Esc, then Alt+Left, leaves URLs', async ({ page }) => {
+  await openIssues(page);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /^URLs/ }).click();
+  const urls = page.getByRole('grid', { name: 'URLs' });
+  await expect(urls.getByRole('row').nth(2)).toBeVisible();
+  const entries = await page.evaluate(() => history.length);
+  await urls.getByRole('gridcell').first().click();
+  await page.keyboard.press('Enter');
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  await expect(inspector).toBeVisible();
+  const first = new URL(page.url()).searchParams.get('inspect');
+  await page.keyboard.press('ArrowDown');
+  await expect.poll(() => new URL(page.url()).searchParams.get('inspect')).not.toBe(first);
+  // Opening and following are in place: no new history entries.
+  expect(await page.evaluate(() => history.length)).toBe(entries);
+  await page.keyboard.press('Escape');
+  await expect(inspector).toBeHidden();
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(page).toHaveURL(/\/issues\//);
+});
+
+test('the inspector follows a flat check’s cursor in place: Esc, then Alt+Left, goes to the check before', async ({
+  page,
+}) => {
+  await openIssues(page);
+  const before = page.url();
+  await page.getByRole('option', { name: /Indexable page not in a sitemap/ }).click();
+  const grid = page.getByRole('grid', { name: /Indexable page not in a sitemap: affected pages/ });
+  await expect(grid.getByRole('row').nth(2)).toBeVisible();
+  await grid.getByRole('gridcell').first().click();
+  await page.keyboard.press('Enter');
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  await expect(inspector).toBeVisible();
+  const first = new URL(page.url()).searchParams.get('inspect');
+  await page.keyboard.press('ArrowDown');
+  await expect.poll(() => new URL(page.url()).searchParams.get('inspect')).not.toBe(first);
+  await page.keyboard.press('Escape');
+  await expect(inspector).toBeHidden();
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(page).toHaveURL(before);
+});
+
 test('the checks list runs on the keyboard: arrows move the selection and the route, Tab goes to the check', async ({
   page,
 }) => {

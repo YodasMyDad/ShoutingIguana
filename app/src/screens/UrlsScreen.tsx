@@ -16,6 +16,7 @@ import { GridCore, type GridCopyResult } from '../grid/GridCore';
 import { useGridMetrics } from '../grid/metrics';
 import type { GridColumn } from '../grid/types';
 import { usePagedRows } from '../grid/usePagedRows';
+import { useInspector } from '../routing/inspector';
 import { MAX_COPY_ROWS } from '../grid/tsv';
 import { formatBytes, formatCount, formatMilliseconds } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
@@ -152,6 +153,8 @@ export function UrlsScreen() {
     [crawlId, sort, filters, q],
   );
   const rows = usePagedRows<UrlRow>({ queryKey, fetchPage, rowHeight });
+  const inspector = useInspector();
+  const inspecting = search.inspect !== undefined;
 
   const columns = useMemo(
     () =>
@@ -262,7 +265,12 @@ export function UrlsScreen() {
           fetchRows={rows.fetchRows}
           onCopy={onCopy}
           onActivate={(_index, row) => {
-            if (row) void navigate({ search: (previous) => ({ ...previous, inspect: row.id }), replace: true });
+            if (row) inspector.open(row.id);
+          }}
+          // While it's open, the inspector follows the cursor, in place.
+          onActiveRowChange={(index) => {
+            const row = inspecting && index !== null ? rows.getRow(index) : undefined;
+            if (row) inspector.open(row.id);
           }}
           // Live refreshes update in place: the progress line is for a refresh the user asked for.
           busy={rows.isRefreshing && !crawling}

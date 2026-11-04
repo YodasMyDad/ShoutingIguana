@@ -26,6 +26,8 @@ export interface IssueRowsGridProps {
   /** A header was pressed: ascending, then descending, then the engine's order. */
   onSortChange: (sort: GridSort[]) => void;
   onInspect: (urlId: number) => void;
+  /** While the inspector is open: the URL under the grid's cursor, which it follows. */
+  onFollow?: ((urlId: number) => void) | undefined;
 }
 
 /**
@@ -40,6 +42,7 @@ export function IssueRowsGrid({
   sort,
   onSortChange,
   onInspect,
+  onFollow,
 }: IssueRowsGridProps) {
   const { rowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
@@ -111,6 +114,10 @@ export function IssueRowsGrid({
         focusHeader={handoff.focusHeader}
         onActivate={(_index, row) => {
           if (row) onInspect(row.id);
+        }}
+        onActiveRowChange={(index) => {
+          const row = onFollow && index !== null ? rows.getRow(index) : undefined;
+          if (row) onFollow?.(row.id);
         }}
         busy={rows.isRefreshing}
         className="flex-1 rounded-md border border-border"

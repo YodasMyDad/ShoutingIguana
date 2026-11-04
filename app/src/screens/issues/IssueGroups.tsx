@@ -80,6 +80,8 @@ export interface IssueGroupsProps {
   /** Opens one group (closing any other), or closes it: a replace navigation. */
   onOpenChange: (group: CheckGroupRef | null) => void;
   onInspect: (urlId: number) => void;
+  /** While the inspector is open: the page under the grid's cursor, which it follows. */
+  onFollow?: ((urlId: number) => void) | undefined;
 }
 
 /**
@@ -88,7 +90,16 @@ export interface IssueGroupsProps {
  * pages in URLs", which opens the URL grid filtered to it. The groups are paged and virtualised like any grid, as a
  * big crawl's duplicate titles can make thousands. A group that's probably in the site's template gets the callout.
  */
-export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenChange, onInspect }: IssueGroupsProps) {
+export function IssueGroups({
+  crawlId,
+  check,
+  total,
+  siteOrigin,
+  open,
+  onOpenChange,
+  onInspect,
+  onFollow,
+}: IssueGroupsProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { rowHeight, headerHeight } = useGridMetrics();
@@ -445,6 +456,10 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
           onActivate={(_index, row) => {
             if (row?.kind === 'page') onInspect(row.row.id);
             else if (row?.kind === 'more') showAll(row.group);
+          }}
+          onActiveRowChange={(index) => {
+            const row = onFollow && index !== null ? getRow(index) : undefined;
+            if (row?.kind === 'page') onFollow?.(row.row.id);
           }}
           busy={groups.isRefreshing}
           className="flex-1 rounded-md border border-border"

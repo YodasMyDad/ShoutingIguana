@@ -24,6 +24,7 @@ import { useCommands } from '../keyboard/registry';
 import { formatCountOf } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
 import { updateSettings, useSettings } from '../settings/settingsStore';
+import { useInspector } from '../routing/inspector';
 import { openInBrowser } from '../shell/os';
 import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
@@ -159,6 +160,8 @@ export function IssuesScreen() {
       params: { crawl: crawlId, check: checkId },
       search: (previous) => ({ ...previous, ...patch }),
       replace: true,
+      // In place: an inspector walked to here keeps the steps back to where it opened.
+      state: true,
     });
 
   const onQueryChange = (next: string) => {
@@ -178,19 +181,16 @@ export function IssuesScreen() {
       params: { crawl: crawlId, check: checkId },
       search: (previous) => ({ ...previous, group: group ?? undefined }),
       replace: true,
+      state: true,
     });
   const onSortChange = (next: GridSort[]) =>
     void navigate({
       params: { crawl: crawlId, check: checkId },
       search: (previous) => ({ ...previous, sort: next.length > 0 ? next : undefined }),
     });
-  // In place, as the inspector opens everywhere: back and forward step between views.
-  const onInspect = (urlId: number) =>
-    void navigate({
-      params: { crawl: crawlId, check: checkId },
-      search: (previous) => ({ ...previous, inspect: urlId }),
-      replace: true,
-    });
+  // From a grid, in place, and following its cursor while it's open (routing/inspector.ts).
+  const inspector = useInspector();
+  const onFollow = search.inspect !== undefined ? inspector.open : undefined;
 
   const setHidden = (id: string, hide: boolean) =>
     updateSettings((settings) => ({
@@ -486,7 +486,8 @@ export function IssuesScreen() {
                 onGroupChange={onGroupChange}
                 sort={sort}
                 onSortChange={onSortChange}
-                onInspect={onInspect}
+                onInspect={inspector.open}
+                onFollow={onFollow}
                 onCopy={() => void onCopy()}
                 copying={copying || (found && !copyReady)}
                 onHideChange={onHideChange}

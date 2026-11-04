@@ -1,8 +1,9 @@
-import { useMatches, useNavigate } from '@tanstack/react-router';
+import { useMatches } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { PanelBottom, PanelRight, X } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { useCommands } from '../keyboard/registry';
+import { useInspector } from '../routing/inspector';
 import { inspectedUrl } from '../routing/search';
 import { INSPECTOR_HEIGHT_RANGE, INSPECTOR_WIDTH_RANGE } from '../settings/schema';
 import { updateSettings, useSettings } from '../settings/settingsStore';
@@ -13,22 +14,18 @@ const KEY_STEP = 16;
 /**
  * Where the URL inspector opens (docs/v2-ui-ia.md, The shell): on the right or docked at the bottom, resizable by
  * pointer or keyboard, closed with Esc. It opens for `?inspect=<url id>` on any view, so back and forward retrace
- * it. The inspector's content is its own slice (it reads `POST /urls/inspect`).
+ * it (routing/inspector.ts has its place in history). The inspector's content is its own slice (it reads
+ * `POST /urls/inspect`).
  */
 export function InspectorSlot() {
-  const navigate = useNavigate();
+  const inspector = useInspector();
   // The current view's own checked search: a view without `inspect` (Home, Overview, Settings) never opens it.
   const inspect = useMatches({ select: (matches) => inspectedUrl(matches[matches.length - 1]?.search) });
   const open = inspect !== undefined;
 
-  // The inspector opens and closes in place (a replace), as it follows the grid's cursor: back and forward step
-  // between views, so Alt+Left after Esc goes back to where the user was, not to the URL that was open.
-  const close = () =>
-    void navigate({
-      to: '.',
-      search: (previous: Record<string, unknown>) => ({ ...previous, inspect: undefined }),
-      replace: true,
-    });
+  // Esc and Close go back over the steps walked inside it, then close it in place: Alt+Left after Esc goes back to
+  // where the user was before it opened, not to a URL that was open.
+  const close = inspector.close;
 
   useCommands(
     () => [
@@ -42,7 +39,7 @@ export function InspectorSlot() {
         run: close,
       },
     ],
-    [open],
+    [open, close],
     'app',
   );
 

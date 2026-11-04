@@ -213,9 +213,14 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   address without it. Sorts are trimmed to 3 (each column once) and filters to 20, as the contract allows; a range
   that can't match and a group anywhere but on one check are dropped. Optional fields accept `undefined`, which
   removes a param.
-- The inspector reads the current view's checked `inspect`, so it opens only on a view that has one. It opens and
-  closes in place (a replace): it follows the grid's cursor, so back and forward step between views, and Alt+Left after
-  Esc goes back to where the user came from, not to the URL that was open.
+- The inspector reads the current view's checked `inspect`, so it opens only on a view that has one. Its place in
+  history is one model every screen uses (`routing/inspector.ts`, `useInspector`), so the inspector's slice inherits
+  it: opened from a grid (Enter, a double-click) and following the grid's cursor while open, it's in place (a
+  replace); walking a link inside it, or the palette's "Go to URL…", is a push, each entry counting the steps walked
+  from where it opened (`inspectSteps` in its history state), so back and forward retrace the walk; Esc or Close goes
+  back over those steps to the entry it opened on, then drops `inspect` there in place. So Esc then Alt+Left leaves
+  the screen, and from a walk A, B, C, Alt+Left shows B while Esc from C closes to the screen as it was before A. A
+  screen's own replaces while it's open (Issues' filters and group) keep the history state (`state: true`).
 - `/crawls/:crawl` opens the crawl's last view. The app reopens where it was left.
 - Each screen's route renders `RouteError` when it fails (Try again where it could work, and Go to Home); the shell
   keeps working around it. Each part of the shell (sidebar, top bar, the engine's banner, the inspector) has its own

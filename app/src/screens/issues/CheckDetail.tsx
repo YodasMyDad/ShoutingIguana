@@ -28,6 +28,8 @@ export interface CheckDetailProps {
   sort: readonly GridSort[];
   onSortChange: (sort: GridSort[]) => void;
   onInspect: (urlId: number) => void;
+  /** While the inspector is open: the URL under a grid's cursor, which it follows. */
+  onFollow?: ((urlId: number) => void) | undefined;
   onCopy: () => void;
   copying: boolean;
   onHideChange: (hidden: boolean) => void;
@@ -57,6 +59,7 @@ export function CheckDetail({
   sort,
   onSortChange,
   onInspect,
+  onFollow,
   onCopy,
   copying,
   onHideChange,
@@ -193,6 +196,7 @@ export function CheckDetail({
               open={group}
               onOpenChange={onGroupChange}
               onInspect={onInspect}
+              onFollow={onFollow}
             />
           ) : (
             <IssueRowsGrid
@@ -203,6 +207,7 @@ export function CheckDetail({
               sort={sort}
               onSortChange={onSortChange}
               onInspect={onInspect}
+              onFollow={onFollow}
             />
           )}
         </section>

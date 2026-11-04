@@ -319,6 +319,19 @@ describe('the Issues screen', () => {
     expect(document.getElementById(sorted.getAttribute('aria-activedescendant') ?? '')).toHaveTextContent('Detail');
   });
 
+  it('opens the inspector from a flat check’s grid, and follows its cursor in place', async () => {
+    sidecar();
+    const { router, history } = await open(`${ISSUES}/title-too-long`);
+    const grid = await screen.findByRole('grid', { name: /Title too long: affected pages/ });
+    await within(grid).findByText('78 characters');
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 12 }));
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 13 }));
+    expect(history.length).toBe(1);
+  });
+
   it('copies the check’s URLs, one per line, and the open group’s when one is open', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });

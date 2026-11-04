@@ -161,7 +161,8 @@ Actions: open in browser, copy the URL.
    - Open a group's URLs, and press Enter on one for the inspector.
    - Esc closes it, and Alt+Left goes back to where you were.
 4. **Inspect a URL.** From any row (Enter or double-click), or the palette ("Go to URL…"). Its inlinks and outlinks
-   are links themselves, so you can walk the site, and back and forward retrace your steps.
+   are links themselves, so you can walk the site, and back and forward retrace your steps. Moving the grid's cursor
+   moves the inspector with it, in place. Esc closes it to the view as it was before it opened, however far you walked.
 5. **Hand over.**
    - On any grid, Export (Ctrl+E) offers CSV or Excel of what you see: these filters, these columns.
    - On Issues, it offers this check, or every check with a summary sheet.
