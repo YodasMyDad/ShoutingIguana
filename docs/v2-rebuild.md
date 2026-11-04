@@ -35,14 +35,13 @@ Discovery and the visual direction were settled on 2026-11-01 (direction B, "cla
 
 ## Where step 3 stands (2026-11-04)
 
-Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `origin/ui/step-3` at `e9edd0c`.
+Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `origin/ui/step-3`.
 `v2` and `master` were not moved. The temp checkpoint under
 `%LOCALAPPDATA%\Temp\claude\...\c67f90ea-...\scratchpad\checkpoint.md` is history. This section is the place to resume.
 
-Running since 2026-11-04, each on its own branch cut from `5fdcbd8`, unmerged: items 1 and 3 below, the design-system
-pass on `ui/design-system` (worktree `.claude/worktrees/design-system`) and the forced-colours Tab test on
-`ui/forced-tab` (worktree `.claude/worktrees/forced-tab`). If a session ends before they report, relaunch each from its
-brief (the session's checkpoint, named in the owner's memory file); don't redo what the branch already committed.
+Running since 2026-11-04, unmerged: item 1 below, the design-system pass on `ui/design-system` (worktree
+`.claude/worktrees/design-system`, cut from `5fdcbd8`). If a session ends before it reports, relaunch it from its brief
+(the session's checkpoint, named in the owner's memory file); don't redo what the branch already committed.
 
 Done on this branch, on top of `v2`:
 
@@ -54,18 +53,23 @@ Done on this branch, on top of `v2`:
   `blocked-by-robots`, `description-missing` and `h1-missing` are Notices. `duplicate-site-version` is a Warning.
   Each check has `why` and `learnMore`, and `GET /api/checks` returns them.
 - Inter and JetBrains Mono are bundled (roman 400, 500 and 600) in `app/src/styles/fonts/`.
+- The forced-colours Tab test is green (merged `ui/forced-tab`, 2026-11-04). The app had no bug: the cached e2e crawl
+  had an analysis by an older engine, so the URLs screen showed its "Analyse again" offer, a Tab stop between the
+  search and the grid. The e2e setup (`startOnCurrentCrawl` in `app/scripts/lib/engine.mjs`) now remakes a stale
+  cached crawl, or re-analyses the copy of a stale `SI_E2E_CRAWL`, and the test checks its precondition. 309 unit
+  tests, 14 script tests, and the e2e suite (10 tests) passed twice in a row.
 
 Left, in this order:
 
 1. The rest of the design system. Tokens exist. Storybook has the shell, feedback and the grid, not every component
    state.
-2. The Issues screen. It is still a stub. The why and learn-more texts are already on each check.
-3. One end-to-end test is still red and has not been re-run: under forced colours, Tab from the URL search does not
-   focus the grid (`app/e2e/states.spec.ts`). That screen's code did not change. A stale dev crawl can put an Analyse
-   button between the search box and the grid. Do not edit the files in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls`.
-4. The clickable prototype, then the vertical slices in the UI brief.
-5. Later engine work the UI still needs: the links grid, sitemaps and robots (E3b), export (E5), full-text search and
+2. The Issues screen, built on the design system once it's merged. It is still a stub. The why and learn-more texts
+   are already on each check. Its brief is written (the session's checkpoint folder, `brief-issues.md`).
+3. The clickable prototype, then the vertical slices in the UI brief.
+4. Later engine work the UI still needs: the links grid, sitemaps and robots (E3b), export (E5), full-text search and
    favicons (E6).
+
+Never edit the files in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls`.
 
 The catalog branch was verified before its merge: 1,104 tests, and the 100k bench found every planted issue. The
 merge itself was clean. CI on `v2` does not run this branch.
