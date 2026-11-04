@@ -78,6 +78,29 @@ test('triage: pick a check, read it, open a group, its URLs, inspect one, then E
   await expect(page.getByRole('treegrid').getByRole('row', { expanded: true })).toBeVisible();
 });
 
+test('back from a group’s URLs on a small window, the open group is in view in the check’s panel', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openIssues(page);
+  await page.getByRole('option', { name: /Duplicate title/ }).click();
+  const groups = page.getByRole('treegrid', { name: /Duplicate title: affected pages/ });
+  // The last group, opened from the keyboard.
+  await groups.focus();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+  await expect(page).toHaveURL(/group=/);
+  await groups.getByRole('link', { name: /^Show (all \d+ pages|the page) in URLs$/ }).click();
+  await expect(page).toHaveURL(/\/urls\?filter=/);
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(page).toHaveURL(/\/issues\/title-duplicate\?group=/);
+  // The panel came back scrolled to its top: the group the route opens is brought into view in it, once the check
+  // has drawn (the row can pass through the window while the panel fills in above it).
+  const tree = page.getByRole('treegrid');
+  await expect(tree.getByRole('row', { level: 2 }).first()).toBeVisible();
+  await page.waitForTimeout(500);
+  await expect(tree.getByRole('row', { expanded: true })).toBeInViewport();
+});
+
 test('the checks list runs on the keyboard: arrows move the selection and the route, Tab goes to the check', async ({
   page,
 }) => {

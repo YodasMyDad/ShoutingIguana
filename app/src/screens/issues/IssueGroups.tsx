@@ -22,6 +22,7 @@ import type { GridColumn, GridRange, GridTree, RowFetcher } from '../../grid/typ
 import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
 import { formatCount } from '../../lib/format';
+import { revealInScrollParent } from '../../lib/scroll';
 import { Badge } from '../../ui/Badge';
 import { Callout } from '../../ui/Callout';
 import { FilterChip } from '../../ui/FilterChip';
@@ -141,12 +142,29 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
   const openChildren = openGroup ? (rowsFailed ? 1 : childRows(openGroup.group, loadedRows?.length ?? null)) : 0;
 
   // A group the route opens (a link, back or forward) may be thousands of rows down: bring it into view, with as many
-  // of its pages as fit. One opened here is already in view, so this moves nothing.
+  // of its pages as fit, and the grid into view in the panel (which comes back scrolled to its top). One opened here
+  // is already in view, so this moves nothing.
   const model = useRef<RowWindowModel | null>(null);
+  const frame = useRef<HTMLDivElement | null>(null);
+  const measureFrame = useCallback(
+    (element: HTMLDivElement | null) => {
+      frame.current = element;
+      measure(element);
+    },
+    [measure],
+  );
   useEffect(() => {
-    if (openIndex === null) return;
+    if (openIndex === null) return undefined;
     model.current?.scrollToIndex(openIndex + openChildren);
     model.current?.scrollToIndex(openIndex);
+    // After the grid has drawn the rows it scrolled to.
+    const id = requestAnimationFrame(() => {
+      const element = frame.current;
+      if (!element) return;
+      const row = element.querySelector<HTMLElement>(`[role="row"][aria-rowindex="${openIndex + 2}"]`);
+      revealInScrollParent(element, row);
+    });
+    return () => cancelAnimationFrame(id);
   }, [openIndex, openChildren, groupCount]);
   const layout = useMemo(() => {
     const opened: OpenGroup | null = openIndex === null ? null : { index: openIndex, children: openChildren };
@@ -409,7 +427,7 @@ export function IssueGroups({ crawlId, check, total, siteOrigin, open, onOpenCha
           compact
         />
       ) : null}
-      <div ref={measure} className="flex max-h-(--evidence-max-height) min-h-0 flex-col" style={{ height }}>
+      <div ref={measureFrame} className="flex max-h-(--evidence-max-height) min-h-0 flex-col" style={{ height }}>
         <GridCore<TreeRow>
           key={queryKey.join('|')}
           label={`${check.title}: affected pages, grouped by ${grouping === 'relatedUrl' ? 'related URL' : 'detail'}`}
