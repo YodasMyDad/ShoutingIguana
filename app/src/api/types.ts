@@ -308,6 +308,55 @@ export interface IssuePage {
 export interface HelloEvent {
   /** The crawls running, paused or stopping in this process. Their latest progress follows. */
   live: string[];
+  /** E4: the crawls being analysed here. Their latest `analysis` event follows. */
+  analyzing?: string[];
+}
+
+/** E4: what a crawl is doing as a whole. Whether it's paused is its status. */
+export type CrawlPhase = 'starting' | 'readingRobotsTxt' | 'crawling' | 'readingSitemaps' | 'retrying' | 'finishing';
+
+export const CRAWL_PHASES: readonly CrawlPhase[] = [
+  'starting',
+  'readingRobotsTxt',
+  'crawling',
+  'readingSitemaps',
+  'retrying',
+  'finishing',
+];
+
+/**
+ * E4: every URL fetched, once, so they add up to `fetched`. A firewall or bot challenge is `blocked` whatever its
+ * status; `other` is a status outside 200–599; `noResponse` is a URL with no status recorded.
+ */
+export interface StatusClassCounts {
+  '2xx': number;
+  '3xx': number;
+  '4xx': number;
+  '5xx': number;
+  other: number;
+  noResponse: number;
+  blocked: number;
+}
+
+/** E4: why URLs got no response; they add up to `statusClasses.noResponse`. `notChecked` is unknown, not broken. */
+export interface NoResponseCounts {
+  robotsDisallowed: number;
+  timeout: number;
+  networkError: number;
+  notChecked: number;
+  processingError: number;
+}
+
+/** E4: `robotsTxt`, `otherSitesRobotsTxt`, `crawlDelay`, `backoff`, `heldBack`, `siteDown` or `robotsTxtCoolDown`. */
+export type CrawlWaitReason =
+  'robotsTxt' | 'otherSitesRobotsTxt' | 'crawlDelay' | 'backoff' | 'heldBack' | 'siteDown' | 'robotsTxtCoolDown';
+
+/** E4: something holding part of the crawl up now. Fields that don't apply to its reason are left out. */
+export interface CrawlWait {
+  reason: CrawlWaitReason;
+  host?: string;
+  urls?: number;
+  durationMs?: number;
 }
 
 export interface ProgressEvent {
@@ -327,18 +376,78 @@ export interface ProgressEvent {
   bytesDownloaded: number;
   /** Every URL fetched per second, pages and the rest alike. */
   urlsPerSecond: number;
+  // E4 (docs/v2-sidecar-api.md, Progress). Optional here, as an E1 engine doesn't send them; the live store reads each
+  // at the boundary, and one that's missing or malformed is null there.
+  /** When the numbers were taken. */
+  at?: string;
+  phase?: CrawlPhase;
+  /** The site's own URLs the crawl means to fetch (queued, in flight or fetched), and those it has fetched. */
+  internalFound?: number;
+  internalFetched?: number;
+  /** The URL limit, or null without one. */
+  maxUrls?: number | null;
+  statusClasses?: StatusClassCounts;
+  /** URLs with a status that weren't blocked, by code as a string. */
+  statusCodes?: Record<string, number>;
+  noResponse?: NoResponseCounts;
+  /** At most five per reason, the longest first. */
+  waits?: CrawlWait[];
+  /** How many more waits there are, by reason, beyond those listed. */
+  moreWaits?: Partial<Record<CrawlWaitReason, number>>;
 }
 
 export type AlertLevel = 'info' | 'warning' | 'error';
 
 export interface AlertEvent {
   crawlId: string;
+  /** E4: numbers the crawl's alerts from 1, across every run. An alert is its `id` and its `at` together. */
+  id?: number;
   level: AlertLevel;
   /** Stable: `blocked`, `mostly-forbidden`, `site-down`... Key text and actions on it. */
   code: string;
   /** Engine text; may include text from the site. */
   message: string;
   at: string;
+  /** E4: what the alert is about, for its action (`host`, `origin`, `url`, `count`...); null for one without facts. */
+  data?: AlertData | null;
+}
+
+/** E4: an alert's facts. Fields that don't apply to its code are left out. */
+export interface AlertData {
+  host?: string;
+  origin?: string;
+  url?: string;
+  reason?: string;
+  count?: number;
+  sampled?: number;
+  urlCount?: number;
+  durationMs?: number;
+}
+
+/** E4: `GET /api/crawls/{id}/history`, one point. File points leave out what the file can't say. */
+export interface HistoryPoint {
+  at: string;
+  fetched: number;
+  htmlPages: number;
+  internalFetched: number;
+  internalFound: number;
+  errors: number;
+  blocked: number;
+  elapsedMs?: number;
+  discovered?: number;
+  queued?: number;
+  skipped?: number;
+}
+
+/** E4: a crawl's progress since it started, for the "found and crawled" chart. */
+export interface CrawlHistory {
+  crawlId: string;
+  /** When the crawl first started: the chart's zero. */
+  startedAt: string;
+  /** Where the points taken live begin; null for a crawl not live here. */
+  liveFrom: string | null;
+  /** Oldest first, at most about 600, ending at the latest. */
+  points: HistoryPoint[];
 }
 
 export interface CrawlEvent {
