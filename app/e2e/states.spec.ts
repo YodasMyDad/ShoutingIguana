@@ -493,4 +493,24 @@ test.describe('the design system’s states', () => {
     }
   });
 
+  test('a long section title wraps in a narrow column instead of running out of it', async ({ page }) => {
+    const host = await fixture(
+      page,
+      `<div style="width:320px" id="column"><div class="si-section-header">
+         <h2 class="si-section-header__title">Pages whose canonical points at a redirected URL<span class="si-section-header__meta">82,904</span></h2>
+         <div class="si-section-header__actions"><button type="button" class="si-btn si-btn--ghost">Export</button></div>
+       </div></div>`,
+    );
+    const column = await host.locator('#column').boundingBox();
+    const title = host.locator('h2');
+    const box = await title.boundingBox();
+    const action = await host.getByRole('button', { name: 'Export' }).boundingBox();
+    expect(column && box && action).toBeTruthy();
+    if (!column || !box || !action) return;
+    expect(box.x + box.width).toBeLessThanOrEqual(column.x + column.width + 0.5);
+    expect(action.x + action.width).toBeLessThanOrEqual(column.x + column.width + 0.5);
+    // All of it shows: wrapped, not cut.
+    expect(await title.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  });
+
 });

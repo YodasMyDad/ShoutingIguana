@@ -332,7 +332,10 @@ export const FilterChips: Story = {
   },
 };
 
-/** Headers: a page's large title with its answer, a section's title, and a grid screen's one line with its count. */
+/**
+ * Headers: a page's large title with its answer, a section's title (long, in a narrow column, it wraps), and a grid
+ * screen's one line with its count.
+ */
 export const Headers: Story = {
   render: () => (
     <StoryFrame>
@@ -348,6 +351,14 @@ export const Headers: Story = {
       />
       <SectionHeader title="Library" meta="7 sites, 11 crawls" />
       <SectionHeader title="Crawling now" size="sm" actions={<Button size="sm">Open</Button>} />
+      {/* A long title in a narrow column: the actions go under it, and it wraps. */}
+      <div className="w-(--checks-width)">
+        <SectionHeader
+          title="Pages whose canonical points at a redirected URL"
+          meta="82,904"
+          actions={<Button size="sm">Export</Button>}
+        />
+      </div>
       <GridHeader
         title="URLs"
         count={<ResultCount shown={264} total={4521} noun="URL" />}
