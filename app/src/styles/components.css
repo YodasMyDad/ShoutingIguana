@@ -2499,14 +2499,38 @@
     color: currentColor;
   }
 
+  /* Disabled: GrayText, the system's own word for it, for the text, the edges, the thumb and the fill. */
   .si-btn:disabled,
   .si-btn[aria-disabled='true']:not([data-loading]),
   .si-segment:disabled,
   .si-field[data-disabled],
-  .si-choice[data-disabled] {
+  .si-choice[data-disabled],
+  .si-menu-item[data-disabled],
+  .si-palette-item[aria-disabled='true'] {
     color: GrayText;
     border-color: GrayText;
     opacity: 1;
+  }
+
+  .si-checkbox:disabled,
+  .si-switch:disabled {
+    border-color: GrayText;
+  }
+
+  .si-checkbox[data-state='checked']:disabled,
+  .si-checkbox[data-state='indeterminate']:disabled,
+  .si-switch[data-state='checked']:disabled {
+    border-color: GrayText;
+    background: GrayText;
+    color: Canvas;
+  }
+
+  .si-switch:disabled .si-switch__thumb {
+    background: GrayText;
+  }
+
+  .si-switch[data-state='checked']:disabled .si-switch__thumb {
+    background: Canvas;
   }
 
   /*

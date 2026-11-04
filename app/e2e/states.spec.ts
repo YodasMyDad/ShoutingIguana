@@ -572,4 +572,32 @@ test.describe('the design system’s states', () => {
     expect(await edge('unpressed')).not.toBe(rest);
   });
 
+  test('under forced colours, what’s disabled is GrayText: menu and palette items, checkboxes, switches', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ forcedColors: 'active' });
+    const host = await fixture(
+      page,
+      `<span id="gray" style="color:GrayText">GrayText</span>
+       <div class="si-menu" role="menu" aria-label="Row" style="width:200px">
+         <div class="si-menu-item" role="menuitem" id="item">Copy the URL</div>
+         <div class="si-menu-item" role="menuitem" data-disabled="" aria-disabled="true" id="item-off">Export this view</div>
+       </div>
+       <div role="listbox" aria-label="Commands"><div class="si-palette-item" role="option" aria-selected="false" aria-disabled="true" id="option-off">Pause the crawl</div></div>
+       <div class="si-choice" data-disabled=""><button type="button" class="si-checkbox" role="checkbox" aria-checked="false" data-state="unchecked" disabled aria-label="a" id="box-off"></button></div>
+       <div class="si-choice" data-disabled=""><button type="button" class="si-checkbox" role="checkbox" aria-checked="true" data-state="checked" disabled aria-label="b" id="box-on-off"></button></div>
+       <div class="si-choice" data-disabled=""><button type="button" class="si-switch" role="switch" aria-checked="false" data-state="unchecked" disabled aria-label="c" id="switch-off"><span class="si-switch__thumb" data-state="unchecked"></span></button></div>
+       <div class="si-choice" data-disabled=""><button type="button" class="si-switch" role="switch" aria-checked="true" data-state="checked" disabled aria-label="d" id="switch-on-off"><span class="si-switch__thumb" data-state="checked"></span></button></div>`,
+    );
+    const get = async (selector: string, property: string) => (await style(host.locator(selector), property))[property];
+    const gray = await get('#gray', 'color');
+    expect(await get('#item', 'color')).not.toBe(gray);
+    expect(await get('#item-off', 'color')).toBe(gray);
+    expect(await get('#option-off', 'color')).toBe(gray);
+    expect(await get('#box-off', 'border-top-color')).toBe(gray);
+    expect(await get('#box-on-off', 'background-color')).toBe(gray);
+    expect(await get('#switch-off', 'border-top-color')).toBe(gray);
+    expect(await get('#switch-off .si-switch__thumb', 'background-color')).toBe(gray);
+    expect(await get('#switch-on-off', 'background-color')).toBe(gray);
+  });
 });
