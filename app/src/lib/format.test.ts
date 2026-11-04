@@ -5,6 +5,7 @@ import {
   formatCountOf,
   formatDuration,
   formatMilliseconds,
+  formatPercent,
   formatRelativeTime,
 } from './format';
 
@@ -35,5 +36,17 @@ describe('formatting', () => {
     expect(formatRelativeTime('2026-11-01T11:57:00Z', now)).toBe('3 minutes ago');
     expect(formatRelativeTime('2026-10-31T12:00:00Z', now)).toBe('yesterday');
     expect(formatRelativeTime(null, now)).toBe('–');
+  });
+
+  it('reads shares as percentages that never round to nothing or to the whole', () => {
+    expect(formatPercent(264, 265)).toBe('99.6%');
+    expect(formatPercent(1, 265)).toBe('0.4%');
+    expect(formatPercent(265, 265)).toBe('100%');
+    expect(formatPercent(0, 265)).toBe('0%');
+    expect(formatPercent(1, 100_000)).toBe('<0.1%');
+    expect(formatPercent(99_999, 100_000)).toBe('>99.9%');
+    expect(formatPercent(1, 2)).toBe('50%');
+    expect(formatPercent(1, 0)).toBe('–');
+    expect(formatPercent(null, 10)).toBe('–');
   });
 });
