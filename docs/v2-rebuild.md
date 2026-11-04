@@ -39,11 +39,11 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `o
 `v2` and `master` were not moved. The temp checkpoint under
 `%LOCALAPPDATA%\Temp\claude\...\c67f90ea-...\scratchpad\checkpoint.md` is history. This section is the place to resume.
 
-Running since 2026-11-04, unmerged: the Issues screen (item 1 below) on `ui/issues` (worktree
-`.claude/worktrees/issues`). The slice is built (`c4482f4`), `ui/step-3` with the design-system fixes is merged into it
-(`38f9bc5`), and a fixer is working through its fresh-eyes review's 23 findings there. If a session ends before it
-reports, relaunch it from its brief (the session's checkpoint, named in the owner's memory file); don't redo what the
-branch already committed.
+Running since 2026-11-04, each on its own branch cut from `f3c0b6c`, unmerged: the Overview slice
+(`ui/overview`, worktree `.claude/worktrees/overview`), the URL inspector slice (`ui/inspector`, worktree
+`.claude/worktrees/inspector`) and engine E3b (`ui/e3b`, worktree `.claude/worktrees/e3b`). If a session ends before
+they report, relaunch each from its brief (the session's checkpoint, named in the owner's memory file); don't redo what
+a branch already committed. Each slice gets a fresh-eyes review and its fixes before it merges.
 
 Done on this branch, on top of `v2`:
 
@@ -70,13 +70,31 @@ Done on this branch, on top of `v2`:
   for a tooltip and the app, fields' clear reaching `onChange`, chip focus, ConfirmDialog errors, 200% zoom, reduced
   motion, cached registry lookups, and app messages in their own tone (not the severity marks). On the merge: 389
   unit tests, 14 script tests, stories clean in both themes and forced colours, e2e 27 of 27.
+- The Issues screen (merged `ui/issues`, 2026-11-04):
+  - **Checks list:** the checks by category, skipped checks always listed with their reason, passed behind a switch,
+    hidden checks remembered with Undo.
+  - **Selected check:** what's wrong, why it matters and how to fix it, with Learn more.
+  - **Affected pages:** a paged, virtualised treegrid in `GridCore` (`tree`, `spanRow`, `sortable`), with the
+    likely-template callout and "Show all N pages in URLs". A `none` check lists its URLs flat.
+  - **Copy URLs**, the palette and keys (J/K, Ctrl+F, Ctrl+Shift+C/H), and every state in Storybook.
+  - **Sidebar:** counts by severity, and it starts as icons below 1024 px.
+  - **Inspector history:** one model for both screens, `routing/inspector.ts`.
+  - **Review:** a fresh-eyes review found 23 defects, and 22 are fixed, each with a test seen to fail with its fix
+    reverted. The one left is "pages affected" shown for checks that can flag non-pages: it needs an engine field,
+    in E3b.
+  - **Verification:** on the merge, 488 unit tests, 84 stories clean in both themes, forced colours and reduced motion,
+    14 script tests, and e2e 36 of 36. Timings are inside the budgets on the garden and 100k crawls: switching checks
+    takes 77–96 ms, opening a group 37–47 ms.
+  - **Export** waits for E5.
+- The clickable prototype is the app itself: `npm run dev` runs it against copies of the real crawls. A static mock
+  build isn't published, as it can't be reviewed file by file.
 
 Left, in this order:
 
-1. The Issues screen: its review's fixes (running, above), then merge.
-2. The clickable prototype, then the vertical slices in the UI brief.
-3. Later engine work the UI still needs: the links grid, sitemaps and robots (E3b), export (E5), full-text search and
-   favicons (E6).
+1. Overview and the URL inspector (running, above), each reviewed and fixed, then merged.
+2. Links, Sitemaps and robots.txt on E3b (running, above); New crawl settings; the crawl's settings; the rest of
+   Settings.
+3. Later engine work the UI still needs: export (E5), full-text search and favicons (E6).
 
 Never edit the files in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls`.
 
