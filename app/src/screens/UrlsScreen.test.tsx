@@ -113,6 +113,39 @@ describe('the URL grid without the URL summary', () => {
   });
 });
 
+describe('the URL grid while the crawl runs', () => {
+  it('shows it’s live, and takes new URLs in place: no skeleton, no progress line', async () => {
+    const { state } = sidecar({
+      status: 'running',
+      analyzedAt: null,
+      summary: { available: false, reason: 'crawling' },
+    });
+    const { queryClient } = await open(URLS);
+    const header = (await screen.findByRole('heading', { level: 1, name: 'URLs' })).parentElement!;
+    expect(await within(header).findByText(wholeText('3 URLs'))).toBeVisible();
+    expect(within(header).getByText('Live')).toBeVisible();
+    state.rows = [...TEST_URL_ROWS, { id: 4, url: 'https://example.com/c', statusCode: 200, statusClass: '2xx' }];
+    let release: () => void = () => undefined;
+    state.hold = new Promise<void>((resolve) => (release = resolve));
+    // What the live bridge does on a progress tick.
+    // Started inside act, not awaited: the refresh is held below, and an async act left open would keep the next
+    // test's renders from committing.
+    act(() => {
+      void queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false });
+    });
+    await waitFor(() => expect(queryClient.isFetching()).toBeGreaterThan(0));
+    // While the refresh is on its way, what's shown stays, quietly.
+    expect(screen.getByText('https://example.com/a')).toBeVisible();
+    expect(screen.queryByRole('progressbar', { name: 'Refreshing' })).toBeNull();
+    state.hold = null;
+    act(() => release());
+    expect(await within(header).findByText(wholeText('4 URLs'))).toBeVisible();
+    expect(await screen.findByText('https://example.com/c')).toBeVisible();
+    expect(screen.getByRole('grid', { name: 'URLs' })).toHaveAttribute('aria-busy', 'false');
+    expect(screen.queryByRole('progressbar', { name: 'Refreshing' })).toBeNull();
+  });
+});
+
 describe('the URL grid opened from a check’s group', () => {
   it('shows its filters as chips that read as sentences, the check and its group each removable', async () => {
     sidecar({ summary: { available: true, reason: null } });
@@ -168,34 +201,5 @@ describe('the inspector on the URL grid', () => {
       await router.load();
     });
     expect(router.state.location.pathname).toBe(`/crawls/${TEST_CRAWL_ID}/overview`);
-  });
-});
-
-describe('the URL grid while the crawl runs', () => {
-  it('shows it’s live, and takes new URLs in place: no skeleton, no progress line', async () => {
-    const { state } = sidecar({
-      status: 'running',
-      analyzedAt: null,
-      summary: { available: false, reason: 'crawling' },
-    });
-    const { queryClient } = await open(URLS);
-    const header = (await screen.findByRole('heading', { level: 1, name: 'URLs' })).parentElement!;
-    expect(await within(header).findByText(wholeText('3 URLs'))).toBeVisible();
-    expect(within(header).getByText('Live')).toBeVisible();
-    state.rows = [...TEST_URL_ROWS, { id: 4, url: 'https://example.com/c', statusCode: 200, statusClass: '2xx' }];
-    let release: () => void = () => undefined;
-    state.hold = new Promise<void>((resolve) => (release = resolve));
-    // What the live bridge does on a progress tick.
-    void act(() => queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
-    await waitFor(() => expect(queryClient.isFetching()).toBeGreaterThan(0));
-    // While the refresh is on its way, what's shown stays, quietly.
-    expect(screen.getByText('https://example.com/a')).toBeVisible();
-    expect(screen.queryByRole('progressbar', { name: 'Refreshing' })).toBeNull();
-    state.hold = null;
-    act(() => release());
-    expect(await within(header).findByText(wholeText('4 URLs'))).toBeVisible();
-    expect(await screen.findByText('https://example.com/c')).toBeVisible();
-    expect(screen.getByRole('grid', { name: 'URLs' })).toHaveAttribute('aria-busy', 'false');
-    expect(screen.queryByRole('progressbar', { name: 'Refreshing' })).toBeNull();
   });
 });
