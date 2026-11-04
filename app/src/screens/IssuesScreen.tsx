@@ -166,10 +166,12 @@ export function IssuesScreen() {
       params: { crawl: crawlId, check: checkId },
       search: (previous) => ({ ...previous, sort: next.length > 0 ? next : undefined }),
     });
+  // In place, as the inspector opens everywhere: back and forward step between views.
   const onInspect = (urlId: number) =>
     void navigate({
       params: { crawl: crawlId, check: checkId },
       search: (previous) => ({ ...previous, inspect: urlId }),
+      replace: true,
     });
 
   const setHidden = (id: string, hide: boolean) =>

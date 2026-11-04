@@ -112,6 +112,29 @@ describe('the URL grid without the URL summary', () => {
   });
 });
 
+describe('the URL grid opened from a check’s group', () => {
+  it('shows its filters as chips that read as sentences, the check and its group each removable', async () => {
+    sidecar({ summary: { available: true, reason: null } });
+    const filter = [
+      { column: 'check', op: 'in', values: ['empty-anchor-text'], group: { detail: null, relatedUrlId: 1 } },
+    ];
+    const { router } = await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}`);
+    const chips = await screen.findByRole('group', { name: 'Filters' });
+    expect(within(chips).getByText('empty-anchor-text')).toBeVisible();
+    expect(await within(chips).findByText('https://example.com/')).toBeVisible();
+    fireEvent.click(
+      within(chips).getByRole('button', { name: 'Remove the filter Related URL is https://example.com/' }),
+    );
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({
+        filter: [{ column: 'check', op: 'in', values: ['empty-anchor-text'] }],
+      }),
+    );
+    fireEvent.click(within(chips).getByRole('button', { name: 'Remove the filter Check is empty-anchor-text' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
+  });
+});
+
 describe('the URL grid while the crawl runs', () => {
   it('shows it’s live, and takes new URLs in place: no skeleton, no progress line', async () => {
     const { state } = sidecar({

@@ -21,8 +21,14 @@ export function InspectorSlot() {
   const inspect = useMatches({ select: (matches) => inspectedUrl(matches[matches.length - 1]?.search) });
   const open = inspect !== undefined;
 
+  // The inspector opens and closes in place (a replace), as it follows the grid's cursor: back and forward step
+  // between views, so Alt+Left after Esc goes back to where the user was, not to the URL that was open.
   const close = () =>
-    void navigate({ to: '.', search: (previous: Record<string, unknown>) => ({ ...previous, inspect: undefined }) });
+    void navigate({
+      to: '.',
+      search: (previous: Record<string, unknown>) => ({ ...previous, inspect: undefined }),
+      replace: true,
+    });
 
   useCommands(
     () => [
