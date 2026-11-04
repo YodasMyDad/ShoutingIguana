@@ -42,6 +42,31 @@ describe('Button', () => {
     expect(screen.getByRole('button', { name: 'Analyse again' })).toBe(button);
   });
 
+  it('takes its spinner away the moment the work ends, as it takes presses again', () => {
+    vi.useFakeTimers();
+    const onClick = vi.fn();
+    const { rerender } = render(
+      <Button loading onClick={onClick}>
+        Save
+      </Button>,
+    );
+    act(() => {
+      vi.advanceTimersByTime(BUTTON_SPINNER_DELAY_MS + 100);
+    });
+    const button = screen.getByRole('button', { name: 'Save' });
+    expect(spinnerOf(button)).not.toBeNull();
+    rerender(
+      <Button loading={false} onClick={onClick}>
+        Save
+      </Button>,
+    );
+    expect(spinnerOf(button)).toBeNull();
+    expect(button).not.toHaveAttribute('data-spinner');
+    expect(button).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
   it('puts the spinner in place of its icon, when it has one', () => {
     vi.useFakeTimers();
     render(
@@ -80,7 +105,27 @@ describe('Button', () => {
       const button = screen.getByRole('button', { name: 'Pause' });
       expect(button).toHaveAttribute('aria-keyshortcuts', 'F7');
       act(() => button.focus());
-      expect(await screen.findByRole('tooltip')).toHaveTextContent('Pause, F7');
+      await screen.findByRole('tooltip');
+      // The tooltip shows "Pause" and F7; it describes the button by what its name lacks, the keys.
+      expect(button).toHaveAccessibleDescription('F7');
+    } finally {
+      unregister();
+    }
+  });
+
+  it('shows its keys inside itself with showShortcut, named by its words alone', () => {
+    const unregister = commands.register([
+      { id: 'test.pause', title: 'Pause the crawl', group: 'Crawl', keys: ['f7'] },
+    ]);
+    try {
+      render(
+        <Button command="test.pause" showShortcut>
+          Pause
+        </Button>,
+      );
+      const button = screen.getByRole('button', { name: 'Pause' });
+      expect(button).toHaveTextContent('PauseF7');
+      expect(button).toHaveAttribute('aria-keyshortcuts', 'F7');
     } finally {
       unregister();
     }
@@ -108,5 +153,22 @@ describe('IconButton', () => {
     render(<IconButton label="Close the inspector" icon={RefreshCw} />);
     const button = screen.getByRole('button', { name: 'Close the inspector' });
     expect(button.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('isn’t described by its tooltip when the tooltip is its label, so its name isn’t read twice', async () => {
+    render(<IconButton label="Open in the browser" icon={RefreshCw} />);
+    const button = screen.getByRole('button', { name: 'Open in the browser' });
+    act(() => button.focus());
+    await screen.findByRole('tooltip');
+    expect(button).not.toHaveAttribute('aria-describedby');
+    expect(button).toHaveAccessibleDescription('');
+  });
+
+  it('is described by a tooltip that says more than its label', async () => {
+    render(<IconButton label="Show full URLs" tooltip="Show the URLs in full" icon={RefreshCw} />);
+    const button = screen.getByRole('button', { name: 'Show full URLs' });
+    act(() => button.focus());
+    await screen.findByRole('tooltip');
+    expect(button).toHaveAccessibleDescription('Show the URLs in full');
   });
 });

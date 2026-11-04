@@ -20,6 +20,21 @@ const rowOf = async (name: string) => (await screen.findByRole('link', { name })
 
 afterEach(() => setTransport(fakeSidecar([])));
 
+describe('Home’s URL field', () => {
+  it('has a Crawl button named by its word, its keycap shown and given as aria-keyshortcuts', async () => {
+    await open(() => json([]));
+    const crawl = await screen.findByRole('button', { name: 'Crawl' });
+    expect(crawl).toHaveTextContent('CrawlEnter');
+    expect(crawl).toHaveAttribute('aria-keyshortcuts', 'Enter');
+  });
+
+  it('has a palette button named by its words, its keys given as aria-keyshortcuts', async () => {
+    await open(() => json([]));
+    const palette = await screen.findByRole('button', { name: 'Search or run a command…' });
+    expect(palette).toHaveAttribute('aria-keyshortcuts', 'Control+K');
+  });
+});
+
 describe('Home’s library', () => {
   it('shows "–" for what a file that couldn’t be read can’t say, never 0', async () => {
     const unreadable: CrawlListItem = testCrawlItem({

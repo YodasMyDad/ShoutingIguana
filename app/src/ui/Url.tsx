@@ -172,6 +172,8 @@ export function Url({
           content={copied ? 'Copied' : url}
           hint={copied ? undefined : 'Click to copy'}
           open={tipOpen || copied}
+          // Named by the full URL already: its tooltip describes the button by the hint alone.
+          triggerName={display.full}
           onOpenChange={(open) => {
             setTipOpen(open);
             if (!open) setCopied(false);
@@ -182,7 +184,7 @@ export function Url({
           </button>
         </Tooltip>
       ) : (
-        <Tooltip content={url}>
+        <Tooltip content={url} triggerName={display.full}>
           <span className="si-url__copy">{text}</span>
         </Tooltip>
       )}

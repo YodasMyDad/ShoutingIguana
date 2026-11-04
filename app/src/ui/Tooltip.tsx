@@ -1,9 +1,20 @@
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
-import { createContext, useContext, type ReactElement, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FocusEvent,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { formatChord, parseChord } from '../keyboard/keys';
+import { releaseKey } from '../keyboard/layers';
 import { useChord } from '../keyboard/registry';
 import { isMac } from '../lib/platform';
 import { Kbd } from './Kbd';
+import { takeQuietFocus } from './quietFocus';
 
 /** How long the pointer rests before a tooltip shows. Moving to the next one within the skip delay shows it at once. */
 export const TOOLTIP_DELAY_MS = 500;
@@ -13,6 +24,20 @@ const TOOLTIP_OFFSET = 6;
 const COLLISION_PADDING = 8;
 
 const InProvider = createContext(false);
+
+/**
+ * Esc on an open tooltip closes it, and Radix takes the key for that. With nothing but the app under it, the key is
+ * given back, so the same Esc does the app's Esc too (closes the inspector). Over a menu, a popover or a dialog it
+ * isn't: those close innermost first, one Esc at a time.
+ */
+/** Focus the app moved itself (a menu giving focus back to its button) opens nothing: the user didn't go there. */
+function stayShutOnQuietFocus(event: FocusEvent<HTMLElement>) {
+  if (takeQuietFocus(event.currentTarget)) event.preventDefault();
+}
+
+function giveEscapeBack(event: KeyboardEvent) {
+  if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]') === null) releaseKey(event);
+}
 
 /** One provider for the app, so moving from one tooltip to the next skips the delay. */
 export function TooltipProvider({ children }: { children: ReactNode }) {
@@ -39,16 +64,29 @@ export interface TooltipProps {
   /** Controlled: "Copied" stays up after a click. */
   open?: boolean | undefined;
   onOpenChange?: ((open: boolean) => void) | undefined;
+  /**
+   * The trigger's own accessible name, when it's text. What the name already says is left out of the description, so
+   * a screen reader doesn't read it twice: an icon button whose tooltip is its label is described by its keys alone,
+   * or not at all.
+   */
+  triggerName?: string | undefined;
   /** One focusable element (a button, a link) or an element the pointer can rest on. */
   children: ReactElement;
 }
 
 /**
- * A tooltip: after a short rest of the pointer, or at once on keyboard focus, and gone with Esc or a click. Its text is
- * the trigger's description for screen readers while it shows; the trigger's name stays its own. Shortcuts come from
- * the command registry, as `Button`'s `command` does.
+ * A tooltip: after a short rest of the pointer, or at once on keyboard focus, and gone with Esc (which still does the
+ * app's Esc) or a click. Its text is the trigger's description for screen readers while it shows, less what the
+ * trigger's name (`triggerName`) already says; the name stays its own. Shortcuts come from the command registry, as
+ * `Button`'s `command` does.
  */
-export function Tooltip({
+export function Tooltip(props: TooltipProps) {
+  const { content, children } = props;
+  if (content === undefined || content === null || content === '' || content === false) return children;
+  return <ShownTooltip {...props} />;
+}
+
+function ShownTooltip({
   content,
   hint,
   command,
@@ -57,22 +95,51 @@ export function Tooltip({
   align = 'center',
   open,
   onOpenChange,
+  triggerName,
   children,
 }: TooltipProps) {
   const commandChord = useChord(command ?? '');
   const inProvider = useContext(InProvider);
+  // Any element (a link, a time), typed as Radix's button.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // Followed here as well as in Radix, so the trigger's description can be put right each time it opens or closes.
+  const [shown, setShown] = useState(false);
   const keys = chord ?? commandChord;
-  if (content === undefined || content === null || content === '' || content === false) return children;
 
-  const spoken =
+  // Read as the trigger's description: only what its name doesn't say already (the hint, the keys), or nothing.
+  const named = (text: string) => triggerName?.toLowerCase().includes(text.toLowerCase()) ?? false;
+  const parts =
     typeof content === 'string'
-      ? [content, typeof hint === 'string' ? hint : null, keys ? formatChord(parseChord(keys), isMac) : null]
-          .filter(Boolean)
-          .join(', ')
-      : undefined;
+      ? [
+          named(content) ? null : content,
+          typeof hint === 'string' ? hint : null,
+          keys ? formatChord(parseChord(keys), isMac) : null,
+        ].filter((part) => part !== null)
+      : null;
+  const spoken = parts?.join(', ');
+  const describes = parts === null || parts.length > 0;
+  const ownDescription = (children.props as { 'aria-describedby'?: string | undefined })['aria-describedby'];
+
+  // Radix adds the open tooltip to the trigger's aria-describedby. With nothing to add to the name, the trigger keeps
+  // only its own description.
+  useLayoutEffect(() => {
+    const trigger = triggerRef.current;
+    if (describes || !trigger) return;
+    if (ownDescription) trigger.setAttribute('aria-describedby', ownDescription);
+    else trigger.removeAttribute('aria-describedby');
+  });
+
   const tooltip = (
-    <TooltipPrimitive.Root {...(open === undefined ? {} : { open })} {...(onOpenChange ? { onOpenChange } : {})}>
-      <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
+    <TooltipPrimitive.Root
+      open={open ?? shown}
+      onOpenChange={(next) => {
+        setShown(next);
+        onOpenChange?.(next);
+      }}
+    >
+      <TooltipPrimitive.Trigger ref={triggerRef} asChild onFocus={stayShutOnQuietFocus}>
+        {children}
+      </TooltipPrimitive.Trigger>
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Content
           side={side}
@@ -80,6 +147,7 @@ export function Tooltip({
           sideOffset={TOOLTIP_OFFSET}
           collisionPadding={COLLISION_PADDING}
           className="si-tooltip"
+          onEscapeKeyDown={giveEscapeBack}
           {...(spoken ? { 'aria-label': spoken } : {})}
         >
           <span className="si-tooltip__text">

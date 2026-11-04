@@ -1,8 +1,8 @@
 import { Search } from 'lucide-react';
 import { TextField, type TextFieldProps } from './TextField';
 
-export interface SearchFieldProps extends Omit<TextFieldProps, 'type' | 'icon' | 'onClear'> {
-  /** Called once the field is emptied by its clear button or Esc. */
+export interface SearchFieldProps extends Omit<TextFieldProps, 'type' | 'icon' | 'onClear' | 'clearable'> {
+  /** Called once the field is emptied by its clear button or Esc, after `onChange` has heard the empty value. */
   onClear?: (() => void) | undefined;
 }
 
@@ -21,11 +21,8 @@ export function SearchField({ hideLabel = true, onClear, clearLabel = 'Clear the
       clearLabel={clearLabel}
       autoComplete="off"
       spellCheck={false}
-      onClear={onClear ?? noop}
+      clearable
+      onClear={onClear}
     />
   );
-}
-
-function noop() {
-  // The field empties itself; nothing else to do.
 }

@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import { Plus, X } from 'lucide-react';
 import type { KeyboardEvent, ReactNode, Ref } from 'react';
 import { Icon } from './Icon';
+import { focusQuietly } from './quietFocus';
 import { Tooltip } from './Tooltip';
 
 export interface FilterChipProps {
@@ -13,7 +14,10 @@ export interface FilterChipProps {
   valueText?: string | undefined;
   /** Opens the filter's editor. Without it the sentence is plain text. */
   onEdit?: (() => void) | undefined;
-  /** Removes the filter: the ✕ button, or Delete or Backspace on the chip. */
+  /**
+   * Removes the filter: the ✕ button, or Delete or Backspace on the chip. Focus moves on to the next chip in its group
+   * (the chips' parent, or the nearest `role="group"` or toolbar), else the one before, else Add filter.
+   */
   onRemove?: (() => void) | undefined;
   /**
    * `preview`: the chip a number would add, beside it ("Show all 264 pages in URLs"), not yet a filter. Neither
@@ -24,6 +28,32 @@ export interface FilterChipProps {
   /** For the editor's trigger (a popover anchors on it). */
   ref?: Ref<HTMLButtonElement> | undefined;
   className?: string | undefined;
+}
+
+/** The control a chip is reached by: its sentence's button, else its ✕; Add filter is a button itself. */
+function chipControl(chip: Element): HTMLElement | null {
+  return chip instanceof HTMLButtonElement ? chip : chip.querySelector<HTMLElement>('button');
+}
+
+/**
+ * Where focus goes once a chip is removed, so it isn't dropped on the page: the next chip, else the one before, else
+ * Add filter. Found before the chip goes.
+ */
+function focusAfterRemoving(control: Element): HTMLElement | null {
+  const chip = control.closest('.si-chip');
+  const group = chip?.parentElement?.closest('[role="group"], [role="toolbar"]') ?? chip?.parentElement;
+  if (!chip || !group) return null;
+  const chips = [...group.querySelectorAll('.si-chip:not(.si-chip--preview)')];
+  const at = chips.indexOf(chip);
+  const filters = chips.filter((candidate) => !candidate.classList.contains('si-chip--add'));
+  const after = filters.filter((candidate) => chips.indexOf(candidate) > at);
+  const before = filters.filter((candidate) => chips.indexOf(candidate) < at).reverse();
+  const add = chips.filter((candidate) => candidate.classList.contains('si-chip--add'));
+  for (const candidate of [...after, ...before, ...add]) {
+    const target = chipControl(candidate);
+    if (target) return target;
+  }
+  return null;
 }
 
 /** "Status is 4xx": the words the chip reads as, for names and announcements. */
@@ -54,12 +84,19 @@ export function FilterChip({
       <span className="si-chip__value">{value}</span>
     </>
   );
+  const remove = (control: HTMLElement) => {
+    if (!onRemove) return;
+    const next = focusAfterRemoving(control);
+    onRemove();
+    focusQuietly(next);
+  };
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if ((event.key === 'Delete' || event.key === 'Backspace') && onRemove) {
       event.preventDefault();
-      onRemove();
+      remove(event.currentTarget);
     }
   };
+  const removeName = `Remove the filter ${words}`;
   const preview = variant === 'preview';
   const removable = onRemove !== undefined && !preview;
   return (
@@ -73,7 +110,7 @@ export function FilterChip({
       )}
     >
       {onEdit && !preview ? (
-        <Tooltip content="Edit the filter" hint={removable ? 'Delete removes it' : undefined}>
+        <Tooltip content="Edit the filter" hint={removable ? 'Delete removes it' : undefined} triggerName={words}>
           <button
             ref={ref}
             type="button"
@@ -90,12 +127,12 @@ export function FilterChip({
         <span className="si-chip__main">{sentence}</span>
       )}
       {removable ? (
-        <Tooltip content="Remove the filter">
+        <Tooltip content="Remove the filter" triggerName={removeName}>
           <button
             type="button"
             className="si-chip__remove"
-            aria-label={`Remove the filter ${words}`}
-            onClick={onRemove}
+            aria-label={removeName}
+            onClick={(event) => remove(event.currentTarget)}
           >
             <Icon icon={X} size="sm" />
           </button>

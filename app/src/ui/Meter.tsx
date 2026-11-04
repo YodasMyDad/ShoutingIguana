@@ -70,7 +70,8 @@ export function Meter({
       <div
         role="meter"
         aria-label={label}
-        aria-valuenow={value}
+        // Where the mark is drawn: past the scale's end, at its end, the words saying the value itself.
+        aria-valuenow={Math.min(Math.max(value, 0), scale)}
         aria-valuemin={0}
         aria-valuemax={scale}
         aria-valuetext={[valueText, limits, min !== undefined || max !== undefined ? state : null]

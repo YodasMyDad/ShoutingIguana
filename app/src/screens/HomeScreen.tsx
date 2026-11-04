@@ -90,9 +90,10 @@ function StartCrawlForm() {
         error={error}
         className="flex-1"
         end={
-          <Button variant="primary" size="lg" type="submit" loading={starting}>
+          <Button variant="primary" size="lg" type="submit" loading={starting} aria-keyshortcuts="Enter">
             Crawl
-            <Kbd chord="enter" size="sm" />
+            {/* Shown, not read: the button is named Crawl, and Enter is its aria-keyshortcuts. */}
+            <Kbd chord="enter" size="sm" aria-hidden />
           </Button>
         }
       />
@@ -216,7 +217,8 @@ function LibraryHeader({
   );
 }
 
-const CELL = 'h-(--row-height-tall) border-b border-border-subtle px-3 whitespace-nowrap first:pl-5 last:pr-5';
+const CELL_BOX = 'h-(--row-height-tall) border-b border-border-subtle px-3 first:pl-5 last:pr-5';
+const CELL = `${CELL_BOX} whitespace-nowrap`;
 
 function LibraryRow({ item }: { item: CrawlListItem }) {
   const queryClient = useQueryClient();
@@ -264,10 +266,13 @@ function LibraryRow({ item }: { item: CrawlListItem }) {
           </div>
         </div>
       </td>
-      <td className={CELL}>
-        <StatusPill status={status} fetched={null} variant="plain" />
-        {item.outOfDate ? <span className="block text-12 text-text-muted">Analysis out of date</span> : null}
-        {item.error ? <span className="block text-12 text-text-muted">{item.error}</span> : null}
+      {/* The status wraps: a file's error, or "Analysis out of date", never pushes the table wider than the window. */}
+      <td className={CELL_BOX}>
+        <div className="max-w-(--library-status-width)">
+          <StatusPill status={status} fetched={null} variant="plain" />
+          {item.outOfDate ? <span className="block text-12 text-text-muted">Analysis out of date</span> : null}
+          {item.error ? <span className="block text-12 text-text-muted">{item.error}</span> : null}
+        </div>
       </td>
       <td className={clsx('figures text-right', CELL)}>{formatCount(fetched)}</td>
       <td className={clsx('figures text-right', CELL)}>{formatCount(pages)}</td>

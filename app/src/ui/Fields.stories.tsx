@@ -18,7 +18,13 @@ type Story = StoryObj<typeof meta>;
 
 /** Text fields: the 3:1 edge, the focus ring as an outline, an inline error, disabled and read-only. */
 export const TextFields: Story = {
-  parameters: { pseudo: { hover: ['.is-hover .si-field'], focusWithin: ['.is-focus .si-field'] } },
+  parameters: {
+    pseudo: {
+      hover: ['.is-hover .si-field'],
+      focusWithin: ['.is-focus .si-field'],
+      focusVisible: ['.is-focus .si-field__input'],
+    },
+  },
   render: () => (
     <StoryFrame sheet>
       <div className="grid max-w-(--content-max) grid-cols-2 gap-6">
@@ -47,7 +53,7 @@ export const TextFields: Story = {
 
 /** Home's URL field: large, mono, the halo while focused, the Crawl button inside. */
 export const LaunchField: Story = {
-  parameters: { pseudo: { focusWithin: ['.is-focus .si-field'] } },
+  parameters: { pseudo: { focusWithin: ['.is-focus .si-field'], focusVisible: ['.is-focus .si-field__input'] } },
   render: () => (
     <StoryFrame>
       <TextField
@@ -85,7 +91,7 @@ export const LaunchField: Story = {
 
 /** Search boxes: the keys that focus it while empty, a clear button and Esc while filled. */
 export const SearchFields: Story = {
-  parameters: { pseudo: { focusWithin: ['.is-focus .si-field'] } },
+  parameters: { pseudo: { focusWithin: ['.is-focus .si-field'], focusVisible: ['.is-focus .si-field__input'] } },
   render: function SearchFields() {
     const [value, setValue] = useState('patio');
     return (
@@ -158,7 +164,12 @@ type SeverityFilter = 'all' | 'error' | 'warning' | 'notice';
 
 /** Segmented controls: text, icons with counts (the Issues filter, "All 19 / 2 / 6 / 11"), icons alone. */
 export const Segmented: Story = {
-  parameters: { pseudo: { hover: ['.is-hover button:nth-child(2)'], focusVisible: ['.is-focus button:nth-child(3)'] } },
+  parameters: {
+    pseudo: {
+      hover: ['.is-hover button:nth-child(2)'],
+      focusVisible: ['.is-focus button:nth-child(3)', '.is-focus-chosen [aria-checked="true"]'],
+    },
+  },
   render: function Segmented() {
     const [severity, setSeverity] = useState<SeverityFilter>('all');
     const [density, setDensity] = useState('standard');
@@ -224,6 +235,19 @@ export const Segmented: Story = {
             ]}
           />
         </StateRow>
+        <StateRow label="Chosen, focus">
+          <SegmentedControl
+            label="Density"
+            value="standard"
+            onValueChange={() => undefined}
+            className="is-focus-chosen"
+            options={[
+              { value: 'compact', label: 'Compact' },
+              { value: 'standard', label: 'Standard' },
+              { value: 'comfortable', label: 'Comfortable' },
+            ]}
+          />
+        </StateRow>
         <StateRow label="Icons">
           <SegmentedControl
             label="Layout"
@@ -241,7 +265,7 @@ export const Segmented: Story = {
   },
 };
 
-/** A menu-button select, and tabs with counts. */
+/** A menu-button select, and tabs with counts, also in a panel too narrow for them all. */
 export const SelectAndTabs: Story = {
   parameters: {
     pseudo: {
@@ -310,6 +334,21 @@ export const SelectAndTabs: Story = {
             { value: 'source', label: 'Source', disabled: true, content: null },
           ]}
         />
+        {/* In a narrow panel: the tabs past the edge scroll, with a thin scrollbar that says so. */}
+        <div className="w-(--checks-width)">
+          <Tabs
+            label="Inspector sections, narrow"
+            flush
+            tabs={[
+              { value: 'summary', label: 'Summary', content: null },
+              { value: 'issues', label: 'Issues', count: 5, content: null },
+              { value: 'inlinks', label: 'Inlinks', count: 1_204, content: null },
+              { value: 'outlinks', label: 'Outlinks', count: 86, content: null },
+              { value: 'headers', label: 'Headers', content: null },
+              { value: 'source', label: 'Source', content: null },
+            ]}
+          />
+        </div>
       </StoryFrame>
     );
   },

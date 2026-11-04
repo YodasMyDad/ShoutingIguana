@@ -6,7 +6,9 @@ import { CRAWL_SECTIONS, sectionOf } from '../app/sections';
 import { setOverlay } from '../app/overlays';
 import { analyseCrawl, continueCrawl, pauseOrResume, stopCrawl } from '../crawl/actions';
 import { crawlControls, crawlName, effectiveStatus } from '../crawl/status';
+import { ariaKeyShortcut, parseChord } from '../keyboard/keys';
 import { formatExactTime } from '../lib/format';
+import { isMac } from '../lib/platform';
 import { useLiveCrawl } from '../live/liveStore';
 import { Button } from '../ui/Button';
 import { Favicon } from '../ui/Favicon';
@@ -52,7 +54,9 @@ export function TopBar() {
         />
       </div>
 
-      <nav aria-label="Breadcrumb" className="min-w-0">
+      {/* Short of room (200% zoom), the crumbs are cut at their edge rather than run under the palette button; the
+          inset keeps Home's focus ring inside that edge. */}
+      <nav aria-label="Breadcrumb" className="-ml-1 min-w-0 overflow-x-clip pl-1">
         <ol className="flex min-w-0 items-center gap-1 text-14 text-text-secondary">
           <li className="shrink-0">
             <TextLink variant="subtle" to="/" search={{}} className="rounded-sm px-1.5 py-1 hover:bg-surface-hover">
@@ -76,7 +80,11 @@ export function TopBar() {
                   <li aria-hidden="true" className="shrink-0 text-text-muted">
                     <Icon icon={ChevronRight} size="sm" />
                   </li>
-                  <li className="shrink-0 truncate px-1.5">{formatExactTime(crawl.startedAt)}</li>
+                  {/* Short of room (200% zoom), the date gives way first (after the palette button's words), then the
+                      crawl's name. */}
+                  <li className="min-w-0 shrink-100 truncate px-1.5" title={formatExactTime(crawl.startedAt)}>
+                    {formatExactTime(crawl.startedAt)}
+                  </li>
                 </>
               ) : null}
               {section ? (
@@ -140,11 +148,14 @@ export function TopBar() {
       <button
         type="button"
         onClick={() => setOverlay('palette')}
-        className="ml-auto flex h-(--control-height) w-(--search-width) shrink-0 items-center gap-2 rounded-sm border border-border bg-surface pr-1.5 pl-2.5 text-13 text-text-muted shadow-control hover:border-border-strong hover:text-text-secondary"
+        aria-keyshortcuts={ariaKeyShortcut(parseChord('mod+k'), isMac)}
+        // Narrowed (200% zoom), its words give way before the crumbs do, down to the magnifier and the keys.
+        className="ml-auto flex h-(--control-height) w-(--search-width) shrink-100 items-center gap-2 rounded-sm border border-border bg-surface pr-1.5 pl-2.5 text-13 text-text-muted shadow-control hover:border-border-strong hover:text-text-secondary"
       >
         <Icon icon={Search} size="sm" />
-        <span className="flex-1 truncate text-left">Search or run a command…</span>
-        <Kbd chord="mod+k" size="sm" />
+        {/* No width of its own (w-0), so the button can narrow to the magnifier and the keys. */}
+        <span className="w-0 flex-1 truncate text-left">Search or run a command…</span>
+        <Kbd chord="mod+k" size="sm" aria-hidden />
       </button>
     </header>
   );

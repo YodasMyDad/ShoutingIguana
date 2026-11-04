@@ -1,5 +1,5 @@
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
@@ -7,8 +7,10 @@ import { resetOverlaysForTests } from '../app/overlays';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
+import { updateSettings } from '../settings/settingsStore';
 import { applyShellState, resetConnectionForTests } from '../shell/connection';
-import { TEST_CRAWL_ID, fakeSidecar, standardRoutes } from '../test/fakeSidecar';
+import { liveStore } from '../live/liveStore';
+import { TEST_CRAWL_ID, fakeSidecar, standardRoutes, testCrawlItem } from '../test/fakeSidecar';
 
 const CRAWL = `/crawls/${TEST_CRAWL_ID}`;
 
@@ -98,6 +100,37 @@ describe('stopping crawls while the app quits', () => {
   });
 });
 
+describe('the sidebar, collapsed', () => {
+  afterEach(() => updateSettings({ sidebarCollapsed: false }));
+
+  it('names each place by its label, and its tooltip doesn’t read the label again', async () => {
+    updateSettings({ sidebarCollapsed: true });
+    await open('/');
+    const home = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Home' });
+    act(() => home.focus());
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
+    expect(home).toHaveAccessibleDescription('');
+  });
+});
+
+describe('the sidebar, on a running crawl’s Overview', () => {
+  afterEach(() => liveStore.reset());
+
+  it('draws one current place: the crawl’s Overview, not also its running-crawl link', async () => {
+    setTransport(fakeSidecar(standardRoutes(testCrawlItem({ status: 'running' }))));
+    await open(`${CRAWL}/overview`);
+    act(() => liveStore.ingest({ event: 'hello', id: '', data: JSON.stringify({ live: [TEST_CRAWL_ID] }) }));
+    const running = await screen.findByRole('region', { name: 'Running crawls' });
+    const link = within(running).getByRole('link');
+    expect(link).toHaveAttribute('aria-current', 'page');
+    expect(link).not.toHaveClass('si-current');
+    const current = within(screen.getByRole('navigation', { name: 'Main' }))
+      .getAllByRole('link')
+      .filter((element) => element.classList.contains('si-current'));
+    expect(current.map((element) => element.textContent)).toEqual(['Overview']);
+  });
+});
+
 describe('Esc in the URL grid', () => {
   it('closes the inspector first, after a row was clicked and inspected; the next Esc clears the selection', async () => {
     const router = await open(`${CRAWL}/urls`);
@@ -116,5 +149,42 @@ describe('Esc in the URL grid', () => {
     expect(selected()).toHaveLength(1);
     press('Escape');
     expect(selected()).toHaveLength(0);
+  });
+
+  /** The URL grid with its second row inspected. */
+  async function inspect() {
+    const router = await open(`${CRAWL}/urls`);
+    const grid = await screen.findByRole('grid', { name: 'URLs' });
+    const cell = await screen.findByText('https://example.com/a');
+    act(() => grid.focus());
+    fireEvent.pointerDown(cell, { button: 0 });
+    press('Enter');
+    const inspector = await screen.findByRole('complementary', { name: 'Inspector' });
+    return { router, grid, inspector };
+  }
+
+  it('closes a tooltip and the inspector with one Esc, from a button in the inspector', async () => {
+    const { router, inspector } = await inspect();
+    const dock = within(inspector).getByRole('button', { name: 'Dock at the bottom' });
+    // Focus from the keyboard opens the button's tooltip at once.
+    act(() => dock.focus());
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
+    press('Escape');
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Inspector' })).toBeNull());
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(router.state.location.search).not.toHaveProperty('inspect');
+  });
+
+  it('closes the inspector with one Esc in the grid while a tooltip shows elsewhere', async () => {
+    const { router, grid } = await inspect();
+    act(() => grid.focus());
+    fireEvent.pointerMove(screen.getByRole('button', { name: 'Back' }), { pointerType: 'mouse' });
+    expect(await screen.findByRole('tooltip', {}, { timeout: 1500 })).toBeInTheDocument();
+    expect(grid).toHaveFocus();
+    press('Escape');
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Inspector' })).toBeNull());
+    expect(router.state.location.search).not.toHaveProperty('inspect');
+    // The grid's selection is the next Esc's.
+    expect(screen.getAllByRole('row').filter((row) => row.getAttribute('aria-selected') === 'true')).toHaveLength(1);
   });
 });

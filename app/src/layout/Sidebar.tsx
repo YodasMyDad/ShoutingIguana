@@ -216,6 +216,8 @@ function RunningCrawl({ id, name, collapsed }: { id: string; name: string; colla
         icon={<LiveDot />}
         count={fetched}
         collapsed={collapsed}
+        // On the crawl's Overview, its own Overview item is the current place; this link only leads there.
+        markCurrent={false}
       />
     </li>
   );

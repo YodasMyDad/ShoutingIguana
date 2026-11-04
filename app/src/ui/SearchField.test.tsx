@@ -2,8 +2,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { Dialog } from './Dialog';
+import { Popover } from './Popover';
 import { SearchField } from './SearchField';
 import { TextField } from './TextField';
+import { Tooltip } from './Tooltip';
 
 describe('SearchField', () => {
   it('is a search box named by its label, clearing with its button or Esc while it has text', async () => {
@@ -59,6 +62,75 @@ describe('SearchField', () => {
     await userEvent.type(box, 'b');
     await userEvent.tab();
     expect(screen.getByRole('button', { name: 'Next' })).toHaveFocus();
+  });
+
+  it('empties a controlled field without an onClear: the owner hears the change', async () => {
+    function Search() {
+      const [value, setValue] = useState('patio');
+      return <SearchField label="Search" value={value} onChange={(event) => setValue(event.target.value)} />;
+    }
+    render(<Search />);
+    await userEvent.click(screen.getByRole('button', { name: 'Clear the search' }));
+    expect(screen.getByRole('searchbox', { name: 'Search' })).toHaveValue('');
+  });
+
+  it('tells an uncontrolled field’s owner it was emptied, so it stops filtering by the old text', async () => {
+    const seen: string[] = [];
+    const onClear = vi.fn(() => seen.push('cleared'));
+    render(<SearchField label="Search" onChange={(event) => seen.push(event.target.value)} onClear={onClear} />);
+    const box = screen.getByRole('searchbox', { name: 'Search' });
+    await userEvent.type(box, 'ab');
+    await userEvent.keyboard('{Escape}');
+    expect(box).toHaveValue('');
+    expect(seen).toEqual(['a', 'ab', '', 'cleared']);
+  });
+
+  it('clears on Esc inside a popover or a dialog, which stay open; the next Esc closes them', async () => {
+    const popoverOpen = vi.fn();
+    const { unmount } = render(
+      <Popover trigger={<button type="button">Edit</button>} title="Filter" open onOpenChange={popoverOpen}>
+        <SearchField label="Value" defaultValue="abc" />
+      </Popover>,
+    );
+    const value = screen.getByRole('searchbox', { name: 'Value' });
+    value.focus();
+    await userEvent.keyboard('{Escape}');
+    expect(value).toHaveValue('');
+    expect(popoverOpen).not.toHaveBeenCalled();
+    await userEvent.keyboard('{Escape}');
+    expect(popoverOpen).toHaveBeenCalledWith(false);
+    unmount();
+
+    const dialogOpen = vi.fn();
+    render(
+      <Dialog open onOpenChange={dialogOpen} title="Find">
+        <SearchField label="Find" defaultValue="abc" />
+      </Dialog>,
+    );
+    const find = screen.getByRole('searchbox', { name: 'Find' });
+    find.focus();
+    await userEvent.keyboard('{Escape}');
+    expect(find).toHaveValue('');
+    expect(dialogOpen).not.toHaveBeenCalled();
+    await userEvent.keyboard('{Escape}');
+    expect(dialogOpen).toHaveBeenCalledWith(false);
+  });
+
+  it('clears on Esc while a tooltip shows elsewhere, which Esc closes too', async () => {
+    const tooltipOpen = vi.fn();
+    render(
+      <>
+        <Tooltip content="Back" open onOpenChange={tooltipOpen}>
+          <button type="button">Back</button>
+        </Tooltip>
+        <SearchField label="Search URLs" defaultValue="abc" />
+      </>,
+    );
+    const box = screen.getByRole('searchbox', { name: 'Search URLs' });
+    box.focus();
+    await userEvent.keyboard('{Escape}');
+    expect(tooltipOpen).toHaveBeenCalledWith(false);
+    expect(box).toHaveValue('');
   });
 
   it('shows the key that focuses it while it’s empty', () => {

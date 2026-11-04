@@ -17,6 +17,7 @@ import {
   typesCharacter,
   type Chord,
 } from './keys';
+import { isKeyTaken } from './layers';
 
 export type CommandGroup = 'Go to' | 'Crawl' | 'View' | 'App' | 'In grids';
 
@@ -57,6 +58,22 @@ interface Entry {
   order: number;
 }
 
+/** A command's keys as controls show them: the first chord (`mod+k`), as written here ("Ctrl+K"), and for ARIA. */
+export interface CommandKeys {
+  chord: string | null;
+  shortcut: string | null;
+  ariaShortcut: string | null;
+}
+
+const NO_KEYS: CommandKeys = { chord: null, shortcut: null, ariaShortcut: null };
+
+/** The entries from the winner down, and each id's winner: worked out once per change of the registry. */
+interface Ranking {
+  version: number;
+  entries: Entry[];
+  winners: Map<string, Command>;
+}
+
 const PRECEDENCE: Record<Precedence, number> = { app: 0, screen: 1 };
 
 /**
@@ -77,6 +94,10 @@ export class CommandRegistry {
   private entries: Entry[] = [];
   private nextOrder = 0;
   private version = 0;
+  // Every button, menu item and nav item asks on each render, and grids put them in cells: the ranking is worked out
+  // once per change, and each id's keys keep the same object while they stay the same, so nothing re-renders for them.
+  private ranking: Ranking | null = null;
+  private readonly keys = new Map<string, CommandKeys & { from: readonly string[] }>();
   private readonly listeners = new Set<() => void>();
   private readonly mac: boolean;
   private readonly isModal: () => boolean;
@@ -116,7 +137,23 @@ export class CommandRegistry {
   }
 
   get(id: string): Command | undefined {
-    return this.ranked().find((entry) => entry.command.id === id)?.command;
+    return id === '' ? undefined : this.ranked().winners.get(id);
+  }
+
+  /** A command's keys, for `useCommandKeys`: the same object until they change. */
+  keysOf(id: string): CommandKeys {
+    const from = this.get(id)?.keys ?? [];
+    if (from.length === 0) return NO_KEYS;
+    const known = this.keys.get(id);
+    if (known?.from.length === from.length && known.from.every((key, index) => key === from[index])) return known;
+    const keys = {
+      from,
+      chord: from[0] ?? null,
+      shortcut: formatChord(parseChord(from[0] ?? ''), this.mac),
+      ariaShortcut: from.map((key) => ariaKeyShortcut(parseChord(key), this.mac)).join(' '),
+    };
+    this.keys.set(id, keys);
+    return keys;
   }
 
   isEnabled(command: Command): boolean {
@@ -125,14 +162,12 @@ export class CommandRegistry {
 
   /** The command's first chord as this platform writes it ("Ctrl+K", "⌘K"), or null when it has none. */
   shortcut(id: string): string | null {
-    const key = this.get(id)?.keys?.[0];
-    return key ? formatChord(parseChord(key), this.mac) : null;
+    return this.keysOf(id).shortcut;
   }
 
   /** Every chord of the command, for `aria-keyshortcuts`. */
   ariaShortcut(id: string): string | null {
-    const keys = this.get(id)?.keys ?? [];
-    return keys.length > 0 ? keys.map((key) => ariaKeyShortcut(parseChord(key), this.mac)).join(' ') : null;
+    return this.keysOf(id).ariaShortcut;
   }
 
   /** Runs a command by id. False when there's no such command or it can't run now. */
@@ -148,6 +183,7 @@ export class CommandRegistry {
    * inspector comes before clearing the grid's selection.
    */
   claims(event: KeyboardEvent): boolean {
+    if (isKeyTaken(event) || event.isComposing) return false;
     const command = this.match(event);
     return command !== null && this.canRunNow(command);
   }
@@ -156,10 +192,11 @@ export class CommandRegistry {
    * The app's one keydown handler. Runs at most one command, and only when nothing else took the key. A key that
    * belongs to a command is taken even while the command can't run, so the browser never acts on it instead (F7
    * would start caret browsing); so are the reserved keys. While an overlay is open it owns the keyboard: the app's
-   * keys do nothing behind it, except the one that toggles it.
+   * keys do nothing behind it, except the one that toggles it. A key a tooltip took only to close itself still counts
+   * (keyboard/layers.ts).
    */
   handleKeyDown(event: KeyboardEvent): boolean {
-    if (event.defaultPrevented || event.isComposing) return false;
+    if (isKeyTaken(event) || event.isComposing) return false;
     const command = this.match(event);
     if (!command) {
       if (this.isReserved(event)) event.preventDefault();
@@ -187,7 +224,7 @@ export class CommandRegistry {
   private match(event: KeyboardEvent): Command | null {
     const editable = isEditableTarget(event.target);
     const shadowed = new Set<string>();
-    for (const { command, chords } of this.ranked()) {
+    for (const { command, chords } of this.ranked().entries) {
       if (shadowed.has(command.id)) continue;
       shadowed.add(command.id);
       if (command.scope === 'grid') continue;
@@ -209,9 +246,15 @@ export class CommandRegistry {
     return this.reserved.some((chord) => matchesChord(chord, event, this.mac));
   }
 
-  /** Entries from the winner down: screen before app, then the latest first. */
-  private ranked(): Entry[] {
-    return [...this.entries].sort((a, b) => (outranks(a, b) ? -1 : outranks(b, a) ? 1 : 0));
+  /** Entries from the winner down (screen before app, then the latest first), and each id's winner. */
+  private ranked(): Ranking {
+    if (this.ranking?.version !== this.version) {
+      const entries = [...this.entries].sort((a, b) => (outranks(a, b) ? -1 : outranks(b, a) ? 1 : 0));
+      const winners = new Map<string, Command>();
+      for (const { command } of entries) if (!winners.has(command.id)) winners.set(command.id, command);
+      this.ranking = { version: this.version, entries, winners };
+    }
+    return this.ranking;
   }
 
   private invoke(command: Command): void {
@@ -261,20 +304,28 @@ export function useRegistryVersion(registry = commands): number {
   return useSyncExternalStore(registry.subscribe, registry.getVersion, registry.getVersion);
 }
 
+const noSubscription = () => () => undefined;
+
+/**
+ * A command's keys for a control, from one subscription that renders it again only when they change. Without a
+ * command (`undefined` or ''), nothing is looked up or subscribed to.
+ */
+export function useCommandKeys(id: string | undefined, registry = commands): CommandKeys {
+  const getSnapshot = () => (id ? registry.keysOf(id) : NO_KEYS);
+  return useSyncExternalStore(id ? registry.subscribe : noSubscription, getSnapshot, getSnapshot);
+}
+
 /** "Ctrl+K" for a command's tooltip or menu item, or null. */
 export function useShortcut(id: string, registry = commands): string | null {
-  useRegistryVersion(registry);
-  return registry.shortcut(id);
+  return useCommandKeys(id, registry).shortcut;
 }
 
 /** A command's first chord (`mod+k`), for keycaps in tooltips and menus, or null. */
 export function useChord(id: string, registry = commands): string | null {
-  useRegistryVersion(registry);
-  return registry.get(id)?.keys?.[0] ?? null;
+  return useCommandKeys(id, registry).chord;
 }
 
 /** A command's chords for `aria-keyshortcuts`, or null. */
 export function useAriaShortcut(id: string, registry = commands): string | null {
-  useRegistryVersion(registry);
-  return registry.ariaShortcut(id);
+  return useCommandKeys(id, registry).ariaShortcut;
 }
