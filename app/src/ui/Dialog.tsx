@@ -2,6 +2,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
+import { keepEscapeForField } from '../keyboard/layers';
 import { Button } from './Button';
 import { IconButton } from './IconButton';
 
@@ -28,8 +29,9 @@ export interface DialogProps {
 }
 
 /**
- * A modal dialog: the page behind is inert, focus moves in and comes back, Esc closes it. Only for what can't wait or
- * can't be undone; everything reversible uses Undo instead (docs/v2-ui-brief.md, Feedback and motion).
+ * A modal dialog: the page behind is inert, focus moves in and comes back, Esc closes it (or first empties the field
+ * with text that has focus, as Esc in a field does everywhere). Only for what can't wait or can't be undone;
+ * everything reversible uses Undo instead (docs/v2-ui-brief.md, Feedback and motion).
  */
 export function Dialog({
   open,
@@ -53,6 +55,7 @@ export function Dialog({
           {...(description ? {} : { 'aria-describedby': undefined })}
           {...(onOpenAutoFocus ? { onOpenAutoFocus } : {})}
           {...(onCloseAutoFocus ? { onCloseAutoFocus } : {})}
+          onEscapeKeyDown={keepEscapeForField}
           className={clsx('si-dialog', size === 'wide' && 'si-dialog--wide', className)}
         >
           <div className="si-dialog__head">

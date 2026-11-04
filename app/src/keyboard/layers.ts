@@ -13,3 +13,15 @@ export function releaseKey(event: Event): void {
 export function isKeyTaken(event: Event): boolean {
   return event.defaultPrevented && !released.has(event);
 }
+
+/**
+ * For an overlay's Esc (a dialog's, a popover's): Esc in a field with text clears the field, so the overlay stays open
+ * and gives the key back to it. The field says it clears on Esc with `data-clearable` (ui/TextField.tsx).
+ */
+export function keepEscapeForField(event: KeyboardEvent): void {
+  const target = event.target;
+  if (target instanceof HTMLInputElement && target.dataset.clearable !== undefined && target.value !== '') {
+    event.preventDefault();
+    releaseKey(event);
+  }
+}

@@ -2,6 +2,7 @@ import * as PopoverPrimitive from '@radix-ui/react-popover';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
 import { useId, type ReactElement, type ReactNode } from 'react';
+import { keepEscapeForField } from '../keyboard/layers';
 import { IconButton } from './IconButton';
 
 const POPOVER_OFFSET = 6;
@@ -24,7 +25,8 @@ export interface PopoverProps {
 
 /**
  * Content that floats above the page from a button: a filter's editor, a column's options. Focus moves into it and
- * back to the button when it closes (Esc, a click outside, or its close button). Non-modal: the page stays usable.
+ * back to the button when it closes (Esc, a click outside, or its close button). Esc in a field with text empties
+ * the field first. Non-modal: the page stays usable.
  */
 export function Popover({
   trigger,
@@ -47,6 +49,7 @@ export function Popover({
           side={side}
           sideOffset={POPOVER_OFFSET}
           collisionPadding={COLLISION_PADDING}
+          onEscapeKeyDown={keepEscapeForField}
           className={clsx('si-popover', className)}
           {...(title ? { 'aria-labelledby': titleId } : label ? { 'aria-label': label } : {})}
         >
