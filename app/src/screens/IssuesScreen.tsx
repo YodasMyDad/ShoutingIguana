@@ -83,7 +83,8 @@ export function IssuesScreen() {
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
   const [showPassed, setShowPassed] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
-  const [copying, setCopying] = useState(false);
+  // The copies running, by what they copy (a check, or one of its groups): another check's isn't held up by one.
+  const [copies, setCopies] = useState<ReadonlySet<string>>(() => new Set());
   const filterRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
 
@@ -247,16 +248,23 @@ export function IssuesScreen() {
   const placed = place && place.index !== null ? place.group : null;
   const copyTarget = placed ? groupRefOf(placed) : null;
   const copyReady = found && (routeGroup === null || placed !== null);
+  const copyKey = JSON.stringify([checkId, copyTarget]);
+  const copying = copies.has(copyKey);
   const onCopy = async () => {
     if (!selected || !copyReady || copying) return;
-    setCopying(true);
+    const key = copyKey;
+    setCopies((running) => new Set(running).add(key));
     try {
       await copyUrls({
         read: checkUrlsReader(crawlId, selected.check.id, copyTarget),
         expected: placed ? placed.pages : selected.count,
       });
     } finally {
-      setCopying(false);
+      setCopies((running) => {
+        const next = new Set(running);
+        next.delete(key);
+        return next;
+      });
     }
   };
 

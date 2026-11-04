@@ -368,6 +368,40 @@ describe('the Issues screen', () => {
     expect(await screen.findByText('Copied 6 URLs')).toBeVisible();
   });
 
+  it('copies another check’s URLs while a copy of one check’s is still running', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const routes = issuesRoutes();
+    const rows = routes.find(([method, pattern]) => method === 'POST' && pattern.source.includes('rows'));
+    if (!rows) throw new Error('No rows route');
+    // The anchor-text check's copy reads its URLs 1,000 at a time: that read doesn't come back.
+    const slow: FakeRoute = [
+      'POST',
+      rows[1],
+      (request, match) =>
+        match[1] === 'empty-anchor-text' && (request.body as GridQuery).limit === 1_000
+          ? new Promise<Response>((_, reject) =>
+              request.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))),
+            )
+          : rows[2](request, match),
+    ];
+    setTransport(fakeSidecar([slow, ...routes]));
+    const { router } = await open(`${ISSUES}/empty-anchor-text`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy URLs' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copy URLs' })).toHaveAttribute('aria-busy', 'true'));
+    fireEvent.keyDown(document.body, { key: 'k' });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/internal-client-error`));
+    await screen.findByRole('heading', { level: 2, name: 'Internal URL returns 4xx' });
+    // The other check's copy isn't this one's: its button is free, and its shortcut copies.
+    expect(screen.getByRole('button', { name: 'Copy URLs' })).not.toHaveAttribute('aria-busy');
+    fireEvent.keyDown(document.body, { key: 'C', ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(writeText.mock.calls[0]?.[0]).toBe('https://example.com/old/\nhttps://example.com/gone/');
+    // The first copy, still running, is stopped from its toast, so it leaves nothing behind.
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull());
+  });
+
   it('copies the open group’s URLs with Ctrl+Shift+C', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
@@ -514,7 +548,7 @@ describe('the Issues screen', () => {
     await waitFor(() => expect(analyse).toHaveBeenCalledOnce());
     setStatus(queryClient, 'analyzing');
     // The button that had focus went with its banner: focus is on the progress banner's Cancel.
-    const cancelButton = await screen.findByRole('button', { name: 'Cancel' });
+    const cancelButton = await within(mainArea()).findByRole('button', { name: 'Cancel' });
     expect(cancelButton).toHaveFocus();
     fireEvent.click(cancelButton);
     await waitFor(() => expect(cancel).toHaveBeenCalledOnce());
@@ -533,7 +567,7 @@ describe('the Issues screen', () => {
     act(() => analyseIt.focus());
     fireEvent.click(analyseIt);
     setStatus(queryClient, 'analyzing');
-    expect(await screen.findByRole('button', { name: 'Cancel' })).toHaveFocus();
+    expect(await within(mainArea()).findByRole('button', { name: 'Cancel' })).toHaveFocus();
   });
 
   it('says why a crawl never analysed can’t be, offering Continue for an interrupted one', async () => {
