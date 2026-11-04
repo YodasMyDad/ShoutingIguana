@@ -7,9 +7,6 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// <summary>JSON-LD that doesn't parse, and rich result types missing what Google requires (indexable pages only).</summary>
 internal sealed class StructuredDataRules : IPageRule
 {
-    // Lenient where browsers and Google are: comments and trailing commas don't make a block unusable.
-    private static readonly JsonDocumentOptions OPTIONS = new() { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip };
-
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
         string? syntaxError = null;
@@ -20,7 +17,8 @@ internal sealed class StructuredDataRules : IPageRule
             JsonDocument document;
             try
             {
-                document = JsonDocument.Parse(block, OPTIONS);
+                // Valid JSON only. A trailing comma is the error Google's unparsable structured data report lists.
+                document = JsonDocument.Parse(block);
             }
             catch (JsonException exception)
             {

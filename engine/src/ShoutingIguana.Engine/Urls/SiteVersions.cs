@@ -1,9 +1,9 @@
 namespace ShoutingIguana.Engine.Urls;
 
 /// <summary>
-/// The other versions of a site, which search engines treat as separate sites: the bare domain and www, each over https
-/// and http. The crawler probes them at the start of a crawl, and the analysis checks that each one redirects to the
-/// main one. An IP address, or a host without a dot such as localhost, has no www twin. On the default port each scheme
+/// The other versions of a site: the bare domain and www, each over https and http. Google treats them as duplicate
+/// URLs and picks one. The crawler probes them at the start of a crawl, and the analysis checks that each one redirects
+/// to the main one. An IP address, or a host without a dot such as localhost, has no www twin. On the default port each scheme
 /// keeps its own default port; on any other port both schemes are asked there, as on a server that answers http and
 /// https on one port.
 /// </summary>

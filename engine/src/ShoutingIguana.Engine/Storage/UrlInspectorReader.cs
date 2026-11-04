@@ -28,9 +28,6 @@ public static class UrlInspectorReader
     /// <summary>How much of a stored page is unpacked to measure it, so a crafted file can't make the reader unpack forever.</summary>
     public const long MAX_MEASURED_BYTES = 512L * 1024 * 1024;
 
-    // Lenient where browsers and Google are, as the structured data check is.
-    private static readonly JsonDocumentOptions JSON_LD = new() { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip };
-
     private static readonly IReadOnlyDictionary<string, int> SEVERITY_ORDER = new Dictionary<string, int>(StringComparer.Ordinal)
     {
         [nameof(IssueSeverity.Error)] = 0, [nameof(IssueSeverity.Warning)] = 1, [nameof(IssueSeverity.Notice)] = 2
@@ -659,7 +656,8 @@ public static class UrlInspectorReader
 
         try
         {
-            using var document = JsonDocument.Parse(block, JSON_LD);
+            // Strict, as the structured data check is: a trailing comma or a comment doesn't parse.
+            using var document = JsonDocument.Parse(block);
             List<string> types = [];
             Types(document.RootElement, types, depth: 0);
             return new StructuredDataBlock(true, types, block, null, false);

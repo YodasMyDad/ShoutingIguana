@@ -46,7 +46,10 @@ public sealed class AppTests : IAsyncLifetime
         Assert.Equal(JsonNamingPolicy.CamelCase.ConvertName(IssueCatalog.TITLE_TOO_LONG.Severity.ToString()), (string?)tooLong["severity"]);
         Assert.Equal(IssueCatalog.TITLE_TOO_LONG.Title, (string?)tooLong["title"]);
         Assert.Equal(IssueCatalog.TITLE_TOO_LONG.Description, (string?)tooLong["description"]);
+        Assert.Equal(IssueCatalog.TITLE_TOO_LONG.Why, (string?)tooLong["why"]);
         Assert.Equal(IssueCatalog.TITLE_TOO_LONG.Fix, (string?)tooLong["fix"]);
+        Assert.Equal(IssueCatalog.TITLE_TOO_LONG.LearnMore, (string?)tooLong["learnMore"]);
         Assert.Equal("titles", (string?)tooLong["category"]);
+        Assert.Null((string?)listed.Single(check => (string?)check!["id"] == IssueCatalog.IMAGE_BROKEN.Id)!["learnMore"]);
     }
 }

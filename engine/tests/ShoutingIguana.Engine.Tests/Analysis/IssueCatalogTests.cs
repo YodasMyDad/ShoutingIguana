@@ -27,7 +27,7 @@ public sealed class IssueCatalogTests
         "hreflang-missing-return", "hreflang-broken-target", "hreflang-to-non-indexable", "hreflang-duplicate-code",
         "hreflang-missing-x-default", "hreflang-outside-head", "structured-data-invalid", "structured-data-missing-required",
         "no-https", "http-page", "mixed-content", "security-headers-missing", "url-uppercase", "url-underscores", "url-too-long",
-        "slow-response", "large-page", "viewport-missing", "lang-missing", "charset-missing", "open-graph-missing",
+        "slow-response", "large-page", "html-past-crawl-limit", "viewport-missing", "lang-missing", "charset-missing", "open-graph-missing",
         "sitemap-url-other-host", "noindex-with-canonical", "robots-txt-unreachable-other-origin", "duplicate-site-version"
     ];
 
@@ -63,7 +63,14 @@ public sealed class IssueCatalogTests
             Assert.Matches(new Regex("^[a-z0-9]+(-[a-z0-9]+)*$"), issue.Id);
             Assert.False(string.IsNullOrWhiteSpace(issue.Title));
             Assert.EndsWith(".", issue.Description);
+            Assert.EndsWith(".", issue.Why);
             Assert.EndsWith(".", issue.Fix);
+            if (issue.LearnMore is { } learnMore)
+            {
+                Assert.StartsWith("https://", learnMore);
+                Assert.True(Uri.IsWellFormedUriString(learnMore, UriKind.Absolute));
+            }
+
             Assert.Same(issue, IssueCatalog.Find(issue.Id));
         });
         Assert.Null(IssueCatalog.Find("no-such-issue"));

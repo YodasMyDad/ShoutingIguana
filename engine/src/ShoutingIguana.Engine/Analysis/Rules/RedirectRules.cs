@@ -11,7 +11,7 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// </summary>
 internal sealed class RedirectRules(UrlTable urls) : ISiteRule
 {
-    /// <summary>Google Search Central: "Googlebot generally follows 10 redirect hops".</summary>
+    /// <summary>By default, Google's crawlers follow up to 10 redirect hops.</summary>
     private const int GOOGLEBOT_MAX_HOPS = 10;
 
     /// <summary>Redirecting URLs a crawled page links to in any way.</summary>

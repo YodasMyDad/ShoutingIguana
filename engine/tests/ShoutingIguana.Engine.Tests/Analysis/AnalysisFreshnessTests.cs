@@ -68,7 +68,10 @@ public sealed class AnalysisFreshnessTests
         Assert.Matches("^[0-9a-f]{16}$", fingerprint);
 
         Assert.Equal(fingerprint, AnalysisFreshness.Fingerprint(Enumerable.Reverse(checks)));
-        Assert.Equal(fingerprint, AnalysisFreshness.Fingerprint(checks.Select(check => check with { Title = "Renamed", Description = "", Fix = "" })));
+        Assert.Equal(fingerprint, AnalysisFreshness.Fingerprint(checks.Select(check => check with
+        {
+            Title = "Renamed", Description = "", Fix = "", Why = "Different.", LearnMore = null
+        })));
 
         Assert.NotEqual(fingerprint, AnalysisFreshness.Fingerprint(checks.Skip(1)));
         Assert.NotEqual(fingerprint, AnalysisFreshness.Fingerprint([.. checks, checks[0] with { Id = "a-new-check" }]));

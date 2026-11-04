@@ -330,6 +330,9 @@ public sealed partial class SyntheticSite
         });
 
         Page("large", "Large HTML", ["large-page"], page => page with { Content = page.Content + $"<!-- {new string('x', 1_100_000)} -->" });
+        // Past Googlebot's 2 MB uncompressed HTML limit, and also over the 1 MB large-page threshold.
+        Page("html-past-crawl-limit", "Huge HTML", ["large-page", "html-past-crawl-limit"],
+            page => page with { Content = page.Content + $"<!-- {new string('x', 2_200_000)} -->" });
         Page("no-viewport", "Missing viewport", ["viewport-missing"], page => page with { Viewport = false });
         Page("no-lang", "Missing lang", ["lang-missing"], page => page with { Lang = false });
         Page("no-charset", "Missing charset", ["charset-missing"], page => page with { Charset = false }, contentType: "text/html");

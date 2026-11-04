@@ -173,7 +173,8 @@ The owner accepted these proposals on 2026-11-01:
 2. **Hiding checks.** The old app could disable a plugin. Instead, a check can be hidden, for one crawl or for all,
    from the Issues screen. The analysis still runs it, and exports leave it out.
 3. **Analysis thresholds.** Settings > Analysis lets the user edit the limits (title and description lengths, thin
-   content, slow responses, image size). A crawl analysed with other limits offers to analyse again.
+   content, slow responses, image size). Settings > Analysis will expose every such threshold: every
+   `AnalysisSettings` property, not only those. A crawl analysed with other limits offers to analyse again.
 4. **Private-network guard.** Dropped: crawling staging and intranet sites is a real use.
 5. **32-bit Windows.** Dropped. Installers for Windows x64 and Arm64, macOS and Linux.
 6. **Sitemap XML generator.** Goes to the backlog, since nobody could reach it in the old app.

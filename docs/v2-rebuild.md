@@ -65,8 +65,9 @@ As of 2026-10-31:
 - **`www` and the bare domain are one site.** Both are internal, and they share one rate limit and connection limit.
   Sites serve one and redirect the other, and separate limits would double the load on the server. The owner confirmed
   this on 2026-11-01.
-  - Search engines treat them, and http and https, as separate sites. So a version that answers instead of
-    redirecting to the main one is flagged `duplicate-site-version`.
+  - Crawling them as one site stays. A version that answers instead of redirecting to the main one is
+    `duplicate-site-version`, a Warning: Google treats the versions as duplicate URLs and picks one, preferring
+    HTTPS. Probes aren't parsed, so a canonical on the other version isn't seen.
   - Nothing links to the other versions as a rule, so the crawler probes each one at the start of a crawl: a status
     check of the start URL's path there, never parsed or followed, so the site is never crawled twice.
   - A dead version isn't flagged, and neither are its unreachable URLs or robots.txt: a dead `www` twin is normal.
@@ -124,7 +125,21 @@ As of 2026-10-31:
     flagged slow besides the planted one. The e2e test also checks the stored times directly, so the crawler's own
     timing can't drift unnoticed.
 - **Thresholds follow common SEO tool defaults.** For example: titles 30–60 characters, descriptions 70–155,
-  200 words, images over 200 KB. All are configurable in `AnalysisSettings`.
+  200 words, images over 200 KB. All are configurable in `AnalysisSettings`. Googlebot's 2 MB HTML limit is not:
+  it is Google's, named in the check, and not a setting.
+- **Check severities (November 2026).** Severity is part of the checks fingerprint, so analyses from before these
+  changes are out of date. That is intended.
+  - `blocked-by-robots` is a Notice, not a Warning. Blocking is usually deliberate (baskets, internal search,
+    filters). Search Console lists it as excluded, not an error, the same as `noindex-page`.
+  - `description-missing` is a Notice. Google writes most snippets from the page, and a missing description has no
+    documented ranking effect.
+  - `h1-missing` is a Notice. Google says it rarely relies on headings' HTML semantics; the gap is mainly
+    accessibility.
+  - `duplicate-site-version` is a Warning, not an Error. Nothing is broken: Google treats the versions as duplicate
+    URLs and picks one, preferring HTTPS. Probes aren't parsed, so the check can't see a canonical on the other
+    version and can't tell a harmless copy from a harmful one.
+  - `meta-refresh` stays a Warning. One severity per id. Google treats an instant refresh as a permanent redirect,
+    but a server redirect is what Google recommends, and every client follows it.
 
 ## Handoff to step 3 (the UI)
 
@@ -145,7 +160,7 @@ Everything below is public in `ShoutingIguana.Engine`.
 | Crawl settings | `CrawlOptions` and its `Validate()`. `CrawlDatabase.ReadOptions(path)` returns a stored crawl's settings, secrets removed (`HasRedactedProxyCredentials`; header names are kept, values aren't) |
 | Analyse | `new CrawlAnalyzer(loggerFactory).AnalyzeAsync(path, settings, cancellationToken)` returns an `AnalysisSummary`: counts per check, `IsPartial` and `Notes` |
 | Issues | `IssueReader`: `ReadAnalysis`, `ReadCounts`, `ReadNotes`, `ReadIssues(path, id, limit, offset)` (paged) and `ReadAll` (streamed, for export). A check missing from `ReadCounts` wasn't run |
-| What each check means | `IssueCatalog.All` and `Find(id)`: id, category, severity, title, description and fix |
+| What each check means | `IssueCatalog.All` and `Find(id)`: id, category, severity, title, description (what), why, fix and an optional learn-more link |
 | Headline numbers | `CrawlStatsReader.Read(path)` |
 | Anything else | `CrawlDatabase.OpenReader(path)` is a read-only connection. `BlobCodec` decodes `response_details` (headers and page facts) and `response_html`. The tables are defined in `Storage/CrawlSchema.cs` |
 
@@ -226,6 +241,12 @@ Everything below is public in `ShoutingIguana.Engine`.
   not a pixel measurement.
 - A version of the site that answers 200 is flagged `duplicate-site-version` even if its page has a canonical or an
   instant meta refresh pointing to the main site, because probes aren't parsed.
+- `charset-missing` doesn't treat a byte-order mark as a charset declaration. W3C says a BOM wins over every other
+  declaration, but the crawl stores decoded text and `PageFacts` doesn't record that a BOM was there. The check
+  doesn't re-parse the HTML to look for one.
+- Hreflang script subtags aren't checked against ISO 15924: any four letters pass. Rare enough that it wasn't added.
+- A sitemap URL on a different protocol from the sitemap (an http URL in an https sitemap) isn't reported.
+  sitemaps.org drops it; the check only compares hosts. Left on the backlog.
 
 ## How to verify
 

@@ -1,8 +1,9 @@
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
 /// <summary>
-/// Validates hreflang values the way Google reads them: an ISO 639-1 language, an optional ISO 15924 script and an
-/// optional ISO 3166-1 alpha-2 (or UN M.49 numeric) region, or x-default. "en-UK" is the classic mistake: the
+/// Validates hreflang values the way Google reads them: an ISO 639-1 language, an optional four-letter script and an
+/// optional ISO 3166-1 alpha-2 region, or x-default. UN M.49 numeric regions such as es-419 aren't supported.
+/// "en-UK" is the classic mistake: Google ignores that region, so the code only works as plain "en"; the
 /// United Kingdom's code is GB.
 /// </summary>
 internal static class HreflangCodes
@@ -61,7 +62,8 @@ internal static class HreflangCodes
         if (next < parts.Length)
         {
             var region = parts[next];
-            if (!(region.Length == 2 && REGIONS.Contains(region)) && !(region.Length == 3 && region.All(char.IsAsciiDigit)))
+            // ISO 3166-1 alpha-2 only. A three-digit UN M.49 region such as 419 is not one.
+            if (region.Length != 2 || !REGIONS.Contains(region))
             {
                 return false;
             }

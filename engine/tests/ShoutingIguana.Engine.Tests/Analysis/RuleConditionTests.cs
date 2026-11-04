@@ -83,6 +83,26 @@ public sealed class RuleConditionTests
     }
 
     [Fact]
+    public void HtmlPastGooglesCrawlLimitIsSeparateFromLargeHtml()
+    {
+        var site = new RuleHarness();
+        var rules = new PerformanceRules(SETTINGS);
+        const long limit = PerformanceRules.GOOGLEBOT_HTML_BYTES;
+
+        Assert.Equal(2 * 1024 * 1024, limit);
+        Assert.Equal(IssueSeverity.Warning, IssueCatalog.HTML_PAST_CRAWL_LIMIT.Severity);
+
+        var over = site.Page($"{site.Site}/over", RuleHarness.Html(), bodyBytes: limit + 1);
+        Assert.Equal([IssueCatalog.LARGE_PAGE, IssueCatalog.HTML_PAST_CRAWL_LIMIT], rules.Check(over).Select(hit => hit.Issue));
+
+        var atTheLimit = site.Page($"{site.Site}/at", RuleHarness.Html(), bodyBytes: limit);
+        Assert.Equal([IssueCatalog.LARGE_PAGE], rules.Check(atTheLimit).Select(hit => hit.Issue));
+
+        var largeOnly = site.Page($"{site.Site}/large", RuleHarness.Html(), bodyBytes: SETTINGS.LargePageBytes + 1);
+        Assert.Equal([IssueCatalog.LARGE_PAGE], rules.Check(largeOnly).Select(hit => hit.Issue));
+    }
+
+    [Fact]
     public void RobotsDirectivesAndMetaRefresh()
     {
         var site = new RuleHarness();
@@ -152,6 +172,7 @@ public sealed class RuleConditionTests
         Assert.Empty(Check("/en", Alternate("en", "/en") + Alternate("fr", "/fr") + Alternate("x-default", "/en")));
         Assert.Empty(Check("/plain", string.Empty));
         Assert.Equal([IssueCatalog.HREFLANG_INVALID_CODE], Check("/uk", Alternate("en-UK", "/uk") + Alternate("x-default", "/uk")));
+        Assert.Equal([IssueCatalog.HREFLANG_INVALID_CODE], Check("/latam", Alternate("es-419", "/latam") + Alternate("x-default", "/latam")));
         Assert.Equal([IssueCatalog.HREFLANG_MISSING_SELF], Check("/no-self", Alternate("fr", "/fr") + Alternate("x-default", "/fr")));
         Assert.Equal([IssueCatalog.HREFLANG_DUPLICATE_CODE],
             Check("/twice", Alternate("en", "/twice") + Alternate("fr", "/fr") + Alternate("fr", "/fr-ca") + Alternate("x-default", "/twice")));

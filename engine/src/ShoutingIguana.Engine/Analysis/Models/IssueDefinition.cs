@@ -2,8 +2,8 @@ namespace ShoutingIguana.Engine.Analysis.Models;
 
 /// <summary>One entry in the issue catalog.</summary>
 /// <param name="Id">Stable kebab-case id stored in crawl files, e.g. <c>title-too-long</c>.</param>
-/// <param name="Description">What is wrong and why it matters, in one or two sentences.</param>
-/// <param name="Fix">What to do about it, in one sentence.</param>
+/// <param name="Description">What is wrong. The catalog text's "what".</param>
+/// <param name="Fix">What to do about it. The catalog text's "fix".</param>
 public sealed record IssueDefinition(
     string Id,
     IssueCategory Category,
@@ -12,6 +12,17 @@ public sealed record IssueDefinition(
     string Description,
     string Fix)
 {
+    /// <summary>
+    /// Why it matters. Shown with the check, and not part of <see cref="AnalysisFreshness.ChecksFingerprint"/>.
+    /// </summary>
+    public required string Why { get; init; }
+
+    /// <summary>
+    /// A page that explains the check, or null when no authoritative source exists. Not part of
+    /// <see cref="AnalysisFreshness.ChecksFingerprint"/>.
+    /// </summary>
+    public string? LearnMore { get; init; }
+
     /// <summary>
     /// How the check's issues group, as its rule writes their details. Only how they're shown: it isn't stored with an
     /// analysis, nor part of <see cref="AnalysisFreshness.ChecksFingerprint"/>.

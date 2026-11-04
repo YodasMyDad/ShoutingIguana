@@ -531,7 +531,7 @@ public sealed class SiteRuleTests
                 "Redirects to https://www.example.com/, which answers HTTP 200 instead of redirecting to https://example.com/", www)
         ], rules.Finish());
         Assert.Equal(IssueCategory.Content, IssueCatalog.DUPLICATE_SITE_VERSION.Category);
-        Assert.Equal(IssueSeverity.Error, IssueCatalog.DUPLICATE_SITE_VERSION.Severity);
+        Assert.Equal(IssueSeverity.Warning, IssueCatalog.DUPLICATE_SITE_VERSION.Severity);
     }
 
     /// <summary>
