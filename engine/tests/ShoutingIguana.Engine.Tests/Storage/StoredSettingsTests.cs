@@ -71,6 +71,24 @@ public sealed class StoredSettingsTests : IDisposable
         Assert.Empty(CrawlSummaryReader.Read(path).OutOfDate(new AnalysisSettings()));
     }
 
+    /// <summary>
+    /// Analyses before the 256-bit fingerprint stored the near-duplicate threshold in bits of 64 (nearDuplicateMaxDistance,
+    /// 6 by default). The threshold has a new name, so that value is never read as bits of 256: unknown, it's left out, and
+    /// the threshold takes its default.
+    /// </summary>
+    [Fact]
+    public async Task ANearDuplicateThresholdOfTheOldScaleIsNeverReadOnTheNew()
+    {
+        var path = await CrawlAndAnalyseAsync();
+        var stored = Stored(path, "SELECT settings_json FROM analysis WHERE id = 1");
+        Assert.Equal(7, stored["nearDuplicateMaxBits"]!.GetValue<int>());
+        stored.Remove("nearDuplicateMaxBits");
+        stored["nearDuplicateMaxDistance"] = 6;
+        Change(path, "UPDATE analysis SET settings_json = $json", stored.ToJsonString());
+
+        Assert.Equal(new AnalysisSettings().NearDuplicateMaxBits, IssueReader.ReadAnalysis(path)!.Settings!.NearDuplicateMaxBits);
+    }
+
     /// <summary>The property left out reads as its default, and every other one as stored.</summary>
     private static void AssertDefault(string name, JsonObject defaults, JsonObject without, JsonObject read)
     {
@@ -100,7 +118,7 @@ public sealed class StoredSettingsTests : IDisposable
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path, new AnalysisSettings
         {
             TitleMinLength = 1, TitleMaxLength = 2, DescriptionMinLength = 3, DescriptionMaxLength = 4, MinWordCount = 5, DuplicateMinWordCount = 6,
-            NearDuplicateMaxDistance = 7, ImageAltMaxLength = 8, LargeImageBytes = 9, LargePageBytes = 10, SlowResponseMs = 11, MaxUrlLength = 12
+            NearDuplicateMaxBits = 7, ImageAltMaxLength = 8, LargeImageBytes = 9, LargePageBytes = 10, SlowResponseMs = 11, MaxUrlLength = 12
         });
         return path;
     }

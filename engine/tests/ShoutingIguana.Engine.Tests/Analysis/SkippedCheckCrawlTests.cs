@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
@@ -83,6 +84,46 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
         Assert.False(IssueReader.ReadCounts(_path).ContainsKey(IssueCatalog.ORPHAN_PAGE.Id));
         Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.ORPHAN_PAGE.Id));
         Assert.Equal(1, CrawlStatsReader.Read(_path).SitemapUrlCount);
+    }
+
+    /// <summary>
+    /// The near-duplicate check compares 256-bit fingerprints, of which an earlier version recorded only the first 64: a
+    /// crawl it made has no columns for the rest, and pages it fetched while continuing a crawl have none in them. Either way
+    /// the check is skipped, saying why, and nothing is stored for it, while exact duplicates are still found. The crawl's
+    /// file still opens and reads as before.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "This crawl was made by an earlier version")]
+    [InlineData(false, "1 page in this crawl was fetched by an earlier version")]
+    public async Task NearDuplicatesAreSkippedWithoutTheWholeFingerprint(bool madeBefore, string why)
+    {
+        await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
+        await CrawlAndAnalyseAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 });
+        Assert.Equal(2, IssueReader.ReadAll(_path, IssueCatalog.NEAR_DUPLICATE_CONTENT.Id).Count());
+
+        Execute(madeBefore
+            ? string.Concat(CrawlSchema.RESPONSE_COLUMNS.Select(column => $"ALTER TABLE responses DROP COLUMN {column.Name};"))
+            : "UPDATE responses SET simhash_1 = NULL, simhash_2 = NULL, simhash_3 = NULL WHERE url_id = (SELECT id FROM urls WHERE url LIKE '%/plants/content-near-a')");
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_path);
+
+        Assert.True(analysis.IsPartial);
+        Assert.Contains($"Near-duplicate content wasn't checked: {char.ToLowerInvariant(why[0])}{why[1..]}, which didn't record what the check needs. Crawl again to check it.",
+            analysis.Notes);
+        Assert.Equal(new SkippedCheck(IssueCatalog.NEAR_DUPLICATE_CONTENT.Id, SkippedCheckReasons.EARLIER_VERSION,
+            $"{why}, which didn't record what this check needs. Crawl again to check it."), Assert.Single(analysis.Skipped));
+        Assert.DoesNotContain(analysis.Issues, issue => issue.Issue == IssueCatalog.NEAR_DUPLICATE_CONTENT);
+        Assert.Empty(IssueReader.ReadAll(_path, IssueCatalog.NEAR_DUPLICATE_CONTENT.Id));
+        Assert.Equal(2, analysis.Issues.Single(issue => issue.Issue == IssueCatalog.DUPLICATE_CONTENT).Count);
+        Assert.Equal(server.Site.GetExpectations().HtmlPages, CrawlStatsReader.Read(_path).HtmlPageCount);
+    }
+
+    private void Execute(string sql)
+    {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _path, Pooling = false }.ToString());
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
     }
 
     private async Task<AnalysisSummary> CrawlAndAnalyseAsync(CrawlOptions options)

@@ -194,8 +194,10 @@ Everything below is public in `ShoutingIguana.Engine`.
 
 ## Known limitations
 
-- Near-duplicate detection compares at most 1,000 neighbours per fingerprint bucket, so past roughly 500k pages a
-  few pairs can be missed.
+- Near-duplicate detection estimates similarity from a 256-bit fingerprint. Pages 70% to 96% alike (a heavy shared
+  template) can be flagged on a large enough site, and a bucket of pages sharing much of their text is searched within
+  a bound, so a near copy in one could be missed (`engine/README.md`, Near duplicates). Crawls made by engines before
+  the 256-bit fingerprint skip the check until crawled again.
 - Links are capped at 10,000 per page, so pages linked only from a huge HTML sitemap can look orphaned.
 - Some crawls skip the orphan check: stopped, depth-limited, URL-limited, folder-scoped, or with sitemaps off or none
   read. A declared sitemap that failed (other than with 404/410) skips the not-in-sitemap check. The analysis notes

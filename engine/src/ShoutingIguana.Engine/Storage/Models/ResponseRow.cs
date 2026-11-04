@@ -32,5 +32,6 @@ internal sealed record ResponseRow
     public int? WordCount { get; init; }
     public ulong? ContentHash { get; init; }
     public ulong? SimHash { get; init; }
+    public SimHashLanes? SimHashLanes { get; init; }
     public string? Language { get; init; }
 }

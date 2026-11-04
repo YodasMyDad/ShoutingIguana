@@ -100,6 +100,16 @@ public sealed partial class SyntheticSite
         {
             H1 = "Nearly copied content", Content = $"<p>{string.Join(' ', nearCopy)}</p>"
         });
+
+        // Not near copies, though the first 64 bits of their fingerprints say so: text keys searched for (as about one
+        // unrelated pair in 2×10^11 collides), then a pair sharing half its text (one in 10^5). Every size of the site
+        // carries both, and the rest of the 256 bits must tell them apart.
+        Page("collision-a", "Fingerprint collision A", [], page => page with { Content = $"<p>{Text("plant-collision-a-633038", PLANT_WORDS)}</p>" });
+        Page("collision-b", "Fingerprint collision B", [], page => page with { Content = $"<p>{Text("plant-collision-b-1005823", PLANT_WORDS)}</p>" });
+        var template = Text("plant-template", PLANT_WORDS / 2);
+        Page("template-a", "Shared template A", [], page => page with { Content = $"<p>{template} {Text("plant-template-a-1772", PLANT_WORDS / 2)}</p>" });
+        Page("template-b", "Shared template B", [], page => page with { Content = $"<p>{template} {Text("plant-template-b-3795", PLANT_WORDS / 2)}</p>" });
+
         Page("thin", "Thin page", ["low-word-count"], page => page with { Content = $"<p>{Text("plant-thin", 60)}</p>" });
 
         // 150 Hindi words: vowel signs and the virama are part of each word, so it's thin, not 300-odd words.

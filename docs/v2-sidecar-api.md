@@ -525,6 +525,7 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 | `resources-off` | The crawl was told not to fetch images and other files |
 | `site-versions-unchecked` | The site's other versions (www or not, http or https) weren't all checked |
 | `rule-failed` | The check's rule failed once every page was read, so it has no results (the log says why) |
+| `earlier-version` | The crawl, or some of the pages the check needs, was made by an earlier version, which didn't record what the check compares (for near-duplicate content, the 256-bit fingerprint). Crawling again mends it |
 | `newer-than-analysis` | The check is newer than the engine that ran the analysis. A check an analysis by a newer engine than the sidecar's didn't run has no `reason`: that engine dropped it |
 
 ### Data (E1: the readers that exist today)

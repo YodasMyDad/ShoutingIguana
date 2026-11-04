@@ -199,6 +199,8 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   - The duplicate site version check needs to know how every version answered, and a home page to redirect to. A
     crawl stopped before the probes were answered, a crawl file from before the crawler probed, or a home page that
     isn't a page skips it.
+  - Near-duplicate content needs every page's whole fingerprint, which engines before it didn't record: a crawl one of
+    them made, or continued, skips it (see [Near duplicates](#near-duplicates)).
   - A skipped check stores no rows, whatever its rule found on the way.
   - A cross-page rule that fails once every page is read leaves its checks with no results at all, so they're skipped
     as `rule-failed` rather than shown as run and clean. Each such rule declares the checks it reports
@@ -229,8 +231,9 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   - The redirect checks still look at them: a version that redirects temporarily, to http, in a loop or to a broken
     URL is a problem.
 - **Thresholds.** `AnalysisSettings` holds every limit (title 30–60 characters, description 70–155, 200
-  words, images over 200 KB, pages slower than 1 s...). Each analysis stores the values it used. Title and
-  description lengths count full-width (CJK) characters and emoji as two, as they take about twice the room.
+  words, images over 200 KB, pages slower than 1 s, near duplicates within 24 of 256 fingerprint bits...). Each
+  analysis stores the values it used. Title and description lengths count full-width (CJK) characters and emoji as
+  two, as they take about twice the room.
 - **Atomic.** The issues are replaced in one transaction, so a failed or cancelled analysis keeps the
   previous results.
 - **What an issue names.** An issue is one check on one URL, with a short detail and the other URL involved. Where a
@@ -265,6 +268,63 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
 Categories: response codes, redirects, links, indexability, canonicals, sitemaps, titles, meta descriptions,
 headings, content, images, hreflang, structured data, security, URLs, performance, HTML.
 
+### Near duplicates
+
+`near-duplicate-content` flags indexable pages of 50 words or more whose main content is almost the same as another's.
+It compares fingerprints taken when the page was parsed, never the text.
+
+- **Fingerprint.** A 256-bit SimHash of the main content's 3-word shingles: four 64-bit lanes, each hashing the words
+  with a seed of its own (`ContentFingerprint`). Lane 0 is the engine's original SimHash (`responses.simhash`); lanes 1
+  to 3 have columns of their own (`simhash_1` to `_3`). Exact copies are left to `duplicate-content`.
+- **Threshold.** Each bit of two pages' fingerprints differs with probability θ/π, where cos θ is how alike their
+  shingles are, so pages d bits apart are about cos(πd/256) alike. They are near copies within
+  `NearDuplicateMaxBits`, 24 of 256 by default: about 96% alike, as 6 bits of 64 meant before, measured with a quarter
+  of the variance. A one-word edit to a 300-word page is about 12 bits. Pages 98% alike are found 98% of the time, and
+  96% alike half the time.
+
+  | Bits apart, of 256 | 8 | 16 | 24 | 32 | 64 | 128 |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | About this alike | 99.5% | 98% | 96% | 92% | 71% | Unrelated |
+
+  The threshold was `nearDuplicateMaxDistance`, in bits of 64, until this engine. It has a new name so that an
+  analysis's stored 6 is never read as 6 of 256: such settings read as the default.
+- **Precision.** Text shared through a template makes pages alike too. The chance that two pages come within 24 bits,
+  by how much of their text they share, and the pairs that makes on a site whose every page shares that much. For any
+  one template the rate is usually far lower, so these are ceilings:
+
+  | Pages share | One pair in | Pairs at 100k pages | At 1M | At 10M | The 64-bit check: one pair in |
+  | --- | --- | --- | --- | --- | --- |
+  | Nothing | 3×10^43 | 0 | 0 | 0 | 2×10^11 (2 pairs at 1M) |
+  | 50% | 5×10^18 | 0 | 0 | 0.00001 | 130,000 |
+  | 60% | 2×10^14 | 0 | 0.002 | 0.2 | 10,000 |
+  | 70% | 10^10 | 0.4 | 44 | 4,400 | 800 |
+  | 80% | 800,000 | 6,500 | 650,000 | 65 million | 70 |
+
+  Through the real fingerprint and rule, on generated 400-word pages: nothing was flagged up to 70% shared at 1M
+  pages, nor were 50 one-word edits among them missed; at 80% shared, 3,664 of 100k pages were flagged, being 80%
+  alike. Between about 70% and 96% alike the estimate can't always tell, on a large enough site.
+- **Finding every pair.** Pages within 24 bits of 256 are within 6 bits of 64 in at least one lane, and a lane within 6
+  bits agrees exactly on 2 of its 8 blocks of 8 bits. So the pages are counting-sorted by each pair of blocks of each
+  lane in turn (28 pairs × 4 lanes: 112 keys of 16 bits, holding one key's arrays at a time), compared within a
+  bucket when that lane is within 6 bits, and joined into groups when all 256 bits are within 24. Every pair within the
+  threshold shares a bucket, whatever the crawl's size or order. Unrelated pages share a key one time in 65,536, about
+  15 to a bucket at 1M pages and 150 at 10M. Another threshold k uses k / 4 bits per lane and k / 4 + 2 blocks.
+- **Dense clusters.** A bucket fuller than unrelated pages ever make one (more than 128 pages, or past 2 million pages
+  four times the average) holds pages that share much of their text: near copies of one another, or a heavy template.
+  Its pages are sorted by the lane and each is compared with the next 64 (half the limit), and a bucket whose pages are
+  one group already is passed over. Near copies there still form one group, each joined through its neighbours. A
+  near copy could be missed only if every key it shares is that crowded and puts it further away. So the search makes
+  at most 112 × pages × max(64, 2 × pages / 65,536) comparisons; 100,000 copies of one page take 0.2 s.
+- **Cost.** About 70 bytes a page while it runs, and 30 more a page in the crawl file. At 1M pages the search takes
+  about 2 s on unrelated content, and 6 to 13 s when 30% to 70% of every page is one template (one thread). Analysing
+  the 1M-page synthetic site's crawl took 78–80 s, against 84–88 s for the single-lane check before it, on the same
+  file. The four lanes cost the parse 28 µs a page, less than the one lane did before, now that a shingle's weights are
+  added eight bits at a time.
+- **Crawls without the whole fingerprint.** Engines before this one recorded lane 0 only. A crawl one of them made, or
+  pages one fetched while continuing a crawl, leave the check skipped (`earlier-version`), with a note: "This crawl was
+  made by an earlier version, which didn't record what this check needs. Crawl again to check it." It is skipped for
+  any such page, not run on the rest, as any page could be the near copy of one the check can't compare.
+
 ## Crawl file (`.sicrawl`)
 
 One SQLite file per crawl. It is a single self-contained file once the crawl closes.
@@ -286,7 +346,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | --- | --- |
 | `crawl` | Start URL, options (so a resume behaves the same), status, engine version |
 | `urls` | Every URL seen once: scope, depth, crawl state, why it was skipped, where it was found (`source` 3 marks a probe of the site's other versions) |
-| `responses` | One row per fetched URL: status, timings, sizes, title, description, H1, canonical, indexability, content hashes |
+| `responses` | One row per fetched URL: status, timings, sizes, title, description, H1, canonical, indexability, content hashes, and the four lanes of the content fingerprint (`simhash`, `simhash_1` to `_3`) |
 | `response_details` | Brotli-compressed JSON of the headers and full `PageFacts` (headings, meta tags, images, hreflang, JSON-LD, ids) |
 | `response_html` | Compressed HTML, only with `--store-html` |
 | `links` | Every link: source, target, kind (link/image/script/canonical/hreflang/redirect...), rel flags, page region, anchor text |
@@ -312,8 +372,10 @@ temporary files. It costs 13 s and 0.66 GB (15%) on the 1M crawl's 50M links (85
 about 2 s and 50 MB on the 100k benchmark, whose analysis then peaks at 278 MB rather than 195 MB.
 
 `notices` is created whenever the crawl writer opens a file,
-so an earlier engine's crawl gets it when it's continued, and reads as having none until then. The crawl's own schema
-version doesn't change. Files are shared, so a notice another program wrote oddly is read as well as it can be (one
+so an earlier engine's crawl gets it when it's continued, and reads as having none until then. The writer adds the
+fingerprint's `responses.simhash_1` to `_3` the same way: pages fetched before then, and any an earlier engine fetches
+into a newer file, have none. The crawl's own schema version doesn't change, so either engine reads and continues
+either file. Files are shared, so a notice another program wrote oddly is read as well as it can be (one
 without a code or a message is left out, a missing level reads as a warning and a missing time as the crawl's start),
 and a `notices` table of another shape reads as none; the writer won't continue a crawl whose table it couldn't store
 a notice in, and says so.

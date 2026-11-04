@@ -151,9 +151,11 @@ internal sealed class AnalysisReader : IDisposable
     /// </summary>
     public IEnumerable<AnalyzedPage> ReadPages(UrlTable urls)
     {
+        // Lanes 1 to 3 of the content fingerprint have columns of their own, which a crawl made by an earlier engine lacks.
+        var lanes = HasFingerprintLanes() ? string.Join(", ", CrawlSchema.RESPONSE_COLUMNS.Select(column => $"r.{column.Name}")) : "NULL, NULL, NULL";
         using var command = _connection.CreateCommand();
         command.CommandText = $"""
-            SELECT u.id, u.url, u.depth, r.size_bytes, r.body_bytes, r.ttfb_ms, r.response_ms, r.indexability_reason, d.data
+            SELECT u.id, u.url, u.depth, r.size_bytes, r.body_bytes, r.ttfb_ms, r.response_ms, r.indexability_reason, d.data, {lanes}
             FROM responses r
             JOIN urls u ON u.id = r.url_id
             JOIN response_details d ON d.url_id = r.url_id
@@ -184,11 +186,28 @@ internal sealed class AnalysisReader : IDisposable
                 ResponseMs = reader.GetInt32(6),
                 IndexabilityReason = urls[id].IndexabilityReason,
                 Headers = details.Headers,
-                Facts = details.Page,
+                Facts = ReadLanes(reader, 9) is { } fingerprintLanes ? details.Page with { SimHashLanes = fingerprintLanes } : details.Page,
                 Links = ReadLinks(id)
             };
         }
     }
+
+    /// <summary>Whether the crawl file has the columns for lanes 1 to 3 of the content fingerprint, which its writer adds.</summary>
+    private bool HasFingerprintLanes()
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT COUNT(*) FROM pragma_table_info('responses')
+            WHERE name IN ({string.Join(", ", CrawlSchema.RESPONSE_COLUMNS.Select(column => $"'{column.Name}'"))})
+            """;
+        return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) == CrawlSchema.RESPONSE_COLUMNS.Length;
+    }
+
+    /// <summary>Lanes 1 to 3 of a page's content fingerprint, from three columns, or null when any is missing.</summary>
+    private static SimHashLanes? ReadLanes(SqliteDataReader reader, int first) =>
+        reader.IsDBNull(first) || reader.IsDBNull(first + 1) || reader.IsDBNull(first + 2)
+            ? null
+            : new SimHashLanes(unchecked((ulong)reader.GetInt64(first)), unchecked((ulong)reader.GetInt64(first + 1)), unchecked((ulong)reader.GetInt64(first + 2)));
 
     /// <summary>The stored URL with this id, or null when there's none (0 means no URL).</summary>
     public string? ReadUrl(int urlId) => CrawlDatabase.Scalar(_connection, $"SELECT url FROM urls WHERE id = {urlId}") as string;

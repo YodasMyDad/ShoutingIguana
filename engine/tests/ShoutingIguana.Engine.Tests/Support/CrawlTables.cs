@@ -12,7 +12,7 @@ internal static class CrawlTables
         SELECT u.url, r.outcome, r.status_code, r.content_type, r.size_bytes, r.body_bytes, target.url, r.block_reason,
                r.is_html, r.title, r.title_count, r.meta_description, r.meta_description_count, r.h1, r.h1_count,
                canonical.url, r.is_noindex, r.is_nofollow, r.indexability, r.indexability_reason, r.word_count,
-               r.content_hash, r.simhash, r.language, r.outlink_count
+               r.content_hash, r.simhash, r.simhash_1, r.simhash_2, r.simhash_3, r.language, r.outlink_count
         FROM responses r
         JOIN urls u ON u.id = r.url_id
         LEFT JOIN urls target ON target.id = r.redirect_url_id

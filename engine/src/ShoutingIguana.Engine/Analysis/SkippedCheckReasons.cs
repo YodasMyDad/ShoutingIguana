@@ -52,6 +52,12 @@ public static class SkippedCheckReasons
     public const string RULE_FAILED = "rule-failed";
 
     /// <summary>
+    /// The crawl, or some of the pages the check needs, was made by an earlier version, which didn't record what the check
+    /// compares (for near-duplicate content, the whole 256-bit fingerprint of each page). Crawling again mends it.
+    /// </summary>
+    public const string EARLIER_VERSION = "earlier-version";
+
+    /// <summary>
     /// Never stored: the check is newer than the engine that ran the analysis, so the analysis didn't know it.
     /// <see cref="Storage.IssueReader.ReadSkippedChecks"/> reports it for such checks. A check that an analysis by a newer
     /// engine didn't run gets no reason: that engine dropped it.

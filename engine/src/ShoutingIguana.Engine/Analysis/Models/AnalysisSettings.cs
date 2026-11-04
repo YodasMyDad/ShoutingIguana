@@ -22,11 +22,19 @@ public sealed record AnalysisSettings
     public int DuplicateMinWordCount { get; init; } = 50;
 
     /// <summary>
-    /// Differing bits out of 64 at which two content fingerprints count as near duplicates. Unrelated pages differ by
-    /// about 32 bits; 6 catches text that is roughly 96% the same (a one-word edit in a long page is 1 to 5 bits) while
-    /// a false match between unrelated pages stays around one in 10^11 pairs.
+    /// Differing bits out of the 256 of two pages' content fingerprints (<see cref="Parsing.ContentFingerprint"/>) at which
+    /// they count as near duplicates. Each bit differs with probability θ/π, where cos θ is how alike the pages' 3-word
+    /// shingles are, so d bits apart estimates a similarity of cos(πd/256): 24 is about 96% the same (a one-word edit in a
+    /// 300-word page is about 12 bits; unrelated pages are about 128 apart). Pages that much alike are found half the
+    /// time, and pages 98% alike 98% of the time. Unrelated pages come within 24 bits once in 3×10^43 pairs, never at any
+    /// crawl size; pages sharing half their text, once in 5×10^18; 60%, once in 2×10^14 (0.002 pairs on a million pages
+    /// that all share it).
     /// </summary>
-    public int NearDuplicateMaxDistance { get; init; } = 6;
+    /// <remarks>
+    /// A new name for a new scale: analyses before it stored differing bits out of 64 (<c>nearDuplicateMaxDistance</c>, 6),
+    /// which this engine never reads, so such settings take this default.
+    /// </remarks>
+    public int NearDuplicateMaxBits { get; init; } = 24;
 
     public int ImageAltMaxLength { get; init; } = 125;
 
@@ -51,10 +59,11 @@ public sealed record AnalysisSettings
             errors.Add("Description lengths must satisfy 0 <= minimum < maximum.");
         }
 
-        // Each extra bit adds a bucketing pass with smaller buckets; beyond 8 bits "near" stops meaning much anyway.
-        if (NearDuplicateMaxDistance is < 0 or > 8)
+        // Every 4 bits more add a block to each lane's search, with more and less selective keys; past 32 bits (92% alike)
+        // "near" stops meaning much anyway.
+        if (NearDuplicateMaxBits is < 0 or > 32)
         {
-            errors.Add("Near-duplicate distance must be between 0 and 8 bits.");
+            errors.Add("Near-duplicate bits must be between 0 and 32 of 256.");
         }
 
         if (MinWordCount < 0 || DuplicateMinWordCount < 0 || ImageAltMaxLength < 1 || LargeImageBytes < 1 ||

@@ -100,6 +100,10 @@ internal sealed class CrawlWriter : IAsyncDisposable
             // A file from before notices were kept gets their table now, as it is continued.
             CrawlDatabase.Execute(connection, CrawlSchema.NOTICES);
             CheckNoticesTable(connection, databasePath);
+
+            // The columns for lanes 1 to 3 of the content fingerprint are added here, to a new file as to one an earlier engine
+            // made, whose pages so far have none.
+            AddMissingResponseColumns(connection);
             var writer = new CrawlWriter(connection, fileLock, options, counters, logger);
             if (created)
             {
@@ -156,6 +160,26 @@ internal sealed class CrawlWriter : IAsyncDisposable
         {
             throw new InvalidOperationException(
                 $"'{databasePath}' can't be continued: another program changed the table it keeps its alerts in (notices), so new ones couldn't be stored there.");
+        }
+    }
+
+    /// <summary>Adds the <c>responses</c> columns a file made by an earlier engine lacks (<see cref="CrawlSchema.RESPONSE_COLUMNS"/>).</summary>
+    private static void AddMissingResponseColumns(SqliteConnection connection)
+    {
+        HashSet<string> existing = new(StringComparer.OrdinalIgnoreCase);
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT name FROM pragma_table_info('responses')";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(0));
+            }
+        }
+
+        foreach (var (name, type) in CrawlSchema.RESPONSE_COLUMNS.Where(column => !existing.Contains(column.Name)))
+        {
+            CrawlDatabase.Execute(connection, $"ALTER TABLE responses ADD COLUMN {name} {type}");
         }
     }
 

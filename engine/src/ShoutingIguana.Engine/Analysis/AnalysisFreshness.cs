@@ -19,9 +19,10 @@ public static class AnalysisFreshness
     /// stored by another version are out of date (<see cref="OutOfDateReason.EngineChanged"/>), and the UI offers to
     /// run them again. A change to the catalog's checks is caught without a bump, by <see cref="ChecksFingerprint"/>.
     /// 4 stores every other URL an issue is about and the fault some checks group by (<c>issue_targets</c>,
-    /// <c>issue_faults</c>), and indexes the links to a URL by kind.
+    /// <c>issue_faults</c>), and indexes the links to a URL by kind. 5 also judges near duplicates on four SimHash
+    /// lanes (256 bits, within <c>NearDuplicateMaxBits</c>) and skips that check when a crawl didn't record them.
     /// </summary>
-    public const int VERSION = 4;
+    public const int VERSION = 5;
 
     /// <summary>The catalog's check ids with their categories and severities, hashed. Titles and texts don't count.</summary>
     public static string ChecksFingerprint { get; } = Fingerprint(IssueCatalog.All);
