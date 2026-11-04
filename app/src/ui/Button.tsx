@@ -2,7 +2,7 @@ import { Slot, Slottable } from '@radix-ui/react-slot';
 import clsx from 'clsx';
 import type { ButtonHTMLAttributes, MouseEvent, Ref } from 'react';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
-import { useAriaShortcut, useChord, useShortcut } from '../keyboard/registry';
+import { useCommandKeys } from '../keyboard/registry';
 import { IconSlot, type IconLike, type IconSize } from './Icon';
 import { Kbd } from './Kbd';
 import { Spinner } from './Spinner';
@@ -61,9 +61,8 @@ export function Button({
   onClick,
   ...rest
 }: ButtonProps) {
-  const shortcut = useShortcut(command ?? '');
-  const chord = useChord(command ?? '');
-  const ariaShortcut = useAriaShortcut(command ?? '');
+  // One lookup, and none without a command: grids put buttons in their cells.
+  const { shortcut, chord, ariaShortcut } = useCommandKeys(command);
   const spinner = useDelayedLoading(loading, { delayMs: BUTTON_SPINNER_DELAY_MS });
   const label = title ?? (typeof children === 'string' ? children : undefined);
   // What a screen reader calls it: its aria-label, or its words. The tooltip leaves that out of the description.
@@ -117,7 +116,7 @@ export function Button({
     </button>
   );
   return (
-    <Tooltip content={tip} command={command} triggerName={name}>
+    <Tooltip content={tip} chord={chord ?? undefined} triggerName={name}>
       {button}
     </Tooltip>
   );

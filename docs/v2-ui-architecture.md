@@ -280,7 +280,10 @@ slices.
   Esc that closes it goes on to the rest (`keyboard/layers.ts` gives back the key Radix takes), except over a menu, a
   popover or a dialog, which close one Esc at a time.
 - The same registry feeds button tooltips and `aria-keyshortcuts` (`Button`'s `command` prop), the `?` sheet, Settings
-  > Shortcuts and the palette. A key can't be listed without working.
+  > Shortcuts and the palette. A key can't be listed without working. Controls read it with `useCommandKeys`: one
+  subscription each, a ranking worked out once per change and keys that keep their identity, so a change renders
+  again only the controls whose keys changed, and a control without a command looks nothing up (grids put buttons and
+  URLs in their cells).
 - The grid's keys are registered with `scope: 'grid'`: listed, never dispatched (the focused grid handles them).
 - The palette is an ARIA combobox over a listbox on a Radix dialog. cmdk was the brief's pick, but its last release
   (1.1.1) leaves `aria-activedescendant` naming a stale or removed option, so screen readers hear the wrong command.
