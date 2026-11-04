@@ -202,16 +202,36 @@ export function IssuesScreen() {
         : settings.hiddenChecks.filter((other) => other !== id),
     }));
 
+  // Another check selected by a key (J, K, hiding this one): focus in the list moves to the new check's option, as
+  // the arrow keys move it; focus in the check (its grid, its buttons), which goes with it, moves to the new check's
+  // title; anywhere else it stays, and the new check is announced.
+  const focusTitleOf = useRef<string | null>(null);
+  useEffect(() => {
+    if (!checkId || focusTitleOf.current !== checkId) return;
+    focusTitleOf.current = null;
+    titleRef.current?.focus();
+  }, [checkId]);
+  const selectTakingFocus = (next: CheckEntry) => {
+    const focused = document.activeElement;
+    const listbox = focused?.closest('[role="listbox"]');
+    choose(next.check.id, 'key');
+    if (listbox) {
+      const options = listbox.querySelectorAll<HTMLElement>('[data-check]');
+      [...options].find((option) => option.dataset.check === next.check.id)?.focus();
+    } else if (focused?.closest('[data-check-detail]')) focusTitleOf.current = next.check.id;
+    else announce(checkWords(next));
+  };
+
   const onHideChange = (hide: boolean) => {
     if (!selected) return;
     const { id, title } = selected.check;
     setHidden(id, hide);
     if (!hide) return;
-    // The list moves on to the next check it shows, as a list does when a row goes.
+    // The list moves on to the next check it shows, as a list does when a row goes, and focus with it.
     const visible = list?.visible ?? [];
     const at = visible.findIndex((entry) => entry.check.id === id);
     const next = visible[at + 1] ?? visible[at - 1];
-    if (next && !showHidden) choose(next.check.id, 'key');
+    if (next && !showHidden) selectTakingFocus(next);
     notifyUndo(`Hid “${title}” from the list`, () => setHidden(id, false));
   };
 
@@ -245,29 +265,13 @@ export function IssuesScreen() {
     if (url) void openInBrowser(url);
   };
 
-  // J and K: focus in the list moves to the new check's option, as the arrow keys move it; focus in the check (its
-  // grid, its buttons), which goes with it, moves to the new check's title; anywhere else it stays, and the new check
-  // is announced.
-  const focusTitleOf = useRef<string | null>(null);
-  useEffect(() => {
-    if (!checkId || focusTitleOf.current !== checkId) return;
-    focusTitleOf.current = null;
-    titleRef.current?.focus();
-  }, [checkId]);
   const moveBy = (step: number) => {
     const visible = list?.visible ?? [];
     if (visible.length === 0) return;
     const at = visible.findIndex((entry) => entry.check.id === checkId);
     const next = visible[Math.max(0, Math.min(visible.length - 1, at < 0 ? 0 : at + step))];
     if (!next || next.check.id === checkId) return;
-    const focused = document.activeElement;
-    const listbox = focused?.closest('[role="listbox"]');
-    choose(next.check.id, 'key');
-    if (listbox) {
-      const options = listbox.querySelectorAll<HTMLElement>('[data-check]');
-      [...options].find((option) => option.dataset.check === next.check.id)?.focus();
-    } else if (focused?.closest('[data-check-detail]')) focusTitleOf.current = next.check.id;
-    else announce(checkWords(next));
+    selectTakingFocus(next);
   };
 
   // Analysing from here: the button pressed goes when the progress banner comes, so focus goes to its Cancel; when
@@ -465,6 +469,7 @@ export function IssuesScreen() {
               showHidden={showHidden}
               onShowHiddenChange={setShowHidden}
               hiddenTotal={entries?.filter((entry) => entry.hidden).length ?? 0}
+              notesShown={analysis.data.notes.length > 0}
               onClearFilters={clearFilters}
               refreshing={refreshing}
               filterRef={filterRef}

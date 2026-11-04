@@ -417,12 +417,50 @@ describe('the Issues screen', () => {
   it('hides a check, remembered, moving on to the next, with Undo', async () => {
     sidecar();
     const { router } = await open(`${ISSUES}/internal-client-error`);
-    fireEvent.click(await screen.findByRole('button', { name: 'Hide this check' }));
+    const hide = await screen.findByRole('button', { name: 'Hide this check' });
+    act(() => hide.focus());
+    fireEvent.click(hide);
     await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    // The button went with its check: focus is on the check that took its place.
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('heading', { level: 2, name: 'Internal links without anchor text' }),
+      ),
+    );
     expect(screen.queryByRole('option', { name: /Internal URL returns 4xx/ })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Show 1 hidden check' })).toBeVisible();
+    // A toggle whose words stay: pressed says the hidden checks are shown.
+    const toggle = screen.getByRole('button', { name: 'Show 1 hidden check' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Show 1 hidden check' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
     expect(await screen.findByRole('option', { name: /Internal URL returns 4xx/ })).toBeVisible();
+  });
+
+  it('hides the check with Ctrl+Shift+H from the list, focus moving to the next option', async () => {
+    sidecar();
+    const { router } = await open(`${ISSUES}/internal-client-error`);
+    await screen.findByRole('listbox');
+    act(() => selectedOption()?.focus());
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'H', ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    expect(document.activeElement).toHaveAccessibleName(/Internal links without anchor text/);
+  });
+
+  it('says a skipped check’s reason is in the notes only when there are notes', async () => {
+    // Orphan page ran under no engine that knew it: no reason of its own.
+    const counts = ISSUES_ANALYSIS.counts;
+    sidecar({ analysis: { ...ISSUES_ANALYSIS, skipped: [], counts } });
+    await open(`${ISSUES}/internal-client-error`);
+    expect(
+      await screen.findByRole('option', { name: 'Orphan page Skipped Skipped: the analysis notes above say why.' }),
+    ).toBeVisible();
+    cleanup();
+    sidecar({ analysis: { ...ISSUES_ANALYSIS, skipped: [], counts, notes: [], isPartial: true } });
+    await open(`${ISSUES}/internal-client-error`);
+    expect(
+      await screen.findByRole('option', { name: 'Orphan page Skipped The analysis didn’t say why.' }),
+    ).toBeVisible();
   });
 
   it('offers to analyse a crawl that never was, and says a running one is analysed when it finishes', async () => {

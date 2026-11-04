@@ -36,6 +36,8 @@ export interface ChecksListProps {
   onShowHiddenChange: (show: boolean) => void;
   /** Every check the user hid, whatever the filters. */
   hiddenTotal: number;
+  /** The analysis left notes, shown above the list: a skipped check without a reason of its own points to them. */
+  notesShown?: boolean;
   onClearFilters: () => void;
   /** The analysis is being read again behind what's shown. */
   refreshing?: boolean;
@@ -63,6 +65,7 @@ export function ChecksList({
   showHidden,
   onShowHiddenChange,
   hiddenTotal,
+  notesShown = false,
   onClearFilters,
   refreshing = false,
   filterRef,
@@ -167,6 +170,7 @@ export function ChecksList({
             disabled={list.passedCount === 0}
           />
           {hiddenTotal > 0 ? (
+            // A toggle: its words stay, and being pressed says the hidden checks are shown.
             <Button
               size="sm"
               variant="ghost"
@@ -174,7 +178,7 @@ export function ChecksList({
               pressed={showHidden}
               onClick={() => onShowHiddenChange(!showHidden)}
             >
-              {showHidden ? 'Hide the hidden checks' : `Show ${formatCountOf(hiddenTotal, 'hidden check')}`}
+              {`Show ${formatCountOf(hiddenTotal, 'hidden check')}`}
             </Button>
           ) : null}
         </div>
@@ -224,6 +228,7 @@ export function ChecksList({
                     tabbable={entry.check.id === tabStop}
                     onSelect={() => onSelect(entry.check.id, 'click')}
                     onOpen={onOpen}
+                    notesShown={notesShown}
                     ref={(element) => {
                       if (element) options.current.set(entry.check.id, element);
                       else options.current.delete(entry.check.id);
@@ -245,6 +250,7 @@ function CheckOption({
   tabbable,
   onSelect,
   onOpen,
+  notesShown,
   ref,
 }: {
   entry: CheckEntry;
@@ -252,6 +258,7 @@ function CheckOption({
   tabbable: boolean;
   onSelect: () => void;
   onOpen: () => void;
+  notesShown: boolean;
   ref: Ref<HTMLDivElement>;
 }) {
   const { check, outcome, count, skipReason } = entry;
@@ -284,7 +291,11 @@ function CheckOption({
           meta
         )
       }
-      description={skipped ? (skipReason ?? 'Skipped: the analysis notes above say why.') : undefined}
+      description={
+        skipped
+          ? (skipReason ?? (notesShown ? 'Skipped: the analysis notes above say why.' : 'The analysis didn’t say why.'))
+          : undefined
+      }
     >
       <div
         ref={ref}
