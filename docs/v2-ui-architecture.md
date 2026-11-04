@@ -26,11 +26,11 @@ Webview (React, app/src) ──────────────────�
 | Folder | Holds |
 | --- | --- |
 | `src/api` | The contract's types, the typed client, its errors, the transports (`http`, and `mock` over the design fixtures), query keys and options |
-| `src/shell` | The IPC with Rust (`ipc.ts`), the connection store, and OS actions with browser fallbacks (`os.ts`) |
+| `src/shell` | The IPC with Rust (`ipc.ts`), the connection store and its wait for a ready engine, OS actions with browser fallbacks (`os.ts`), and the start-up failure screen |
 | `src/live` | The SSE parser and reconnecting stream, the live store, and the bridge from events to the rest of the app |
 | `src/grid` | The grid primitive: windowed scroll space, virtualiser, keyboard and selection model, copy, paging hook |
 | `src/keyboard` | Chords, the command registry, the app's commands, the palette and the `?` sheet |
-| `src/settings` | Preferences: schema, store (Tauri store or `localStorage`), appearance |
+| `src/settings` | Preferences: schema, store (the shell's settings commands, or `localStorage`), appearance |
 | `src/feedback` | The loading rule, skeletons, toasts, error states, route errors, announcements |
 | `src/layout` | The shell's layout: sidebar, top bar, inspector slot, banners, the stopping overlay |
 | `src/screens` | One file per route. Home and the URLs grid work; the rest are stubs for their slices |
@@ -52,8 +52,8 @@ route search params → screens; settings store → appearance, layout
 
 - **Reads** go through TanStack Query with the options in `api/queries.ts`. They stay fresh until an event says
   otherwise: `staleTime` is infinite, nothing refetches on focus or reconnect, and `networkMode` is `always` (the
-  sidecar is local, so "offline" never applies). Grid pages' keys are `['grid', <grid>, <crawl id>, ...]`, so
-  `gridPagesOf(crawlId)` finds one crawl's pages.
+  sidecar is local, so "offline" never applies: a call made while it starts waits for it in the transport). Grid
+  pages' keys are `['grid', <grid>, <crawl id>, ...]`, so `gridPagesOf(crawlId)` finds one crawl's pages.
 - **Events** go into the live store at once, but React hears about them at most 4 times a second, and not at all while
   the window is hidden. Their side effects (refreshing the library, a crawl's reads, toasts, announcements) happen in
   the live bridge as each event arrives.
@@ -74,28 +74,88 @@ route search params → screens; settings store → appearance, layout
 ## The shell
 
 `app/src-tauri/src`: `sidecar/` (lifecycle), `live/` (its own event stream, for the tray and notifications), `tray/`,
-`quit.rs`, `window.rs`, `webview2.rs`, `context_menu.rs`, `open_files.rs`, `commands.rs`.
+`quit.rs`, `window.rs`, `webview2.rs`, `context_menu.rs`, `open_files.rs`, `commands.rs`, `settings.rs` (the
+preferences file), `profile.rs` (where its per-user files go), `startup.rs` (when it can't start).
 
 - **Starting.** A 32-byte token per spawn in `SI_SIDECAR_TOKEN`, the exact webview origin in `SI_SIDECAR_ORIGINS`
   (plus the dev server's in debug builds), `SI_PARENT_PID`, `--stdin-lifeline`. On Windows the sidecar joins a job
   object that kills it if the shell dies. The binary is the `externalBin`, built by `scripts/build-sidecar.*`
-  (self-contained, single file, ReadyToRun).
+  (self-contained, single file, ReadyToRun, without IIS's in-process module). It is spawned on a thread of its own, so
+  the window never waits for antivirus to scan a new 128 MB file, and it unpacks its native library into the app's
+  local data folder (`engine\<app version>`, through `DOTNET_BUNDLE_EXTRACT_BASE_DIR`) rather than `%TEMP%`; other
+  versions' folders there are removed.
 - **The connection, to the page.** One state machine. Command `sidecar_state` returns it; event `sidecar://state`
-  carries every change: `starting`, `ready` (port, token, version), `restarting`, `failed` (reason, exit code, a plain
-  message), `stopping`. Each has a rising `seq`: the page listens first, then asks, and keeps the newest.
-- **Restarts.** A lost sidecar restarts with backoff (250 ms to 4 s); five in a minute is `failed`, with Try again
-  (`restart_sidecar`). Exit code 3 (another sidecar holds the state folder) is retried for about 40 s.
+  carries every change: `starting`, `ready` (port, token, version), `restarting` (attempt, attempts, and why:
+  `crashed`, `start-failed` or `start-timed-out`), `failed` (reason, exit code, a plain message), `stopping`. Each has
+  a rising `seq`: the page listens first, then asks, and keeps the newest.
+- **Calls wait for the engine.** A call made while the shell starts or restarts the sidecar waits for it
+  (`waitForConnection` in `shell/connection.ts`, used by the HTTP transport), so a cold start shows skeletons, never
+  "The engine is starting.". It fails at once only when the engine has failed or the app is quitting, and a wait is
+  bounded at 90 s. Queries that failed before the page's first ready sidecar (it had failed, then Try again) fetch
+  again when it comes (`shell/readiness.ts`); later sidecars are the live bridge's.
+- **Restarts.** Every path ends:
+  - a start that never gets ready is tried three times in all (250 ms, then 1 s, between), then it's
+    `failed: start-failed`, however long each try takes (a start times out at 20 s);
+  - a sidecar that crashes after it was ready restarts with backoff (250 ms to 4 s), and the sixth crash without five
+    minutes of stable running between is `failed: crashed`;
+  - exit code 3 (another copy of the app, or its engine, holds the state folder) fails at once, with the shell's plain
+    sentence: the engine's own names a command-line option, so it goes only to the log.
+
+  Every retry is published as `restarting`, and the banner says why and which try it is. On any unexpected exit the
+  shell logs the sidecar's last 50 stderr lines at WARN. The reason it shows prefers a .NET "Unhandled exception." line
+  and is never a stack frame, and the sidecar writes unhandled exceptions to its own log too. Try again
+  (`restart_sidecar`) starts afresh.
 - **Quitting.** With a crawl running, one native question: "Stop crawling and quit?". Then the window shows
   "Stopping crawls…", the shell writes `shutdown` to the sidecar's stdin and waits up to 35 s (the contract's 30 s bound
   and a margin) before killing it. Closing the window while a crawl runs hides it to the tray instead, and says so once.
+  A launch made while the app quits doesn't bring the dying window back: once the engine has stopped, the shell starts
+  a new copy with that launch's files (`--relaunch-after <pid>` makes it wait until this one has gone).
 - **The tray.** Present while a crawl is live or the window is hidden: a progress ring on the icon, the crawls with
-  Pause and Resume, and Quit. Hidden, the webview is told it's invisible and its memory target is set Low, which held
-  the app at 10 to 25 MB in the spike.
-- **OS.** Single instance (a second launch focuses the window and forwards `.sicrawl` paths: `shell://open-crawl-files`
-  and `take_pending_open_files`). Window size and position remembered. WebView2's browser keys are off, so the
-  registry owns F5, Ctrl+F and the rest, and its context menu keeps only editing items.
-- **Permissions.** The page gets core IPC, `setTheme`, `setZoom`, open and save dialogs, http(s) links, show in folder,
-  the store and the shell's five commands. Nothing that spawns, reads files or notifies.
+  Pause and Resume, and Quit. Hidden, the webview is told it's invisible, its memory target is set Low, and the page is
+  suspended: no rendering, timers or live updates while hidden, so memory doesn't creep back. It resumes when the
+  window comes back and catches up from the engine, as after any reconnect (a sidecar replaced meanwhile included).
+  The 50 MB tray budget holds over a long stay: with a crawl running, the shell and its WebView2 processes measured
+  9.6 MB at 30 s, 20 MB at 3 minutes and a flat 23 MB from 6 to 11 minutes. The shell's own event stream keeps the
+  tray and the notifications going, and a crawl the engine took with it when it crashed is told once the new engine
+  reports it: "Crawl interrupted".
+- **OS.** Single instance. A second launch focuses the window, and the `.sicrawl` paths of every launch wait in the
+  shell until the page takes them, which it does once the engine can open them: `shell://open-crawl-files` says more
+  have arrived, and `take_pending_open_files` hands each over once. Window size and position are remembered. The
+  window stays on the app: any other navigation is refused, and an http(s) link opens in the browser.
+- **Keys.** WebView2's browser keys are off, so the registry owns F5, Ctrl+F and the rest. Every reserved key was
+  checked with real key presses (F7's caret browsing, Ctrl+S, Ctrl+J, Shift+Esc, Ctrl+P…) and none does anything in
+  WebView2. F10, and a tap of Alt on its own, would put the window in Windows' menu mode and lose the next key, so the
+  shell keeps them from it. The context menu keeps only editing items.
+- **Permissions.** The page gets the events it listens to, `setTheme`, `setZoom`, open and save dialogs, http(s)
+  links, and the shell's commands, none of which takes a path. Preferences go through `settings_read` and
+  `settings_write`, bound to one file (`settings.json` in the app's config folder, a JSON object of at most 64 KB).
+  Show in folder is `reveal_crawl_file`, which takes a crawl's id and finds the file in the engine's library. There's
+  no `core:default`, no store and no reveal of any path: `tests/capabilities.rs` expands the generated ACL and fails if
+  the page is granted a command that takes an unscoped path, or one from a plugin nobody has reviewed.
+- **When it can't start.** A webview that can't be made, or a plugin that fails, ends the app with a native message
+  box naming the error and the log's folder. A page whose start-up fails (the shell's IPC, say) shows a plain failure
+  with "Copy diagnostics", never a blank window.
+- **Test runs.** `SI_APP_PROFILE_DIR` gives a run of the built app a folder of its own for preferences, window state,
+  the WebView2 profile, the engine's unpacked files and the log, and keeps it out of single instance. The smoke test
+  and the orphan check use it, so they never touch the user's own copy, and run beside it.
+
+## Packaging, signing and CI
+
+- **The installer** is per-user NSIS. CI builds it on every push and installs it silently into a temporary folder,
+  checks that `.sicrawl` opens with it, runs it, and uninstalls it (`scripts/smoke-installer.ps1`). A silent uninstall
+  keeps the app's data and an empty `.sicrawl` key, as Tauri's installer does unless the user ticks "Delete the
+  application data".
+- **Signing.** `scripts/sign.mjs` signs the sidecar right after `dotnet publish`, and, as Tauri's `signCommand`, the
+  shell, the installer's plugins, the uninstaller and the installer. It signs when a certificate is configured
+  (`SI_SIGN_CERT_THUMBPRINT`, or `SI_SIGN_PFX_BASE64` and `SI_SIGN_PFX_PASSWORD`, with SHA-256 and an RFC 3161
+  timestamp), and otherwise skips, saying so. There is no certificate yet: buying one is the owner's decision before
+  the first release, as SmartScreen and application-control policies block unsigned code.
+- **Releases** come from `.github/workflows/app-release.yml`, run by hand only: the installer, signed if the secrets
+  are set, smoke-tested, kept as an artifact with its checksum, and optionally a draft GitHub release. The legacy WPF
+  app's `release.yml` still runs on pushes to `master`.
+- **CI** (`.github/workflows/app.yml`) pins every action to a commit and the shell's Rust in
+  `src-tauri/rust-toolchain.toml`. It also builds the shell on Linux (clippy and tests, so code for other platforms
+  compiles) and checks it on the oldest Rust `Cargo.toml` names.
 
 ## The API client
 

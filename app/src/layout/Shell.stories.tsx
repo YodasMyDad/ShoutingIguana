@@ -99,7 +99,18 @@ export const UrlsWhileCrawling: Story = {
 
 /** The engine stopped and the shell is starting a new one. */
 export const EngineRestarting: Story = {
-  loaders: [() => applyShellState({ state: 'restarting', seq: seq++, generation: 2, attempt: 1, exitCode: -1 })],
+  loaders: [
+    () =>
+      applyShellState({
+        state: 'restarting',
+        seq: seq++,
+        generation: 2,
+        attempt: 1,
+        attempts: 5,
+        reason: 'crashed',
+        exitCode: -1,
+      }),
+  ],
   render: () => <SidecarBanner />,
 };
 

@@ -1,6 +1,8 @@
 //! System notifications for crawls that ended while the window was out of sight. The webview shows its own toasts
 //! when it is in front, so these are only sent when the window is hidden or not focused.
 
+use std::collections::HashSet;
+
 use tauri::AppHandle;
 use tauri_plugin_notification::NotificationExt;
 
@@ -57,6 +59,21 @@ pub fn notice(ended: &Ended, item: &CrawlItem, analysed_before: Option<&Option<S
         _ => None,
     }
 }
+
+/// The crawls a lost sidecar took with it (`lost`), as the library of the one after it reports them: a notice for
+/// each that ended interrupted. One already continued, or no longer in the library, tells nothing.
+pub fn interrupted<'a>(
+    lost: &'a HashSet<String>,
+    items: &'a [CrawlItem],
+) -> impl Iterator<Item = (&'a CrawlItem, Notice)> + 'a {
+    items.iter().filter(|item| lost.contains(&item.id) && item.status == INTERRUPTED).map(|item| {
+        let body = format!("{}: the engine stopped. Continue it from the library.", item.display_name());
+        (item, Notice { title: "Crawl interrupted", body })
+    })
+}
+
+/// The library's status for a crawl whose sidecar stopped while it ran.
+const INTERRUPTED: &str = "interrupted";
 
 /// What identifies one ending of a crawl, so the same one is never told twice.
 pub fn ending_key(item: &CrawlItem) -> (String, Option<String>, Option<String>) {
@@ -168,6 +185,43 @@ mod tests {
         );
         let analysis = Ended { error: Some("Disk full".into()), ..ended("completed", true, true) };
         assert_eq!(notice(&analysis, &item("completed"), None), told("Analysis failed", "example.com: Disk full"));
+    }
+
+    /// The review's case (M2): a crawl running in the tray when the engine crashed came back interrupted, and nobody
+    /// said so. Only the crawls the lost sidecar took with it are told, and only those it left interrupted.
+    #[test]
+    fn crawls_a_lost_engine_left_interrupted_are_told_once_each() {
+        let lost: HashSet<String> = ["a", "b", "c"].into_iter().map(String::from).collect();
+        let mut continued = item("running");
+        continued.id = "b".into();
+        let mut unrelated = item("interrupted");
+        unrelated.id = "d".into();
+        let mut other = item("interrupted");
+        other.id = "c".into();
+        other.site = None;
+        other.file_name = "shop.sicrawl".into();
+        let items = [item("interrupted"), continued, unrelated, other];
+        let told: Vec<_> = interrupted(&lost, &items).map(|(item, notice)| (item.id.clone(), notice)).collect();
+        assert_eq!(
+            told,
+            [
+                (
+                    "a".to_owned(),
+                    Notice {
+                        title: "Crawl interrupted",
+                        body: "example.com: the engine stopped. Continue it from the library.".into()
+                    }
+                ),
+                (
+                    "c".to_owned(),
+                    Notice {
+                        title: "Crawl interrupted",
+                        body: "shop: the engine stopped. Continue it from the library.".into()
+                    }
+                ),
+            ]
+        );
+        assert_eq!(interrupted(&HashSet::new(), &items).count(), 0);
     }
 
     #[test]

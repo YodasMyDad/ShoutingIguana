@@ -1,0 +1,13 @@
+<Project>
+  <!--
+    Imported by scripts/build-sidecar.* into the sidecar's publish only (CustomAfterMicrosoftCommonTargets), so the
+    engine's projects stay as they are. It leaves IIS's in-process module (aspnetcorev2_inprocess.dll), which a
+    self-hosted Kestrel never loads, out of the single-file bundle: otherwise every machine unpacks it for nothing.
+    PublishIISAssets=false can't do this: it keeps the module out of the publish folder, not out of the bundle.
+  -->
+  <Target Name="SiLeaveOutIisModule" AfterTargets="ComputeResolvedFilesToPublishList" BeforeTargets="_ComputeFilesToBundle">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'aspnetcorev2_inprocess.dll'" />
+    </ItemGroup>
+  </Target>
+</Project>

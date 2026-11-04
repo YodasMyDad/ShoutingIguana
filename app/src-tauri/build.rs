@@ -7,6 +7,9 @@ fn main() {
         "request_quit",
         "shell_info",
         "take_pending_open_files",
+        "settings_read",
+        "settings_write",
+        "reveal_crawl_file",
     ])))
     .expect("the Tauri build script failed");
 }

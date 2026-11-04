@@ -12,23 +12,27 @@ mod stderr;
 
 use std::fmt;
 use std::io::{self, BufRead, BufReader, Read};
+use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Emitter};
 
+pub use launch::WEBVIEW_ORIGIN;
 pub use state::{SidecarState, SidecarStatePayload};
 
 use crate::sync::lock;
 use crate::window::MAIN_WINDOW;
-use launch::{DATA_DIR_OVERRIDE, ORIGINS_VARIABLE, PARENT_VARIABLE, STATE_DIR_OVERRIDE, TOKEN_VARIABLE};
+use launch::{
+    DATA_DIR_OVERRIDE, EXTRACT_DIR_VARIABLE, ORIGINS_VARIABLE, PARENT_VARIABLE, STATE_DIR_OVERRIDE, TOKEN_VARIABLE,
+};
 use process::SidecarProcess;
 use ready::ReadyLine;
 use restart::{Decision, Exit, RestartPolicy};
-use state::FailureReason;
+use state::{FailureReason, RestartReason};
 use stderr::{describe_exit, ExitReport, StderrTail};
 
 pub const STATE_EVENT: &str = "sidecar://state";
@@ -171,7 +175,8 @@ struct Launch {
     process: SidecarProcess,
     token: String,
     started: Instant,
-    ready: AtomicBool,
+    /// When it wrote its ready line.
+    ready_at: OnceLock<Instant>,
     timed_out: AtomicBool,
     stderr: Mutex<StderrTail>,
     open_streams: Mutex<u8>,
@@ -179,6 +184,10 @@ struct Launch {
 }
 
 impl Launch {
+    fn is_ready(&self) -> bool {
+        self.ready_at.get().is_some()
+    }
+
     fn stream_closed(&self) {
         let mut open = lock(&self.open_streams);
         *open = open.saturating_sub(1);
@@ -216,7 +225,8 @@ impl Sidecar {
         lock(&self.inner).published.clone()
     }
 
-    /// Starts the first sidecar.
+    /// Starts the first sidecar, off the calling thread: creating a 128 MB process waits for antivirus to scan it,
+    /// half a second or more after every install, and the window mustn't wait for that.
     pub fn start(self: &Arc<Self>) {
         let generation = {
             let mut inner = lock(&self.inner);
@@ -224,7 +234,7 @@ impl Sidecar {
             self.publish(&mut inner, generation, SidecarState::Starting);
             generation
         };
-        self.spawn(generation);
+        self.spawn_in_background(generation);
     }
 
     /// The UI's "Try again": a fresh start with the restart counters cleared. Does nothing unless the engine failed.
@@ -241,7 +251,7 @@ impl Sidecar {
             generation
         };
         log::info!("Starting the engine again, as asked");
-        self.spawn(generation);
+        self.spawn_in_background(generation);
         true
     }
 
@@ -268,7 +278,7 @@ impl Sidecar {
         };
         self.link.close();
         let launch = launch?;
-        let timeout = if launch.ready.load(Ordering::SeqCst) { timeout } else { timeout.min(BRIEF_SHUTDOWN_TIMEOUT) };
+        let timeout = if launch.is_ready() { timeout } else { timeout.min(BRIEF_SHUTDOWN_TIMEOUT) };
         stop_process(&launch.process, timeout)
     }
 
@@ -286,6 +296,17 @@ impl Sidecar {
         }
     }
 
+    /// Spawns on a thread of its own; on the calling thread only if no thread can be started.
+    fn spawn_in_background(self: &Arc<Self>, generation: u32) {
+        let this = Arc::clone(self);
+        let started =
+            thread::Builder::new().name(format!("sidecar-spawn-{generation}")).spawn(move || this.spawn(generation));
+        if let Err(error) = started {
+            log::warn!("Couldn't start a thread to start the engine ({error}): starting it here");
+            self.spawn(generation);
+        }
+    }
+
     fn spawn(self: &Arc<Self>, generation: u32) {
         let binary = std::env::current_exe().ok().and_then(|shell| launch::binary_path(&shell));
         let Some(binary) = binary.filter(|binary| binary.is_file()) else {
@@ -299,11 +320,14 @@ impl Sidecar {
                 return;
             }
         };
-        let environment = [
+        let mut environment = vec![
             (TOKEN_VARIABLE, token.clone().into()),
             (ORIGINS_VARIABLE, launch::allowed_origins(self.app.config().build.dev_url.as_ref()).into()),
             (PARENT_VARIABLE, std::process::id().to_string().into()),
         ];
+        if let Some(folder) = self.extraction_folder() {
+            environment.push((EXTRACT_DIR_VARIABLE, folder.into_os_string()));
+        }
         let arguments =
             launch::arguments(launch::folder_override(DATA_DIR_OVERRIDE), launch::folder_override(STATE_DIR_OVERRIDE));
         let (process, stdout, stderr) = match SidecarProcess::spawn(&binary, &arguments, &environment) {
@@ -322,7 +346,7 @@ impl Sidecar {
             process,
             token,
             started: Instant::now(),
-            ready: AtomicBool::new(false),
+            ready_at: OnceLock::new(),
             timed_out: AtomicBool::new(false),
             stderr: Mutex::default(),
             open_streams: Mutex::new(2),
@@ -338,6 +362,34 @@ impl Sidecar {
             }
         }
         self.watch(&launch, stdout, stderr);
+    }
+
+    /// Where the single-file sidecar unpacks its native libraries: a folder of the app's own, per user and per app
+    /// version, rather than %TEMP%, which application-control policies often block DLLs in and nothing ever cleans.
+    /// Other versions' folders are removed the first time. None (so .NET's default) if there's no such folder.
+    fn extraction_folder(&self) -> Option<PathBuf> {
+        static PREPARED: OnceLock<Option<PathBuf>> = OnceLock::new();
+        PREPARED
+            .get_or_init(|| {
+                let Some(root) =
+                    crate::profile::local_data_folder(&self.app).map(|folder| folder.join(launch::EXTRACT_FOLDER))
+                else {
+                    log::warn!("The app has no local data folder to unpack the engine in");
+                    return None;
+                };
+                let version = self.app.package_info().version.to_string();
+                match launch::prepare_extraction_folder(&root, &version) {
+                    Ok(folder) => Some(folder),
+                    Err(error) => {
+                        log::warn!(
+                            "Couldn't make {}: the engine unpacks into the temp folder ({error})",
+                            root.display()
+                        );
+                        None
+                    }
+                }
+            })
+            .clone()
     }
 
     /// Four threads per sidecar: the ready line on stdout, the log on stderr, the exit, and the start timeout.
@@ -372,7 +424,7 @@ impl Sidecar {
         });
         let watched = Arc::clone(launch);
         spawn_thread(format!("sidecar-start-timeout-{generation}"), move || {
-            if watched.process.wait(START_TIMEOUT).is_none() && !watched.ready.load(Ordering::SeqCst) {
+            if watched.process.wait(START_TIMEOUT).is_none() && !watched.is_ready() {
                 watched.timed_out.store(true, Ordering::SeqCst);
                 log::warn!("The engine didn't say it was ready within {} s: killing it", START_TIMEOUT.as_secs());
                 watched.process.kill();
@@ -381,7 +433,7 @@ impl Sidecar {
     }
 
     fn on_ready(&self, launch: &Launch, ready: ReadyLine) {
-        if launch.ready.swap(true, Ordering::SeqCst) {
+        if launch.ready_at.set(Instant::now()).is_err() {
             return;
         }
         let mut inner = lock(&self.inner);
@@ -415,18 +467,22 @@ impl Sidecar {
             log::info!("The engine stopped ({}) as the app quits", describe_exit(code));
             return;
         }
-        let report = ExitReport {
-            code,
-            timed_out: launch.timed_out.load(Ordering::SeqCst),
-            reason: lock(&launch.stderr).reason().map(str::to_owned),
-            ..ExitReport::default()
+        let (reason, tail) = {
+            let stderr = lock(&launch.stderr);
+            (stderr.reason().map(str::to_owned), stderr.lines().collect::<Vec<_>>().join("\n"))
         };
+        let report =
+            ExitReport { code, timed_out: launch.timed_out.load(Ordering::SeqCst), reason, ..ExitReport::default() };
         log::warn!(
             "The engine stopped unexpectedly ({}){}",
             describe_exit(code),
             report.reason.as_deref().map(|reason| format!(": {reason}")).unwrap_or_default()
         );
-        let exit = Exit { code, was_ready: launch.ready.load(Ordering::SeqCst) };
+        // Its stderr is otherwise kept only while developing, and the cause of a crash is in it.
+        if !tail.is_empty() {
+            log::warn!(target: SIDECAR_LOG, "The engine's last lines on stderr:\n{tail}");
+        }
+        let exit = Exit { code, ready_for: launch.ready_at.get().map(Instant::elapsed) };
         self.after_exit(&mut inner, launch.generation, exit, report);
     }
 
@@ -437,25 +493,24 @@ impl Sidecar {
             return;
         }
         let report = ExitReport { spawn_error: Some(error), ..ExitReport::default() };
-        self.after_exit(&mut inner, generation, Exit { code: None, was_ready: false }, report);
+        self.after_exit(&mut inner, generation, Exit { code: None, ready_for: None }, report);
     }
 
     fn after_exit(self: &Arc<Self>, inner: &mut Inner, generation: u32, exit: Exit, mut report: ExitReport) {
-        match inner.policy.decide(exit, Instant::now()) {
+        match inner.policy.decide(exit) {
             Decision::Fail(reason) => {
-                report.restarts = inner.policy.recent_restarts();
+                report.crashes = inner.policy.crashes();
                 self.fail(inner, generation, reason, &report);
             }
-            Decision::Restart { attempt, delay } => {
-                // A start that never got going leaves the UI on "starting": nothing it had was lost.
-                if !matches!(inner.published.state, SidecarState::Starting) {
-                    self.publish(inner, generation, SidecarState::Restarting { attempt, exit_code: exit.code });
-                }
-                log::info!("Starting the engine again in {} ms (restart {attempt} within a minute)", delay.as_millis());
-                self.schedule(inner, generation, delay, report);
-            }
-            Decision::WaitForStateFolder { delay } => {
-                log::info!("Another engine is using the state folder: trying again in {} ms", delay.as_millis());
+            Decision::Restart { attempt, attempts, delay } => {
+                // Every retry is said, and why, so the UI never sits on "starting" while starts fail behind it.
+                let reason = restart_reason(exit, &report);
+                let state = SidecarState::Restarting { attempt, attempts, reason, exit_code: exit.code };
+                self.publish(inner, generation, state);
+                log::info!(
+                    "Starting the engine again in {} ms (restart {attempt} of {attempts}, {reason:?})",
+                    delay.as_millis()
+                );
                 self.schedule(inner, generation, delay, report);
             }
         }
@@ -504,6 +559,16 @@ impl Sidecar {
         if let Err(error) = self.app.emit_to(MAIN_WINDOW, STATE_EVENT, &inner.published) {
             log::warn!("Couldn't send the engine's state to the window: {error}");
         }
+    }
+}
+
+fn restart_reason(exit: Exit, report: &ExitReport) -> RestartReason {
+    if exit.ready_for.is_some() {
+        RestartReason::Crashed
+    } else if report.timed_out {
+        RestartReason::StartTimedOut
+    } else {
+        RestartReason::StartFailed
     }
 }
 

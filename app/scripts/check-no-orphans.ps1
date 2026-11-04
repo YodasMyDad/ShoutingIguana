@@ -3,11 +3,12 @@
 Checks that the app leaves no sidecar or WebView2 process behind, whether it is closed or killed.
 
 .DESCRIPTION
-Runs the built app with SI_APP_DATA_DIR and SI_APP_STATE_DIR set to fresh temporary folders (never the user's own),
-waits for its si-sidecar child to listen, then:
+Runs the built app with SI_APP_DATA_DIR, SI_APP_STATE_DIR and SI_APP_PROFILE_DIR set to fresh temporary folders, so it
+never touches the user's own copy of the app (its library, settings, window position or WebView2 profile) and runs
+beside it if it is open. Waits for its si-sidecar child to listen, then:
 
   1. Closes the main window (WM_CLOSE, nothing running): the app, the sidecar and every msedgewebview2.exe started
-     with the app's WebView2 user data folder must be gone within 10 s.
+     with the run's WebView2 user data folder must be gone within 10 s.
   2. Relaunches it and kills the shell (Stop-Process -Force, which is TerminateProcess, as Task Manager does): the
      sidecar must be gone within 5 s.
 
@@ -52,10 +53,6 @@ if (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $AppExe) $sideca
     Fail "there is no $sidecarName next to ${AppExe}: the app can't start its engine."
 }
 
-# Tauri gives WebView2 a user data folder named after the app's identifier.
-$identifier = (Get-Content -LiteralPath (Join-Path $appRoot 'src-tauri\tauri.conf.json') -Raw | ConvertFrom-Json).identifier
-$webviewData = Join-Path $env:LOCALAPPDATA "$identifier\EBWebView"
-
 $root = Join-Path ([IO.Path]::GetTempPath()) "si-orphans-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
 New-Item -ItemType Directory -Path $root | Out-Null
 $failures = New-Object System.Collections.Generic.List[string]
@@ -83,10 +80,11 @@ function Get-Children([int]$ParentId, [string]$Name) {
     @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $ParentId AND Name = '$Name'")
 }
 
-# WebView2 processes running on the app's user data folder, started since $Since.
+# WebView2 processes running on the run's user data folder (the shell puts it in the test profile), started since
+# $Since.
 function Get-WebViewProcesses([datetime]$Since) {
     @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" | Where-Object {
-            $_.CommandLine -and $_.CommandLine.IndexOf($webviewData, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+            $_.CommandLine -and $_.CommandLine.IndexOf($script:webviewData, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
             $_.CreationDate -ge $Since.AddSeconds(-1)
         })
 }
@@ -98,10 +96,13 @@ function Test-Running([int[]]$Ids) {
 function Start-App([string]$Name) {
     $data = New-Item -ItemType Directory -Path (Join-Path $root "$Name-data")
     $state = New-Item -ItemType Directory -Path (Join-Path $root "$Name-state")
+    $testProfile = New-Item -ItemType Directory -Path (Join-Path $root "$Name-profile")
+    $script:webviewData = Join-Path $testProfile.FullName 'webview'
     $info = New-Object Diagnostics.ProcessStartInfo $AppExe
     $info.UseShellExecute = $false
     $info.EnvironmentVariables['SI_APP_DATA_DIR'] = $data.FullName
     $info.EnvironmentVariables['SI_APP_STATE_DIR'] = $state.FullName
+    $info.EnvironmentVariables['SI_APP_PROFILE_DIR'] = $testProfile.FullName
     $since = Get-Date
     $app = [Diagnostics.Process]::Start($info)
     $launched.Add($app)
@@ -115,7 +116,7 @@ function Start-App([string]$Name) {
         $script:sidecarId -and @(Get-NetTCPConnection -OwningProcess $script:sidecarId -State Listen -ErrorAction SilentlyContinue).Count -gt 0
     } $StartTimeout
     if ($app.HasExited) {
-        Fail "the app exited at once (exit code $($app.ExitCode)). Is another Shouting Iguana running? It takes over a second launch."
+        Fail "the app exited at once (exit code $($app.ExitCode))."
     }
     if (-not $listening) {
         Fail "the app's sidecar wasn't listening within $($StartTimeout.TotalSeconds) s (sidecar pid: $script:sidecarId)."

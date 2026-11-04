@@ -9,9 +9,12 @@ mod context_menu;
 mod live;
 mod logging;
 mod open_files;
+mod profile;
 mod quit;
+mod settings;
 mod shell;
 mod sidecar;
+mod startup;
 mod sync;
 mod tray;
 #[cfg(windows)]
@@ -23,14 +26,30 @@ use tauri::{AppHandle, Manager, RunEvent};
 use shell::Shell;
 
 fn main() {
-    let app = tauri::Builder::default()
-        // First, so a second launch hands over to this one before anything else starts.
-        .plugin(tauri_plugin_single_instance::init(open_files::on_second_launch))
+    let arguments: Vec<String> = std::env::args_os().map(|argument| argument.to_string_lossy().into_owned()).collect();
+    // Started by a copy that was quitting: once that one has gone, single instance lets this one through.
+    open_files::wait_for_earlier_copy(&arguments);
+
+    let context = tauri::generate_context!();
+    let identifier = context.config().identifier.clone();
+    let mut builder = tauri::Builder::default();
+    // First, so a second launch hands over to this one before anything else starts. A test run of the built app
+    // stays out of it, so it runs beside the user's own.
+    if profile::test_profile().is_none() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(open_files::on_second_launch));
+    }
+    let built = builder
         .plugin(logging::plugin())
-        .plugin(tauri_plugin_window_state::Builder::new().with_state_flags(window::state_flags()).build())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(window::state_flags())
+                .with_filename(profile::window_state_file())
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        // For the shell's own settings (shell.json) only: the webview isn't granted the store.
         .plugin(tauri_plugin_store::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::sidecar_state,
@@ -38,27 +57,38 @@ fn main() {
             commands::request_quit,
             commands::shell_info,
             commands::take_pending_open_files,
+            commands::settings_read,
+            commands::settings_write,
+            commands::reveal_crawl_file,
         ])
         .on_window_event(window::on_event)
-        .setup(|app| {
-            let handle = app.handle();
-            let arguments: Vec<String> =
-                std::env::args_os().map(|argument| argument.to_string_lossy().into_owned()).collect();
-            let launched_with =
-                std::env::current_dir().map(|cwd| open_files::crawl_paths(&arguments, &cwd)).unwrap_or_default();
-            let shell = Shell::new(handle, launched_with);
-            let sidecar = shell.sidecar.clone();
-            live::start(handle.clone(), &shell);
-            app.manage(shell);
-            // The engine starts while the window and the page load.
-            sidecar.start();
-            log::info!("Shouting Iguana {} started", handle.package_info().version);
-            window::create(handle)?;
-            Ok(())
+        .setup({
+            let identifier = identifier.clone();
+            move |app| {
+                let handle = app.handle();
+                let launched_with =
+                    std::env::current_dir().map(|cwd| open_files::crawl_paths(&arguments, &cwd)).unwrap_or_default();
+                let shell = Shell::new(handle, launched_with);
+                let sidecar = shell.sidecar.clone();
+                live::start(handle.clone(), &shell);
+                app.manage(shell);
+                // The engine starts on a thread of its own while the window and the page load.
+                sidecar.start();
+                log::info!("Shouting Iguana {} started", handle.package_info().version);
+                // A webview that can't be made (a broken WebView2 runtime, a profile it can't write) ends the app
+                // here, saying so: an error returned from setup, Tauri turns into a panic, and the app just vanishes.
+                if let Err(error) = window::create(handle) {
+                    startup::failed(&identifier, &error);
+                }
+                Ok(())
+            }
         })
-        .build(tauri::generate_context!())
-        .expect("Shouting Iguana couldn't start");
-    app.run(on_run_event);
+        .build(context);
+    match built {
+        Ok(app) => app.run(on_run_event),
+        // A plugin that couldn't start (the log's folder can't be made, say): the same.
+        Err(error) => startup::failed(&identifier, &error),
+    }
 }
 
 fn on_run_event(app: &AppHandle, event: RunEvent) {

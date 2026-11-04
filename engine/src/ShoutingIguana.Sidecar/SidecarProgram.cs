@@ -59,6 +59,7 @@ internal static class SidecarProgram
         }
 
         await using (host.ConfigureAwait(false))
+        using (new UnhandledExceptionLog(host.Services.GetRequiredService<ILogger<UnhandledExceptionLog>>()).Start())
         {
             await output.WriteLineAsync(host.ReadyLine).ConfigureAwait(false);
             await output.FlushAsync(CancellationToken.None).ConfigureAwait(false);
