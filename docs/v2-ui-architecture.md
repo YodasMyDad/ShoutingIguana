@@ -545,7 +545,10 @@ is what it shows. What it settled:
   and on a match's tint, system colours under forced colours). The search is the app's own field driving a state
   field (`sourceSearch.ts`): matches are marked whether or not the field has focus, counted to 10,000, stepped with
   Enter and Shift+Enter, searched 150 ms after typing pauses. Ctrl+F anywhere in the section focuses the field (the
-  section takes the key before the registry does). Alt+Left and Alt+Right stay the app's.
+  section takes the key before the registry does). To the registry the viewer is a text field (it has a caret), which
+  keeps the keys a command doesn't claim `inInputs`: so its keymap runs those commands itself, first (`nav.back`,
+  `nav.forward`, `shortcuts.show`), and every key of the app's works with focus in the HTML; docs/v2-ui-ia.md's
+  keys table says whose each key is there.
 - **Docked at the bottom** the sheet is short, so its head is one line (what the URL is, the URL cut at its end, the
   actions), and it takes at most `--inspector-height-max` of the window, so the view above keeps some rows.
 - **Its commands** are the registry's Inspector group: open in the browser, copy the URL, dock at the bottom or on

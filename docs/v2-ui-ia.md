@@ -216,6 +216,18 @@ Actions: open in browser, copy the URL.
 | Enter, Shift+Enter in the search | The next match, the one before |
 | Left and Right on its edge (Up and Down when docked at the bottom) | Resize it; Home and End for its least and most |
 
+With focus in the HTML itself (Source's viewer, which has a caret and can't be typed in):
+
+| Keys | Whose | Action |
+| --- | --- | --- |
+| Arrows, Home, End, Page Up, Page Down, Ctrl+Home, Ctrl+End; with Shift | The viewer's | Move the caret; select |
+| Ctrl+A, Ctrl+C | The viewer's | Select all of the HTML; copy the selection |
+| Ctrl+F | The section's | Its search field |
+| Alt+Left, Alt+Right | The app's | Back and forward (on macOS too, where a text field keeps Option+arrows) |
+| Esc | The app's | Close the inspector, whatever is selected |
+| Ctrl+K, `?`, F7, F8, Ctrl+1 to Ctrl+7, Ctrl+N, Ctrl+O, Ctrl+, | The app's | As everywhere |
+| Letters and other typing keys | Nobody's | Nothing: a screen's single-letter keys (Issues' J and K) wait for focus outside the HTML |
+
 macOS uses Cmd where Windows uses Ctrl. One registry feeds the menus, tooltips, the `?` sheet and the palette.
 
 ## The tray

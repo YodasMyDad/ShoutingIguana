@@ -358,6 +358,47 @@ test('the source is the stored HTML as text, highlighted, and its search steps t
   await expect(inspector).toBeVisible();
 });
 
+test('the app’s keys work with focus in the source: back and forward, the shortcuts, the palette and Esc', async ({
+  page,
+}) => {
+  const inspector = await inspectPlant(page, 'hreflang-en');
+  const opened = inspected(page);
+  await walkInlinks(page, inspector, 1);
+  const walked = inspected(page);
+  await showTab(inspector, /^Source/);
+  const source = inspector.getByRole('textbox', { name: 'HTML source' });
+  // The viewer has a caret, so to the keyboard it's a text field: these are the keys a text field would keep.
+  await source.click();
+  await expect(source).toBeFocused();
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect.poll(() => inspected(page)).toBe(opened);
+  await expect(source).toContainText('hreflang');
+  await source.click();
+  await page.keyboard.press('Alt+ArrowRight');
+  await expect.poll(() => inspected(page)).toBe(walked);
+
+  await source.click();
+  await page.keyboard.press('?');
+  const shortcuts = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+  await expect(shortcuts).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(shortcuts).toBeHidden();
+  await expect(inspector).toBeVisible();
+
+  await source.click();
+  await page.keyboard.press('Control+k');
+  const palette = page.getByRole('dialog', { name: 'Command palette' });
+  await expect(palette).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(palette).toBeHidden();
+
+  // Esc is the app's there too: it closes the inspector whatever is selected in the source.
+  await source.click();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Escape');
+  await expect(inspector).toBeHidden();
+});
+
 test('“Go to URL…” looks a path up and opens the inspector on it, from a view without one', async ({ page }) => {
   await openSection(page, /^Overview/);
   await page.keyboard.press('Control+k');

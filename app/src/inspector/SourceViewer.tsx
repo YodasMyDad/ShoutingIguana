@@ -5,9 +5,10 @@ import { standardKeymap } from '@codemirror/commands';
 import { html } from '@codemirror/lang-html';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { Compartment, EditorState } from '@codemirror/state';
-import { EditorView, highlightSpecialChars, keymap, lineNumbers } from '@codemirror/view';
+import { EditorView, highlightSpecialChars, keymap, lineNumbers, type KeyBinding } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import { useEffect, useEffectEvent, useRef } from 'react';
+import { commands } from '../keyboard/registry';
 import { setSourceMatch, setSourceQuery, sourceSearch, sourceSearchOf } from './sourceSearch';
 
 export interface SourceViewerProps {
@@ -90,8 +91,24 @@ const theme = EditorView.theme({
   },
 });
 
-/** The cursor keys and selection, without the keys the app owns: Alt+Left and Alt+Right are back and forward. */
-const viewerKeys = standardKeymap.filter((binding) => !(binding.key ?? '').startsWith('Alt-'));
+/**
+ * The app's keys that the registry leaves to a text field, which the viewer is to it (it has a caret, though
+ * nothing can be typed): back and forward, and `?` for the shortcuts. Here they run the app's commands, so every key
+ * of the app's works with focus in the source. The rest reach the registry by themselves (Ctrl+K, F7, F8, Ctrl+1 to
+ * 7, and Esc, which the editor has no use for: it closes the inspector whatever is selected), and Ctrl+F is the
+ * section's own.
+ */
+const appKeys: readonly KeyBinding[] = [
+  { key: 'Alt-ArrowLeft', run: () => commands.run('nav.back') },
+  { key: 'Alt-ArrowRight', run: () => commands.run('nav.forward') },
+  { key: '?', run: () => commands.run('shortcuts.show') },
+];
+
+/**
+ * The app's keys first, then the editor's caret keys and selection: on macOS the editor would have Option+Left and
+ * Option+Right for itself (a word at a time), and they're the app's back and forward.
+ */
+const viewerKeys: readonly KeyBinding[] = [...appKeys, ...standardKeymap];
 
 export default function SourceViewer({ html: source, label, wrap, query, current, onMatches }: SourceViewerProps) {
   const host = useRef<HTMLDivElement>(null);
