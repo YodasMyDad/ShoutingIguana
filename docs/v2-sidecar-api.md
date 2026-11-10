@@ -1713,13 +1713,13 @@ nothing kept, on a 32-core Windows machine that other work was sharing.
 
   | Read | Before | Now |
   | --- | --- | --- |
-  | `/stats`, with the link summary | 0.76 to 0.96 s (0.95 to 1.16 at p95) | 98 to 126 ms (108 to 174 at p95, over seven runs of 20) |
+  | `/stats`, with the link summary | 0.76 to 0.96 s (0.95 to 1.16 at p95) | 98 to 126 ms (108 to 174 at p95, over six runs of 20) |
   | `/stats`, without it: the links counted, each sitemap page looked up among them | the same read | 181 to 244 ms (189 to 322) |
   | `/stats` again, the crawl unchanged | as the first | 1 ms |
 
   With the link summary, which a crawl analysed and not continued since has, it's inside the 300 ms budget at p95,
-  first read included. Without it (a crawl running, never analysed or continued since) it was inside in six runs of
-  seven, and 322 ms at p95 in the other, on a machine other work was loading; a running crawl's is then kept for 2 s.
+  first read included. Without it (a crawl running, never analysed or continued since) it was inside in five runs of
+  six, and 322 ms at p95 in the other, on a machine other work was loading; a running crawl's is then kept for 2 s.
   It grows with the URLs, so the first read of a million URLs would take about a second, which wasn't measured; the
   reads after it are kept. `si readbench` times both (`stats`, `stats-pass`) and holds them to twice the desktop's
   worst, for CI's runner.

@@ -734,7 +734,7 @@ few thousand targets (27–47 ms); a page of any filter on what a link is, anywh
 
 `stats` and `stats-pass` (E3c) are `CrawlStatsReader.Read`, Overview's headline numbers. It reads the URLs once and the
 responses once, counting each row every way it's wanted as it's read (`si_tally(slot, value)`), where it ran a statement
-for each number (0.96 s, 1.16 s at p95): 98 to 126 ms (108 to 174 at p95, over seven runs), and 1 ms from what's kept
+for each number (0.96 s, 1.16 s at p95): 98 to 126 ms (108 to 174 at p95, over six runs), and 1 ms from what's kept
 once read. With the link summary no link is read: it has the number of links, and counts each URL's links from other
 pages apart from a page's links to itself, which says which pages a sitemap led to have none. Without it the links
 are counted and each of those pages is looked up among them (181 to 244 ms, 189 to 322 at p95). The gates are about
