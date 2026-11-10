@@ -33,6 +33,10 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     /// <item>The links grid's reads that pass over every link once per filter set (<c>link-pass</c>: a filter on a link's
     /// text or on the page it's on, a search, and any filter without the link summary) are over the budget at 100k
     /// already, by what they are: held to 2.5 s there, so they can't get slower.</item>
+    /// <item>The links grid's reads deep among the links of more targets than are listed for their index, or of most of
+    /// the crawl's links of one kind (<c>link-targets</c>), read an index entry for every matching link, or for every
+    /// other one, once per filter set: inside the 300 ms budget at 100k on the desktop (265 ms at worst), which the
+    /// runner's 550 ms is, and held to it so they can't get slower. They grow with the links, so they'd miss at 1M.</item>
     /// </list>
     /// engine/README.md has the measurements.
     /// </summary>
@@ -50,6 +54,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         ["crawl"] = 185,
         ["crawl-facets"] = 245,
         ["link-grid"] = 200,
+        ["link-targets"] = 550,
         ["link-pass"] = 2_500,
         ["sitemaps"] = 200,
         ["robots"] = 200
@@ -176,9 +181,12 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
 
     /// <summary>
     /// The links grid: its pages in crawl order and sorted by the target, unfiltered and under filters common and rare on
-    /// what a link is and on its target, and its facets, which the link summary answers (<c>link-grid</c>); then the reads
-    /// that pass over every link once per filter set (<c>link-pass</c>): a filter on the link's text or on the page it's on,
-    /// a search, and everything without the link summary.
+    /// what a link is and on its target, and its facets, which the link summary answers (<c>link-grid</c>): among them a
+    /// few targets with many links between them, a menu's, whose pages are found on the links' index by target at any
+    /// depth. Then the reads that go through many targets' links on that index once per filter set (<c>link-targets</c>),
+    /// and those that pass over every link once per filter set (<c>link-pass</c>): a filter on the link's text or on the
+    /// page it's on, a search, a filter on the target with one on a link's position deep among many links, and everything
+    /// without the link summary.
     /// </summary>
     private void LinksGrid()
     {
@@ -207,10 +215,31 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         Linked("Links grid: from one page", "link-grid", new UrlQuery { Filters = [Number("from.id", FilterOperator.Eq, start)] });
         Linked("Links grid: to one page (the start URL's inlinks)", "link-grid", new UrlQuery { Filters = [Number("to.id", FilterOperator.Eq, start)] });
 
+        // A few targets with links from every page between them (a menu's): half of a crawl's links, to a few dozen URLs.
+        var mostLinked = Linked(new UrlQuery { Sort = [new UrlSort("inlinks", true)], Limit = 12 });
+        if (mostLinked.Count > 1)
+        {
+            Linked("Links grid: to the twelve most linked pages (few targets, many links)", "link-grid",
+                new UrlQuery { Filters = [new UrlFilter("to.id", FilterOperator.In) { Values = [.. mostLinked.Select(id => FilterValue.Of(id))] }] });
+        }
+
+        Linked("Links grid: to URLs under /c/ (few targets, many links)", "link-grid", new UrlQuery { Filters = [Text("to.url", FilterOperator.Contains, "/c/")] });
+        Linked("Links grid: to URLs with over 50,000 inlinks (few targets, many links)", "link-grid", new UrlQuery { Filters = [Number("to.inlinks", FilterOperator.Gt, 50_000)] });
+        Linked("Links grid: to pages a click from the start (few targets, many links)", "link-grid", new UrlQuery { Filters = [Number("to.depth", FilterOperator.Lte, 1)] });
+        Linked("Links grid: hyperlinks to pages a click from the start (few targets, many links, one kind)", "link-grid",
+            new UrlQuery { Filters = [In("kind", "hyperlink"), Number("to.depth", FilterOperator.Lte, 1)] });
+
+        // More targets than are listed for their index, with many links between them; and a filter most links pass.
+        Linked("Links grid: to pages four clicks from the start (many targets, many links)", "link-targets", new UrlQuery { Filters = [Number("to.depth", FilterOperator.Eq, 4)] });
+        Linked("Links grid: to the site's own URLs (most links)", "link-grid", new UrlQuery { Filters = [Boolean("to.isInternal", true)] });
+        Linked("Links grid: hyperlinks to the site's own URLs (most links, one kind)", "link-targets", new UrlQuery { Filters = [In("kind", "hyperlink"), Boolean("to.isInternal", true)] });
+
         Linked("Links grid: text contains a common word (every link read)", "link-pass", new UrlQuery { Filters = [Text("text", FilterOperator.Contains, "product")] });
         Linked("Links grid: text contains rare text (every link read)", "link-pass", new UrlQuery { Filters = [Text("text", FilterOperator.Contains, "Product 12345")] });
         Linked("Links grid: from pages at depth 2 (every link read)", "link-pass", new UrlQuery { Filters = [Number("from.depth", FilterOperator.Eq, 2)] });
         Linked("Links grid: search (every link read)", "link-pass", new UrlQuery { Search = "/p/123" });
+        Linked("Links grid: navigation links to pages a click from the start (every link read, deep in)", "link-pass",
+            new UrlQuery { Filters = [In("position", "navigation"), Number("to.depth", FilterOperator.Lte, 1)] });
         Timed("Links grid: facets of a text filter (every link read)", "facets", "link-pass", null,
             () => LinkGridReader.Facets(path, new UrlFacetQuery { Filters = [Text("text", FilterOperator.Contains, "product")] }));
 
@@ -287,6 +316,19 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             .Where(group => group.RelatedUrlId is not null)
             .MaxBy(group => group.Pages);
         return best?.RelatedUrlId;
+    }
+
+    /// <summary>The URLs the query lists, by id; none without the URL summary.</summary>
+    private List<int> Linked(UrlQuery query)
+    {
+        try
+        {
+            return [.. UrlGridReader.Query(path, query).Rows.Select(row => row.Id)];
+        }
+        catch (NeedsAnalysisException)
+        {
+            return [];
+        }
     }
 
     /// <summary>The first URL the query lists, but for <paramref name="other"/>; null without the URL summary.</summary>
