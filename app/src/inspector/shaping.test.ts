@@ -329,7 +329,8 @@ describe('hreflangProblem', () => {
       'Outside the head, where search engines ignore it',
     );
     expect(hreflangProblem({ ...entry, target: null })).toBe('Not in this crawl');
-    expect(hreflangProblem({ ...entry, target: target(null) })).toBe('Not fetched');
+    // Its status is all that comes with a target: no code doesn't say it was never fetched.
+    expect(hreflangProblem({ ...entry, target: target(null) })).toBe('No status in this crawl');
     expect(hreflangProblem({ ...entry, target: target(404) })).toBe('Answers 404');
     expect(hreflangProblem({ ...entry, target: target(301) })).toBe('Answers 301');
   });
@@ -354,7 +355,8 @@ describe('the link grids’ words', () => {
 
   it('says why the other end has no status', () => {
     expect(linkStatusWords({ statusCode: 404, fetched: true })).toBe('404');
-    expect(linkStatusWords({ statusCode: null, fetched: true })).toBe('No response');
+    // An outcome with no code may be robots.txt's refusal, where no request was made: never "No response".
+    expect(linkStatusWords({ statusCode: null, fetched: true })).toBe('No status');
     expect(linkStatusWords({ statusCode: null, fetched: false })).toBe('Not fetched');
   });
 

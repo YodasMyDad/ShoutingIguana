@@ -12,6 +12,7 @@ import { TextLink } from '../ui/TextLink';
 import { Url } from '../ui/Url';
 import { checkTitle, useChecks, useInspectorContext } from './inspectorContext';
 import { issueLink } from './issueLinks';
+import { NO_STATUS } from './links';
 import { reasonPhrase } from './words';
 
 /** A block of a section, under a hairline, with its title. */
@@ -85,7 +86,8 @@ export function WalkUrl({
       {showStatus && statusCode !== undefined ? (
         <StatusCode
           code={statusCode}
-          reason={statusCode === null ? 'Not fetched' : reasonPhrase(statusCode)}
+          // A target comes with its status alone: why there's none (never fetched, blocked, unreachable) isn't said.
+          reason={statusCode === null ? NO_STATUS : reasonPhrase(statusCode)}
           className="shrink-0 text-12"
         />
       ) : null}

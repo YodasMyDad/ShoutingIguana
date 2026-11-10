@@ -8,7 +8,8 @@ export function hreflangProblem(entry: HreflangEntry): string | null {
   if (!entry.inHead && !entry.fromHttpHeader) return 'Outside the head, where search engines ignore it';
   if (entry.target === null) return 'Not in this crawl';
   const code = entry.target.statusCode;
-  if (code === null) return 'Not fetched';
+  // The target comes with its status alone: whether it was never fetched, blocked or unreachable isn't said.
+  if (code === null) return 'No status in this crawl';
   if (code < 200 || code >= 300) return `Answers ${code}`;
   return null;
 }

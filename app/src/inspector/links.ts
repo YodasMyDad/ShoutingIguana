@@ -59,7 +59,14 @@ export function followWords(row: Pick<LinkRow, 'followed' | 'flags'>): string {
   return [lead, ...others].join(', ');
 }
 
-/** The other end's status as text: its code, or why there's none. */
+/** A URL the crawl has an outcome for and no status code: which outcome isn't said where only the code comes. */
+export const NO_STATUS = 'No status';
+
+/**
+ * The other end's status as text: its code, or that there's none. A link's row says whether the crawl has an outcome
+ * for its URL (`fetched`) but not which: blocked by robots.txt, timed out and unreachable all come with no code, so
+ * "No response" would be a guess (robots.txt never let the request be made).
+ */
 export function linkStatusWords(row: Pick<LinkRow, 'statusCode' | 'fetched'>): string {
-  return row.statusCode === null ? (row.fetched ? 'No response' : 'Not fetched') : String(row.statusCode);
+  return row.statusCode === null ? (row.fetched ? NO_STATUS : 'Not fetched') : String(row.statusCode);
 }

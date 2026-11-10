@@ -784,6 +784,17 @@ describe('walking the site', () => {
     await waitFor(() => expect(within(inspector).getByRole('grid', { name: 'Inlinks' })).toHaveFocus());
   });
 
+  it('says a link’s URL has no status when the crawl has an outcome for it without a code, and no more', async () => {
+    const blocked = testLinkRow({ id: 3, url: OTHER.url, statusCode: null, fetched: true, indexable: null });
+    const unfetched = testLinkRow({ id: 1, url: HOME.url, statusCode: null, fetched: false, indexable: null });
+    const { inspector, user } = await open(`${URLS}?inspect=2`, { ...SITE, outlinks: { 2: [blocked, unfetched] } });
+    await user.click(await within(inspector).findByRole('tab', { name: /^Outlinks/ }));
+    const grid = await within(inspector).findByRole('grid', { name: 'Outlinks' });
+    expect(await within(grid).findByText('No status')).toBeVisible();
+    expect(within(grid).getByText('Not fetched')).toBeVisible();
+    expect(within(grid).queryByText('No response')).toBeNull();
+  });
+
   it('says so when a URL has no inlinks', async () => {
     const { inspector, user } = await open(`${URLS}?inspect=3`);
     await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
