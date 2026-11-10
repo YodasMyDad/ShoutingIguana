@@ -43,9 +43,12 @@ function list<T>(value: unknown, item: (entry: unknown) => T | undefined): T[] |
   return items.length > 0 ? items : undefined;
 }
 
-function column(value: unknown): string | undefined {
+function urlColumnName(value: unknown): string | undefined {
   return typeof value === 'string' && COLUMN.test(value) ? value : undefined;
 }
+
+/** Reads a column's name from a search param, or undefined when it isn't one this grid could have. */
+type ColumnName = (value: unknown) => string | undefined;
 
 /** A check category's id, as the catalog names them (`responseCodes`): a short name, nothing else. */
 function categoryId(value: unknown): string | undefined {
@@ -53,7 +56,7 @@ function categoryId(value: unknown): string | undefined {
 }
 
 /** `{ column, desc }` objects, or the compact `-status,url` form. A column sorts once, and at most 3 do. */
-export function parseSort(value: unknown): GridSort[] | undefined {
+export function parseSort(value: unknown, column: ColumnName = urlColumnName): GridSort[] | undefined {
   const sorts = list<GridSort>(value, (entry) => {
     if (typeof entry === 'string') {
       const desc = entry.startsWith('-');
@@ -93,7 +96,7 @@ function groupRef(value: unknown): CheckGroupRef | null {
 }
 
 /** A filter as the contract shapes it (E3a): what it carries depends on its operator. At most 20 are kept. */
-export function parseFilters(value: unknown): GridFilter[] | undefined {
+export function parseFilters(value: unknown, column: ColumnName = urlColumnName): GridFilter[] | undefined {
   return list<GridFilter>(value, (entry) => {
     if (typeof entry !== 'object' || entry === null) return undefined;
     const record = entry as Record<string, unknown>;
@@ -208,7 +211,32 @@ export function validateGridSearch(search: Record<string, unknown>): GridSearch 
     view: text(search.view)?.match(/^[a-z0-9-]{1,64}$/)?.[0],
     filter: parseFilters(search.filter),
     sort: parseSort(search.sort),
-    cols: list<string>(search.cols, column),
+    cols: list<string>(search.cols, urlColumnName),
+    q: text(search.q),
+    inspect: positiveInteger(search.inspect),
+  });
+}
+
+// ----------------------------------------------------------------------------------------------------------- Links
+
+/** A link's own column, or one of either end's as the links grid names them: `kind`, `from.depth`, `to.statusCode`. */
+const LINK_COLUMN = /^(?:(?:from|to)\.)?[a-zA-Z][a-zA-Z0-9]*$/;
+
+function linkColumnName(value: unknown): string | undefined {
+  return typeof value === 'string' && LINK_COLUMN.test(value) ? value : undefined;
+}
+
+/**
+ * The links grid's search (docs/v2-sidecar-api.md, Links): the URL grid's, over the links' columns, either end's
+ * included (`to.statusClass`), and sorted by one key, as that grid sorts. A filter by a check's group is the URL
+ * grid's only, so it's dropped here as anywhere it isn't `check`.
+ */
+export function validateLinksSearch(search: Record<string, unknown>): GridSearch {
+  return strictSearch(search, {
+    view: text(search.view)?.match(/^[a-z0-9-]{1,64}$/)?.[0],
+    filter: parseFilters(search.filter, linkColumnName),
+    sort: parseSort(search.sort, linkColumnName)?.slice(0, 1),
+    cols: list<string>(search.cols, linkColumnName)?.filter((name, index, all) => all.indexOf(name) === index),
     q: text(search.q),
     inspect: positiveInteger(search.inspect),
   });

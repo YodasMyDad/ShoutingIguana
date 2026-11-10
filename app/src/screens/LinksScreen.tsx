@@ -1,11 +1,563 @@
-import { ScreenStub } from './ScreenStub';
+import { useQuery } from '@tanstack/react-query';
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { Copy, Link2Off, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { api } from '../api/client';
+import { isProblem } from '../api/errors';
+import type { GridFilter, LinkRow, SummaryReason } from '../api/grids';
+import { crawlQuery, linkColumnsQuery, linkFacetsQuery, queryKeys } from '../api/queries';
+import { isCrawling } from '../api/types';
+import { analyseCrawl } from '../crawl/actions';
+import { crawlControls, effectiveStatus } from '../crawl/status';
+import { announce } from '../feedback/announce';
+import { ErrorState } from '../feedback/ErrorState';
+import { notifyResult } from '../feedback/notify';
+import { useAnnounceResults } from '../feedback/useAnnounceResults';
+import { useDelayedLoading } from '../feedback/useDelayedLoading';
+import { useFocusRescue } from '../feedback/useFocusRescue';
+import { ColumnChooser } from '../grid/ColumnChooser';
+import { copyAll, type PageReader } from '../grid/copyAll';
+import { FacetMenu } from '../grid/FacetMenu';
+import { FilterBar, FilterChips } from '../grid/FilterBar';
+import { GridCore, type GridCopyResult } from '../grid/GridCore';
+import { useGridMetrics } from '../grid/metrics';
+import { NeedsAnalysis } from '../grid/NeedsAnalysis';
+import { nextSort, useHeaderHandoff } from '../grid/sort';
+import { MAX_COPY_ROWS, toTsv } from '../grid/tsv';
+import { useElementWidth } from '../grid/useElementWidth';
+import { usePagedRows } from '../grid/usePagedRows';
+import { useUrlWords } from '../grid/useUrlWords';
+import { useCommands, type Command } from '../keyboard/registry';
+import { formatCount, formatShownOf } from '../lib/format';
+import { useLiveCrawl } from '../live/liveStore';
+import { useInspector } from '../routing/inspector';
+import { Banner } from '../ui/Banner';
+import { Button } from '../ui/Button';
+import { EmptyState, FilteredEmptyState } from '../ui/EmptyState';
+import { LiveBadge } from '../ui/LiveBadge';
+import { DropdownMenu, MenuItem } from '../ui/Menu';
+import { GridHeader, ResultCount } from '../ui/PageHeader';
+import { SearchField } from '../ui/SearchField';
+import { Tooltip } from '../ui/Tooltip';
+import { siteOriginOf } from '../ui/urlText';
+import { FACET_TITLES, LINK_FACET_IDS, buildFacets, withFacetValue, type FacetValue } from './links/facets';
+import {
+  DEFAULT_LINK_COLUMNS,
+  LINK_FILTER_GROUPS,
+  endUrls,
+  linkChooserGroups,
+  linkFilterColumns,
+  linkGridColumns,
+  linkQueryColumns,
+  sharedUrlWidth,
+  shownLinkColumns,
+} from './links/linkColumns';
+import { endColumn, linkColumnName, linkFilterWords, urlIdsNamed } from './links/linkWords';
+import { LINK_PRESETS, activePreset } from './links/presets';
+import { passReason, slowReadWords } from './links/readCost';
+import { analysisNote, noLinksWords, noMatchWords } from './links/states';
 
-/** Links: every link with anchor text, position, follow flags and the target's status, in the one grid. */
+const ROUTE = '/crawls/$crawl/links';
+
+/** The room the grid's frame takes beside its columns: its border and the scrollbar over its right edge. */
+const FRAME_SLACK = 24;
+
+/** What the last read of a view said of it, kept while the same view is read again for other columns. */
+interface Counted {
+  view: string;
+  matching: number;
+  total: number | null;
+  /** Why the crawl has no URL summary, or null when it has one. */
+  reason: SummaryReason | null;
+}
+
+/**
+ * Links (docs/v2-ui-ia.md, Links): every link the crawl stored, in the one grid, over the links' own columns and each
+ * end's. The view (filters, search, sort, columns, the URL inspected) is the route's, so back, forward and a link from
+ * another screen restore it. Presets and facets only ever put filters in the route: what's filtered is always what
+ * the filter bar says. Either end of a link opens the inspector on that URL, as a row of the URL grid does.
+ */
 export function LinksScreen() {
+  const { crawl: crawlId } = useParams({ from: ROUTE });
+  const search = useSearch({ from: ROUTE });
+  const navigate = useNavigate({ from: ROUTE });
+  const { rowHeight, headerHeight } = useGridMetrics();
+  const sort = useMemo(() => search.sort ?? [], [search.sort]);
+  const filters = useMemo(() => search.filter ?? [], [search.filter]);
+  const q = search.q;
+
+  const item = useQuery(crawlQuery(crawlId)).data;
+  const live = useLiveCrawl(crawlId);
+  const crawlStatus = effectiveStatus(item, live);
+  const crawling = crawlStatus !== null && isCrawling(crawlStatus);
+  const canAnalyse = crawlControls(crawlStatus, item).canAnalyse;
+  const siteOrigin = siteOriginOf(item?.startUrl);
+
+  // The engine's columns: their types, which sort, which need the analysis. The default columns need none of it to
+  // be asked for, so the first page never waits on this; columns the route names are checked against it first.
+  const catalogue = useQuery(linkColumnsQuery());
+  const shown = useMemo(() => shownLinkColumns(search.cols, catalogue.data), [search.cols, catalogue.data]);
+  const queryColumns = useMemo(() => linkQueryColumns(shown), [shown]);
+
+  const view = useMemo(
+    () => `${crawlId}|${JSON.stringify({ sort, filters, q: q ?? '' })}`,
+    [crawlId, sort, filters, q],
+  );
+  const queryKey = useMemo(
+    () => queryKeys.linksGrid(crawlId, { columns: queryColumns, filters, q: q ?? '', sort }),
+    [crawlId, queryColumns, filters, q, sort],
+  );
+  const fetchPage = useCallback(
+    (offset: number, limit: number, signal: AbortSignal) =>
+      api.links(crawlId, { columns: queryColumns, offset, limit, sort, filters, ...(q ? { search: q } : {}) }, signal),
+    [crawlId, queryColumns, sort, filters, q],
+  );
+  const rows = usePagedRows<LinkRow>({
+    queryKey,
+    fetchPage,
+    rowHeight,
+    enabled: search.cols === undefined || catalogue.data !== undefined,
+  });
+
+  // Another column asks for the rows again, with it: the count of the same view stands meanwhile, so the grid keeps
+  // its rows' places, its scroll and its cursor instead of starting again from a skeleton.
+  const [counted, setCounted] = useState<Counted | null>(null);
+  const first = rows.firstPage;
+  const latest: Counted | null =
+    first && rows.rowCount !== null
+      ? { view, matching: rows.rowCount, total: rows.unfilteredTotal, reason: first.summary.reason }
+      : null;
+  if (
+    latest &&
+    (counted?.view !== latest.view ||
+      counted.matching !== latest.matching ||
+      counted.total !== latest.total ||
+      counted.reason !== latest.reason)
+  ) {
+    setCounted(latest);
+  }
+  const kept = counted?.view === view ? counted : null;
+  const rowCount = rows.rowCount ?? kept?.matching ?? null;
+  const total = rows.unfilteredTotal ?? kept?.total ?? null;
+
+  const facetsQuery = useMemo(() => ({ filters: [...filters], ...(q ? { search: q } : {}) }), [filters, q]);
+  const facetsRead = useQuery(linkFacetsQuery(crawlId, facetsQuery));
+  const facets = useMemo(
+    () => (facetsRead.data ? buildFacets(facetsRead.data, filters) : null),
+    [facetsRead.data, filters],
+  );
+
+  const inspector = useInspector();
+  const inspecting = search.inspect !== undefined;
+  /** Which end of the row the inspector is on, so it follows the cursor down the same end. */
+  const [inspectedEnd, setInspectedEnd] = useState<'from' | 'to'>('to');
+  const openEnd = useCallback(
+    (urlId: number, end: 'from' | 'to') => {
+      setInspectedEnd(end);
+      inspector.open(urlId);
+    },
+    [inspector],
+  );
+  const openRow = (row: LinkRow | undefined, end: 'from' | 'to') => {
+    const urlId = row?.[`${end}.id`];
+    if (typeof urlId === 'number') openEnd(urlId, end);
+  };
+
+  const setFilters = useCallback(
+    (next: readonly GridFilter[]) =>
+      void navigate({ search: (previous) => ({ ...previous, filter: next.length > 0 ? [...next] : undefined }) }),
+    [navigate],
+  );
+  /** All links again, in crawl order, with the columns as they are. */
+  const clearView = useCallback(() => void navigate({ search: (previous) => ({ cols: previous.cols }) }), [navigate]);
+  const setColumns = (next: readonly string[]) => {
+    const isDefault =
+      next.length === DEFAULT_LINK_COLUMNS.length && next.every((id, index) => id === DEFAULT_LINK_COLUMNS[index]);
+    void navigate({ search: (previous) => ({ ...previous, cols: isDefault ? undefined : [...next] }), replace: true });
+  };
+
+  const handoff = useHeaderHandoff(sort);
+  const [measure, width] = useElementWidth();
+  const urlWidth = sharedUrlWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK);
+  const columns = useMemo(
+    () => linkGridColumns(shown, catalogue.data, { siteOrigin, onOpen: openEnd, sort, urlWidth }),
+    [shown, catalogue.data, siteOrigin, openEnd, sort, urlWidth],
+  );
+
+  const summary = first?.summary;
+  const summaryAvailable = summary?.available ?? true;
+  const emptyColumns = (first?.unavailable ?? []).filter((id) => shown.includes(id));
+  const note = analysisNote(summary, emptyColumns.map(linkColumnName));
+  const editor = useMemo(
+    () =>
+      catalogue.data
+        ? { columns: linkFilterColumns(catalogue.data, summaryAvailable), groups: LINK_FILTER_GROUPS }
+        : undefined,
+    [catalogue.data, summaryAvailable],
+  );
+  const chooserGroups = useMemo(
+    () => (catalogue.data ? linkChooserGroups(catalogue.data, summaryAvailable) : []),
+    [catalogue.data, summaryAvailable],
+  );
+  const namedUrls = useMemo(() => urlIdsNamed(filters), [filters]);
+  const words = linkFilterWords(useUrlWords(crawlId, namedUrls, siteOrigin));
+
+  // A filter or a search the user applied is answered once, with the count it leaves. The count itself is no live
+  // region: a running crawl moves it every second.
+  useAnnounceResults(
+    crawlId,
+    useMemo(() => JSON.stringify({ filters, q: q ?? '' }), [filters, q]),
+    rowCount === null || total === null ? null : formatShownOf(rowCount, total, 'link'),
+  );
+
+  // A read still on its way after 150 ms says what it's doing, over the grid's skeleton: a view that looks at every
+  // link takes about a second on a big crawl. Changing the view gives the read up: its request is aborted.
+  const failed = rows.error !== null && rows.error !== undefined && rowCount === null;
+  const waiting = useDelayedLoading(rowCount === null && !failed);
+  const slowWords = slowReadWords(
+    passReason({ filters, search: q, sort }, { crawling, summaryReason: counted?.reason }),
+    counted?.total ?? null,
+  );
+  const saidWaiting = useRef('');
+  useEffect(() => {
+    if (!waiting) saidWaiting.current = '';
+    else if (saidWaiting.current !== view) {
+      saidWaiting.current = view;
+      announce(slowWords);
+    }
+  }, [waiting, view, slowWords]);
+
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState(q ?? '');
+  const [draftFor, setDraftFor] = useState(q);
+  if (draftFor !== q) {
+    // The route's search changed under the field (back, a preset, Clear): the field shows the route's.
+    setDraftFor(q);
+    setDraft(q ?? '');
+  }
+  const applySearch = (text: string) => {
+    const value = text.trim();
+    void navigate({ search: (previous) => ({ ...previous, q: value || undefined }) });
+  };
+
+  const [adding, setAdding] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const [cursorColumn, setCursorColumn] = useState<string | undefined>(undefined);
+  /** The column a copy takes: the one the grid's cursor is in, else the first. */
+  const copyColumn = cursorColumn !== undefined && shown.includes(cursorColumn) ? cursorColumn : shown[0];
+  const [copying, setCopying] = useState(false);
+  const reader = useCallback(
+    (asked: readonly string[]): PageReader<LinkRow> =>
+      (after, limit, signal) =>
+        api.links(
+          crawlId,
+          { columns: [...asked], sort, filters, limit, ...(q ? { search: q } : {}), ...(after ? { after } : {}) },
+          signal,
+        ),
+    [crawlId, sort, filters, q],
+  );
+  const copyEnd = async (end: 'from' | 'to') => {
+    if (copying) return;
+    setCopying(true);
+    const noun = end === 'from' ? 'source' : 'target';
+    await copyAll<LinkRow>({
+      read: reader([`${end}.url`]),
+      text: (read) => endUrls(read, end),
+      noun: [`${noun} URL`, `${noun} URLs`],
+      failed: `The ${noun} URLs couldn’t be copied.`,
+    });
+    setCopying(false);
+  };
+  const copyOneColumn = async () => {
+    const column = columns.find((candidate) => candidate.id === copyColumn);
+    if (copying || !column) return;
+    setCopying(true);
+    await copyAll<LinkRow>({
+      read: reader(linkQueryColumns([column.id])),
+      text: (read) => ({
+        text: toTsv(
+          [column.header],
+          read.map((row) => [column.text(row)]),
+        ),
+        count: read.length,
+      }),
+      noun: ['row', 'rows'],
+      failed: 'The column couldn’t be copied.',
+    });
+    setCopying(false);
+  };
+
+  const hasRows = rowCount !== null && rowCount > 0;
+  const preset = activePreset(filters, q);
+  const copyColumnTitle = copyColumn ? `Copy the ${linkColumnName(copyColumn)} column` : 'Copy a column';
+  useCommands(
+    (): Command[] => [
+      {
+        id: 'links.search',
+        title: 'Search the links',
+        group: 'Links',
+        keys: ['mod+f'],
+        inInputs: true,
+        keywords: ['find', 'filter', 'anchor text', 'url'],
+        run: () => {
+          searchRef.current?.focus();
+          searchRef.current?.select();
+        },
+      },
+      {
+        id: 'links.addFilter',
+        title: 'Add a filter to the links',
+        group: 'Links',
+        keywords: ['filter', 'column'],
+        enabled: () => editor !== undefined,
+        run: () => setAdding(true),
+      },
+      {
+        id: 'links.columns',
+        title: 'Choose the links’ columns',
+        group: 'Links',
+        keywords: ['columns', 'show', 'hide'],
+        enabled: () => chooserGroups.length > 0,
+        run: () => setChoosing(true),
+      },
+      {
+        id: 'links.clear',
+        title: 'Clear the links’ filters, search and sort',
+        group: 'Links',
+        keywords: ['reset', 'all links'],
+        enabled: () => filters.length > 0 || q !== undefined || sort.length > 0,
+        run: clearView,
+      },
+      ...LINK_PRESETS.filter((candidate) => candidate.filters.length > 0).map((candidate): Command => ({
+        id: `links.preset.${candidate.id}`,
+        title: `Show ${candidate.title.charAt(0).toLowerCase()}${candidate.title.slice(1)}`,
+        group: 'Links',
+        keywords: [candidate.hint],
+        run: () => void navigate({ search: (previous) => ({ cols: previous.cols, filter: [...candidate.filters] }) }),
+      })),
+      {
+        id: 'links.copyTargets',
+        title: 'Copy the target URLs',
+        group: 'Links',
+        keys: ['mod+shift+c'],
+        keywords: ['copy', 'urls', 'clipboard'],
+        enabled: () => hasRows && !copying,
+        run: () => void copyEnd('to'),
+      },
+      {
+        id: 'links.copySources',
+        title: 'Copy the source URLs',
+        group: 'Links',
+        keywords: ['copy', 'urls', 'clipboard', 'pages'],
+        enabled: () => hasRows && !copying,
+        run: () => void copyEnd('from'),
+      },
+      {
+        id: 'links.copyColumn',
+        title: copyColumnTitle,
+        group: 'Links',
+        keywords: ['copy', 'column', 'clipboard'],
+        enabled: () => hasRows && !copying,
+        run: () => void copyOneColumn(),
+      },
+    ],
+    [view, columns, editor, chooserGroups, hasRows, copying, copyColumnTitle, clearView, navigate],
+  );
+
+  // A button that goes with what it cleared (Clear in the empty grid, "Clear the sort and filters") leaves the
+  // keyboard in the grid that comes, never on the page.
+  const frame = useRef<HTMLDivElement>(null);
+  useFocusRescue(frame, () => frame.current?.querySelector<HTMLElement>('[role="grid"]') ?? searchRef.current);
+
+  const onCopy = (result: GridCopyResult) => {
+    if (result.truncated) {
+      notifyResult(`Copied the first ${formatCount(MAX_COPY_ROWS)} rows`, {
+        description: 'A copy takes no more than that.',
+      });
+    }
+  };
+  const analyse = (label: string) =>
+    canAnalyse ? (
+      <Button size="sm" icon={RefreshCw} command="crawl.analyse" onClick={() => void analyseCrawl(crawlId)}>
+        {label}
+      </Button>
+    ) : null;
+  const chooseFacet = (value: FacetValue) => setFilters(withFacetValue(filters, value.filter));
+  const noLinks = noLinksWords(crawling);
+
   return (
-    <ScreenStub
-      title="Links"
-      purpose="All links, with anchor text, position, follow flags and the status of the target, in the same grid and filters as URLs. It needs E3’s /links."
-    />
+    <div ref={frame} className="flex h-full min-h-0 flex-col">
+      <GridHeader
+        title="Links"
+        count={rowCount !== null && total !== null ? <ResultCount shown={rowCount} total={total} noun="link" /> : null}
+        badge={crawling ? <LiveBadge /> : null}
+        className="px-6 pt-2 pb-1"
+        actions={
+          <SearchField
+            ref={searchRef}
+            label="Search link text and URLs"
+            placeholder="Search links"
+            value={draft}
+            shortcut="mod+f"
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') applySearch(event.currentTarget.value);
+            }}
+            onClear={() => {
+              setDraft('');
+              if (q !== undefined) applySearch('');
+            }}
+            className="w-(--search-width)"
+          />
+        }
+      />
+      <div className="flex flex-wrap items-center gap-1 px-6 pb-2">
+        <div role="group" aria-label="Views" className="contents">
+          {LINK_PRESETS.map((candidate) => (
+            <Tooltip key={candidate.id} content={candidate.hint} triggerName={candidate.title}>
+              <Button
+                variant="ghost"
+                size="sm"
+                pressed={preset?.id === candidate.id}
+                onClick={() =>
+                  void navigate({
+                    search: (previous) => ({
+                      cols: previous.cols,
+                      filter: candidate.filters.length > 0 ? [...candidate.filters] : undefined,
+                    }),
+                  })
+                }
+              >
+                {candidate.title}
+              </Button>
+            </Tooltip>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-1">
+          <ColumnChooser
+            groups={chooserGroups}
+            shown={shown}
+            onChange={setColumns}
+            defaults={DEFAULT_LINK_COLUMNS}
+            open={choosing}
+            onOpenChange={setChoosing}
+            command="links.columns"
+          />
+          <DropdownMenu
+            align="end"
+            trigger={
+              <Button variant="ghost" size="sm" icon={Copy}>
+                Copy
+              </Button>
+            }
+          >
+            <MenuItem command="links.copyTargets">Copy the target URLs</MenuItem>
+            <MenuItem command="links.copySources">Copy the source URLs</MenuItem>
+            <MenuItem command="links.copyColumn">{copyColumnTitle}</MenuItem>
+          </DropdownMenu>
+        </div>
+      </div>
+      <FilterBar
+        filters={filters}
+        onChange={setFilters}
+        words={words}
+        editor={editor}
+        adding={adding}
+        onAddingChange={setAdding}
+        onClear={() => setFilters([])}
+        className="flex flex-wrap items-center gap-2 px-6 pb-3"
+      >
+        {LINK_FACET_IDS.map((id) => (
+          <FacetMenu
+            key={id}
+            title={FACET_TITLES[id]}
+            noun="link"
+            values={facets ? (facets.find((facet) => facet.id === id)?.values ?? []) : null}
+            matching={facetsRead.data?.matching}
+            failed={facetsRead.isError && !facetsRead.data}
+            onRetry={() => void facetsRead.refetch()}
+            onChoose={chooseFacet}
+          />
+        ))}
+      </FilterBar>
+      {note ? (
+        <Banner inset className="mx-6 mb-3" actions={note.action ? analyse(note.action) : undefined}>
+          {note.text}
+        </Banner>
+      ) : null}
+      {failed ? (
+        isProblem(rows.error, 'needs-analysis') ? (
+          <NeedsAnalysis error={rows.error} action={analyse('Analyse it')} onClear={clearView} />
+        ) : isProblem(rows.error, 'invalid-query') ? (
+          <ErrorState
+            error={rows.error}
+            actions={
+              <Button size="sm" onClick={() => void navigate({ search: {} })}>
+                Reset the view
+              </Button>
+            }
+          />
+        ) : (
+          <ErrorState error={rows.error} onRetry={rows.refetch} />
+        )
+      ) : (
+        <div ref={measure} className="mx-6 mb-4 flex min-h-0 flex-1 flex-col">
+          <GridCore<LinkRow>
+            key={view}
+            label="Links"
+            columns={columns}
+            rowCount={rowCount}
+            getRow={rows.getRow}
+            rowHeight={rowHeight}
+            headerHeight={headerHeight}
+            onRangeChange={rows.onRangeChange}
+            onScrollOffset={rows.onScrollOffset}
+            fetchRows={rows.fetchRows}
+            onCopy={onCopy}
+            onSort={(column, focused) => {
+              const next = nextSort(sort, column);
+              handoff.sorted(column, focused, next);
+              void navigate({
+                search: (previous) => ({ ...previous, sort: next.length > 0 ? next : undefined }),
+                replace: true,
+              });
+            }}
+            focusHeader={handoff.focusHeader}
+            // Enter or a double-click opens the end the cursor is in: the page the link is on from one of its
+            // columns, the link's target from anywhere else.
+            onActivate={(_index, row, column) =>
+              openRow(row, column !== undefined && endColumn(column)?.end === 'from' ? 'from' : 'to')
+            }
+            // While it's open, the inspector follows the cursor, in place, down the end it's on.
+            onActiveRowChange={(index) => {
+              if (inspecting && index !== null) openRow(rows.getRow(index), inspectedEnd);
+            }}
+            onActiveColumnChange={setCursorColumn}
+            // Live refreshes update in place: the progress line is for a refresh the user asked for.
+            busy={rows.isRefreshing && !crawling}
+            loadingNote={waiting ? slowWords : undefined}
+            emptyState={
+              filters.length === 0 && !q ? (
+                <EmptyState title={noLinks.title} icon={Link2Off} level="none">
+                  {noLinks.why}
+                </EmptyState>
+              ) : (
+                <FilteredEmptyState
+                  title={noMatchWords(q, filters.length > 0)}
+                  level="none"
+                  filters={
+                    filters.length > 0 ? (
+                      <FilterChips filters={filters} onChange={setFilters} words={words} />
+                    ) : undefined
+                  }
+                  onClear={clearView}
+                />
+              )
+            }
+            className="flex-1 rounded-lg border border-border shadow-1"
+          />
+        </div>
+      )}
+    </div>
   );
 }
