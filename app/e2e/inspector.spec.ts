@@ -192,6 +192,28 @@ test('Esc handled twice before history has gone back closes the inspector once, 
   expect(inspected(page)).toBeNull();
 });
 
+test('“Go to URL…” on a view with the inspector closed opens it in place: Esc, then Alt+Left leaves the view', async ({
+  page,
+}) => {
+  await openSection(page, /^URLs/);
+  await expect(page.getByRole('grid', { name: 'URLs' }).getByRole('row').nth(1)).toBeVisible();
+  await page.keyboard.press('Control+k');
+  const palette = page.getByRole('dialog', { name: 'Command palette' });
+  await palette.getByRole('combobox').fill('go to url');
+  await page.keyboard.press('Enter');
+  const field = palette.getByRole('textbox', { name: 'Go to URL' });
+  await field.fill('/plants/thin');
+  await page.keyboard.press('Enter');
+  const inspector = inspectorOf(page);
+  await expect(inspector.getByRole('heading', { level: 2 })).toContainText('/plants/thin');
+  await page.keyboard.press('Escape');
+  await expect(inspector).toBeHidden();
+  await expect(page).toHaveURL(/\/urls$/);
+  // No second entry for the same view is left behind: back goes to where the URLs were opened from.
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(page).not.toHaveURL(/\/urls/);
+});
+
 test('from a check’s pages: Enter inspects one, its issue leads back to the check, Esc and Alt+Left', async ({
   page,
 }) => {

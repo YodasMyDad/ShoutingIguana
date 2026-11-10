@@ -221,8 +221,8 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
 - The inspector reads the current view's checked `inspect`, so it opens only on a view that has one. Its place in
   history is one model every screen uses (`routing/inspector.ts`, `useInspector`), so the inspector's slice inherits
   it: opened from a grid (Enter, a double-click) and following the grid's cursor while open, it's in place (a
-  replace); walking a link inside it, or the palette's "Go to URL…", is a push, each entry counting the steps walked
-  from where it opened (`inspectSteps` in its history state), so back and forward retrace the walk; Esc or Close goes
+  replace); walking a link inside it, or the palette's "Go to URL…" while it's open, is a push, each entry counting
+  the steps walked from where it opened (`inspectSteps` in its history state), so back and forward retrace the walk; Esc or Close goes
   back over those steps to the entry it opened on, then drops `inspect` there in place. So Esc then Alt+Left leaves
   the screen, and from a walk A, B, C, Alt+Left shows B while Esc from C closes to the screen as it was before A. A
   browser keeps only so many entries (Chromium 50) and `history.go` past the oldest does nothing, silently: a close
@@ -230,8 +230,10 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   the inspector always closes (after a walk of 60, on the oldest entry left). One close runs at a time: Esc pressed
   again before history has gone back joins it, never goes back over the walk a second time. A
   screen's own replaces while it's open (Issues' filters and group) keep the history state (`state: true`). The
-  palette's "Go to URL…" is `goToUrl`: a walk on a view that has the inspector (`viewInspects`), and from any other
-  (Overview, the crawl's settings) the crawl's URLs with the inspector open, a place of its own that back leaves.
+  palette's "Go to URL…" is `goToUrl`: on a view that has the inspector (`viewInspects`), a step of the walk when
+  it's open and, when it's closed, opened in place as a grid opens it (a push would leave two entries for the same
+  view once it's closed, and a back between them that shows nothing); from any other view (Overview, the crawl's
+  settings) the crawl's URLs with the inspector open, a place of its own that back leaves.
 - `/crawls/:crawl` opens the crawl's last view. The app reopens where it was left.
 - Each screen's route renders `RouteError` when it fails (Try again where it could work, and Go to Home); the shell
   keeps working around it. Each part of the shell (sidebar, top bar, the engine's banner, the inspector) has its own

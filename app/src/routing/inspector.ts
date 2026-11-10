@@ -1,9 +1,9 @@
 // The inspector's place in history (docs/v2-ui-ia.md, flows 3 and 4), in one place every screen with a grid uses:
 // - opened from a grid (Enter, a double-click), and following the grid's cursor while open, it's in place (a
 //   replace): back and forward step between views, not between the rows looked at;
-// - walking a link inside it (an inlink, an outlink), or the palette's "Go to URL…", is a new place (a push), and each
-//   entry counts the steps walked from where it opened (`inspectSteps` in the entry's history state), so back and
-//   forward retrace the walk;
+// - walking a link inside it (an inlink, an outlink), or the palette's "Go to URL…" while it's open, is a new place
+//   (a push), and each entry counts the steps walked from where it opened (`inspectSteps` in the entry's history
+//   state), so back and forward retrace the walk; "Go to URL…" with it closed opens it in place, as a grid does;
 // - Esc or Close goes back over the steps walked to the entry it opened on, then drops `inspect` from it in place: the
 //   screen is as it was before the inspector opened, and back from there leaves the screen.
 import { useRouter } from '@tanstack/react-router';
@@ -53,9 +53,14 @@ export function inspectFromGrid(router: AppRouter, urlId: number): Promise<void>
   });
 }
 
-/** From inside the inspector (a link) or the palette ("Go to URL…"): a step of the walk, a new place in history. */
+/**
+ * From inside the inspector (a link) or the palette ("Go to URL…"): a step of the walk, a new place in history. With
+ * the inspector closed there's no walk to add to: it opens in place, as from a grid. A push would leave two entries
+ * for the same view once it's closed, and back between them would do nothing to see.
+ */
 export function walkTo(router: AppRouter, urlId: number): Promise<void> {
-  const steps = inspecting(router) ? walkedSteps(router.state.location.state) + 1 : 0;
+  if (!inspecting(router)) return inspectFromGrid(router, urlId);
+  const steps = walkedSteps(router.state.location.state) + 1;
   return router.navigate({
     to: '.',
     search: withInspect(urlId),
@@ -78,8 +83,9 @@ export function viewInspects(pathname: string, crawlId: string): boolean {
 }
 
 /**
- * The palette's "Go to URL…": a step of the walk on a view that has the inspector; from anywhere else (Overview, the
- * crawl's settings), the crawl's URLs with the inspector open on it.
+ * The palette's "Go to URL…": on a view that has the inspector, a step of the walk, or the inspector opened in place
+ * when it's closed; from anywhere else (Overview, the crawl's settings), the crawl's URLs with the inspector open on
+ * it.
  */
 export function goToUrl(router: AppRouter, crawlId: string, urlId: number): Promise<void> {
   if (viewInspects(router.state.location.pathname, crawlId)) return walkTo(router, urlId);
@@ -154,11 +160,11 @@ async function closeOnce(router: AppRouter): Promise<void> {
 export interface Inspector {
   /** A grid's Enter or double-click, or its cursor moving while the inspector is open: in place. */
   open: (urlId: number) => void;
-  /** A link inside the inspector, or the palette's "Go to URL…": a new place, a step back retraces. */
+  /** A link inside the inspector: a new place, a step back retraces. */
   walk: (urlId: number) => void;
   /** Esc or Close: back to the view as it was before the inspector opened. */
   close: () => void;
-  /** The palette's "Go to URL…": a walk where the view has the inspector, else the crawl's URLs with it open. */
+  /** The palette's "Go to URL…": a walk where the inspector is open, else it opens (on the crawl's URLs if need be). */
   goTo: (crawlId: string, urlId: number) => void;
 }
 

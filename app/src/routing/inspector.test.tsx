@@ -234,19 +234,33 @@ describe('“Go to URL…”', () => {
     }
   });
 
-  it('is a step of the walk on a view that has the inspector, so back retraces it', async () => {
+  it('opens the inspector in place on a view that has it closed, then is a step of the walk back retraces', async () => {
     const history = fromOverview();
     const router = await open(history);
     await step(() => goToUrl(router, TEST_CRAWL_ID, 2));
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: 2 });
-    expect(history.length).toBe(3);
+    // In place, as a grid opens it: closing it leaves no second entry for the same view.
+    expect(history.length).toBe(2);
     await step(() => goToUrl(router, TEST_CRAWL_ID, 3));
+    expect(history.length).toBe(3);
     expect(walkedSteps(router.state.location.state)).toBe(1);
     await step(() => history.back());
     expect(at(router).inspect).toBe(2);
-    // Esc from the first URL gone to: the screen as it was before.
+    // Esc from the first URL gone to: the screen as it was before, and back from there leaves it.
     await step(() => closeInspector(router));
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
+    await step(() => history.back());
+    expect(at(router).path).toBe(`${CRAWL}/overview`);
+  });
+
+  it('leaves no dead step: Go to URL with the inspector closed, Esc, then back leaves the view', async () => {
+    const history = fromOverview();
+    const router = await open(history);
+    await step(() => walkTo(router, 2));
+    await step(() => closeInspector(router));
+    expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
+    await step(() => history.back());
+    expect(at(router).path).toBe(`${CRAWL}/overview`);
   });
 
   it('opens the crawl’s URLs with the inspector from a view that has none', async () => {
