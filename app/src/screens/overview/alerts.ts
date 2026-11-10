@@ -133,6 +133,16 @@ function words(alert: AlertEvent): Pick<AlertEntry, 'title' | 'detail' | 'advice
   }
 }
 
+/**
+ * When an alert was raised, as an instant. Never its `at` as text: the sidecar writes a time without its trailing
+ * zeros ("…:57.5Z", "…:57.52Z", "…:57Z"), so within a second the text's order isn't time's. A time that can't be read
+ * sorts as the oldest.
+ */
+function raisedAt(alert: Pick<AlertEvent, 'at'>): number {
+  const at = Date.parse(alert.at);
+  return Number.isNaN(at) ? 0 : at;
+}
+
 /** "a Cloudflare challenge", "an HTTP 403": the engine names the firewall or challenge without an article. */
 function withArticle(reason: string): string {
   return /^(a|an|the)\s/i.test(reason) ? reason : `${/^[aeiou]/i.test(reason) ? 'an' : 'a'} ${reason}`;
@@ -153,7 +163,7 @@ export function alertEntries(...sources: readonly (readonly AlertEvent[] | undef
       if (!known || (alert.data?.count ?? 0) > (known.data?.count ?? 0)) byKey.set(key, alert);
     }
   }
-  const newestFirst = [...byKey.values()].sort((a, b) => b.at.localeCompare(a.at) || (b.id ?? 0) - (a.id ?? 0));
+  const newestFirst = [...byKey.values()].sort((a, b) => raisedAt(b) - raisedAt(a) || (b.id ?? 0) - (a.id ?? 0));
   const blockedHosts = new Set<string>();
   const entries: AlertEntry[] = [];
   for (const alert of newestFirst) {

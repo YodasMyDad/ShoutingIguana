@@ -67,6 +67,46 @@ describe('alerts', () => {
     expect(alertEntries(live, file, undefined).map((entry) => entry.code)).toEqual(['site-unreachable', 'sitemaps']);
   });
 
+  it('orders alerts by when they were raised, not by their times as text', () => {
+    // The sidecar writes a time without its trailing zeros: 57.5 s, 57.52 s and 57 s exactly, which as text sort
+    // ".52Z" before ".5Z", and the whole second after both.
+    const at = (entries: ReturnType<typeof alertEntries>) => entries.map((entry) => entry.at);
+    expect(
+      at(
+        alertEntries([
+          alert({ code: 'sitemaps', id: 1, at: '2026-11-10T08:55:57.5Z' }),
+          alert({ code: 'sitemaps-failed', id: 2, at: '2026-11-10T08:55:57.52Z' }),
+        ]),
+      ),
+    ).toEqual(['2026-11-10T08:55:57.52Z', '2026-11-10T08:55:57.5Z']);
+    expect(
+      at(
+        alertEntries([
+          alert({ code: 'sitemaps', id: 1, at: '2026-11-10T08:55:57Z' }),
+          alert({ code: 'sitemaps-failed', id: 2, at: '2026-11-10T08:55:57.9Z' }),
+          alert({ code: 'site-unreachable', id: 3, at: '2026-11-10T08:55:56.999Z' }),
+        ]),
+      ),
+    ).toEqual(['2026-11-10T08:55:57.9Z', '2026-11-10T08:55:57Z', '2026-11-10T08:55:56.999Z']);
+    // The same instant: the later id first.
+    expect(
+      alertEntries([
+        alert({ code: 'sitemaps', id: 4, at: '2026-11-10T08:55:57.5Z' }),
+        alert({ code: 'sitemaps-failed', id: 5, at: '2026-11-10T08:55:57.500Z' }),
+      ]).map((entry) => entry.code),
+    ).toEqual(['sitemaps-failed', 'sitemaps']);
+  });
+
+  it('shows a blocked host as its latest alert by time, though an earlier one sorts later as text', () => {
+    const entries = alertEntries([
+      alert({ code: 'blocked', id: 1, at: '2026-11-10T08:55:57.5Z', data: { host: 'example.com', count: 4 } }),
+      alert({ code: 'blocked', id: 2, at: '2026-11-10T08:55:57.52Z', data: { host: 'example.com', count: 9 } }),
+    ]);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.at).toBe('2026-11-10T08:55:57.52Z');
+    expect(entries[0]?.detail).toContain('9 responses');
+  });
+
   it('tells apart two alerts that share an id but not a time (a crash lost the first)', () => {
     const entries = alertEntries([
       alert({ id: 7, code: 'sitemaps', at: '2026-11-01T10:00:00.000Z' }),
