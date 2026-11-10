@@ -19,7 +19,7 @@ import { issueLink } from './issueLinks';
 import { Block, IssueCheckLink, IssueList, PageText, SectionBody, WalkUrl } from './parts';
 import { measuresOf, scaleEnd, type Measure } from './scale';
 import type { SectionId } from './sections';
-import { KIND_WORDS, SOURCE_WORDS, TYPE_WORDS, protocolWords, reasonPhrase, wordFor } from './words';
+import { KIND_WORDS, SOURCE_WORDS, TYPE_WORDS, depthWords, protocolWords, reasonPhrase, wordFor } from './words';
 
 /** How many of the URL's issues the summary lists before sending the rest to the Issues section. */
 const SUMMARY_ISSUES = 5;
@@ -491,12 +491,6 @@ function IssuesSummary({ detail, onShowSection }: SummarySectionProps) {
   );
 }
 
-function depthWords(depth: number | null): string {
-  if (depth === null) return 'Not reached by links from the start URL';
-  if (depth === 0) return 'The start URL';
-  return `${formatCountOf(depth, 'click')} from the start URL`;
-}
-
 function Discovery({ detail }: { detail: UrlDetail }) {
   const { crawling } = useInspectorContext();
   const { discovery, links, summary } = detail;
@@ -531,7 +525,7 @@ function Discovery({ detail }: { detail: UrlDetail }) {
         </Fact>
       ) : null}
       {links && links.inSitemap !== null ? <Fact label="In a sitemap">{links.inSitemap ? 'Yes' : 'No'}</Fact> : null}
-      <Fact label="Depth">{depthWords(discovery.depth)}</Fact>
+      <Fact label="Depth">{depthWords(discovery)}</Fact>
       <Fact label="Found by">
         {wordFor(SOURCE_WORDS, discovery.source)}
         {discovery.source === 'link' && foundVia ? <span className="text-text-muted"> ({foundVia})</span> : null}

@@ -56,7 +56,7 @@ import { SourceSection } from './SourceSection';
 import { preloadSourceViewer } from './sourceViewerLoader';
 import { StructuredDataSection } from './StructuredDataSection';
 import { SummarySection } from './SummarySection';
-import { TYPE_WORDS } from './words';
+import { TYPE_WORDS, depthInBrief } from './words';
 
 const COPIED_MS = 1_500;
 /** The link counts are read once the inspector has stayed on a URL this long: a grid's cursor passing by reads none. */
@@ -424,14 +424,13 @@ function Kind({
   }
   const type = detail.type;
   const icon = type === 'page' || type === 'image' ? TYPE_ICONS[type] : File;
-  const depth = detail.discovery.depth;
   return (
     <span className={clsx('flex items-center gap-1.5 text-12 text-text-muted', room)}>
       <Icon icon={icon} size="sm" className="shrink-0" />
       <span className="truncate">
         {TYPE_WORDS[type]}
         {detail.isInternal ? '' : ' on another site'}
-        {depth === null ? '' : `, depth ${depth}`}
+        {depthInBrief(detail.discovery)}
       </span>
       {crawling ? <LiveBadge className="ml-1 shrink-0" /> : null}
     </span>

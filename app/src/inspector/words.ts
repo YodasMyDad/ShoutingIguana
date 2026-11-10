@@ -3,6 +3,7 @@
 // for that are "Unknown", never the raw value.
 import type { UrlOutcome, UrlSource, UrlType } from '../api/grids';
 import type { LinkFlag, LinkKind, LinkPosition, NotFetchedBecause } from '../api/inspector';
+import { formatCountOf } from '../lib/format';
 
 /** "Page", "Image": what the URL is, as the grid's type column says it. */
 export const TYPE_WORDS: Record<UrlType, string> = {
@@ -35,6 +36,31 @@ export const SOURCE_WORDS: Record<UrlSource, string> = {
   sitemap: 'A sitemap',
   siteVersion: 'A probe of the site’s other versions',
 };
+
+/** The depth and the source of a URL, as `/urls/inspect` gives them with how it was found. */
+interface Found {
+  depth: number | null;
+  source: UrlSource | null;
+}
+
+/**
+ * How far a URL is from the start, as a sentence. Depth 0 is the start URL only for the URL the crawl started at:
+ * the crawl also asks for the site's other versions itself (http or https, with or without www), and those have
+ * depth 0 too.
+ */
+export function depthWords({ depth, source }: Found): string {
+  if (depth === null) return 'Not reached by links from the start URL';
+  if (depth === 0 && source === 'seed') return 'The start URL';
+  if (depth === 0 && source === 'siteVersion') return 'Not reached by links: the crawl asked for it itself';
+  return `${formatCountOf(depth, 'click')} from the start URL`;
+}
+
+/** The same after what the URL is, in the inspector's head: "Page, depth 2". Nothing for a URL without a depth. */
+export function depthInBrief({ depth, source }: Found): string {
+  if (depth === null) return '';
+  if (depth === 0 && source === 'siteVersion') return ', another version of the site';
+  return `, depth ${depth}`;
+}
 
 export const KIND_WORDS: Record<LinkKind, string> = {
   hyperlink: 'Hyperlink',

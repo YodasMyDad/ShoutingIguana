@@ -24,6 +24,7 @@ import {
   structuredDataSummary,
   visibleChildren,
 } from './structuredData';
+import { depthInBrief, depthWords } from './words';
 
 describe('shapeHeaders', () => {
   it('merges a repeated name into one row, in the place of its first', () => {
@@ -387,6 +388,26 @@ describe('the link grids’ words', () => {
     expect(chosenLinkKind('outlinks')).toBe('all');
     resetLinkKinds();
     expect(chosenLinkKind('inlinks')).toBe('all');
+  });
+});
+
+describe('depth', () => {
+  it('calls depth 0 the start URL only for the URL the crawl started at', () => {
+    expect(depthWords({ depth: 0, source: 'seed' })).toBe('The start URL');
+    // A probe of the site's other versions is asked for by the crawl itself, at depth 0 too.
+    expect(depthWords({ depth: 0, source: 'siteVersion' })).toBe('Not reached by links: the crawl asked for it itself');
+    expect(depthWords({ depth: 1, source: 'link' })).toBe('1 click from the start URL');
+    expect(depthWords({ depth: 3, source: 'sitemap' })).toBe('3 clicks from the start URL');
+    expect(depthWords({ depth: null, source: 'sitemap' })).toBe('Not reached by links from the start URL');
+    // A source this engine doesn't know: its depth is said as it is.
+    expect(depthWords({ depth: 0, source: null })).toBe('0 clicks from the start URL');
+  });
+
+  it('says it in brief for the head, without a depth for a probe', () => {
+    expect(depthInBrief({ depth: 2, source: 'link' })).toBe(', depth 2');
+    expect(depthInBrief({ depth: 0, source: 'seed' })).toBe(', depth 0');
+    expect(depthInBrief({ depth: 0, source: 'siteVersion' })).toBe(', another version of the site');
+    expect(depthInBrief({ depth: null, source: 'sitemap' })).toBe('');
   });
 });
 

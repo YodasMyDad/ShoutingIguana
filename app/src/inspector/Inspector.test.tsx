@@ -451,6 +451,19 @@ describe('a URL the crawl didn’t read', () => {
     expect(within(inspector).getByText('Size').parentElement).toHaveTextContent('Limit 200 KB');
   });
 
+  it('doesn’t call a probe of the site’s other versions the start URL, though its depth is 0', async () => {
+    const probe = testUrlDetail({
+      url: 'http://example.com/',
+      discovery: { ...testUrlDetail().discovery, source: 'siteVersion', depth: 0, foundOn: null, foundVia: null },
+    });
+    const inspector = await state(probe);
+    expect(within(inspector).getByText('Page, another version of the site')).toBeVisible();
+    const fact = (label: string) => within(inspector).getByText(label, { selector: 'dt' }).nextElementSibling;
+    expect(fact('Depth')).toHaveTextContent('Not reached by links: the crawl asked for it itself');
+    expect(fact('Found by')).toHaveTextContent('A probe of the site’s other versions');
+    expect(within(inspector).queryByText('The start URL')).toBeNull();
+  });
+
   it('says a page answered with no body, and still shows how it answered', async () => {
     const inspector = await state(
       testUrlDetail({ response: testResponse({ bodyBytes: 0, sizeBytes: 0 }), content: null, structuredData: [] }),
