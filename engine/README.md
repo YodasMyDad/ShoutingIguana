@@ -623,15 +623,23 @@ a page gives to read on. The API, with every column and operator, is in
       (first where an even spread would put it, then by halves) and the page read from the ids after it. No link is
       read to be passed over, at any depth, and nothing is kept;
     - more targets than that: a walk from the nearer end when the page is near one; deeper in, their links' ids read
-      through them once, on the index, a bit per link (`LinkIdSet`), and kept; a filter most links pass, on a crawl
-      with no link id missing, as every id but the others' (the links to the other targets and, for one kind, the
-      other kinds to these).
+      through them once, on the index, a bit per link (`LinkIdSet`), and kept.
 
-    One target named outright is walked on the index at any depth, whatever else is asked. A filter on the target
-    with something the index doesn't hold (a link's position, its flags, more than one kind): through the targets
-    when they have few links in all; otherwise a walk of the links from the nearer end when the page is near one,
-    remembered when it ran long (a filter on deep targets has its links bunched on the pages crawled last);
-    otherwise a set of the matching ids read once in one pass over the links, and kept.
+    One target named outright is walked on the index at any depth, whatever else is asked.
+  - **A filter on the target that most of the links it could match pass** (the links to the site's own URLs, the
+    navigation links to the pages a click from the start) is read from the blocks too, deep in. `link_blocks` counts
+    links by what they are, so it counts the links the rest of the filters match; the others among those lead to the
+    targets that fail, are the fewer, and are read once through those targets (an index entry each when a kind is all
+    that's asked of a link, else the rows of the links to those targets, when the summary says they're at most an
+    eighth of the crawl's). A block's matching links are the difference (`ButTheOthers`), and the page is read from
+    the blocks that hold it: nothing per matching link, nothing kept but the blocks' counts, and link ids missing
+    change nothing, where keeping every id but the others' (`AllBut`, which is what's left when the others are too
+    many) needs a crawl with none missing.
+  - **A filter on the target with something the index doesn't hold** (a link's position, its flags, more than one
+    kind) that the fewer links pass: through the targets when they have few links in all; otherwise a walk of the
+    links from the nearer end when the page is near one, remembered when it ran long (a filter on deep targets has
+    its links bunched on the pages crawled last); otherwise a set of the matching ids read once in one pass over the
+    links, and kept.
   - **A sort by the target** puts the targets with matching links in order (every URL's sort value is read once), adds
     up their counts to find the page's first target, and reads each target's links in crawl order on the index, from
     the nearer end of a target with many.
@@ -742,6 +750,15 @@ from the start (1.4 million links to 74,000 targets, 237 ms half way down) and t
 (4.4 million, kept as every link but the rest, 158 ms). They're inside the 100k budget and grow with the links, so
 they'd miss at 1M; the gate is twice the desktop's worst, for the runner, so they can't get slower. `link-pass` gained
 the read the index can't place: a filter on the target with one on a link's position, deep among many links (0.57 s).
+
+E3c took the filters most links pass out of both: deep in, they're read from the blocks but for the others
+(`ButTheOthers`), so the hyperlinks to the site's own URLs moved from `link-targets` to `link-grid` (107 ms half way
+down, from 249), and the navigation links to pages a click from the start from `link-pass` (16 ms, from 565). On a
+copy of the crawl with one link id in eleven missing, which no read was timed on before, the links to the site's own
+URLs took 407 to 459 ms half way down and take 97 to 132. `link-pass` keeps a filter on the target with a position
+that the fewer links pass (the content links to pages four clicks from the start, 455 ms), and the text filters and
+searches: a table of the distinct link texts was measured for those and not built
+([the API doc](../docs/v2-sidecar-api.md#engine-changes-e3c-made) has the numbers).
 
 The `links-kind` cell, and the inspector's, were measured before `ix_links_to_kind` and `issue_targets`. With those, on
 the same 1M crawl, links of one kind half way down take 94–241 ms (they were 1.7–3.1 s) and "named by" is 2 ms, 8 ms for

@@ -1185,15 +1185,21 @@ So a page in crawl order is read:
     is closed in on from where an even spread of the links would put it, and the page is read from the ids after
     it: no link is read to be passed over, at any depth, and nothing is kept;
   - with more targets than are listed for the index (20,000), a page near either end is walked to, and deeper in
-    the links' ids are read through the targets once, an index entry a link, and kept; a filter most links pass
-    (the links to the site's own URLs) is kept as every link but the others, which are the fewer to read, on a crawl
-    with no link id missing.
+    the links' ids are read through the targets once, an index entry a link, and kept.
 
   All of that needs the index to hold what the filters ask of a link: its target, and at most one kind (`kind` in
   one value). One target named outright (`to.id` equal to one URL, or `to.url` equal to one) is walked on the index at
   any depth, whatever else is asked.
+- under a filter on the target that **most of the links it could match pass** (E3c), from the blocks again: the links
+  to the site's own URLs, the hyperlinks to URLs that answered, the navigation links to the pages a click from the
+  start. The blocks count links by what they are, so they count the links the rest of the filters match (every
+  link, when the target is all that's asked); the others among those, which lead to the targets that fail, are the
+  fewer, and are read once through those targets. A block's matching links are the difference, so a page anywhere
+  is read from the blocks that hold it, whatever else is asked of the link (its kind, position, flags), nothing is
+  read for every matching link, and link ids missing (a crawl that fetched pages again) change nothing.
 - under filters on the target together with what that index doesn't hold (a link's position, its flags, whether it
-  has text, more kinds than one): through the targets when they have few links in all; otherwise by walking the
+  has text, more kinds than one), **where the fewer links pass**, or the others are too many to read (more than an
+  eighth of the crawl's links): through the targets when they have few links in all; otherwise by walking the
   links from the nearer end when the page is near one; otherwise from a set of the matching links' ids, read once in
   one pass over the links and kept (a bit per link). That pass is over budget, as the next paragraph's are.
 
@@ -1202,8 +1208,8 @@ never analysed, continued since it was last analysed, or last analysed by an eng
 is not out of date for that, and gains the link summary when the crawl is analysed again); on any crawl, a filter
 on the link's text or
 fragment, on its `id`, on the page it's on (`from.*`), or a `search`; and, deep in a grid whose targets have many
-links, a filter on the target together with one on a link's position or flags, whose count and facets the summary
-still gives. One pass then gives the set of matching ids, with the count and the facets where the summary doesn't,
+links, a filter on the target together with one on a link's position or flags that the fewer links of that position
+or those flags pass, whose count and facets the summary still gives. One pass then gives the set of matching ids, with the count and the facets where the summary doesn't,
 kept per filter set (a running crawl's for the 2 s its reads answer for one moment), so the pages that follow cost a
 page. A filter
 that matches few source pages (`from.id`, or `from.*` matching up to a twentieth of the crawl's URLs) reads only their
@@ -1754,3 +1760,58 @@ nothing kept, on a 32-core Windows machine that other work was sharing.
   the inspector names with a status: `redirects.final`, a test's `canonical` and `metaRefresh`, an hreflang's
   `target` (`UrlTarget.Outcome`). The tests hold every named URL of the synthetic site, and every link list, to what
   the URL grid shows of that URL.
+- **A filter most links pass is read from the blocks, link ids missing or not.** Deep in the links to the site's own
+  URLs, the matching ids were kept as every id but the others', which takes a crawl with no link id missing; on one
+  with gaps (pages fetched again) they were read through every target instead, an index entry for each of 4.6
+  million links. Measured cold on a copy of the benchmark crawl with one link id in eleven missing and 100,000 links
+  stored again at the end (`make_gaps.py`, then analysed), that missed the budget. The links are now counted by
+  block as the blocks' own count but for the others, read through the targets that fail
+  ([How the links are read](#how-the-links-are-read)), and the page read from its blocks: nothing is read per
+  matching link, nothing is kept but a few thousand counts, and gaps don't matter. It serves a filter on the target
+  with one on a link's position or flags too, where most links of that position pass: the read the E3b review left
+  over budget (navigation links to pages a click from the start, 565 ms half way down) is one of those.
+
+  | Read, the page half way down | Before | Now |
+  | --- | --- | --- |
+  | Links to the site's own URLs, link ids missing (4.6 million) | 407 to 459 ms (472 to 664 at p95) | 97 to 132 ms (149 to 153) |
+  | Hyperlinks to them, link ids missing (4.0 million) | 386 to 606 ms (430 to 871) | 99 to 111 ms (111 to 147) |
+  | Links to the site's own URLs, no id missing (5.0 million) | 105 ms (157) | 126 ms (149) |
+  | Hyperlinks to them, no id missing (4.4 million) | 249 ms (266 to 289) | 107 ms (113) |
+  | Navigation links to pages a click from the start (2.1 million) | 565 ms | 16 ms (19) |
+
+  **Still one pass:** a filter on the target with one on a link's position or flags that the fewer links of that
+  position pass, or whose others are more than an eighth of the crawl's links, deep among targets with many links:
+  the content links to pages four clicks from the start (1.3 million of 2.2 million content links, the others spread
+  over every other page) take 455 ms half way down, once per filter set. What it would take is the links counted by
+  block and by target at once, which is a row for nearly every link; reading the others, or the matches, through
+  their targets reads as many rows as the pass does. It isn't cheap, and isn't done.
+- **A table of the distinct link texts: measured, and not built.** The design: `link_texts` (an id for each distinct
+  text) and the text's id in the key of `link_summary`, so a filter on a link's text is a set of text ids, counted
+  and faceted from the summary as a filter on the target is; and, to place a page anywhere, the id in the key of
+  `link_blocks` too. Measured on the benchmark crawl, which has 396,932 distinct link texts (some four a page), by a
+  prototype of the tables and by the counting put into the analysis for the measurement, then taken out:
+
+  | Cost | Measured |
+  | --- | --- |
+  | `link_texts` | 10.6 MB, 2.2% of the 478 MB file |
+  | `link_summary` with the text's id | 215,758 rows become 512,454: 3.1 MB becomes 8.0 MB |
+  | `link_blocks` with the text's id | 3,436 rows become 2,096,793: 0.06 MB becomes 30.9 MB |
+  | The file, texts and by target | +15.5 MB, 3.2% (4.1% as the file grew in place) |
+  | The file, by block too | +46.3 MB, 9.7% |
+  | The analysis's time (texts and by target only; seven pairs of runs) | 11.1 to 14.8 s without, 14.9 to 20.9 s with: 2.2 to 3.3 s counting and 1.2 to 2.2 s storing, a quarter more at the very least |
+  | The analysis's peak memory (an analysis of a crawl analysed before) | 155 MB becomes 242 MB |
+
+  What it would buy: the count, the facets and the first page of a text filter in some 60 to 80 ms, from 320 to 530
+  (the distinct texts are scanned in 9 to 18 ms and the summary's rows in 12), and every page of a rare one. **It
+  doesn't pay**, by the measure set for it (the budget met for text `contains`, `equals`, "is empty" and search, for
+  under a tenth more analysis time and a twentieth more file): the analysis takes a quarter to two fifths longer and
+  half as much memory again; a page deep in a common text's links needs the ids by block, which alone are 6.5% of
+  the file; and a search can't be answered from it at all, as it also matches the page a link is on, which no table
+  by target or by text knows. "Is empty" was never slow (the summary holds whether a link has text). A real site's
+  crawl would cost less (the garden crawl has 489 texts for 21,914 links: 0.3% of its file), so the cost is the
+  benchmark site's, where every product's links carry its own name.
+
+  **Known limitation, as measured:** on the 100k crawl a filter on a link's text takes 0.33 to 0.55 s for its first
+  read and a search 0.85 s, once per filter set (a running crawl's, at most every 2 s), and their pages after that
+  cost a page; on a million pages, about ten times that. (This belongs under the rebuild doc's Known limitations,
+  which this work was told to leave alone.)
