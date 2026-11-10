@@ -19,33 +19,39 @@ internal sealed class UrlRowsConverter : JsonConverter<UrlRowsDto>
         writer.WriteStartArray();
         foreach (var row in value.Rows)
         {
-            writer.WriteStartObject();
-            for (var index = 0; index < value.Columns.Count; index++)
-            {
-                writer.WritePropertyName(value.Columns[index]);
-                switch (row.Values[index])
-                {
-                    case null:
-                        writer.WriteNullValue();
-                        break;
-                    case string text:
-                        writer.WriteStringValue(text);
-                        break;
-                    case bool flag:
-                        writer.WriteBooleanValue(flag);
-                        break;
-                    case double number:
-                        writer.WriteNumberValue(number);
-                        break;
-                    case var number:
-                        writer.WriteNumberValue(Convert.ToInt64(number, CultureInfo.InvariantCulture));
-                        break;
-                }
-            }
-
-            writer.WriteEndObject();
+            WriteRow(writer, value.Columns, row.Values);
         }
 
         writer.WriteEndArray();
+    }
+
+    /// <summary>One row as an object keyed by column id, for any grid whose columns are its query's.</summary>
+    public static void WriteRow(Utf8JsonWriter writer, IReadOnlyList<string> columns, IReadOnlyList<object?> values)
+    {
+        writer.WriteStartObject();
+        for (var index = 0; index < columns.Count; index++)
+        {
+            writer.WritePropertyName(columns[index]);
+            switch (values[index])
+            {
+                case null:
+                    writer.WriteNullValue();
+                    break;
+                case string text:
+                    writer.WriteStringValue(text);
+                    break;
+                case bool flag:
+                    writer.WriteBooleanValue(flag);
+                    break;
+                case double number:
+                    writer.WriteNumberValue(number);
+                    break;
+                case var number:
+                    writer.WriteNumberValue(Convert.ToInt64(number, CultureInfo.InvariantCulture));
+                    break;
+            }
+        }
+
+        writer.WriteEndObject();
     }
 }

@@ -6,7 +6,7 @@ using ShoutingIguana.Sidecar.Serialization;
 namespace ShoutingIguana.Sidecar.Api;
 
 /// <summary>
-/// The grids: URLs, their facets and lookup, the inspector, and a check's groups and rows. Every read is a POST with a
+/// The grids: URLs, their facets and lookup, the inspector, a check's groups and rows, the links, the sitemaps and robots.txt. Every read but the list of sitemaps is a POST with a
 /// JSON body to one fixed URL per crawl (the URL inspected goes in the body, not the path), so paging, filtering and
 /// moving from URL to URL never cost a CORS preflight. A request given up stops its read (<see cref="GridData"/>).
 /// </summary>
@@ -43,6 +43,35 @@ internal static class GridEndpoints
         api.MapPost("/api/crawls/{id}/urls/source", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
             await data.SourceAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.UrlRequest).ConfigureAwait(false), cancellationToken)
                 .ConfigureAwait(false));
+
+        api.MapGet("/api/link-columns", () => TypedResults.Json(GridData.LinkColumns, SidecarJsonContext.Default.IReadOnlyListLinkColumnDto));
+
+        api.MapPost("/api/crawls/{id}/links", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.LinkGridAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.GridQueryRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.LinkGridPageDto));
+
+        api.MapPost("/api/crawls/{id}/links/facets", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.LinkFacetsAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.FacetsRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.FacetsDto));
+
+        api.MapGet("/api/crawls/{id}/sitemaps", async (string id, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.SitemapsAsync(id, cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.SitemapList));
+
+        api.MapPost("/api/crawls/{id}/sitemaps/urls", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.SitemapUrlsAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.GridQueryRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.UrlPageDto));
+
+        api.MapPost("/api/crawls/{id}/robots", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.RobotsAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.GroupsRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.RobotsOriginPageDto));
+
+        api.MapPost("/api/crawls/{id}/robots/file", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.RobotsFileAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.RobotsFileRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.RobotsFileDto));
+
+        api.MapPost("/api/crawls/{id}/robots/blocked", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.RobotsBlockedAsync(id, await RequestBody.ReadAsync(request, SidecarJsonContext.Default.RobotsBlockedRequest).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.RobotsBlockedPage));
 
         api.MapPost("/api/crawls/{id}/issues/{checkId}/groups", async (string id, string checkId, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.GroupsAsync(id, checkId, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.GroupsRequest).ConfigureAwait(false),

@@ -45,6 +45,18 @@ internal static class TestCrawlFiles
     /// <summary>What a crawl run by another program leaves: the crawl row stamped again.</summary>
     public static void StampAsCrawledAgain(string path) => Assert.Equal(1, Execute(path, "UPDATE crawl SET updated_at = updated_at + 1000"));
 
+    /// <summary>
+    /// A URL the crawl stored as refused by robots.txt, added to a crawl too small to have found one: the synthetic site's
+    /// robots.txt disallows /private/, which only its larger sites link to.
+    /// </summary>
+    public static void AddRefusedByRobots(string path, string url) => Execute(path, $"""
+        INSERT INTO urls (url, is_internal, fetch_mode, depth, state, skip_reason, source) VALUES ('{url}', 1, 0, 2, 2, 0, 1);
+        INSERT INTO responses (url_id, fetched_at, outcome, ttfb_ms, response_ms, is_html, title_count, meta_description_count, h1_count, is_noindex, is_nofollow,
+                               indexability, indexability_reason, outlink_count)
+        VALUES (last_insert_rowid(), 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 1, 6, 0);
+        UPDATE crawl SET updated_at = updated_at + 1000;
+        """);
+
     private static int Execute(string path, string sql)
     {
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
