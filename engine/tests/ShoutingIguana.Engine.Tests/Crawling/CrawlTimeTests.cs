@@ -176,6 +176,40 @@ public sealed class CrawlTimeTests : IDisposable
     }
 
     /// <summary>
+    /// The time stays known from the moment a crawl is continued: the run stamps the crawl row as it opens the file, before
+    /// it has crawled for a moment (a big crawl's URLs are read back in first), and a run that ends without having crawled
+    /// at all (stopped while it opened) leaves the time the crawl had.
+    /// </summary>
+    [Fact]
+    public async Task TheTimeIsKnownWhileACrawlIsBeingContinuedAndAfterARunThatNeverCrawled()
+    {
+        await using var site = await StartSiteAsync();
+        var path = _files.NewPath();
+        var options = new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, DiscoverSitemaps = false };
+        await TestCrawls.RunAsync(options, path);
+        var before = CrawlRunReader.Read(path)!.TimeCrawling;
+
+        // The file opened to continue the crawl, as a run opens it, and closed again with nothing crawled.
+        await using (var writer = CrawlWriter.Open(path, options, resume: true, new CrawlCounters(), NullLogger.Instance))
+        {
+            Assert.Equal(before, writer.TimeCrawledBefore);
+            Assert.Equal(before, CrawlRunReader.Read(path)?.TimeCrawling);
+            Assert.Equal(before, CrawlSummaryReader.Read(path).TimeCrawling);
+            await writer.UpdateStatusAsync(CrawlStatus.Stopped, isFinished: false, CancellationToken.None);
+        }
+
+        Assert.Equal(before, CrawlRunReader.Read(path)?.TimeCrawling);
+        Assert.Single(CrawlRunReader.Read(path)!.Runs!);
+
+        // And it goes on from there: the next run is the crawl's second to have crawled, and its time is added.
+        var continued = await TestCrawls.RunAsync(options, path, resume: true);
+        var runs = CrawlRunReader.Read(path)!;
+        Assert.Equal(continued.Progress.TimeCrawling, runs.TimeCrawling);
+        Assert.Equal(before + runs.Runs![1].TimeCrawling, runs.TimeCrawling);
+        Assert.Equal(0, TestCrawls.Count(path, "SELECT COUNT(*) FROM run_time WHERE crawled_ms IS NULL"));
+    }
+
+    /// <summary>
     /// A run cut short leaves its last stretch going, as long as it was last stored: read so, with the run not ended, and
     /// ended there once the crawl is continued, whose time is then the whole of it.
     /// </summary>

@@ -151,10 +151,10 @@ internal static class CrawlSchema
     /// keep it. With such a row the crawl's whole time isn't known, and readers say so rather than give a part of it.</item>
     /// <item><c>ended</c> is 1 once the stretch has ended; 0 while it goes on, and until the crawl is continued where its
     /// process died.</item>
-    /// <item><c>crawl_updated_at</c> is the crawl row's stamp as it stood when the row was last stored at a run's start or
-    /// end. Every run stamps the crawl row, whichever engine runs it, so when the last row's isn't the crawl row's own, a
-    /// run since went untimed: readers then don't know the crawl's time, and the next run this engine makes says so with
-    /// the row above.</item>
+    /// <item><c>crawl_updated_at</c> is the crawl row's stamp as it stood when the row was stored, and the last row's is
+    /// moved on with it whenever this engine stamps the crawl row: as a run opens the file and as it ends. Every run stamps
+    /// the crawl row, whichever engine runs it, so when the last row's isn't the crawl row's own, a run since went
+    /// untimed: readers then don't know the crawl's time, and the next run this engine makes says so with the row above.</item>
     /// </list>
     /// </summary>
     public const string RUN_TIME = """

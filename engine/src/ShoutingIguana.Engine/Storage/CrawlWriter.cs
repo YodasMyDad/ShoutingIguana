@@ -130,7 +130,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
             {
                 // Before the run stamps the crawl row: the stamp tells whether every run so far was timed.
                 var earlier = CrawlRunReader.Read(connection, transaction: null);
-                writer.RestoreState();
+                writer.RestoreState(timed: earlier is not null);
                 writer.RestoreRunTime(earlier);
             }
 
@@ -919,7 +919,8 @@ internal sealed class CrawlWriter : IAsyncDisposable
         command.ExecuteNonQuery();
     }
 
-    private void RestoreState()
+    /// <param name="timed">The file knows the time every run so far spent crawling, and must go on knowing it while this one starts.</param>
+    private void RestoreState(bool timed)
     {
         // In one transaction: URLs claimed but never recorded when the last run stopped go back on the queue, and the
         // crawl is marked running again. A status of Running left by a crash is fine; the lock says nothing else writes.
@@ -928,6 +929,13 @@ internal sealed class CrawlWriter : IAsyncDisposable
             _statements.SetTransaction(transaction);
             CrawlDatabase.Execute(_connection, "UPDATE urls SET state = 0 WHERE state = 1;", transaction);
             _statements.UpdateCrawlStatus(CrawlStatus.Running, false, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            if (timed)
+            {
+                // The stamp just moved is this engine's doing: the last stretch takes it with the same commit, so a
+                // reader never finds the crawl stamped past what was timed while a big crawl's URLs are read back in.
+                PassStampOn(transaction);
+            }
+
             transaction.Commit();
         }
 
@@ -1102,13 +1110,17 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
         if (_crawlStamped)
         {
-            RunTime("""
-                UPDATE run_time SET crawl_updated_at = (SELECT updated_at FROM crawl WHERE id = 1)
-                WHERE id = (SELECT MAX(id) FROM run_time) AND run = $run
-                """, _transaction, ("$run", _run));
+            PassStampOn(_transaction);
             _crawlStamped = false;
         }
     }
+
+    /// <summary>
+    /// The last stretch stored takes the crawl row's stamp as it stands, whichever run it's of (a run paused before it
+    /// began has none of its own): this writer moved the stamp, and what it crawls it times, so no run has gone untimed.
+    /// </summary>
+    private void PassStampOn(SqliteTransaction? transaction) =>
+        RunTime("UPDATE run_time SET crawl_updated_at = (SELECT updated_at FROM crawl WHERE id = 1) WHERE id = (SELECT MAX(id) FROM run_time)", transaction);
 
     private object? RunTime(string sql, SqliteTransaction? transaction, params (string Name, object Value)[] parameters)
     {
