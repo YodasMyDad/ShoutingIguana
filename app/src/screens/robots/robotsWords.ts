@@ -9,7 +9,7 @@ import type {
   RobotsOrigin,
   RobotsOriginPage,
 } from '../../api/grids';
-import { formatCountOf } from '../../lib/format';
+import { formatCount, formatCountOf } from '../../lib/format';
 
 export type RobotsTone = 'read' | 'nothing' | 'refused' | 'unknown';
 
@@ -101,7 +101,7 @@ export interface BlockedWhy {
 export function blockedWhy(row: Pick<RobotsBlockedUrl, 'reason' | 'line' | 'rule' | 'error'>): BlockedWhy {
   switch (row.reason) {
     case 'rule': {
-      const line = row.line === null ? 'A rule' : `Line ${row.line}`;
+      const line = row.line === null ? 'A rule' : `Line ${formatCount(row.line)}`;
       return {
         short: row.rule === null ? line : `${line}: ${row.rule}`,
         sentence: row.rule === null ? `${line} of this file refused it.` : `${line} refused it: ${row.rule}`,

@@ -100,6 +100,12 @@ describe('why a URL was blocked', () => {
     });
   });
 
+  it('writes a line far down a long file with its thousands separator', () => {
+    expect(blockedWhy({ reason: 'rule', line: 2_483, rule: 'Disallow: /x', error: null }).short).toBe(
+      'Line 2,483: Disallow: /x',
+    );
+  });
+
   it('says in words that the file couldn’t be read, with how when that’s stored', () => {
     const why = blockedWhy({ reason: 'unreachable', line: null, rule: null, error: 'HTTP 503' });
     expect(why.short).toBe('robots.txt couldn’t be read');

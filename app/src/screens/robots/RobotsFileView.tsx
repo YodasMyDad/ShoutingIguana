@@ -22,7 +22,7 @@ import { SourceSkeleton } from '../../inspector/SourceSection';
 import { useSourceViewer } from '../../inspector/sourceViewerLoader';
 import { useCommands } from '../../keyboard/registry';
 import { copyText } from '../../lib/clipboard';
-import { formatBytes, formatCountOf, formatExactTime, formatShownOf } from '../../lib/format';
+import { formatBytes, formatCount, formatCountOf, formatExactTime, formatShownOf } from '../../lib/format';
 import { useInspector } from '../../routing/inspector';
 import { openInBrowser } from '../../shell/os';
 import { Banner } from '../../ui/Banner';
@@ -536,7 +536,7 @@ function BlockedUrls({
               <FilteredEmptyState
                 title={
                   narrowing.by === 'line'
-                    ? `Line ${narrowing.line} blocked no URLs.`
+                    ? `Line ${formatCount(narrowing.line)} blocked no URLs.`
                     : 'No blocked URLs like that here.'
                 }
                 level="none"

@@ -186,7 +186,6 @@ describe('robots.txt: one origin’s file', () => {
     expect(
       screen.getByText(wholeText('12 lines, 164 bytes. As ShoutingIguana, the crawl obeyed lines 5 to 9.')),
     ).toBeVisible();
-    expect(within(viewer()).getByText('line 7: Blocked no URLs')).toBeVisible();
     expect(within(viewer()).getByText('line 10: Not used by the crawl')).toBeVisible();
   });
 

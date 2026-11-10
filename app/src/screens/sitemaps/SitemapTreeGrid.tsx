@@ -19,16 +19,17 @@ const ROUTE = '/crawls/$crawl/sitemaps/{-$sitemap}';
 /** The counts the list shows, each in a column of its own. */
 const LIST_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'notCrawled', 'nonIndexable'];
 
-const FOUND_WIDTH = 136;
-const STATE_WIDTH = 216;
+const FOUND_WIDTH = 132;
+const STATE_WIDTH = 200;
+/** Room for a count in the millions, whole: 1,234,567. */
 const COUNT_WIDTHS: Record<SitemapCount, number> = {
-  listed: 84,
-  crawled: 84,
+  listed: 96,
+  crawled: 96,
   notCrawled: 104,
   indexable: 96,
   nonIndexable: 120,
 };
-const MIN_URL_WIDTH = 240;
+const MIN_URL_WIDTH = 220;
 /** The grid's edges, and the room its scrollbar takes. */
 const FRAME_SLACK = 18;
 

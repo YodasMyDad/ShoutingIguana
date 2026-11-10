@@ -65,8 +65,8 @@ describe('Sitemaps: the list', () => {
     expect(rows.slice(1, 4).map((row) => row.getAttribute('aria-level'))).toEqual(['2', '2', '2']);
     expect(within(rows[0]!).getByText('Index of 3')).toBeVisible();
     expect(within(rows[0]!).getByText('robots.txt')).toBeVisible();
-    expect(within(rowOf(`${SITE}/sitemaps/pages.xml`)).getByText('A sitemap index')).toBeVisible();
-    expect(within(rowOf(`${SITE}/news-sitemap.xml`)).getByText('The crawl’s settings')).toBeVisible();
+    expect(within(rowOf(`${SITE}/sitemaps/pages.xml`)).getByText('Sitemap index')).toBeVisible();
+    expect(within(rowOf(`${SITE}/news-sitemap.xml`)).getByText('Crawl settings')).toBeVisible();
     expect(within(rowOf(`${SITE}/sitemaps/missing.xml`)).getByText('Couldn’t be read: HTTP 404')).toBeVisible();
   });
 
@@ -226,7 +226,7 @@ describe('Sitemaps: what isn’t there', () => {
     await open(SITEMAPS);
     expect(await screen.findByText('The crawl found 1 sitemap, which couldn’t be read: HTTP 404.')).toBeVisible();
     expect(await screen.findByText('No sitemap was read')).toBeVisible();
-    expect(within(rowOf(only.url)).getByText('The default location')).toBeVisible();
+    expect(within(rowOf(only.url)).getByText('Default location')).toBeVisible();
     // No sitemap was read, so there's no count of the pages none lists to make.
     expect(screen.queryByText(/in any sitemap/)).toBeNull();
   });

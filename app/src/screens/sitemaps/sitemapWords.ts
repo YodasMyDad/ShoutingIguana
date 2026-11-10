@@ -22,12 +22,12 @@ export interface Words {
 
 const FOUND_VIA: Record<SitemapSource, Words> = {
   robotsTxt: { short: 'robots.txt', sentence: 'The start URL’s robots.txt declares it.' },
-  options: { short: 'The crawl’s settings', sentence: 'It was given to the crawl in its settings.' },
+  options: { short: 'Crawl settings', sentence: 'It was given to the crawl in its settings.' },
   defaultLocation: {
-    short: 'The default location',
+    short: 'Default location',
     sentence: 'Nothing declared a sitemap, so the crawl tried /sitemap.xml.',
   },
-  index: { short: 'A sitemap index', sentence: 'A sitemap index lists it.' },
+  index: { short: 'Sitemap index', sentence: 'A sitemap index lists it.' },
 };
 
 /** How the crawl came by a sitemap. Null is said plainly: the crawl can't tell any more. */

@@ -48,16 +48,16 @@ describe('the file as the viewer shows it', () => {
     expect(at(11)?.nameEnd).toBeUndefined();
   });
 
-  it('puts how many URLs a rule blocked beside it, as a link, and says so of one that blocked none', () => {
+  it('puts how many URLs a rule blocked beside it, as a link, and nothing beside a rule that blocked none', () => {
     const marks = fileMarks(TEST_FILE_LINES);
     expect(marks.find((mark) => mark.line === 6)).toMatchObject({
       action: 'Blocked 3 URLs',
       actionTitle: 'List the 3 URLs line 6 blocked',
     });
+    // A real file has hundreds of rules that blocked nothing: a note on each would bury the few that did.
     const none = marks.find((mark) => mark.line === 7);
     expect(none?.action).toBeUndefined();
-    expect(none?.note).toBe('Blocked no URLs');
-    // A rule of a group the crawl didn't obey blocked nothing, and says nothing of it.
+    expect(none?.note).toBeUndefined();
     expect(marks.find((mark) => mark.line === 3)?.note).toBeUndefined();
   });
 
@@ -69,8 +69,9 @@ describe('the file as the viewer shows it', () => {
   });
 
   it('uses thousands separators in a rule’s count', () => {
-    const [mark] = fileMarks([{ ...TEST_FILE_LINES[5]!, blocked: 12_345 }]);
+    const [mark] = fileMarks([{ ...TEST_FILE_LINES[5]!, number: 2_483, blocked: 12_345 }]);
     expect(mark?.action).toBe('Blocked 12,345 URLs');
+    expect(mark?.actionTitle).toBe('List the 12,345 URLs line 2,483 blocked');
   });
 
   it('knows which lines can narrow the list', () => {
@@ -82,6 +83,11 @@ describe('which lines the crawl obeyed', () => {
   it('is the runs of lines that apply, a sitemap line apart', () => {
     expect(obeyedLines(TEST_FILE_LINES)).toEqual([[5, 9]]);
     expect(obeyedWords(TEST_FILE_LINES, 'ShoutingIguana')).toBe('As ShoutingIguana, the crawl obeyed lines 5 to 9.');
+    const far = [
+      { number: 2_482, kind: 'userAgent', applies: true },
+      { number: 4_882, kind: 'disallow', applies: true },
+    ] as const;
+    expect(obeyedWords(far, 'ShoutingIguana')).toBe('As ShoutingIguana, the crawl obeyed lines 2,482 to 4,882.');
   });
 
   it('keeps a blank line or a comment inside a group, and names two groups apart', () => {

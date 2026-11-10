@@ -3,7 +3,7 @@
 // refused (docs/v2-sidecar-api.md, robots.txt): nothing is parsed or matched again here. Pure, so it's unit-tested.
 import type { RobotsBlockedQuery, RobotsBlockedUrl, RobotsFile, RobotsLine } from '../../api/grids';
 import type { SourceLineMark } from '../../inspector/sourceLines';
-import { formatCountOf } from '../../lib/format';
+import { formatCount, formatCountOf } from '../../lib/format';
 import type { RobotsReasonSearch, RobotsSearch } from '../../routing/search';
 import { LINE_PROBLEM_WORDS } from './robotsWords';
 
@@ -42,13 +42,11 @@ export function fileMarks(lines: readonly RobotsLine[]): SourceLineMark[] {
       else if (line.applies === false) mark.tone = 'quiet';
     }
     if (line.problem !== null) mark.note = LINE_PROBLEM_WORDS[line.problem];
-    if (line.blocked !== null) {
-      if (line.blocked > 0) {
-        mark.action = `Blocked ${formatCountOf(line.blocked, 'URL')}`;
-        mark.actionTitle = `List the ${formatCountOf(line.blocked, 'URL')} line ${line.number} blocked`;
-      } else {
-        mark.note = mark.note ? `${mark.note}. Blocked no URLs` : 'Blocked no URLs';
-      }
+    // A rule that blocked nothing says nothing: a real file has hundreds, and a note on each would bury the few
+    // that did. The list beside the file says so when none did.
+    if (line.blocked !== null && line.blocked > 0) {
+      mark.action = `Blocked ${formatCountOf(line.blocked, 'URL')}`;
+      mark.actionTitle = `List the ${formatCountOf(line.blocked, 'URL')} line ${formatCount(line.number)} blocked`;
     }
     return [mark];
   });
@@ -56,7 +54,7 @@ export function fileMarks(lines: readonly RobotsLine[]): SourceLineMark[] {
 
 /** "line 5", "lines 1 to 2": a run of lines, in words. */
 const run = ([first, last]: readonly [number, number]) =>
-  first === last ? `line ${first}` : `lines ${first} to ${last}`;
+  first === last ? `line ${formatCount(first)}` : `lines ${formatCount(first)} to ${formatCount(last)}`;
 
 /** The runs of lines that are part of the group the crawl obeyed. A sitemap line belongs to no group. */
 export function obeyedLines(lines: readonly Pick<RobotsLine, 'number' | 'kind' | 'applies'>[]): [number, number][] {
@@ -144,7 +142,8 @@ export function narrowingWords(
   switch (narrowing.by) {
     case 'line': {
       const line = file ? lineAt(file, narrowing.line) : undefined;
-      return { field: 'Rule', value: line ? `line ${narrowing.line}: ${line.text.trim()}` : `line ${narrowing.line}` };
+      const at = `line ${formatCount(narrowing.line)}`;
+      return { field: 'Rule', value: line ? `${at}: ${line.text.trim()}` : at };
     }
     case 'reason':
       return {

@@ -18,9 +18,9 @@ const list = (sitemaps: Sitemap[], discovery: SitemapList['discovery'] = 'done')
 describe('how a sitemap was found', () => {
   it('has words for each way the crawl comes by one', () => {
     expect(foundViaWords('robotsTxt').short).toBe('robots.txt');
-    expect(foundViaWords('options').short).toBe('The crawl’s settings');
+    expect(foundViaWords('options').short).toBe('Crawl settings');
     expect(foundViaWords('defaultLocation').sentence).toContain('/sitemap.xml');
-    expect(foundViaWords('index').short).toBe('A sitemap index');
+    expect(foundViaWords('index').short).toBe('Sitemap index');
   });
 
   it('says plainly when the crawl can’t say how it found it', () => {
