@@ -2576,7 +2576,12 @@
 
   .si-split__bar--magnified,
   .si-split__bar--none {
-    height: var(--space-5);
+    height: var(--space-6);
+  }
+
+  /* A part that opens its URLs is never too thin to hit (WCAG 2.5.8): 24 px, as the bar is high. */
+  a.si-split__part {
+    min-width: var(--space-6);
   }
 
   .si-split__bar--none {

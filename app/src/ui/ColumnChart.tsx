@@ -51,13 +51,17 @@ export function ColumnChart({ columns, label, axis, className }: ColumnChartProp
           );
           return (
             <li key={column.key} className="si-columns__item">
+              {/* The column's name with its number is its text; the number, bar and label drawn are the picture of
+                  it, so nothing is read twice and a link's name is what's written in it. */}
               {column.link ? (
                 <ChartLink
                   {...column.link}
                   className={clsx('si-columns__column si-columns__column--link', column.className)}
-                  aria-label={column.name}
                 >
-                  {content}
+                  <span className="sr-only">{column.name}</span>
+                  <span aria-hidden="true" className="si-columns__parts">
+                    {content}
+                  </span>
                 </ChartLink>
               ) : (
                 <span className={clsx('si-columns__column', column.value === 0 && 'si-columns__column--zero')}>
