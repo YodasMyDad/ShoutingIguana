@@ -175,6 +175,25 @@ describe('the inspector in history', () => {
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
   });
 
+  it('closes once when asked twice: the second Esc joins the close under way', async () => {
+    // A browser goes back a moment after it's asked: the second Esc comes while the first close is on its way.
+    const history = browserLikeHistory(['/', `${CRAWL}/overview`, `${CRAWL}/urls`]);
+    const router = await open(history);
+    await step(() => inspectFromGrid(router, 1));
+    await step(() => walkTo(router, 2));
+    await step(() => walkTo(router, 3));
+    await step(() => Promise.all([closeInspector(router), closeInspector(router)]));
+    // Time for a second step back to land, had one been asked for.
+    await step(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
+    // A close after it is its own: nothing is left of the first.
+    await step(() => inspectFromGrid(router, 4));
+    await step(() => closeInspector(router));
+    expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
+    history.back();
+    await waitFor(() => expect(at(router).path).toBe(`${CRAWL}/overview`));
+  });
+
   it('does the same over the browser’s history, whose back is asynchronous', async () => {
     window.history.replaceState(null, '', `${CRAWL}/overview`);
     const history = createBrowserHistory();

@@ -146,6 +146,52 @@ test('a walk longer than the browser keeps history for still closes with Esc', a
   expect(inspected(page)).toBeNull();
 });
 
+test('Esc handled twice before history has gone back closes the inspector once, and stays on the view', async ({
+  page,
+}) => {
+  const inspector = await inspectPlant(page, 'hreflang-en');
+  await walkInlinks(page, inspector, 2);
+  // Two presses handled back to back, as when the app was busy while they were made: the second comes before history
+  // has gone back for the first. Had the close run twice, history would go back over the walk twice, out of the view.
+  await page.evaluate(() => {
+    for (let press = 0; press < 2; press++) {
+      (document.activeElement ?? document.body).dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
+      );
+    }
+  });
+  await expect(inspector).toBeHidden();
+  await page.waitForTimeout(500);
+  await expect(page).toHaveURL(/\/urls\?q=/);
+  expect(inspected(page)).toBeNull();
+
+  // The same with real key events, 80 ms apart, while the main thread is busy for 400 ms.
+  await page.getByRole('grid', { name: 'URLs' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(inspector).toBeVisible();
+  await walkInlinks(page, inspector, 2);
+  const session = await page.context().newCDPSession(page);
+  const escape = async () => {
+    const key = { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 };
+    await session.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...key });
+    await session.send('Input.dispatchKeyEvent', { type: 'keyUp', ...key });
+  };
+  void page.evaluate(() => {
+    setTimeout(() => {
+      const end = performance.now() + 400;
+      while (performance.now() < end);
+    }, 0);
+  });
+  await page.waitForTimeout(30);
+  const first = escape();
+  await page.waitForTimeout(80);
+  await Promise.all([first, escape()]);
+  await expect(inspector).toBeHidden();
+  await page.waitForTimeout(500);
+  await expect(page).toHaveURL(/\/urls\?q=/);
+  expect(inspected(page)).toBeNull();
+});
+
 test('from a check’s pages: Enter inspects one, its issue leads back to the check, Esc and Alt+Left', async ({
   page,
 }) => {

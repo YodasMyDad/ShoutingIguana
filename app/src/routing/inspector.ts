@@ -124,7 +124,20 @@ function entriesBehind(router: AppRouter): number {
  * history can't go back as far as asked (it doesn't say how far it can), the entry shown: the inspector always
  * closes.
  */
-export async function closeInspector(router: AppRouter): Promise<void> {
+export function closeInspector(router: AppRouter): Promise<void> {
+  // One close at a time. History goes back a moment after it's asked, and until then the router still has the
+  // walked entry: a second Esc in that moment would go back over the walk again, out of the view.
+  const underWay = closing.get(router);
+  if (underWay) return underWay;
+  const close = closeOnce(router).finally(() => closing.delete(router));
+  closing.set(router, close);
+  return close;
+}
+
+/** The close under way on each router, which a second Esc or Close joins. */
+const closing = new WeakMap<AppRouter, Promise<void>>();
+
+async function closeOnce(router: AppRouter): Promise<void> {
   const steps = Math.min(walkedSteps(router.state.location.state), entriesBehind(router));
   if (steps > 0) await goBack(router, steps);
   await router.navigate({
