@@ -337,6 +337,14 @@ slices.
   `inert` and the registry runs none of its keys, but the one that toggles the overlay (`inOverlays`). When an
   overlay closes, focus goes back where it was, else to the view's grid, else to the main area (`restoreFocus`); a
   navigation that removes the focused element puts focus in the new view.
+- A command chosen in the palette runs once the palette has given focus back (`afterFocusReturns` in
+  `app/overlays.ts`), never a frame or a timer after the close: Radix gives focus back from a timer of its own once
+  the palette's content has gone, nothing orders that before a frame, and a command that ran first had the focus it
+  took (the inspector's for "Go to URL…", the source's search field, the checks' filter) taken back to the view. The
+  wait is bounded (250 ms): then focus is given back anyway and the command runs, and Radix saying so later moves
+  nothing. Focus is given back once per close, and only with no overlay open: the `?` sheet closing under the
+  palette (Ctrl+K on it) keeps the place for when the palette closes. A menu needs none of this: its item acts
+  while the menu is still open, and Radix gives no focus back once focus has left the menu.
 - A view that takes away the control that had focus, without a navigation, gives the focus somewhere to go
   (`feedback/useFocusRescue.ts`): a banner's button goes once its action has worked (Resume, Continue) and focus goes
   to the page's title; the top bar's Pause becomes Resume and takes the focus, and Stop, which leaves no control

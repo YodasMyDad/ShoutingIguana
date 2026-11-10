@@ -11,6 +11,7 @@ import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { TEST_CRAWL_ID, fakeSidecar, standardRoutes, type FakeSidecar } from '../test/fakeSidecar';
 import { inspectorRoutes, testUrlDetail } from '../test/inspectorSidecar';
+import { lateZeroTimers } from '../test/lateTimers';
 import { setPaletteMode } from './paletteMode';
 import { installKeyboard } from './registry';
 
@@ -79,6 +80,22 @@ describe('“Go to URL…” in the palette', () => {
     expect(await screen.findByRole('heading', { level: 2, name: B.url })).toBeVisible();
     // The URL was asked for by name: the keyboard goes where it shows, in the inspector.
     await waitFor(() => expect(screen.getByRole('tabpanel', { name: /^Summary/ })).toHaveFocus());
+  });
+
+  it('keeps the keyboard in the inspector however long the palette takes to give focus back', async () => {
+    const { router, user } = await open(`${CRAWL}/urls?inspect=2`);
+    const grid = await screen.findByRole('grid', { name: 'URLs' });
+    const { field } = await goToUrlMode(user);
+    await user.type(field, '/b');
+    // The palette's close takes far longer than a frame. It gives focus back to the view (its grid), and only then
+    // does the inspector open on the URL and take the keyboard: nothing takes it back.
+    const late = lateZeroTimers(100);
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull());
+    await late.over();
+    await waitFor(() => expect(inspected(router)).toBe(3));
+    await waitFor(() => expect(screen.getByRole('tabpanel', { name: /^Summary/ })).toHaveFocus());
+    expect(grid).not.toHaveFocus();
   });
 
   it('says under the field when the crawl doesn’t have the URL, or the text isn’t one, and stays open', async () => {

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { checksQuery, libraryQuery } from '../api/queries';
-import { restoreFocus, setOverlay, useOverlay } from '../app/overlays';
+import { afterFocusReturns, restoreFocus, setOverlay, useOverlay } from '../app/overlays';
 import { crawlName } from '../crawl/status';
 import { formatCount, formatRelativeTime } from '../lib/format';
 import { Kbd } from '../ui/Kbd';
@@ -85,14 +85,17 @@ export function CommandPalette() {
   // next time: "Go to URL…" is asked for each time it's wanted.
   useEffect(() => () => setPaletteMode({ kind: 'commands' }), []);
   const close = () => setOverlay(null);
-  /** Closes first, so focus is back where it was before the command moves it. */
+  /**
+   * Closes first, and runs the command once the palette has given focus back, however long that takes: focus is
+   * where it was before the command moves it, and stays where the command puts it.
+   */
   const choose = (entry: PaletteItem) => {
     if (entry.stay) {
       void entry.run();
       return;
     }
     close();
-    requestAnimationFrame(() => void entry.run());
+    afterFocusReturns(() => void entry.run());
   };
 
   return (
