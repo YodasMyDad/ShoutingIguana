@@ -113,7 +113,8 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
   /**
    * While a crawl runs, its grids' counts and rows refresh in place (the IA's "12,345 of 101,107 URLs, live while
    * crawling"): at most once a second, never cancelling a page that's still on its way, so a slow page isn't fetched
-   * forever. Only grids on screen fetch; the rest are marked stale for when they're next shown.
+   * forever. Only grids on screen fetch; the rest are marked stale for when they're next shown. The URL open in the
+   * inspector refreshes with them.
    */
   function refreshLiveGrids(crawlId: string) {
     const now = Date.now();
@@ -121,6 +122,8 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     if (last !== undefined && now - last < LIVE_GRID_REFRESH_MS) return;
     gridRefreshedAt.set(crawlId, now);
     void queryClient.invalidateQueries(liveGridPagesOf(crawlId), { cancelRefetch: false });
+    // The URL the inspector shows changes too (queued, then fetched; more links to it): it refreshes in place.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.urlDetails(crawlId) }, { cancelRefetch: false });
   }
 
   function onCrawlEvent(event: CrawlEvent) {

@@ -14,6 +14,7 @@ import { useLiveCrawl } from '../live/liveStore';
 import type { Density, ThemePreference } from '../settings/schema';
 import { getSettings, updateSettings } from '../settings/settingsStore';
 import { ZOOM_LEVELS, quitApp } from '../shell/os';
+import { setPaletteMode } from './paletteMode';
 import { useCommands, type Command } from './registry';
 
 /** The grid's own keys: handled by the focused grid, listed here so the `?` sheet and tooltips show them. */
@@ -154,6 +155,17 @@ export function useAppCommands(): void {
         group: 'Go to',
         keywords: ['library', 'crawls'],
         run: () => navigate({ to: '/', search: {} }),
+      },
+      {
+        id: 'go.url',
+        title: 'Go to URL…',
+        group: 'Go to',
+        keywords: ['inspect', 'inspector', 'find', 'open', 'page', 'address'],
+        enabled: () => crawlId !== undefined,
+        run: () => {
+          setPaletteMode({ kind: 'url', text: '' });
+          setOverlay('palette');
+        },
       },
       {
         id: 'go.settings',

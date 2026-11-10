@@ -1,0 +1,72 @@
+// The link grids' words and what they remember for the session: the kind of link each last showed, and the row the
+// cursor was left on in each URL's links.
+import type { LinkKind, LinkRow } from '../api/inspector';
+import { FLAG_WORDS } from './words';
+
+export type LinkDirection = 'inlinks' | 'outlinks';
+export type KindChoice = LinkKind | 'all';
+
+/** The kind each grid last showed, for the session: walking from URL to URL keeps "Hyperlinks only". */
+const chosenKinds: Record<LinkDirection, KindChoice> = { inlinks: 'all', outlinks: 'all' };
+
+export function chosenLinkKind(direction: LinkDirection): KindChoice {
+  return chosenKinds[direction];
+}
+
+export function chooseLinkKind(direction: LinkDirection, kind: KindChoice): void {
+  chosenKinds[direction] = kind;
+}
+
+/** Tests: every kind again. */
+export function resetLinkKinds(): void {
+  chosenKinds.inlinks = 'all';
+  chosenKinds.outlinks = 'all';
+}
+
+/** A session's walk can be long: the rows remembered are the latest of this many grids. */
+const REMEMBERED_GRIDS = 500;
+
+/** The row the cursor was left on in each link grid (a URL's links of a kind), so going back along a walk finds it. */
+const cursorRows = new Map<string, number>();
+
+/** Remembers the cursor's row in a link grid, by the grid's key; null (no cursor) forgets it. */
+export function rememberLinkRow(grid: string, row: number | null): void {
+  cursorRows.delete(grid);
+  if (row === null) return;
+  cursorRows.set(grid, row);
+  const oldest = cursorRows.size > REMEMBERED_GRIDS ? cursorRows.keys().next() : null;
+  if (oldest && !oldest.done) cursorRows.delete(oldest.value);
+}
+
+export function rememberedLinkRow(grid: string): number | undefined {
+  return cursorRows.get(grid);
+}
+
+/** Tests: no row remembered. */
+export function resetLinkRows(): void {
+  cursorRows.clear();
+}
+
+/**
+ * Whether search engines follow the link, then its other flags: "Followed", "nofollow, sponsored", "Not followed"
+ * (a nofollow on its page stops it, with no flag on the link itself). Only hyperlinks are followed or not: any other
+ * kind has its flags alone.
+ */
+export function followWords(row: Pick<LinkRow, 'followed' | 'flags'>): string {
+  if (row.followed === null) return row.flags.map((flag) => FLAG_WORDS[flag]).join(', ');
+  const lead = row.followed ? 'Followed' : row.flags.includes('noFollow') ? FLAG_WORDS.noFollow : 'Not followed';
+  const others = row.flags.filter((flag) => flag !== 'noFollow').map((flag) => FLAG_WORDS[flag]);
+  return [lead, ...others].join(', ');
+}
+
+/** A URL the crawl has an outcome for and no status code: which outcome isn't said where only the code comes. */
+export const NO_STATUS = 'No status';
+
+/**
+ * The other end's status as text: its code, or that there's none. A link's row says whether the crawl has an outcome
+ * for its URL (`fetched`) but not which: blocked by robots.txt, timed out and unreachable all come with no code, so
+ * "No response" would be a guess (robots.txt never let the request be made).
+ */
+export function linkStatusWords(row: Pick<LinkRow, 'statusCode' | 'fetched'>): string {
+  return row.statusCode === null ? (row.fetched ? NO_STATUS : 'Not fetched') : String(row.statusCode);
+}

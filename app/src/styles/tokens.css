@@ -248,6 +248,17 @@
   --color-message-failure: light-dark(#c22828, #ff8a84);
   --color-message-failure-subtle: light-dark(#fdeeee, #2b1416);
 
+  /* Code, only: the HTML source viewer's syntax colours. Quiet hues, each 4.5:1 or more on the sunken and raised
+     surfaces and on a search match's tint, in both themes. A comment is the muted text. */
+  --color-code-tag: light-dark(#0b5cad, #7fb9ff);
+  --color-code-attribute: light-dark(#7a3e9d, #c9a4e8);
+  --color-code-string: light-dark(#1a6b35, #8fd19e);
+  --color-code-keyword: light-dark(#a23a1d, #f0a48a);
+  --color-code-number: light-dark(#8a5a00, #e0b060);
+  --color-code-comment: var(--color-text-muted);
+  --color-code-match: var(--color-accent-subtle); /* a search match: the tint and the accent's edge */
+  --color-code-match-current: var(--color-text-selection); /* the match the search is on */
+
   /* Scrim behind dialogs; selection highlight */
   --color-scrim: light-dark(rgb(24 24 27 / 0.32), rgb(0 0 0 / 0.6));
   --color-text-selection: light-dark(#cfe5ff, #1f4c7c);
@@ -304,7 +315,8 @@
   --topbar-height: 52px;
   --inspector-width: 400px;
   --inspector-width-min: 320px;
-  --inspector-height: 320px; /* docked at the bottom */
+  --inspector-height: 320px; /* docked at the bottom; never more than the view above can spare (InspectorSlot) */
+  --banner-measure-min: 14rem; /* a banner's words keep this much before its action goes under them */
   --checks-width: 372px;
   --issues-columns: var(--checks-width) minmax(0, 1fr); /* the checks list, then the selected check */
   --checks-height-stacked: max(50vh, 18rem); /* the checks list's rows above the selected check, when they stack */
@@ -317,6 +329,11 @@
   --overview-card-min: 96px; /* a breakdown card's body while it loads */
   --overview-figure-min: 116px; /* a severity figure, while it loads */
   --overview-list-min: 320px; /* Fix first and the categories, while they load */
+  /* The inspector's rows: a mark, then the words. */
+  --check-row-columns: var(--leading-13) minmax(0, 1fr);
+  --chain-columns: var(--icon-box) minmax(0, 1fr); /* a redirect chain's rail, then each step */
+  --hreflang-columns: 5.5rem minmax(0, 1fr); /* the language ("x-default"), then where it points */
+  --tree-row-min: 12rem; /* a structured data tree's row, however deep: past the sheet's width it scrolls sideways */
   --content-max: 1136px;
   --page-gutter: var(--space-8);
   --sheet-inset: var(--space-2);
@@ -328,6 +345,7 @@
   --control-height-sm: 28px;
   --control-height-lg: 52px;
   --control-height-xs: 24px; /* status pill, small chips, badges with text */
+  --target-min: 24px; /* the least a pointer target may be (WCAG 2.2, 2.5.8), where targets stack */
   --chip-height: 28px;
   --icon-xs: 12px;
   --icon-sm: 14px;
@@ -557,6 +575,14 @@
     --color-message-caution-subtle: Canvas;
     --color-message-failure: CanvasText;
     --color-message-failure-subtle: Canvas;
+    --color-code-tag: CanvasText;
+    --color-code-attribute: CanvasText;
+    --color-code-string: CanvasText;
+    --color-code-keyword: CanvasText;
+    --color-code-number: CanvasText;
+    --color-code-comment: GrayText;
+    --color-code-match: Canvas;
+    --color-code-match-current: Highlight;
     --color-scrim: transparent;
     --color-text-selection: Highlight;
     --elevation-1: none;

@@ -37,3 +37,14 @@ export function searchPalette<T extends PaletteEntry>(
     .sort((a, b) => rank(a.entry.group) - rank(b.entry.group) || b.score - a.score || a.index - b.index)
     .map((candidate) => candidate.entry);
 }
+
+/**
+ * Whether what's typed reads as a URL to go to: one with a scheme (`https://…`), a path on the site (`/contact/`), a
+ * protocol-relative one (`//example.com/a`) or a host with a dot (`www.example.com/a`). Never text with a space.
+ */
+export function looksLikeUrl(query: string): boolean {
+  const text = query.trim();
+  if (text === '' || /\s/.test(text)) return false;
+  if (text === '/' || /^https?:\/\/\S/i.test(text) || /^\/\/?\S/.test(text)) return true;
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?([/?#]\S*)?$/i.test(text);
+}

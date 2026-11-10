@@ -103,6 +103,11 @@ export interface GridCoreProps<Row> {
    * replaced one sorted from its header, so the cursor stays where the user pressed.
    */
   focusHeader?: string | undefined;
+  /**
+   * Read when the grid mounts: the cursor starts on this row, which comes into view once the rows are there. For a
+   * grid shown again where it was left (a URL's links, back along a walk).
+   */
+  startRow?: number | undefined;
 }
 
 const SKELETON_ROWS = 12;
@@ -137,10 +142,13 @@ function GridCoreInner<Row>({
   spanRow,
   onSort,
   focusHeader,
+  startRow,
 }: GridCoreProps<Row>) {
   const id = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [nav, setNav] = useState<GridNavState>(INITIAL_NAV);
+  const [nav, setNav] = useState<GridNavState>(() =>
+    startRow === undefined || startRow < 0 ? INITIAL_NAV : { ...INITIAL_NAV, active: { row: startRow, col: 0 } },
+  );
   // The header row is a row the cursor reaches when the columns sort: the column it's on there, or null in the rows.
   const sortable = onSort !== undefined && columns.some((column) => column.sortable);
   const [headerCursor, setHeaderCursor] = useState<number | null>(() => {
@@ -185,6 +193,15 @@ function GridCoreInner<Row>({
   );
   const reportOffset = useEffectEvent((offset: number) => onScrollOffset?.(offset));
   useEffect(() => model.onOffset((offset) => reportOffset(offset)), [model]);
+
+  // The row the cursor started on (`startRow`) comes into view once, when the rows are first there.
+  const started = useRef(startRow === undefined);
+  const revealStart = useEffectEvent(() => {
+    if (started.current || count === 0) return;
+    started.current = true;
+    if (nav.active) model.scrollToIndex(Math.min(nav.active.row, count - 1));
+  });
+  useEffect(() => revealStart(), [count]);
 
   const template = columns.map((column) => `${column.width}px`).join(' ');
   const width = columns.reduce((sum, column) => sum + column.width, 0);
@@ -655,10 +672,40 @@ function GridCoreInner<Row>({
         <VirtualScrollbar model={model} total={count * rowHeight} viewport={view.viewport} top={headerHeight} />
       ) : null}
       {!loading && rowCount === 0 && emptyState ? (
-        <div className="absolute inset-x-0 bottom-0 overflow-auto" style={{ top: headerHeight }}>
+        <EmptyRegion label={label} top={headerHeight}>
           {emptyState}
-        </div>
+        </EmptyRegion>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Why there are no rows, under the header. In a short grid (a small window, the inspector docked at the bottom) it
+ * can be taller than its room and scroll: then, and only then, it's a Tab stop with a name, so the keyboard can
+ * scroll it (WCAG 2.1.1). With room for it, the grid stays the one stop.
+ */
+function EmptyRegion({ label, top, children }: { label: string; top: number; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [scrolls, setScrolls] = useState(false);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const measure = () => setScrolls(element.scrollHeight > element.clientHeight + 1);
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(element);
+    if (element.firstElementChild) observer?.observe(element.firstElementChild);
+    return () => observer?.disconnect();
+  }, []);
+  return (
+    <div
+      ref={ref}
+      className="absolute inset-x-0 bottom-0 overflow-auto"
+      style={{ top }}
+      {...(scrolls ? { tabIndex: 0, role: 'group', 'aria-label': `${label}: no rows` } : {})}
+    >
+      {children}
     </div>
   );
 }

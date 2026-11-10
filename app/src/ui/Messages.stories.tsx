@@ -74,6 +74,17 @@ export const Banners: Story = {
           </CardBody>
         </Card>
       </StorySection>
+      <StorySection title="In a narrow panel (the inspector): the action goes under the words">
+        <div className="w-(--inspector-width-min)">
+          <Banner
+            inset
+            detail="Another version of Shouting Iguana analysed it, so its checks may differ from this version’s."
+            actions={<Button size="sm">Analyse again</Button>}
+          >
+            These issues are out of date: they’re from the analysis last week.
+          </Banner>
+        </div>
+      </StorySection>
     </StoryFrame>
   ),
 };

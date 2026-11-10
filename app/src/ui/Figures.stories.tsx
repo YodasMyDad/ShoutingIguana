@@ -135,6 +135,7 @@ export const Meters: Story = {
           formatTick={(value) => `${value.toLocaleString('en-GB')} ms`}
         />
         <Meter label="Word count" value={86} min={200} valueText="86 words" severity="notice" />
+        <Meter label="Title length" value={569} min={30} max={60} valueText="569 characters" severity="notice" />
       </div>
     </StoryFrame>
   ),

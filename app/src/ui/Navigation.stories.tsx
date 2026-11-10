@@ -72,6 +72,22 @@ export const Urls: Story = {
         <StateRow label="Not copyable">
           <Url url={`${SITE}/login/`} copyable={false} openable={false} />
         </StateRow>
+        <StateRow label="A link in the app">
+          <div className="w-(--inspector-width-min)">
+            <Url url={`${SITE}/garden-furniture/`} siteOrigin={SITE} openable={false} onGo={() => undefined} />
+          </div>
+        </StateRow>
+        <StateRow label="A link, hover">
+          <div className="w-(--inspector-width-min)">
+            <Url
+              url={`${SITE}/garden-furniture/`}
+              siteOrigin={SITE}
+              openable={false}
+              onGo={() => undefined}
+              className="is-link-hover"
+            />
+          </div>
+        </StateRow>
         <StateRow label="Wrapped">
           <div className="w-(--inspector-width-min)">
             <Url

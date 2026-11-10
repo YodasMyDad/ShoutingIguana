@@ -1864,8 +1864,10 @@
 
   .si-banner {
     display: flex;
+    /* In a narrow panel (the inspector) the action goes under the words, which keep a readable measure. */
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2) var(--space-3);
     min-height: var(--control-height-lg);
     padding: var(--space-2) var(--space-4);
     border-bottom: var(--hairline) solid var(--color-border);
@@ -1883,7 +1885,7 @@
 
   .si-banner__body {
     display: flex;
-    flex: 1;
+    flex: 1 1 var(--banner-measure-min);
     flex-direction: column;
     gap: var(--space-0-5);
     min-width: 0;
@@ -2029,6 +2031,25 @@
     font: inherit;
     text-align: start;
     cursor: copy;
+  }
+
+  /* A URL that goes somewhere in the app (the inspector walks to it): the link's colour, underlined on hover. */
+  .si-url__go {
+    /* A pointer target of 24 px, however small the type: links like this stack in lists. */
+    padding-block: max(0px, calc((var(--target-min) - 1lh) / 2));
+    cursor: pointer;
+  }
+
+  .si-url__go .si-url__path,
+  .si-url--wrap .si-url__go {
+    color: var(--color-accent-text);
+  }
+
+  .si-url__go:hover,
+  .si-url.is-link-hover .si-url__go {
+    text-decoration: underline;
+    text-decoration-color: var(--color-accent-text);
+    text-underline-offset: var(--underline-offset);
   }
 
   /* The full URL: what screen readers, find-in-page and the layout's width read. It takes no height. */
@@ -2423,6 +2444,17 @@
   .si-list-heading__meta {
     color: var(--color-text-muted);
     font-weight: var(--font-weight-regular);
+  }
+
+  /* ---------------------------------------------------------- Source viewer */
+  /* The frame carries the focus ring for the editor inside it, whose own scroller would clip one. */
+  .si-source:focus-within {
+    outline: var(--focus-width) solid var(--color-focus);
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  .si-source .cm-content:focus-visible {
+    outline: none;
   }
 
   /* ------------------------------------------------------------------ Facts */

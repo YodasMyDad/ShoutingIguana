@@ -175,6 +175,8 @@ Actions: open in browser, copy the URL.
 4. **Inspect a URL.** From any row (Enter or double-click), or the palette ("Go to URL…"). Its inlinks and outlinks
    are links themselves, so you can walk the site, and back and forward retrace your steps. Moving the grid's cursor
    moves the inspector with it, in place. Esc closes it to the view as it was before it opened, however far you walked.
+   "Go to URL…" takes a URL or a path on the site; from a view without an inspector (Overview, the crawl's settings)
+   it opens the crawl's URLs with the inspector on it. The sections are tabs, and the one you're on stays as you walk.
 5. **Hand over.**
    - On any grid, Export (Ctrl+E) offers CSV or Excel of what you see: these filters, these columns.
    - On Issues, it offers this check, or every check with a summary sheet.
@@ -212,6 +214,30 @@ Actions: open in browser, copy the URL.
 | Ctrl+C | Copy as tab-separated text |
 | Home, End, Page Up, Page Down | Jump |
 | Shift+F10 or the menu key | Right-click menu |
+
+### In the inspector
+
+| Keys | Action |
+| --- | --- |
+| Left and Right on the tabs | The section before or after |
+| Enter on a link's row | Walk to that URL |
+| Alt+Left, Alt+Right | Back and forward along the walk |
+| Esc | Close it, to the view as it was before it opened |
+| Ctrl+F in Source | Search the HTML |
+| Enter, Shift+Enter in the search | The next match, the one before |
+| Left and Right on its edge (Up and Down when docked at the bottom) | Resize it; Home and End for its least and most |
+
+With focus in the HTML itself (Source's viewer, which has a caret and can't be typed in):
+
+| Keys | Whose | Action |
+| --- | --- | --- |
+| Arrows, Home, End, Page Up, Page Down, Ctrl+Home, Ctrl+End; with Shift | The viewer's | Move the caret; select |
+| Ctrl+A, Ctrl+C | The viewer's | Select all of the HTML; copy the selection |
+| Ctrl+F | The section's | Its search field |
+| Alt+Left, Alt+Right | The app's | Back and forward (on macOS too, where a text field keeps Option+arrows) |
+| Esc | The app's | Close the inspector, whatever is selected |
+| Ctrl+K, `?`, F7, F8, Ctrl+1 to Ctrl+7, Ctrl+N, Ctrl+O, Ctrl+, | The app's | As everywhere |
+| Letters and other typing keys | Nobody's | Nothing: a screen's single-letter keys (Issues' J and K) wait for focus outside the HTML |
 
 macOS uses Cmd where Windows uses Ctrl. One registry feeds the menus, tooltips, the `?` sheet and the palette.
 
