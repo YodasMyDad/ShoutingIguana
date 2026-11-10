@@ -37,6 +37,9 @@ internal static class ReaderFunctions
     /// </summary>
     public const string LINK = "si_link";
 
+    /// <summary><c>si_link_id(id)</c>: one link's id kept, where a read keeps the ids and counts nothing (<see cref="GridReadContext.LinkIds"/>), and gives 1.</summary>
+    public const string LINK_ID = "si_link_id";
+
     /// <summary>
     /// <c>si_links(to_id, kind, position, flags, source_nofollow, links)</c>: one row of the link summary, its links counted
     /// by target and shape (<see cref="GridReadContext.LinkTally"/>), and gives 1.
@@ -132,6 +135,19 @@ internal static class ReaderFunctions
             {
                 ((GridReadContext)state).ReadLink(raw.sqlite3_value_int64(arguments[0]), raw.sqlite3_value_int64(arguments[1]), raw.sqlite3_value_int64(arguments[2]),
                     raw.sqlite3_value_int64(arguments[3]), raw.sqlite3_value_int64(arguments[4]), raw.sqlite3_value_int64(arguments[5]));
+                raw.sqlite3_result_int(call, 1);
+            }
+            catch (Exception exception)
+            {
+                raw.sqlite3_result_error(call, exception.Message);
+            }
+        });
+
+        raw.sqlite3_create_function(handle, LINK_ID, 1, raw.SQLITE_UTF8, context, static (call, state, arguments) =>
+        {
+            try
+            {
+                ((GridReadContext)state).LinkIds?.Add(raw.sqlite3_value_int64(arguments[0]));
                 raw.sqlite3_result_int(call, 1);
             }
             catch (Exception exception)

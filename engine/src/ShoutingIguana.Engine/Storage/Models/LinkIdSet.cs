@@ -86,6 +86,31 @@ internal sealed class LinkIdSet
         return this;
     }
 
+    /// <summary>
+    /// Turns the set into every id from 1 to <paramref name="largestId"/> that it doesn't hold, and seals it: for a crawl
+    /// with no id missing, the links a filter matches, given the fewer it doesn't. False, the set left as it is, when its
+    /// ids aren't kept as bits.
+    /// </summary>
+    public bool SealAllBut(long largestId)
+    {
+        if (_bits is null || (largestId >> 6) + 1 != _bits.Length)
+        {
+            return false;
+        }
+
+        for (var word = 0; word < _bits.Length; word++)
+        {
+            _bits[word] = ~_bits[word];
+        }
+
+        // No id 0, and none past the largest.
+        _bits[0] &= ~1UL;
+        var last = (int)(largestId & 63);
+        _bits[^1] &= last == 63 ? ulong.MaxValue : (1UL << (last + 1)) - 1;
+        Seal();
+        return true;
+    }
+
     /// <summary>The ids at places <paramref name="offset"/> to <paramref name="offset"/> + <paramref name="take"/> in ascending order, as many as there are.</summary>
     public long[] Range(long offset, int take)
     {

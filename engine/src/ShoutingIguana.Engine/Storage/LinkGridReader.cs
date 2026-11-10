@@ -44,19 +44,36 @@ public static class LinkGridReader
     ];
 
     /// <summary>
-    /// A filter whose links lead to at most this many targets has them read through those targets, when the targets have few
-    /// links in all (<see cref="DRIVE_ROWS"/>). Tests change it, to read every page each way: below 0, none are.
+    /// A filter whose links lead to at most this many targets has them read through those targets: all of them and kept,
+    /// when the targets have few links in all (<see cref="DriveRows"/>), or a page at a time on the links' index by target
+    /// (<see cref="Placed"/>). Tests change it, to read every page each way: below 0, none are.
     /// </summary>
     internal static int DriveCap { get; set; } = 20_000;
 
-    /// <summary>The most links read through a filter's targets to find its own, or a thirty-second of the crawl's if that's more.</summary>
-    private const int DRIVE_ROWS = 100_000;
+    /// <summary>
+    /// The most links read through a filter's targets to find its own and keep them, or a thirty-second of the crawl's if
+    /// that's more. Tests lower it, to read a small crawl's pages as a large one's are: below 0, no links are few.
+    /// </summary>
+    internal static int DriveRows { get; set; } = 100_000;
+
+    /// <summary>
+    /// A page's place on the links' index by target is closed in on until it's at most this many links past the id found,
+    /// which the page's read then skips. Tests lower it, so a small crawl's places are closed in on to the link.
+    /// </summary>
+    internal static int PlaceSlack { get; set; } = 1_000;
+
+    /// <summary>The first tries at a place take the links as evenly spread; after these, each try halves what's left.</summary>
+    private const int EVEN_TRIES = 6;
+
+    /// <summary>The fewest ids a page's read on the index by target looks through.</summary>
+    private const int LEAST_SPAN = 4_096;
 
     /// <summary>
     /// A walk that takes longer than this found its links bunched far from the end it started at (a filter on deep targets,
     /// whose links are all on pages crawled late): the filter set's next pages are read from a set of its ids instead.
+    /// Tests lower it, so that any walk has taken long.
     /// </summary>
-    private static readonly TimeSpan SLOW_WALK = TimeSpan.FromMilliseconds(100);
+    internal static TimeSpan SlowWalk { get; set; } = TimeSpan.FromMilliseconds(100);
 
     /// <summary>Tests only: false reads pages without the links counted by block, as if every filter were on the target.</summary>
     internal static bool UseBlocks { get; set; } = true;
@@ -405,8 +422,9 @@ public static class LinkGridReader
     /// <param name="OnTarget">It tests the link's target, which the summary by target holds and the one by block doesn't.</param>
     /// <param name="Indexed">It reads nothing of a link but its id, target and kind, which the links' index by target and kind holds.</param>
     /// <param name="Kind">The one kind of link it asks for, when that's all it does.</param>
+    /// <param name="Single">It names one URL as the links' end, whose links are in crawl order on that end's index.</param>
     private sealed record Condition(string Key, string LinkSql, string? SummarySql, IReadOnlyList<KeyValuePair<string, object>> Parameters, bool Direct = false,
-        bool OnTarget = false, bool Indexed = false, long? Kind = null);
+        bool OnTarget = false, bool Indexed = false, long? Kind = null, bool Single = false);
 
     /// <param name="HasSummary">The crawl has a link summary, and so its links counted by block.</param>
     private sealed record Filters(IReadOnlyList<Condition> Conditions, bool HasSummary = false)
@@ -423,6 +441,19 @@ public static class LinkGridReader
         public bool Shaped { get; } = HasSummary && Conditions.All(condition => condition is { SummarySql: not null, OnTarget: false });
 
         public bool Direct { get; } = Conditions.Any(condition => condition.Direct);
+
+        /// <summary>
+        /// A condition names one URL as the links' end: its links are in crawl order on that end's index, so a walk of them
+        /// passes no other link. Several ends' links aren't: their index gives them an end at a time.
+        /// </summary>
+        public bool OneEnd { get; } = Conditions.Any(condition => condition.Single);
+
+        /// <summary>
+        /// Beyond the target, the conditions ask nothing of a link, or one kind of link: each target's matching links are
+        /// then on the links' index by target (and kind) in crawl order, where they're counted and read between any two
+        /// ids with no link's row.
+        /// </summary>
+        public bool OnTargetIndex { get; } = Conditions.Where(condition => !condition.OnTarget).ToList() is [] or [{ Kind: not null }];
 
         public IReadOnlyList<KeyValuePair<string, object>> Parameters { get; } = [.. Conditions.SelectMany(condition => condition.Parameters)];
 
@@ -447,6 +478,9 @@ public static class LinkGridReader
 
         /// <summary>The links, read in id order unless a condition names them by id or by an end, which its index then finds.</summary>
         public string From => Direct ? "links l" : "links l NOT INDEXED";
+
+        /// <summary>The links as a walk reads them: in id order, on the index of the one end a condition names when it names one.</summary>
+        public string Walked => OneEnd ? "links l" : "links l NOT INDEXED";
 
         private static string Join(IEnumerable<string> conditions) => string.Join(" AND ", conditions) is { Length: > 0 } all ? " WHERE " + all : string.Empty;
     }
@@ -547,7 +581,7 @@ public static class LinkGridReader
                     .Where(number => Math.Floor(number) == number && number is >= long.MinValue and <= long.MaxValue).Select(number => (long)number).Distinct().Order()];
                 var list = ids.Count == 0 ? "NULL" : string.Join(", ", ids.Select(id => id.ToString(CultureInfo.InvariantCulture)));
                 yield return new Condition($"{prefix}id in {list}", $"l.{end} IN ({list})", inSummary ? $"c.{end} IN ({list})" : null, [], Direct: true, OnTarget: inSummary,
-                    Indexed: inSummary);
+                    Indexed: inSummary, Single: ids.Count == 1);
             }
             else
             {
@@ -581,7 +615,13 @@ public static class LinkGridReader
         // A page's links are stored together, so the links of a twentieth of the URLs are read through the index by source
         // sooner than every link is tested; a target's are anywhere, so only a few targets are listed.
         var listed = inSummary ? set.Count <= ListedEnds : ListedEnds > 0 && set.Count * 20 <= UrlCount(context);
-        if (listed && set.Json is { } json)
+        if (listed && set is { Count: 1, Json: { } one })
+        {
+            // One URL, named outright: a walk of its links follows the end's index, in crawl order.
+            var id = one[1..^1];
+            yield return new Condition(key, $"l.{end} IN ({id})", inSummary ? $"c.{end} IN ({id})" : null, [], Direct: true, OnTarget: inSummary, Indexed: inSummary, Single: true);
+        }
+        else if (listed && set.Json is { } json)
         {
             var name = prefix == LinkColumns.TO ? "$toIds" : "$fromIds";
             yield return new Condition(key, $"l.{end} IN (SELECT value FROM json_each({name}))", inSummary ? $"c.{end} IN (SELECT value FROM json_each({name}))" : null,
@@ -696,20 +736,28 @@ public static class LinkGridReader
     private static LinkIdSet Ids(GridReadContext context, Filters filters, long total) => context.LinkSummary is null || !filters.Summarised
         ? Passed(context, filters).Ids!
         : HeldHuge(context, "linkids|" + filters.Key, () =>
-            !filters.Shaped && Drive(context, filters, total) is { } driven ? driven : Scan(context, filters, total, ids: true, tally: false).Ids!);
+            !filters.Shaped && (AllBut(context, filters, total) ?? Drive(context, filters, total, however: true)) is { } driven
+                ? driven
+                : Scan(context, filters, total, ids: true, tally: false, indexed: false).Ids!);
 
     /// <summary>
     /// One pass over the links for a filter set: the matching links' ids, their tally, or both. A condition that names
     /// links by an end is found on that end's index; otherwise every link is read, in order.
     /// </summary>
-    private static (LinkIdSet? Ids, LinkTally? Tally) Scan(GridReadContext context, Filters filters, long total, bool ids, bool tally)
+    /// <param name="indexed">
+    /// False to read every link in order whatever the conditions name: the link summary has said the ends they name have
+    /// many links, each of which the index would fetch from wherever it's stored.
+    /// </param>
+    private static (LinkIdSet? Ids, LinkTally? Tally) Scan(GridReadContext context, Filters filters, long total, bool ids, bool tally, bool indexed = true)
     {
         var found = ids ? new LinkIdSet(LargestLinkId(context), total) : null;
         var counted = tally ? NewTally(context) : null;
         (context.LinkIds, context.LinkTally, context.NofollowPages) = (found, counted, tally ? NofollowPages(context) : null);
         try
         {
-            var sql = $"SELECT COUNT({ReaderFunctions.LINK}(l.rowid, l.to_id, l.from_id, l.kind, l.position, l.flags)) FROM {filters.From}{filters.Where(Within(context))}";
+            // With nothing to count, the id is all that's passed on.
+            var each = tally ? $"{ReaderFunctions.LINK}(l.rowid, l.to_id, l.from_id, l.kind, l.position, l.flags)" : $"{ReaderFunctions.LINK_ID}(l.rowid)";
+            var sql = $"SELECT COUNT({each}) FROM {(indexed ? filters.From : "links l NOT INDEXED")}{filters.Where(Within(context))}";
             Ran?.Invoke(sql);
             using var command = context.Command(sql, filters.Parameters);
             command.ExecuteScalar();
@@ -743,24 +791,32 @@ public static class LinkGridReader
     /// before it's read. Null when that's many (a nofollow link among a home page's hundred thousand; a filter most
     /// targets pass): the links are then walked, or read in one pass.
     /// </summary>
-    private static LinkIdSet? Drive(GridReadContext context, Filters filters, long total)
+    /// <param name="however">
+    /// However many the targets and their links, when the index by target holds all the conditions ask
+    /// (<see cref="OnTargetIndex"/>): each matching link is then an entry of the index read in passing, with no link's row,
+    /// a fraction of what the pass over the links costs.
+    /// </param>
+    private static LinkIdSet? Drive(GridReadContext context, Filters filters, long total, bool however = false)
     {
-        var tally = Tally(context, filters);
-        if (DriveCap < 0 || tally.ToUnknown > 0)
+        if (DriveCap < 0)
         {
             return null;
         }
 
-        List<int> targets = [.. tally.Targets().Take(DriveCap + 1).Select(target => target.Target)];
-        if (targets.Count > DriveCap)
+        var onIndex = however && OnTargetIndex(context, filters);
+        if (Targets(context, filters, onIndex ? int.MaxValue : DriveCap) is not { } driven)
         {
             return null;
         }
 
-        var driven = $"[{string.Join(",", targets)}]";
-        var reads = Held(context, "linkdrive|" + filters.Key, () => context.Scalar(
-            "SELECT COALESCE(SUM(c.links), 0) FROM link_summary c WHERE c.to_id IN (SELECT value FROM json_each($driven))", [new("$driven", driven)]));
-        if (reads > Math.Max(DRIVE_ROWS, total / 32))
+        // What reading through the targets reads: every link to them, which the summary adds up; or, where their index
+        // holds all that's asked, the matching links alone, which the tally has counted.
+        var few = DriveRows < 0 ? -1 : Math.Max(DriveRows, total / 32);
+        var reads = onIndex
+            ? Tally(context, filters).Links
+            : Held(context, "linkdrive|" + filters.Key, () => context.Scalar(
+                "SELECT COALESCE(SUM(c.links), 0) FROM link_summary c WHERE c.to_id IN (SELECT value FROM json_each($driven))", [new("$driven", driven)]));
+        if (reads > few && !onIndex)
         {
             return null;
         }
@@ -768,7 +824,28 @@ public static class LinkGridReader
         // The targets are those the conditions on the target pass, so only the rest are tested; where they read nothing but a
         // link's kind, the index by target and kind answers them without the links' rows.
         var index = filters.Indexed && context.HasLinkKindIndex ? "ix_links_to_kind" : "ix_links_to";
-        var sql = $"SELECT l.rowid FROM links l INDEXED BY {index}{filters.Where("l.to_id IN (SELECT value FROM json_each($driven))", targetsGiven: true)}";
+        var from = onIndex ? OnIndex(filters, "$driven") : $"links l INDEXED BY {index}{filters.Where("l.to_id IN (SELECT value FROM json_each($driven))", targetsGiven: true)}";
+        if (reads > few)
+        {
+            // Many: a bit an id, each kept as SQLite reads it.
+            var found = new LinkIdSet(LargestLinkId(context), total);
+            context.LinkIds = found;
+            try
+            {
+                var each = $"SELECT COUNT({ReaderFunctions.LINK_ID}(l.rowid)) FROM {from}";
+                Ran?.Invoke(each);
+                using var all = context.Command(each, [.. filters.Parameters, new("$driven", driven)]);
+                all.ExecuteScalar();
+            }
+            finally
+            {
+                context.LinkIds = null;
+            }
+
+            return found.Seal();
+        }
+
+        var sql = $"SELECT l.rowid FROM {from}";
         Ran?.Invoke(sql);
         using var command = context.Command(sql, [.. filters.Parameters, new("$driven", driven)]);
         using var reader = command.ExecuteReader();
@@ -781,6 +858,223 @@ public static class LinkGridReader
         return new LinkIdSet(ids);
     }
 
+    /// <summary>
+    /// The matching links of a filter on the target that most links pass (the links to the site's own URLs, the hyperlinks
+    /// to URLs that answered 200), read as every link but the others: the fewer links are read on the index by target,
+    /// and the set is every id but theirs. The others are every link to a target none of the matching links leads to, and,
+    /// where one kind of link is asked for, the links of other kinds to the targets they do lead to. That takes a crawl
+    /// with no link id missing, whose ids are then 1 to the number of links; null otherwise, and when the index doesn't
+    /// hold all the filters ask, or they match the fewer links.
+    /// </summary>
+    private static LinkIdSet? AllBut(GridReadContext context, Filters filters, long total)
+    {
+        if (DriveCap < 0 || !OnTargetIndex(context, filters) || LargestLinkId(context) != total)
+        {
+            return null;
+        }
+
+        var matched = Tally(context, filters);
+        if (matched.Links <= total / 2 || matched.ToUnknown > 0)
+        {
+            return null;
+        }
+
+        // Every link, by target, to tell the others from: counted only now that most links are known to match.
+        var every = Tally(context, new Filters([], HasSummary: true));
+        if (every.ToUnknown > 0 || every.Links != total)
+        {
+            return null;
+        }
+
+        var found = new LinkIdSet(total, total);
+        context.LinkIds = found;
+        try
+        {
+            void Read(string from, IEnumerable<int> targets)
+            {
+                var sql = $"SELECT COUNT({ReaderFunctions.LINK_ID}(l.rowid)) FROM links l INDEXED BY {from}";
+                Ran?.Invoke(sql);
+                using var command = context.Command(sql, [new("$others", $"[{string.Join(",", targets)}]")]);
+                command.ExecuteScalar();
+            }
+
+            Read("ix_links_to WHERE l.to_id IN (SELECT value FROM json_each($others))", every.Targets().Where(target => matched.To(target.Target) == 0).Select(target => target.Target));
+            if (filters.OneKind is { } kind)
+            {
+                // The other kinds of link to the targets with matching ones, where they have any: the kinds after this
+                // one on the index, and those before it, each a stretch of a target's entries.
+                List<int> mixed = [.. matched.Targets().Where(target => every.To(target.Target) > target.Links).Select(target => target.Target)];
+                Read(string.Create(CultureInfo.InvariantCulture, $"ix_links_to_kind WHERE l.to_id IN (SELECT value FROM json_each($others)) AND l.kind > {kind}"), mixed);
+                if (kind > 0)
+                {
+                    Read(string.Create(CultureInfo.InvariantCulture, $"ix_links_to_kind WHERE l.to_id IN (SELECT value FROM json_each($others)) AND l.kind < {kind}"), mixed);
+                }
+            }
+        }
+        finally
+        {
+            context.LinkIds = null;
+        }
+
+        return found.SealAllBut(total) && found.Count == matched.Links ? found : null;
+    }
+
+    /// <summary>
+    /// The targets a filter set's links lead to, as a list for the links' index by target: those the link summary counts
+    /// matching links to. Null when there are more than <paramref name="most"/>, or links to a target that isn't a URL of the
+    /// crawl (a crafted file's).
+    /// </summary>
+    private static string? Targets(GridReadContext context, Filters filters, int most)
+    {
+        var tally = Tally(context, filters);
+        if (tally.ToUnknown > 0)
+        {
+            return null;
+        }
+
+        List<int> targets = [.. tally.Targets().Take(most == int.MaxValue ? most : most + 1).Select(target => target.Target)];
+        return targets.Count > most ? null : $"[{string.Join(",", targets)}]";
+    }
+
+    /// <summary>The links' index by target holds all the conditions ask of a link, and the file has the index (by kind too, when a kind is asked).</summary>
+    private static bool OnTargetIndex(GridReadContext context, Filters filters) => filters.OnTargetIndex && (filters.OneKind is null || context.HasLinkKindIndex);
+
+    // ---- A page on the links' index by target.
+
+    /// <summary>
+    /// The matching links of a filter's targets as the links' index by target (and kind) holds them: each target's in crawl
+    /// order, so those between two ids are a short stretch of the index for each target, counted or read without a link's
+    /// row, and without the links before them.
+    /// </summary>
+    private sealed class TargetIndex(GridReadContext context, Filters filters, string targets)
+    {
+        private readonly string _between = $"{OnIndex(filters, "$targets")} AND l.rowid > $low AND l.rowid <= $high";
+
+        /// <summary>How many of them have an id after <paramref name="low"/>, up to <paramref name="high"/>.</summary>
+        public long Count(long low, long high)
+        {
+            var sql = $"SELECT COUNT(*) FROM {_between}";
+            Ran?.Invoke(sql);
+            return context.Scalar(sql, Parameters(low, high));
+        }
+
+        /// <summary>Those with an id after <paramref name="low"/>, up to <paramref name="high"/>, in id order either way, past the first <paramref name="skip"/>.</summary>
+        public List<long> Read(long low, long high, bool descending, long skip, int take)
+        {
+            var sql = $"SELECT l.rowid FROM {_between} ORDER BY l.rowid {(descending ? "DESC" : "ASC")} LIMIT $take OFFSET $skip";
+            Ran?.Invoke(sql);
+            using var command = context.Command(sql, [.. Parameters(low, high), new("$take", take), new("$skip", skip)]);
+            using var reader = command.ExecuteReader();
+            List<long> ids = [];
+            while (reader.Read())
+            {
+                ids.Add(reader.GetInt64(0));
+            }
+
+            return ids;
+        }
+
+        private List<KeyValuePair<string, object>> Parameters(long low, long high) => [new("$targets", targets), new("$low", low), new("$high", high)];
+    }
+
+    /// <summary>
+    /// The links to a list of targets as the links' index by target holds them, for filters that ask nothing else of a link
+    /// but, at most, one kind (<see cref="Filters.OnTargetIndex"/>): the kind is asked for as the index holds it, so only
+    /// that kind's entries are read. The condition as the links grid compiles it reads an unknown kind as none, which no
+    /// index answers.
+    /// </summary>
+    private static string OnIndex(Filters filters, string targets) => filters.OneKind is { } kind
+        ? string.Create(CultureInfo.InvariantCulture, $"links l INDEXED BY ix_links_to_kind WHERE l.to_id IN (SELECT value FROM json_each({targets})) AND l.kind = {kind}")
+        : $"links l INDEXED BY ix_links_to WHERE l.to_id IN (SELECT value FROM json_each({targets}))";
+
+    /// <summary>The index by target for a filter set whose every condition it holds, leading to few enough targets to list; else null.</summary>
+    private static TargetIndex? IndexOf(GridReadContext context, Filters filters) =>
+        DriveCap >= 0 && OnTargetIndex(context, filters) && Targets(context, filters, DriveCap) is { } targets ? new TargetIndex(context, filters, targets) : null;
+
+    /// <summary>
+    /// A page at a place among the links to the targets a filter leads to, found and read on the links' index by target:
+    /// no link is read to be passed over, at any depth, and nothing is kept. The index counts the targets' links between
+    /// two ids without reading them, so the id the page starts after is closed in on: first where an even spread of the
+    /// links would put the place, counting from the nearer end of what's left, then by halves, until the place is a few
+    /// links past an id. The page is then read from the ids after that one. A menu's target has a link on every page, so
+    /// the first try lands within a few links of the place; whatever the spread, each try costs the index entries it
+    /// counts, and they shrink.
+    /// </summary>
+    /// <param name="first">The place of the page's first link among the matching ones, from 0.</param>
+    /// <returns>Null when the index doesn't hold what the filters ask, or they lead to too many targets to list.</returns>
+    private static long[]? Placed(GridReadContext context, Filters filters, long matching, long first, int take)
+    {
+        if (IndexOf(context, filters) is not { } index)
+        {
+            return null;
+        }
+
+        // Of the matching links, `before` have an id up to `low` and `through` one up to `high`; the page's first is between.
+        var largest = LargestLinkId(context);
+        var (low, before, high, through) = (0L, 0L, largest, matching);
+        for (var tries = 0; first - before > PlaceSlack && high - low > 1; tries++)
+        {
+            var even = tries < EVEN_TRIES ? (double)(first - before) / Math.Max(1, through - before) : 0.5;
+            var id = Math.Clamp(low + (long)((high - low) * even), low + 1, high - 1);
+            var upTo = id - low <= high - id ? before + index.Count(low, id) : through - index.Count(id, high);
+            if (upTo <= first)
+            {
+                (low, before) = (id, upTo);
+            }
+            else
+            {
+                (high, through) = (id, upTo);
+            }
+        }
+
+        // As many ids on as the spread found here says hold the page, twice over; more when they turn out not to.
+        var skip = first - before;
+        var span = Span((skip + take) * 2.0 * (high - low) / Math.Max(1, through - before), largest);
+        while (true)
+        {
+            var end = span >= largest - low ? largest : low + span;
+            var ids = index.Read(low, end, descending: false, skip, take);
+            if (ids.Count == take || end == largest)
+            {
+                return [.. ids];
+            }
+
+            span = span > largest / 4 ? largest : span * 4;
+        }
+    }
+
+    /// <summary>
+    /// The links that follow a cursor's among those to the targets a filter leads to, read on the links' index by target
+    /// (<see cref="Placed"/>): from the ids after it, or before it, as many as their spread says hold them, and more
+    /// when they turn out not to.
+    /// </summary>
+    private static long[]? PlacedAfter(GridReadContext context, Filters filters, long matching, bool descending, long cursor, int take)
+    {
+        if (IndexOf(context, filters) is not { } index)
+        {
+            return null;
+        }
+
+        var largest = LargestLinkId(context);
+        var span = Span(take * 2.0 * largest / Math.Max(1, matching), largest);
+        while (true)
+        {
+            var (low, high) = descending
+                ? (span >= cursor - 1 ? 0 : cursor - 1 - span, cursor - 1)
+                : (cursor, span >= largest - cursor ? largest : cursor + span);
+            var ids = index.Read(low, high, descending, skip: 0, take);
+            if (ids.Count == take || (descending ? low == 0 : high >= largest))
+            {
+                return [.. ids];
+            }
+
+            span = span > largest / 4 ? largest : span * 4;
+        }
+    }
+
+    /// <summary>A stretch of ids to read a page from: about as many as asked, at least a few thousand, at most all there are.</summary>
+    private static long Span(double ids, long largest) => (long)Math.Clamp(ids, Math.Min(LEAST_SPAN, Math.Max(1, largest)), Math.Max(1, largest));
+
     // ---- A page in crawl order.
 
     /// <summary>
@@ -791,8 +1085,11 @@ public static class LinkGridReader
     /// <item>a set of the matching ids kept already, or the only way to know them (a filter the link summary doesn't hold):
     /// the set;</item>
     /// <item>filters on what a link is: the blocks that hold the page, found by their counts (<see cref="BlockWalk"/>);</item>
-    /// <item>filters on the target too: through the targets, when they have few links in all (<see cref="Drive"/>), else by
-    /// walking from the nearer end when the page is near one, else from the set, read once.</item>
+    /// <item>filters on the target too: through the targets, when they have few links in all (<see cref="Drive"/>); else on
+    /// the links' index by target, when it holds all the filters ask and the targets are few enough to list
+    /// (<see cref="Placed"/>); else by walking from the nearer end when the page is near one, or at any place when a filter
+    /// names one target, whose index the walk follows; else from the set, read once: through the targets again when their
+    /// index holds all that's asked, however many they are, otherwise in one pass over the links.</item>
     /// </list>
     /// </summary>
     private static long[] Page(GridReadContext context, Filters filters, long total, long matching, bool descending, int offset, int limit, long? after, out bool more)
@@ -826,7 +1123,7 @@ public static class LinkGridReader
             {
                 next = filters.Shaped
                     ? BlockWalk(context, filters, descending, cursor, skip: 0, limit + 1)
-                    : Walk(context, filters, descending, cursor, skip: 0, limit + 1);
+                    : PlacedAfter(context, filters, matching, descending, cursor, limit + 1) ?? Walk(context, filters, descending, cursor, skip: 0, limit + 1);
             }
 
             more = next.Length > limit;
@@ -855,15 +1152,19 @@ public static class LinkGridReader
         {
             ids = BlockWalk(context, filters, descending: false, after: null, first, take);
         }
+        else if (Placed(context, filters, matching, first, take) is { } placed)
+        {
+            ids = placed;
+        }
         else
         {
-            // Walked from the nearer end: when the filter names the links' end, whose index the walk follows; or when, spread
-            // evenly, the walk would pass few links, unless an earlier one found them bunched far from that end and took long.
-            // Otherwise from the set, read once.
+            // Walked from the nearer end: when the filter names one URL as the links' end, whose index the walk follows, in
+            // crawl order; or when, spread evenly, the walk would pass few links, unless an earlier one found them bunched
+            // far from that end and took long. Otherwise from the set, read once.
             var fromEnd = matching - first - take;
             var passed = (Math.Min(first, fromEnd) + take) * (double)total / Math.Max(1, matching);
             var slow = Under(context, "linkwalk|slow|" + filters.Key);
-            if (filters.Direct || (WalkRows >= 0 && passed <= Math.Max(WalkRows, total / 16) && !context.Noted(slow)))
+            if (filters.OneEnd || (WalkRows >= 0 && passed <= Math.Max(WalkRows, total / 16) && !context.Noted(slow)))
             {
                 var clock = Stopwatch.GetTimestamp();
                 ids = fromEnd < first ? Walk(context, filters, descending: true, after: null, fromEnd, take) : Walk(context, filters, descending: false, after: null, first, take);
@@ -872,7 +1173,7 @@ public static class LinkGridReader
                     Array.Reverse(ids);
                 }
 
-                if (!filters.Direct && Stopwatch.GetElapsedTime(clock) > SLOW_WALK)
+                if (!filters.OneEnd && Stopwatch.GetElapsedTime(clock) > SlowWalk)
                 {
                     context.Note(slow);
                 }
@@ -891,11 +1192,15 @@ public static class LinkGridReader
         return ids;
     }
 
-    /// <summary>The links walked in id order, either way, testing each: after a cursor's link, or from an end, past <paramref name="skip"/> matching ones.</summary>
+    /// <summary>
+    /// The links walked in id order, either way, testing each: after a cursor's link, or from an end, past
+    /// <paramref name="skip"/> matching ones. Every link on the way is read, but when a condition names one URL as the links'
+    /// end: that end's index holds its links in this order, and the walk reads only them.
+    /// </summary>
     private static long[] Walk(GridReadContext context, Filters filters, bool descending, long? after, long skip, int take)
     {
         var sql = $"""
-            SELECT l.rowid FROM {filters.From}{filters.Where(after is null ? null : $"l.rowid {(descending ? "<" : ">")} $after")}
+            SELECT l.rowid FROM {filters.Walked}{filters.Where(after is null ? null : $"l.rowid {(descending ? "<" : ">")} $after")}
             ORDER BY l.rowid {(descending ? "DESC" : "ASC")}
             LIMIT {take.ToString(CultureInfo.InvariantCulture)} OFFSET {skip.ToString(CultureInfo.InvariantCulture)}
             """;
