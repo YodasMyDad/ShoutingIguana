@@ -15,4 +15,10 @@ internal sealed record GridScope(string? CheckId, IssueGroupKey? Group, IssueGro
     /// the URLs stored under it, as its count on the Issues screen does.
     /// </summary>
     public bool TargetsStored { get; init; }
+
+    /// <summary>
+    /// Only the URLs this sitemap lists, and those of every sitemap under it: the grid is still every URL's, narrowed as a
+    /// filter narrows it, with the sitemap's listed URLs as its total.
+    /// </summary>
+    public int? SitemapId { get; init; }
 }

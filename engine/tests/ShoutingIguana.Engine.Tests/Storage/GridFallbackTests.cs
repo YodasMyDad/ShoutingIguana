@@ -68,6 +68,24 @@ public sealed class GridFallbackTests : IDisposable
         Assert.Null(inspected.Issues);
         Assert.Equal(3, UrlInspectorReader.ReadLinks(path, home, LinkDirection.Outlinks, new LinkQuery { Kinds = [LinkKind.Hyperlink] })!.Total);
 
+        // The links grid, the sitemaps and robots.txt read the running crawl too: the links counted from the links themselves,
+        // as there's no summary of them yet.
+        var links = LinkGridReader.Query(path, new UrlQuery { Columns = ["from.url", "to.url", "to.statusCode", "to.inlinks", "followed"] }, cache);
+        Assert.Equal(new SummaryState(false, SummaryUnavailableReason.Crawling), links.Summary);
+        Assert.Equal(["to.inlinks"], links.Unavailable);
+        Assert.Equal((links.Rows.Count, links.Rows.Count), (links.Matching, links.Total));
+        Assert.Contains(links.Rows, row => (string?)row.Values[1] == site.BaseUri.AbsoluteUri && (string?)row.Values[2] == site.BaseUri + "a" && row.Values[3] is 200L && row.Values[4] is true);
+        var toC = LinkGridReader.Query(path, new UrlQuery { Filters = [new UrlFilter("to.url", FilterOperator.EndsWith) { Value = FilterValue.Of("/c") }] }, cache);
+        Assert.Equal(1, toC.Matching);
+        Assert.Equal(links.Total, LinkGridReader.Facets(path, new UrlFacetQuery(), cache).Facets["kind"].Sum(bucket => bucket.Count));
+        Assert.Equal(["to.inlinks"], Assert.Throws<NeedsAnalysisException>(() => LinkGridReader.Query(path, new UrlQuery { Sort = [new UrlSort("to.inlinks")] })).Columns);
+        var robots = RobotsReader.ReadOrigins(path, cache: cache);
+        Assert.Equal((RobotsState.Missing, 0L, true), (robots.Origins[0].State, robots.Blocked, robots.Origins[0].IsInternal));
+        Assert.Empty(RobotsReader.ReadFile(path, robots.Origins[0].Origin, cache)!.Lines);
+        var sitemaps = SitemapListReader.Read(path, cache);
+        Assert.Contains(sitemaps.Discovery, new[] { SitemapDiscovery.Running, SitemapDiscovery.Done });
+        Assert.All(sitemaps.Sitemaps, sitemap => Assert.Equal(SitemapSource.DefaultLocation, sitemap.FoundVia));
+
         site.Release("/held");
         Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
         Assert.Equal(SummaryUnavailableReason.NotAnalyzed, UrlGridReader.Query(path, new UrlQuery()).Summary.Reason);
@@ -75,6 +93,12 @@ public sealed class GridFallbackTests : IDisposable
         var analysed = UrlGridReader.Query(path, new UrlQuery { Columns = ["url", "inlinks"], Sort = [new UrlSort("inlinks", true)] });
         Assert.Equal(SummaryState.Present, analysed.Summary);
         Assert.Empty(analysed.Unavailable);
+
+        // Analysed, the links grid has every link, counted from its summary, and the columns that needed the analysis.
+        var counted = LinkGridReader.Query(path, new UrlQuery { Columns = ["to.inlinks"], Sort = [new UrlSort("to.inlinks", true)] }, cache);
+        Assert.Equal((SummaryState.Present, TestCrawls.Count(path, "SELECT COUNT(*) FROM links")), (counted.Summary, counted.Total));
+        Assert.True(counted.Total >= links.Total);
+        Assert.Empty(counted.Unavailable);
     }
 
     /// <summary>A stopped crawl analysed, then continued: its summary describes what it was, so until it's analysed again, none.</summary>

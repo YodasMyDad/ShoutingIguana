@@ -21,6 +21,13 @@ internal static class UrlQueryCompiler
     public const int MAX_TEXT = 1_000;
     public const int MAX_SORT = 3;
 
+    /// <summary>The sitemap a grid is narrowed to, as a parameter of <see cref="SITEMAPS_UNDER"/>.</summary>
+    public const string SITEMAP_PARAMETER = "$m0";
+
+    /// <summary>The ids of a sitemap and every sitemap under it, however deep, each once.</summary>
+    public const string SITEMAPS_UNDER =
+        $"WITH RECURSIVE under(id) AS (SELECT {SITEMAP_PARAMETER} UNION SELECT c.id FROM sitemaps c JOIN under ON c.parent_id = under.id) SELECT id FROM under";
+
     /// <summary>Stands for the column's SQL in a condition, so one condition gives both its forms.</summary>
     private const string COLUMN = "@column";
 
@@ -169,6 +176,11 @@ internal static class UrlQueryCompiler
     public static CompiledQuery Compile(UrlQuery query, GridMode mode, GridScope scope, string reason)
     {
         var predicates = Filters(query.Filters, query.Search, mode, scope, reason);
+        if (scope.SitemapId is { } sitemap)
+        {
+            predicates.Insert(0, Sitemap(sitemap, mode));
+        }
+
         var sort = query.Sort.Select(key => SortKey(key, mode, scope, reason)).ToList();
         List<UrlColumnDefinition> columns = [UrlColumns.ID];
         List<string> unavailable = [];
@@ -245,6 +257,28 @@ internal static class UrlQueryCompiler
         return new GridPredicate(sql, "+" + sql, parameters, Driving: true, Key(sql, parameters))
         {
             Source = stored?.Source ?? Issues(condition, negated: false)
+        };
+    }
+
+    /// <summary>
+    /// The URLs a sitemap lists, and those of every sitemap under it: with a URL summary, read into a set, on the key of
+    /// what each sitemap lists; without one, matched against the crawl's own URLs.
+    /// </summary>
+    public static GridPredicate Sitemap(int sitemapId, GridMode mode)
+    {
+        List<KeyValuePair<string, object>> parameters = [new(SITEMAP_PARAMETER, sitemapId)];
+        const string LISTED = $"m.sitemap_id IN ({SITEMAPS_UNDER})";
+        const string IDS = $"SELECT m.url_id FROM sitemap_urls m WHERE {LISTED}";
+        if (mode == GridMode.Crawl)
+        {
+            return Plain($"u.id IN ({IDS})", parameters);
+        }
+
+        const string SQL = $"s.url_id IN ({IDS})";
+        return new GridPredicate(SQL, "+" + SQL, parameters, Driving: true, Key(SQL, parameters))
+        {
+            Ids = IDS,
+            Source = new IdSource([new IdScan("sitemap_urls m", "m.url_id", LISTED, Combinable: false)], ROW_ID, Negated: false)
         };
     }
 
