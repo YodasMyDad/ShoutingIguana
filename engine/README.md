@@ -454,8 +454,8 @@ The analysis of a crawl therefore counts them once, in one pass, into two small 
   wrongly.
 
 They're counted in hash tables by a function SQLite calls per link, then stored in key order: grouping the links in
-SQL sorts every one of them, 18 s on the 100k crawl. The pass takes 1.5 s there (5 million links), and its tables
-about 30 MB at the analysis's peak. They count the links and which pages say nofollow, which only a run of the crawl
+SQL sorts every one of them, 18 s on the 100k crawl. The pass takes 1.5 s there (5 million links); what its tables
+add to the analysis's peak is inside the spread between runs ([below](#synthetic-site-and-benchmark)). They count the links and which pages say nofollow, which only a run of the crawl
 changes, so `link_summary_state` keeps the crawl row's stamp (`updated_at`) they were counted under: an analysis
 finds them standing and leaves them (analysing again, with other thresholds or a newer engine's checks, doesn't pay
 for the pass again), an engine from before them analysing the file doesn't make them wrong, and once a run of the
@@ -626,18 +626,18 @@ half way or just past it), on a 32-core Windows machine (20 runs at 100k, 5 at 1
 | The links grid, from the link summary: pages in crawl order and by the target, filters, facets (`link-grid`) | 69 | not measured | | 200 |
 | The links grid, one pass over the links: text and search filters, and everything without the link summary (`link-pass`) | 1,232 | not measured | | 2,500 |
 | Sitemaps: the list, a sitemap's URLs (`sitemaps`) | 31 | not measured | | 200 |
-| robots.txt: origins, a file, its blocked URLs (`robots`) | 31 | not measured | | 200 |
+| robots.txt: origins, a file, its blocked URLs (`robots`) | 34 | not measured | | 200 |
 
 The facets of the pages without the summary take 1.35 s at 1M: they read and judge every row of the crawl's own tables.
 Every other read of 1M in the table is under 1 s apart from `links-kind`, which was measured before its index (below);
 the slowest of the rest is the pages by response time without the summary (0.92 s).
 
-The last four classes (E3b) were measured on the 100k benchmark crawl only (5,054,060 links, 20 runs): their gates
+The last four classes (E3b) were measured on the 100k benchmark crawl only (5,054,060 links, 20 runs, twice, the slower figures given): their gates
 take the least growth the others have, tenfold. `link-pass` is over the budget at 100k by what it is, one pass over
 every link (0.3 s for a rare text filter, 0.5 s for a common one, 0.8–0.9 s for a search, 0.7–1.2 s for a common
 filter or a sort by the target without the link summary), and is held to 2.5 s so it can't get slower; a million
 pages' links would take ten times that. Of the rest, the slowest are a filter on "not followed" (69 ms: the pages
-that say nofollow are read first), the facets (49–51 ms), a sort by the target (42–52 ms at any place) and links to a
+that say nofollow are read first), the facets (49–51 ms), a sort by the target (42–55 ms at any place) and links to a
 few thousand targets (27–47 ms); a page of any filter on what a link is, anywhere in 4.4 million hyperlinks, takes
 3 ms.
 
@@ -687,10 +687,11 @@ On a 32-core Windows machine, at concurrency 16, against the local synthetic sit
 | 101,107 | 110,251 | 5.05 M | 35 s | 2,916 pages/s | 168 MB | none (−1 MB) | 7 s, 157 MB peak | 400 MB |
 
 This was measured on `68d55a2`. Since then, the crawl also probes the site's other versions, which adds one URL,
-and the benchmark plants the dead twin, six more (110,258). With the link summary (E3b) the same machine measured a
-36 s crawl at 2,813 pages/s, a 193 MB peak with no growth (+1 MB), an 11 s analysis peaking at 313 MB (283 MB before;
-the link summary's pass is 1.5 s of it), and a 494 MB file, the link summary and the new index 4.5 MB of it. The
-links and their two indexes, which E3b doesn't write, took 15 MB more than in the run before it: probably the order
+and the benchmark plants the dead twin, six more (110,258). With the link summary (E3b) the same machine, shared
+with other work, measured over three runs a 36–42 s crawl (2,437–2,813 pages/s), a 188–195 MB peak with no growth (−9
+to +1 MB), an 11 s analysis peaking at 276, 313 and 315 MB (283 MB in the one run before; the link summary's pass is
+1.5 s of it by its own clock), and a 487–494 MB file (474 MB before), the link summary and the new index 4.5 MB of it.
+The rest is in the links and their two indexes, which E3b doesn't write, and moves from run to run: probably the order
 the URLs were found in, as larger ids take more bytes.
 
 Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and

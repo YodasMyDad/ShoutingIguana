@@ -1421,7 +1421,7 @@ inspector's group keys are read on, which they're read without too; both come wh
   read takes from the file): they stand until a run of the
   crawl moves the stamp on, so analysing a crawl again doesn't count them again, and an engine from before them
   analysing the file leaves them standing, and right. On the 100k benchmark crawl (5,054,060 links) the pass takes
-  1.5 s of the first analysis, and the three tables with the new index 4.5 MB of a 493 MB file.
+  1.5 s of the first analysis, and the three tables with the new index 4.5 MB of a 487–494 MB file.
 - **The links grid's reader**, `LinkGridReader` (`Query`, `Facets`, `Columns`) in `Storage/`: a link's own columns,
   and either end's as the URL grid's (`from.`, `to.`), compiled by the URL grid's own compiler into sets of URL ids.
 - **Sitemaps.** `SitemapListReader.Read`, and the URL grid narrowed to what a sitemap lists
@@ -1438,7 +1438,9 @@ inspector's group keys are read on, which they're read without too; both come wh
   ([Grid reads](../engine/README.md#grid-reads)).
 
 Measured on the 100k benchmark crawl (112,589 URLs, 5,054,060 links) with `si readbench --gate --runs 20`, as CI
-runs it: p95, each read on a fresh connection with nothing kept, on a 32-core Windows machine.
+runs it: p95, each read on a fresh connection with nothing kept, on a 32-core Windows machine. A second run measured
+the same or faster, but for a robots.txt file with what each line blocked (34 ms) and a page past half way of the
+hyperlinks sorted by their target's inlinks (55 ms).
 
 | Read | First page | Half way down |
 | --- | --- | --- |
