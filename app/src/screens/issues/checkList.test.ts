@@ -147,7 +147,7 @@ describe('the answer', () => {
 });
 
 describe('the first check to fix', () => {
-  it('is the most severe, then the one with the most pages affected', () => {
+  it('is the most severe, then the one with the most pages or URLs affected', () => {
     expect(firstCheckToFix(checkEntries(CHECKS, ANALYSIS))?.check.id).toBe('internal-client-error');
     const noErrors = checkEntries(CHECKS, {
       ...ANALYSIS,
@@ -173,7 +173,7 @@ describe('the first check to fix', () => {
 });
 
 describe('the order to fix checks in', () => {
-  it('is by severity, then pages affected, then catalog order, and starts with the first to fix', () => {
+  it('is by severity, then the pages or URLs affected, then catalog order, and starts with the first to fix', () => {
     const entries = checkEntries(CHECKS, {
       ...ANALYSIS,
       counts: [...ANALYSIS.counts.filter((entry) => entry.checkId !== 'title-duplicate')].concat([
