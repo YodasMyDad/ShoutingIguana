@@ -22,7 +22,7 @@ import {
   testUrlDetail,
   type InspectorSidecarOptions,
 } from '../test/inspectorSidecar';
-import { issuesRoutes, type IssuesSidecarOptions } from '../test/issuesSidecar';
+import { ISSUES_ANALYSIS, ISSUES_CHECKS, issuesRoutes, type IssuesSidecarOptions } from '../test/issuesSidecar';
 import { resetLinkKinds } from './links';
 import { rememberSection, resetRememberedSection, type SectionId } from './sections';
 
@@ -39,7 +39,7 @@ const connect = () => setDirectConnection({ baseUrl: 'mock://sidecar', token: 'm
 
 /** Every story starts clean: docked on the right at the layout's size, on the section it names, nothing live. */
 function fresh(section: SectionId = 'summary', dock: 'right' | 'bottom' = 'right') {
-  updateSettings({ inspectorDock: dock, inspectorWidth: null, inspectorHeight: null });
+  updateSettings({ inspectorDock: dock, inspectorWidth: null, inspectorHeight: null, hiddenChecks: [] });
   resetRememberedSection();
   rememberSection(section);
   resetLinkKinds();
@@ -214,6 +214,28 @@ const notFetched = (discovery: Partial<UrlDetail['discovery']>): UrlDetail =>
 /** Live: a crawl is running and hasn't reached this URL. It says so, and fills in, in place, once it's fetched. */
 export const LiveAndQueued: Story = {
   loaders: [() => own({ urls: { 2: notFetched({ state: 'queued' }) } }, { issues: { item: { status: 'running' } } })],
+  render: () => inspect(2),
+};
+
+/**
+ * A crawl that stopped before it reached the URL: it was never fetched, and nothing says it's on its way. Every
+ * section that has nothing to show for it says the same.
+ */
+export const StoppedBeforeItWasReached: Story = {
+  loaders: [
+    () =>
+      own(
+        {
+          urls: {
+            2: {
+              ...notFetched({ state: 'queued' }),
+              summary: { available: false, reason: 'notAnalyzed' },
+            },
+          },
+        },
+        { issues: { analysis: null, item: { status: 'stopped', analyzedAt: null } } },
+      ),
+  ],
   render: () => inspect(2),
 };
 
@@ -392,6 +414,148 @@ export const HugeSource: Story = {
 
 // --------------------------------------------------------------------------------------------- Each section
 
+const WIDE_TITLE = '庭の家具とパティオセットの専門店'.repeat(3);
+
+/**
+ * Full-width characters: a title of 48 Japanese characters takes the room of 96 in a search result, which is what
+ * the limit counts. Its length says both, as the check's own detail does, never "96 characters".
+ */
+export const WideCharacters: Story = {
+  loaders: [
+    () =>
+      own({
+        urls: {
+          2: testUrlDetail({
+            url: 'https://example.com/ja/garden/',
+            content: {
+              ...PAGE.content!,
+              titles: [{ text: WIDE_TITLE, length: 96 }],
+              descriptions: [{ text: '屋外用の金属製パティオソファセット。', length: 36 }],
+              language: 'ja',
+            },
+            issues: [
+              {
+                checkId: 'title-too-long',
+                severity: 'notice',
+                detail: '48 characters (96 counting full-width characters as two)',
+                related: null,
+                group: null,
+              },
+            ],
+          }),
+        },
+      }),
+  ],
+  render: () => inspect(2),
+};
+
+/**
+ * An image over the limit for images: its size on that scale, with the check the pages that use it were flagged
+ * with (the check is theirs; its issues name this URL).
+ */
+export const ImageOverItsLimit: Story = {
+  loaders: [
+    () =>
+      own(
+        {
+          urls: {
+            2: testUrlDetail({
+              url: 'https://example.com/img/garden-large.jpg',
+              type: 'image',
+              content: null,
+              structuredData: [],
+              response: testResponse({ contentType: 'image/jpeg', sizeBytes: 307_200, bodyBytes: null }),
+              discovery: { ...PAGE.discovery, foundVia: 'image', fetchMode: 'check' },
+              issues: [],
+              namedBy: { total: 3, checks: [{ checkId: 'image-too-large', count: 3 }] },
+            }),
+          },
+        },
+        {
+          issues: {
+            checks: {
+              ...ISSUES_CHECKS,
+              checks: [
+                ...ISSUES_CHECKS.checks,
+                { ...ISSUES_CHECKS.checks[2]!, id: 'image-too-large', title: 'Image too large', severity: 'warning' },
+              ],
+            },
+          },
+        },
+      ),
+  ],
+  render: () => inspect(2),
+};
+
+/** A canonical to a URL that answers 404: the test passes, and says the canonical leads nowhere, not back. */
+export const CanonicalToNowhere: Story = {
+  loaders: [
+    () =>
+      own({
+        urls: {
+          2: testUrlDetail({
+            indexability: {
+              ...PAGE.indexability,
+              tests: PAGE.indexability.tests.map((test) =>
+                test.test === 'canonical'
+                  ? {
+                      ...test,
+                      canonical: { id: 9, url: 'https://example.com/garden/gone/', statusCode: 404 },
+                      canonicalUrl: 'https://example.com/garden/gone/',
+                    }
+                  : test,
+              ),
+            },
+          }),
+        },
+      }),
+  ],
+  render: () => inspect(2),
+};
+
+/**
+ * An analysis that's out of date: the summary says so above the issues it lists, with the Issues screen's own banner
+ * and Analyse again, and the verdict is the crawl's own judgement because of it.
+ */
+export const OutOfDateAnalysis: Story = {
+  loaders: [
+    () =>
+      own(
+        {
+          urls: {
+            2: {
+              ...PAGE,
+              links: null,
+              indexability: { ...PAGE.indexability, judgedBy: 'crawl' },
+              summary: { available: false, reason: 'engineChanged' },
+            },
+          },
+        },
+        {
+          issues: {
+            analysis: { ...ISSUES_ANALYSIS, outOfDate: true, outOfDateReasons: ['engineChanged'] },
+            item: { outOfDate: true },
+          },
+        },
+      ),
+  ],
+  render: () => inspect(2),
+};
+
+/**
+ * A check the user hid from the Issues list: it's still this URL's, listed after the others and marked "Hidden", and
+ * left out of the section's count and the tab's.
+ */
+export const HiddenCheck: Story = {
+  loaders: [
+    () => {
+      own(SITE, { section: 'issues' });
+      updateSettings({ hiddenChecks: ['title-too-long'] });
+    },
+  ],
+  render: () => inspect(2),
+};
+
 /** Its issues: each check that flagged it, and the issues on other URLs that name it. */
 export const Issues: Story = {
   loaders: [() => own(SITE, { section: 'issues' })],
@@ -498,6 +662,58 @@ export const RedirectChainTooLong: Story = {
   render: () => inspect(2),
 };
 
+/**
+ * A URL that never answered (robots.txt blocked it): Redirects says what the crawl did with it and that it doesn't
+ * know whether it redirects, never that it "answers for itself".
+ */
+export const RedirectsOfAUrlThatNeverAnswered: Story = {
+  loaders: [
+    () =>
+      own(
+        {
+          urls: {
+            2: testUrlDetail({
+              url: 'https://example.com/account/orders/',
+              response: testResponse({
+                outcome: 'robotsDisallowed',
+                statusCode: null,
+                contentType: null,
+                httpVersion: null,
+                ttfbMs: null,
+                responseMs: null,
+                sizeBytes: null,
+                bodyBytes: null,
+              }),
+              content: null,
+              headers: [],
+              structuredData: [],
+              issues: [],
+              redirects: {
+                hops: [],
+                final: { id: 2, url: 'https://example.com/account/orders/', statusCode: null },
+                loop: false,
+                tooLong: false,
+              },
+              indexability: {
+                indexable: false,
+                reason: 'blockedByRobots',
+                judgedBy: 'analysis',
+                tests: [
+                  { test: 'answered', outcome: 'notChecked' },
+                  { test: 'robotsTxt', outcome: 'fail', unreachable: false },
+                  { test: 'noindex', outcome: 'notChecked' },
+                  { test: 'canonical', outcome: 'notChecked' },
+                ],
+              },
+            }),
+          },
+        },
+        { section: 'redirects' },
+      ),
+  ],
+  render: () => inspect(2),
+};
+
 /** A URL that doesn't redirect: the section says so. */
 export const NoRedirects: Story = {
   loaders: [() => own(SITE, { section: 'redirects' })],
@@ -544,6 +760,54 @@ export const StructuredData: Story = {
         { section: 'structuredData' },
       ),
   ],
+  render: () => inspect(2),
+};
+
+/**
+ * A block nested deeper than the tree goes (40 levels; the tree stops at 32): opened all the way down, it says it's
+ * nested too deep to show, never that what's there is empty.
+ */
+export const StructuredDataNestedTooDeep: Story = {
+  loaders: [
+    () =>
+      own(
+        {
+          urls: {
+            2: testUrlDetail({
+              structuredData: [
+                {
+                  valid: true,
+                  types: ['Thing'],
+                  json: Array.from({ length: 40 }).reduce<string>(
+                    (inner) => `{"part":${inner}}`,
+                    '{"name":"The innermost"}',
+                  ),
+                  error: null,
+                  truncated: false,
+                },
+              ],
+            }),
+          },
+        },
+        { section: 'structuredData' },
+      ),
+  ],
+  // Down the tree, a level at a time, as far as it goes.
+  play: async ({ canvasElement }) => {
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
+    for (let attempt = 0; attempt < 40 && canvasElement.querySelector('[role="tabpanel"] ul') === null; attempt++) {
+      await settle();
+    }
+    for (let level = 0; level < 40; level++) {
+      const closed = canvasElement.querySelectorAll<HTMLButtonElement>(
+        '[role="tabpanel"] button[aria-expanded="false"]',
+      );
+      const last = closed[closed.length - 1];
+      if (!last) break;
+      last.click();
+      await settle();
+    }
+  },
   render: () => inspect(2),
 };
 
