@@ -13,8 +13,11 @@ export interface FilterSentence {
 export interface FilterWords {
   /** A column's name ("Status"); the column's id when the view doesn't know it. */
   column: (id: string) => string;
-  /** An enum value or a check, in words: a check's title, "Client error". The value itself by default. */
-  value?: (column: string, value: string | number) => string;
+  /**
+   * A value in words: an enum value or a check ("Client error", a check's title), or a number with its unit
+   * ("1,000 ms"). Null for the default: the value itself, a number with its thousands separators.
+   */
+  value?: (column: string, value: string | number) => string | null;
   /**
    * A column being empty (`true`) or not, where that means something plainer than "is empty": a page with a word count
    * is one whose HTML was read. Null for the default, "is empty" and "is not empty".
@@ -73,11 +76,12 @@ export function filterSentences(
     case 'is':
       return [{ field, op: 'is', value: filter.value ? 'yes' : 'no' }];
     case 'between':
+      // Each end in the column's own words, so a range of times has its unit on both.
       if (filter.min !== undefined && filter.max !== undefined)
-        return [{ field, op: 'is between', value: `${shown(filter.min)} and ${shown(filter.max)}` }];
+        return [{ field, op: 'is between', value: `${valueWords(filter.min)} and ${valueWords(filter.max)}` }];
       return filter.min !== undefined
-        ? [{ field, op: 'is at least', value: shown(filter.min) }]
-        : [{ field, op: 'is at most', value: shown(filter.max ?? 0) }];
+        ? [{ field, op: 'is at least', value: valueWords(filter.min) }]
+        : [{ field, op: 'is at most', value: valueWords(filter.max ?? 0) }];
     case 'in':
     case 'notIn': {
       const sentence = { field, op: OPS[filter.op] ?? 'is', value: either(filter.values.map(valueWords)) };

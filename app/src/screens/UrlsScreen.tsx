@@ -358,7 +358,8 @@ function ActiveFilters({
     column: (id: string) =>
       id === 'check' ? 'Check' : (COLUMNS.find((column) => column.id === id)?.header ?? urlColumnWords(id) ?? id),
     value: (column: string, value: string | number) =>
-      column === 'check' ? checkWords(value) : (urlValueWords(column, value) ?? String(value)),
+      // A number this list has no words for reads with its thousands separators (the sentence's default).
+      column === 'check' ? checkWords(value) : urlValueWords(column, value),
     empty: urlEmptyWords,
   };
   return (

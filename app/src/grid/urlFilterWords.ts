@@ -1,6 +1,7 @@
 // Words for the URL grid's columns and enum values that a view's own columns don't cover, so a filter another screen
 // links with (Overview's "Status class is 4xx", "Outcome is not blocked") reads as a sentence, never as engine ids.
 // The full filter bar, with every column's words, is the URLs slice's.
+import { formatCount } from '../lib/format';
 import type { FilterSentence } from './filterSentence';
 
 const COLUMNS: Record<string, string> = {
@@ -81,7 +82,14 @@ export function urlColumnWords(id: string): string | null {
   return COLUMNS[id] ?? null;
 }
 
-/** An enum value's words for a filter chip, or null when this list doesn't have it. */
+/** Columns that hold a time in milliseconds: a filter's value on one is nothing without its unit. */
+const MILLISECONDS: ReadonlySet<string> = new Set(['responseMs', 'ttfbMs']);
+
+/**
+ * A value's words for a filter chip: an enum value's, or a time with its unit ("1,000 ms": the filter's own number,
+ * never rounded to seconds, as it's a bound). Null when this list has none for it.
+ */
 export function urlValueWords(column: string, value: string | number): string | null {
+  if (typeof value === 'number' && MILLISECONDS.has(column)) return `${formatCount(value)} ms`;
   return VALUES[column]?.[String(value)] ?? null;
 }
