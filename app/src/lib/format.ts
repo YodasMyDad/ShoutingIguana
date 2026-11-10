@@ -10,6 +10,25 @@ export function formatCount(value: number | null | undefined): string {
   return value === null || value === undefined || !Number.isFinite(value) ? '–' : integer.format(value);
 }
 
+const compact = [
+  new Intl.NumberFormat(LOCALE, { maximumSignificantDigits: 3 }),
+  new Intl.NumberFormat(LOCALE, { maximumSignificantDigits: 2 }),
+] as const;
+
+/**
+ * A count in the room of a few characters, for where the whole number can't be shown: 312,876 is "313k", 1,234,567
+ * "1.23M". Three significant figures, or two for a tighter fit ("1.2M"). Under a thousand it's the count itself.
+ * Never the only place the number is: what shows it keeps the whole number within reach (its name, its tooltip).
+ */
+export function formatCompactCount(value: number | null | undefined, figures: 2 | 3 = 3): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '–';
+  if (Math.abs(value) < 1_000) return integer.format(value);
+  const format = compact[figures === 3 ? 0 : 1];
+  // Rounding can carry into the next unit (999,950 at three figures is 1M, not 1,000k).
+  const thousands = Number((value / 1_000).toPrecision(figures));
+  return Math.abs(thousands) < 1_000 ? `${format.format(thousands)}k` : `${format.format(value / 1_000_000)}M`;
+}
+
 /** "1 URL", "4,521 URLs". */
 export function formatCountOf(value: number, singular: string, plural = `${singular}s`): string {
   return `${formatCount(value)} ${value === 1 ? singular : plural}`;

@@ -17,8 +17,12 @@ export interface BannerProps {
   icon?: IconLike;
   /** Inside a panel, as a rounded strip, rather than across the window under the top bar. */
   inset?: boolean | undefined;
-  /** `alert` for an error that stops the app; `status` (the default) otherwise. */
-  role?: 'status' | 'alert' | undefined;
+  /**
+   * `alert` for an error that stops the app; `status` (the default) otherwise. `none` for a banner that states what
+   * something else has already announced (a crawl's status, which the live bridge announces as it changes, with a
+   * toast for some): it isn't a live region then, so the change isn't read out two or three times over.
+   */
+  role?: 'status' | 'alert' | 'none' | undefined;
   className?: string | undefined;
 }
 
@@ -42,7 +46,7 @@ export function Banner({
 }: BannerProps) {
   return (
     <div
-      role={role ?? (tone === 'error' ? 'alert' : 'status')}
+      role={role === 'none' ? undefined : (role ?? (tone === 'error' ? 'alert' : 'status'))}
       className={clsx('si-banner', `si-banner--${tone}`, inset && 'si-banner--inset', className)}
     >
       <span className="si-banner__icon">

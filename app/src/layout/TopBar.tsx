@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useParams, useRouter } from '@tanstack/react-router';
 import { ChevronLeft, ChevronRight, Pause, Play, RefreshCw, Search, Square } from 'lucide-react';
+import { useRef } from 'react';
 import { crawlQuery } from '../api/queries';
 import { CRAWL_SECTIONS, sectionOf } from '../app/sections';
 import { setOverlay } from '../app/overlays';
 import { analyseCrawl, continueCrawl, pauseOrResume, stopCrawl } from '../crawl/actions';
 import { crawlControls, crawlName, effectiveStatus } from '../crawl/status';
+import { useFocusRescue } from '../feedback/useFocusRescue';
 import { ariaKeyShortcut, parseChord } from '../keyboard/keys';
 import { formatExactTime } from '../lib/format';
 import { isMac } from '../lib/platform';
@@ -39,6 +41,13 @@ export function TopBar() {
   const status = crawlId ? effectiveStatus(crawl, live) : null;
   const controls = crawlControls(status, crawl);
   const section = CRAWL_SECTIONS.find((candidate) => candidate.id === sectionOf(pathname));
+  // A control pressed goes once it has worked (Pause becomes Resume, Stop goes while the crawl stops): focus goes to
+  // the control that took its place, or to the view when none did, never to the page.
+  const controlsRef = useRef<HTMLDivElement>(null);
+  useFocusRescue(
+    controlsRef,
+    () => controlsRef.current?.querySelector<HTMLElement>('button') ?? document.getElementById('main'),
+  );
 
   return (
     <header className="@container/topbar flex h-(--topbar-height) shrink-0 items-center gap-3 border-b border-border-subtle bg-canvas pr-4 pl-3">
@@ -109,7 +118,7 @@ export function TopBar() {
 
       {crawlId && status ? (
         // Short of room (200% zoom with a running crawl's Pause and Stop), the controls' keys go, then their words.
-        <div className="flex shrink-0 items-center gap-2 @max-topbar-keys/topbar:[&_kbd]:hidden">
+        <div ref={controlsRef} className="flex shrink-0 items-center gap-2 @max-topbar-keys/topbar:[&_kbd]:hidden">
           <StatusPill status={status} fetched={live?.progress?.fetched ?? crawl?.fetchedUrlCount ?? null} />
           {controls.canPause ? (
             <Button

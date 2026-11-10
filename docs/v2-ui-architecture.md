@@ -33,7 +33,7 @@ Webview (React, app/src) ──────────────────�
 | `src/settings` | Preferences: schema, store (the shell's settings commands, or `localStorage`), appearance |
 | `src/feedback` | The loading rule, skeletons, toasts, error states, route errors, announcements |
 | `src/layout` | The shell's layout: sidebar, top bar, inspector slot, banners, the stopping overlay |
-| `src/screens` | One file per route, a screen's own pieces in a folder beside it (`screens/issues/`). Home, Issues and the URLs grid work; the rest are stubs for their slices |
+| `src/screens` | One file per route, a screen's own pieces in a folder beside it (`screens/issues/`). Home, Overview, Issues and the URLs grid work; the rest are stubs for their slices |
 | `src/app` | The router, the query client, overlays, sections, the root component |
 | `src/ui` | The component library: buttons, fields, menus, severity, figures, URLs and the rest (see Components) |
 | `src/styles` | `tokens.css` (every design value), `base.css`, `components.css` (the library's look), the Tailwind entry |
@@ -160,7 +160,7 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
 
 ## The API client
 
-- `api/client.ts` has a function for every E1, E2 and E3a call: the URL grid, its columns, facets and lookup, the
+- `api/client.ts` has a function for every E1, E2 and E3a call, and E4's `/history`: the URL grid, its columns, facets and lookup, the
   inspector (one URL, its links both ways, its HTML) and a check's groups and rows. `api/grids.ts` and
   `api/inspector.ts` type them as the sidecar answers them:
   - the inspector, its links and its HTML are POSTs (`/urls/inspect`, `/urls/inlinks`, `/urls/outlinks`,
@@ -200,6 +200,22 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   `progress`): never cancelling a page still on its way, with no skeleton and no progress line, and a "Live" mark by
   the count.
 - A count the stream sends malformed is null, shown as "–", never 0. A status the contract doesn't have is dropped.
+- E4's part of a progress event is read at the same boundary (`LiveProgressDetail`): when it was taken, the phase,
+  the site's own counts, the URL limit (null is "no limit", undefined "not said"), the status classes and codes, why
+  URLs got no response, and the waits. A breakdown with a part missing is null rather than short, as its parts
+  wouldn't add up. An alert keeps its `id` and its facts; a hello's `analyzing` crawls are live.
+- Each crawl keeps a **run clock** (`RunClock`): how long the run being watched has spent crawling. It advances by the
+  time between progress events while the crawl's status is `running`, stands still while it's paused or stopping, and
+  starts again when the crawl is continued (the engine's `elapsedMs` starts again). The engine has no such figure: its
+  `elapsedMs` is the run's wall time, pauses included, which is where the clock starts for a run the page comes to
+  part-way. It is the one clock the live screen's times go by.
+- Each crawl keeps a **trail** for the found-and-crawled chart: a point per progress event at first, at most 600
+  however long it runs (when full, every other point goes and from then on every second event is kept, then every
+  fourth), with the newest always last, each placed on the run clock. `GET /history` gives what came before the page
+  heard of the run; the trail carries the chart on (`screens/overview/foundAndCrawled.ts`). It starts again with a new
+  run.
+- Each crawl keeps its **pace samples**: one per progress event taken while it was running, as far back as a minute of
+  the run clock, never thinned. A long crawl's pace is as exact as a short one's, and a pause is no part of it.
 - Select from the live store with `useLive`, `useLiveCrawl` and `useLiveIds`. A selector returns stored values or
   primitives, never a new object.
 
@@ -303,6 +319,12 @@ slices.
   `inert` and the registry runs none of its keys, but the one that toggles the overlay (`inOverlays`). When an
   overlay closes, focus goes back where it was, else to the view's grid, else to the main area (`restoreFocus`); a
   navigation that removes the focused element puts focus in the new view.
+- A view that takes away the control that had focus, without a navigation, gives the focus somewhere to go
+  (`feedback/useFocusRescue.ts`): a banner's button goes once its action has worked (Resume, Continue) and focus goes
+  to the page's title; the top bar's Pause becomes Resume and takes the focus, and Stop, which leaves no control
+  while the crawl stops, hands it to the view; a filter's chip in Issues goes and focus goes to the filter field. It
+  acts only when the element last focused in its container has left the document and nothing else took the focus,
+  and after the view's own effects, so a particular move (the analysis banner's, to its Cancel) wins.
 - **Esc**, innermost first: an open overlay (palette, `?` sheet, menu) closes; then the inspector; then the focused
   grid's selection clears. The grid asks the registry (`claims`) before taking Esc itself. A tooltip isn't a step: the
   Esc that closes it goes on to the rest (`keyboard/layers.ts` gives back the key Radix takes), except over a menu, a
@@ -360,8 +382,9 @@ screen, and one that a second screen needs moves here.
 | Severity | `SeverityMark` (shape and colour, the word its name) in dense rows; `SeverityBadge` (with the word) wherever there's room; `SeverityCount(s)` for counts. Notices are the quietest |
 | Status | `StatusPill` for a crawl's status (the words of `crawl/status.ts`), `LiveBadge` and `LiveDot` for what updates live, `StatusCode` for a status code's class (only that meaning), `Badge` for a label without colour (`dashed`: what didn't happen) |
 | Filters | `FilterChip` reads as a sentence, opens its editor, goes with ✕ or Delete (focus moves on to the next chip, else the one before, else Add filter); `AddFilterChip`; the `preview` chip beside a number that opens its URLs |
-| Numbers | `Num` (counts, bytes, ms, rates, percentages; the unit smaller and muted), `Duration`, `RelativeTime` (kept current by one minute clock for the app, `lib/clock.ts`, idle while the window is hidden; the exact time in its tooltip and read after it); `Stat` and `StatLink` (a figure that opens its URLs) in `Stats`, `MiniStat`s; `Meter` for a value on its check's scale; `ShareBar` for a share; `ProgressBar` with its phase; `RefreshLine` for a panel that's refreshing; `Spinner` only inside what's working |
-| Messages | `Callout` (insight, info, warning, error), `Banner` for a view's state with its one action, `EmptyState`, `FilteredEmptyState` (the filters and one-click clear), `SkippedState` (the reason in words). A callout's or banner's warning and error are the app's messages, never a finding's severity: they take the message tones (`--color-message-caution*`, quiet as clarity's out-of-date note; `--color-message-failure*`, the error hue under its own name, as the destructive fills) and Lucide's message icons, never the severity marks |
+| Charts | `Sparkline` and `LineChart` (lines over time, drawn with visx in real pixels: the plot measures its box with `useElementSize`, so strokes keep their weight; no tweening), `StatusSplit` (the magnified status bar: the full bar, and the share that didn't answer 2xx across the full width beneath), `ColumnChart` (counts side by side; a number wider than its column is measured and written shorter, "313k", the whole number staying the column's name and tooltip), `StackBar` with `Legend` (a whole in a few parts). Every part that counts URLs is a `ChartLink` (the router's link) with its name and number, so a chart is never read by colour or by its bars alone; each chart says itself in words (`label`). Bars are elements, not SVG, so parts are real links with focus rings and names that wrap; under forced colours parts are told apart by their gaps and a hatch stays a hatch |
+| Numbers | `Num` (counts, bytes, ms, rates, percentages; the unit smaller and muted), `Duration`, `RelativeTime` (kept current by one minute clock for the app, `lib/clock.ts`, idle while the window is hidden; the exact time in its tooltip and read after it); `Stat` and `StatLink` (a figure that opens its URLs) in `Stats` (`wrap` for more figures than columns), `MiniStat`s; `Meter` for a value on its check's scale; `ShareBar` for a share; `ProgressBar` with its phase; `RefreshLine` for a panel that's refreshing; `Spinner` only inside what's working |
+| Messages | `Callout` (insight, info, warning, error), `Banner` for a view's state with its one action (a live region, unless it states what something else announces, a crawl's status: `role="none"`), `EmptyState`, `FilteredEmptyState` (the filters and one-click clear), `SkippedState` (the reason in words). A callout's or banner's warning and error are the app's messages, never a finding's severity: they take the message tones (`--color-message-caution*`, quiet as clarity's out-of-date note; `--color-message-failure*`, the error hue under its own name, as the destructive fills) and Lucide's message icons, never the severity marks |
 | URLs and places | `Url` (mono, truncated in the middle to its measured width, path-only on the crawl's origin, copy on click, open in the browser), `Favicon`, `TextLink` and `NavItem` (router links; the current place keeps `.si-current`), `ListRow` and `ListHeading`, `PageHeader`, `SectionHeader`, `GridHeader` with `ResultCount`, `Facts`, `Card` |
 
 The states rule: a component isn't done until each state it can be in (default, hover, focus-visible, active or
@@ -380,6 +403,9 @@ are drawn for the app and are never swapped for Lucide's.
   and the detail copyable, progress with Cancel. Never for form validation: that's inline. A toast with an id replaces
   the one showing with that id: the same failure twice is one toast, and a crawl's toasts are keyed by crawl and event
   (`crawlToast`), so the live bridge dismisses one whose action no longer fits (Continue, once the crawl runs again).
+  Never dismiss an id just before showing a toast with it: Sonner applies a dismissal two animation frames late, to
+  whatever toast has the id by then, so the new toast goes as it appears (the bridge sends none as a crawl starts
+  stopping, or with an event that carries the failure).
   Sonner is unstyled: every look is the app's, in unlayered rules more specific than Sonner's own stylesheet, so the
   app's colours and focus rings win, and a toast follows the theme setting, the OS's included.
 - **Errors**: `ErrorState`, the plain cause first, "Details" behind a button, Try again only where trying again could
@@ -387,7 +413,7 @@ are drawn for the app and are never swapped for Lucide's.
   it, Reset the view). The crawl actions offer Retry per call: a Pause, Resume or Stop refused as `crawl-busy` (the
   crawl isn't live here) gets none.
 - **Announcements**: `announce()` speaks through one polite and one assertive live region. Crawl status changes are
-  announced by the live bridge.
+  announced by the live bridge, and by nothing else: a banner that states a crawl's status isn't a live region.
 
 ## Rules every slice follows
 
@@ -404,10 +430,10 @@ are drawn for the app and are never swapped for Lucide's.
 
 ## Left for the slices
 
-- Every screen except Home and Issues: Overview (live and done), the full URL and Links grids, Sitemaps, robots.txt,
+- Every screen except Home, Overview and Issues: the full URL and Links grids, Sitemaps, robots.txt,
   New crawl, the crawl's settings, the inspector's content, the rest of Settings.
 - The engine's E3b to E6: the links, sitemaps and robots grids, export, search, favicons. Analysis progress (E4) is in
-  use on Issues (`crawl/analysis.ts` words its phases, for Overview too).
+  use on Issues and Overview (`crawl/analysis.ts` words its phases), as are E4's progress, alerts and history.
 - Export (E5) on Issues: this check, or every check with a summary sheet, and Ctrl+E. Until the engine has it, Issues
   offers Copy URLs and no Export button.
 - The URL grid's filter bar: it shows the route's filters as removable chips that read as sentences
@@ -426,10 +452,15 @@ are drawn for the app and are never swapped for Lucide's.
   passed, skipped, hidden), the answer sentence and the first check to fix; `groupTree.ts` maps the open group onto the
   grid's rows; `copyUrls.ts` reads a check's rows 1,000 at a time with the `after` cursor. All unit-tested.
 - **The route holds the view**: the check in the path (the first to fix, with a replace, when there's none), and
-  `severity`, `q`, `group` (a `{ detail, relatedUrlId }` as `/groups` gave it), `sort` (a flat check's) and `inspect`.
-  A click on a check is a new place; the arrow keys, the filter, the severity and opening a group replace. The first to
-  fix is picked from the checks the severity and text filters keep (`CheckList.matching`), and a severity that leaves
-  the selected check out (the sidebar's Errors, Warnings, Notices) moves the selection to it, in place.
+  `severity`, `q`, `category`, `group` (a `{ detail, relatedUrlId }` as `/groups` gave it), `sort` (a flat check's) and
+  `inspect`. A click on a check is a new place; the arrow keys, the filter, the severity and opening a group replace.
+  The first to fix is picked from the checks the severity, text and category filters keep (`CheckList.matching`), and
+  a severity or category that leaves the selected check out (the sidebar's Errors, Warnings, Notices; a category's
+  link) moves the selection to it, in place.
+- **A category is a filter of its own** (`category`, the catalog's id for it), because its title as text matches other
+  categories' checks ("URLs" is in "Links to broken internal URLs"). It comes from a link, stays through check
+  selection, back and forward, and shows as a chip above the list whose ✕ removes it (focus then goes to the filter
+  field). An id the catalog doesn't have names the checks listed under "Other checks".
 - **One listbox** for the checks, a group per category named by `ListHeading level="none"`, options named by what they
   show; roving focus, so it is one Tab stop and Tab goes on to the check.
 - **Groups are a paged treegrid**: one group open at a time (the route's), its first 10 pages, then "Show all N pages
@@ -452,3 +483,101 @@ are drawn for the app and are never swapped for Lucide's.
   has show passed, show hidden, Learn more and Cancel the analysis. Every check is in the palette by its title. J and
   K take focus in the list to the new check's option, and focus in the check (which goes with it) to the new check's
   title; anywhere else focus stays, and the new check is announced ("Title too long, 3 URLs").
+
+## Overview (the second slice)
+
+`screens/OverviewScreen.tsx` and `screens/overview/`. One route, two screens: the live crawl while it runs, then the
+answer. What it settled:
+
+- **Pure first**, as Issues: `statusSplit.ts` (the magnified bar's classes, what each is made of, the bars' widths and
+  the filter that opens each class), `liveFigures.ts` (the pace over the last minute, the time left, the sparkline's
+  window, what was found split three ways), `foundAndCrawled.ts` (the history joined to the trail, and round ticks),
+  `alerts.ts` and `waits.ts` (plain words and the next action by the engine's stable codes), `answer.ts` (issues by
+  severity, Fix first, categories, skipped checks by reason, indexability, depth, response times), `emptyCrawl.ts`
+  (why a crawl read no pages) and `links.ts` (where every figure leads). All unit-tested, each figure with its link.
+- **It builds on Issues' list** (`issues/checkList.ts`): the answer sentence, the totals and the severity counts are
+  the same functions, and `rankChecksToFix` is the order both screens use (`firstCheckToFix` is its first).
+  Analysing from a screen is one hook, `issues/useAnalysisControl.ts`, and what the analysis's read says of a crawl is
+  another, `issues/useAnalysisAnswer.ts`: "not analysed" is an answer that comes as an error, which the query forgets
+  the moment it's asked again, so a screen that went by the query alone swapped itself for its loading frame whenever
+  a never-analysed crawl's analysis was refetched (as it ends, on a reconnect). The hook remembers it, so the screen
+  keeps what it shows and treats the read as refreshing, and an analysis that has just ended stays "finishing" until
+  its result arrives.
+- **Hidden checks are left out of every figure**, on Overview, Issues and the sidebar alike: the answer's sentence,
+  the severity counts, the categories and Fix first are all built from `countedEntries`, so they agree, and the
+  sentence ends with what was left out ("1 hidden check isn't counted: it found 30 issues."), its count opening
+  Issues, so nothing reads as clean because it's hidden. With every check that found issues hidden, Fix first lists
+  none and says so (Issues still opens on one of them, which is its own rule).
+- **Every number is a link to exactly what it counts.** A figure carries an `OverviewLink` (the URL grid's filters, or
+  Issues at a check, a severity or a category by its id), which `overviewLinks.ts` checks against its route. The URL
+  grid's chips word the columns those filters use (`grid/urlFilterWords.ts`), so the landing reads as a sentence.
+- **Blocked is a class of its own**, live and done, so the two bars agree: E4's `statusClasses` count a firewall's
+  answer as blocked whatever its status, and the finished crawl's facets are read under `outcome notIn [blocked]`, the
+  blocked being what that filter left out. Each class links by `statusClass` with the same filter, and Blocked by
+  `outcome`.
+- **Not checked is not crawled.** A URL the crawl never asked, its host having stopped answering, is unknown, not
+  broken. The URL grid has it as not fetched, with no status class, while E4's `fetched`, its `noResponse` class and
+  the library's `fetchedUrlCount` count it (a stored outcome), and `/stats` counts it among the network errors. So
+  the screen takes it out, live and done: Crawled, the status codes' total, No response and its reasons are without
+  it, and a line under the classes says how many there are in the engine's words ("weren't checked because their
+  sites had stopped answering"), opening `outcome in [notChecked]`. Live the count is `noResponse.notChecked`; done
+  it is a second facets read beside the status one (`statusFacetsQuery`, the two as one query), because the facets
+  can't tell these URLs from the ones only found and `/stats` is too slow to wait for. "N URLs crawled" and a stopped
+  crawl's "after N URLs" are the status breakdown's total, which is what their link opens.
+- **What the breakdowns count.** Status codes: every URL fetched, as the grid counts them. Indexability: the site's
+  page URLs the crawl asked for (`isInternal`, `type` page, `fetched`), errors and redirects included, as "why not"
+  names them. The crawler's own probes of the site's other versions (`source` `siteVersion`) are on the site and look
+  like pages, but aren't the site's: every page filter leaves them out (`SITE_PAGES`), as the engine's own counts do,
+  so an http site's https version not answering isn't one of its pages that "Didn't answer". The status codes count
+  every URL fetched, probes included, live and done: a crawl's first "Network error × 1" is often that probe, which
+  the live event counts (the engine's `statusClasses` are of every URL). Depth and response times: the site's pages,
+  which is one count everywhere. A page is the engine's (`CrawlSchema.PAGE`): a URL of the site that answered 2xx with HTML the crawl read, so the filter ends with
+  `wordCount isNotEmpty` (only parsed HTML has a word count; a URL whose status alone was checked, an iframe's target,
+  has none). The cards' "N pages", the live "Pages" and its link, and the library's "pages read" are then the same
+  number. Each card says its own count (the facets' `matching`).
+- **The answer never waits for `/stats`**, which counts every link (1.1 to 1.4 s on the 100k crawl). It adds why URLs
+  got no response to one row when it arrives, and a stopped crawl's queue to its banner. The answer is the analysis,
+  the catalog and three facet reads, each card with its own skeleton and its own error.
+- **One clock for the live screen's times**: the time the run being watched has spent crawling (the live store's
+  run clock). Elapsed shows it, the chart's time axis is it, and the pace is read over the last minute of it, so the
+  three agree, a pause moves none of them, and a resumed crawl's time left is right at once. A continued crawl's
+  screen is of this run: its chart starts where the run did, at the counts it started with, and says "since it was
+  continued". The earlier runs are in `/history`, counted back from the file, but the file doesn't keep when each run
+  began and ended, so the hours or days between them can't be told from crawling, and on one axis they were most of
+  the chart. The finished crawl's line says when it started and not how long it took, for the same reason: nothing
+  the engine keeps is the time spent crawling (an engine gap; `finishedAt - startedAt` has every pause and stop in
+  it).
+- **The time left** shows only with a URL limit: what's left of the limit at the pace of the last minute of crawling,
+  worded "done within" while the crawl may still find fewer URLs than its limit, and "about ... left" once it has
+  found as many as it may fetch. At the limit there's none: the figure says the limit is reached.
+- **Nothing moves as the numbers grow.** Figures update in place at most 4 times a second; each row of figures has a
+  context line with room for two lines; six figures in a row are the smaller size unless the window is wide, so
+  1,000,000 fits; the status bar keeps its height with nothing to magnify; what holds the crawl up (which comes and
+  goes) is the last card of its column. Nor when the first figures come: before a crawl's first progress event the
+  status codes' rows, the chart's box and key and the bar of what was found are all drawn, each figure a dash, and a
+  URL limit nothing has spoken of yet (`maxUrls` undefined) isn't read as no limit.
+- **Alerts.** While the crawl runs the list is a `log`, there from the start (an alert that arrives with its log isn't
+  read out), and an alert's age, which the clock rewrites each minute, is marked `aria-live="off"` inside it. The
+  newest twenty are drawn, the rest a press away, outside the log; the list and its items are memoised, so a progress
+  event draws none of them again. They're ordered by when they were raised (`Date.parse`, never the text: the sidecar
+  drops a time's trailing zeros). A blocked host's count is the file's as it was read, so it's said only of a crawl
+  that isn't running ("37 responses blocked."); live, the Blocked row has the number.
+- **A crawl's status is announced once**, by the live bridge. The banners that state it (paused, stopping, stopped,
+  interrupted, failed, running elsewhere, the analysis's progress) take `Banner`'s `role="none"`: as live regions
+  they had it read out two or three times, and the analysis's read out every phase and count.
+- **Pause, Resume and Stop stay in the top bar**, on every screen, with F7 and F8. The screen's banners carry the next
+  action for the state it's in: Resume when paused, Continue when stopped or interrupted, Analyse it, Analyse again.
+- **States.** Live (running, paused, stopping, just started), the analysis running after the crawl (its phase and
+  progress, with Cancel, over the crawl's breakdowns) or again (over the last answer), never analysed, out of date,
+  partial (the notes), stopped and interrupted (how far it got, Continue), failed (the engine's reason), running in
+  another window, unreadable, and a crawl that read no pages, which says how its start URL answered and offers the next
+  action. Each is a story under Screens/Overview, the live ones from a scripted stream (2,900 URLs a second among them).
+- **Its commands**: Cancel the analysis, and "Open the first check to fix" in the palette. The rest are the app's
+  (Pause or resume, Stop, Continue, Analyse again).
+- **Measured** (10 Nov 2026, this machine, the production build in headless Chromium at 1280x720, against the real
+  sidecar). A live crawl of the engine's test site at the Fast preset (16 at a time; 66,283 URLs in 18 to 23 s, so
+  2,900 to 3,600 URLs a second), three times (light, dark, 200% zoom): 60 fps from the first figure to the answer, 99%
+  of frames within 16.8 ms and none over 33 ms. The 100k crawl from a click in the library: the answer is painted
+  within 48 ms (62 at most over 7 opens) and every breakdown within 64 ms (78 at most); 136 ms the first time, before
+  the sidecar has counted the crawl. A click on a status class shows URLs within 48 ms and its first rows within 63;
+  Fix first shows its check in Issues within 52 ms; Tab moves focus within 18 ms.

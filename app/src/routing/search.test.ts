@@ -75,6 +75,14 @@ describe('search params', () => {
     expect(validateIssuesSearch({ severity: 'warning' })).toEqual({ severity: ['warning'] });
   });
 
+  it('reads a category as the catalog’s id for it, and nothing else', () => {
+    expect(validateIssuesSearch({ category: 'responseCodes' })).toEqual({ category: 'responseCodes' });
+    expect(validateIssuesSearch({ category: 'Response codes' })).toEqual({});
+    expect(validateIssuesSearch({ category: ['links'] })).toEqual({});
+    expect(validateIssuesSearch({ category: 'a'.repeat(65) })).toEqual({});
+    expect(validateIssuesSearch({ category: '' })).toEqual({});
+  });
+
   it('leaves an empty search empty', () => {
     expect(validateHomeSearch({ q: '' })).toEqual({});
   });

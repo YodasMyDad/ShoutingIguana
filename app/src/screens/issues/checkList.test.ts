@@ -5,7 +5,12 @@ import {
   answerSentence,
   buildCheckList,
   checkEntries,
+  countedEntries,
   firstCheckToFix,
+  hiddenTotals,
+  hiddenWords,
+  isInCategory,
+  rankChecksToFix,
   type CheckListFilters,
 } from './checkList';
 
@@ -83,6 +88,38 @@ describe('what each check came to', () => {
   });
 });
 
+describe('hidden checks', () => {
+  it('are left out of what an answer counts, and what they came to is said apart', () => {
+    // An error with 9 issues and a notice with 265, hidden; a passed check hidden too.
+    const hidden = new Set(['internal-client-error', 'empty-anchor-text', 'title-duplicate']);
+    const entries = checkEntries(CHECKS, ANALYSIS, hidden);
+    expect(ids(countedEntries(entries))).toEqual([
+      'internal-server-error',
+      'broken-internal-links',
+      'orphan-page',
+      'title-too-long',
+      'future-check',
+    ]);
+    expect(analysisTotals(countedEntries(entries))).toEqual({ found: 2, issues: 91, passed: 1, skipped: 2 });
+    expect(hiddenTotals(entries)).toEqual({ checks: 3, found: 2, issues: 274 });
+    expect(hiddenTotals(checkEntries(CHECKS, ANALYSIS))).toBeNull();
+  });
+
+  it('are said after the answer, with what they found', () => {
+    const words = (totals: { checks: number; found: number; issues: number }) => {
+      const { count, rest } = hiddenWords(totals);
+      return `${count}${rest}`;
+    };
+    expect(words({ checks: 3, found: 2, issues: 274 })).toBe(
+      '3 hidden checks aren’t counted: 2 of them found 274 issues.',
+    );
+    expect(words({ checks: 1, found: 1, issues: 30 })).toBe('1 hidden check isn’t counted: it found 30 issues.');
+    expect(words({ checks: 1, found: 1, issues: 1 })).toBe('1 hidden check isn’t counted: it found 1 issue.');
+    expect(words({ checks: 2, found: 0, issues: 0 })).toBe('2 hidden checks aren’t counted.');
+    expect(words({ checks: 1, found: 0, issues: 0 })).toBe('1 hidden check isn’t counted.');
+  });
+});
+
 describe('the answer', () => {
   it('says how many checks found how many issues, then how many passed and were skipped', () => {
     expect(answerSentence({ found: 19, issues: 933, passed: 63, skipped: 3 })).toBe(
@@ -135,6 +172,38 @@ describe('the first check to fix', () => {
   });
 });
 
+describe('the order to fix checks in', () => {
+  it('is by severity, then pages affected, then catalog order, and starts with the first to fix', () => {
+    const entries = checkEntries(CHECKS, {
+      ...ANALYSIS,
+      counts: [...ANALYSIS.counts.filter((entry) => entry.checkId !== 'title-duplicate')].concat([
+        { checkId: 'title-duplicate', count: 86 },
+        { checkId: 'future-check', count: 86 },
+      ]),
+    });
+    const ranked = rankChecksToFix(entries);
+    expect(ids(ranked)).toEqual([
+      'internal-client-error',
+      'broken-internal-links',
+      // Level on severity and count: catalog order.
+      'title-duplicate',
+      'future-check',
+      'empty-anchor-text',
+      'title-too-long',
+    ]);
+    expect(firstCheckToFix(entries)).toBe(ranked[0]);
+  });
+
+  it('leaves out passed, skipped and hidden checks', () => {
+    const hidden = new Set(['broken-internal-links']);
+    expect(ids(rankChecksToFix(checkEntries(CHECKS, ANALYSIS, hidden)))).toEqual([
+      'internal-client-error',
+      'empty-anchor-text',
+      'title-too-long',
+    ]);
+  });
+});
+
 describe('the list', () => {
   const build = (filters: Partial<CheckListFilters> = {}, hidden: ReadonlySet<string> = new Set()) =>
     buildCheckList(CHECKS, checkEntries(CHECKS, ANALYSIS, hidden), { ...FILTERS, hidden, ...filters });
@@ -158,6 +227,37 @@ describe('the list', () => {
     ]);
     expect(list.passedCount).toBe(2);
     expect(list.severityCounts).toEqual({ all: 4, error: 2, warning: 0, notice: 2 });
+  });
+
+  it('narrows to one category by its id, which its title as text can’t do', () => {
+    // "Links" as text is also in "Links to broken internal URLs" and "Internal links without anchor text", and would
+    // be in any other category's check that mentions links; the id names the category alone.
+    const list = build({ category: 'titles' });
+    expect(list.category).toEqual({ id: 'titles', title: 'Titles' });
+    expect(list.categories.map((category) => [category.title, ids(category.entries)])).toEqual([
+      ['Titles', ['title-too-long']],
+    ]);
+    expect(ids(list.matching)).toEqual(['title-too-long', 'title-duplicate']);
+    expect(list.severityCounts).toEqual({ all: 1, error: 0, warning: 0, notice: 1 });
+    expect(list.filteredToNothing).toBe(false);
+    // With the other filters, as any filter.
+    expect(ids(build({ category: 'links', severity: ['notice'] }).visible)).toEqual([
+      'empty-anchor-text',
+      'orphan-page',
+    ]);
+    expect(ids(build({ category: 'links', q: 'broken' }).visible)).toEqual(['broken-internal-links']);
+    expect(build({ category: 'titles', severity: ['error'] }).filteredToNothing).toBe(true);
+    expect(build().category).toBeNull();
+  });
+
+  it('reads a category the catalog doesn’t name as the checks listed under Other checks', () => {
+    const list = build({ category: 'aNewCategory' });
+    expect(list.category).toEqual({ id: 'aNewCategory', title: 'Other checks' });
+    expect(ids(list.visible)).toEqual(['future-check']);
+    expect(isInCategory(CHECKS, CHECKS.checks[0]!, 'responseCodes')).toBe(true);
+    expect(isInCategory(CHECKS, CHECKS.checks[0]!, 'links')).toBe(false);
+    expect(isInCategory(CHECKS, CHECKS.checks[0]!, 'gone')).toBe(false);
+    expect(isInCategory(CHECKS, CHECKS.checks.at(-1)!, 'gone')).toBe(true);
   });
 
   it('adds the checks that passed when asked', () => {

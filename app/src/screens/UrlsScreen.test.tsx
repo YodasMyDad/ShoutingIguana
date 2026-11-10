@@ -188,6 +188,40 @@ describe('the URL grid opened from a check’s group', () => {
     await waitFor(() => expect(router.state.location.search).toEqual({}));
   });
 
+  it('reads the filters Overview’s “Pages” links with as sentences, never as the engine’s ids', async () => {
+    sidecar({ summary: { available: true, reason: null } });
+    const filter = [
+      { column: 'isInternal', op: 'is', value: true },
+      { column: 'type', op: 'in', values: ['page'] },
+      { column: 'statusClass', op: 'in', values: ['2xx'] },
+      { column: 'wordCount', op: 'isNotEmpty' },
+    ];
+    await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}`);
+    const chips = await screen.findByRole('group', { name: 'Filters' });
+    expect(within(chips).getByRole('button', { name: 'Remove the filter HTML was read' })).toBeVisible();
+    expect(within(chips).getByRole('button', { name: 'Remove the filter Status class is 2xx' })).toBeVisible();
+    expect(within(chips).queryByText(/wordCount/)).toBeNull();
+  });
+
+  it('reads the response times Overview links with as times, with their unit', async () => {
+    sidecar({ summary: { available: true, reason: null } });
+    const slow = [{ column: 'responseMs', op: 'gte', value: 1000 }];
+    await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(slow))}`);
+    const chips = await screen.findByRole('group', { name: 'Filters' });
+    expect(
+      within(chips).getByRole('button', { name: 'Remove the filter Response is at least 1,000 ms' }),
+    ).toBeVisible();
+    cleanup();
+    sidecar({ summary: { available: true, reason: null } });
+    const band = [{ column: 'responseMs', op: 'between', min: 250, max: 499 }];
+    await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(band))}`);
+    expect(
+      within(await screen.findByRole('group', { name: 'Filters' })).getByRole('button', {
+        name: 'Remove the filter Response is between 250 ms and 499 ms',
+      }),
+    ).toBeVisible();
+  });
+
   it('shows a placeholder while the names are read, and plain words when they can’t be, never ids', async () => {
     const filter = [
       { column: 'check', op: 'in', values: ['empty-anchor-text'], group: { detail: null, relatedUrlId: 1 } },

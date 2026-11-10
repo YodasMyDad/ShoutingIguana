@@ -18,6 +18,7 @@ import type { GridColumn } from '../grid/types';
 import { usePagedRows } from '../grid/usePagedRows';
 import { useInspector } from '../routing/inspector';
 import { MAX_COPY_ROWS } from '../grid/tsv';
+import { urlColumnWords, urlEmptyWords, urlValueWords } from '../grid/urlFilterWords';
 import { formatBytes, formatCount, formatMilliseconds } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
 import { Banner } from '../ui/Banner';
@@ -354,8 +355,12 @@ function ActiveFilters({
     return related.isError ? 'a URL that couldn’t be read' : LOOKING_UP;
   };
   const words = {
-    column: (id: string) => (id === 'check' ? 'Check' : (COLUMNS.find((column) => column.id === id)?.header ?? id)),
-    value: (column: string, value: string | number) => (column === 'check' ? checkWords(value) : String(value)),
+    column: (id: string) =>
+      id === 'check' ? 'Check' : (COLUMNS.find((column) => column.id === id)?.header ?? urlColumnWords(id) ?? id),
+    value: (column: string, value: string | number) =>
+      // A number this list has no words for reads with its thousands separators (the sentence's default).
+      column === 'check' ? checkWords(value) : urlValueWords(column, value),
+    empty: urlEmptyWords,
   };
   return (
     <>

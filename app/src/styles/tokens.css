@@ -310,6 +310,13 @@
   --checks-height-stacked: max(50vh, 18rem); /* the checks list's rows above the selected check, when they stack */
   --evidence-max-height: 64vh; /* a check's affected pages: its grid scrolls inside this */
   --explain-columns: repeat(auto-fit, minmax(13rem, 1fr)); /* what's wrong, why it matters, how to fix it */
+  --overview-live-columns: minmax(0, 1.7fr) minmax(0, 1fr); /* the live Overview: the chart, then codes and alerts */
+  --overview-columns: minmax(0, 1.2fr) minmax(0, 1fr); /* the answer: Fix first, then categories and what was skipped */
+  --overview-issues-width: 88px; /* a category's issue count, in a column */
+  --overview-share-width: 128px; /* a share's bar and percentage beside its count */
+  --overview-card-min: 96px; /* a breakdown card's body while it loads */
+  --overview-figure-min: 116px; /* a severity figure, while it loads */
+  --overview-list-min: 320px; /* Fix first and the categories, while they load */
   --content-max: 1136px;
   --page-gutter: var(--space-8);
   --sheet-inset: var(--space-2);
@@ -370,6 +377,7 @@
   --spark-height: 28px;
   --spark-height-lg: 36px;
   --chart-height: 188px; /* the least a line chart gets; it grows to fill its card */
+  --column-height: 104px; /* a column chart's tallest column, with its number */
   --meter-mark-height: 12px;
   --chart-axis-width: 40px;
   --chart-label-width: 84px;

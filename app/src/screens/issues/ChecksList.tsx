@@ -1,6 +1,7 @@
 import { EyeOff } from 'lucide-react';
 import { useEffect, useId, useRef, type KeyboardEvent, type Ref } from 'react';
 import type { Severity } from '../../api/types';
+import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
@@ -30,6 +31,8 @@ export interface ChecksListProps {
   onQueryChange: (q: string) => void;
   severity: SeverityFilter;
   onSeverityChange: (severity: SeverityFilter) => void;
+  /** Removes the category the list is narrowed to (`list.category`): its chip's ✕. */
+  onCategoryClear?: (() => void) | undefined;
   showPassed: boolean;
   onShowPassedChange: (show: boolean) => void;
   showHidden: boolean;
@@ -47,8 +50,8 @@ export interface ChecksListProps {
 const SEVERITY_LABELS: Record<Severity, string> = { error: 'Errors', warning: 'Warnings', notice: 'Notices' };
 
 /**
- * The checks list (docs/v2-ui-ia.md, Issues): the filter, the severity choice with its counts, then the checks by
- * category in catalog order. One ARIA listbox with a group per category: it's one stop for Tab, the arrow keys move
+ * The checks list (docs/v2-ui-ia.md, Issues): the filter, the severity choice with its counts, the category a link
+ * narrowed it to as a chip that removes it, then the checks by category in catalog order. One ARIA listbox with a group per category: it's one stop for Tab, the arrow keys move
  * the selection (and the route), Home and End go to the ends, and Tab goes on to the selected check.
  */
 export function ChecksList({
@@ -60,6 +63,7 @@ export function ChecksList({
   onQueryChange,
   severity,
   onSeverityChange,
+  onCategoryClear,
   showPassed,
   onShowPassedChange,
   showHidden,
@@ -73,6 +77,10 @@ export function ChecksList({
   const id = useId();
   const options = useRef(new Map<string, HTMLDivElement>());
   const listRef = useRef<HTMLDivElement>(null);
+  // A filter's chip goes with its filter, the chips' list with the last of them, "Clear the filters" with them all:
+  // focus that was on one goes to the filter field, which is always there, never to the page.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusRescue(rootRef, () => rootRef.current?.querySelector<HTMLElement>('input[type="search"]'));
 
   // The selected check is in view in the list, whoever picked it (a link, back, the first to fix), scrolling the list
   // alone: never the page around it.
@@ -113,7 +121,13 @@ export function ChecksList({
     event.preventDefault();
   };
 
+  // A category has no control of its own (it comes from a link), so its chip is the one place it shows and goes:
+  // above the list, or among the filters that left nothing to list.
+  const categoryChip = list.category ? (
+    <FilterChip key="category" field="Category" value={list.category.title} size="sm" onRemove={onCategoryClear} />
+  ) : null;
   const filters = [
+    categoryChip,
     q ? (
       <FilterChip key="q" field="Title" op="contains" value={q} size="sm" onRemove={() => onQueryChange('')} />
     ) : null,
@@ -129,7 +143,8 @@ export function ChecksList({
   ];
 
   return (
-    <>
+    // No box of its own: its parts are the card's own rows.
+    <div ref={rootRef} className="contents">
       {refreshing ? <RefreshLine label="Reading the analysis again" /> : null}
       <div className="grid gap-3 border-b border-border p-4">
         <SearchField
@@ -182,6 +197,11 @@ export function ChecksList({
             </Button>
           ) : null}
         </div>
+        {categoryChip && !list.filteredToNothing ? (
+          <div role="group" aria-label="Filters" className="flex flex-wrap gap-2">
+            {categoryChip}
+          </div>
+        ) : null}
       </div>
       {list.filteredToNothing ? (
         <FilteredEmptyState
@@ -240,7 +260,7 @@ export function ChecksList({
           })}
         </div>
       )}
-    </>
+    </div>
   );
 }
 

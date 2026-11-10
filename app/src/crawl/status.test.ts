@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CrawlStatus, ProgressEvent } from '../api/types';
-import { applyEvent, type LiveState } from '../live/liveStore';
+import { applyEvent, liveProgressOf, type LiveState } from '../live/liveStore';
 import { testCrawlItem } from '../test/fakeSidecar';
 import { crawlControls, effectiveStatus } from './status';
 
@@ -28,7 +28,7 @@ const empty: LiveState = { stream: 'open', live: [], crawls: {} };
 
 describe('the status a crawl shows', () => {
   it('after the sidecar restarts mid-crawl, is the new sidecar’s: interrupted, with Continue', () => {
-    let state = applyEvent(empty, { type: 'progress', data: progress('running') });
+    let state = applyEvent(empty, { type: 'progress', data: liveProgressOf(progress('running')) });
     expect(effectiveStatus(testCrawlItem({ status: 'running' }), state.crawls[ID])).toBe('running');
     // The new sidecar's hello: nothing is live; its library says the crawl was interrupted.
     state = applyEvent(state, { type: 'hello', data: { live: [] } });
@@ -48,7 +48,7 @@ describe('the status a crawl shows', () => {
   });
 
   it('is this sidecar’s while it works on the crawl, even before the library catches up', () => {
-    const state = applyEvent(empty, { type: 'progress', data: progress('paused') });
+    const state = applyEvent(empty, { type: 'progress', data: liveProgressOf(progress('paused')) });
     expect(effectiveStatus(testCrawlItem({ status: 'completed' }), state.crawls[ID])).toBe('paused');
   });
 

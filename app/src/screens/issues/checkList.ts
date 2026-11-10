@@ -34,6 +34,12 @@ export interface CheckListFilters {
   severity: readonly Severity[];
   /** Matches a check's title or category, ignoring case. */
   q: string;
+  /**
+   * One category, by its id in the catalog: what a link to a category's checks names (Overview's "Issues by
+   * category"), since the category's title as text would match other categories' checks too. An id the catalog
+   * doesn't have stands for the checks whose category it doesn't name ("Other checks").
+   */
+  category?: string | undefined;
   showPassed: boolean;
   showHidden: boolean;
   /** Checks the user hid. */
@@ -47,12 +53,17 @@ export interface CheckList {
   /** The rows the list shows, in order: what the arrow keys move through. */
   visible: CheckEntry[];
   /**
-   * Every check the severity and text filters keep, whether the list shows it or not (passed, hidden): where the
-   * first check to fix is picked from, so it's one the filters are about.
+   * Every check the severity, text and category filters keep, whether the list shows it or not (passed, hidden):
+   * where the first check to fix is picked from, so it's one the filters are about.
    */
   matching: CheckEntry[];
-  /** Checks that found issues, per severity, as the severity filter counts them (text filter and hidden applied). */
+  /**
+   * Checks that found issues, per severity, as the severity filter counts them (the text and category filters and
+   * hidden applied).
+   */
   severityCounts: Record<Severity | 'all', number>;
+  /** The category the list is narrowed to, with its title for the filter's words. Null when it isn't. */
+  category: { id: string; title: string } | null;
   /** Hidden checks the filters would otherwise show. */
   hiddenCount: number;
   /** Checks that passed, hidden ones left out: the switch's "Show the 63 checks that passed". */
@@ -99,6 +110,54 @@ export function checkEntries(
       hidden: hidden.has(check.id),
     };
   });
+}
+
+/**
+ * The checks an answer counts: the ones the user hasn't hidden. A hidden check is left out of every figure there is
+ * (the sentence, the severity counts, the categories, Fix first), on Issues, Overview and the sidebar alike, so they
+ * can't disagree with each other; `hiddenTotals` says what was left out, so nothing reads as clean because it's
+ * hidden.
+ */
+export function countedEntries(entries: readonly CheckEntry[]): CheckEntry[] {
+  return entries.filter((entry) => !entry.hidden);
+}
+
+/** What the hidden checks came to on this crawl. */
+export interface HiddenTotals {
+  /** Hidden checks, whatever they came to. */
+  checks: number;
+  /** Those that found issues, and their issues. */
+  found: number;
+  issues: number;
+}
+
+/** The hidden checks' totals, or null when none is hidden. */
+export function hiddenTotals(entries: readonly CheckEntry[]): HiddenTotals | null {
+  const hidden = entries.filter((entry) => entry.hidden);
+  if (hidden.length === 0) return null;
+  const found = hidden.filter((entry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped');
+  return {
+    checks: hidden.length,
+    found: found.length,
+    issues: found.reduce((sum, entry) => sum + (entry.count ?? 0), 0),
+  };
+}
+
+/**
+ * What the answer leaves out, after it: "1 hidden check" and " isn’t counted: it found 30 issues.", in two parts so
+ * the first can be the link to where hidden checks are shown.
+ */
+export function hiddenWords({ checks, found, issues }: HiddenTotals): { count: string; rest: string } {
+  const what =
+    found === 0
+      ? ''
+      : checks === 1
+        ? `: it found ${formatCountOf(issues, 'issue')}`
+        : `: ${formatCount(found)} of them found ${formatCountOf(issues, 'issue')}`;
+  return {
+    count: formatCountOf(checks, 'hidden check'),
+    rest: ` ${checks === 1 ? 'isn’t' : 'aren’t'} counted${what}.`,
+  };
 }
 
 export function analysisTotals(entries: readonly CheckEntry[]): AnalysisTotals {
@@ -160,22 +219,42 @@ export function foundBySeverity(
 const SEVERITY_RANK: Record<Severity, number> = { error: 0, warning: 1, notice: 2 };
 
 /**
+ * The checks that found issues, in the order to fix them: the most severe, then the most pages affected, then catalog
+ * order. Hidden checks are left out, unless every check with issues is hidden. Overview's "Fix first" is this list,
+ * and Issues opens on its first.
+ */
+export function rankChecksToFix(entries: readonly CheckEntry[]): CheckEntry[] {
+  const found = entries.filter((entry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped');
+  const candidates = found.some((entry) => !entry.hidden) ? found.filter((entry) => !entry.hidden) : found;
+  // A stable sort, so checks level on severity and count keep catalog order.
+  return [...candidates].sort(
+    (a, b) => SEVERITY_RANK[a.check.severity] - SEVERITY_RANK[b.check.severity] || (b.count ?? 0) - (a.count ?? 0),
+  );
+}
+
+/**
  * The check to fix first: the most severe, then the most pages affected, then catalog order. Hidden checks are left
  * out, unless every check with issues is hidden. Null when no check found an issue.
  */
 export function firstCheckToFix(entries: readonly CheckEntry[]): CheckEntry | null {
-  const found = entries.filter((entry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped');
-  const candidates = found.some((entry) => !entry.hidden) ? found.filter((entry) => !entry.hidden) : found;
-  let best: CheckEntry | null = null;
-  for (const entry of candidates) {
-    if (!best) {
-      best = entry;
-      continue;
-    }
-    const rank = SEVERITY_RANK[entry.check.severity] - SEVERITY_RANK[best.check.severity];
-    if (rank < 0 || (rank === 0 && (entry.count ?? 0) > (best.count ?? 0))) best = entry;
-  }
-  return best;
+  return rankChecksToFix(entries)[0] ?? null;
+}
+
+/** The title every category the catalog doesn't name (a newer engine's) is listed under, rather than its id. */
+const OTHER_CHECKS = 'Other checks';
+
+/**
+ * Whether a check is in the category a filter names. An id the catalog doesn't have names every check whose category
+ * it doesn't have either: the ones listed as "Other checks".
+ */
+export function isInCategory(checks: Checks, check: Check, category: string): boolean {
+  const known = (id: string) => checks.categories.some((candidate) => candidate.id === id);
+  return known(category) ? check.category === category : !known(check.category);
+}
+
+/** A category by its id, with the title it's listed under. */
+export function categoryNamed(checks: Checks, id: string): { id: string; title: string } {
+  return { id, title: checks.categories.find((category) => category.id === id)?.title ?? OTHER_CHECKS };
 }
 
 function matchesText(entry: CheckEntry, category: string, words: readonly string[]): boolean {
@@ -196,10 +275,12 @@ export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], f
   const titleOf = new Map(order.map((category) => [category.id, category.title]));
   for (const entry of entries) {
     if (!titleOf.has(entry.check.category)) {
-      titleOf.set(entry.check.category, 'Other checks');
-      order.push({ id: entry.check.category, title: 'Other checks' });
+      titleOf.set(entry.check.category, OTHER_CHECKS);
+      order.push({ id: entry.check.category, title: OTHER_CHECKS });
     }
   }
+  const only = filters.category;
+  const inCategory = (entry: CheckEntry) => only === undefined || isInCategory(checks, entry.check, only);
   for (const category of order) {
     categories.set(category.id, { id: category.id, title: category.title, passed: 0, entries: [] });
   }
@@ -211,7 +292,8 @@ export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], f
   for (const entry of entries) {
     const category = categories.get(entry.check.category);
     if (!category) continue;
-    const text = matchesText(entry, category.title, words);
+    // The text and category filters together: what the severity then chooses among.
+    const text = inCategory(entry) && matchesText(entry, category.title, words);
     if (text && severities.has(entry.check.severity)) matching.push(entry);
     if (entry.outcome === 'passed' && !entry.hidden) {
       category.passed++;
@@ -229,8 +311,9 @@ export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], f
     category.entries.push(entry);
   }
 
-  const severityCounts = foundBySeverity(entries, (entry) =>
-    matchesText(entry, categories.get(entry.check.category)?.title ?? '', words),
+  const severityCounts = foundBySeverity(
+    entries,
+    (entry) => inCategory(entry) && matchesText(entry, categories.get(entry.check.category)?.title ?? '', words),
   );
   const shown = [...categories.values()].filter((category) => category.entries.length > 0);
   const visible = shown.flatMap((category) => category.entries);
@@ -240,6 +323,7 @@ export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], f
     visible,
     matching,
     severityCounts,
+    category: only === undefined ? null : categoryNamed(checks, only),
     hiddenCount,
     passedCount,
     filteredToNothing: visible.length === 0 && unfiltered > 0,
@@ -248,5 +332,5 @@ export function buildCheckList(checks: Checks, entries: readonly CheckEntry[], f
 
 /** The category's title for a check, for its header ("Links"). */
 export function categoryTitle(checks: Checks, check: Check): string {
-  return checks.categories.find((category) => category.id === check.category)?.title ?? 'Other checks';
+  return categoryNamed(checks, check.category).title;
 }

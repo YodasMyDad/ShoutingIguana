@@ -161,6 +161,84 @@ describe('the Issues screen', () => {
     await waitFor(() => expect(router.state.location.search).toMatchObject({ q: 'anchor' }));
     fireEvent.click(screen.getByRole('radio', { name: /Errors/ }));
     expect(await screen.findByText('No checks match these filters.')).toBeVisible();
+    const clear = screen.getByRole('button', { name: 'Clear the filters' });
+    act(() => clear.focus());
+    fireEvent.click(clear);
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
+    expect(options().length).toBeGreaterThan(3);
+    // The button went with the filters: focus is on the filter field, not dropped.
+    expect(clear.isConnected).toBe(false);
+    expect(document.activeElement).toBe(filter);
+  });
+
+  it('keeps focus when a filter’s chip is removed: on the chip left, then on the filter field', async () => {
+    sidecar();
+    const { router } = await open(
+      `${ISSUES}/internal-client-error?q=anchor&severity=${encodeURIComponent('["error"]')}`,
+    );
+    expect(await screen.findByText('No checks match these filters.')).toBeVisible();
+    const title = screen.getByRole('button', { name: 'Remove the filter Title contains anchor' });
+    act(() => title.focus());
+    fireEvent.click(title);
+    await waitFor(() => expect(router.state.location.search).toEqual({ severity: ['error'] }));
+    // Errors alone lists a check, so the chips, the one for the severity that had taken focus among them, have gone.
+    await waitFor(() => expect(title.isConnected).toBe(false));
+    expect(screen.queryByText('No checks match these filters.')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Filter checks' }));
+  });
+
+  it('lists one category from a link, as a chip that removes it, kept through selection and back', async () => {
+    sidecar();
+    const { router, history } = await open(`${ISSUES}?category=links`);
+    // The first to fix in the category, in place of the address it came to.
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    expect(history.length).toBe(1);
+    expect(router.state.location.search).toEqual({ category: 'links' });
+    expect(options().map((option) => option.textContent)).toEqual([
+      expect.stringContaining('Internal links without anchor text'),
+      expect.stringContaining('Orphan page'),
+    ]);
+    // In the screen's filter words, not typed into the filter field.
+    expect(screen.getByRole('searchbox', { name: 'Filter checks' })).toHaveValue('');
+    const filters = screen.getByRole('group', { name: 'Filters' });
+    expect(within(filters).getByText('Category')).toBeVisible();
+    expect(within(filters).getByText('Links')).toBeVisible();
+    // The severity's counts are the category's.
+    expect(screen.getByRole('radio', { name: /All/ })).toHaveTextContent('1');
+
+    // Selecting a check keeps it, and so do back and forward.
+    fireEvent.click(screen.getByRole('option', { name: /Orphan page/ }));
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/orphan-page`));
+    expect(router.state.location.search).toEqual({ category: 'links' });
+    expect(options()).toHaveLength(2);
+    act(() => history.back());
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    expect(router.state.location.search).toEqual({ category: 'links' });
+    expect(options()).toHaveLength(2);
+
+    // The chip removes it, in place, and focus goes to the filter field rather than nowhere.
+    const remove = screen.getByRole('button', { name: 'Remove the filter Category is Links' });
+    act(() => remove.focus());
+    fireEvent.click(remove);
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
+    expect(options().length).toBeGreaterThan(3);
+    expect(screen.queryByRole('group', { name: 'Filters' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Filter checks' }));
+    // Forward is the place the click made, which still has it.
+    act(() => history.forward());
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/orphan-page`));
+    expect(router.state.location.search).toEqual({ category: 'links' });
+    expect(options()).toHaveLength(2);
+  });
+
+  it('moves the selection into the category the address names, and clears it with the other filters', async () => {
+    sidecar();
+    const { router } = await open(`${ISSUES}/internal-client-error?category=titles`);
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/title-too-long`));
+    fireEvent.click(screen.getByRole('radio', { name: /Errors/ }));
+    expect(await screen.findByText('No checks match these filters.')).toBeVisible();
+    // Among the filters that left nothing, once: not above the list as well.
+    expect(screen.getAllByRole('button', { name: 'Remove the filter Category is Titles' })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Clear the filters' }));
     await waitFor(() => expect(router.state.location.search).toEqual({}));
     expect(options().length).toBeGreaterThan(3);
@@ -496,6 +574,18 @@ describe('the Issues screen', () => {
     expect(await screen.findByRole('option', { name: /Internal URL returns 4xx/ })).toBeVisible();
   });
 
+  it('answers of the checks that aren’t hidden, as its list and the Overview do, and says what they found', async () => {
+    updateSettings({ hiddenChecks: ['internal-client-error'] });
+    sidecar();
+    await open(ISSUES);
+    expect(
+      await screen.findByText(
+        '2 checks found 9 issues on this crawl. 1 passed and 1 was skipped. 1 hidden check isn’t counted: it found 2 issues.',
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole('radio', { name: /All/ })).toHaveTextContent('2');
+  });
+
   it('hides the check with Ctrl+Shift+H from the list, focus moving to the next option', async () => {
     sidecar();
     const { router } = await open(`${ISSUES}/internal-client-error`);
@@ -568,6 +658,55 @@ describe('the Issues screen', () => {
     fireEvent.click(analyseIt);
     setStatus(queryClient, 'analyzing');
     expect(await within(mainArea()).findByRole('button', { name: 'Cancel' })).toHaveFocus();
+  });
+
+  it('shows the analysis’s progress, and that a crawl is running, without reading them out as live regions', async () => {
+    // The live bridge announces a crawl's status as it changes, the analysis starting and finishing among them.
+    sidecar({ item: { status: 'analyzing' } });
+    await open(`${ISSUES}/internal-client-error`);
+    const live = '[role="status"], [role="alert"], [aria-live="polite"], [aria-live="assertive"]';
+    expect((await within(mainArea()).findByRole('progressbar')).closest(live)).toBeNull();
+    cleanup();
+    sidecar({ item: { status: 'running' } });
+    await open(`${ISSUES}/internal-client-error`);
+    expect(
+      (await within(mainArea()).findByText(/The crawl is running, so these are the issues/)).closest(live),
+    ).toBeNull();
+  });
+
+  it('keeps saying a crawl hasn’t been analysed while that is read again, rather than a loading frame', async () => {
+    let slow: ((response: Response) => void) | null = null;
+    let asked = 0;
+    const notAnalysed = () =>
+      new Response(
+        JSON.stringify({ type: 'not-analyzed', title: 'This crawl hasn’t been analysed yet.', status: 404 }),
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/problem+json' },
+        },
+      );
+    setTransport(
+      fakeSidecar([
+        [
+          'GET',
+          /^\/api\/crawls\/[0-9a-f]{16}\/analysis$/,
+          () => (asked++ === 0 ? notAnalysed() : new Promise<Response>((resolve) => (slow = resolve))),
+        ],
+        ...issuesRoutes({ analysis: null }),
+      ]),
+    );
+    const { queryClient } = await open(ISSUES);
+    const heading = await screen.findByRole('heading', { name: 'This crawl hasn’t been analysed yet' });
+    act(() => void queryClient.invalidateQueries({ queryKey: queryKeys.analysis(TEST_CRAWL_ID) }));
+    await waitFor(() => expect(slow).not.toBeNull());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 200)));
+    expect(heading.isConnected).toBe(true);
+    expect(document.querySelector('[aria-label="Loading the issues"]')).toBeNull();
+    await act(async () => {
+      slow?.(notAnalysed());
+      await Promise.resolve();
+    });
+    expect(heading.isConnected).toBe(true);
   });
 
   it('says why a crawl never analysed can’t be, offering Continue for an interrupted one', async () => {

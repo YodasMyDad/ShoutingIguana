@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatBytes,
+  formatCompactCount,
   formatCount,
   formatCountOf,
   formatDuration,
@@ -15,6 +16,23 @@ describe('formatting', () => {
     expect(formatCount(null)).toBe('–');
     expect(formatCountOf(1, 'URL')).toBe('1 URL');
     expect(formatCountOf(4521, 'URL')).toBe('4,521 URLs');
+  });
+
+  it('writes a count in a few characters where the whole number has no room, to three figures or two', () => {
+    expect(formatCompactCount(312_876)).toBe('313k');
+    expect(formatCompactCount(26_493)).toBe('26.5k');
+    expect(formatCompactCount(9_876)).toBe('9.88k');
+    expect(formatCompactCount(1_204_998)).toBe('1.2M');
+    expect(formatCompactCount(1_234_567)).toBe('1.23M');
+    expect(formatCompactCount(26_493, 2)).toBe('26k');
+    expect(formatCompactCount(312_876, 2)).toBe('310k');
+    expect(formatCompactCount(1_234_567, 2)).toBe('1.2M');
+    // Under a thousand it's the count itself, and rounding that carries goes up a unit, never "1,000k".
+    expect(formatCompactCount(870)).toBe('870');
+    expect(formatCompactCount(0)).toBe('0');
+    expect(formatCompactCount(999_950)).toBe('1M');
+    expect(formatCompactCount(999_499)).toBe('999k');
+    expect(formatCompactCount(null)).toBe('–');
   });
 
   it('gives sizes and times their units', () => {

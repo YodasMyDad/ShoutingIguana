@@ -60,7 +60,8 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
         void queryClient.invalidateQueries({ queryKey: queryKeys.library, exact: true });
         break;
       case 'hello':
-        onHello(event.data.live, previous);
+        // A crawl being analysed here is still this sidecar's, as one being crawled is.
+        onHello([...event.data.live, ...(event.data.analyzing ?? [])], previous);
         break;
       case 'progress':
         if (isCrawling(event.data.status)) {
@@ -136,7 +137,7 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
       item ? { ...item, status } : item,
     );
     if (status === previous) return;
-    dismissStaleToasts(crawlId, status);
+    dismissStaleToasts(event);
     if (status === 'completed' || status === 'stopped' || status === 'failed') {
       gridRefreshedAt.delete(crawlId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.crawl(crawlId) });
@@ -148,10 +149,17 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
     decideToast(event, previous);
   }
 
-  /** A crawl's toast whose action no longer fits its status goes: no Continue for a crawl that runs again. */
-  function dismissStaleToasts(crawlId: string, status: CrawlStatus) {
-    if (status !== 'stopped' && status !== 'interrupted') dismissToast(crawlToast(crawlId, 'stopped'));
-    if (status !== 'failed') dismissToast(crawlToast(crawlId, 'failed'));
+  /**
+   * A crawl's toast whose action no longer fits its status goes: no Continue for a crawl that runs again. Never as the
+   * news the toast is for arrives (a crawl that's stopping is about to say it stopped; an event with an error is the
+   * failure): the toaster applies a dismissal two frames late, to whatever has the id by then, so it took away the
+   * toast that had just appeared.
+   */
+  function dismissStaleToasts({ crawlId, status, error }: CrawlEvent) {
+    if (status !== 'stopping' && status !== 'stopped' && status !== 'interrupted') {
+      dismissToast(crawlToast(crawlId, 'stopped'));
+    }
+    if (status !== 'failed' && !error) dismissToast(crawlToast(crawlId, 'failed'));
   }
 
   /**

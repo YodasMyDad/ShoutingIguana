@@ -75,6 +75,12 @@ export function adaptStats(raw: Record<string, unknown>): CrawlStats {
 
 export type LiveSnapshot = Omit<ProgressEvent, 'crawlId' | 'status'> & { pages: number };
 
+/**
+ * A snapshot of the garden crawl's replay as E4's progress carries it. The fixture was made before E4: its status
+ * classes count a firewall's block page under its status code, where E4 counts it as `blocked` (the crawl's two were
+ * 403s), and it has no `other` class and no reasons for the URLs without a response (the crawl's were refused by
+ * robots.txt).
+ */
 export function adaptSnapshot(raw: Record<string, unknown>): LiveSnapshot {
   const rate =
     typeof raw.urlsPerSecond === 'number'
@@ -83,6 +89,17 @@ export function adaptSnapshot(raw: Record<string, unknown>): LiveSnapshot {
         ? raw.pagesPerSecond
         : 0;
   const number = (key: string) => (typeof raw[key] === 'number' ? raw[key] : 0);
+  const classes = (raw.statusClasses ?? {}) as Record<string, unknown>;
+  const classCount = (key: string) => (typeof classes[key] === 'number' ? classes[key] : 0);
+  const statusCodes = { ...((raw.statusCodes ?? {}) as Record<string, number>) };
+  const blocked = Math.min(number('blocked'), statusCodes['403'] ?? 0);
+  if (blocked > 0) {
+    const genuine = (statusCodes['403'] ?? 0) - blocked;
+    if (genuine > 0) statusCodes['403'] = genuine;
+    else delete statusCodes['403'];
+  }
+  const noResponse = classCount('noResponse');
+  const robotsDisallowed = Math.min(number('robotsDisallowed'), noResponse);
   return {
     elapsedMs: number('elapsedMs'),
     discovered: number('discovered'),
@@ -98,6 +115,23 @@ export function adaptSnapshot(raw: Record<string, unknown>): LiveSnapshot {
     bytesDownloaded: number('bytesDownloaded'),
     urlsPerSecond: rate,
     pages: number('pages'),
+    statusClasses: {
+      '2xx': classCount('2xx'),
+      '3xx': classCount('3xx'),
+      '4xx': classCount('4xx') - blocked,
+      '5xx': classCount('5xx'),
+      other: classCount('other'),
+      noResponse,
+      blocked,
+    },
+    statusCodes,
+    noResponse: {
+      robotsDisallowed,
+      timeout: 0,
+      networkError: noResponse - robotsDisallowed,
+      notChecked: 0,
+      processingError: 0,
+    },
   };
 }
 

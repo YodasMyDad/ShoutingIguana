@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
-import { isProblem } from '../api/errors';
 import { GRID_PAGE_SIZE, type CheckGroupRef, type GridPage, type GridSort, type IssueGroup } from '../api/grids';
 import {
   analysisQuery,
@@ -14,7 +13,7 @@ import {
 } from '../api/queries';
 import { GRID_PAGE_GC_MS } from '../app/queryClient';
 import { isCrawling, type Severity } from '../api/types';
-import { analyseCrawl, cancelAnalysis, continueCrawl } from '../crawl/actions';
+import { continueCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -40,11 +39,17 @@ import {
   buildCheckList,
   categoryTitle,
   checkEntries,
+  countedEntries,
   firstCheckToFix,
+  hiddenTotals,
+  hiddenWords,
+  isInCategory,
   type CheckEntry,
 } from './issues/checkList';
 import { checkUrlsReader, copyUrls } from './issues/copyUrls';
 import { groupRefOf } from './issues/groupTree';
+import { useAnalysisAnswer } from './issues/useAnalysisAnswer';
+import { useAnalysisControl } from './issues/useAnalysisControl';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
@@ -58,8 +63,9 @@ function checkWords(entry: CheckEntry): string {
 /**
  * Issues (docs/v2-ui-ia.md, Issues; flow 3, Triage): the answer first, the checks by category on the left, and the
  * selected check on the right, with what's wrong, why it matters, how to fix it, and its affected pages grouped by
- * their cause. The check is in the path; the severity, the text filter, the group in view, a flat check's sort and the
- * inspected URL are in the search, so back, forward and links restore all of it.
+ * their cause. The check is in the path; the severity, the text filter, the category a link narrowed the list to, the
+ * group in view, a flat check's sort and the inspected URL are in the search, so back, forward and links restore all of
+ * it.
  */
 export function IssuesScreen() {
   const { crawl: crawlId, check: checkId } = useParams({ from: ROUTE });
@@ -77,7 +83,9 @@ export function IssuesScreen() {
   const crawling = status !== null && isCrawling(status);
   const analysing = status === 'analyzing';
   const canAnalyse = crawlControls(status, item).canAnalyse;
-  const neverAnalysed = isProblem(analysis.error, 'not-analyzed');
+  // Never analysed, remembered while the read is asked again: the screen keeps saying so, rather than swap itself
+  // for its loading frame until the answer comes.
+  const { neverAnalysed, rereading, finishing } = useAnalysisAnswer(crawlId, analysis, { analysing });
 
   const hiddenIds = useSettings((settings) => settings.hiddenChecks);
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
@@ -99,6 +107,9 @@ export function IssuesScreen() {
     setQ(routeQ);
   }, [routeQ]);
   const severity: SeverityFilter = (search.severity?.length === 1 ? search.severity[0] : undefined) ?? 'all';
+  // One category's checks, from a link (Overview's "Issues by category"): a filter of its own, with its own words in
+  // the list, never text in the filter field, which would match other categories' checks by their titles.
+  const category = search.category;
   const sort = useMemo<GridSort[]>(() => search.sort ?? [], [search.sort]);
 
   const entries = useMemo(
@@ -111,21 +122,29 @@ export function IssuesScreen() {
         ? buildCheckList(checks.data, entries, {
             severity: severity === 'all' ? [] : [severity],
             q,
+            category,
             showPassed,
             showHidden,
             hidden,
           })
         : null,
-    [checks.data, entries, severity, q, showPassed, showHidden, hidden],
+    [checks.data, entries, severity, q, category, showPassed, showHidden, hidden],
   );
-  const totals = entries ? analysisTotals(entries) : null;
+  // The answer counts the checks that aren't hidden, as the list, its severities and the Overview do, and says what
+  // it left out.
+  const totals = entries ? analysisTotals(countedEntries(entries)) : null;
+  const hiddenChecks = entries ? hiddenTotals(entries) : null;
   // The first to fix among the checks the filters keep: landing on Errors picks an error.
   const first = list ? firstCheckToFix(list.matching) : null;
   const selected = entries?.find((entry) => entry.check.id === checkId) ?? null;
   const found = selected !== null && selected.outcome !== 'passed' && selected.outcome !== 'skipped';
   // A severity that leaves the selected check out of the list (the sidebar's Warnings, the severity control, a link)
-  // moves the selection to the first to fix among what it lists. The text filter doesn't: it narrows while typing.
-  const outOfSeverity = selected !== null && severity !== 'all' && selected.check.severity !== severity;
+  // moves the selection to the first to fix among what it lists, and so does a category. The text filter doesn't: it
+  // narrows while typing.
+  const outOfSeverity =
+    selected !== null &&
+    ((severity !== 'all' && selected.check.severity !== severity) ||
+      (category !== undefined && checks.data !== undefined && !isInCategory(checks.data, selected.check, category)));
 
   // No check in the path, or one the severity leaves out: the first to fix, replacing the address so back doesn't
   // bounce here again.
@@ -159,7 +178,11 @@ export function IssuesScreen() {
     });
   };
 
-  const setSearch = (patch: { severity?: Severity[] | undefined; q?: string | undefined }) =>
+  const setSearch = (patch: {
+    severity?: Severity[] | undefined;
+    q?: string | undefined;
+    category?: string | undefined;
+  }) =>
     void navigate({
       params: { crawl: crawlId, check: checkId },
       search: (previous) => ({ ...previous, ...patch }),
@@ -177,8 +200,9 @@ export function IssuesScreen() {
   const clearFilters = () => {
     setQ('');
     sentQ.current.add('');
-    setSearch({ q: undefined, severity: undefined });
+    setSearch({ q: undefined, severity: undefined, category: undefined });
   };
+  const clearCategory = () => setSearch({ category: undefined });
 
   const onGroupChange = (group: CheckGroupRef | null) =>
     void navigate({
@@ -282,45 +306,15 @@ export function IssuesScreen() {
     selectTakingFocus(next);
   };
 
-  // Analysing from here: the button pressed goes when the progress banner comes, so focus goes to its Cancel; when
-  // the banner goes, focus that was in it goes to the page's title. Starting and finishing are announced with the
-  // crawl's status (live/liveBridge.ts), and a cancel is announced here, as the status alone reads "finished".
-  const pageTitleRef = useRef<HTMLHeadingElement>(null);
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  const startedHere = useRef(false);
-  const cancelRequested = useRef(false);
-  const [cancelling, setCancelling] = useState(false);
-  if (cancelling && !analysing) setCancelling(false);
-  const analyse = () => {
-    startedHere.current = true;
-    void analyseCrawl(crawlId);
-  };
-  const cancelHere = () => {
-    cancelRequested.current = true;
-    setCancelling(true);
-    void cancelAnalysis(crawlId);
-  };
-  const cancel = analysing ? cancelHere : null;
-  const wasAnalysing = useRef(analysing);
-  useEffect(() => {
-    if (analysing === wasAnalysing.current) return;
-    wasAnalysing.current = analysing;
-    const focusLost = document.activeElement === null || document.activeElement === document.body;
-    if (analysing) {
-      if (startedHere.current && focusLost) cancelRef.current?.focus();
-      startedHere.current = false;
-      return;
-    }
-    if (cancelRequested.current) {
-      announce(
-        neverAnalysed
-          ? 'Analysis cancelled. This crawl still hasn’t been analysed.'
-          : 'Analysis cancelled. These are the issues from the last analysis.',
-      );
-    }
-    cancelRequested.current = false;
-    if (focusLost) pageTitleRef.current?.focus();
-  }, [analysing, neverAnalysed]);
+  // Analysing from here, with where focus goes as the progress banner comes and goes (useAnalysisControl).
+  const {
+    titleRef: pageTitleRef,
+    cancelRef,
+    analyse,
+    cancelHere,
+    cancel,
+    cancelling,
+  } = useAnalysisControl(crawlId, analysing, neverAnalysed);
 
   useCommands(
     () => [
@@ -413,10 +407,15 @@ export function IssuesScreen() {
     ],
   );
 
-  const loading = (checks.isPending || analysis.isPending) && !checks.error && !analysis.error;
+  const loading = (checks.isPending || (analysis.isPending && !rereading)) && !checks.error && !analysis.error;
   const skeleton = useDelayedLoading(loading);
 
-  const subtitle = totals ? answerSentence(totals) : neverAnalysed ? 'No issues to show yet.' : undefined;
+  const hiddenNote = hiddenChecks ? hiddenWords(hiddenChecks) : null;
+  const subtitle = totals
+    ? `${answerSentence(totals)}${hiddenNote ? ` ${hiddenNote.count}${hiddenNote.rest}` : ''}`
+    : neverAnalysed
+      ? 'No issues to show yet.'
+      : undefined;
   let body;
   if (loading || skeleton) {
     body = <IssuesSkeleton visible={skeleton} />;
@@ -426,8 +425,8 @@ export function IssuesScreen() {
     body = (
       <NotAnalysed
         crawling={crawling}
-        analysing={analysing}
-        event={analysisEvent}
+        analysing={analysing || finishing}
+        event={finishing ? { crawlId, phase: 'writing', done: 1, total: 1 } : analysisEvent}
         canAnalyse={canAnalyse}
         status={status}
         missing={item?.missing === true}
@@ -472,6 +471,7 @@ export function IssuesScreen() {
               onQueryChange={onQueryChange}
               severity={severity}
               onSeverityChange={onSeverityChange}
+              onCategoryClear={clearCategory}
               showPassed={showPassed}
               onShowPassedChange={setShowPassed}
               showHidden={showHidden}
