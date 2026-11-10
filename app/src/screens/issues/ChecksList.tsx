@@ -30,6 +30,8 @@ export interface ChecksListProps {
   onQueryChange: (q: string) => void;
   severity: SeverityFilter;
   onSeverityChange: (severity: SeverityFilter) => void;
+  /** Removes the category the list is narrowed to (`list.category`): its chip's ✕. */
+  onCategoryClear?: (() => void) | undefined;
   showPassed: boolean;
   onShowPassedChange: (show: boolean) => void;
   showHidden: boolean;
@@ -47,8 +49,8 @@ export interface ChecksListProps {
 const SEVERITY_LABELS: Record<Severity, string> = { error: 'Errors', warning: 'Warnings', notice: 'Notices' };
 
 /**
- * The checks list (docs/v2-ui-ia.md, Issues): the filter, the severity choice with its counts, then the checks by
- * category in catalog order. One ARIA listbox with a group per category: it's one stop for Tab, the arrow keys move
+ * The checks list (docs/v2-ui-ia.md, Issues): the filter, the severity choice with its counts, the category a link
+ * narrowed it to as a chip that removes it, then the checks by category in catalog order. One ARIA listbox with a group per category: it's one stop for Tab, the arrow keys move
  * the selection (and the route), Home and End go to the ends, and Tab goes on to the selected check.
  */
 export function ChecksList({
@@ -60,6 +62,7 @@ export function ChecksList({
   onQueryChange,
   severity,
   onSeverityChange,
+  onCategoryClear,
   showPassed,
   onShowPassedChange,
   showHidden,
@@ -113,7 +116,13 @@ export function ChecksList({
     event.preventDefault();
   };
 
+  // A category has no control of its own (it comes from a link), so its chip is the one place it shows and goes:
+  // above the list, or among the filters that left nothing to list.
+  const categoryChip = list.category ? (
+    <FilterChip key="category" field="Category" value={list.category.title} size="sm" onRemove={onCategoryClear} />
+  ) : null;
   const filters = [
+    categoryChip,
     q ? (
       <FilterChip key="q" field="Title" op="contains" value={q} size="sm" onRemove={() => onQueryChange('')} />
     ) : null,
@@ -182,6 +191,11 @@ export function ChecksList({
             </Button>
           ) : null}
         </div>
+        {categoryChip && !list.filteredToNothing ? (
+          <div role="group" aria-label="Filters" className="flex flex-wrap gap-2">
+            {categoryChip}
+          </div>
+        ) : null}
       </div>
       {list.filteredToNothing ? (
         <FilteredEmptyState

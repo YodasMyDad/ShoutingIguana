@@ -55,7 +55,7 @@ links and "reopen where I left off" all work.
 | `/new?url=` | New crawl settings, pre-filled |
 | `/crawls/:crawl` | Goes to the crawl's last view: Overview the first time |
 | `/crawls/:crawl/overview` | Live crawl, then the answer |
-| `/crawls/:crawl/issues/:check?` | Issues, with a check selected (the first to fix when none is). Params: `severity`, `q`, `group` (the open group, as `{ detail, relatedUrlId }`), `sort` (a check that doesn't group), `inspect` |
+| `/crawls/:crawl/issues/:check?` | Issues, with a check selected (the first to fix when none is). Params: `severity`, `q`, `category` (one category's checks, by its id in the catalog: where Overview's category counts lead), `group` (the open group, as `{ detail, relatedUrlId }`), `sort` (a check that doesn't group), `inspect` |
 | `/crawls/:crawl/urls` | URLs. Params: `view`, `filter`, `sort`, `cols`, `q`, `inspect` |
 | `/crawls/:crawl/links` | Links. Same params as URLs |
 | `/crawls/:crawl/sitemaps/:sitemap?` | Sitemaps, and one sitemap's URLs |
@@ -112,7 +112,9 @@ links and "reopen where I left off" all work.
 - The checks list, grouped by category and filterable by severity and search. Its rows show severity, title and pages
   affected. Skipped checks are always listed in their category, with their reasons: hiding them would read as
   clean. "Show the N checks that passed" adds the ones that passed. The filters, that switch and the hidden checks'
-  count sit above the list, so Tab goes from the list to the selected check.
+  count sit above the list, so Tab goes from the list to the selected check. A category a link narrowed the list to
+  (Overview's "Issues by category") shows there as a chip that removes it: it is never text in the search field, as a
+  category's title is in other categories' checks' titles too.
 - The selected check shows what's wrong, why it matters and how to fix it.
 - Its rows are grouped by detail or by the other URL involved, as the catalog says for each check, so a template
   fault is one row with its count; open a group for its first pages and all of them in URLs. A check whose detail is a

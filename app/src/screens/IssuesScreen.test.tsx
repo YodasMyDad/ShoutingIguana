@@ -166,6 +166,61 @@ describe('the Issues screen', () => {
     expect(options().length).toBeGreaterThan(3);
   });
 
+  it('lists one category from a link, as a chip that removes it, kept through selection and back', async () => {
+    sidecar();
+    const { router, history } = await open(`${ISSUES}?category=links`);
+    // The first to fix in the category, in place of the address it came to.
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    expect(history.length).toBe(1);
+    expect(router.state.location.search).toEqual({ category: 'links' });
+    expect(options().map((option) => option.textContent)).toEqual([
+      expect.stringContaining('Internal links without anchor text'),
+      expect.stringContaining('Orphan page'),
+    ]);
+    // In the screen's filter words, not typed into the filter field.
+    expect(screen.getByRole('searchbox', { name: 'Filter checks' })).toHaveValue('');
+    const filters = screen.getByRole('group', { name: 'Filters' });
+    expect(within(filters).getByText('Category')).toBeVisible();
+    expect(within(filters).getByText('Links')).toBeVisible();
+    // The severity's counts are the category's.
+    expect(screen.getByRole('radio', { name: /All/ })).toHaveTextContent('1');
+
+    // Selecting a check keeps it, and so do back and forward.
+    fireEvent.click(screen.getByRole('option', { name: /Orphan page/ }));
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/orphan-page`));
+    expect(router.state.location.search).toEqual({ category: 'links' });
+    expect(options()).toHaveLength(2);
+    act(() => history.back());
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    expect(router.state.location.search).toEqual({ category: 'links' });
+    expect(options()).toHaveLength(2);
+
+    // The chip removes it, in place, and focus goes to the filter field rather than nowhere.
+    fireEvent.click(screen.getByRole('button', { name: 'Remove the filter Category is Links' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
+    expect(options().length).toBeGreaterThan(3);
+    expect(screen.queryByRole('group', { name: 'Filters' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Filter checks' }));
+    // Forward is the place the click made, which still has it.
+    act(() => history.forward());
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/orphan-page`));
+    expect(router.state.location.search).toEqual({ category: 'links' });
+    expect(options()).toHaveLength(2);
+  });
+
+  it('moves the selection into the category the address names, and clears it with the other filters', async () => {
+    sidecar();
+    const { router } = await open(`${ISSUES}/internal-client-error?category=titles`);
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/title-too-long`));
+    fireEvent.click(screen.getByRole('radio', { name: /Errors/ }));
+    expect(await screen.findByText('No checks match these filters.')).toBeVisible();
+    // Among the filters that left nothing, once: not above the list as well.
+    expect(screen.getAllByRole('button', { name: 'Remove the filter Category is Titles' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear the filters' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
+    expect(options().length).toBeGreaterThan(3);
+  });
+
   it('focuses the check filter with Ctrl+F', async () => {
     sidecar();
     await open(`${ISSUES}/internal-client-error`);

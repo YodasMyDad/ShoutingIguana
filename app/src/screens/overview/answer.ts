@@ -62,13 +62,14 @@ export interface CategoryFigure {
   checks: Record<Severity, number>;
   /** Their issues in all. */
   issues: number;
-  /** Issues, listing the category's checks. */
+  /** Issues, listing the category's checks: by its id, as its title is in other categories' checks' titles too. */
   link: IssuesLink;
 }
 
 /**
  * The categories with issues, in catalog order, each with its checks by severity and its issues. Hidden checks are
- * left out. A category the catalog doesn't name (a newer engine's) joins "Other checks".
+ * left out. A category the catalog doesn't name (a newer engine's) joins "Other checks", which its id opens in Issues
+ * as it does here: every check whose category the catalog doesn't name.
  */
 export function categoryFigures(checks: Checks, entries: readonly CheckEntry[]): CategoryFigure[] {
   const titles = new Map(checks.categories.map((category) => [category.id, category.title]));
@@ -79,7 +80,7 @@ export function categoryFigures(checks: Checks, entries: readonly CheckEntry[]):
       title: category.title,
       checks: { error: 0, warning: 0, notice: 0 },
       issues: 0,
-      link: { to: 'issues', q: category.title },
+      link: { to: 'issues', category: category.id },
     });
   }
   for (const entry of entries) {
@@ -92,7 +93,7 @@ export function categoryFigures(checks: Checks, entries: readonly CheckEntry[]):
         title,
         checks: { error: 0, warning: 0, notice: 0 },
         issues: 0,
-        link: { to: 'issues', q: title },
+        link: { to: 'issues', category: entry.check.category },
       };
       figures.set(title, figure);
     }

@@ -15,6 +15,7 @@ const COLUMN = /^[a-zA-Z][a-zA-Z0-9]*$/;
 /** The contract's limits (docs/v2-sidecar-api.md, URLs): text of at most 1,000 characters, 100 values in a list. */
 const MAX_TEXT = 1_000;
 const MAX_VALUES = 100;
+const CATEGORY = /^[a-zA-Z][a-zA-Z0-9-]{0,63}$/;
 /** A query sorts by at most 3 columns, each once, and has at most 20 filters: more is trimmed, never sent. */
 export const MAX_SORTS = 3;
 export const MAX_FILTERS = 20;
@@ -44,6 +45,11 @@ function list<T>(value: unknown, item: (entry: unknown) => T | undefined): T[] |
 
 function column(value: unknown): string | undefined {
   return typeof value === 'string' && COLUMN.test(value) ? value : undefined;
+}
+
+/** A check category's id, as the catalog names them (`responseCodes`): a short name, nothing else. */
+function categoryId(value: unknown): string | undefined {
+  return typeof value === 'string' && CATEGORY.test(value) ? value : undefined;
 }
 
 /** `{ column, desc }` objects, or the compact `-status,url` form. A column sorts once, and at most 3 do. */
@@ -162,6 +168,8 @@ export interface IssuesSearch {
   severity?: Severity[] | undefined;
   /** Filters the checks by title. */
   q?: string | undefined;
+  /** The one category listed, by its id in the catalog: where a category's count leads. Every one when left out. */
+  category?: string | undefined;
   /** The selected check's group in view, opened: `detail` and `relatedUrlId` as `/groups` gave them. */
   group?: CheckGroupRef | undefined;
   /** How a check that doesn't group sorts its URLs. */
@@ -176,6 +184,7 @@ export function validateIssuesSearch(search: Record<string, unknown>): IssuesSea
       (severity, index, all) => all.indexOf(severity) === index,
     ),
     q: text(search.q),
+    category: categoryId(search.category),
     group: groupRef(search.group) ?? undefined,
     sort: parseSort(search.sort),
     inspect: positiveInteger(search.inspect),

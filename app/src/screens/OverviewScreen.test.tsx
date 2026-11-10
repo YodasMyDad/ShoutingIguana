@@ -155,7 +155,9 @@ describe('the Overview of an analysed crawl', () => {
     await open();
     const links = await region('Issues by category').findByRole('link', { name: /Links/ });
     expect(links).toHaveTextContent('6 issues');
-    expect(searchOf(links).get('q')).toBe('Links');
+    // By the category's id, never its title as text, which other categories' checks have in their own titles.
+    expect(searchOf(links).get('category')).toBe('links');
+    expect(searchOf(links).get('q')).toBeNull();
     const skipped = region('Not checked on this crawl');
     expect(skipped.getByRole('link', { name: 'Orphan page' })).toBeVisible();
     expect(skipped.getByText('No sitemap could be read.')).toBeVisible();

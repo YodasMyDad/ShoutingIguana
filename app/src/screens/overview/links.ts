@@ -10,11 +10,12 @@ export interface UrlsLink {
   filters: GridFilter[];
 }
 
-/** Issues: at one check, or listing one severity's checks, or the checks a text matches (a category's title). */
+/** Issues: at one check, or listing one severity's checks, one category's (by its id), or the checks a text matches. */
 export interface IssuesLink {
   to: 'issues';
   check?: string;
   severity?: Severity;
+  category?: string;
   q?: string;
 }
 

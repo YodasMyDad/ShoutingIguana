@@ -41,6 +41,7 @@ import {
   categoryTitle,
   checkEntries,
   firstCheckToFix,
+  isInCategory,
   type CheckEntry,
 } from './issues/checkList';
 import { checkUrlsReader, copyUrls } from './issues/copyUrls';
@@ -59,8 +60,9 @@ function checkWords(entry: CheckEntry): string {
 /**
  * Issues (docs/v2-ui-ia.md, Issues; flow 3, Triage): the answer first, the checks by category on the left, and the
  * selected check on the right, with what's wrong, why it matters, how to fix it, and its affected pages grouped by
- * their cause. The check is in the path; the severity, the text filter, the group in view, a flat check's sort and the
- * inspected URL are in the search, so back, forward and links restore all of it.
+ * their cause. The check is in the path; the severity, the text filter, the category a link narrowed the list to, the
+ * group in view, a flat check's sort and the inspected URL are in the search, so back, forward and links restore all of
+ * it.
  */
 export function IssuesScreen() {
   const { crawl: crawlId, check: checkId } = useParams({ from: ROUTE });
@@ -100,6 +102,9 @@ export function IssuesScreen() {
     setQ(routeQ);
   }, [routeQ]);
   const severity: SeverityFilter = (search.severity?.length === 1 ? search.severity[0] : undefined) ?? 'all';
+  // One category's checks, from a link (Overview's "Issues by category"): a filter of its own, with its own words in
+  // the list, never text in the filter field, which would match other categories' checks by their titles.
+  const category = search.category;
   const sort = useMemo<GridSort[]>(() => search.sort ?? [], [search.sort]);
 
   const entries = useMemo(
@@ -112,12 +117,13 @@ export function IssuesScreen() {
         ? buildCheckList(checks.data, entries, {
             severity: severity === 'all' ? [] : [severity],
             q,
+            category,
             showPassed,
             showHidden,
             hidden,
           })
         : null,
-    [checks.data, entries, severity, q, showPassed, showHidden, hidden],
+    [checks.data, entries, severity, q, category, showPassed, showHidden, hidden],
   );
   const totals = entries ? analysisTotals(entries) : null;
   // The first to fix among the checks the filters keep: landing on Errors picks an error.
@@ -125,8 +131,12 @@ export function IssuesScreen() {
   const selected = entries?.find((entry) => entry.check.id === checkId) ?? null;
   const found = selected !== null && selected.outcome !== 'passed' && selected.outcome !== 'skipped';
   // A severity that leaves the selected check out of the list (the sidebar's Warnings, the severity control, a link)
-  // moves the selection to the first to fix among what it lists. The text filter doesn't: it narrows while typing.
-  const outOfSeverity = selected !== null && severity !== 'all' && selected.check.severity !== severity;
+  // moves the selection to the first to fix among what it lists, and so does a category. The text filter doesn't: it
+  // narrows while typing.
+  const outOfSeverity =
+    selected !== null &&
+    ((severity !== 'all' && selected.check.severity !== severity) ||
+      (category !== undefined && checks.data !== undefined && !isInCategory(checks.data, selected.check, category)));
 
   // No check in the path, or one the severity leaves out: the first to fix, replacing the address so back doesn't
   // bounce here again.
@@ -160,7 +170,11 @@ export function IssuesScreen() {
     });
   };
 
-  const setSearch = (patch: { severity?: Severity[] | undefined; q?: string | undefined }) =>
+  const setSearch = (patch: {
+    severity?: Severity[] | undefined;
+    q?: string | undefined;
+    category?: string | undefined;
+  }) =>
     void navigate({
       params: { crawl: crawlId, check: checkId },
       search: (previous) => ({ ...previous, ...patch }),
@@ -178,7 +192,13 @@ export function IssuesScreen() {
   const clearFilters = () => {
     setQ('');
     sentQ.current.add('');
-    setSearch({ q: undefined, severity: undefined });
+    setSearch({ q: undefined, severity: undefined, category: undefined });
+  };
+  // The category's chip goes with the filter, so focus goes to the filter field beside it rather than nowhere (a chip
+  // with another beside it hands focus on itself).
+  const clearCategory = () => {
+    setSearch({ category: undefined });
+    filterRef.current?.focus();
   };
 
   const onGroupChange = (group: CheckGroupRef | null) =>
@@ -443,6 +463,7 @@ export function IssuesScreen() {
               onQueryChange={onQueryChange}
               severity={severity}
               onSeverityChange={onSeverityChange}
+              onCategoryClear={clearCategory}
               showPassed={showPassed}
               onShowPassedChange={setShowPassed}
               showHidden={showHidden}

@@ -89,6 +89,15 @@ export const GardenFlatCheck: Story = {
   render: () => <IssuesApp path={`${GARDEN}/title-too-long?sort=-detail`} />,
 };
 
+/**
+ * One category's checks, as Overview's "Issues by category" links here: the garden's URLs category, whose title as
+ * text would list other categories' checks too. The category is a chip above the list, which removes it.
+ */
+export const OneCategory: Story = {
+  loaders: [fresh],
+  render: () => <IssuesApp path={`${GARDEN}?category=urls`} />,
+};
+
 /** First load: the screen's own layout in skeletons, after 150 ms. */
 export const FirstLoad: Story = {
   loaders: [() => own({ analysis: 'pending' })],

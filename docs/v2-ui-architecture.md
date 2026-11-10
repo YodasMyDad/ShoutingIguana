@@ -435,10 +435,15 @@ are drawn for the app and are never swapped for Lucide's.
   passed, skipped, hidden), the answer sentence and the first check to fix; `groupTree.ts` maps the open group onto the
   grid's rows; `copyUrls.ts` reads a check's rows 1,000 at a time with the `after` cursor. All unit-tested.
 - **The route holds the view**: the check in the path (the first to fix, with a replace, when there's none), and
-  `severity`, `q`, `group` (a `{ detail, relatedUrlId }` as `/groups` gave it), `sort` (a flat check's) and `inspect`.
-  A click on a check is a new place; the arrow keys, the filter, the severity and opening a group replace. The first to
-  fix is picked from the checks the severity and text filters keep (`CheckList.matching`), and a severity that leaves
-  the selected check out (the sidebar's Errors, Warnings, Notices) moves the selection to it, in place.
+  `severity`, `q`, `category`, `group` (a `{ detail, relatedUrlId }` as `/groups` gave it), `sort` (a flat check's) and
+  `inspect`. A click on a check is a new place; the arrow keys, the filter, the severity and opening a group replace.
+  The first to fix is picked from the checks the severity, text and category filters keep (`CheckList.matching`), and
+  a severity or category that leaves the selected check out (the sidebar's Errors, Warnings, Notices; a category's
+  link) moves the selection to it, in place.
+- **A category is a filter of its own** (`category`, the catalog's id for it), because its title as text matches other
+  categories' checks ("URLs" is in "Links to broken internal URLs"). It comes from a link, stays through check
+  selection, back and forward, and shows as a chip above the list whose ✕ removes it (focus then goes to the filter
+  field). An id the catalog doesn't have names the checks listed under "Other checks".
 - **One listbox** for the checks, a group per category named by `ListHeading level="none"`, options named by what they
   show; roving focus, so it is one Tab stop and Tab goes on to the check.
 - **Groups are a paged treegrid**: one group open at a time (the route's), its first 10 pages, then "Show all N pages
@@ -478,7 +483,7 @@ answer. What it settled:
   checks are left out of the figures and Fix first, as the sidebar leaves them. Analysing from a screen is one hook,
   `issues/useAnalysisControl.ts`.
 - **Every number is a link to exactly what it counts.** A figure carries an `OverviewLink` (the URL grid's filters, or
-  Issues at a check, a severity or a category's title), which `overviewLinks.ts` checks against its route. The URL
+  Issues at a check, a severity or a category by its id), which `overviewLinks.ts` checks against its route. The URL
   grid's chips word the columns those filters use (`grid/urlFilterWords.ts`), so the landing reads as a sentence.
 - **Blocked is a class of its own**, live and done, so the two bars agree: E4's `statusClasses` count a firewall's
   answer as blocked whatever its status, and the finished crawl's facets are read under `outcome notIn [blocked]`, the

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FacetBucket, FacetsPage } from '../../api/grids';
 import type { Analysis, Check, Checks } from '../../api/types';
-import { checkEntries } from '../issues/checkList';
+import { buildCheckList, checkEntries } from '../issues/checkList';
 import {
   categoryFigures,
   depthFigures,
@@ -119,21 +119,21 @@ describe('issues by category', () => {
         title: 'Response codes',
         checks: { error: 1, warning: 0, notice: 0 },
         issues: 9,
-        link: { to: 'issues', q: 'Response codes' },
+        link: { to: 'issues', category: 'responseCodes' },
       },
       {
         id: 'links',
         title: 'Links',
         checks: { error: 1, warning: 0, notice: 1 },
         issues: 270,
-        link: { to: 'issues', q: 'Links' },
+        link: { to: 'issues', category: 'links' },
       },
       {
         id: 'titles',
         title: 'Titles',
         checks: { error: 0, warning: 1, notice: 1 },
         issues: 92,
-        link: { to: 'issues', q: 'Titles' },
+        link: { to: 'issues', category: 'titles' },
       },
     ]);
   });
@@ -144,6 +144,55 @@ describe('issues by category', () => {
       checkEntries(CHECKS, { ...ANALYSIS, counts: [{ checkId: 'duplicate-site-version', count: 1 }], skipped: [] }),
     );
     expect(figures.map((figure) => [figure.title, figure.issues])).toEqual([['Other checks', 1]]);
+  });
+
+  it('leads to exactly its checks in Issues, though other categories’ checks have its title in their own', () => {
+    // As the real catalog has it: "URLs" is a category, and a word in the titles of checks in other categories.
+    const catalog: Checks = {
+      categories: [
+        { id: 'links', title: 'Links' },
+        { id: 'urls', title: 'URLs' },
+      ],
+      checks: [
+        check('broken-internal-links', 'links', 'error', 'Links to broken internal URLs'),
+        check('url-too-long', 'urls', 'notice', 'URL too long'),
+        check('url-uppercase', 'urls', 'notice', 'URLs with uppercase letters'),
+        check('newer-one', 'aNewCategory', 'warning', 'Newer links check'),
+        check('newer-two', 'anotherNewCategory', 'warning', 'Newer URLs check'),
+      ],
+    };
+    const found = checkEntries(catalog, {
+      ...ANALYSIS,
+      counts: [
+        { checkId: 'broken-internal-links', count: 5_031 },
+        { checkId: 'url-too-long', count: 2 },
+        { checkId: 'url-uppercase', count: 1 },
+        { checkId: 'newer-one', count: 7 },
+        { checkId: 'newer-two', count: 11 },
+      ],
+      skipped: [],
+    });
+    const figures = categoryFigures(catalog, found);
+    expect(figures.map((figure) => figure.title)).toEqual(['Links', 'URLs', 'Other checks']);
+    for (const figure of figures) {
+      // What Issues lists for the link, as its route hands it over.
+      const listed = buildCheckList(catalog, found, {
+        severity: figure.link.severity ? [figure.link.severity] : [],
+        q: figure.link.q ?? '',
+        category: figure.link.category,
+        showPassed: false,
+        showHidden: false,
+        hidden: new Set(),
+      }).visible;
+      expect([figure.title, listed.length]).toEqual([
+        figure.title,
+        figure.checks.error + figure.checks.warning + figure.checks.notice,
+      ]);
+      expect([figure.title, listed.reduce((sum, entry) => sum + (entry.count ?? 0), 0)]).toEqual([
+        figure.title,
+        figure.issues,
+      ]);
+    }
   });
 });
 

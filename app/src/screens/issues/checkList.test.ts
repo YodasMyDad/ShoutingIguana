@@ -6,6 +6,7 @@ import {
   buildCheckList,
   checkEntries,
   firstCheckToFix,
+  isInCategory,
   rankChecksToFix,
   type CheckListFilters,
 } from './checkList';
@@ -191,6 +192,37 @@ describe('the list', () => {
     ]);
     expect(list.passedCount).toBe(2);
     expect(list.severityCounts).toEqual({ all: 4, error: 2, warning: 0, notice: 2 });
+  });
+
+  it('narrows to one category by its id, which its title as text can’t do', () => {
+    // "Links" as text is also in "Links to broken internal URLs" and "Internal links without anchor text", and would
+    // be in any other category's check that mentions links; the id names the category alone.
+    const list = build({ category: 'titles' });
+    expect(list.category).toEqual({ id: 'titles', title: 'Titles' });
+    expect(list.categories.map((category) => [category.title, ids(category.entries)])).toEqual([
+      ['Titles', ['title-too-long']],
+    ]);
+    expect(ids(list.matching)).toEqual(['title-too-long', 'title-duplicate']);
+    expect(list.severityCounts).toEqual({ all: 1, error: 0, warning: 0, notice: 1 });
+    expect(list.filteredToNothing).toBe(false);
+    // With the other filters, as any filter.
+    expect(ids(build({ category: 'links', severity: ['notice'] }).visible)).toEqual([
+      'empty-anchor-text',
+      'orphan-page',
+    ]);
+    expect(ids(build({ category: 'links', q: 'broken' }).visible)).toEqual(['broken-internal-links']);
+    expect(build({ category: 'titles', severity: ['error'] }).filteredToNothing).toBe(true);
+    expect(build().category).toBeNull();
+  });
+
+  it('reads a category the catalog doesn’t name as the checks listed under Other checks', () => {
+    const list = build({ category: 'aNewCategory' });
+    expect(list.category).toEqual({ id: 'aNewCategory', title: 'Other checks' });
+    expect(ids(list.visible)).toEqual(['future-check']);
+    expect(isInCategory(CHECKS, CHECKS.checks[0]!, 'responseCodes')).toBe(true);
+    expect(isInCategory(CHECKS, CHECKS.checks[0]!, 'links')).toBe(false);
+    expect(isInCategory(CHECKS, CHECKS.checks[0]!, 'gone')).toBe(false);
+    expect(isInCategory(CHECKS, CHECKS.checks.at(-1)!, 'gone')).toBe(true);
   });
 
   it('adds the checks that passed when asked', () => {
