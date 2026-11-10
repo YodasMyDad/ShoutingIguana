@@ -43,15 +43,25 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `o
 on round by round and tell them when it is done. Pausing is theirs to call. Merging to `master` or releasing still
 needs an explicit yes.
 
-Overview, the URL inspector and engine E3b are merged, verified and pushed (below). Four agents are running from
-`17b340d`, each on its own local branch, unmerged and not pushed:
+Overview, the URL inspector, engine E3b and the real shell pass are merged, verified and pushed (below). Three
+pieces are in flight from `17b340d`, each on its own local branch, unmerged and not pushed:
 
-| Work | Branch and worktree | Brief |
-| --- | --- | --- |
-| Engine E3c: what the slices found the engine lacks | `ui/e3c`, `.claude/worktrees/e3c` | `brief-e3c.md` |
-| The Links screen, the Issues "pages affected" wording, and `npm run dev` keeping analysed copies | `ui/links`, `.claude/worktrees/links` | `brief-links.md` |
-| The Sitemaps and robots.txt screens | `ui/sitemaps-robots`, `.claude/worktrees/sitemaps-robots` | `brief-sitemaps-robots.md` |
-| The real shell: a Tauri and WebView2 run, its timings, and screenshots for the owner | `ui/shell-pass`, `.claude/worktrees/shell-pass` | `brief-shell-pass.md` |
+| Work | Branch and worktree | Brief | State |
+| --- | --- | --- | --- |
+| Engine E3c: what the slices found the engine lacks | `ui/e3c`, `.claude/worktrees/e3c` | `brief-e3c.md` | Built to `4400814` (25 commits). Under review (`brief-e3c-review.md`); then a fixer, the merge and both verify scripts |
+| The Links screen, the Issues "pages affected" wording, and `npm run dev` keeping analysed copies | `ui/links`, `.claude/worktrees/links` | `brief-links.md` | Building |
+| The Sitemaps and robots.txt screens | `ui/sitemaps-robots`, `.claude/worktrees/sitemaps-robots` | `brief-sitemaps-robots.md` | Building |
+
+E3c added fields and changed none (the contract is "Engine changes E3c made" in `docs/v2-sidecar-api.md` on its
+branch), so the UI still has to take them up once it is merged. Do that after Links and Sitemaps merge, as it
+touches Overview and the inspector:
+
+- Live Overview subtracts `siteVersions`, so an http-only site stops showing "Network error × 1".
+- Home, the top bar and the "Crawl stopped" toast use `crawled` and `crawledUrlCount`.
+- The finished screen says the time spent crawling (`crawlingMs`), and the chart closes the gaps between runs
+  (`/history.runs[]`).
+- The inspector uses `linkTotals` (two fewer reads per URL on every tick) and `urlLength`.
+- Link rows, and canonical and hreflang targets, show the target's `outcome` where they said "No status".
 
 The briefs are in the 2026-11-10 scratchpad folder that the owner's memory file names. So are `ui-slice-rules.md`
 (the rules every UI slice follows, and the kinds of defect the first reviews found) and `checkpoint.md` (the log and
@@ -162,24 +172,58 @@ Done on this branch, on top of `v2`:
   - A command chosen in the palette runs once the palette has given focus back, so it keeps the focus it takes.
   - The session's first Ctrl+K takes about 20 ms, not 320.
   - A grid's result count is no live region. It is said once, after the user changes the view.
+- The real shell (merged `ui/shell-pass`, 2026-11-10):
+  - **How:** the release build (`tauri build --no-bundle`, WebView2 157, 150% scale) with its own data folder,
+    driven over WebView2's debugging port, with a Win32 helper for the window, the tray, native dialogs and keys.
+    `npm run smoke:shell` repeats the walk: 14 steps in about a minute. It needs a Windows desktop session, so it
+    isn't in CI. The architecture doc says how to run it.
+  - **Works:** start, and the engine killed or slow to start; a crawl from Home with F7 and F8; URLs, the inspector
+    and Issues; the palette, "Go to URL…" and the shortcut sheet; window size and place; the tray, with a crawl
+    finishing while the window is hidden; "Stop crawling and quit?"; a second start; the OS theme changing;
+    copying; "Open in the browser".
+  - **Keys:** WebView2's own (F5, Ctrl+R, F3, Ctrl+G, Ctrl+J, Ctrl+P, F12, Shift+Esc) do nothing and still reach
+    the page.
+  - **Timings** on the 100k crawl are beside Chromium's in the architecture doc, all inside their budgets: the
+    answer painted in 57 to 61 ms, a status class to its first rows in 51 to 66 ms, the inspector's summary in 18
+    to 20 ms, the first Ctrl+K painted in 46 to 61 ms, and no frame over 33 ms through a live crawl.
+  - **Fixed:** back from the tray after a crawl ended there, Overview failed with too many re-renders
+    (`useAnalysisAnswer`).
+  - **Found, still open:**
+    - Home at 200% zoom loses the library's Site column and scrolls sideways.
+    - The top bar's search field shrinks to one letter beside Pause and Stop at 1280 px.
+    - Scroll bars are Windows' classic ones with arrows, which headless Chromium never shows.
+    - Overview's breadcrumb crushes the date at 200% zoom.
+    - Hidden in the tray, the shell and WebView2 hold 66 MB of working set where the doc says 23 MB. The two
+      figures may not measure the same thing.
+    - Not built: Ctrl+F on URLs (the IA's "Filter this grid"), a header sort and a row menu on the URL grid.
+  - **Not checked:** real hardware keys and the physical screen (it ran in a disconnected remote session),
+    notifications as shown, the tray icon's look, Pause and Resume from the tray menu, scales other than 150%,
+    the `.sicrawl` file association and drag and drop.
 - **Verification on the merges**, run again by the orchestrator:
-  - App: 873 unit tests, 15 script tests, 167 stories clean in both themes, forced colours and reduced motion, and
-    e2e 62 of 62.
+  - App, on the shell merge `c709158`: 876 unit tests, 25 script tests, 167 stories clean in both themes, forced
+    colours and reduced motion, and e2e 62 of 62.
   - Engine: 1,156 tests, the 100k bench (every planted issue, flat at 193 MB) and `readbench --gate`.
   - The gate failed once, under load, on four URL-grid sorts: 201 to 264 ms against 200. On a quieter machine the
     same reads took 26 to 35 ms with E3b and 25 to 33 ms without it, and the whole gate then passed.
-- **Not verified by anyone yet:** the real Tauri and WebView2 shell (every test and timing is headless Chromium), a
-  real screen reader, and anything at 1M URLs.
+- **Not verified by anyone yet:** a real screen reader, anything at 1M URLs, and the shell under a person's hands
+  (the list above). CI has not run this branch.
 - The clickable prototype is the app itself: `npm run dev` runs it against copies of the real crawls. A static mock
   build isn't published, as it can't be reviewed file by file.
 
 Left, in this order:
 
-1. Round 2, running (above): E3c; Links, with the Issues "pages affected" wording; Sitemaps and robots.txt; the real
-   shell. Each reviewed, fixed, merged and verified.
-2. Round 3: New crawl settings, the crawl's settings and the rest of Settings (the Overview's alert actions then get
-   their real targets); export (E5, engine and UI); full-text search and favicons (E6, engine and UI).
-3. A screenshot gallery for the owner, from the real shell.
+1. Round 2, in flight (above): E3c; Links, with the Issues "pages affected" wording; Sitemaps and robots.txt. Each
+   reviewed, fixed, merged and verified.
+2. The UI takes up E3c's fields (the list above), and the shell pass's open findings are fixed.
+3. Round 3: New crawl settings, the crawl's settings and the rest of Settings (the Overview's alert actions then get
+   their real targets); export (E5, engine and UI); full-text search and favicons (E6, engine and UI). E3c left one
+   engine idea for this round: run the pass over every link on several connections, which would bring text filters
+   and search (0.3 to 1.4 s on 100k) down with no cost to the file or the analysis.
+4. The screenshot gallery is published for the owner as a private artifact: 36 views from the shell pass. Its
+   builder and where it is published from are in the scratchpad's `checkpoint.md`. Re-shoot and republish it when
+   the remaining screens land.
+5. Before step 3 is called finished: a read-only audit of what is built against the IA and the UI brief (screens,
+   the Keyboard table, the definition of done).
 
 Known and open: a links filter on the target with a link's position takes 565 ms half way down a big crawl, and
 nothing is measured at 1M URLs.
