@@ -42,11 +42,17 @@ export const StatusCodes = memo(function StatusCodes({
   crawlId,
   split,
   live = false,
+  pending = false,
 }: {
   crawlId: string;
   split: StatusSplit;
   /** The crawl is running: "so far". */
   live?: boolean;
+  /**
+   * The crawl's first figures haven't arrived (`split` is `NO_FIGURES_YET`): the same bars and rows, each count a
+   * dash, never 0, so the card is its full size from the start and nothing below it moves when they come.
+   */
+  pending?: boolean;
 }) {
   const bySegment = new Map(split.segments.map((segment) => [segment.key, segment]));
   const ok = bySegment.get('2xx');
@@ -85,11 +91,13 @@ export const StatusCodes = memo(function StatusCodes({
   return (
     <div className="flex flex-col gap-4">
       <StatusSplitBar
-        label={splitWords(split)}
+        label={pending ? 'Status codes: waiting for the crawl’s first figures.' : splitWords(split)}
         whole={whole}
         magnified={magnified}
         caption={
-          split.rest > 0 ? (
+          pending ? (
+            'Waiting for the crawl’s first figures'
+          ) : split.rest > 0 ? (
             <>
               The <b>{formatCount(split.rest)}</b> not 2xx, magnified
             </>
@@ -127,13 +135,13 @@ export const StatusCodes = memo(function StatusCodes({
                   className="truncate text-text-muted"
                   title={segment.count > 0 ? parts || segment.meaning : undefined}
                 >
-                  {segment.count === 0 ? (live ? 'None so far' : 'None') : parts || segment.meaning}
+                  {pending ? '' : segment.count === 0 ? (live ? 'None so far' : 'None') : parts || segment.meaning}
                 </span>
               </span>
             ),
             meta: (
               <span className="figures flex items-baseline gap-3">
-                <span className="font-medium">{formatCount(segment.count)}</span>
+                <span className="font-medium">{pending ? '–' : formatCount(segment.count)}</span>
                 <span className="w-(--percent-width) text-right text-12 text-text-muted">
                   {segment.count > 0 ? formatPercent(segment.count, split.total) : ''}
                 </span>

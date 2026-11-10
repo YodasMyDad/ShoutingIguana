@@ -214,6 +214,16 @@ function splitOf(
   };
 }
 
+/**
+ * The breakdown before a crawl's first figures: every class listed, with nothing in it. It's drawn with a dash for
+ * each count (`StatusCodes`' `pending`), in the room the figures take, so nothing moves when they arrive.
+ */
+export const NO_FIGURES_YET: StatusSplit = statusSplit(
+  { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0, other: 0, noResponse: 0, blocked: 0 },
+  null,
+  null,
+);
+
 /** The facets query the finished crawl's breakdown reads: every URL but the blocked ones, by class and by code. */
 export const STATUS_FACETS = { filters: [NOT_BLOCKED], facets: ['statusClass', 'statusCode'] as const };
 

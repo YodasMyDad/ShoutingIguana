@@ -619,6 +619,69 @@ describe('the Overview while the crawl runs', () => {
     expect(figure('Queued')).toHaveTextContent('–');
   });
 
+  it('is its full size before the crawl’s first figures, each a dash, so nothing moves when they come', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM });
+    await open();
+    expect(await region('Progress').findByText('Crawled')).toBeVisible();
+    // The status codes: every row it will have, not a line of words in their place (the cards under it moved 270 px
+    // when the rows came).
+    const status = region('Status codes');
+    const rows = () => within(status.getByRole('list', { name: 'Status codes by class' })).getAllByRole('listitem');
+    const before = rows();
+    expect(before.map((row) => row.textContent.replace(/\s+/g, ' ').trim())).toEqual([
+      '2xx –',
+      '3xx –',
+      '4xx –',
+      '5xx –',
+      'No response –',
+      'Blocked –',
+    ]);
+    expect(status.getByText('Waiting for the crawl’s first figures')).toBeVisible();
+    // The chart's box, its key and the bar of what was found are there too.
+    const progressCard = region('Found and crawled');
+    const chart = progressCard.getByRole('img', { name: /^Found and crawled URLs of the site: waiting/ });
+    const found = progressCard.getByRole('img', { name: 'What was found: waiting for the crawl’s first figures' });
+    const key = progressCard.getByText('On the site').closest('.si-legend');
+    expect(key).toHaveTextContent('Found –');
+    expect(key).toHaveTextContent('Crawled –');
+    const card = main().getByRole('region', { name: 'Progress' });
+    const cells = () => [...card.querySelectorAll('.si-stat, .si-stat > *')];
+    const cellsBefore = cells();
+
+    await heard(progress(0.5), progress(1));
+    // The same elements, filled in.
+    const after = rows();
+    expect(after).toHaveLength(before.length);
+    expect(after.every((row, index) => row === before[index])).toBe(true);
+    expect(after[0]).toHaveTextContent('2xx');
+    expect(after[0]).not.toHaveTextContent('–');
+    expect(chart.isConnected).toBe(true);
+    expect(chart).toHaveAccessibleName(/^Found and crawled URLs of the site over 1 s: /);
+    expect(found.isConnected).toBe(true);
+    expect(found).toHaveAccessibleName('Of 9 URLs found: 2 crawled, 8 queued, 0 not followed');
+    expect(key?.isConnected).toBe(true);
+    expect(key).not.toHaveTextContent('–');
+    expect(cells().every((element, index) => element === cellsBefore[index])).toBe(true);
+  });
+
+  it('says nothing of a URL limit until the crawl has said whether it has one', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM });
+    await open();
+    expect(await region('Progress').findByText('Elapsed')).toBeVisible();
+    // Before the first progress, and from an engine that doesn't say: no claim either way.
+    expect(cell('Elapsed')).not.toHaveTextContent(/limit/i);
+    const { maxUrls: _limit, ...unsaid } = progressAt(1, POLITE);
+    await heard(message('progress', unsaid));
+    expect(figure('Crawled')).toHaveTextContent('2');
+    expect(cell('Elapsed')).not.toHaveTextContent(/limit/i);
+    // It has none: said, and only then.
+    await heard(message('progress', { ...progressAt(1.5, POLITE), maxUrls: null }));
+    expect(cell('Elapsed')).toHaveTextContent('No URL limit, so no end time');
+    // It has one: the pace is being worked out.
+    await heard(message('progress', progressAt(2, POLITE)));
+    expect(cell('Elapsed')).toHaveTextContent('Working out the pace');
+  });
+
   it('links its figures and its status codes to the URLs, which work while it crawls', async () => {
     sidecar({ analysis: null, item: LIVE_ITEM });
     await open();

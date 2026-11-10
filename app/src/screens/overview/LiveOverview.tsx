@@ -11,7 +11,7 @@ import { Banner } from '../../ui/Banner';
 import { Button } from '../../ui/Button';
 import { Card, CardBody, CardFooter, CardHeader } from '../../ui/Card';
 import { Duration } from '../../ui/Duration';
-import { LineChart } from '../../ui/LineChart';
+import { LineChart, type LineChartSeries, type LineChartTick } from '../../ui/LineChart';
 import { LiveDot } from '../../ui/LiveBadge';
 import { Num } from '../../ui/Num';
 import { Sparkline } from '../../ui/Sparkline';
@@ -25,7 +25,7 @@ import { ANSWERED_SITE_PAGES } from './links';
 import { activityWords, atUrlLimit, crawledSoFar, foundSplit, sparkOf, timeLeft } from './liveFigures';
 import { linkProps } from './overviewLinks';
 import { StatusCodes } from './StatusCodes';
-import { statusSplit } from './statusSplit';
+import { NO_FIGURES_YET, statusSplit } from './statusSplit';
 import { waitEntries } from './waits';
 
 /**
@@ -42,6 +42,10 @@ const THREE_COLUMNS_BELOW = 880;
 /** From this width six figures in a row can be the larger size and still hold 1,000,000. */
 const LARGER_FIGURES_FROM = 1100;
 const TWO_COLUMNS_BELOW = 520;
+
+/** The chart before the crawl's first figures: its own box, with nothing drawn in it. */
+const NO_LINES: readonly LineChartSeries[] = [];
+const NO_TICKS: readonly LineChartTick[] = [];
 
 /**
  * Overview while the crawl runs (docs/v2-ui-ia.md, Overview (live); flow 2, Watch it): what it has crawled, found and
@@ -127,7 +131,9 @@ export function LiveOverview({
     };
   }, [series]);
 
-  const limit = progress?.maxUrls ?? null;
+  // A number, null for a crawl with no limit, and undefined while nothing has said (before the first progress, or
+  // from an engine that doesn't say): then nothing here says there's no limit.
+  const limit = progress?.maxUrls;
   const onSite = progress?.internalFetched ?? null;
   const crawledContext =
     onSite === null
@@ -145,7 +151,9 @@ export function LiveOverview({
         ? 'At its URL limit: the last requests are finishing'
         : limit
           ? 'Working out the pace'
-          : 'No URL limit, so no end time';
+          : limit === null
+            ? 'No URL limit, so no end time'
+            : '';
 
   return (
     <>
@@ -248,76 +256,87 @@ export function LiveOverview({
             meta={series ? `The site’s URLs ${over}` : undefined}
           />
           <CardBody className="flex flex-col gap-4">
-            {chart && series ? (
-              <>
-                <LineChart
-                  label={`Found and crawled URLs of the site ${over}: ${formatCount(series.found)} found, ${formatCount(series.crawled)} crawled`}
-                  series={chart.lines}
-                  xMax={chart.xMax}
-                  yMax={chart.yMax}
-                  xTicks={chart.xTicks}
-                  yTicks={chart.yTicks}
-                />
-                <Legend>
-                  {/* The chart is of the site's own URLs, which a URL limit counts; the bar below is of every URL. */}
-                  <span className="si-legend__item text-text-muted">On the site</span>
-                  <LegendItem swatch={<span className="si-legend__line" />}>
-                    Found <span className="si-legend__value">{formatCount(series.found)}</span>
-                  </LegendItem>
-                  <LegendItem swatch={<span className="si-legend__line si-legend__line--primary" />}>
-                    Crawled <span className="si-legend__value">{formatCount(series.crawled)}</span>
-                  </LegendItem>
-                </Legend>
-              </>
-            ) : (
-              <div className="flex min-h-(--chart-height) items-center justify-center text-13 text-text-muted">
-                Waiting for the crawl’s first figures…
-              </div>
-            )}
-            {found ? (
-              <div className="border-t border-border-subtle pt-4">
-                <StackBar
-                  label={`Of ${formatCountOf(found.found, 'URL')} found: ${formatCount(found.crawled)} crawled, ${formatCount(found.queued)} queued, ${formatCount(found.notFollowed)} not followed${found.notChecked > 0 ? `, ${formatCount(found.notChecked)} not checked` : ''}`}
-                  parts={[
-                    {
-                      key: 'crawled',
-                      label: 'Crawled',
-                      value: found.crawled,
-                      valueText: formatCount(found.crawled),
-                      tone: 'primary',
-                    },
-                    {
-                      key: 'queued',
-                      label: 'Queued',
-                      value: found.queued,
-                      valueText: formatCount(found.queued),
-                      tone: 'soft',
-                    },
-                    {
-                      key: 'notFollowed',
-                      label: 'Not followed',
-                      value: found.notFollowed,
-                      valueText: formatCount(found.notFollowed),
-                      tone: 'hatched',
-                    },
-                    // Rare (a site that stopped answering), so it's listed only once there are some: the status
-                    // codes beside it say why, and open them.
-                    ...(found.notChecked > 0
-                      ? [
-                          {
-                            key: 'notChecked',
-                            label: 'Not checked',
-                            value: found.notChecked,
-                            valueText: formatCount(found.notChecked),
-                            tone: 'hatched' as const,
-                          },
-                        ]
-                      : []),
-                  ]}
-                  total={`Of all ${formatCount(found.found)} found`}
-                />
-              </div>
-            ) : null}
+            {/* Everything here is drawn from the start, with a dash for each figure that hasn't come: the chart's
+                room, its key and the bar beneath, so the crawl's first figures fill it in and move nothing. */}
+            <div className="relative">
+              <LineChart
+                label={
+                  series
+                    ? `Found and crawled URLs of the site ${over}: ${formatCount(series.found)} found, ${formatCount(series.crawled)} crawled`
+                    : 'Found and crawled URLs of the site: waiting for the crawl’s first figures'
+                }
+                series={chart?.lines ?? NO_LINES}
+                xMax={chart?.xMax ?? 1_000}
+                yMax={chart?.yMax ?? 1}
+                xTicks={chart?.xTicks ?? NO_TICKS}
+                yTicks={chart?.yTicks ?? NO_TICKS}
+              />
+              {chart ? null : (
+                // Over the chart's own box, which is there from the start.
+                <div
+                  aria-hidden="true"
+                  className="absolute inset-0 flex items-center justify-center text-13 text-text-muted"
+                >
+                  Waiting for the crawl’s first figures…
+                </div>
+              )}
+            </div>
+            <Legend>
+              {/* The chart is of the site's own URLs, which a URL limit counts; the bar below is of every URL. */}
+              <span className="si-legend__item text-text-muted">On the site</span>
+              <LegendItem swatch={<span className="si-legend__line" />}>
+                Found <span className="si-legend__value">{formatCount(series?.found)}</span>
+              </LegendItem>
+              <LegendItem swatch={<span className="si-legend__line si-legend__line--primary" />}>
+                Crawled <span className="si-legend__value">{formatCount(series?.crawled)}</span>
+              </LegendItem>
+            </Legend>
+            <div className="border-t border-border-subtle pt-4">
+              <StackBar
+                label={
+                  found
+                    ? `Of ${formatCountOf(found.found, 'URL')} found: ${formatCount(found.crawled)} crawled, ${formatCount(found.queued)} queued, ${formatCount(found.notFollowed)} not followed${found.notChecked > 0 ? `, ${formatCount(found.notChecked)} not checked` : ''}`
+                    : 'What was found: waiting for the crawl’s first figures'
+                }
+                parts={[
+                  {
+                    key: 'crawled',
+                    label: 'Crawled',
+                    value: found?.crawled ?? 0,
+                    valueText: formatCount(found?.crawled),
+                    tone: 'primary',
+                  },
+                  {
+                    key: 'queued',
+                    label: 'Queued',
+                    value: found?.queued ?? 0,
+                    valueText: formatCount(found?.queued),
+                    tone: 'soft',
+                  },
+                  {
+                    key: 'notFollowed',
+                    label: 'Not followed',
+                    value: found?.notFollowed ?? 0,
+                    valueText: formatCount(found?.notFollowed),
+                    tone: 'hatched',
+                  },
+                  // Rare (a site that stopped answering), so it's listed only once there are some: the status
+                  // codes beside it say why, and open them.
+                  ...(found && found.notChecked > 0
+                    ? [
+                        {
+                          key: 'notChecked',
+                          label: 'Not checked',
+                          value: found.notChecked,
+                          valueText: formatCount(found.notChecked),
+                          tone: 'hatched' as const,
+                        },
+                      ]
+                    : []),
+                ]}
+                total={`Of all ${formatCount(found?.found)} found`}
+              />
+            </div>
           </CardBody>
           <CardFooter icon={Layers}>
             When the crawl ends, the analysis runs on its own
@@ -337,11 +356,8 @@ export function LiveOverview({
               meta={split ? `${formatCountOf(split.total, 'URL')} so far` : undefined}
             />
             <CardBody>
-              {split ? (
-                <StatusCodes crawlId={crawlId} split={split} live />
-              ) : (
-                <p className="text-13 text-text-muted">The status codes show with the crawl’s first figures.</p>
-              )}
+              {/* The same rows before the first figures as after, each count a dash until then. */}
+              <StatusCodes crawlId={crawlId} split={split ?? NO_FIGURES_YET} live pending={!split} />
             </CardBody>
           </Card>
 
