@@ -53,12 +53,6 @@ internal sealed class CrawlData(CrawlManager crawls)
             ]);
     }
 
-    public CrawlStatsDto Stats(string id)
-    {
-        var path = crawls.PathOf(id);
-        return CrawlStatsDto.From(EngineErrors.Read(() => CrawlStatsReader.Read(path)));
-    }
-
     /// <summary>One page of the URLs a check flagged, in crawl order. A check the analysis skipped has no total, not 0.</summary>
     public IssuesPageDto Issues(string id, string checkId, IQueryCollection query)
     {

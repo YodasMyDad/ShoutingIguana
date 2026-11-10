@@ -103,6 +103,16 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         return Facets(await ReadAsync(token => LinkGridReader.Facets(path, query, cache, token), cancellationToken).ConfigureAwait(false));
     }
 
+    /// <summary>
+    /// The crawl's headline numbers, read as a grid is: in one of the read slots, stopped when its request is given up, and
+    /// kept with the grids' counts, so they're read once while the crawl stands still (a running crawl's, every 2 s).
+    /// </summary>
+    public async Task<CrawlStatsDto> StatsAsync(string id, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        return CrawlStatsDto.From(await ReadAsync(token => CrawlStatsReader.Read(path, cache, token), cancellationToken).ConfigureAwait(false));
+    }
+
     public async Task<UrlLookup> LookupAsync(string id, UrlLookupRequest request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
