@@ -4,10 +4,10 @@ import { Badge } from '../ui/Badge';
 import { Callout } from '../ui/Callout';
 import { Icon } from '../ui/Icon';
 import { StatusCode } from '../ui/StatusCode';
-import { useIssuesIn } from './inspectorContext';
+import { useInspectorContext, useIssuesIn } from './inspectorContext';
 import { Block, IssueList, SectionBody, WalkUrl } from './parts';
 import { redirectChainLayout, type ChainStep } from './redirectChain';
-import { OUTCOME_WORDS, reasonPhrase } from './words';
+import { reasonPhrase } from './words';
 
 const VIA_WORDS = { http: 'Redirects to', metaRefresh: 'Meta refresh to' } as const;
 const REDIRECT_CATEGORIES = ['redirects'] as const;
@@ -17,7 +17,8 @@ const REDIRECT_CATEGORIES = ['redirects'] as const;
  * where it ends. Loops and chains longer than the crawl follows are called out.
  */
 export function RedirectsSection({ detail }: { detail: UrlDetail }) {
-  const layout = redirectChainLayout(detail);
+  const { crawling } = useInspectorContext();
+  const layout = redirectChainLayout(detail, crawling);
   const issues = useIssuesIn(detail.issues, REDIRECT_CATEGORIES);
   return (
     <SectionBody>
@@ -51,7 +52,6 @@ export function RedirectsSection({ detail }: { detail: UrlDetail }) {
 }
 
 function Step({ step, index, last }: { step: ChainStep; index: number; last: boolean }) {
-  const noCodeWords = step.outcome ? OUTCOME_WORDS[step.outcome] : 'Not fetched';
   return (
     <li className="grid grid-cols-(--chain-columns) gap-x-3">
       {/* The rail: the step's number, and the line down to the next. */}
@@ -71,7 +71,7 @@ function Step({ step, index, last }: { step: ChainStep; index: number; last: boo
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1">
           <StatusCode
             code={step.statusCode}
-            reason={step.statusCode === null ? noCodeWords : reasonPhrase(step.statusCode)}
+            reason={step.statusCode === null ? (step.noCode ?? undefined) : reasonPhrase(step.statusCode)}
             variant={step.statusCode !== null && step.statusCode >= 400 ? 'flag' : 'plain'}
             className="text-13"
           />

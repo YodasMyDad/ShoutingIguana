@@ -302,6 +302,15 @@ describe('a URL the crawl didn’t read', () => {
     const inspector = await state(notFetched({ state: 'skipped', notFetchedBecause: 'depthLimit' }));
     expect(within(inspector).getByText('Not fetched')).toBeVisible();
     expect(within(inspector).getByText('It’s deeper than the crawl’s depth limit.')).toBeVisible();
+    // Its Redirects says the same, never that it "answers for itself": it never answered.
+    const panel = await showTab(userEvent.setup(), /^Redirects/);
+    expect(within(panel).getByRole('heading', { name: 'Not fetched' })).toBeVisible();
+    expect(
+      within(panel).getByText(
+        'It’s deeper than the crawl’s depth limit. So the crawl doesn’t know whether it redirects.',
+      ),
+    ).toBeVisible();
+    expect(within(panel).queryByText(/answers for itself/)).toBeNull();
   });
 
   it('says robots.txt blocked a URL the engine marks fetched with no status', async () => {
