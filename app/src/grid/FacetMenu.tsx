@@ -26,6 +26,8 @@ export interface FacetMenuProps<Value extends FacetMenuValue> {
   onRetry?: (() => void) | undefined;
   /** A value was chosen: the view narrows to it. */
   onChoose: (value: Value) => void;
+  /** Whether the menu is open, when something other than its button says (a story). */
+  open?: boolean | undefined;
 }
 
 /**
@@ -40,9 +42,11 @@ export function FacetMenu<Value extends FacetMenuValue>({
   failed = false,
   onRetry,
   onChoose,
+  open,
 }: FacetMenuProps<Value>) {
   return (
     <DropdownMenu
+      {...(open === undefined ? {} : { open })}
       trigger={
         <Button variant="ghost" size="sm" iconEnd={ChevronDown} aria-label={`Filter by ${title.toLowerCase()}`}>
           {title}

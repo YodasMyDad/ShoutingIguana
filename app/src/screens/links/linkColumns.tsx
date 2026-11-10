@@ -233,10 +233,13 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
       // Words take the room a code doesn't: left with the text, as the inspector's link grids have it.
       cell: (row) => {
         const code = row[`${end.end}.statusCode`];
-        return typeof code === 'number' ? (
-          <StatusCode code={code} />
-        ) : (
-          <StatusCode code={null} reason={endStatusWords(row, end.end)} />
+        if (typeof code === 'number') return <StatusCode code={code} />;
+        // What happened instead of a status can be longer than the column: whole in its tooltip.
+        const words = endStatusWords(row, end.end);
+        return (
+          <span className="flex min-w-0" title={words}>
+            <StatusCode code={null} reason={words} />
+          </span>
         );
       },
       text: (row) => endStatusWords(row, end.end),

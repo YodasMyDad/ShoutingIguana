@@ -177,7 +177,7 @@ export function FilterEditor({ columns, groups, filter, startColumn, onApply }: 
       ) : null}
       {input === 'values' ? (
         <fieldset
-          className="flex max-h-(--filter-values-height) flex-col gap-1 overflow-y-auto"
+          className="flex max-h-(--filter-values-height) flex-col gap-2 overflow-y-auto"
           aria-describedby={errorOf('values') ? `${formId}-values-error` : undefined}
         >
           <legend className="sr-only">{column.name}</legend>

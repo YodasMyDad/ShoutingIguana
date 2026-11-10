@@ -82,7 +82,7 @@ export function ColumnChooser({ groups, shown, onChange, defaults, open, onOpenC
             <p className="text-13 text-text-secondary">No column is called that.</p>
           ) : (
             visible.map((group) => (
-              <fieldset key={group.id} className="flex flex-col gap-1" aria-labelledby={`${id}-${group.id}`}>
+              <fieldset key={group.id} className="flex flex-col gap-2" aria-labelledby={`${id}-${group.id}`}>
                 <p id={`${id}-${group.id}`} className="text-12 font-medium text-text-muted">
                   {group.title}
                 </p>

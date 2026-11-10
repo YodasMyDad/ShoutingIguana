@@ -1212,6 +1212,18 @@
     --mark-subtle: var(--color-5xx-subtle);
   }
 
+  /* Words in place of a code ("Blocked by robots.txt") shorten where a column is narrower than they are. */
+  .si-code:has(.si-code__words) {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .si-code__words {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .si-code__mark {
     flex: none;
     display: inline-block;
