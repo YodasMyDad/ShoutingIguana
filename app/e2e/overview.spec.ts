@@ -54,7 +54,20 @@ test.afterEach(async () => {
   }
 });
 
+/**
+ * A theme changed on an open page tweens its colours, and axe measuring part-way through sees a contrast that
+ * neither theme has. Waits for the tweens to end. Only transitions: a spinner's animation never does.
+ */
+async function colourTweensEnd(page: Page) {
+  await page.evaluate(async () => {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const tweens = document.getAnimations().filter((animation) => animation instanceof CSSTransition);
+    await Promise.all(tweens.map((tween) => tween.finished.catch(() => undefined)));
+  });
+}
+
 async function expectNoViolations(page: Page) {
+  await colourTweensEnd(page);
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
