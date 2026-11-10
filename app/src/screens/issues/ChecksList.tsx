@@ -1,6 +1,7 @@
 import { EyeOff } from 'lucide-react';
 import { useEffect, useId, useRef, type KeyboardEvent, type Ref } from 'react';
 import type { Severity } from '../../api/types';
+import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
@@ -76,6 +77,10 @@ export function ChecksList({
   const id = useId();
   const options = useRef(new Map<string, HTMLDivElement>());
   const listRef = useRef<HTMLDivElement>(null);
+  // A filter's chip goes with its filter, the chips' list with the last of them, "Clear the filters" with them all:
+  // focus that was on one goes to the filter field, which is always there, never to the page.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusRescue(rootRef, () => rootRef.current?.querySelector<HTMLElement>('input[type="search"]'));
 
   // The selected check is in view in the list, whoever picked it (a link, back, the first to fix), scrolling the list
   // alone: never the page around it.
@@ -138,7 +143,8 @@ export function ChecksList({
   ];
 
   return (
-    <>
+    // No box of its own: its parts are the card's own rows.
+    <div ref={rootRef} className="contents">
       {refreshing ? <RefreshLine label="Reading the analysis again" /> : null}
       <div className="grid gap-3 border-b border-border p-4">
         <SearchField
@@ -254,7 +260,7 @@ export function ChecksList({
           })}
         </div>
       )}
-    </>
+    </div>
   );
 }
 

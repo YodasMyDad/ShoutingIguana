@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Play } from 'lucide-react';
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useRef, type ReactNode } from 'react';
 import { isProblem } from '../api/errors';
 import { alertsQuery, analysisQuery, checksQuery, crawlQuery, startUrlQuery, statsQuery } from '../api/queries';
 import { isCrawling, type Checks, type CrawlListItem, type CrawlStatus } from '../api/types';
@@ -9,6 +9,7 @@ import { continueCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
+import { useFocusRescue } from '../feedback/useFocusRescue';
 import { useElementWidth } from '../grid/useElementWidth';
 import { useCommands } from '../keyboard/registry';
 import { formatCount, formatCountOf, formatExactTime } from '../lib/format';
@@ -75,6 +76,11 @@ export function OverviewScreen() {
   const neverAnalysed = isProblem(analysis.error, 'not-analyzed');
   const facets = useCrawlFacets(crawlId, !crawling && readable);
   const control = useAnalysisControl(crawlId, analysing, neverAnalysed);
+  // A banner's button goes once its action has worked (Resume, Continue), and the live crawl's cards go when it ends:
+  // focus that was on something the screen took away goes to its title, never to the page. After the analysis's own
+  // moves (to its Cancel), which the hook above makes.
+  const screenRef = useRef<HTMLDivElement>(null);
+  useFocusRescue(screenRef, () => control.titleRef.current);
   // How many URLs it crawled, as the URL grid counts them (which is where the figure leads): the status breakdown's
   // total. The library's count has the URLs that weren't checked in it, so it stands only until the breakdown is read.
   const crawled = facets.status.data ? crawledCount(facets.status.data) : (item?.fetchedUrlCount ?? 0);
@@ -237,7 +243,7 @@ export function OverviewScreen() {
   }
 
   return (
-    <div className="@container">
+    <div ref={screenRef} className="@container">
       <div
         aria-busy={refreshing}
         className="relative mx-auto box-content flex max-w-(--content-max) flex-col gap-5 px-(--page-gutter) pt-7 pb-10"

@@ -194,12 +194,7 @@ export function IssuesScreen() {
     sentQ.current.add('');
     setSearch({ q: undefined, severity: undefined, category: undefined });
   };
-  // The category's chip goes with the filter, so focus goes to the filter field beside it rather than nowhere (a chip
-  // with another beside it hands focus on itself).
-  const clearCategory = () => {
-    setSearch({ category: undefined });
-    filterRef.current?.focus();
-  };
+  const clearCategory = () => setSearch({ category: undefined });
 
   const onGroupChange = (group: CheckGroupRef | null) =>
     void navigate({

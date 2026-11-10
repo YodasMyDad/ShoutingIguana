@@ -319,6 +319,12 @@ slices.
   `inert` and the registry runs none of its keys, but the one that toggles the overlay (`inOverlays`). When an
   overlay closes, focus goes back where it was, else to the view's grid, else to the main area (`restoreFocus`); a
   navigation that removes the focused element puts focus in the new view.
+- A view that takes away the control that had focus, without a navigation, gives the focus somewhere to go
+  (`feedback/useFocusRescue.ts`): a banner's button goes once its action has worked (Resume, Continue) and focus goes
+  to the page's title; the top bar's Pause becomes Resume and takes the focus, and Stop, which leaves no control
+  while the crawl stops, hands it to the view; a filter's chip in Issues goes and focus goes to the filter field. It
+  acts only when the element last focused in its container has left the document and nothing else took the focus,
+  and after the view's own effects, so a particular move (the analysis banner's, to its Cancel) wins.
 - **Esc**, innermost first: an open overlay (palette, `?` sheet, menu) closes; then the inspector; then the focused
   grid's selection clears. The grid asks the registry (`claims`) before taking Esc itself. A tooltip isn't a step: the
   Esc that closes it goes on to the rest (`keyboard/layers.ts` gives back the key Radix takes), except over a menu, a

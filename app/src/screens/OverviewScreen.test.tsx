@@ -348,6 +348,22 @@ describe('the Overview when there’s no answer yet, or something’s off', () =
     await waitFor(() => expect(proceed).toHaveBeenCalledTimes(1));
   });
 
+  it('takes focus to its title when Continue has worked and its banner goes, rather than drop it', async () => {
+    const { proceed } = sidecar({ analysis: null, item: { ...NEVER, status: 'stopped', finishedAt: null } });
+    const { queryClient } = await open();
+    const resume = (await main().findAllByRole('button', { name: /Continue/ }))[0]!;
+    act(() => resume.focus());
+    fireEvent.click(resume);
+    await waitFor(() => expect(proceed).toHaveBeenCalledTimes(1));
+    expect(document.activeElement).toBe(resume);
+    // The crawl runs again: the screen is the live crawl, and the banner with the button is gone.
+    setStatus(queryClient, 'running');
+    await heard(message('progress', progressAt(100, POLITE)));
+    expect(main().getByText('Live')).toBeVisible();
+    expect(resume.isConnected).toBe(false);
+    expect(document.activeElement).toBe(main().getByRole('heading', { level: 1, name: /Overview/ }));
+  });
+
   it('says an interrupted crawl was interrupted, with Continue', async () => {
     sidecar({ analysis: null, item: { ...NEVER, status: 'interrupted', finishedAt: null } });
     await open();
@@ -602,6 +618,56 @@ describe('the Overview while the crawl runs', () => {
     await waitFor(() => expect(resume).toHaveBeenCalledTimes(1));
   });
 
+  it('takes focus to its title when Resume has worked and its banner goes, rather than drop it', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM });
+    await open();
+    await heard(message('progress', progressAt(100, { ...POLITE, status: 'paused' })));
+    const button = main().getByRole('button', { name: /Resume/ });
+    act(() => button.focus());
+    fireEvent.click(button);
+    // It runs again: the banner, and the button in it, are gone.
+    await heard(message('progress', progressAt(100.5, POLITE)));
+    expect(main().queryByText(/The crawl is paused\./)).toBeNull();
+    expect(button.isConnected).toBe(false);
+    expect(document.activeElement).toBe(main().getByRole('heading', { level: 1, name: /Overview/ }));
+  });
+
+  it('keeps focus in the top bar’s controls: Pause hands it to Resume, and Stop, with nothing left, to the view', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM });
+    const { queryClient } = await open();
+    await heard(message('progress', progressAt(100, POLITE)));
+    const bar = within(document.querySelector('header')!);
+    const pause = bar.getByRole('button', { name: /Pause/ });
+    act(() => pause.focus());
+    fireEvent.click(pause);
+    await heard(message('progress', progressAt(100.5, { ...POLITE, status: 'paused' })));
+    expect(pause.isConnected).toBe(false);
+    expect(document.activeElement).toBe(bar.getByRole('button', { name: /Resume/ }));
+    // Stop: while the crawl is stopping the bar has no control at all.
+    const stop = bar.getByRole('button', { name: /Stop/ });
+    act(() => stop.focus());
+    fireEvent.click(stop);
+    setStatus(queryClient, 'stopping');
+    await heard(message('progress', progressAt(101, { ...POLITE, status: 'stopping' })));
+    expect(stop.isConnected).toBe(false);
+    expect(document.activeElement).toBe(document.getElementById('main'));
+  });
+
+  it('leaves focus alone when what goes didn’t have it', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM });
+    await open();
+    await heard(message('progress', progressAt(100, { ...POLITE, status: 'paused' })));
+    // On a figure that stays, and then nowhere at all (a click on empty space): neither is a loss to make good.
+    const crawled = region('Progress').getByRole('link', { name: /Crawled/ });
+    act(() => crawled.focus());
+    await heard(message('progress', progressAt(100.5, POLITE)));
+    expect(document.activeElement).toBe(crawled);
+    await heard(message('progress', progressAt(101, { ...POLITE, status: 'paused' })));
+    act(() => crawled.blur());
+    await heard(message('progress', progressAt(101.5, POLITE)));
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('shows an alert as it’s raised, with what to do, and what holds the crawl up now', async () => {
     sidecar({ analysis: null, item: LIVE_ITEM });
     await open();
@@ -658,6 +724,10 @@ describe('the Overview while the crawl runs', () => {
     await heard(progress(100));
     expect(main().getByText('Live')).toBeVisible();
 
+    // Focus is on one of the live crawl's figures, which go with it.
+    const crawled = region('Progress').getByRole('link', { name: /Crawled/ });
+    act(() => crawled.focus());
+
     // The crawl ends and its analysis starts in the same breath, as the sidecar reports them.
     setStatus(queryClient, 'analyzing');
     await heard(
@@ -667,6 +737,10 @@ describe('the Overview while the crawl runs', () => {
     );
     expect(main().queryByText('Live')).toBeNull();
     expect(await main().findByRole('progressbar', { name: 'Reading the crawl' })).toBeVisible();
+    // The figure that had focus went with the live crawl: focus is on the title, not dropped, and not on Cancel,
+    // which nobody asked for.
+    expect(crawled.isConnected).toBe(false);
+    expect(document.activeElement).toBe(main().getByRole('heading', { level: 1, name: /Overview/ }));
 
     // The analysis ends: the live layer refreshes the crawl's reads, and the answer is there.
     analysed = true;

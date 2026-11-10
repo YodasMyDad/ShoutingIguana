@@ -161,9 +161,30 @@ describe('the Issues screen', () => {
     await waitFor(() => expect(router.state.location.search).toMatchObject({ q: 'anchor' }));
     fireEvent.click(screen.getByRole('radio', { name: /Errors/ }));
     expect(await screen.findByText('No checks match these filters.')).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Clear the filters' }));
+    const clear = screen.getByRole('button', { name: 'Clear the filters' });
+    act(() => clear.focus());
+    fireEvent.click(clear);
     await waitFor(() => expect(router.state.location.search).toEqual({}));
     expect(options().length).toBeGreaterThan(3);
+    // The button went with the filters: focus is on the filter field, not dropped.
+    expect(clear.isConnected).toBe(false);
+    expect(document.activeElement).toBe(filter);
+  });
+
+  it('keeps focus when a filter’s chip is removed: on the chip left, then on the filter field', async () => {
+    sidecar();
+    const { router } = await open(
+      `${ISSUES}/internal-client-error?q=anchor&severity=${encodeURIComponent('["error"]')}`,
+    );
+    expect(await screen.findByText('No checks match these filters.')).toBeVisible();
+    const title = screen.getByRole('button', { name: 'Remove the filter Title contains anchor' });
+    act(() => title.focus());
+    fireEvent.click(title);
+    await waitFor(() => expect(router.state.location.search).toEqual({ severity: ['error'] }));
+    // Errors alone lists a check, so the chips, the one for the severity that had taken focus among them, have gone.
+    await waitFor(() => expect(title.isConnected).toBe(false));
+    expect(screen.queryByText('No checks match these filters.')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Filter checks' }));
   });
 
   it('lists one category from a link, as a chip that removes it, kept through selection and back', async () => {
@@ -196,7 +217,9 @@ describe('the Issues screen', () => {
     expect(options()).toHaveLength(2);
 
     // The chip removes it, in place, and focus goes to the filter field rather than nowhere.
-    fireEvent.click(screen.getByRole('button', { name: 'Remove the filter Category is Links' }));
+    const remove = screen.getByRole('button', { name: 'Remove the filter Category is Links' });
+    act(() => remove.focus());
+    fireEvent.click(remove);
     await waitFor(() => expect(router.state.location.search).toEqual({}));
     expect(options().length).toBeGreaterThan(3);
     expect(screen.queryByRole('group', { name: 'Filters' })).toBeNull();
