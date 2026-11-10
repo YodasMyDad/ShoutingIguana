@@ -133,18 +133,48 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `o
 `v2` and `master` were not moved. The temp checkpoint under
 `%LOCALAPPDATA%\Temp\claude\...\c67f90ea-...\scratchpad\checkpoint.md` is history. This section is the place to resume.
 
-**Round 2 is under way (2026-11-10).** The owner asked for step 3 to be finished without reports in between: carry
-on round by round and tell them when it is done. Pausing is theirs to call. Merging to `master` or releasing still
-needs an explicit yes.
+**Paused in round 2 (2026-11-10, evening).** The owner paused to preserve usage: "let whatever is running finish,
+log it and we'll pick everything up at the weekend wherever you leave things". Nothing was launched after that.
+Before it, the owner had asked for step 3 to be finished without reports in between, round by round. Pausing is
+theirs to call. Merging to `master` or releasing still needs an explicit yes.
 
 Overview, the URL inspector, engine E3b and the real shell pass are merged, verified and pushed (below). Three
-pieces are in flight from `17b340d`, each on its own local branch, unmerged and not pushed:
+pieces from `17b340d` are built, each on its own local branch. None is pushed, merged or through its review and
+fixes, and their checks are the build agents' own, not run again:
 
-| Work | Branch and worktree | Brief | State |
+| Work | Branch and worktree | State | Saved in the scratchpad |
 | --- | --- | --- | --- |
-| Engine E3c: what the slices found the engine lacks | `ui/e3c`, `.claude/worktrees/e3c` | `brief-e3c.md` | Built to `4400814` (25 commits). Under review (`brief-e3c-review.md`); then a fixer, the merge and both verify scripts |
-| The Links screen, the Issues "pages affected" wording, and `npm run dev` keeping analysed copies | `ui/links`, `.claude/worktrees/links` | `brief-links.md` | Building |
-| The Sitemaps and robots.txt screens | `ui/sitemaps-robots`, `.claude/worktrees/sitemaps-robots` | `brief-sitemaps-robots.md` | Building |
+| Engine E3c: what the slices found the engine lacks | `ui/e3c`, `.claude/worktrees/e3c` | Built to `4400814` (25 commits). Its review (`brief-e3c-review.md`, which also covers the E3b fix round) was still running when this was written | `e3c-review\findings.md` once the review ends. If that file is missing, the review didn't finish: run it again from its brief |
+| The Links screen, the Issues "pages affected" wording, and `npm run dev` keeping analysed copies | `ui/links`, `.claude/worktrees/links` | Built to `2175872` (24 commits). No review yet | `links\report.md` |
+| The Sitemaps and robots.txt screens | `ui/sitemaps-robots`, `.claude/worktrees/sitemaps-robots` | Built to `8d77343` (20 commits). No review yet | `sitemaps-robots\report.md` |
+
+To resume:
+
+1. E3c: a fixer from the review's findings, then the merge, both verify scripts and the push.
+2. Links: a review (model: `brief-overview-review.md`, plus the open points in `links\report.md`), a fixer, the
+   merge, `verify-app.sh` and the push. Merge it before Sitemaps: it is the one that reshaped the grid's shared
+   pieces.
+3. Sitemaps and robots.txt: the same, merged onto Links. Both changed `app/src/grid/*` (`GridCore`), the registry,
+   the mock transport, `errors.ts`, the test setup and the docs, so expect real conflicts.
+4. Then "Left, in this order" below, from item 2.
+
+What the two screens' builds reported, unchecked by anyone else:
+
+- **Links:** 996 unit tests, 202 stories and e2e 81 of 81. On the 100k crawl a new search takes 0.94 to 1.87 s, a
+  text filter 0.5 to 0.8 s and a filter on the source's depth 1.46 s. "Show the sources or targets in URLs" isn't
+  built, as the URL grid has no filter for it. The Issues wording was written by a subagent and not read line by
+  line: its review must settle which denominator a check's share uses.
+- **Sitemaps and robots.txt:** 1,033 unit tests, 229 stories and e2e 84 of 84. Searching the origins for those that
+  blocked something isn't built, as `POST /robots` can't filter. "Crawled" counts URLs robots.txt refused.
+- **For round 3's engine brief:**
+  - `POST /robots` has no search or filter.
+  - `/urls/inspect` names no sitemap and no robots.txt line.
+  - A sitemap has no count of redirecting or broken URLs.
+  - The URL grid can't be filtered to the ends of a set of links.
+  - `/issues/groups` calls its count `pages` for checks on URLs too.
+  - The analysis's `inlinks` is 1 or 2 away from the stored links for about a tenth of URLs.
+- Each agent, stopping its own story check, killed a story check that belonged to another worktree. Each run was
+  made again. A brief should say: stop only your own process ids.
 
 E3c added fields and changed none (the contract is "Engine changes E3c made" in `docs/v2-sidecar-api.md` on its
 branch), so the UI still has to take them up once it is merged. Do that after Links and Sitemaps merge, as it
@@ -307,8 +337,8 @@ Done on this branch, on top of `v2`:
 Left, in this order. Items 3, 4 and 6 were added on 2026-11-10, and items 5 and 8 widened: the reasons are in
 [Simple first](#simple-first-advanced-on-a-switch-2026-11-10).
 
-1. Round 2, in flight (above): E3c; Links, with the Issues "pages affected" wording; Sitemaps and robots.txt. Each
-   reviewed, fixed, merged and verified.
+1. Round 2, built and paused (above): E3c; Links, with the Issues "pages affected" wording; Sitemaps and
+   robots.txt. Each still to be reviewed, fixed, merged and verified.
 2. The UI takes up E3c's fields (the list above), and the shell pass's open findings are fixed.
 3. The comparison with Screaming Frog and Sitebulb: research only, into `docs/v2-comparison.md`. It can run beside
    items 1 and 2.
