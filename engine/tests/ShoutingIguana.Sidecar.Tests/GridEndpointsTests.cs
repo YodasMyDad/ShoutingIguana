@@ -289,6 +289,11 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         var checks = (await Sidecar.GetJsonAsync("api/checks"))["checks"]!.AsArray();
         Assert.All(checks, check => Assert.Equal(GroupingName(IssueCatalog.Find((string)check!["id"]!)!.Grouping), (string?)check["grouping"]));
 
+        // What each check's flagged URLs are: pages, or any URL, as a missing image is flagged for answering 404.
+        Assert.All(checks, check => Assert.Equal(IssueCatalog.Find((string)check!["id"]!)!.Subject == IssueSubject.Page ? "page" : "url", (string?)check["subject"]));
+        Assert.Equal("url", (string?)checks.Single(check => (string?)check!["id"] == "internal-client-error")!["subject"]);
+        Assert.Equal("page", (string?)checks.Single(check => (string?)check!["id"] == "title-too-long")!["subject"]);
+
         var counts = IssueReader.ReadCounts(grid.Path);
         var related = counts.Where(count => count.Value > 0).Select(count => IssueCatalog.Find(count.Key)!)
             .First(check => check.Grouping == IssueGrouping.RelatedUrl).Id;

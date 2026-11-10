@@ -45,7 +45,10 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<IndexabilityReason>),
         typeof(CamelCaseEnumConverter<IndexabilityJudge>),
         typeof(CamelCaseEnumConverter<IndexabilityTestKind>),
-        typeof(CamelCaseEnumConverter<TestOutcome>)
+        typeof(CamelCaseEnumConverter<TestOutcome>),
+
+        // Links, sitemaps and robots.txt (E3b).
+        typeof(CamelCaseEnumConverter<IssueSubject>)
     ])]
 [JsonSerializable(typeof(ReadyEvent))]
 [JsonSerializable(typeof(ProblemDto))]
