@@ -397,6 +397,9 @@ are drawn for the app and are never swapped for Lucide's.
   and the detail copyable, progress with Cancel. Never for form validation: that's inline. A toast with an id replaces
   the one showing with that id: the same failure twice is one toast, and a crawl's toasts are keyed by crawl and event
   (`crawlToast`), so the live bridge dismisses one whose action no longer fits (Continue, once the crawl runs again).
+  Never dismiss an id just before showing a toast with it: Sonner applies a dismissal two animation frames late, to
+  whatever toast has the id by then, so the new toast goes as it appears (the bridge sends none as a crawl starts
+  stopping, or with an event that carries the failure).
   Sonner is unstyled: every look is the app's, in unlayered rules more specific than Sonner's own stylesheet, so the
   app's colours and focus rings win, and a toast follows the theme setting, the OS's included.
 - **Errors**: `ErrorState`, the plain cause first, "Details" behind a button, Try again only where trying again could
