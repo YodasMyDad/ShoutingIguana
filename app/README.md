@@ -34,9 +34,10 @@ another checkout of the engine, such as a clean worktree while someone edits thi
 
 `npm run dev` never touches your own library or crawls:
 
-- It copies the crawls in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls` into `%TEMP%\si-app-dev\data` (once, and again
-  when they change). With no dev crawls, or with `--synthetic`, it makes a small crawl of the engine's synthetic site
-  with the CLI.
+- It copies the crawls in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls` into `%TEMP%\si-app-dev\data`, and keeps a copy
+  from run to run while its original hasn't changed (its size and modified time, kept in
+  `%TEMP%\si-app-dev\copied-from`), so a copy you analysed stays analysed. When an original changes, its copy is made
+  again. With no dev crawls, or with `--synthetic`, it makes a small crawl of the engine's synthetic site with the CLI.
 - The sidecar gets a fresh state folder each run, a fixed development token and only the dev server's origin.
 - Ctrl+C stops both. Set `SI_DEV_LOG=1` to see the sidecar's log.
 
