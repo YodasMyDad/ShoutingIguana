@@ -16,7 +16,7 @@ import { inspectFromGrid } from '../routing/inspector';
 import { DEFAULT_SETTINGS } from '../settings/schema';
 import { getSettings, updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, type FakeSidecar } from '../test/fakeSidecar';
-import { issuesRoutes } from '../test/issuesSidecar';
+import { ISSUES_CHECKS, issuesRoutes, type IssuesSidecarOptions } from '../test/issuesSidecar';
 import {
   inspectorRoutes,
   testLinkRow,
@@ -95,8 +95,13 @@ afterEach(() => {
   setTransport(fakeSidecar([]));
 });
 
-async function open(path: string, options: InspectorSidecarOptions = SITE, history?: RouterHistory) {
-  sidecar = fakeSidecar([...inspectorRoutes(options), ...issuesRoutes()]);
+async function open(
+  path: string,
+  options: InspectorSidecarOptions = SITE,
+  history?: RouterHistory,
+  issues: IssuesSidecarOptions = {},
+) {
+  sidecar = fakeSidecar([...inspectorRoutes(options), ...issuesRoutes(issues)]);
   setTransport(sidecar);
   const queryClient = createQueryClient();
   const router = createAppRouter(queryClient, history ?? createMemoryHistory({ initialEntries: [path] }));
@@ -199,6 +204,27 @@ describe('the summary', () => {
     expect(anchor.getAttribute('href')).toContain(`/crawls/${TEST_CRAWL_ID}/issues/empty-anchor-text?group=`);
     expect(groupOf(anchor)).toEqual({ detail: null, relatedUrlId: 1 });
     expect(within(issues).getByText('Links to 1 URL')).toBeVisible();
+  });
+
+  it('opens a duplicate’s cluster from its first page: the group named after the page itself', async () => {
+    const first = testUrlDetail({
+      issues: [
+        {
+          checkId: 'title-duplicate',
+          severity: 'warning',
+          detail: '1 other page',
+          related: { id: 3, url: OTHER.url },
+        },
+      ],
+      namedBy: { total: 1, checks: [{ checkId: 'title-duplicate', count: 1 }] },
+    });
+    const duplicate = { ...ISSUES_CHECKS.checks[2]!, id: 'title-duplicate', title: 'Duplicate title' };
+    const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: first, 3: OTHER } }, undefined, {
+      checks: { ...ISSUES_CHECKS, checks: [...ISSUES_CHECKS.checks, duplicate] },
+    });
+    const issues = await within(inspector).findByRole('list', { name: 'This URL’s issues' });
+    const link = await within(issues).findByRole('link', { name: 'Duplicate title' });
+    expect(groupOf(link)).toEqual({ detail: null, relatedUrlId: 2 });
   });
 
   it('uses the group the engine gives with an issue', async () => {

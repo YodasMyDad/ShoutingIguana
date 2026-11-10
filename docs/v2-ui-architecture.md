@@ -495,7 +495,11 @@ is what it shows. What it settled:
   only when the URL's `issues` have it: a value out of range that the analysis didn't flag says how far out it is,
   and no more.
 - **Issues lead to Issues**: each check's title is a link to it with the issue's group open (the engine's `group`,
-  or `issueLinks.ts`'s fallback for an engine without it), leaving the inspector; back returns to the URL.
+  or `issueLinks.ts`'s fallback for an engine without it), leaving the inspector; back returns to the URL. The
+  fallback names a group only when it's sure to be there with the URL in it, else the check alone: a duplicate's
+  cluster is named after its first page (the page itself, when other pages' issues name it), and is left out for an
+  analysis another version made, which may have grouped the older way. `issueLinks.sweep.test.ts` checks every link
+  it builds against the real groups of three analyses (`scripts/issue-links-fixture.mjs` makes its fixture).
 - **Walking.** A URL of the crawl inside the inspector is `WalkUrl` (`Url` with `onGo`): a push through
   `useInspector().walk`. In the link grids Enter, a double-click or a click on the URL walks; the grid stays one Tab
   stop, and the keyboard stays in the new URL's grid. Elsewhere the section's panel takes the focus the link loses.

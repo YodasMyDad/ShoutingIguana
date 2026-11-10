@@ -414,6 +414,36 @@ describe('issueLink', () => {
       });
     });
 
+    describe('a duplicate check, grouped by cluster under its first page', () => {
+      const duplicate = issue({ checkId: 'title-duplicate', detail: '1 other page', related: { id: 99, url: '' } });
+      const analysed = { available: true, reason: null } as const;
+
+      it('opens the first page’s own group from the first page, whose issue names another', () => {
+        // The other pages' issues name the first page: that's what says it is the first.
+        const first = { id: 6, namedBy: { total: 1, checks: [{ checkId: 'title-duplicate', count: 1 }] } };
+        expect(issueLink(duplicate, 'relatedUrl', { ...first, summary: analysed }).group).toEqual({
+          detail: null,
+          relatedUrlId: 6,
+        });
+      });
+
+      it('opens the first page’s group from the cluster’s other pages, whose issues name it', () => {
+        const other = { id: 99, namedBy: { total: 0, checks: [] }, summary: analysed };
+        const names = issue({ checkId: 'h1-duplicate', related: { id: 6, url: '' } });
+        expect(issueLink(names, 'relatedUrl', other).group).toEqual({ detail: null, relatedUrlId: 6 });
+        // Named by another check's issues only, it's no cluster's first page.
+        const canonical = { ...other, namedBy: { total: 2, checks: [{ checkId: 'canonicalised-page', count: 2 }] } };
+        expect(issueLink(names, 'relatedUrl', canonical).group).toEqual({ detail: null, relatedUrlId: 6 });
+      });
+
+      it('leads to the check alone when another version analysed the crawl, or the URL isn’t known', () => {
+        const first = { id: 6, namedBy: { total: 1, checks: [{ checkId: 'title-duplicate', count: 1 }] } };
+        const older = { available: false, reason: 'engineChanged' } as const;
+        expect(issueLink(duplicate, 'relatedUrl', { ...first, summary: older }).group).toBeUndefined();
+        expect(issueLink(duplicate, 'relatedUrl').group).toBeUndefined();
+      });
+    });
+
     it('links the checks that group by fault to the check alone', () => {
       for (const checkId of ['canonical-relative', 'canonical-invalid', 'structured-data-invalid']) {
         expect(issueLink(issue({ checkId, detail: 'its own detail', related: null }), 'detail').group).toBeUndefined();

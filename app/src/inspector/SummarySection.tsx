@@ -234,7 +234,7 @@ function useFlagged(detail: UrlDetail, checkId: string | null) {
   return {
     severity: issue.severity ?? check?.severity ?? 'notice',
     title: checkTitle(check, ready),
-    link: issueLink(issue, check?.grouping),
+    link: issueLink(issue, check?.grouping, detail),
   };
 }
 
@@ -437,7 +437,7 @@ function IssuesSummary({ detail, onShowSection }: SummarySectionProps) {
         </button>
       }
     >
-      <IssueList issues={issues.slice(0, SUMMARY_ISSUES)} label="This URL’s issues" />
+      <IssueList issues={issues.slice(0, SUMMARY_ISSUES)} label="This URL’s issues" detail={detail} />
     </Block>
   );
 }

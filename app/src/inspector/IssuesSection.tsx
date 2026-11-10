@@ -70,7 +70,7 @@ export function IssuesSection({ detail }: { detail: UrlDetail }) {
         </Block>
       ) : (
         <Block title={formatCountOf(issues.length, 'issue')} meta={bySeverity.join(', ')}>
-          <IssueList issues={issues} label="This URL’s issues" />
+          <IssueList issues={issues} label="This URL’s issues" detail={detail} />
         </Block>
       )}
       {named.length > 0 ? (

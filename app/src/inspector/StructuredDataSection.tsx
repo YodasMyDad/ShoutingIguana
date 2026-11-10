@@ -49,7 +49,7 @@ export function StructuredDataSection({ detail }: { detail: UrlDetail }) {
       <p className="pb-4 text-13 text-text-secondary">{structuredDataSummary(blocks)}.</p>
       {issues.length > 0 ? (
         <Block title="What the analysis found" className="border-t">
-          <IssueList issues={issues} label="This URL’s structured data issues" />
+          <IssueList issues={issues} label="This URL’s structured data issues" detail={detail} />
         </Block>
       ) : null}
       {blocks.map((block) => (

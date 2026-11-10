@@ -3,7 +3,7 @@
 import clsx from 'clsx';
 import { useState, type ReactNode } from 'react';
 import type { CheckGroupRef } from '../api/grids';
-import type { UrlIssue } from '../api/inspector';
+import type { UrlDetail, UrlIssue } from '../api/inspector';
 import { ErrorState } from '../feedback/ErrorState';
 import { Skeleton } from '../feedback/Skeleton';
 import { SeverityMark } from '../ui/SeverityMark';
@@ -123,10 +123,10 @@ export function IssueCheckLink({
  * One check that flagged the URL: its severity, its title (a link to the check on Issues, its group open), the
  * detail, and the other URL the issue is about.
  */
-export function IssueRow({ issue }: { issue: UrlIssue }) {
+export function IssueRow({ issue, detail }: { issue: UrlIssue; detail: UrlDetail }) {
   const { byId, ready } = useChecks();
   const check = byId.get(issue.checkId);
-  const link = issueLink(issue, check?.grouping);
+  const link = issueLink(issue, check?.grouping, detail);
   const severity = issue.severity ?? check?.severity ?? 'notice';
   return (
     <li className="grid min-h-(--row-height-issue) grid-cols-(--check-row-columns) gap-x-2 py-0.5 text-13">
@@ -153,11 +153,20 @@ export function IssueRow({ issue }: { issue: UrlIssue }) {
   );
 }
 
-export function IssueList({ issues, label }: { issues: readonly UrlIssue[]; label: string }) {
+export function IssueList({
+  issues,
+  label,
+  detail,
+}: {
+  issues: readonly UrlIssue[];
+  label: string;
+  /** The URL the issues are on: which group an issue is in can depend on it. */
+  detail: UrlDetail;
+}) {
   return (
     <ul aria-label={label} className="flex flex-col">
       {issues.map((issue, index) => (
-        <IssueRow key={`${issue.checkId}-${index}`} issue={issue} />
+        <IssueRow key={`${issue.checkId}-${index}`} issue={issue} detail={detail} />
       ))}
     </ul>
   );

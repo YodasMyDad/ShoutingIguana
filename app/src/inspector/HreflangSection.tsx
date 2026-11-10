@@ -35,7 +35,7 @@ export function HreflangSection({ detail }: { detail: UrlDetail }) {
     <SectionBody>
       {issues.length > 0 ? (
         <Block title="What the analysis found">
-          <IssueList issues={issues} label="This URL’s hreflang issues" />
+          <IssueList issues={issues} label="This URL’s hreflang issues" detail={detail} />
         </Block>
       ) : null}
       <Block title={formatCountOf(entries.length, 'annotation')}>

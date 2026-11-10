@@ -43,7 +43,7 @@ export function RedirectsSection({ detail }: { detail: UrlDetail }) {
       </Block>
       {issues.length > 0 ? (
         <Block title="What the analysis found">
-          <IssueList issues={issues} label="This URL’s redirect issues" />
+          <IssueList issues={issues} label="This URL’s redirect issues" detail={detail} />
         </Block>
       ) : null}
     </SectionBody>
