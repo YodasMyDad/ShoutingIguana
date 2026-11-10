@@ -15,6 +15,7 @@ import { setDirectConnection } from '../shell/connection';
 import { TEST_CRAWL_ID, fakeSidecar, json } from '../test/fakeSidecar';
 import { ISSUES_ANALYSIS, ISSUES_CHECKS } from '../test/issuesSidecar';
 import {
+  DEAD_TWIN,
   EMPTY_FACETS,
   OVERVIEW_STATS,
   alert,
@@ -294,6 +295,20 @@ export const LiveLimitReached: Story = {
   render: () => <OverviewApp />,
 };
 
+/**
+ * A host stopped answering while it ran, so some URLs weren't checked: they aren't crawled and aren't errors. Crawled
+ * and the status codes leave them out, as the URL grid does, and a line under the classes says how many, opening them.
+ */
+export const LiveNotChecked: Story = {
+  loaders: [
+    () => {
+      running(60, POLITE);
+      liveStore.ingest(message('progress', { ...progressAt(60, POLITE), ...DEAD_TWIN.progress }));
+    },
+  ],
+  render: () => <OverviewApp />,
+};
+
 /** Trouble: the site blocks the crawl, its robots.txt can't be read, and requests are held back. Each says what to do. */
 export const LiveWithAlerts: Story = {
   loaders: [
@@ -387,6 +402,24 @@ export const Stopped: Story = {
         analysis: null,
         item: { ...NEVER, status: 'stopped', finishedAt: null, fetchedUrlCount: 2_713, pageCount: 241 },
         stats: { ...OVERVIEW_STATS, queuedCount: 1_417 },
+      }),
+  ],
+  render: () => <OverviewApp />,
+};
+
+/**
+ * A crawl with URLs that weren't checked, done: 6,909 URLs crawled though the library counts 6,914 outcomes, No
+ * response without them (and its reasons adding up to it), the 5 said apart in the engine's words, and the URLs only
+ * found counted without them. Every count opens exactly its URLs.
+ */
+export const NotChecked: Story = {
+  loaders: [
+    () =>
+      own({
+        item: DEAD_TWIN.item,
+        facets: { status: DEAD_TWIN.status },
+        notChecked: DEAD_TWIN.notChecked,
+        stats: { ...OVERVIEW_STATS, ...DEAD_TWIN.stats },
       }),
   ],
   render: () => <OverviewApp />,

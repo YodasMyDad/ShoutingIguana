@@ -40,6 +40,7 @@ import { emptyCrawl, isEmptyCrawl, type EmptyCrawl } from './overview/emptyCrawl
 import { LiveOverview } from './overview/LiveOverview';
 import { linkProps } from './overview/overviewLinks';
 import { OverviewSkeleton } from './overview/OverviewSkeleton';
+import { crawledCount } from './overview/statusSplit';
 import { useCrawlFacets } from './overview/useCrawlFacets';
 
 const ROUTE = '/crawls/$crawl/overview';
@@ -74,6 +75,9 @@ export function OverviewScreen() {
   const neverAnalysed = isProblem(analysis.error, 'not-analyzed');
   const facets = useCrawlFacets(crawlId, !crawling && readable);
   const control = useAnalysisControl(crawlId, analysing, neverAnalysed);
+  // How many URLs it crawled, as the URL grid counts them (which is where the figure leads): the status breakdown's
+  // total. The library's count has the URLs that weren't checked in it, so it stands only until the breakdown is read.
+  const crawled = facets.status.data ? crawledCount(facets.status.data) : (item?.fetchedUrlCount ?? 0);
 
   const hiddenIds = useSettings((settings) => settings.hiddenChecks);
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
@@ -156,7 +160,13 @@ export function OverviewScreen() {
             cancelRef={control.cancelRef}
           />
         ) : null}
-        <CrawlState crawlId={crawlId} item={item} status={status} canContinue={controls.canContinue} />
+        <CrawlState
+          crawlId={crawlId}
+          item={item}
+          status={status}
+          crawled={crawled}
+          canContinue={controls.canContinue}
+        />
         {analysis.data && !empty ? (
           <AnalysisNotes
             analysis={analysis.data}
@@ -208,7 +218,7 @@ export function OverviewScreen() {
             <h2 id="overview-crawl-title" className="text-16 font-semibold text-text">
               The crawl
             </h2>
-            <CrawlFacts crawlId={crawlId} item={item} />
+            <CrawlFacts crawlId={crawlId} item={item} crawled={crawled} />
           </div>
           {empty ? (
             <StatusCodesCard crawlId={crawlId} facets={facets} />
@@ -285,11 +295,14 @@ function CrawlState({
   crawlId,
   item,
   status,
+  crawled,
   canContinue,
 }: {
   crawlId: string;
   item: CrawlListItem;
   status: CrawlStatus | null;
+  /** URLs crawled, as the URL grid counts them. */
+  crawled: number;
   canContinue: boolean;
 }) {
   const unfinished = status === 'stopped' || status === 'interrupted';
@@ -299,7 +312,7 @@ function CrawlState({
   const stats = useQuery({ ...statsQuery(crawlId), enabled: unfinished && liveQueued === null }).data;
   const failure = useLive((state) => state.crawls[crawlId]?.error ?? null);
   const queued = liveQueued ?? stats?.queuedCount ?? null;
-  const far = formatCountOf(item.fetchedUrlCount, 'URL');
+  const far = formatCountOf(crawled, 'URL');
   const left = queued !== null && queued > 0 ? `, with ${formatCount(queued)} still queued` : '';
   const proceed = canContinue ? (
     <Button
@@ -431,7 +444,7 @@ function EmptyAction({ crawlId, item, reason }: { crawlId: string; item: CrawlLi
 }
 
 /** The crawl in a line: what it fetched (opening its URLs), its pages, when it ran and for how long. */
-function CrawlFacts({ crawlId, item }: { crawlId: string; item: CrawlListItem }) {
+function CrawlFacts({ crawlId, item, crawled }: { crawlId: string; item: CrawlListItem; crawled: number }) {
   const started = item.startedAt ? Date.parse(item.startedAt) : Number.NaN;
   const finished = item.finishedAt ? Date.parse(item.finishedAt) : Number.NaN;
   const took = Number.isNaN(started) || Number.isNaN(finished) ? null : finished - started;
@@ -441,7 +454,7 @@ function CrawlFacts({ crawlId, item }: { crawlId: string; item: CrawlListItem })
         {...linkProps(crawlId, { to: 'urls', filters: [{ column: 'fetched', op: 'is', value: true }] })}
         variant="inline"
       >
-        {formatCountOf(item.fetchedUrlCount, 'URL')}
+        {formatCountOf(crawled, 'URL')}
       </TextLink>{' '}
       crawled, {formatCountOf(item.pageCount, 'page')} read
       {item.startedAt ? `, started ${formatExactTime(item.startedAt)}` : ''}

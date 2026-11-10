@@ -73,7 +73,10 @@ function FacetCard({
   );
 }
 
-/** A finished crawl's status codes, from the URL facets; why URLs got no response joins once the stats arrive. */
+/**
+ * A finished crawl's status codes, from the URL facets, the URLs that weren't checked apart; why URLs got no response
+ * joins once the stats arrive.
+ */
 export function StatusCodesCard({ crawlId, facets }: { crawlId: string; facets: CrawlFacets }) {
   // Slow on a big crawl (it counts every link), so nothing waits for it: it only adds the reasons to one row.
   const stats = useQuery({ ...statsQuery(crawlId), enabled: facets.status.data !== undefined }).data;

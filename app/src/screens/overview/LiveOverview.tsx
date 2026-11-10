@@ -22,7 +22,7 @@ import { AlertList, WaitList } from './AlertList';
 import { alertEntries } from './alerts';
 import { countTicks, progressSeries, timeTicks } from './foundAndCrawled';
 import { ANSWERED_SITE_PAGES } from './links';
-import { activityWords, foundSplit, sparkOf, timeLeft } from './liveFigures';
+import { activityWords, crawledSoFar, foundSplit, sparkOf, timeLeft } from './liveFigures';
 import { linkProps } from './overviewLinks';
 import { StatusCodes } from './StatusCodes';
 import { statusSplit } from './statusSplit';
@@ -173,7 +173,8 @@ export function LiveOverview({
               {...linkProps(crawlId, { to: 'urls', filters: [{ column: 'fetched', op: 'is', value: true }] })}
               size={size}
               label="Crawled"
-              value={<Num value={progress?.fetched} />}
+              // What the link opens: the URLs that weren't checked aren't crawled, though E4's `fetched` counts them.
+              value={<Num value={crawledSoFar(progress)} />}
               context={lines(crawledContext)}
             />
             <StatLink
@@ -264,7 +265,7 @@ export function LiveOverview({
             {found ? (
               <div className="border-t border-border-subtle pt-4">
                 <StackBar
-                  label={`Of ${formatCountOf(found.found, 'URL')} found: ${formatCount(found.crawled)} crawled, ${formatCount(found.queued)} queued, ${formatCount(found.notFollowed)} not followed`}
+                  label={`Of ${formatCountOf(found.found, 'URL')} found: ${formatCount(found.crawled)} crawled, ${formatCount(found.queued)} queued, ${formatCount(found.notFollowed)} not followed${found.notChecked > 0 ? `, ${formatCount(found.notChecked)} not checked` : ''}`}
                   parts={[
                     {
                       key: 'crawled',
@@ -287,6 +288,19 @@ export function LiveOverview({
                       valueText: formatCount(found.notFollowed),
                       tone: 'hatched',
                     },
+                    // Rare (a site that stopped answering), so it's listed only once there are some: the status
+                    // codes beside it say why, and open them.
+                    ...(found.notChecked > 0
+                      ? [
+                          {
+                            key: 'notChecked',
+                            label: 'Not checked',
+                            value: found.notChecked,
+                            valueText: formatCount(found.notChecked),
+                            tone: 'hatched' as const,
+                          },
+                        ]
+                      : []),
                   ]}
                   total={`Of all ${formatCount(found.found)} found`}
                 />

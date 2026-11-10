@@ -2,10 +2,11 @@
 // 2xx, and the share that didn't is drawn enlarged beneath it, so 0.7% is still visible. Pure: the classes, what each
 // is made of, the bars' widths and the filter that opens each class's URLs. Live it's built from a progress event, and
 // done from the URL facets, by the same rules, so the two agree: a firewall's block page is Blocked whatever its
-// status, and the other classes leave it out.
+// status, and the other classes leave it out. A URL that wasn't checked (never asked, its host having stopped
+// answering) is in no class, live or done: the grid has it as not fetched, and the breakdown says it apart.
 import type { FacetsPage, GridFilter } from '../../api/grids';
 import type { CrawlStats, NoResponseCounts, StatusClassCounts } from '../../api/types';
-import { BLOCKED, NOT_BLOCKED, urlsLink, type UrlsLink } from './links';
+import { BLOCKED, NOT_BLOCKED, NOT_CHECKED, NO_OUTCOME, urlsLink, type UrlsLink } from './links';
 
 export type SplitClass = keyof StatusClassCounts;
 
@@ -39,20 +40,21 @@ const MEANINGS: Record<SplitClass, string> = {
   blocked: 'A firewall or bot challenge answered',
 };
 
-const NO_RESPONSE_WORDS: Record<keyof NoResponseCounts, string> = {
+/** Why a URL the crawl asked for got no response. Not checked isn't one: those were never asked. */
+type NoResponseReason = Exclude<keyof NoResponseCounts, 'notChecked'>;
+
+const NO_RESPONSE_WORDS: Record<NoResponseReason, string> = {
   robotsDisallowed: 'Refused by robots.txt',
   timeout: 'Timed out',
   networkError: 'Network error',
-  notChecked: 'Not asked: the site had stopped answering',
   processingError: 'Couldn’t be read',
 };
 
-const NO_RESPONSE_ORDER: readonly (keyof NoResponseCounts)[] = [
+const NO_RESPONSE_ORDER: readonly NoResponseReason[] = [
   'robotsDisallowed',
   'timeout',
   'networkError',
   'processingError',
-  'notChecked',
 ];
 
 /** The least of the bar a class with any URLs gets, in percent: a sliver that can still be seen and clicked. */
@@ -79,7 +81,10 @@ export interface SplitSegment {
 }
 
 export interface StatusSplit {
-  /** Every URL the crawl fetched: the classes add up to it. */
+  /**
+   * Every URL the crawl fetched, as the URL grid counts them (`fetched` is true): the classes add up to it. The URLs
+   * that weren't checked aren't among them.
+   */
   total: number;
   /** How many answered 2xx. */
   ok: number;
@@ -91,8 +96,16 @@ export interface StatusSplit {
   whole: { ok: number; rest: number };
   /** The lower bar: each class that didn't answer 2xx and has URLs, in percent of its width. They add up to 100. */
   magnified: { key: SplitClass; percent: number }[];
-  /** URLs found but not fetched (not followed, past a limit, still queued), with their link. Null when not known. */
+  /**
+   * URLs found but not fetched (not followed, past a limit, still queued), with their link: the ones that weren't
+   * checked left out. Null when not known.
+   */
   notFetched: { count: number; link: UrlsLink } | null;
+  /**
+   * URLs that weren't checked because their sites had stopped answering, with their link. Unknown, not broken, so
+   * they're in no class and not in the total. Null when there are none.
+   */
+  notChecked: { count: number; link: UrlsLink } | null;
 }
 
 /** The URL grid's filters for one class: exactly the URLs it counts. */
@@ -130,7 +143,7 @@ function codeParts(key: SplitClass, codes: Readonly<Record<string, number>> | nu
     .sort((a, b) => b.count - a.count || Number(a.label) - Number(b.label));
 }
 
-function noResponseParts(reasons: Partial<NoResponseCounts> | null): SplitPart[] {
+function noResponseParts(reasons: Partial<Record<NoResponseReason, number>> | null): SplitPart[] {
   if (!reasons) return [];
   return NO_RESPONSE_ORDER.flatMap((reason) => {
     const count = reasons[reason] ?? 0;
@@ -139,16 +152,33 @@ function noResponseParts(reasons: Partial<NoResponseCounts> | null): SplitPart[]
 }
 
 /**
- * The breakdown from its counts: E4's status classes (every URL fetched, once), the status codes of the URLs that
- * weren't blocked, and why URLs got no response.
+ * The breakdown from its counts: E4's status classes (every URL the crawl stored an outcome for, once), the status
+ * codes of the URLs that weren't blocked, and why URLs got no response. E4 counts the URLs that weren't checked as no
+ * response (`noResponse.notChecked`); here they come out of that class and of the total, and stand apart. `notFetched`
+ * is how many URLs have no status class in the grid, the ones that weren't checked among them.
  */
 export function statusSplit(
-  classes: StatusClassCounts,
+  counted: StatusClassCounts,
   codes: Readonly<Record<string, number>> | null,
   noResponse: Partial<NoResponseCounts> | null,
   notFetched: number | null = null,
 ): StatusSplit {
+  const notChecked = Math.max(0, Math.min(noResponse?.notChecked ?? 0, counted.noResponse));
+  const classes = { ...counted, noResponse: counted.noResponse - notChecked };
+  return splitOf(classes, codes, noResponse, notChecked, notFetched);
+}
+
+/** The breakdown of the URLs crawled (`classes`, the ones that weren't checked already left out), and those apart. */
+function splitOf(
+  classes: StatusClassCounts,
+  codes: Readonly<Record<string, number>> | null,
+  noResponse: Partial<Record<NoResponseReason, number>> | null,
+  notChecked: number,
+  notFetched: number | null,
+): StatusSplit {
   const total = SPLIT_CLASSES.reduce((sum, key) => sum + classes[key], 0);
+  // What has no status class in the grid, less the URLs that weren't checked, which the breakdown says apart.
+  const onlyFound = notFetched === null ? null : Math.max(0, notFetched - notChecked);
   const ok = classes['2xx'];
   const rest = total - ok;
   const segments = SPLIT_CLASSES.filter((key) => ALWAYS_LISTED.includes(key) || classes[key] > 0).map((key) => ({
@@ -173,9 +203,14 @@ export function statusSplit(
     whole: { ok: okPercent, rest: restPercent },
     magnified: others.map((key, index) => ({ key, percent: widths[index] ?? 0 })),
     notFetched:
-      notFetched !== null && notFetched > 0
-        ? { count: notFetched, link: urlsLink([{ column: 'statusClass', op: 'isEmpty' }]) }
+      onlyFound !== null && onlyFound > 0
+        ? {
+            count: onlyFound,
+            // No status class, and where some weren't checked (they have none either), no outcome.
+            link: urlsLink([{ column: 'statusClass', op: 'isEmpty' }, ...(notChecked > 0 ? [NO_OUTCOME] : [])]),
+          }
         : null,
+    notChecked: notChecked > 0 ? { count: notChecked, link: urlsLink([NOT_CHECKED]) } : null,
   };
 }
 
@@ -183,11 +218,27 @@ export function statusSplit(
 export const STATUS_FACETS = { filters: [NOT_BLOCKED], facets: ['statusClass', 'statusCode'] as const };
 
 /**
+ * The read beside it: the URLs that weren't checked, of which only the count (`matching`) is used. The facets count
+ * them among the URLs with no status class, where nothing tells them from the URLs only found, and `/stats` has their
+ * count but takes over a second on a big crawl, so the breakdown asks the grid, which is also where the count leads.
+ */
+export const NOT_CHECKED_FACETS = { filters: [NOT_CHECKED], facets: ['statusClass'] as const };
+
+/** A finished crawl's status facets with how many of its URLs weren't checked: the breakdown's two reads as one. */
+export interface StatusFacets extends FacetsPage {
+  notChecked: number;
+}
+
+/**
  * A finished crawl's breakdown, from the URL facets under `STATUS_FACETS`: the classes of what wasn't blocked, and the
  * blocked as what the filter left out. `stats` adds why URLs got no response, when it has arrived (it's slow on a big
- * crawl, so the breakdown doesn't wait for it).
+ * crawl, so the breakdown doesn't wait for it): its network errors count the URLs that weren't checked, which its
+ * `notCheckedCount` takes out again.
  */
-export function statusSplitFromFacets(facets: FacetsPage, stats?: Pick<CrawlStats, 'outcomes'>): StatusSplit {
+export function statusSplitFromFacets(
+  facets: StatusFacets,
+  stats?: Pick<CrawlStats, 'outcomes' | 'notCheckedCount'>,
+): StatusSplit {
   const classes: StatusClassCounts = { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0, other: 0, noResponse: 0, blocked: 0 };
   let notFetched = 0;
   for (const bucket of facets.facets.statusClass ?? []) {
@@ -205,12 +256,19 @@ export function statusSplitFromFacets(facets: FacetsPage, stats?: Pick<CrawlStat
     ? {
         robotsDisallowed: outcomes.robotsDisallowed ?? 0,
         timeout: outcomes.timeout ?? 0,
-        networkError: outcomes.networkError ?? 0,
+        networkError: Math.max(0, (outcomes.networkError ?? 0) - stats.notCheckedCount),
         processingError: outcomes.processingError ?? 0,
       }
     : null;
-  return statusSplit(classes, codes, reasons, notFetched);
+  return splitOf(classes, codes, reasons, Math.max(0, facets.notChecked), notFetched);
 }
+
+/**
+ * How many URLs a finished crawl crawled, as the URL grid counts them (`fetched` is true), which is where the figure
+ * leads: the breakdown's total. The library's `fetchedUrlCount` is every URL with a stored outcome, the ones that
+ * weren't checked among them, so it says more than the grid shows whenever a site stopped answering.
+ */
+export const crawledCount = (facets: StatusFacets): number => statusSplitFromFacets(facets).total;
 
 /** "404 × 8, 403 × 2", the most first, at most `limit` of them, then how many more kinds there are. */
 export function partsText(parts: readonly SplitPart[], format: (count: number) => string, limit = 3): string {

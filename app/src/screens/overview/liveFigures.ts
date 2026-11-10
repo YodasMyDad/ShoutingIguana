@@ -100,22 +100,47 @@ export function activityWords(status: CrawlStatus | null, phase: CrawlPhase | nu
   return phase ? PHASES[phase] : 'Crawling';
 }
 
+/**
+ * The URLs crawled so far, as the URL grid counts them (`fetched` is true). E4's `fetched` is every URL the crawl has
+ * stored an outcome for, and that includes the ones it never asked because their host had stopped answering
+ * (`noResponse.notChecked`), which the grid has as not fetched: they come out. Null when `fetched` isn't known.
+ */
+export function crawledSoFar(progress: Pick<LiveProgress, 'fetched' | 'noResponse'> | null): number | null {
+  const fetched = progress?.fetched ?? null;
+  return fetched === null ? null : fetched - notCheckedSoFar(progress);
+}
+
+/** The URLs that weren't checked so far: 0 when the stream hasn't said. Never more than `fetched`, which counts them. */
+export function notCheckedSoFar(progress: Pick<LiveProgress, 'fetched' | 'noResponse'> | null): number {
+  return Math.max(0, Math.min(progress?.noResponse?.notChecked ?? 0, progress?.fetched ?? 0));
+}
+
 export interface FoundSplit {
   /** Every URL found. */
   found: number;
+  /** As the URL grid counts them: the ones that weren't checked left out. */
   crawled: number;
   /** Waiting or on their way. */
   queued: number;
   /** Found but not to be fetched: nofollow links, past a limit. */
   notFollowed: number;
+  /** Never asked, their site having stopped answering: neither crawled nor left out by a rule. Usually 0. */
+  notChecked: number;
 }
 
-/** What was found, split three ways. Null unless every part is known, as the parts wouldn't add up. */
+/** What was found, split by what became of it. Null unless every part is known, as the parts wouldn't add up. */
 export function foundSplit(
-  progress: Pick<LiveProgress, 'discovered' | 'fetched' | 'queued' | 'inFlight' | 'skipped'> | null,
+  progress: Pick<LiveProgress, 'discovered' | 'fetched' | 'queued' | 'inFlight' | 'skipped' | 'noResponse'> | null,
 ): FoundSplit | null {
   if (!progress) return null;
   const { discovered, fetched, queued, inFlight, skipped } = progress;
   if (discovered === null || fetched === null || queued === null || skipped === null) return null;
-  return { found: discovered, crawled: fetched, queued: queued + (inFlight ?? 0), notFollowed: skipped };
+  const notChecked = notCheckedSoFar(progress);
+  return {
+    found: discovered,
+    crawled: fetched - notChecked,
+    queued: queued + (inFlight ?? 0),
+    notFollowed: skipped,
+    notChecked,
+  };
 }

@@ -15,6 +15,7 @@ import { updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, testCrawlItem } from '../test/fakeSidecar';
 import { ISSUES_ANALYSIS } from '../test/issuesSidecar';
 import {
+  DEAD_TWIN,
   EMPTY_FACETS,
   OVERVIEW_STATS,
   alert,
@@ -198,6 +199,49 @@ describe('the Overview of an analysed crawl', () => {
     expect(rows.getByRole('link', { name: /^No response/ })).toHaveTextContent('No HTTP answer');
   });
 
+  it('counts the URLs that weren’t checked as the URL grid does: not crawled, not errors, and said apart', async () => {
+    const deadTwin = {
+      item: { ...DEAD_TWIN.item, status: 'stopped', finishedAt: null },
+      facets: { status: DEAD_TWIN.status },
+      notChecked: DEAD_TWIN.notChecked,
+    } as const;
+    // Without the stats, which are slow: every figure is already what the grid counts.
+    sidecar({ ...deadTwin, stats: 'pending' });
+    await open();
+    const status = await findRegion('Status codes');
+    const rows = within(await status.findByRole('list', { name: 'Status codes by class' }));
+    expect(status.getByText('6,909 URLs')).toBeVisible();
+    expect(rows.getByRole('link', { name: /^No response/ })).toHaveTextContent('13');
+    const notChecked = status.getByRole('link', { name: '5 URLs' });
+    expect(notChecked.closest('p')).toHaveTextContent(
+      '5 URLs weren’t checked because their sites had stopped answering.',
+    );
+    expect(filtersOf(notChecked)).toEqual([{ column: 'outcome', op: 'in', values: ['notChecked'] }]);
+    // The URLs only found, without those 5.
+    expect(filtersOf(status.getByRole('link', { name: '140 more URLs' }))).toEqual([
+      { column: 'statusClass', op: 'isEmpty' },
+      { column: 'outcome', op: 'isEmpty' },
+    ]);
+    // The crawl's own line and its banner say what the grid opens, not the library's count with the 5 in it.
+    const crawled = main().getByRole('link', { name: '6,909 URLs' });
+    expect(filtersOf(crawled)).toEqual([{ column: 'fetched', op: 'is', value: true }]);
+    expect(main().getByText(/This crawl was stopped after 6,909 URLs/)).toBeVisible();
+    expect(main().queryByText(/6,914/)).toBeNull();
+  });
+
+  it('takes the URLs that weren’t checked out of the network errors the crawl’s stats count', async () => {
+    sidecar({
+      item: DEAD_TWIN.item,
+      facets: { status: DEAD_TWIN.status },
+      notChecked: DEAD_TWIN.notChecked,
+      stats: { ...OVERVIEW_STATS, ...DEAD_TWIN.stats },
+    });
+    await open();
+    const rows = within(await region('Status codes').findByRole('list', { name: 'Status codes by class' }));
+    // 10 and 3 beside the 13: `/stats` says 8 network errors, 5 of them never asked.
+    expect(await rows.findByText('Refused by robots.txt × 10, Network error × 3')).toBeVisible();
+  });
+
   it('shows indexability and why not, depth and response times, each number opening its pages', async () => {
     sidecar();
     await open();
@@ -279,19 +323,19 @@ describe('the Overview when there’s no answer yet, or something’s off', () =
   it('says how far a stopped crawl got and what was still queued, with Continue', async () => {
     const { proceed } = sidecar({
       analysis: null,
-      item: { ...NEVER, status: 'stopped', finishedAt: null, fetchedUrlCount: 2_713 },
+      item: { ...NEVER, status: 'stopped', finishedAt: null },
       stats: { ...OVERVIEW_STATS, queuedCount: 1_417 },
     });
     await open();
-    expect(await main().findByText(/This crawl was stopped after 2,713 URLs, with 1,417 still queued\./)).toBeVisible();
+    expect(await main().findByText(/This crawl was stopped after 4,521 URLs, with 1,417 still queued\./)).toBeVisible();
     fireEvent.click(main().getAllByRole('button', { name: /Continue/ })[0]!);
     await waitFor(() => expect(proceed).toHaveBeenCalledTimes(1));
   });
 
   it('says an interrupted crawl was interrupted, with Continue', async () => {
-    sidecar({ analysis: null, item: { ...NEVER, status: 'interrupted', finishedAt: null, fetchedUrlCount: 2_713 } });
+    sidecar({ analysis: null, item: { ...NEVER, status: 'interrupted', finishedAt: null } });
     await open();
-    expect(await main().findByText(/This crawl was interrupted after 2,713 URLs/)).toBeVisible();
+    expect(await main().findByText(/This crawl was interrupted after 4,521 URLs/)).toBeVisible();
     expect(main().getAllByRole('button', { name: /Continue/ }).length).toBeGreaterThan(0);
   });
 
@@ -419,6 +463,31 @@ describe('the Overview while the crawl runs', () => {
       { column: 'statusClass', op: 'in', values: ['4xx'] },
       NOT_BLOCKED,
     ]);
+  });
+
+  it('counts the URLs that weren’t checked as the URL grid does while it runs: not crawled, and said apart', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM });
+    await open();
+    await heard(message('progress', { ...progressAt(60, POLITE), ...DEAD_TWIN.progress }));
+    // 6,914 outcomes stored, 5 of them never asked: what "fetched is true" opens is 6,909.
+    expect(figure('Crawled')).toHaveTextContent('6,909');
+    const status = region('Status codes');
+    expect(status.getByText('6,909 URLs so far')).toBeVisible();
+    const classes = within(status.getByRole('list', { name: 'Status codes by class' }));
+    const noResponse = classes.getByRole('link', { name: /^No response/ });
+    expect(noResponse).toHaveTextContent('13');
+    expect(noResponse).toHaveTextContent('Refused by robots.txt × 10, Network error × 3');
+    const notChecked = status.getByRole('link', { name: '5 URLs' });
+    expect(notChecked.closest('p')).toHaveTextContent(
+      '5 URLs weren’t checked because their sites had stopped answering.',
+    );
+    expect(filtersOf(notChecked)).toEqual([{ column: 'outcome', op: 'in', values: ['notChecked'] }]);
+    // What was found still adds up: 6,909 + 140 + 5.
+    expect(
+      region('Found and crawled').getByRole('img', {
+        name: 'Of 7,054 URLs found: 6,909 crawled, 0 queued, 140 not followed, 5 not checked',
+      }),
+    ).toBeVisible();
   });
 
   it('carries Resume when the crawl is paused', async () => {

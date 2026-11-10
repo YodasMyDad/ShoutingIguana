@@ -27,6 +27,14 @@ export const urlsLink = (filters: readonly GridFilter[]): UrlsLink => ({ to: 'ur
 export const NOT_BLOCKED: GridFilter = { column: 'outcome', op: 'notIn', values: ['blocked'] };
 export const BLOCKED: GridFilter = { column: 'outcome', op: 'in', values: ['blocked'] };
 
+/**
+ * URLs the crawl never asked, their host having stopped answering: unknown, not broken. The grid has them as not
+ * fetched, with no status class, so no class of the breakdown counts them.
+ */
+export const NOT_CHECKED: GridFilter = { column: 'outcome', op: 'in', values: ['notChecked'] };
+/** URLs with no outcome at all: only found (not followed, past a limit, still queued), never asked or looked at. */
+export const NO_OUTCOME: GridFilter = { column: 'outcome', op: 'isEmpty' };
+
 /** The site's own URLs that are pages, by their content type or, without one, their extension. */
 export const SITE_PAGES: readonly GridFilter[] = [
   { column: 'isInternal', op: 'is', value: true },

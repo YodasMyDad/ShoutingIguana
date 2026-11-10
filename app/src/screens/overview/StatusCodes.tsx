@@ -34,8 +34,9 @@ function splitWords(split: StatusSplit): string {
 /**
  * The status codes of what the crawl fetched (docs/v2-ui-design.md, "The magnified status bar"): the full bar, the
  * share that didn't answer 2xx enlarged beneath it, and every class listed with what it's made of, its number and its
- * share. Every class with URLs opens them in URLs. The same figure while the crawl runs and once it's done: only where
- * its counts come from differs.
+ * share. Every class with URLs opens them in URLs. The URLs that weren't checked (their site had stopped answering)
+ * are in no class: a line under the classes says how many, and opens them. The same figure while the crawl runs and
+ * once it's done: only where its counts come from differs.
  */
 export const StatusCodes = memo(function StatusCodes({
   crawlId,
@@ -152,6 +153,17 @@ export const StatusCodes = memo(function StatusCodes({
           );
         })}
       </ul>
+      {split.notChecked ? (
+        // The engine's words for them (its analysis note): unknown, not broken, so never among the errors above.
+        <p className="text-13 text-text-secondary">
+          <TextLink {...linkProps(crawlId, split.notChecked.link)} variant="inline">
+            {formatCountOf(split.notChecked.count, 'URL')}
+          </TextLink>{' '}
+          {split.notChecked.count === 1
+            ? 'wasn’t checked because its site had stopped answering.'
+            : 'weren’t checked because their sites had stopped answering.'}
+        </p>
+      ) : null}
       {split.notFetched ? (
         <p className="text-13 text-text-secondary">
           <TextLink {...linkProps(crawlId, split.notFetched.link)} variant="inline">

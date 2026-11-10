@@ -489,7 +489,16 @@ answer. What it settled:
   answer as blocked whatever its status, and the finished crawl's facets are read under `outcome notIn [blocked]`, the
   blocked being what that filter left out. Each class links by `statusClass` with the same filter, and Blocked by
   `outcome`.
-- **What the breakdowns count.** Status codes: every URL fetched. Indexability: the site's page URLs the crawl asked
+- **Not checked is not crawled.** A URL the crawl never asked, its host having stopped answering, is unknown, not
+  broken. The URL grid has it as not fetched, with no status class, while E4's `fetched`, its `noResponse` class and
+  the library's `fetchedUrlCount` count it (a stored outcome), and `/stats` counts it among the network errors. So
+  the screen takes it out, live and done: Crawled, the status codes' total, No response and its reasons are without
+  it, and a line under the classes says how many there are in the engine's words ("weren't checked because their
+  sites had stopped answering"), opening `outcome in [notChecked]`. Live the count is `noResponse.notChecked`; done
+  it is a second facets read beside the status one (`statusFacetsQuery`, the two as one query), because the facets
+  can't tell these URLs from the ones only found and `/stats` is too slow to wait for. "N URLs crawled" and a stopped
+  crawl's "after N URLs" are the status breakdown's total, which is what their link opens.
+- **What the breakdowns count.** Status codes: every URL fetched, as the grid counts them. Indexability: the site's page URLs the crawl asked
   for (`isInternal`, `type` page, `fetched`), errors and redirects included, as "why not" names them. Depth and response
   times: the site's pages that answered 2xx. Each card says its own count (the facets' `matching`), which is why the
   pages by depth can differ by one from the library's page count (a page whose HTML wasn't parsed).

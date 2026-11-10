@@ -6,6 +6,7 @@ import {
   PACE_WINDOW_MS,
   SPARK_POINTS,
   activityWords,
+  crawledSoFar,
   foundSplit,
   paceOf,
   sparkOf,
@@ -121,17 +122,48 @@ describe('what the crawl is doing', () => {
 
 describe('what was found', () => {
   it('splits into crawled, queued (with what’s on its way) and not followed', () => {
-    expect(foundSplit({ discovered: 5_722, fetched: 2_713, queued: 1_415, inFlight: 2, skipped: 1_592 })).toEqual({
+    expect(
+      foundSplit({ discovered: 5_722, fetched: 2_713, queued: 1_415, inFlight: 2, skipped: 1_592, noResponse: null }),
+    ).toEqual({
       found: 5_722,
       crawled: 2_713,
       queued: 1_417,
       notFollowed: 1_592,
+      notChecked: 0,
     });
   });
 
   it('isn’t split when a part isn’t known', () => {
-    expect(foundSplit({ discovered: 5_722, fetched: null, queued: 1_415, inFlight: 2, skipped: 1_592 })).toBeNull();
+    expect(
+      foundSplit({ discovered: 5_722, fetched: null, queued: 1_415, inFlight: 2, skipped: 1_592, noResponse: null }),
+    ).toBeNull();
     expect(foundSplit(null)).toBeNull();
+  });
+
+  // The engine's test site with a dead twin host, at its last progress event: 6,914 outcomes stored, 5 of them URLs
+  // never asked. The URL grid counts 6,909 as fetched.
+  const reasons = { robotsDisallowed: 10, timeout: 0, networkError: 3, notChecked: 5, processingError: 0 };
+
+  it('counts as crawled what the URL grid does: not the URLs that weren’t checked', () => {
+    expect(crawledSoFar({ fetched: 6_914, noResponse: reasons })).toBe(6_909);
+    expect(crawledSoFar({ fetched: 6_914, noResponse: null })).toBe(6_914);
+    expect(crawledSoFar({ fetched: null, noResponse: reasons })).toBeNull();
+    expect(crawledSoFar(null)).toBeNull();
+  });
+
+  it('splits the URLs that weren’t checked out of the crawled, so the parts still add up to what was found', () => {
+    const split = foundSplit({
+      discovered: 7_054,
+      fetched: 6_914,
+      queued: 0,
+      inFlight: 0,
+      skipped: 140,
+      noResponse: reasons,
+    });
+    expect(split).toEqual({ found: 7_054, crawled: 6_909, queued: 0, notFollowed: 140, notChecked: 5 });
+    expect((split?.crawled ?? 0) + (split?.queued ?? 0) + (split?.notFollowed ?? 0) + (split?.notChecked ?? 0)).toBe(
+      split?.found,
+    );
   });
 });
 

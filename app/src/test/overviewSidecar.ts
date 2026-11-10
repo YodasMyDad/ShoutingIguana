@@ -107,6 +107,62 @@ export const OVERVIEW_STATS: CrawlStats = {
   nonIndexableReasons: { canonicalised: 1, clientError: 9 },
 };
 
+/**
+ * A crawl whose site's twin host stopped answering, as the real sidecar answered for one of the engine's test site:
+ * 6,914 outcomes stored (the library's `fetchedUrlCount`, and the last progress event's `fetched`), 5 of them URLs that
+ * weren't checked. The URL grid has those 5 as not fetched, so it counts 6,909 fetched, 13 of them with no response,
+ * and the status facets count the 5 among the 145 URLs with no status class. `/stats` has them among its 8 network
+ * errors, and says how many they are.
+ */
+export const DEAD_TWIN = {
+  item: { fetchedUrlCount: 6_914, pageCount: 6_172 },
+  notChecked: 5,
+  status: page(7_053, 7_054, {
+    statusClass: [
+      bucket('statusClass', '2xx', 6_326),
+      bucket('statusClass', '3xx', 264),
+      bucket('statusClass', '4xx', 277),
+      bucket('statusClass', '5xx', 28),
+      bucket('statusClass', 'noResponse', 13),
+      bucket('statusClass', null, 145),
+    ],
+    statusCode: [
+      bucket('statusCode', 200, 6_326),
+      bucket('statusCode', 301, 203),
+      bucket('statusCode', 302, 61),
+      bucket('statusCode', 404, 277),
+      bucket('statusCode', 500, 28),
+      bucket('statusCode', null, 158),
+    ],
+  }),
+  stats: {
+    notCheckedCount: 5,
+    outcomes: {
+      success: 6_326,
+      redirect: 264,
+      clientError: 277,
+      serverError: 28,
+      blocked: 1,
+      robotsDisallowed: 10,
+      networkError: 8,
+    },
+    statusCodes: { '200': 6_326, '301': 203, '302': 61, '403': 1, '404': 277, '500': 28 },
+    skipReasons: { noFollow: 140 },
+  },
+  /** Its last progress event's part that differs from the grid's counts. */
+  progress: {
+    fetched: 6_914,
+    discovered: 7_054,
+    queued: 0,
+    inFlight: 0,
+    skipped: 140,
+    htmlPages: 6_172,
+    statusClasses: { '2xx': 6_326, '3xx': 264, '4xx': 277, '5xx': 28, other: 0, noResponse: 18, blocked: 1 },
+    statusCodes: { '200': 6_326, '301': 203, '302': 61, '404': 277, '500': 28 },
+    noResponse: { robotsDisallowed: 10, timeout: 0, networkError: 3, notChecked: 5, processingError: 0 },
+  },
+} as const;
+
 /** The figures a done crawl's item has in these tests and stories: the garden crawl's. */
 export const OVERVIEW_ITEM = { fetchedUrlCount: 4_521, pageCount: 265 } as const;
 
@@ -230,6 +286,11 @@ export const alert = (extra: Partial<AlertEvent> & Pick<AlertEvent, 'code' | 'id
 export interface OverviewSidecarOptions extends IssuesSidecarOptions {
   /** The three breakdowns; `pending` never answers, `error` fails each. */
   facets?: Partial<OverviewFacets> | 'pending' | 'error';
+  /**
+   * URLs that weren't checked (their site had stopped answering): what the grid counts under `outcome` in
+   * `notChecked`. The status facets count them among the URLs with no status class. None unless said.
+   */
+  notChecked?: number;
   history?: CrawlHistory;
   alerts?: AlertEvent[];
   /** `pending` never answers: the breakdowns mustn't wait for it. */
@@ -255,9 +316,15 @@ export function overviewRoutes(options: OverviewSidecarOptions = {}): FakeRoute[
       });
     }
     const wanted = query.facets ?? [];
+    const status = facets.status ?? OVERVIEW_FACETS.status;
+    // The status breakdown's second read: only the URLs that weren't checked, of which it takes the count.
+    if (query.filters?.some((filter) => filter.column === 'outcome' && filter.op === 'in')) {
+      const count = options.notChecked ?? 0;
+      return json(page(count, status.total, count > 0 ? { statusClass: [bucket('statusClass', null, count)] } : {}));
+    }
     if (wanted.includes('indexability')) return json(facets.indexability ?? OVERVIEW_FACETS.indexability);
     if (wanted.includes('depth')) return json(facets.pages ?? OVERVIEW_FACETS.pages);
-    return json(facets.status ?? OVERVIEW_FACETS.status);
+    return json(status);
   };
   const startUrl =
     options.startUrl === undefined
