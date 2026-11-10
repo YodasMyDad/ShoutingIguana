@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Bot } from 'lucide-react';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import type { RobotsOrigin } from '../../api/grids';
 import { originsAsGridPage, robotsKeys, type OriginsGridPage } from '../../api/queries';
@@ -19,6 +19,7 @@ import { LiveBadge } from '../../ui/LiveBadge';
 import { PageHeader } from '../../ui/PageHeader';
 import { RelativeTime } from '../../ui/RelativeTime';
 import { TextLink } from '../../ui/TextLink';
+import { pressedRow, rememberPlace, rememberedPlace } from '../listPlace';
 import { IGNORED, answerSentence, stateWords } from './robotsWords';
 
 const ROUTE = '/crawls/$crawl/robots/{-$origin}';
@@ -58,9 +59,15 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
   const first = rows.firstPage as OriginsGridPage | undefined;
   const userAgent = first?.userAgent ?? '';
 
+  // Coming back from an origin's file, the list starts on the row it was opened from.
+  const place = `origins:${crawlId}`;
+  const [startRow] = useState(() => rememberedPlace(place));
   const open = useCallback(
-    (origin: string) => void navigate({ params: { crawl: crawlId, origin }, search: {} }),
-    [navigate, crawlId],
+    (origin: string, row: number) => {
+      rememberPlace(place, row);
+      void navigate({ params: { crawl: crawlId, origin }, search: {} });
+    },
+    [navigate, crawlId, place],
   );
 
   const fixed = STATE_WIDTH + BLOCKED_WIDTH + READ_WIDTH + SIZE_WIDTH;
@@ -152,7 +159,16 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
   } else {
     const height = (rows.rowCount ?? 8) * rowHeight + headerHeight + 2;
     body = (
-      <div ref={measure} className="flex min-h-(--list-grid-min-height) shrink flex-col" style={{ height }}>
+      <div
+        ref={measure}
+        className="flex min-h-(--list-grid-min-height) shrink flex-col"
+        style={{ height }}
+        // A count's link is followed by the router, not the grid: the row it was in is where the list was left.
+        onClickCapture={(event) => {
+          const row = event.target instanceof Element && event.target.closest('a') ? pressedRow(event.target) : null;
+          if (row !== null) rememberPlace(place, row);
+        }}
+      >
         <GridCore<RobotsOrigin>
           label="Origins"
           columns={columns}
@@ -163,8 +179,9 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
           onRangeChange={rows.onRangeChange}
           onScrollOffset={rows.onScrollOffset}
           fetchRows={rows.fetchRows}
-          onActivate={(_index, row) => {
-            if (row) open(row.origin);
+          startRow={startRow}
+          onActivate={(index, row) => {
+            if (row) open(row.origin, index);
           }}
           // Live refreshes update in place: the progress line is for a refresh the user asked for.
           busy={rows.isRefreshing && !crawl.crawling}

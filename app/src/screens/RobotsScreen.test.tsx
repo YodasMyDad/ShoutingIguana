@@ -11,6 +11,7 @@ import { onAnnounce } from '../feedback/announce';
 import type { SourceViewerProps } from '../inspector/SourceViewer';
 import { installKeyboard } from '../keyboard/registry';
 import { TEST_CRAWL_ID, fakeSidecar, json, problem } from '../test/fakeSidecar';
+import { resetPlaces } from './listPlace';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { wholeText } from '../test/text';
 import {
@@ -80,7 +81,10 @@ const blockedRequests = (transport: { requests: TransportRequest[] }) =>
     .map((request) => request.body as RobotsBlockedQuery);
 const viewer = () => screen.getByTestId('source-viewer');
 
-afterEach(() => setTransport(fakeSidecar([])));
+afterEach(() => {
+  setTransport(fakeSidecar([]));
+  resetPlaces();
+});
 
 describe('robots.txt: the origins', () => {
   it('answers first, then lists the origins with what each answer meant to the crawl, in different words', async () => {
@@ -125,6 +129,24 @@ describe('robots.txt: the origins', () => {
     fireEvent.keyDown(grid, { key: 'ArrowDown' });
     fireEvent.keyDown(grid, { key: 'Enter' });
     await waitFor(() => expect(pathOf(router)).toBe(`${ROBOTS}/${encodeURIComponent('https://cdn.example.net')}`));
+  });
+
+  it('starts, coming back from an origin’s file, on the row it was opened from', async () => {
+    sidecar();
+    const { router } = await open(ROBOTS);
+    const grid = await screen.findByRole('grid', { name: 'Origins' });
+    await screen.findByText('https://partner.example.org');
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    await waitFor(() => expect(pathOf(router)).toBe(`${ROBOTS}/${encodeURIComponent('https://partner.example.org')}`));
+    act(() => router.history.back());
+    const again = await screen.findByRole('grid', { name: 'Origins' });
+    await screen.findByText('https://partner.example.org');
+    act(() => again.focus());
+    const cursor = document.getElementById(again.getAttribute('aria-activedescendant') ?? '');
+    expect(cursor?.closest('[role="row"]')).toHaveTextContent('https://partner.example.org');
   });
 
   it('pages: an origin far down the list is read when it comes into view, never all at once', async () => {

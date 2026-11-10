@@ -10,6 +10,7 @@ import { Badge } from '../../ui/Badge';
 import { Icon } from '../../ui/Icon';
 import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
+import { pressedRow, rememberPlace, rememberedPlace } from '../listPlace';
 import { COUNT_FILTERS, COUNT_WORDS, countOf, type SitemapCount } from './sitemapLinks';
 import { countsKnown, sitemapRows, type SitemapRow } from './sitemapTree';
 import { foundViaWords, stateWords } from './sitemapWords';
@@ -56,6 +57,13 @@ export function SitemapTree({ crawlId, sitemaps, siteOrigin, crawling, busy, onO
   const [measure, width] = useElementWidth();
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(() => new Set());
   const rows = useMemo(() => sitemapRows(sitemaps, collapsed), [sitemaps, collapsed]);
+  // Coming back from a sitemap, the list starts on the row it was opened from.
+  const place = `sitemaps:${crawlId}`;
+  const [startRow] = useState(() => {
+    const id = rememberedPlace(place);
+    const at = id === undefined ? -1 : rows.findIndex((row) => row.sitemap.id === id);
+    return at >= 0 ? at : undefined;
+  });
   const grouped = rows.some((row) => row.expanded !== undefined);
 
   const tree = useMemo<GridTree>(
@@ -166,7 +174,18 @@ export function SitemapTree({ crawlId, sitemaps, siteOrigin, crawling, busy, onO
   const getRow = useCallback((index: number) => rows[index], [rows]);
 
   return (
-    <div ref={measure} className="flex min-h-0 flex-1 flex-col">
+    // As tall as its rows, the ones under a closed index not counted, and never more than the room there is.
+    <div
+      ref={measure}
+      className="flex min-h-(--list-grid-min-height) shrink flex-col"
+      style={{ height: rows.length * rowHeight + headerHeight + 2 }}
+      // A count's link is followed by the router, not the grid: the row it was in is where the list was left.
+      onClickCapture={(event) => {
+        const row = event.target instanceof Element && event.target.closest('a') ? pressedRow(event.target) : null;
+        const left = row === null ? undefined : rows[row];
+        if (left) rememberPlace(place, left.sitemap.id);
+      }}
+    >
       <GridCore<SitemapRow>
         label="Sitemaps"
         columns={columns}
@@ -175,8 +194,10 @@ export function SitemapTree({ crawlId, sitemaps, siteOrigin, crawling, busy, onO
         rowHeight={rowHeight}
         headerHeight={headerHeight}
         tree={tree}
+        startRow={startRow}
         onActivateCell={(_index, row, column) => {
           if (!row) return;
+          rememberPlace(place, row.sitemap.id);
           const count = LIST_COUNTS.find((candidate) => candidate === column);
           // A count that's unknown or nothing has no URLs to open: the sitemap itself, then.
           const counted = count !== undefined && countsKnown(row.sitemap) && countOf(row.sitemap, count) > 0;

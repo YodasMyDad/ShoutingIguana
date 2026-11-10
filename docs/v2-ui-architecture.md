@@ -755,6 +755,10 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
 - **A link to a route with an optional part must name the part**, as `undefined` for "none". Left out, the router
   keeps the part the page is on: on one sitemap's page the sidebar's Sitemaps, Ctrl+5 and "All sitemaps" all led to
   the sitemap itself. The sidebar's and the palette's Sitemaps and robots.txt name it now.
+- **A list is come back to where it was left** (`screens/listPlace.ts`): the row a sitemap or an origin was opened
+  from is remembered for the session and handed to the grid as `startRow`, so Back, "All sitemaps" and the sidebar
+  land on that row, not at the top of a thousand. The list of sitemaps is as tall as its rows, the ones under a
+  closed index not counted, and never taller than the room there is.
 - **A stale place is said, with the list a press away**: a sitemap's id or an origin the crawl doesn't have
   (`sitemap-not-found`, `origin-not-found`, and a path that can't be an id) reads from `STALE_PLACE_WORDS` in
   `api/errors.ts`.

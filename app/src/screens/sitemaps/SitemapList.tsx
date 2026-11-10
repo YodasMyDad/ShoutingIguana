@@ -10,7 +10,6 @@ import { ErrorState } from '../../feedback/ErrorState';
 import { SkeletonRows } from '../../feedback/Skeleton';
 import { useDelayedLoading } from '../../feedback/useDelayedLoading';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
-import { useGridMetrics } from '../../grid/metrics';
 import { Banner } from '../../ui/Banner';
 import { Button } from '../../ui/Button';
 import { Callout } from '../../ui/Callout';
@@ -46,7 +45,6 @@ export interface SitemapListProps {
  */
 export function SitemapList({ crawlId, list, crawl, wanted }: SitemapListProps) {
   const navigate = useNavigate({ from: ROUTE });
-  const { rowHeight, headerHeight } = useGridMetrics();
   const container = useRef<HTMLDivElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
   // A banner's button goes once its action has worked (Analyse again, Continue): focus goes to the page's title.
@@ -121,19 +119,16 @@ export function SitemapList({ crawlId, list, crawl, wanted }: SitemapListProps) 
       </EmptyState>
     );
   } else {
-    const height = sitemaps.length * rowHeight + headerHeight + 2;
     body = (
       <>
-        <div className="flex min-h-(--list-grid-min-height) shrink flex-col" style={{ height }}>
-          <SitemapTree
-            crawlId={crawlId}
-            sitemaps={sitemaps}
-            siteOrigin={crawl.siteOrigin}
-            crawling={crawl.crawling}
-            busy={list.isFetching && !crawl.crawling}
-            onOpen={open}
-          />
-        </div>
+        <SitemapTree
+          crawlId={crawlId}
+          sitemaps={sitemaps}
+          siteOrigin={crawl.siteOrigin}
+          crawling={crawl.crawling}
+          busy={list.isFetching && !crawl.crawling}
+          onOpen={open}
+        />
         {tally?.read === 0 && data.discovery !== 'running' ? (
           <Callout tone="info" title="No sitemap was read">
             {WHERE_THE_CRAWL_LOOKS}

@@ -20,6 +20,7 @@ import {
   testSitemap,
   type SitemapsRobotsOptions,
 } from '../test/sitemapsRobotsSidecar';
+import { resetPlaces } from './listPlace';
 import { ANSWERED_SITE_PAGES } from './overview/links';
 
 const SITEMAPS = `/crawls/${TEST_CRAWL_ID}/sitemaps`;
@@ -50,7 +51,10 @@ const gridRequests = (transport: { requests: TransportRequest[] }) =>
     .filter((request) => request.path.endsWith('/sitemaps/urls'))
     .map((request) => request.body as GridQuery);
 
-afterEach(() => setTransport(fakeSidecar([])));
+afterEach(() => {
+  setTransport(fakeSidecar([]));
+  resetPlaces();
+});
 
 describe('Sitemaps: the list', () => {
   it('answers first, then lists every sitemap as a tree with how it was found and what became of it', async () => {
@@ -155,6 +159,21 @@ describe('Sitemaps: the list', () => {
     fireEvent.keyDown(tree, { key: 'Enter' });
     await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/1`));
     expect(searchOf(router).filter).toBeUndefined();
+  });
+
+  it('starts, coming back from a sitemap, on the row it was opened from', async () => {
+    sidecar();
+    const { router } = await open(SITEMAPS);
+    const news = await waitFor(() => rowOf(`${SITE}/news-sitemap.xml`));
+    fireEvent.click(within(news).getByRole('link', { name: '2 URLs listed' }));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/5`));
+    act(() => router.history.back());
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    await screen.findByText(`${SITE}/news-sitemap.xml`);
+    // The cursor is where the list was left: focus arriving finds it there, not on the first row.
+    act(() => tree.focus());
+    const cursor = document.getElementById(tree.getAttribute('aria-activedescendant') ?? '');
+    expect(cursor?.closest('[role="row"]')).toHaveTextContent('/news-sitemap.xml');
   });
 
   it('opens the sitemap itself from a count that’s nothing or unknown', async () => {
