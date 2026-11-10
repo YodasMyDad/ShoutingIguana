@@ -790,6 +790,52 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
         }
     }
 
+    /// <summary>
+    /// A walk from the nearer end that took long found its links far from that end (a filter on deep targets has them on
+    /// the pages crawled last). It's noted for the filter set: the next page isn't walked, but read from a set of the
+    /// matching ids, read once and kept.
+    /// </summary>
+    [Fact]
+    public void AWalkThatTookLongIsntTakenAgain()
+    {
+        List<string> ran = [];
+        LinkGridReader.Ran = ran.Add;
+        bool Walked(string sql) => sql.Contains("ORDER BY l.rowid", StringComparison.Ordinal);
+        var query = new UrlQuery { Filters = [Boolean("to.isInternal", true), Names("position", FilterOperator.In, "content")], Limit = 20 };
+        var expected = Reference.Matching(query.Filters).Select(link => link.Id).ToList();
+        Assert.True(expected.Count > 200);
+
+        // No targets are few enough to read through, and every page is near enough an end to walk to: both pages are walked.
+        (LinkGridReader.DriveCap, LinkGridReader.WalkRows, LinkGridReader.DriveRows) = (0, int.MaxValue, -1);
+        var cache = new ReadCache();
+        foreach (var offset in new[] { 0, 20 })
+        {
+            ran.Clear();
+            Assert.Equal(expected.Skip(offset).Take(20), LinkGridReader.Query(crawl.Path, query with { Offset = offset }, cache).Rows.Select(row => row.Id));
+            Assert.Single(ran, Walked);
+        }
+
+        // Any walk has taken long: the first is taken and noted, the next page is read from the set, and the one after
+        // from the set as kept.
+        LinkGridReader.SlowWalk = TimeSpan.Zero;
+        cache = new ReadCache();
+        ran.Clear();
+        Assert.Equal(expected.Take(20), LinkGridReader.Query(crawl.Path, query, cache).Rows.Select(row => row.Id));
+        Assert.Single(ran, Walked);
+        ran.Clear();
+        Assert.Equal(expected.Skip(20).Take(20), LinkGridReader.Query(crawl.Path, query with { Offset = 20 }, cache).Rows.Select(row => row.Id));
+        Assert.DoesNotContain(ran, Walked);
+        Assert.StartsWith("SELECT COUNT(si_link_id(l.rowid)) FROM links l NOT INDEXED WHERE", Assert.Single(ran, sql => sql.Contains("FROM links", StringComparison.Ordinal)), StringComparison.Ordinal);
+        ran.Clear();
+        Assert.Equal(expected.Skip(expected.Count - 30).Take(20), LinkGridReader.Query(crawl.Path, query with { Offset = expected.Count - 30 }, cache).Rows.Select(row => row.Id));
+        Assert.Empty(ran);
+
+        // The note is the filter set's: another's first page is walked.
+        ran.Clear();
+        LinkGridReader.Query(crawl.Path, query with { Filters = [Boolean("to.isInternal", true), Names("position", FilterOperator.In, "footer")] }, cache);
+        Assert.Single(ran, Walked);
+    }
+
     [Fact]
     public void TheColumnsAreALinksOwnAndEachEnds()
     {
@@ -992,6 +1038,8 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
                 Assert.Equal(page.Matching, ids.Count);
                 return ids;
             }
+
+            GridWalks.AssertGoesOn(page.Rows.Count, ids.Count, page.Matching);
         }
     }
 
@@ -1005,6 +1053,10 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
             ids.AddRange(page.Rows.Select(row => row.Id));
             Assert.Equal(after is null ? 0 : null, page.Offset);
             after = page.Next;
+            if (after is not null)
+            {
+                GridWalks.AssertGoesOn(page.Rows.Count, ids.Count, page.Matching);
+            }
         }
         while (after is not null);
 

@@ -624,6 +624,10 @@ public sealed class UrlGridReaderTests(GridCrawl crawl)
             Assert.Equal(after is null ? 0 : null, page.Offset);
             ids.AddRange(page.Rows.Select(row => row.Id));
             after = page.Next;
+            if (after is not null)
+            {
+                GridWalks.AssertGoesOn(page.Rows.Count, ids.Count, page.Matching);
+            }
         }
         while (after is not null);
 

@@ -515,6 +515,10 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
             var page = IssueGroupReader.ReadRows(crawl.Path, check, query with { After = after, Limit = PAGE })!.Page!;
             ids.AddRange(page.Rows.Select(row => row.Id));
             after = page.Next;
+            if (after is not null)
+            {
+                GridWalks.AssertGoesOn(page.Rows.Count, ids.Count, page.Matching);
+            }
         }
         while (after is not null);
 

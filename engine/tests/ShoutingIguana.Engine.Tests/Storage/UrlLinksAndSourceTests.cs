@@ -274,6 +274,10 @@ public sealed class UrlLinksAndSourceTests(GridCrawl crawl)
             Assert.Equal(after is null ? 0 : null, page.Offset);
             links.AddRange(page.Rows);
             after = page.Next;
+            if (after is not null)
+            {
+                GridWalks.AssertGoesOn(page.Rows.Count, links.Count, page.Total);
+            }
         }
         while (after is not null);
 

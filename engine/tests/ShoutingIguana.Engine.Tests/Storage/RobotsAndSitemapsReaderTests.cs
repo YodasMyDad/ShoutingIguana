@@ -211,6 +211,46 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
     }
 
     /// <summary>
+    /// The origins come as the screen lists them: the start URL's, then the site's others, then every other origin by the
+    /// URLs it blocked, most first, then by name, whether or not the crawl kept a robots.txt for it.
+    /// </summary>
+    [Fact]
+    public void TheOriginsComeTheSitesOwnFirstThenByWhatTheyBlocked()
+    {
+        var copy = crawl.Copy();
+        var twin = "https" + Site[4..];
+        var partner = RobotsReader.ReadOrigins(crawl.Path).Origins.Single(origin => !origin.IsInternal).Origin;
+
+        // Other sites, some with a robots.txt of their own, and URLs the crawl was kept from on some of them: here, five of
+        // the site's pages stored as theirs, and as refused.
+        var moved = TestCrawls.Rows(copy, $"SELECT u.id FROM urls u JOIN responses r ON r.url_id = u.id WHERE u.url LIKE '{Site}/p/1%' ORDER BY u.id LIMIT 5").Select(int.Parse).ToList();
+        Assert.Equal(5, moved.Count);
+        string[] theirs = ["https://m.example", "https://m.example", "https://m.example", "https://z.example", "https://b.example"];
+        for (var index = 0; index < moved.Count; index++)
+        {
+            Change(copy, "UPDATE urls SET url = $url WHERE id = $id", ("$url", $"{theirs[index]}/{index}"), ("$id", moved[index]));
+            Change(copy, $"UPDATE responses SET outcome = {(int)ShoutingIguana.Engine.Fetching.Models.FetchOutcome.RobotsDisallowed}, error = NULL WHERE url_id = $id", ("$id", moved[index]));
+        }
+
+        Change(copy, """
+            INSERT INTO robots (origin, status_code, content, error, fetched_at)
+            VALUES ('https://b.example', 200, 'User-agent: *' || char(10) || 'Disallow: /', NULL, 0), ('https://c.example', 404, NULL, NULL, 0), ('https://a.example', 503, NULL, NULL, 0)
+            """);
+        var site = RobotsReader.ReadOrigins(crawl.Path).Origins[0].Blocked;
+        var origins = RobotsReader.ReadOrigins(copy);
+        Assert.Equal(
+        [
+            (Site, true, site), (twin, true, 0), ("https://m.example", false, 3), ("https://b.example", false, 1), ("https://z.example", false, 1),
+            (partner, false, 0), ("https://a.example", false, 0), ("https://c.example", false, 0)
+        ], origins.Origins.Select(origin => (origin.Origin, origin.IsInternal, origin.Blocked)));
+        Assert.Equal((8L, site + 5), (origins.Total, origins.Blocked));
+        Assert.Equal([RobotsState.Read, RobotsState.Unanswered, null, RobotsState.Read, null, RobotsState.Missing, RobotsState.Unreachable, RobotsState.Missing], origins.Origins.Select(origin => origin.State));
+
+        // And paged in that order.
+        Assert.Equal(origins.Origins.Skip(2).Take(3), RobotsReader.ReadOrigins(copy, offset: 2, limit: 3).Origins);
+    }
+
+    /// <summary>
     /// The rule that refused a URL is the one the crawler's matcher gives for the stored file: the longest that matches, for
     /// the group that applies to the crawler. Where no line accounts for a blocked URL, it says why.
     /// </summary>
