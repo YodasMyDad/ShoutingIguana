@@ -16,6 +16,7 @@ import { TEST_CRAWL_ID, fakeSidecar, json, problem, type FakeRoute } from '../te
 import {
   ISSUES_ANALYSIS,
   ISSUES_CHECKS,
+  ISSUES_CHECKS_WITHOUT_SUBJECTS,
   ISSUE_GROUPS,
   ISSUE_ROWS,
   issueRowsPage,
@@ -87,6 +88,106 @@ export const GardenGroupOpen: Story = {
 export const GardenFlatCheck: Story = {
   loaders: [fresh],
   render: () => <IssuesApp path={`${GARDEN}/title-too-long?sort=-detail`} />,
+};
+
+/** The group a story opens: the pages that link to the home page without text. */
+const HOME_GROUP = `?group=${encodeURIComponent(JSON.stringify({ detail: null, relatedUrlId: 1 }))}`;
+const NOT_FOUND_GROUP = `?group=${encodeURIComponent(JSON.stringify({ detail: 'HTTP 404', relatedUrlId: null }))}`;
+
+/**
+ * A check that flags only pages (the catalog's `subject` is `page`): "Pages affected", as a share of the pages
+ * crawled, and pages in its list, its grid's name and its row in the checks. The pages crawled are the library's
+ * count (7 here), not the 6 the analysis audited.
+ */
+export const PageCheck: Story = {
+  loaders: [() => own()],
+  render: () => <IssuesApp path={`${ISSUES}/title-too-long`} />,
+};
+
+/** The same of a page check that groups: the column, the link to a group's pages and the template's share. */
+export const PageCheckGroupOpen: Story = {
+  loaders: [() => own()],
+  render: () => <IssuesApp path={`${ISSUES}/empty-anchor-text${HOME_GROUP}`} />,
+};
+
+/**
+ * A check that can flag any URL (`subject` is `url`: a missing image, a redirect, a URL that was never crawled):
+ * "URLs affected", as a share of the URLs found, and nothing of it is called pages.
+ */
+export const UrlCheck: Story = {
+  loaders: [() => own()],
+  render: () => <IssuesApp path={`${ISSUES}/internal-client-error${NOT_FOUND_GROUP}`} />,
+};
+
+/**
+ * A catalog that doesn't say what its checks flag (an engine from before E3b, as the design fixtures are): every
+ * count is of URLs, as a share of the URLs found, which is true whatever a check flags.
+ */
+export const CheckWithoutSubject: Story = {
+  loaders: [() => own({ checks: ISSUES_CHECKS_WITHOUT_SUBJECTS })],
+  render: () => <IssuesApp path={`${ISSUES}/empty-anchor-text${HOME_GROUP}`} />,
+};
+
+/** The URLs found haven't been read yet: the share keeps its place with a dash, and says what it will be of. */
+export const UrlCheckBeforeItsShare: Story = {
+  loaders: [() => own({ urlsFound: 'pending' })],
+  render: () => <IssuesApp path={`${ISSUES}/internal-client-error`} />,
+};
+
+const BIG_ANALYSIS: Analysis = {
+  ...ISSUES_ANALYSIS,
+  pagesAnalyzed: 987_653,
+  counts: [
+    { checkId: 'internal-client-error', count: 312_876 },
+    { checkId: 'internal-server-error', count: 0 },
+    { checkId: 'empty-anchor-text', count: 987_650 },
+    { checkId: 'title-too-long', count: 654_321 },
+  ],
+};
+
+const BIG_GROUPS: Record<string, IssueGroup[]> = {
+  'empty-anchor-text': [
+    {
+      detail: null,
+      relatedUrlId: 1,
+      relatedUrl: 'https://example.com/',
+      pages: 987_649,
+      share: 987_649 / 987_650,
+      likelyTemplate: true,
+    },
+    {
+      detail: null,
+      relatedUrlId: 9,
+      relatedUrl: 'https://example.com/garden/',
+      pages: 1,
+      share: 1 / 987_650,
+      likelyTemplate: false,
+    },
+  ],
+  'internal-client-error': [
+    { detail: 'HTTP 404', relatedUrlId: null, relatedUrl: null, pages: 300_000, share: 0.9588, likelyTemplate: false },
+    { detail: 'HTTP 410', relatedUrlId: null, relatedUrl: null, pages: 12_876, share: 0.0412, likelyTemplate: false },
+  ],
+};
+
+const big = () =>
+  own({
+    analysis: BIG_ANALYSIS,
+    groups: BIG_GROUPS,
+    item: { pageCount: 987_654, fetchedUrlCount: 1_234_000 },
+    urlsFound: 1_234_567,
+  });
+
+/** Six-digit counts of a page check: the figures, the list's counts and the group's link keep their room. */
+export const SixDigitPageCounts: Story = {
+  loaders: [big],
+  render: () => <IssuesApp path={`${ISSUES}/empty-anchor-text${HOME_GROUP}`} />,
+};
+
+/** The same of a URL check, whose share is of over a million URLs found. */
+export const SixDigitUrlCounts: Story = {
+  loaders: [big],
+  render: () => <IssuesApp path={`${ISSUES}/internal-client-error${NOT_FOUND_GROUP}`} />,
 };
 
 /**
@@ -291,7 +392,9 @@ export const ThousandsOfGroups: Story = {
         checks: {
           ...ISSUES_CHECKS,
           checks: ISSUES_CHECKS.checks.map((check) =>
-            check.id === 'internal-client-error' ? { ...check, title: 'Duplicate title', grouping: 'detail' } : check,
+            check.id === 'internal-client-error'
+              ? { ...check, title: 'Duplicate title', grouping: 'detail', subject: 'page' }
+              : check,
           ),
         },
         analysis: {
