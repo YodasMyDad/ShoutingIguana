@@ -23,7 +23,28 @@ export type ProblemType =
   | 'body-too-large'
   | 'bad-host'
   | 'internal'
+  // Sitemaps and robots.txt (E3b): a sitemap's id, or an origin, that the crawl doesn't have. The engine's titles
+  // are plain sentences ("This crawl has no sitemap with that id."); the screens say what to do next, in
+  // STALE_PLACE_WORDS below.
+  | 'sitemap-not-found'
+  | 'origin-not-found'
   | (string & {});
+
+/**
+ * Plain words for a link to something the crawl doesn't have (any more): what it was, and what to do. A sitemap's id
+ * and an origin live in routes, so a link from before the site was crawled again, or one typed by hand, may name one
+ * that isn't there.
+ */
+export const STALE_PLACE_WORDS = {
+  'sitemap-not-found': {
+    title: 'This sitemap isn’t in this crawl',
+    why: 'The link names a sitemap this crawl doesn’t have. It may be from before the site was crawled again.',
+  },
+  'origin-not-found': {
+    title: 'This crawl has no robots.txt for that origin',
+    why: 'The link names an origin the crawl never asked for a robots.txt. It may be from before the site was crawled again.',
+  },
+} as const satisfies Partial<Record<ProblemType, { title: string; why: string }>>;
 
 export abstract class ApiError extends Error {
   /** A plain sentence for the UI. */

@@ -391,6 +391,11 @@
   --row-height-more: 38px;
   --row-height-issue: 30px;
   --tree-indent: 26px; /* chevron plus its gap */
+  /* Sitemaps and robots.txt (their slice). */
+  --list-grid-min-height: 128px; /* a list's grid keeps its header and three rows, however little room is left */
+  --robots-file-min-height: 240px; /* the file and the blocked URLs keep this much, however short the window */
+  --robots-pane-height: 360px; /* each of them where they stack, in a narrow panel */
+  --robots-columns: minmax(0, 11fr) minmax(0, 9fr); /* the file, then the URLs it blocked */
   --divider-height: 20px;
   --spark-height: 28px;
   --spark-height-lg: 36px;

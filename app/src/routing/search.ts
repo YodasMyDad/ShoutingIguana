@@ -222,6 +222,43 @@ export function validateInspectSearch(search: Record<string, unknown>): InspectS
   return strictSearch(search, { inspect: positiveInteger(search.inspect) });
 }
 
+// ------------------------------------------------------------------------------ Sitemaps and robots.txt (their slice)
+
+/**
+ * Sitemaps. One sitemap's URLs are the URL grid narrowed to it, so its search is the grid's own. `url` belongs to the
+ * list: the sitemap a link means, by its address (an alert names the sitemap it's about that way), which the list
+ * starts on.
+ */
+export interface SitemapsSearch extends GridSearch {
+  url?: string | undefined;
+}
+
+export function validateSitemapsSearch(search: Record<string, unknown>): SitemapsSearch {
+  return { ...validateGridSearch(search), url: text(search.url) };
+}
+
+/** What narrows an origin's blocked URLs when it isn't a line: the two reasons no line accounts for. */
+export const ROBOTS_REASONS = ['unreachable', 'unknown'] as const;
+export type RobotsReasonSearch = (typeof ROBOTS_REASONS)[number];
+
+/** robots.txt, on one origin's file. */
+export interface RobotsSearch {
+  /** The line chosen, from 1: the file marks it, and the blocked URLs listed are the ones it refused. */
+  line?: number | undefined;
+  /** The blocked URLs no line refused, by why. A line and a reason can't both narrow: the line wins. */
+  reason?: RobotsReasonSearch | undefined;
+  inspect?: number | undefined;
+}
+
+export function validateRobotsSearch(search: Record<string, unknown>): RobotsSearch {
+  const line = positiveInteger(search.line);
+  return strictSearch(search, {
+    line,
+    reason: line === undefined ? ROBOTS_REASONS.find((reason) => reason === search.reason) : undefined,
+    inspect: positiveInteger(search.inspect),
+  });
+}
+
 /** The URL the inspector shows, from the current view's checked search: only a positive whole number. */
 export function inspectedUrl(search: unknown): number | undefined {
   const value = typeof search === 'object' && search !== null ? (search as { inspect?: unknown }).inspect : undefined;
