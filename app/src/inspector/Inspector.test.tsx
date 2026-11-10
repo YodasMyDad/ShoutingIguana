@@ -183,6 +183,18 @@ describe('the summary', () => {
     expect(within(inspector).queryByText(/^96 characters/)).toBeNull();
   });
 
+  it('writes a response time just over its limit exactly, never as the limit itself', async () => {
+    const slow = testUrlDetail({ response: testResponse({ responseMs: 1_015 }), issues: [] });
+    const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: slow } });
+    const meter = await within(inspector).findByRole('meter', { name: 'Response time' });
+    expect(meter).toHaveAttribute('aria-valuetext', '1,015 ms, Limit 1 s, over the limit');
+    expect(within(inspector).getByText('15 ms over the 1 s limit')).toBeVisible();
+    // The figure at the top says the same: "1 s" beside "Limit 1 s" would read as on the limit.
+    const figure = within(inspector).getByText('Response').parentElement!;
+    expect(figure).toHaveTextContent('1,015 ms');
+    expect(figure).toHaveTextContent('Limit 1 s');
+  });
+
   it('doesn’t name a check the analysis didn’t flag the URL with, only how far out the value is', async () => {
     const quiet = testUrlDetail({ issues: [] });
     const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: quiet } });

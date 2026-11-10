@@ -7,7 +7,7 @@ import { Callout } from '../ui/Callout';
 import { Fact, Facts } from '../ui/Facts';
 import { Icon } from '../ui/Icon';
 import { Meter } from '../ui/Meter';
-import { Num } from '../ui/Num';
+import { FigureParts, Num } from '../ui/Num';
 import { SeverityMark } from '../ui/SeverityMark';
 import { MiniStat, MiniStats } from '../ui/Stat';
 import { StatusCode } from '../ui/StatusCode';
@@ -48,7 +48,7 @@ export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
   const verdict = indexabilityVerdict(detail);
   return (
     <SectionBody>
-      <TopFigures detail={detail} state={state} />
+      <TopFigures detail={detail} state={state} response={measures.response} />
       {state.title ? (
         <Block>
           <Callout tone="info" title={state.title}>
@@ -126,7 +126,16 @@ export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
 }
 
 /** Status, response and words (or size, for a file): the three figures the design leads with. */
-function TopFigures({ detail, state }: { detail: UrlDetail; state: FetchState }) {
+function TopFigures({
+  detail,
+  state,
+  response: responseTime,
+}: {
+  detail: UrlDetail;
+  state: FetchState;
+  /** The response time on its scale: its words are exact where rounding would put it on its limit. */
+  response: Measure | null;
+}) {
   const { response, content, limits } = detail;
   if (!response || !state.answered) return null;
   return (
@@ -139,7 +148,15 @@ function TopFigures({ detail, state }: { detail: UrlDetail; state: FetchState })
         />
         <MiniStat
           label="Response"
-          value={<Num value={response.responseMs} format="ms" />}
+          value={
+            responseTime ? (
+              <span className="figures">
+                <FigureParts text={responseTime.valueText} />
+              </span>
+            ) : (
+              <Num value={response.responseMs} format="ms" />
+            )
+          }
           context={`Limit ${formatMilliseconds(limits.slowResponseMs)}`}
         />
         {content ? (

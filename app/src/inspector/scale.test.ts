@@ -72,6 +72,26 @@ describe('the measures', () => {
     expect(titleMeasure(61, TEST_LIMITS, 'x'.repeat(61)).valueText).toBe('61 characters');
   });
 
+  it('writes a value exactly when it rounds to its limit, so it never reads as on it while it’s over', () => {
+    // 1,015 ms is "1 s" rounded, and so is the limit.
+    expect(responseMeasure(1_015, TEST_LIMITS)).toMatchObject({
+      state: 'over',
+      valueText: '1,015 ms',
+      limitText: 'Limit 1 s',
+      note: '15 ms over the 1 s limit',
+    });
+    expect(responseMeasure(1_412, TEST_LIMITS).valueText).toBe('1,412 ms');
+    // Past where it rounds to the limit, and within it, it's rounded as everywhere.
+    expect(responseMeasure(2_600, TEST_LIMITS).valueText).toBe('3 s');
+    expect(responseMeasure(1_000, TEST_LIMITS).valueText).toBe('1 s');
+    expect(responseMeasure(117, TEST_LIMITS).valueText).toBe('117 ms');
+    // A page 24 bytes over 1 MB.
+    expect(htmlSizeMeasure(1_048_600, TEST_LIMITS)).toMatchObject({
+      valueText: '1,048,600 bytes',
+      note: '24 bytes over the 1 MB limit',
+    });
+  });
+
   it('stays quiet within the range', () => {
     const measure = titleMeasure(45, TEST_LIMITS);
     expect(measure.state).toBe('within');

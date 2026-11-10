@@ -54,9 +54,21 @@ interface MeasureSpec {
   format: (value: number) => string;
   /** A bare number in the value's unit, for "1 over the 60 limit". */
   formatAmount: (value: number) => string;
+  /** The value to its last unit, where `format` rounds: "1,015 ms". */
+  formatExact?: (value: number) => string;
   limitText: string;
   over?: string;
   under?: string;
+}
+
+/**
+ * The value in words. One past its limit that rounds to the limit's own words (1,015 ms reads "1 s", as the 1 s limit
+ * does) would look as if it sat on the limit while a check says it's over: it's written to its last unit instead.
+ */
+function valueWords(spec: MeasureSpec, value: number, reading: ScaleReading): string {
+  const limit = reading.state === 'over' ? spec.max : reading.state === 'under' ? spec.min : undefined;
+  const rounded = spec.format(value);
+  return limit !== undefined && spec.formatExact && rounded === spec.format(limit) ? spec.formatExact(value) : rounded;
 }
 
 function measure(spec: MeasureSpec, value: number): Measure {
@@ -74,7 +86,7 @@ function measure(spec: MeasureSpec, value: number): Measure {
     min: spec.min,
     max: spec.max,
     ...reading,
-    valueText: spec.format(value),
+    valueText: valueWords(spec, value, reading),
     limitText: spec.limitText,
     note,
     checkId: reading.state === 'over' ? (spec.over ?? null) : reading.state === 'under' ? (spec.under ?? null) : null,
@@ -171,6 +183,7 @@ export function responseMeasure(responseMs: number, limits: ContentLimits): Meas
       max: limits.slowResponseMs,
       format: formatMilliseconds,
       formatAmount: formatMilliseconds,
+      formatExact: (value) => `${formatCount(Math.round(value))} ms`,
       limitText: `Limit ${formatMilliseconds(limits.slowResponseMs)}`,
       over: 'slow-response',
     },
@@ -187,6 +200,7 @@ export function htmlSizeMeasure(bodyBytes: number, limits: ContentLimits): Measu
       max: limits.largePageBytes,
       format: formatBytes,
       formatAmount: formatBytes,
+      formatExact: (value) => formatCountOf(value, 'byte'),
       limitText: `Limit ${formatBytes(limits.largePageBytes)}`,
       over: 'large-page',
     },
