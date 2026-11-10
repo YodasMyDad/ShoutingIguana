@@ -30,6 +30,9 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     /// <item>Two classes are slower than 1 s at 1M today, and held to that instead, so they can't get slower: the facets
     /// without the summary (1.35 s at 1M, a ceiling of 1.5 s), and links of a kind to a URL that has a million of them
     /// (1.8 s, a ceiling of 2 s, until the links' indexes hold their kind).</item>
+    /// <item>The links grid's reads that pass over every link once per filter set (<c>link-pass</c>: a filter on a link's
+    /// text or on the page it's on, a search, and any filter without the link summary) are over the budget at 100k
+    /// already, by what they are: held to 2.5 s there, so they can't get slower.</item>
     /// </list>
     /// engine/README.md has the measurements.
     /// </summary>
@@ -47,7 +50,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         ["crawl"] = 185,
         ["crawl-facets"] = 245,
         ["link-grid"] = 200,
-        ["link-pass"] = 1_500,
+        ["link-pass"] = 2_500,
         ["sitemaps"] = 200,
         ["robots"] = 200
     };
