@@ -372,6 +372,12 @@ slices.
   (1.1.1) leaves `aria-activedescendant` naming a stale or removed option, so screen readers hear the wrong command.
   Option ids are the entries' own, so the attribute changes whenever the highlighted command does, and a live region
   that's always there says how many results there are once typing pauses.
+- The palette and the `?` sheet are chunks of their own, fetched as soon as the app is idle
+  (`layout/overlayChunks.ts`) and shown without `lazy` and Suspense (`lib/chunk.ts`), as the source viewer is.
+  `lazy` suspends on its first render even when its chunk is there, and React holds back what follows a Suspense
+  fallback for 300 ms: a session's first Ctrl+K took 320 ms in the production build with the main thread idle
+  throughout, against 20 ms for every later one. A loaded chunk now renders in the render that opens it (first
+  Ctrl+K 16 to 31 ms to the dialog on the 100k crawl); one not fetched yet shows nothing until it arrives.
 
 ## Theming and tokens
 

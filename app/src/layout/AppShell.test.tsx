@@ -11,6 +11,7 @@ import { updateSettings } from '../settings/settingsStore';
 import { applyShellState, resetConnectionForTests } from '../shell/connection';
 import { liveStore } from '../live/liveStore';
 import { TEST_CRAWL_ID, fakeSidecar, standardRoutes, testCrawlItem } from '../test/fakeSidecar';
+import { paletteChunk, shortcutsChunk } from './overlayChunks';
 
 const CRAWL = `/crawls/${TEST_CRAWL_ID}`;
 
@@ -39,6 +40,24 @@ const press = (key: string, init: KeyboardEventInit = {}) =>
   fireEvent.keyDown(document.activeElement ?? document.body, { key, ...init });
 
 describe('the overlays', () => {
+  // The first Ctrl+K of a session is as quick as the next. Their code is fetched while the app is idle; with
+  // `lazy` and Suspense the first render suspended all the same, showed the (empty) fallback, and React held the
+  // palette back for 300 ms after it.
+  it('are in the page in the turn that opens them, once their code is there: no fallback first', async () => {
+    await Promise.all([paletteChunk.load(), shortcutsChunk.load()]);
+    await open(`${CRAWL}/urls`);
+    const grid = await screen.findByRole('grid', { name: 'URLs' });
+    act(() => grid.focus());
+    press('k', { ctrlKey: true });
+    // Not `findBy`: nothing is waited for.
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
+    expect(screen.getByRole('combobox')).toHaveFocus();
+    press('Escape');
+    await waitFor(() => expect(grid).toHaveFocus());
+    press('?', { shiftKey: true });
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
+  });
+
   it('give focus back to the grid when the palette closes with Esc', async () => {
     await open(`${CRAWL}/urls`);
     const grid = await screen.findByRole('grid', { name: 'URLs' });
