@@ -64,10 +64,15 @@ export interface GridCoreProps<Row> {
   onRangeChange?: (range: GridRange) => void;
   /** Every scroll's virtual offset, for prefetching by speed. */
   onScrollOffset?: (offset: number) => void;
-  /** Enter or double-click: open the inspector. */
-  onActivate?: (index: number, row: Row | undefined) => void;
+  /**
+   * Enter or double-click: open the inspector. `column` is the id of the column the cursor was in, or the cell that
+   * was double-clicked, for a grid whose rows hold more than one thing to open (a link's two ends).
+   */
+  onActivate?: (index: number, row: Row | undefined, column: string | undefined) => void;
   /** The cursor moved to another row (the inspector follows it). */
   onActiveRowChange?: (index: number | null) => void;
+  /** The cursor moved to another column, by its id: for an action on the column the cursor is in (copy it). */
+  onActiveColumnChange?: (column: string | undefined) => void;
   /** Right-click, Shift+F10 or the menu key. */
   onContextMenu?: (index: number, column: number, anchor: { x: number; y: number }) => void;
   /** Fetches rows that aren't loaded, for copying a selection that spans pages. */
@@ -77,6 +82,11 @@ export interface GridCoreProps<Row> {
   emptyState?: ReactNode;
   /** Data is refreshing behind what's shown: a thin progress line, nothing blanks. */
   busy?: boolean;
+  /**
+   * What the first load is doing, said over its skeleton when it's taking long enough for one to show ("Reading all
+   * 5,053,909 links: a search looks at every one."). The view announces it; here it's for the eye.
+   */
+  loadingNote?: ReactNode;
   className?: string;
   /** Tests and stories: the virtualiser's model, to drive scrolling. */
   modelRef?: (model: RowWindowModel) => void;
@@ -131,11 +141,13 @@ function GridCoreInner<Row>({
   onScrollOffset,
   onActivate,
   onActiveRowChange,
+  onActiveColumnChange,
   onContextMenu,
   fetchRows,
   onCopy,
   emptyState,
   busy = false,
+  loadingNote,
   className,
   modelRef,
   tree,
@@ -247,6 +259,9 @@ function GridCoreInner<Row>({
 
   const apply = (next: GridNavState, reveal: number | null) => {
     if (next.active?.row !== active?.row) onActiveRowChange?.(next.active?.row ?? null);
+    if (next.active?.col !== active?.col) {
+      onActiveColumnChange?.(next.active ? columns[next.active.col]?.id : undefined);
+    }
     setNav(next);
     if (reveal !== null) {
       model.scrollToIndex(reveal);
@@ -392,6 +407,8 @@ function GridCoreInner<Row>({
         event.preventDefault();
         const column = columns[move.col];
         if (column?.sortable) onSort?.(column.id, true);
+        // A header that can't sort, where others can, says why: a key that does nothing reads as broken.
+        else if (column?.sortHint) announce(column.sortHint);
         return;
       }
       if (move?.type === 'rows') {
@@ -439,8 +456,9 @@ function GridCoreInner<Row>({
     event.preventDefault();
     apply(result.state, result.reveal);
     const effect = result.effect;
-    if (effect?.type === 'activate') onActivate?.(effect.row, getRow(effect.row));
-    else if (effect?.type === 'copy') void copy();
+    if (effect?.type === 'activate') {
+      onActivate?.(effect.row, getRow(effect.row), columns[result.state.active?.col ?? active?.col ?? 0]?.id);
+    } else if (effect?.type === 'copy') void copy();
     else if (effect?.type === 'contextMenu') {
       const cell = document.getElementById(cellId(effect.row, effect.col))?.getBoundingClientRect();
       onContextMenu?.(effect.row, effect.col, cell ? { x: cell.left, y: cell.bottom } : { x: 0, y: 0 });
@@ -480,7 +498,7 @@ function GridCoreInner<Row>({
     if (event.target instanceof Element && event.target.closest('[data-tree-toggle]')) return;
     const expanded = tree?.expanded(position.row);
     if (expanded !== undefined) toggle(position.row, !expanded);
-    else onActivate?.(position.row, getRow(position.row));
+    else onActivate?.(position.row, getRow(position.row), columns[position.col]?.id);
   };
 
   const onContextMenuEvent = (event: MouseEvent<HTMLDivElement>) => {
@@ -547,6 +565,7 @@ function GridCoreInner<Row>({
                 aria-sort={column.sort}
                 data-active={header === col || undefined}
                 className={clsx('si-grid-cell', column.numeric && 'si-grid-cell--numeric')}
+                title={sortable && !column.sortable ? column.sortHint : undefined}
               >
                 {column.sortable && onSort ? (
                   // The grid is the one stop for Tab: the cursor reaches the header, and Enter or Space sorts. The
@@ -670,6 +689,11 @@ function GridCoreInner<Row>({
       </div>
       {view.windowed ? (
         <VirtualScrollbar model={model} total={count * rowHeight} viewport={view.viewport} top={headerHeight} />
+      ) : null}
+      {skeleton && rowCount === null && loadingNote ? (
+        <p className="si-grid-note" style={{ top: headerHeight }}>
+          {loadingNote}
+        </p>
       ) : null}
       {!loading && rowCount === 0 && emptyState ? (
         <EmptyRegion label={label} top={headerHeight}>

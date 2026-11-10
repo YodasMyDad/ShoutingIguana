@@ -136,7 +136,7 @@ describe('GridCore', () => {
     const active = document.getElementById(grid.getAttribute('aria-activedescendant') ?? '');
     expect(active).toHaveTextContent('https://example.com/0');
     fireEvent.keyDown(grid, { key: 'Enter' });
-    expect(onActivate).toHaveBeenCalledWith(0, rows[0]);
+    expect(onActivate).toHaveBeenCalledWith(0, rows[0], 'url');
   });
 
   it('leaves the cursor unset when rows arrive while it doesn’t have focus', () => {
@@ -151,7 +151,7 @@ describe('GridCore', () => {
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: 'ArrowDown' });
     fireEvent.keyDown(grid, { key: 'Enter' });
-    expect(onActivate).toHaveBeenCalledWith(1, rows[1]);
+    expect(onActivate).toHaveBeenCalledWith(1, rows[1], 'url');
   });
 
   it('selects rows with Space and Shift, and marks them selected', () => {
