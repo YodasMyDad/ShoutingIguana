@@ -2,7 +2,7 @@
 // catalog's words for a check, and the URL's issues by category.
 import { useQuery } from '@tanstack/react-query';
 import { createContext, use, useMemo } from 'react';
-import type { UrlIssue } from '../api/inspector';
+import type { UrlDetail, UrlIssue } from '../api/inspector';
 import { checksQuery } from '../api/queries';
 import type { Check } from '../api/types';
 
@@ -26,6 +26,12 @@ export function useInspectorContext(): InspectorContextValue {
   const value = use(InspectorContext);
   if (!value) throw new Error('An inspector section is rendered outside the inspector');
   return value;
+}
+
+/** Whether the URL's issues are from an analysis that no longer stands, or from before a crawl still running. */
+export function issuesAreStale(detail: Pick<UrlDetail, 'issues' | 'summary'>): boolean {
+  const { available, reason } = detail.summary;
+  return detail.issues !== null && !available && reason !== null && reason !== 'notAnalyzed';
 }
 
 /** The catalog, by check id: titles and how each check groups. Read once for the app. */

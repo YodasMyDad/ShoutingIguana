@@ -3,17 +3,10 @@ import type { UrlDetail } from '../api/inspector';
 import { analyseCrawl } from '../crawl/actions';
 import { formatCountOf } from '../lib/format';
 import { Button } from '../ui/Button';
-import { Callout } from '../ui/Callout';
 import { EmptyState } from '../ui/EmptyState';
 import { severityCount, SEVERITIES } from '../ui/severity';
 import { checkTitle, useChecks, useInspectorContext } from './inspectorContext';
-import { Block, IssueCheckLink, IssueList, SectionBody } from './parts';
-
-const OUT_OF_DATE = {
-  crawling: 'These are from the last analysis. The crawl is running, so they may be out of date.',
-  engineChanged: 'These are from the last analysis, made by another version of Shouting Iguana.',
-  crawlChanged: 'These are from the last analysis. The crawl was continued since, so they may be out of date.',
-} as const;
+import { Block, IssueCheckLink, IssueList, SectionBody, StaleIssues } from './parts';
 
 /**
  * Its issues: each check that flagged the URL in the last analysis, with its severity, title and detail, linking to
@@ -22,7 +15,7 @@ const OUT_OF_DATE = {
 export function IssuesSection({ detail }: { detail: UrlDetail }) {
   const { crawlId, urlId, crawling } = useInspectorContext();
   const { byId, ready } = useChecks();
-  const { issues, namedBy, summary } = detail;
+  const { issues, namedBy } = detail;
 
   if (issues === null) {
     return (
@@ -47,8 +40,6 @@ export function IssuesSection({ detail }: { detail: UrlDetail }) {
     );
   }
 
-  const stale =
-    !summary.available && summary.reason !== null && summary.reason !== 'notAnalyzed' ? summary.reason : null;
   const bySeverity = SEVERITIES.flatMap((severity) => {
     const count = issues.filter((issue) => issue.severity === severity).length;
     return count > 0 ? [severityCount(severity, count)] : [];
@@ -57,11 +48,7 @@ export function IssuesSection({ detail }: { detail: UrlDetail }) {
 
   return (
     <SectionBody>
-      {stale ? (
-        <Block>
-          <Callout tone="warning">{OUT_OF_DATE[stale]}</Callout>
-        </Block>
-      ) : null}
+      <StaleIssues detail={detail} className="pb-4" />
       {issues.length === 0 ? (
         <Block>
           <EmptyState title="No issues" icon={ShieldCheck} layout="row" level={3}>

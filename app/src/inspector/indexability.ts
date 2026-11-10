@@ -54,7 +54,15 @@ const REASONS: Record<IndexabilityReason, string> = {
   unreachable: 'It didn’t answer.',
 };
 
-type Subject = Pick<UrlDetail, 'id' | 'url' | 'indexability' | 'response' | 'discovery'>;
+type Subject = Pick<UrlDetail, 'id' | 'url' | 'indexability' | 'response' | 'discovery' | 'summary'>;
+
+/** Why a verdict is the crawl's own and not the analysis's, by where the analysis stands. */
+const JUDGED_BY_CRAWL: Record<NonNullable<UrlDetail['summary']['reason']>, string> = {
+  crawling: 'The crawl’s own judgement: the analysis runs when the crawl finishes.',
+  notAnalyzed: 'The crawl’s own judgement: this crawl hasn’t been analysed yet.',
+  engineChanged: 'The crawl’s own judgement: the last analysis is out of date.',
+  crawlChanged: 'The crawl’s own judgement: the last analysis is out of date.',
+};
 
 const answeredWords = (code: number | null | undefined) => {
   if (code === null || code === undefined) return 'It didn’t answer';
@@ -145,7 +153,9 @@ export function indexabilityVerdict(subject: Subject): IndexabilityVerdict {
   const failed = rows.filter((row) => row.state === 'fail').map((row) => row.test);
   const note =
     indexability.judgedBy === 'crawl' && indexability.indexable !== null
-      ? 'The crawl’s own judgement: the analysis hasn’t judged this URL.'
+      ? subject.summary.reason
+        ? JUDGED_BY_CRAWL[subject.summary.reason]
+        : 'The crawl’s own judgement: the analysis hasn’t judged this URL.'
       : null;
 
   if (indexability.indexable === true) {

@@ -1,9 +1,9 @@
 import { ChevronDown, ChevronUp, Play, RefreshCw, X } from 'lucide-react';
 import { useId, useState, type Ref } from 'react';
 import type { Analysis, AnalysisEvent, CrawlStatus } from '../../api/types';
-import { analysisPhaseWords, analysisProgressText, analysisStep, outOfDateWords } from '../../crawl/analysis';
+import { analysisPhaseWords, analysisProgressText, analysisStep } from '../../crawl/analysis';
+import { LastAnalysisBanner } from '../../crawl/LastAnalysisBanner';
 import { Skeleton } from '../../feedback/Skeleton';
-import { formatExactTime, formatRelativeTime } from '../../lib/format';
 import { Banner } from '../../ui/Banner';
 import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
@@ -82,30 +82,16 @@ export function AnalysisNotes({
   canAnalyse: boolean;
   onAnalyse: () => void;
 }) {
-  const when = formatRelativeTime(analysis.analyzedAt);
   const partial = analysis.isPartial === true || (analysis.isPartial === null && analysis.notes.length > 0);
   return (
     <>
-      {crawling ? (
-        <Banner inset icon={<LiveDot />}>
-          The crawl is running, so these are the issues its last analysis found,{' '}
-          <span title={formatExactTime(analysis.analyzedAt)}>{when}</span>. It’s analysed again when it finishes.
-        </Banner>
-      ) : analysis.outOfDate && !analysing ? (
-        <Banner
-          inset
-          detail={outOfDateWords(analysis.outOfDateReasons)}
-          actions={
-            canAnalyse ? (
-              <Button size="sm" icon={RefreshCw} command="crawl.analyse" onClick={onAnalyse}>
-                Analyse again
-              </Button>
-            ) : null
-          }
-        >
-          These issues are out of date: they’re from the analysis {when}.
-        </Banner>
-      ) : null}
+      <LastAnalysisBanner
+        analysis={analysis}
+        crawling={crawling}
+        analysing={analysing}
+        canAnalyse={canAnalyse}
+        onAnalyse={onAnalyse}
+      />
       {partial ? <PartialNotes analysis={analysis} /> : null}
     </>
   );

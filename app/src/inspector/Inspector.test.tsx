@@ -16,7 +16,7 @@ import { inspectFromGrid } from '../routing/inspector';
 import { DEFAULT_SETTINGS } from '../settings/schema';
 import { getSettings, updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, type FakeSidecar } from '../test/fakeSidecar';
-import { ISSUES_CHECKS, issuesRoutes, type IssuesSidecarOptions } from '../test/issuesSidecar';
+import { ISSUES_ANALYSIS, ISSUES_CHECKS, issuesRoutes, type IssuesSidecarOptions } from '../test/issuesSidecar';
 import {
   inspectorRoutes,
   testLinkRow,
@@ -526,6 +526,47 @@ describe('the sections', () => {
     expect(within(panel).getByText('Not analysed yet')).toBeVisible();
     expect(within(panel).getByRole('button', { name: 'Analyse it' })).toBeVisible();
     expect(within(inspector).getByRole('tab', { name: /^Issues/ })).toHaveTextContent(/^Issues$/);
+  });
+
+  it('says an out-of-date analysis in the summary as the Issues screen does, with Analyse again', async () => {
+    const stale = testUrlDetail({
+      issues: PAGE.issues,
+      links: null,
+      indexability: { ...testUrlDetail().indexability, judgedBy: 'crawl' },
+      summary: { available: false, reason: 'engineChanged' },
+    });
+    const onAnalyse = vi.fn();
+    const { inspector, user } = await open(`${URLS}?inspect=2`, { urls: { 2: stale } }, undefined, {
+      analysis: { ...ISSUES_ANALYSIS, outOfDate: true, outOfDateReasons: ['engineChanged'] },
+      item: { outOfDate: true },
+      onAnalyse,
+    });
+    // In the summary, above the issues it lists: the Issues screen's own words, its reason and its action.
+    const summary = await within(inspector).findByRole('tabpanel', { name: /^Summary/ });
+    const banner = await within(summary).findByText(/These issues are out of date: they’re from the analysis/);
+    expect(banner).toBeVisible();
+    expect(
+      within(summary).getByText(
+        'Another version of Shouting Iguana analysed it, so its checks may differ from this version’s.',
+      ),
+    ).toBeVisible();
+    // The verdict is the crawl's own because the analysis is out of date, not because it never judged the URL.
+    expect(within(summary).getByText('The crawl’s own judgement: the last analysis is out of date.')).toBeVisible();
+    expect(within(summary).queryByText(/the analysis hasn’t judged this URL/)).toBeNull();
+    await user.click(within(summary).getByRole('button', { name: 'Analyse again' }));
+    await waitFor(() => expect(onAnalyse).toHaveBeenCalledTimes(1));
+
+    // The Issues section says it the same way: one banner, not a second wording.
+    const issues = await showTab(user, /^Issues/);
+    expect(within(issues).getByText(/These issues are out of date: they’re from the analysis/)).toBeVisible();
+    expect(within(issues).getByRole('button', { name: 'Analyse again' })).toBeVisible();
+  });
+
+  it('says nothing about the analysis while it stands', async () => {
+    const { inspector } = await open(`${URLS}?inspect=2`);
+    await within(inspector).findByRole('list', { name: 'This URL’s issues' });
+    expect(within(inspector).queryByText(/out of date/)).toBeNull();
+    expect(within(inspector).queryByRole('button', { name: 'Analyse again' })).toBeNull();
   });
 
   it('lists the issues on other URLs that name this one, each leading to its group', async () => {

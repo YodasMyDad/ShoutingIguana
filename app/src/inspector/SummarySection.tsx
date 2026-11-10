@@ -16,7 +16,7 @@ import { fetchState, type FetchState } from './fetchState';
 import { canonicalFact, indexabilityVerdict, type IndexabilityRow, type IndexabilityVerdict } from './indexability';
 import { checkTitle, useChecks, useInspectorContext } from './inspectorContext';
 import { issueLink } from './issueLinks';
-import { Block, IssueCheckLink, IssueList, PageText, SectionBody, WalkUrl } from './parts';
+import { Block, IssueCheckLink, IssueList, PageText, SectionBody, StaleIssues, WalkUrl } from './parts';
 import { measuresOf, scaleEnd, type Measure } from './scale';
 import type { SectionId } from './sections';
 import { KIND_WORDS, SOURCE_WORDS, TYPE_WORDS, depthWords, protocolWords, reasonPhrase, wordFor } from './words';
@@ -468,6 +468,7 @@ function IssuesSummary({ detail, onShowSection }: SummarySectionProps) {
   if (issues.length === 0) {
     return (
       <Block title="No issues">
+        <StaleIssues detail={detail} className="mb-3" />
         <p className="text-13 text-text-secondary">No check flagged this URL in the last analysis.</p>
       </Block>
     );
@@ -486,6 +487,7 @@ function IssuesSummary({ detail, onShowSection }: SummarySectionProps) {
         </button>
       }
     >
+      <StaleIssues detail={detail} className="mb-3" />
       <IssueList issues={issues.slice(0, SUMMARY_ISSUES)} label="This URL’s issues" detail={detail} />
     </Block>
   );

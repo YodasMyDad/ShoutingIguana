@@ -1848,8 +1848,10 @@
 
   .si-banner {
     display: flex;
+    /* In a narrow panel (the inspector) the action goes under the words, which keep a readable measure. */
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2) var(--space-3);
     min-height: var(--control-height-lg);
     padding: var(--space-2) var(--space-4);
     border-bottom: var(--hairline) solid var(--color-border);
@@ -1867,7 +1869,7 @@
 
   .si-banner__body {
     display: flex;
-    flex: 1;
+    flex: 1 1 var(--banner-measure-min);
     flex-direction: column;
     gap: var(--space-0-5);
     min-width: 0;

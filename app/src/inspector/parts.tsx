@@ -1,16 +1,22 @@
 // The pieces the inspector's sections share: a titled block, a URL that walks the inspector to it, an issue's row,
 // the skeleton of a section, and what a section says when it couldn't be read.
+import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { useState, type ReactNode } from 'react';
 import type { CheckGroupRef } from '../api/grids';
 import type { UrlDetail, UrlIssue } from '../api/inspector';
+import { analysisQuery, crawlQuery } from '../api/queries';
+import { analyseCrawl } from '../crawl/actions';
+import { LastAnalysisBanner } from '../crawl/LastAnalysisBanner';
+import { crawlControls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { Skeleton } from '../feedback/Skeleton';
+import { useLiveCrawl } from '../live/liveStore';
 import { SeverityMark } from '../ui/SeverityMark';
 import { StatusCode } from '../ui/StatusCode';
 import { TextLink } from '../ui/TextLink';
 import { Url } from '../ui/Url';
-import { checkTitle, useChecks, useInspectorContext } from './inspectorContext';
+import { checkTitle, issuesAreStale, useChecks, useInspectorContext } from './inspectorContext';
 import { issueLink } from './issueLinks';
 import { NO_STATUS } from './links';
 import { reasonPhrase } from './words';
@@ -171,6 +177,32 @@ export function IssueList({
         <IssueRow key={`${issue.checkId}-${index}`} issue={issue} detail={detail} />
       ))}
     </ul>
+  );
+}
+
+/**
+ * Above the URL's issues, wherever they're listed (the summary, the Issues section): the Issues screen's own banner
+ * for an analysis that's out of date, with its Analyse again, or for a crawl still running. Nothing while the
+ * analysis stands.
+ */
+export function StaleIssues({ detail, className }: { detail: UrlDetail; className?: string | undefined }) {
+  const { crawlId, crawling } = useInspectorContext();
+  const stale = issuesAreStale(detail);
+  const analysis = useQuery({ ...analysisQuery(crawlId), enabled: stale }).data;
+  const item = useQuery(crawlQuery(crawlId)).data;
+  const status = effectiveStatus(item, useLiveCrawl(crawlId));
+  if (!stale || !analysis) return null;
+  return (
+    <div className={className}>
+      <LastAnalysisBanner
+        analysis={analysis}
+        crawling={crawling}
+        // The analysis running is said in the top bar; here the issues stay marked until the new ones come.
+        analysing={false}
+        canAnalyse={crawlControls(status, item).canAnalyse}
+        onAnalyse={() => void analyseCrawl(crawlId)}
+      />
+    </div>
   );
 }
 

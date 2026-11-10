@@ -269,6 +269,20 @@ describe('indexabilityVerdict', () => {
     expect(verdict.note).toBe('The crawl’s own judgement: the analysis hasn’t judged this URL.');
   });
 
+  it('says why the verdict is the crawl’s own by where the analysis stands, never that it hasn’t judged when it has', () => {
+    const judgedByCrawl = (reason: 'crawling' | 'notAnalyzed' | 'engineChanged' | 'crawlChanged') =>
+      indexabilityVerdict(
+        testUrlDetail({
+          indexability: { ...testUrlDetail().indexability, judgedBy: 'crawl' },
+          summary: { available: false, reason },
+        }),
+      ).note;
+    expect(judgedByCrawl('engineChanged')).toBe('The crawl’s own judgement: the last analysis is out of date.');
+    expect(judgedByCrawl('crawlChanged')).toBe('The crawl’s own judgement: the last analysis is out of date.');
+    expect(judgedByCrawl('notAnalyzed')).toBe('The crawl’s own judgement: this crawl hasn’t been analysed yet.');
+    expect(judgedByCrawl('crawling')).toBe('The crawl’s own judgement: the analysis runs when the crawl finishes.');
+  });
+
   it('gives the server’s reason when it blocked the crawler', () => {
     const verdict = indexabilityVerdict(
       testUrlDetail({
