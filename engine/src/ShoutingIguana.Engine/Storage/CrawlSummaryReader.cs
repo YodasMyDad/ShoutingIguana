@@ -45,6 +45,7 @@ public static class CrawlSummaryReader
             var (fetched, crawled, pages) = withCounts ? Counts(connection) : (null, null, null);
             return summary with
             {
+                TimeCrawling = CrawlRunReader.Read(connection, transaction: null)?.TimeCrawling,
                 FetchedUrlCount = fetched,
                 CrawledUrlCount = crawled,
                 PageCount = pages,

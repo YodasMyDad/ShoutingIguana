@@ -140,6 +140,41 @@ internal static class CrawlSchema
         """;
 
     /// <summary>
+    /// The time the crawl spent crawling: a row for each stretch of it, from a run's start (or its resuming after a pause)
+    /// to its next pause or its end, so the time paused and the time between a stop and a continue are in none. A crawl-time
+    /// table, created whenever the writer opens a file, as <see cref="NOTICES"/> is.
+    /// <list type="bullet">
+    /// <item><c>run</c> numbers the crawl's runs from 1: a run's stretches share it, and a pause is the gap between two.</item>
+    /// <item><c>crawled_ms</c> is how long the stretch went on, by a clock that only runs forward. The writer stores it
+    /// every few seconds while the stretch goes on, so a run cut short (the process died) loses only seconds. Null in the
+    /// one row that stands for runs nobody timed: every run before the table was there, or one by an engine that doesn't
+    /// keep it. With such a row the crawl's whole time isn't known, and readers say so rather than give a part of it.</item>
+    /// <item><c>ended</c> is 1 once the stretch has ended; 0 while it goes on, and until the crawl is continued where its
+    /// process died.</item>
+    /// <item><c>crawl_updated_at</c> is the crawl row's stamp as it stood when the row was last stored at a run's start or
+    /// end. Every run stamps the crawl row, whichever engine runs it, so when the last row's isn't the crawl row's own, a
+    /// run since went untimed: readers then don't know the crawl's time, and the next run this engine makes says so with
+    /// the row above.</item>
+    /// </list>
+    /// </summary>
+    public const string RUN_TIME = """
+        CREATE TABLE IF NOT EXISTS run_time (
+            id INTEGER PRIMARY KEY,
+            run INTEGER NOT NULL,
+            started_at INTEGER NOT NULL,
+            crawled_ms INTEGER,
+            ended INTEGER NOT NULL,
+            crawl_updated_at INTEGER NOT NULL
+        );
+        """;
+
+    /// <summary>
+    /// The columns of <see cref="RUN_TIME"/>, in order. A table of any other shape is another program's: the writer then
+    /// keeps no time (a crawl matters more than how long it took), and readers don't know the crawl's.
+    /// </summary>
+    public const string RUN_TIME_COLUMNS = "id,run,started_at,crawled_ms,ended,crawl_updated_at";
+
+    /// <summary>
     /// The columns of <see cref="NOTICES"/>, which the writer stores into and readers read by name. Another program can
     /// have made the table its own way: readers then find no notices, and the writer refuses to continue the crawl.
     /// </summary>

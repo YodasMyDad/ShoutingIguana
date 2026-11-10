@@ -37,6 +37,13 @@ public sealed record CrawlProgress(
     public CrawlNoResponseCounts NoResponse { get; init; } = CrawlNoResponseCounts.None;
 
     /// <summary>
+    /// The time the crawl has spent crawling, over every run of it: the earlier runs', and this run's without the time it
+    /// was paused, so it stands still during a pause, where <see cref="Elapsed"/> (this run's alone) runs on. Null when
+    /// the time an earlier run took wasn't kept (an earlier engine's run), so the whole isn't known.
+    /// </summary>
+    public TimeSpan? TimeCrawling { get; init; }
+
+    /// <summary>
     /// The URLs crawled: those asked for, and those robots.txt kept the crawl from asking. <see cref="Fetched"/> less the
     /// URLs that weren't checked (<see cref="CrawlNoResponseCounts.NotChecked"/>), which have an outcome though nothing was
     /// asked: the URL grid has those as not fetched, so this is its count of the URLs fetched.

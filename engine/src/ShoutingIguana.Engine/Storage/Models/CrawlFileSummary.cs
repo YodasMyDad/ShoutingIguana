@@ -25,6 +25,13 @@ public sealed record CrawlFileSummary
     public required string EngineVersion { get; init; }
 
     /// <summary>
+    /// The time the crawl has spent crawling, over every run of it, less the time paused: neither a pause nor the time
+    /// between a stop and a continue is in it. Null when it isn't known (<see cref="CrawlRunReader"/>): an engine from
+    /// before the time was kept made the crawl, or a run of it.
+    /// </summary>
+    public TimeSpan? TimeCrawling { get; init; }
+
+    /// <summary>
     /// URLs with a stored outcome, whatever it was, as <see cref="Crawling.Models.CrawlProgress.Fetched"/> counts them:
     /// those the crawl requested, those robots.txt kept it from requesting, which are stored as disallowed, and those it
     /// never asked because their host had stopped answering, which <see cref="CrawledUrlCount"/> leaves out. URLs it only
