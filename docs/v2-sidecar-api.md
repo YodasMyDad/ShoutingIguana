@@ -853,17 +853,17 @@ not the path, so moving from URL to URL costs no preflight. `url-not-found` (404
 below, or past what an id holds), and `invalid-query` without one.
 
 ```json
-{"id":119,"url":"https://www.example.com/blog/?p=2","isInternal":true,"type":"page",
+{"id":119,"url":"https://www.example.com/blog/?p=2","urlLength":33,"isInternal":true,"type":"page",
  "discovery":{"source":"link","depth":2,"foundOn":{"id":7,"url":"https://www.example.com/blog/"},"foundVia":"hyperlink",
               "fetchMode":"crawl","state":"done","notFetchedBecause":null},
  "response":{"fetched":true,"outcome":"success","statusCode":200,"contentType":"text/html; charset=utf-8","httpVersion":"2.0",
              "crawledAt":"2026-10-31T20:15:02Z","ttfbMs":180,"responseMs":240,"sizeBytes":18011,"bodyBytes":96340,
              "blockReason":null,"error":null},
- "redirects":{"hops":[],"final":{"id":119,"url":"https://www.example.com/blog/?p=2","statusCode":200},"loop":false,"tooLong":false},
+ "redirects":{"hops":[],"final":{"id":119,"url":"https://www.example.com/blog/?p=2","statusCode":200,"outcome":"success"},"loop":false,"tooLong":false},
  "indexability":{"indexable":false,"reason":"canonicalised","judgedBy":"analysis",
    "tests":[{"test":"answered","outcome":"pass","statusCode":200},{"test":"robotsTxt","outcome":"pass"},
             {"test":"noindex","outcome":"pass","meta":false,"header":false},
-            {"test":"canonical","outcome":"fail","canonical":{"id":7,"url":"https://www.example.com/blog/","statusCode":200},
+            {"test":"canonical","outcome":"fail","canonical":{"id":7,"url":"https://www.example.com/blog/","statusCode":200,"outcome":"success"},
              "canonicalUrl":"https://www.example.com/blog/"}]},
  "content":{"titles":[{"text":"Blog, page 2","length":12}],"descriptions":[],"h1s":[{"text":"Blog","length":4}],
             "headings":[1,3,0,0,0,0],"wordCount":412,"language":"en-GB","charset":"utf-8","robots":[],"metaRefresh":null,
@@ -871,6 +871,7 @@ below, or past what an id holds), and `invalid-query` without one.
  "limits":{"titleMin":30,"titleMax":60,"descriptionMin":70,"descriptionMax":155,"minWords":200,"slowResponseMs":1000,
            "largePageBytes":1048576,"largeImageBytes":204800,"imageAltMaxLength":125,"maxUrlLength":115,"fromAnalysis":true},
  "links":{"inlinks":3,"followedInlinks":3,"nofollowInlinks":0,"linkingPages":2,"outlinks":45,"inSitemap":false},
+ "linkTotals":{"inlinks":4,"outlinks":63},
  "headers":[{"name":"content-type","value":"text/html; charset=utf-8"}],
  "structuredData":[{"valid":true,"types":["BlogPosting"],"json":"{…}","error":null,"truncated":false}],
  "hreflang":[],
@@ -880,6 +881,11 @@ below, or past what an id holds), and `invalid-query` without one.
  "source":{"stored":false}}
 ```
 
+- **`urlLength`** (E3c) is the URL's length as the check `url-too-long` measures it, to set against
+  `limits.maxUrlLength`: the URL as people read it, its escapes decoded and its host in its own script (`/каталог/` is
+  9 characters, not 42), in characters as a reader counts them. The check and the inspector measure it with the same
+  code. It's given for any URL, though the check looks only at indexable pages; null only for a stored URL that isn't
+  one (a crafted file's).
 - **`discovery`** is how the crawl first found it: `foundVia` is the kind of link (`hyperlink`, `image`, `canonical`,
   `redirect`...), `fetchMode` is `crawl` (fetched, parsed, its links followed) or `check` (status only), `state` is
   `queued`, `fetching`, `done` or `skipped`, and `notFetchedBecause` why a skipped URL wasn't fetched (`none` when no
@@ -921,6 +927,16 @@ below, or past what an id holds), and `invalid-query` without one.
   `image-too-large` goes by, and `imageAltMaxLength`) and a URL's (`maxUrlLength`).
 - **`links`** comes from the URL summary, and is null without one (`summary` says why). `type` is judged as the
   grid's column is.
+- **`linkTotals`** (E3c) is every link to the URL and from it, `{ inlinks, outlinks }`: links of every kind, a page's
+  links to itself left out, which is the `total` that `/urls/inlinks` and `/urls/outlinks` give with no `kinds`. So the
+  inspector's Inlinks and Outlinks tabs have their counts without a read each. They're counted from the links
+  themselves (the inlinks from the link summary, where there is one), so they're there with or without a URL summary,
+  a running crawl's included, where `links` (hyperlinks only, on the pages audited) is null; a running crawl's are
+  kept for 2 s, as its other counts are.
+- **A URL the inspector names carries its `outcome`** (E3c) beside its status, as the URL grid's `outcome` column has
+  it: `redirects.final`, a test's `canonical` and `metaRefresh`, and an hreflang's `target`, as each hop of `redirects`
+  already did. A status is null both for a URL never fetched and for one that gave no HTTP answer; the outcome tells
+  them apart (null, or `robotsDisallowed`, `timeout`, `networkError`, `notChecked`...).
 - **`headers`** are as stored: names lowercased, for internal URLs only. **`structuredData`** is each JSON-LD block,
   `valid` when it parses, with its `@type`s (those in a `@graph` included), or the parser's `error`; `truncated` when
   the page's block was cut at the parser's limit. **`hreflang`** is each annotation `{ language, href, url, target, inHead,
@@ -949,11 +965,14 @@ page's links to itself left out, in the order they were found:
 
 ```json
 {"rows":[{"id":7,"url":"https://www.example.com/blog/","kind":"hyperlink","text":"Older posts","position":"content",
-          "flags":[],"followed":true,"fragment":null,"statusCode":200,"indexable":true,"fetched":true}],
+          "flags":[],"followed":true,"fragment":null,"statusCode":200,"indexable":true,"fetched":true,"outcome":"success"}],
  "offset":0,"total":3,"next":"…"}
 ```
 
 - `id`, `url` and the status columns are the other end's: the linking page for an inlink, the target for an outlink.
+  **`outcome`** (E3c) is what became of the request for it, as the URL grid's `outcome` column: so a link to a URL
+  that robots.txt refused, that timed out or that wasn't checked says which, where `statusCode` is null for each of
+  them as it is for a URL never fetched (`outcome` null).
   `kinds` filters by the kind of link (`hyperlink`, `image`, `script`, `stylesheet`, `iframe`, `media`, `icon`,
   `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect`; every kind by default).
 - `text` is the anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link. `position`
@@ -1721,3 +1740,17 @@ nothing kept, on a 32-core Windows machine that other work was sharing.
   since (told by the crawl row's stamp, which every run moves and the last stretch keeps). The time is given whole or
   not at all. Tested on a clock the test moves: three runs with pauses and an hour between two, to the millisecond,
   live and from the file.
+- **The inspector's totals of every kind of link, and the URL's length.** `/urls/inspect` counted a URL's hyperlinks
+  only (`links`, from the URL summary), so the inspector's Inlinks and Outlinks tabs read `/urls/inlinks` and
+  `/urls/outlinks` for their counts, on every tick of a running crawl. It now gives both totals (`linkTotals`,
+  `UrlDetail.LinkTotals`), counted where the lists' own totals are and kept under the same key, so the tabs' counts
+  and the lists can't differ; the inlinks come from the link summary where there is one, a few rows where the links'
+  index has an entry for every link (the first page of the start URL's 202,222 inlinks took 5.2 ms and takes 1.8).
+  Inspecting a URL takes 1.8 ms where it took 1.2. `urlLength` is the URL's length by the check's own measure
+  (`UrlRules.MeasuredLength`, which the check now calls too).
+- **What became of a link's other end.** A link row had the other URL's status, null alike for a URL never fetched
+  and for one that robots.txt refused or that timed out. Each row now has its `outcome` (`LinkRow.Outcome`, read from
+  the other end's response with or without the URL summary, as the URL grid's column reads it), and so does every URL
+  the inspector names with a status: `redirects.final`, a test's `canonical` and `metaRefresh`, an hreflang's
+  `target` (`UrlTarget.Outcome`). The tests hold every named URL of the synthetic site, and every link list, to what
+  the URL grid shows of that URL.

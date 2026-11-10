@@ -589,6 +589,11 @@ a page gives to read on. The API, with every column and operator, is in
   `issues (issue, detail, related_url_id)`. A crawl analysed by an earlier engine is grouped as it was.
 - **"Named by"**, the issues on other URLs naming one, is read on `issue_targets`' index by the URL named, so it costs
   what that URL is named by, not every issue in the crawl.
+- **A URL's links in all** (`UrlDetail.LinkTotals`: every kind, to it and from it, its links to itself left out) are
+  counted once and kept, for the inspector and for its lists of links alike: the links to it from the link summary
+  where that counts the crawl as it stands, else on the links' index by target. Each link row, and each URL the
+  inspector names, carries what became of the request for it (`UrlOutcome`) beside its status, which is null for a
+  URL never fetched and for one that gave no HTTP answer alike.
 - **Links of some kinds to a URL** (the hyperlinks to a nav target, a stylesheet's links) are counted on the analysis's
   index of the links by target and kind, and a page of them anywhere is found there too: each kind's in crawl order,
   merged as they're read, so no link is read to be skipped. Links from a page are few, and read as they are.
