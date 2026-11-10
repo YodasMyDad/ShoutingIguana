@@ -52,6 +52,10 @@ function ActionFor({
 /**
  * The crawl's alerts, newest first, each saying what happened and what to do about it. While the crawl runs the list is
  * a log, so a new alert is read out; with none, it says what would show here.
+ *
+ * The log is there from the start, empty, so the first alert is added to a log that exists (one that arrives together
+ * with its log isn't read out). And an alert's age, which the app's clock rewrites every minute, is marked as no part
+ * of it (`aria-live="off"`), or every alert's "2 minutes ago" would be read out again each minute.
  */
 export function AlertList({
   crawlId,
@@ -66,15 +70,14 @@ export function AlertList({
   canContinue?: boolean;
   onContinue: () => void;
 }) {
-  if (entries.length === 0) {
-    return (
+  const none =
+    entries.length === 0 ? (
       <EmptyState title="None so far" icon={ShieldCheck} layout="row" level="none">
         Nothing has blocked, slowed or refused this crawl. If the site starts blocking it, goes down or its robots.txt
         can’t be read, the alert shows here with what to do.
       </EmptyState>
-    );
-  }
-  const list = (
+    ) : null;
+  const list = none ? null : (
     <ul aria-label="Alerts" className="flex flex-col gap-2.5">
       {entries.map((entry) => (
         <li key={entry.key}>
@@ -86,7 +89,7 @@ export function AlertList({
               {entry.action ? (
                 <ActionFor crawlId={crawlId} action={entry.action} canContinue={canContinue} onContinue={onContinue} />
               ) : null}
-              <span className="text-12 text-text-muted">
+              <span className="text-12 text-text-muted" aria-live={live ? 'off' : undefined}>
                 <RelativeTime iso={entry.at} />
               </span>
             </p>
@@ -95,8 +98,17 @@ export function AlertList({
       ))}
     </ul>
   );
-  // A log is read out as it grows; the list inside it keeps its own role.
-  return live ? <div role="log">{list}</div> : list;
+  if (!live) return list ?? none;
+  // A log is read out as it grows; the list inside it keeps its own role. What it says with no alerts is beside it,
+  // not in it: it's no alert.
+  return (
+    <>
+      <div role="log" aria-label="Alerts as they’re raised">
+        {list}
+      </div>
+      {none}
+    </>
+  );
 }
 
 /** What holds part of the crawl up right now: it comes and goes, so it sits where nothing below it moves. */

@@ -735,6 +735,30 @@ describe('the Overview while the crawl runs', () => {
     ).toBeVisible();
   });
 
+  it('reads out an alert as it’s raised, the first included, and not its age again every minute', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM });
+    await open();
+    await heard(progress(100));
+    const alerts = region('Alerts');
+    // The log is there before any alert, empty: an alert that arrived together with its log wouldn't be read out.
+    const log = alerts.getByRole('log');
+    expect(log).toBeEmptyDOMElement();
+    expect(alerts.getByText('None so far')).toBeVisible();
+    expect(log.contains(alerts.getByText('None so far'))).toBe(false);
+    await heard(
+      message('alert', alert({ id: 1, code: 'sitemaps', level: 'info', data: { count: 4, urlCount: 6_146 } })),
+    );
+    // The same log, with the alert added to it.
+    expect(alerts.getByRole('log')).toBe(log);
+    expect(within(log).getByText('Sitemaps read')).toBeVisible();
+    expect(alerts.queryByText('None so far')).toBeNull();
+    // Its age is rewritten by the clock every minute ("1 minute ago", "2 minutes ago"): no part of what the log reads.
+    const age = log.querySelector('time');
+    expect(age).not.toBeNull();
+    expect(age?.closest('[aria-live]')).toHaveAttribute('aria-live', 'off');
+    expect(log.contains(age?.closest('[aria-live]') ?? null)).toBe(true);
+  });
+
   it('becomes the analysis’s progress, then the answer, without a reload', async () => {
     let analysed = false;
     const transport = fakeSidecar([
