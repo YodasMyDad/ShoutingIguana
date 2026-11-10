@@ -1,11 +1,18 @@
 // A sidecar for the Issues screen's tests and stories: a small catalog over three categories, an analysis with a
 // check of each kind (grouped by detail, by related URL, flat, skipped and passed), and groups and rows answered as
 // the real `/groups` and `/rows` do (a group narrows the rows, `after` reads on, `detail` sorts).
-import type { GridPage, GridQuery, IssueGroup, IssueRow } from '../api/grids';
-import type { Analysis, Check, Checks, CrawlListItem } from '../api/types';
+import type { FacetsPage, FacetsQuery, GridPage, GridQuery, IssueGroup, IssueRow } from '../api/grids';
+import type { Analysis, Check, CheckSubject, Checks, CrawlListItem } from '../api/types';
 import { json, problem, standardRoutes, testCrawlItem, type FakeRoute } from './fakeSidecar';
 
-const check = (id: string, category: string, severity: Check['severity'], title: string, grouping: Check['grouping']) =>
+const check = (
+  id: string,
+  category: string,
+  severity: Check['severity'],
+  title: string,
+  grouping: Check['grouping'],
+  subject: CheckSubject,
+) =>
   ({
     id,
     category,
@@ -17,6 +24,7 @@ const check = (id: string, category: string, severity: Check['severity'], title:
     learnMore:
       id === 'empty-anchor-text' ? 'https://developers.google.com/search/docs/crawling-indexing/links-crawlable' : null,
     grouping,
+    subject,
   }) satisfies Check;
 
 export const ISSUES_CHECKS: Checks = {
@@ -26,13 +34,49 @@ export const ISSUES_CHECKS: Checks = {
     { id: 'titles', title: 'Titles' },
   ],
   checks: [
-    check('internal-client-error', 'responseCodes', 'error', 'Internal URL returns 4xx', 'detail'),
-    check('internal-server-error', 'responseCodes', 'error', 'Internal URL returns 5xx', 'detail'),
-    check('empty-anchor-text', 'links', 'notice', 'Internal links without anchor text', 'relatedUrl'),
-    check('orphan-page', 'links', 'notice', 'Orphan page', 'none'),
-    check('title-too-long', 'titles', 'notice', 'Title too long', 'none'),
+    // Each check's subject is the engine's own: the response codes flag any URL, the rest only pages.
+    check('internal-client-error', 'responseCodes', 'error', 'Internal URL returns 4xx', 'detail', 'url'),
+    check('internal-server-error', 'responseCodes', 'error', 'Internal URL returns 5xx', 'detail', 'url'),
+    check('empty-anchor-text', 'links', 'notice', 'Internal links without anchor text', 'relatedUrl', 'page'),
+    check('orphan-page', 'links', 'notice', 'Orphan page', 'none', 'page'),
+    check('title-too-long', 'titles', 'notice', 'Title too long', 'none', 'page'),
   ],
 };
+
+/** The same catalog as an engine from before E3b gives it, and the design fixtures: no check says what it flags. */
+export const ISSUES_CHECKS_WITHOUT_SUBJECTS: Checks = {
+  ...ISSUES_CHECKS,
+  checks: ISSUES_CHECKS.checks.map(({ subject: _subject, ...rest }) => rest),
+};
+
+/**
+ * The crawl's own counts, which a check's count is a part of: 7 pages crawled (one more than the 6 the analysis
+ * audited, as the engine leaves a Cloudflare `/cdn-cgi/` page out of its checks but not out of its page count), and 41
+ * URLs found, 40 of them crawled.
+ */
+export const ISSUES_CRAWL = { pageCount: 7, fetchedUrlCount: 40, urlsFound: 41 } as const;
+
+/**
+ * The URL facets as the status breakdown reads them: `total` is every URL the crawl found, all but one of them
+ * crawled. Its second read, of the URLs that weren't checked, matches none.
+ */
+export function issuesFacets(query: FacetsQuery, urlsFound: number = ISSUES_CRAWL.urlsFound): FacetsPage {
+  const notChecked = query.filters?.some((filter) => filter.column === 'outcome' && filter.op === 'in') ?? false;
+  return {
+    matching: notChecked ? 0 : urlsFound,
+    total: urlsFound,
+    summary: { available: true, reason: null },
+    unavailable: [],
+    facets: notChecked
+      ? {}
+      : {
+          statusClass: [
+            { value: '2xx', count: urlsFound - 1, filter: { column: 'statusClass', op: 'in', values: ['2xx'] } },
+            { value: null, count: 1, filter: { column: 'statusClass', op: 'isEmpty' } },
+          ],
+        },
+  };
+}
 
 export const ISSUES_ANALYSIS: Analysis = {
   analyzedAt: '2026-11-01T10:21:00Z',
@@ -134,6 +178,11 @@ export interface IssuesSidecarOptions {
   /** The last analysis; null for a crawl never analysed, `error` for one that can't be read, `pending` for never. */
   analysis?: Analysis | null | 'error' | 'pending';
   checks?: Checks;
+  /**
+   * Every URL the crawl found (the URL facets' `total`); `pending` for a read that never answers, `error` for one that
+   * fails.
+   */
+  urlsFound?: number | 'pending' | 'error';
   groups?: Record<string, IssueGroup[]>;
   rows?: Record<string, (IssueRow & { group?: number })[]>;
   onAnalyse?: () => void;
@@ -143,7 +192,11 @@ export interface IssuesSidecarOptions {
 
 /** The routes the Issues screen reads, with the standard ones (library, item, health) after them. */
 export function issuesRoutes(options: IssuesSidecarOptions = {}): FakeRoute[] {
-  const item = testCrawlItem(options.item);
+  const item = testCrawlItem({
+    pageCount: ISSUES_CRAWL.pageCount,
+    fetchedUrlCount: ISSUES_CRAWL.fetchedUrlCount,
+    ...options.item,
+  });
   const analysis = options.analysis === undefined ? ISSUES_ANALYSIS : options.analysis;
   const groups = options.groups ?? ISSUE_GROUPS;
   const rows = options.rows ?? ISSUE_ROWS;
@@ -212,6 +265,16 @@ export function issuesRoutes(options: IssuesSidecarOptions = {}): FakeRoute[] {
       'POST',
       /^\/api\/crawls\/[0-9a-f]{16}\/issues\/([a-z0-9-]+)\/rows$/,
       (request, match) => json(issueRowsPage(match[1] ?? '', request.body as GridQuery, rows)),
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/urls\/facets$/,
+      (request) =>
+        options.urlsFound === 'pending'
+          ? new Promise<Response>(() => undefined)
+          : options.urlsFound === 'error'
+            ? problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 })
+            : json(issuesFacets(request.body as FacetsQuery, options.urlsFound)),
     ],
     ...standardRoutes(item).filter(([method, pattern]) => !(method === 'GET' && pattern.source.includes('checks'))),
   ];

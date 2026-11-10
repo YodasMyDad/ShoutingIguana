@@ -17,6 +17,7 @@ import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import {
   ANCHOR_ROWS,
   ISSUES_ANALYSIS,
+  ISSUES_CHECKS_WITHOUT_SUBJECTS,
   ISSUE_GROUPS,
   issuesRoutes,
   type IssuesSidecarOptions,
@@ -148,7 +149,14 @@ describe('the Issues screen', () => {
     expect(all).toHaveFocus();
     expect(heard).toContain('Orphan page, skipped');
     fireEvent.keyDown(all, { key: 'j' });
-    await waitFor(() => expect(heard).toContain('Title too long, 3 URLs'));
+    // A check that flags only pages counts pages; one that can flag any URL counts URLs.
+    await waitFor(() => expect(heard).toContain('Title too long, 3 pages'));
+    fireEvent.keyDown(all, { key: 'k' });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/orphan-page`));
+    fireEvent.keyDown(all, { key: 'k' });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
+    fireEvent.keyDown(all, { key: 'k' });
+    await waitFor(() => expect(heard).toContain('Internal URL returns 4xx, 2 URLs'));
     stop();
   });
 
@@ -373,7 +381,8 @@ describe('the Issues screen', () => {
     sidecar({ groups: { ...ISSUE_GROUPS, 'internal-client-error': groups } });
     await open(`${ISSUES}/internal-client-error?group=${encodeURIComponent('{"detail":"HTTP 404","relatedUrlId":9}')}`);
     const grid = await screen.findByRole('treegrid');
-    const more = (await within(grid).findByRole('link', { name: 'Show the page in URLs' })).closest<HTMLElement>(
+    // The check can flag any URL, so the one URL of its group isn't called a page.
+    const more = (await within(grid).findByRole('link', { name: 'Show it in URLs' })).closest<HTMLElement>(
       '[role="gridcell"]',
     );
     if (!more) throw new Error('No link row');
@@ -811,5 +820,134 @@ describe('the Issues screen', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Filter checks' }), { target: { value: 'title' } });
     await waitFor(() => expect(router.state.location.search).toMatchObject({ q: 'title' }));
     expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`);
+  });
+});
+
+describe('a check’s count, worded by what the check flags', () => {
+  /** A figure of the check's header, by its label: the whole of what it says. */
+  const figure = (label: string) => screen.getByText(label, { selector: '.si-stat__label' }).parentElement;
+  /** The share figure, whatever it's of: null when the header has none. */
+  const share = () => screen.queryByText(/^Share of/, { selector: '.si-stat__label' });
+  /** A check's row in the list, by the whole of its name (jsdom runs the count and its noun together). */
+  const row = (name: RegExp) => screen.getByRole('option', { name });
+  const facetReads = (requests: readonly { path: string }[]) =>
+    requests.filter((request) => request.path.endsWith('/urls/facets')).length;
+  const OPEN_GROUP = `?group=${encodeURIComponent('{"detail":null,"relatedUrlId":1}')}`;
+
+  it('says pages for a check that flags only pages, as a share of the pages crawled', async () => {
+    const { requests } = sidecar();
+    await open(`${ISSUES}/title-too-long`);
+    await screen.findByRole('heading', { name: 'Title too long', level: 2 });
+    expect(figure('Pages affected')).toHaveTextContent(/^Pages affected3Open them in URLs$/);
+    // Of the 7 pages the crawl read, as the library and Overview count them: not of the 6 the analysis audited.
+    expect(figure('Share of pages')).toHaveTextContent(/^Share of pages43%of the 7 pages crawled$/);
+    expect(screen.getByRole('heading', { name: 'Affected pages', level: 3 }).parentElement).toHaveTextContent(
+      'Affected pages3 pages',
+    );
+    expect(await screen.findByRole('grid', { name: 'Title too long: affected pages' })).toBeVisible();
+    expect(row(/^Notice Title too long 3 ?pages$/)).toBeVisible();
+    expect(screen.queryByText(/URLs affected|Share of URLs|Affected URLs/)).toBeNull();
+    // The pages crawled come with the crawl: nothing more is read for them.
+    expect(facetReads(requests)).toBe(0);
+  });
+
+  it('says URLs for a check that can flag any URL, as a share of the URLs found', async () => {
+    sidecar();
+    const { router } = await open(`${ISSUES}/internal-client-error`);
+    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2Open them in URLs$/);
+    // 2 of the 41 URLs the crawl found: a broken image or a redirect is no part of its 7 pages.
+    await waitFor(() => expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs4\.9%of the 41 URLs found$/));
+    expect(screen.getByRole('heading', { name: 'Affected URLs', level: 3 })).toBeVisible();
+    const grid = await screen.findByRole('treegrid', {
+      name: 'Internal URL returns 4xx: affected URLs, grouped by detail',
+    });
+    expect(within(grid).getByRole('columnheader', { name: 'URLs' })).toBeVisible();
+    expect(within(grid).queryByRole('columnheader', { name: 'Pages' })).toBeNull();
+    expect(row(/^Error Internal URL returns 4xx 2 ?URLs$/)).toBeVisible();
+    expect(screen.queryByText(/Pages affected|Share of pages|Affected pages/)).toBeNull();
+    // Its group's link doesn't call them pages, nor say "URLs in URLs".
+    await within(grid).findByText('HTTP 404');
+    fireEvent.pointerDown(grid.querySelector('[data-tree-toggle]')!, { button: 0 });
+    await waitFor(() => expect(router.state.location.search).toHaveProperty('group'));
+    expect(await within(grid).findByRole('link', { name: 'Show all 2 in URLs' })).toBeVisible();
+  });
+
+  it('keeps the share’s place with a dash until the URLs found are read', async () => {
+    sidecar({ urlsFound: 'pending' });
+    await open(`${ISSUES}/internal-client-error`);
+    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs–of the URLs found$/);
+  });
+
+  it('says only what’s known of a check that doesn’t say what it flags: URLs, of the URLs found', async () => {
+    const heard: string[] = [];
+    const stop = onAnnounce((message) => heard.push(message));
+    sidecar({ checks: ISSUES_CHECKS_WITHOUT_SUBJECTS });
+    const { router } = await open(`${ISSUES}/title-too-long`);
+    await screen.findByRole('heading', { name: 'Title too long', level: 2 });
+    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected3Open them in URLs$/);
+    await waitFor(() => expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs7\.3%of the 41 URLs found$/));
+    expect(screen.getByRole('heading', { name: 'Affected URLs', level: 3 }).parentElement).toHaveTextContent(
+      'Affected URLs3 URLs',
+    );
+    expect(await screen.findByRole('grid', { name: 'Title too long: affected URLs' })).toBeVisible();
+    expect(row(/^Notice Title too long 3 ?URLs$/)).toBeVisible();
+    expect(screen.queryByText(/Pages affected|Share of pages|Affected pages|pages crawled/)).toBeNull();
+    const all = screen.getByRole('radio', { name: /All/ });
+    act(() => all.focus());
+    fireEvent.keyDown(all, { key: 'k' });
+    await waitFor(() => expect(path(router)).toBe(`${ISSUES}/orphan-page`));
+    fireEvent.keyDown(all, { key: 'k' });
+    await waitFor(() => expect(heard).toContain('Internal links without anchor text, 6 URLs'));
+    stop();
+  });
+
+  it('words a group’s count, its link and the template’s share in pages for a page check', async () => {
+    sidecar();
+    await open(`${ISSUES}/empty-anchor-text${OPEN_GROUP}`);
+    const grid = await screen.findByRole('treegrid', {
+      name: 'Internal links without anchor text: affected pages, grouped by related URL',
+    });
+    expect(within(grid).getByRole('columnheader', { name: 'Pages' })).toBeVisible();
+    expect(await within(grid).findByRole('link', { name: 'Show all 5 pages in URLs' })).toBeVisible();
+    expect(screen.getByText('Likely in the site’s template').parentElement).toHaveTextContent('on 5 of 6 pages');
+    // 6 of the 7 pages crawled.
+    expect(figure('Share of pages')).toHaveTextContent(/^Share of pages86%of the 7 pages crawled$/);
+  });
+
+  it('words the same group in URLs when the check doesn’t say it flags only pages', async () => {
+    sidecar({ checks: ISSUES_CHECKS_WITHOUT_SUBJECTS });
+    await open(`${ISSUES}/empty-anchor-text${OPEN_GROUP}`);
+    const grid = await screen.findByRole('treegrid', {
+      name: 'Internal links without anchor text: affected URLs, grouped by related URL',
+    });
+    expect(within(grid).getByRole('columnheader', { name: 'URLs' })).toBeVisible();
+    expect(await within(grid).findByRole('link', { name: 'Show all 5 in URLs' })).toBeVisible();
+    expect(screen.getByText('Likely in the site’s template').parentElement).toHaveTextContent('on 5 of 6 URLs');
+  });
+
+  it('says no share while the crawl runs: its counts are moving, and the analysis is of what it was', async () => {
+    const { requests } = sidecar({ item: { status: 'running' } });
+    await open(`${ISSUES}/internal-client-error`);
+    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
+    expect(share()).toBeNull();
+    expect(screen.queryByText(/URLs found|pages crawled/)).toBeNull();
+    // Nor is the crawl counted for it while it runs.
+    expect(facetReads(requests)).toBe(0);
+    fireEvent.click(screen.getByRole('option', { name: /Title too long/ }));
+    await screen.findByRole('heading', { name: 'Title too long', level: 2 });
+    expect(figure('Pages affected')).toHaveTextContent(/^Pages affected3/);
+    expect(share()).toBeNull();
+  });
+
+  it('never says a share of more than the whole: a count past the pages crawled has none', async () => {
+    // The file has fewer pages than the analysis counted (it's of another moment): nothing true to say.
+    sidecar({ item: { pageCount: 2 } });
+    await open(`${ISSUES}/title-too-long`);
+    await screen.findByRole('heading', { name: 'Title too long', level: 2 });
+    expect(figure('Pages affected')).toHaveTextContent(/^Pages affected3/);
+    expect(share()).toBeNull();
   });
 });

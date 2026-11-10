@@ -2,7 +2,8 @@ import { Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { useId, type ReactNode, type Ref } from 'react';
 import type { CheckGroupRef, GridSort } from '../../api/grids';
 import type { Analysis } from '../../api/types';
-import { formatCount, formatPercent } from '../../lib/format';
+import { affectedCount, affectedWords, checkShare, type CrawlCounts } from '../../crawl/checkSubject';
+import { formatCount } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { EmptyState, SkippedState } from '../../ui/EmptyState';
@@ -20,6 +21,11 @@ export interface CheckDetailProps {
   entry: CheckEntry;
   categoryTitle: string;
   analysis: Analysis;
+  /**
+   * The crawl's own counts, which the check's count is a share of: the pages crawled for a check that flags only
+   * pages, the URLs found for any other. Null while the crawl runs, when no share is said.
+   */
+  crawlCounts: CrawlCounts | null;
   /** The check's groups, once the first page says (null before, and for a check that doesn't group). */
   groupCount: number | null;
   siteOrigin: string | null;
@@ -44,14 +50,17 @@ function groupedBy(grouping: CheckEntry['check']['grouping']): string {
 
 /**
  * The selected check (docs/v2-ui-ia.md, Issues): its severity and category, title and actions, its figures, what's
- * wrong, why it matters and how to fix it, then its affected pages. A skipped check shows its reason, never 0s; a
- * check that passed says so plainly.
+ * wrong, why it matters and how to fix it, then what it flags. That is worded by the check's `subject`
+ * (crawl/checkSubject.ts): pages, as a share of the pages crawled, only for a check that flags nothing else; URLs, as
+ * a share of the URLs found, for one that can flag any URL or doesn't say. A skipped check shows its reason, never
+ * 0s; a check that passed says so plainly.
  */
 export function CheckDetail({
   crawlId,
   entry,
   categoryTitle,
   analysis,
+  crawlCounts,
   groupCount,
   siteOrigin,
   group,
@@ -69,7 +78,8 @@ export function CheckDetail({
   const titleId = useId();
   const { check, outcome, count } = entry;
   const found = outcome !== 'passed' && outcome !== 'skipped';
-  const pages = analysis.pagesAnalyzed;
+  const words = affectedWords(check);
+  const share = found ? checkShare(check, count, crawlCounts) : null;
   const groups = check.grouping !== 'none';
 
   return (
@@ -110,22 +120,14 @@ export function CheckDetail({
             <StatLink
               compact
               size="md"
-              label="Pages affected"
+              label={words.affected}
               value={<Num value={count ?? 0} />}
               context="Open them in URLs"
               to="/crawls/$crawl/urls"
               params={{ crawl: crawlId }}
               search={{ filter: [{ column: 'check', op: 'in', values: [check.id] }] }}
             />
-            {count !== null && pages > 0 && count <= pages ? (
-              <Stat
-                compact
-                size="md"
-                label="Share of pages"
-                value={formatPercent(count, pages)}
-                context={`of the ${formatCount(pages)} pages crawled`}
-              />
-            ) : null}
+            {share ? <Stat compact size="md" label={share.label} value={share.value} context={share.context} /> : null}
             {groups ? (
               <Stat
                 compact
@@ -177,14 +179,14 @@ export function CheckDetail({
         <section aria-labelledby={`${titleId}-pages`} className="px-6 pt-5 pb-6">
           <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h3 id={`${titleId}-pages`} className="text-14 font-semibold">
-              Affected pages
+              {words.heading}
             </h3>
             <span className="text-13 text-text-muted">
               {groups
                 ? groupCount === null
                   ? `${formatCount(count)} ${count === 1 ? 'issue' : 'issues'}`
                   : `${formatCount(count)} ${count === 1 ? 'issue' : 'issues'} in ${formatCount(groupCount)} ${groupCount === 1 ? 'group' : 'groups'}, ${groupedBy(check.grouping)}`
-                : `${formatCount(count)} ${count === 1 ? 'URL' : 'URLs'}`}
+                : affectedCount(check, count)}
             </span>
           </div>
           {groups ? (

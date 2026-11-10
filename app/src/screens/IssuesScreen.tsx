@@ -14,6 +14,7 @@ import {
 import { GRID_PAGE_GC_MS } from '../app/queryClient';
 import { isCrawling, type Severity } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
+import { affectedCount, affectedNoun, type CrawlCounts } from '../crawl/checkSubject';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -50,22 +51,27 @@ import { checkUrlsReader, copyUrls } from './issues/copyUrls';
 import { groupRefOf } from './issues/groupTree';
 import { useAnalysisAnswer } from './issues/useAnalysisAnswer';
 import { useAnalysisControl } from './issues/useAnalysisControl';
+import { foundCount } from './overview/statusSplit';
+import { statusFacetsQuery } from './overview/useCrawlFacets';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
-/** A check as it's announced when J or K selects it: "Title too long, 3 URLs". */
+/**
+ * A check as it's announced when J or K selects it: "Title too long, 3 pages", "Internal URL returns 4xx, 9 URLs".
+ * Pages only for a check that flags nothing else (crawl/checkSubject.ts).
+ */
 function checkWords(entry: CheckEntry): string {
   if (entry.outcome === 'skipped') return `${entry.check.title}, skipped`;
   if (entry.outcome === 'passed') return `${entry.check.title}, passed`;
-  return `${entry.check.title}, ${formatCountOf(entry.count ?? 0, 'URL')}`;
+  return `${entry.check.title}, ${affectedCount(entry.check, entry.count ?? 0)}`;
 }
 
 /**
  * Issues (docs/v2-ui-ia.md, Issues; flow 3, Triage): the answer first, the checks by category on the left, and the
- * selected check on the right, with what's wrong, why it matters, how to fix it, and its affected pages grouped by
- * their cause. The check is in the path; the severity, the text filter, the category a link narrowed the list to, the
- * group in view, a flat check's sort and the inspected URL are in the search, so back, forward and links restore all of
- * it.
+ * selected check on the right, with what's wrong, why it matters, how to fix it, and the pages or URLs it flags
+ * grouped by their cause. The check is in the path; the severity, the text filter, the category a link narrowed the
+ * list to, the group in view, a flat check's sort and the inspected URL are in the search, so back, forward and links
+ * restore all of it.
  */
 export function IssuesScreen() {
   const { crawl: crawlId, check: checkId } = useParams({ from: ROUTE });
@@ -174,6 +180,20 @@ export function IssuesScreen() {
     staleTime: Infinity,
     gcTime: GRID_PAGE_GC_MS,
   });
+
+  // What the selected check's count is a share of, from the crawl itself. The pages crawled are the library's count
+  // (as Overview's "pages read" is). The URLs found are the URL grid's total, read with Overview's status breakdown
+  // (the same query, so the two screens can't disagree, and coming from Overview costs nothing), and only for a check
+  // whose count is of URLs. Neither while the crawl runs: its counts move, the library's stands still until it stops,
+  // and the analysis on screen is of the crawl as it was.
+  const countsUrls = found && affectedNoun(selected.check) === 'URL';
+  const urlFacets = useQuery({ ...statusFacetsQuery(crawlId), enabled: countsUrls && !crawling });
+  const pagesCrawled = item?.pageCount ?? null;
+  const urlsFound = urlFacets.data ? foundCount(urlFacets.data) : null;
+  const crawlCounts = useMemo<CrawlCounts | null>(
+    () => (crawling ? null : { pages: pagesCrawled, urls: urlsFound }),
+    [crawling, pagesCrawled, urlsFound],
+  );
 
   const choose = (next: string, by: SelectedBy) => {
     if (next === checkId) return;
@@ -498,6 +518,7 @@ export function IssuesScreen() {
                 entry={selected}
                 categoryTitle={categoryTitle(checks.data, selected.check)}
                 analysis={analysis.data}
+                crawlCounts={crawlCounts}
                 groupCount={groupsPage.data?.matching ?? null}
                 siteOrigin={siteOriginOf(item?.startUrl)}
                 group={search.group}
