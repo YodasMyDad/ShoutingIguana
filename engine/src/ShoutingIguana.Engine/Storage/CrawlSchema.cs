@@ -232,6 +232,10 @@ internal static class CrawlSchema
         -- The issues naming a URL, by check, without reading the others.
         CREATE INDEX IF NOT EXISTS ix_issue_targets_named ON issue_targets (related_url_id, issue);
 
+        -- The URLs one issue names, for the inspector to say which group it's in, without reading the check's other issues.
+        -- An analysis from before this index is read through the key, a check at a time.
+        CREATE INDEX IF NOT EXISTS ix_issue_targets_url ON issue_targets (url_id, issue);
+
         -- The fault a check's issues group by where each issue's detail is the page's own instance of it (a JSON-LD
         -- parser's message with where in the block it failed, a canonical's href), so a fault in the site's template is one
         -- group. Only for the checks the catalog gives a fault (IssueDefinition.FaultOf).

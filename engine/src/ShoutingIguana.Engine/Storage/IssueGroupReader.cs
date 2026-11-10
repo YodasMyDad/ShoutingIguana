@@ -107,6 +107,48 @@ public static class IssueGroupReader
     };
 
     /// <summary>
+    /// The group one issue is in, as <see cref="Counted"/> makes a check's groups: the key that finds it among them, and that
+    /// narrows the check's rows to it. An issue of a check grouped by the other URL is in the group of each URL it names: the
+    /// one it shows as the other URL involved when that is one of them (a duplicate shows a page that repeats it, but is
+    /// grouped under its cluster's first page), otherwise the first. Null for a check that isn't grouped, one this engine
+    /// doesn't know, and an issue without a detail of a check grouped by the fault its detail shows.
+    /// </summary>
+    internal static IssueGroupKey? GroupOf(GridReadContext context, string checkId, int urlId, string? detail, int? relatedUrlId)
+    {
+        var check = IssueCatalog.Find(checkId);
+        switch (check?.Grouping)
+        {
+            case null or IssueGrouping.None:
+                return null;
+            case IssueGrouping.RelatedUrl when context.HasIssueTargets:
+                List<int> named = [];
+                using (var command = context.Command("SELECT related_url_id FROM issue_targets WHERE url_id = $url AND issue = $check ORDER BY related_url_id",
+                           [new("$url", urlId), new("$check", checkId)]))
+                using (var reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        named.Add(reader.GetInt32(0));
+                    }
+                }
+
+                if (named.Count == 0)
+                {
+                    return null;
+                }
+
+                var group = relatedUrlId is { } related && named.Contains(related) ? related : named[0];
+                return new IssueGroupKey(null, group == IssueHit.NO_OTHER_URL ? null : group);
+            case IssueGrouping.RelatedUrl:
+                return new IssueGroupKey(null, relatedUrlId);
+            case IssueGrouping.PageDetail when context.HasIssueTargets && check.FaultOf is { } faultOf:
+                return detail is null ? null : new IssueGroupKey(faultOf(detail), null);
+            default:
+                return new IssueGroupKey(detail, relatedUrlId);
+        }
+    }
+
+    /// <summary>
     /// One page of a check's rows as a URL grid: a row per URL the check flagged, with the URL grid's columns and the
     /// issue's own (its detail, the other URL and its status), filtered, searched and sorted as the URL grid is. Narrowed
     /// to one group by <paramref name="group"/>. Null when the crawl has never been analysed.
