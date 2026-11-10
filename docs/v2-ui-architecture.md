@@ -508,9 +508,9 @@ answer. What it settled:
 - **Its commands**: Cancel the analysis, and "Open the first check to fix" in the palette. The rest are the app's
   (Pause or resume, Stop, Continue, Analyse again).
 - **Measured** (10 Nov 2026, this machine, the production build in headless Chromium at 1280x720, against the real
-  sidecar). A live crawl of the engine's test site at the Fast preset (16 at a time, about 2,000 URLs a second here,
-  66,283 URLs): 60 fps from the first figure to the answer, 99% of frames within 16.8 ms and none over 33 ms. The 100k
-  crawl from a click in the library: the answer is painted within 48 ms (62 at most over 7 opens) and every breakdown
-  within 64 ms (78 at most); 136 ms the first time, before the sidecar has counted the crawl. A click on a status class
-  shows URLs within 48 ms and its first rows within 63; Fix first shows its check in Issues within 52 ms; Tab moves
-  focus within 18 ms.
+  sidecar). A live crawl of the engine's test site at the Fast preset (16 at a time; 66,283 URLs in 18 to 23 s, so
+  2,900 to 3,600 URLs a second), three times (light, dark, 200% zoom): 60 fps from the first figure to the answer, 99%
+  of frames within 16.8 ms and none over 33 ms. The 100k crawl from a click in the library: the answer is painted
+  within 48 ms (62 at most over 7 opens) and every breakdown within 64 ms (78 at most); 136 ms the first time, before
+  the sidecar has counted the crawl. A click on a status class shows URLs within 48 ms and its first rows within 63;
+  Fix first shows its check in Issues within 52 ms; Tab moves focus within 18 ms.
