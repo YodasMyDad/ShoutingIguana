@@ -37,7 +37,12 @@ function ActionFor({
       );
     case 'sitemaps':
       return (
-        <TextLink to="/crawls/$crawl/sitemaps/{-$sitemap}" params={{ crawl: crawlId }}>
+        <TextLink
+          to="/crawls/$crawl/sitemaps/{-$sitemap}"
+          params={{ crawl: crawlId }}
+          // The sitemap it means, by its address: Sitemaps goes on to it.
+          search={action.url ? { url: action.url } : {}}
+        >
           {action.label}
         </TextLink>
       );

@@ -8,7 +8,8 @@ import { formatCount, formatCountOf, formatDuration } from '../../lib/format';
 export type AlertAction =
   | { kind: 'crawlSettings'; label: string }
   | { kind: 'newCrawl'; label: string; url: string }
-  | { kind: 'sitemaps'; label: string }
+  /** `url`: the sitemap the alert is about, by its address: the link lands on that sitemap. */
+  | { kind: 'sitemaps'; label: string; url?: string }
   | { kind: 'continue'; label: string };
 
 export interface AlertEntry {
@@ -123,7 +124,7 @@ function words(alert: AlertEvent): Pick<AlertEntry, 'title' | 'detail' | 'advice
         title: 'A sitemap was left out',
         detail: data.url ? `${data.url}${data.reason ? `: ${data.reason}` : ''}` : (data.reason ?? null),
         advice: 'The checks that compare pages with the sitemaps may be skipped.',
-        action: SITEMAPS,
+        action: data.url ? { kind: 'sitemaps', label: 'Open this sitemap', url: data.url } : SITEMAPS,
       };
     case 'sitemaps-failed':
       return {
