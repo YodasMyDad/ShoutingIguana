@@ -220,6 +220,41 @@ describe('GridCore', () => {
     expect(screen.getByText('No URLs match these filters.')).toBeInTheDocument();
   });
 
+  it('makes the reason there are no rows a Tab stop only when it’s too tall for its room and scrolls', () => {
+    const why = <p>No URLs match these filters.</p>;
+    const { unmount } = render(
+      <GridCore<Row>
+        label="Empty"
+        columns={columns}
+        rowCount={0}
+        getRow={() => undefined}
+        rowHeight={32}
+        headerHeight={32}
+        emptyState={why}
+      />,
+    );
+    // With room for it, the grid is the one stop.
+    expect(screen.getByText('No URLs match these filters.').parentElement).not.toHaveAttribute('tabindex');
+    unmount();
+    // In a short grid it scrolls: the keyboard must be able to reach it to scroll it.
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(128);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(55);
+    render(
+      <GridCore<Row>
+        label="Empty"
+        columns={columns}
+        rowCount={0}
+        getRow={() => undefined}
+        rowHeight={32}
+        headerHeight={32}
+        emptyState={why}
+      />,
+    );
+    const region = screen.getByRole('group', { name: 'Empty: no rows' });
+    expect(region).toHaveAttribute('tabindex', '0');
+    expect(region).toHaveTextContent('No URLs match these filters.');
+  });
+
   it('is busy, with no row count, until the first page arrives', () => {
     const { grid } = setup({ rowCount: null });
     expect(grid).toHaveAttribute('aria-busy', 'true');

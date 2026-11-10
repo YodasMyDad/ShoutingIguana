@@ -406,6 +406,31 @@ test('the sheet resizes from the keyboard, docks at the bottom, and remembers bo
   await expect.poll(async () => (await inspectorOf(page).boundingBox())?.width ?? 0).toBe(before + 32);
 });
 
+test('an empty link grid in a short window passes axe, and the keyboard reaches the reason it scrolls', async ({
+  page,
+}) => {
+  await openSection(page, /^URLs/);
+  await page.keyboard.press('Control+k');
+  const palette = page.getByRole('dialog', { name: 'Command palette' });
+  await palette.getByRole('combobox').fill('go to url');
+  await page.keyboard.press('Enter');
+  await palette.getByRole('textbox', { name: 'Go to URL' }).fill('/img/large.jpg');
+  await page.keyboard.press('Enter');
+  const inspector = inspectorOf(page);
+  await expect(inspector.getByRole('heading', { level: 2 })).toContainText('/img/large.jpg');
+  await showTab(inspector, /^Outlinks/);
+  await expect(inspector.getByText('No outlinks')).toBeVisible();
+  // 1280x720 at 200%: the grid has less room than its "No outlinks" takes, so that scrolls.
+  await page.setViewportSize({ width: 640, height: 360 });
+  const reason = inspector.getByRole('group', { name: 'Outlinks: no rows' });
+  await expect(reason).toHaveAttribute('tabindex', '0');
+  await expectNoViolations(page);
+  await inspector.getByRole('button', { name: 'Dock at the bottom' }).click();
+  await expect(reason).toHaveAttribute('tabindex', '0');
+  await expectNoViolations(page);
+  await inspector.getByRole('button', { name: 'Dock on the right' }).click();
+});
+
 const SECTIONS = [
   /^Summary/,
   /^Issues/,

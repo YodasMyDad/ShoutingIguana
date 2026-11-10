@@ -275,6 +275,9 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   text (a group's link to its rows), is left out, never copied as a blank line. A treegrid's `fetchRows` maps its
   rows to the pages they come from (Issues' groups).
 - **Loading**: the first load's skeleton shows only after 150 ms, and once shown stays at least 300 ms, rows or not.
+- **No rows**: `emptyState` says why, under the header. In a grid too short for it (a small window, the inspector
+  docked at the bottom) it scrolls, and then, only then, it's a Tab stop with a name, so the keyboard can scroll it;
+  with room for it the grid stays the one stop.
 - Give it a new `key` when the rows change meaning (another sort or filter): that resets the scroll and selection.
 - **Sorting from the header**: a column with `sortable` gets a button for a header, and the grid calls
   `onSort(id, focused)`; `grid/sort.ts` (`nextSort`) cycles ascending, descending, then the engine's order. The sort

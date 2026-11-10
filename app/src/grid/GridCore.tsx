@@ -672,10 +672,40 @@ function GridCoreInner<Row>({
         <VirtualScrollbar model={model} total={count * rowHeight} viewport={view.viewport} top={headerHeight} />
       ) : null}
       {!loading && rowCount === 0 && emptyState ? (
-        <div className="absolute inset-x-0 bottom-0 overflow-auto" style={{ top: headerHeight }}>
+        <EmptyRegion label={label} top={headerHeight}>
           {emptyState}
-        </div>
+        </EmptyRegion>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Why there are no rows, under the header. In a short grid (a small window, the inspector docked at the bottom) it
+ * can be taller than its room and scroll: then, and only then, it's a Tab stop with a name, so the keyboard can
+ * scroll it (WCAG 2.1.1). With room for it, the grid stays the one stop.
+ */
+function EmptyRegion({ label, top, children }: { label: string; top: number; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [scrolls, setScrolls] = useState(false);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const measure = () => setScrolls(element.scrollHeight > element.clientHeight + 1);
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(element);
+    if (element.firstElementChild) observer?.observe(element.firstElementChild);
+    return () => observer?.disconnect();
+  }, []);
+  return (
+    <div
+      ref={ref}
+      className="absolute inset-x-0 bottom-0 overflow-auto"
+      style={{ top }}
+      {...(scrolls ? { tabIndex: 0, role: 'group', 'aria-label': `${label}: no rows` } : {})}
+    >
+      {children}
     </div>
   );
 }
