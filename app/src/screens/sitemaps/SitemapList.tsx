@@ -16,7 +16,7 @@ import { Callout } from '../../ui/Callout';
 import { EmptyState } from '../../ui/EmptyState';
 import { LiveBadge } from '../../ui/LiveBadge';
 import { PageHeader } from '../../ui/PageHeader';
-import { TextLink } from '../../ui/TextLink';
+import { CountSentence } from '../SentenceWithCounts';
 import { SitemapTree } from './SitemapTreeGrid';
 import {
   COVERAGE_FACETS,
@@ -201,25 +201,9 @@ function NotInAnySitemap({ crawlId }: { crawlId: string }) {
   }
   const coverage = coverageOf(facets.data);
   if (!coverage.known) return <p className="text-13 text-text-secondary">{COVERAGE_NEEDS[coverage.reason]}</p>;
-  const words = coverageWords(coverage);
   return (
     <p className="text-13 text-text-secondary">
-      {typeof words === 'string' ? (
-        words
-      ) : (
-        <>
-          <TextLink
-            to="/crawls/$crawl/urls"
-            params={{ crawl: crawlId }}
-            search={{ filter: coverage.filters }}
-            variant="inline"
-            className="figures"
-          >
-            {words.count}
-          </TextLink>
-          {words.rest}
-        </>
-      )}
+      <CountSentence crawlId={crawlId} parts={coverageWords(coverage)} />
     </p>
   );
 }

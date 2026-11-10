@@ -759,6 +759,10 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   from is remembered for the session and handed to the grid as `startRow`, so Back, "All sitemaps" and the sidebar
   land on that row, not at the top of a thousand. The list of sitemaps is as tall as its rows, the ones under a
   closed index not counted, and never taller than the room there is.
+- **A count of URLs in a sentence is a link too** (`screens/countSentence.ts`, drawn by `SentenceWithCounts.tsx`):
+  a sentence is built as words and counts, each count with the URL grid's filters for what it counts, so the
+  words and every landing are unit-tested. The robots.txt answer's "kept it from 1,204 URLs" opens the URLs whose
+  `outcome` is `robotsDisallowed`, which is what the origins' counts add up to.
 - **A stale place is said, with the list a press away**: a sitemap's id or an origin the crawl doesn't have
   (`sitemap-not-found`, `origin-not-found`, and a path that can't be an id) reads from `STALE_PLACE_WORDS` in
   `api/errors.ts`.
@@ -778,8 +782,9 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
 - **What isn't there is said.** No sitemap at all: a sentence by how far the crawl got (`discovery`), and where the
   crawl looks. None read: the same, under the list. How a sitemap was found, when the crawl can't say (`foundVia`
   null): "Not known", with why. The site's pages no sitemap lists: one read of the URL grid's `inSitemap` facet over
-  the site's pages (`ANSWERED_SITE_PAGES`, as Overview counts pages), its count a link to exactly those pages. It
-  needs the analysis: without one the line says so, and the counts that need none still show.
+  the site's pages (`ANSWERED_SITE_PAGES`, as Overview counts pages). Both of its counts are links: the pages no
+  sitemap lists, and the site's pages they're of. It needs the analysis: without one the line says so, and the
+  counts that need none still show.
 - **Without a URL summary** (never analysed, out of date, an earlier engine's, a crawl running) the list says which
   counts are the crawl's own judgement (indexable, non-indexable) and offers the analysis where it can run.
 - **One sitemap is the URL grid narrowed to it** (`/sitemaps/urls`): the URL grid's columns and filter chips
@@ -862,6 +867,8 @@ sidecar not having counted the crawl yet).
 ### The sweep
 
 `e2e/sitemaps-robots.sweep.spec.ts` reads every count off both screens and follows it: each sitemap's four counts
-(a 0 has no link, so the engine is asked what its link would open), each quick filter, the pages no sitemap lists,
+(a 0 has no link, so the engine is asked what its link would open), each quick filter, the pages no sitemap lists
+and the site's pages they're of (the engine is asked for both first, so the sweep waits for the sentence it knows
+is coming and never passes for want of one), every URL robots.txt kept the crawl from,
 each origin's blocked URLs, each line's, and the two cases no line accounts for, which must add up to the origin's.
 It runs on the tests' own crawl of the synthetic site, and on a real one with `SI_E2E_CRAWL`.

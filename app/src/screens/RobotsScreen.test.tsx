@@ -90,11 +90,17 @@ describe('robots.txt: the origins', () => {
   it('answers first, then lists the origins with what each answer meant to the crawl, in different words', async () => {
     sidecar();
     await open(ROBOTS);
-    expect(
-      await screen.findByText(
+    const answer = await screen.findByText(
+      wholeText(
         'The crawl asked 4 origins for robots.txt, as ShoutingIguana. They kept it from 6 URLs. The site’s own come first, then the rest by the URLs they blocked.',
       ),
-    ).toBeVisible();
+    );
+    expect(answer).toBeVisible();
+    // What it was kept from is a link to exactly those URLs: the ones whose outcome is "refused by robots.txt".
+    const kept = decodeURIComponent(within(answer).getByRole('link', { name: '6 URLs' }).getAttribute('href') ?? '');
+    expect(kept).toBe(
+      `/crawls/${TEST_CRAWL_ID}/urls?filter=[{"column":"outcome","op":"in","values":["robotsDisallowed"]}]`,
+    );
     const grid = await screen.findByRole('grid', { name: 'Origins' });
     await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '5'));
     const state = (origin: string) => rowOf(origin).querySelector('[aria-colindex="2"]');

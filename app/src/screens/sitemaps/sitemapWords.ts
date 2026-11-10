@@ -11,6 +11,7 @@ import type {
   SummaryReason,
 } from '../../api/grids';
 import { formatCount, formatCountOf } from '../../lib/format';
+import type { SentencePart } from '../countSentence';
 import { ANSWERED_SITE_PAGES } from '../overview/links';
 
 export interface Words {
@@ -214,19 +215,19 @@ export const COVERAGE_NEEDS: Record<SummaryReason, string> = {
 };
 
 /** The words either side of the count that opens the pages no sitemap lists: "264", " of the site’s 265 pages aren’t in any sitemap." */
-export function coverageWords(coverage: Extract<Coverage, { known: true }>): { count: string; rest: string } | string {
-  if (coverage.pages === 0) return 'The crawl read no pages on this site, so there’s nothing for a sitemap to list.';
+export function coverageWords(coverage: Extract<Coverage, { known: true }>): SentencePart[] {
+  if (coverage.pages === 0) return ['The crawl read no pages on this site, so there’s nothing for a sitemap to list.'];
+  // The site's pages, as Overview counts them: the count opens exactly them.
+  const pages = { text: formatCountOf(coverage.pages, 'page'), filters: ANSWERED_SITE_PAGES };
   if (coverage.missing === 0) {
     return coverage.pages === 1
-      ? 'The site’s 1 page is in a sitemap.'
-      : `All of the site’s ${formatCount(coverage.pages)} pages are in a sitemap.`;
+      ? ['The site’s ', pages, ' is in a sitemap.']
+      : ['All of the site’s ', pages, ' are in a sitemap.'];
   }
-  const isnt = coverage.missing === 1 ? 'isn’t' : 'aren’t';
-  return {
-    count: formatCount(coverage.missing),
-    rest:
-      coverage.pages === 1
-        ? ' of the site’s 1 page isn’t in any sitemap.'
-        : ` of the site’s ${formatCount(coverage.pages)} pages ${isnt} in any sitemap.`,
-  };
+  return [
+    { text: formatCount(coverage.missing), filters: coverage.filters },
+    ' of the site’s ',
+    pages,
+    coverage.missing === 1 ? ' isn’t in any sitemap.' : ' aren’t in any sitemap.',
+  ];
 }

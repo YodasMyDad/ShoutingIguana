@@ -4,6 +4,7 @@
 // count that's 0 has no link: the engine is asked for what its link would open, which must be nothing. What a line of
 // robots.txt blocked, and the two cases no line accounts for, must add up to what the origin blocked.
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { ANSWERED_SITE_PAGES } from '../src/screens/overview/links';
 import { COUNT_FILTERS, type SitemapCount } from '../src/screens/sitemaps/sitemapLinks';
 import { countOf, crawlTestSite, read, removeCrawl, seededCrawl, type SeededCrawl } from './support';
 
@@ -151,20 +152,39 @@ test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }
     }
   }
 
-  // The site's pages no sitemap lists.
-  await page.goto(`/crawls/${crawl.id}/sitemaps`);
-  const coverage = main(page).getByText(/in any sitemap\./);
-  if ((await coverage.count()) > 0) {
-    // "N of the site's M pages": M is the crawl's pages, as the library counts them.
-    const pages = /of the site’s ([\d,]+) pages?/.exec(await coverage.innerText())?.[1];
-    if (pages) expect(countOf(pages)).toBe(crawl.pageCount);
-    const link = coverage.getByRole('link');
-    if ((await link.count()) > 0) {
-      const said = countOf(await link.innerText());
-      await link.click();
-      await expect(page).toHaveURL(/\/urls\?filter=/);
-      await expect(shownIn(main(page))).toHaveText(number(said));
-      landings++;
+  // The site's pages no sitemap lists: said once a sitemap was read. What the sentence must say is the engine's own
+  // count, asked here, so the sweep waits for the sentence it knows is coming rather than pass for want of one.
+  if (list.sitemaps.some((sitemap) => sitemap.state === 'read')) {
+    const facets = await read<{
+      matching: number;
+      unavailable: string[];
+      facets: { inSitemap?: { value: boolean | null; count: number }[] };
+    }>(`/api/crawls/${crawl.id}/urls/facets`, { filters: ANSWERED_SITE_PAGES, facets: ['inSitemap'] });
+    await page.goto(`/crawls/${crawl.id}/sitemaps`);
+    if (facets.unavailable.includes('inSitemap')) {
+      await expect(main(page).getByText(/^How many of the site’s pages no sitemap lists is counted/)).toBeVisible();
+    } else if (facets.matching === 0) {
+      await expect(main(page).getByText(/^The crawl read no pages on this site/)).toBeVisible();
+    } else {
+      // "N of the site's M pages": M is the crawl's pages, as the library counts them.
+      expect(facets.matching).toBe(crawl.pageCount);
+      const missing = facets.facets.inSitemap?.find((bucket) => bucket.value === false)?.count ?? 0;
+      const sentence = main(page).getByText(/the site’s [\d,]+ pages? (is|are|isn’t|aren’t) in (a|any) sitemap\./);
+      await expect(sentence).toBeVisible();
+      // Each count in it is a link to exactly its URLs: the pages no sitemap lists (when there are some), and the
+      // site's pages.
+      const expected = missing > 0 ? [missing, facets.matching] : [facets.matching];
+      await expect(sentence.getByRole('link')).toHaveCount(expected.length);
+      for (const [at, count] of expected.entries()) {
+        const link = sentence.getByRole('link').nth(at);
+        expect(countOf(await link.innerText()), `the sentence's count ${at}`).toBe(count);
+        await link.click();
+        await expect(page).toHaveURL(/\/urls\?filter=/);
+        await expect(shownIn(main(page)), `the sentence's link ${at}`).toHaveText(number(count));
+        landings++;
+        await page.goBack();
+        await expect(sentence).toBeVisible();
+      }
     }
   }
   report(
@@ -219,7 +239,13 @@ test('sweep: every count on robots.txt lands on exactly its URLs, and the lines 
     main(page).getByText(new RegExp(`asked ${number(first.total)} origins? for robots\\.txt`)),
   ).toBeVisible();
   if (first.blocked > 0) {
-    await expect(main(page).getByText(new RegExp(`kept it from ${number(first.blocked)} URLs?\\.`))).toBeVisible();
+    // What the crawl was kept from, in all: a link to exactly those URLs in the URL grid.
+    const kept = main(page).getByRole('link', { name: new RegExp(`^${number(first.blocked)} URLs?$`) });
+    await expect(kept).toBeVisible();
+    await kept.click();
+    await expect(page).toHaveURL(/\/urls\?filter=/);
+    await expect(shownIn(main(page)), 'every URL robots.txt kept the crawl from').toHaveText(number(first.blocked));
+    await page.goBack();
   }
   const grid = main(page).getByRole('grid', { name: 'Origins' });
   await expect(grid.getByRole('row').nth(1)).toBeVisible();

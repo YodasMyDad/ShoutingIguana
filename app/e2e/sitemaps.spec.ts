@@ -3,6 +3,7 @@
 // on exactly their URLs, one sitemap's grid filters and sorts and opens the inspector, a deep link to each survives a
 // reload, the tree runs on the keyboard, and axe finds nothing in both themes and under forced colours.
 import { expect, test, type Page } from '@playwright/test';
+import { ANSWERED_SITE_PAGES } from '../src/screens/overview/links';
 import { countOf, expectNoViolations, openSection, read, seededCrawl } from './support';
 
 interface Sitemap {
@@ -88,11 +89,22 @@ test('every count in the list lands on exactly its URLs, and back returns to the
 });
 
 test('the pages no sitemap lists land on exactly those pages in URLs', async ({ page }) => {
+  // The synthetic site's categories are in no sitemap: the engine says how many pages that is.
+  const { crawl } = await sitemapsOf();
+  const facets = await read<{ facets: { inSitemap?: { value: boolean | null; count: number }[] } }>(
+    `/api/crawls/${crawl}/urls/facets`,
+    { filters: ANSWERED_SITE_PAGES, facets: ['inSitemap'] },
+  );
+  const missing = facets.facets.inSitemap?.find((bucket) => bucket.value === false)?.count ?? 0;
+  expect(missing, 'the synthetic site has pages no sitemap lists').toBeGreaterThan(0);
+
   await openSitemaps(page);
   const line = main(page).getByText(/in any sitemap\./);
-  const link = line.getByRole('link');
-  test.skip((await link.count()) === 0, 'Every page of this crawl is in a sitemap');
+  // Two links: how many aren't listed, then the site's pages they're "of".
+  await expect(line.getByRole('link')).toHaveCount(2);
+  const link = line.getByRole('link').first();
   const said = countOf(await link.innerText());
+  expect(said).toBe(missing);
   await link.click();
   await expect(page).toHaveURL(/\/urls\?filter=/);
   await expect(shown(page)).toHaveText(said.toLocaleString('en-GB'));

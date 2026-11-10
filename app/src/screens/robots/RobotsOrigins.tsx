@@ -19,8 +19,9 @@ import { LiveBadge } from '../../ui/LiveBadge';
 import { PageHeader } from '../../ui/PageHeader';
 import { RelativeTime } from '../../ui/RelativeTime';
 import { TextLink } from '../../ui/TextLink';
+import { CountSentence } from '../SentenceWithCounts';
 import { pressedRow, rememberPlace, rememberedPlace } from '../listPlace';
-import { IGNORED, answerSentence, stateWords } from './robotsWords';
+import { IGNORED, answerParts, stateWords } from './robotsWords';
 
 const ROUTE = '/crawls/$crawl/robots/{-$origin}';
 
@@ -199,9 +200,14 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
         badge={crawl.crawling ? <LiveBadge /> : null}
         // The line is there from the start, so nothing moves when the answer comes.
         subtitle={
-          first
-            ? `${answerSentence(first)}${first.total > 1 ? ' The site’s own come first, then the rest by the URLs they blocked.' : ''}`
-            : ' '
+          first ? (
+            <>
+              <CountSentence crawlId={crawlId} parts={answerParts(first)} />
+              {first.total > 1 ? ' The site’s own come first, then the rest by the URLs they blocked.' : ''}
+            </>
+          ) : (
+            '\u00a0'
+          )
         }
       />
       {first && !first.respected ? (

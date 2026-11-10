@@ -80,7 +80,9 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
   useFocusRescue(container, () => title.current);
 
   const file = useQuery(robotsFileQuery(crawlId, origin));
-  const narrowing = useMemo(() => narrowingOf(search), [search]);
+  // By the two params alone: the inspector moving (the route's `inspect`) narrows nothing anew.
+  const { line, reason } = search;
+  const narrowing = useMemo(() => narrowingOf({ line, reason }), [line, reason]);
   /** The blocked URL the list's cursor is on: the file shows the line that decided it. */
   const [cursor, setCursor] = useState<RobotsBlockedUrl | undefined>(undefined);
 

@@ -5,6 +5,7 @@ import {
   LINE_PROBLEM_WORDS,
   UNKNOWN_REASON,
   UNMATCHED_WORDS,
+  answerParts,
   answerSentence,
   blockedWhy,
   stateWords,
@@ -76,6 +77,20 @@ describe('the answer over the origins', () => {
     expect(answerSentence({ total: 4_120, blocked: 0, respected: true, userAgent: UA })).toBe(
       'The crawl asked 4,120 origins for robots.txt, as ShoutingIguana. None of them kept it from a URL.',
     );
+  });
+
+  it('makes the URLs the crawl was kept from a link to exactly them, by the engine’s own word for them', () => {
+    const parts = answerParts({ total: 17, blocked: 1_204, respected: true, userAgent: UA });
+    expect(parts.filter((part) => typeof part !== 'string')).toEqual([
+      { text: '1,204 URLs', filters: [{ column: 'outcome', op: 'in', values: ['robotsDisallowed'] }] },
+    ]);
+    // Nothing to open when nothing was blocked, or when the crawl ignored robots.txt.
+    expect(
+      answerParts({ total: 3, blocked: 0, respected: true, userAgent: UA }).every((part) => typeof part === 'string'),
+    ).toBe(true);
+    expect(
+      answerParts({ total: 3, blocked: 0, respected: false, userAgent: UA }).every((part) => typeof part === 'string'),
+    ).toBe(true);
   });
 
   it('doesn’t say “none blocked” of a crawl told to ignore robots.txt: the banner says why', () => {

@@ -11,6 +11,7 @@ import { onAnnounce } from '../feedback/announce';
 import { installKeyboard } from '../keyboard/registry';
 import { TEST_CRAWL_ID, fakeSidecar, json, problem } from '../test/fakeSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
+import { wholeText } from '../test/text';
 import {
   COVERAGE_PAGE,
   SITE,
@@ -190,7 +191,10 @@ describe('Sitemaps: the list', () => {
   it('says how many of the site’s pages no sitemap lists, as a link to exactly those pages', async () => {
     sidecar();
     await open(SITEMAPS);
-    const line = await screen.findByText(/of the site’s 9 pages aren’t in any sitemap\./);
+    const line = await screen.findByText(wholeText('2 of the site’s 9 pages aren’t in any sitemap.'));
+    // The pages it's "of" are a link too: the site's pages, as Overview counts them.
+    const pages = decodeURIComponent(within(line).getByRole('link', { name: '9 pages' }).getAttribute('href') ?? '');
+    expect(JSON.parse(pages.slice(pages.indexOf('filter=') + 'filter='.length))).toEqual(ANSWERED_SITE_PAGES);
     const link = within(line).getByRole('link', { name: '2' });
     const href = decodeURIComponent(link.getAttribute('href') ?? '');
     expect(href.startsWith(`/crawls/${TEST_CRAWL_ID}/urls?filter=`)).toBe(true);

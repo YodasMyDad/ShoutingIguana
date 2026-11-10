@@ -2,8 +2,9 @@
 // Each state has its own true sentence, by the engine's values (docs/v2-sidecar-api.md, robots.txt): a file that
 // didn't answer is `unreachable` (the origin's URLs were refused) or `unanswered` (the crawl went ahead), and the two
 // never share words. Pure, so every wording is unit-tested.
-import type { RobotsBlockedUrl, RobotsLineProblem, RobotsOrigin, RobotsOriginPage } from '../../api/grids';
+import type { GridFilter, RobotsBlockedUrl, RobotsLineProblem, RobotsOrigin, RobotsOriginPage } from '../../api/grids';
 import { formatCount, formatCountOf } from '../../lib/format';
+import { sentenceText, type SentencePart } from '../countSentence';
 
 export type RobotsTone = 'read' | 'nothing' | 'refused' | 'unknown';
 
@@ -71,14 +72,28 @@ export function stateWords(origin: Answer, userAgent: string): StateWords {
 }
 
 /** The answer first, over the list of origins. */
-export function answerSentence(page: Pick<RobotsOriginPage, 'total' | 'blocked' | 'respected' | 'userAgent'>): string {
-  if (page.total === 0) return 'The crawl asked no origin for its robots.txt.';
+export function answerParts(
+  page: Pick<RobotsOriginPage, 'total' | 'blocked' | 'respected' | 'userAgent'>,
+): SentencePart[] {
+  if (page.total === 0) return ['The crawl asked no origin for its robots.txt.'];
   const asked = `The crawl asked ${formatCountOf(page.total, 'origin')} for robots.txt, as ${page.userAgent}.`;
-  if (!page.respected) return asked;
-  return page.blocked === 0
-    ? `${asked} None of them kept it from a URL.`
-    : `${asked} ${page.total === 1 ? 'It' : 'They'} kept it from ${formatCountOf(page.blocked, 'URL')}.`;
+  if (!page.respected) return [asked];
+  if (page.blocked === 0) return [`${asked} None of them kept it from a URL.`];
+  return [
+    `${asked} ${page.total === 1 ? 'It' : 'They'} kept it from `,
+    // Every URL the crawl stored as refused by robots.txt, on whatever origin: what the origins' counts add up to.
+    { text: formatCountOf(page.blocked, 'URL'), filters: REFUSED_BY_ROBOTS },
+    '.',
+  ];
 }
+
+/** The answer as it reads. */
+export function answerSentence(page: Pick<RobotsOriginPage, 'total' | 'blocked' | 'respected' | 'userAgent'>): string {
+  return sentenceText(answerParts(page));
+}
+
+/** The URL grid's filter for the URLs robots.txt kept the crawl from: the engine's own word for them. */
+export const REFUSED_BY_ROBOTS: readonly GridFilter[] = [{ column: 'outcome', op: 'in', values: ['robotsDisallowed'] }];
 
 /** A crawl told to ignore robots.txt: said at the top, so an empty list of blocked URLs isn't read as "allowed". */
 export const IGNORED =

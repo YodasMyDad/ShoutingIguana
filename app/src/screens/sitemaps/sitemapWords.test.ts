@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FacetsPage, Sitemap, SitemapList } from '../../api/grids';
 import { COVERAGE_PAGE, TEST_SITEMAP_LIST, testSitemap } from '../../test/sitemapsRobotsSidecar';
+import { sentenceText } from '../countSentence';
 import { ANSWERED_SITE_PAGES } from '../overview/links';
 import {
   COVERAGE_NEEDS,
@@ -115,10 +116,13 @@ describe('the site’s pages no sitemap lists', () => {
       pages: 9,
       filters: [...ANSWERED_SITE_PAGES, { column: 'inSitemap', op: 'is', value: false }],
     });
-    expect(coverage.known && coverageWords(coverage)).toEqual({
-      count: '2',
-      rest: ' of the site’s 9 pages aren’t in any sitemap.',
-    });
+    const parts = coverage.known ? coverageWords(coverage) : [];
+    expect(sentenceText(parts)).toBe('2 of the site’s 9 pages aren’t in any sitemap.');
+    // Both counts are links: the pages no sitemap lists, and the site's pages as Overview counts them.
+    expect(parts.filter((part) => typeof part !== 'string')).toEqual([
+      { text: '2', filters: [...ANSWERED_SITE_PAGES, { column: 'inSitemap', op: 'is', value: false }] },
+      { text: '9 pages', filters: ANSWERED_SITE_PAGES },
+    ]);
   });
 
   it('says so when every page is in one, or there are no pages', () => {
@@ -127,9 +131,9 @@ describe('the site’s pages no sitemap lists', () => {
       facets: { inSitemap: [{ value: true, count: 9, filter: { column: 'inSitemap', op: 'is', value: true } }] },
     };
     const coverage = coverageOf(all);
-    expect(coverage.known && coverageWords(coverage)).toBe('All of the site’s 9 pages are in a sitemap.');
+    expect(coverage.known && sentenceText(coverageWords(coverage))).toBe('All of the site’s 9 pages are in a sitemap.');
     const none = coverageOf({ ...all, matching: 0, facets: { inSitemap: [] } });
-    expect(none.known && coverageWords(none)).toBe(
+    expect(none.known && sentenceText(coverageWords(none))).toBe(
       'The crawl read no pages on this site, so there’s nothing for a sitemap to list.',
     );
   });
@@ -139,10 +143,9 @@ describe('the site’s pages no sitemap lists', () => {
       ...COVERAGE_PAGE,
       facets: { inSitemap: [{ value: false, count: 1, filter: { column: 'inSitemap', op: 'is', value: false } }] },
     });
-    expect(one.known && coverageWords(one)).toEqual({
-      count: '1',
-      rest: ' of the site’s 9 pages isn’t in any sitemap.',
-    });
+    expect(one.known && sentenceText(coverageWords(one))).toBe('1 of the site’s 9 pages isn’t in any sitemap.');
+    const single = coverageOf({ ...COVERAGE_PAGE, matching: 1, facets: { inSitemap: [] } });
+    expect(single.known && sentenceText(coverageWords(single))).toBe('The site’s 1 page is in a sitemap.');
   });
 
   it('says what it needs when the analysis that counts it isn’t there: never 0', () => {
