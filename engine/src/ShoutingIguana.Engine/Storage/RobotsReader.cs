@@ -89,13 +89,18 @@ public static class RobotsReader
     }
 
     /// <summary>What an origin's stored answer meant to the crawl, as its cache took it and the analysis's robots.txt checks do.</summary>
-    internal static RobotsState StateOf(int? statusCode, string? error) => statusCode switch
+    /// <param name="onStartOrigin">
+    /// The origin is the start URL's, which no answer from refuses everything on; any other origin that gives no answer
+    /// gets no verdict (<see cref="RobotsState.Unanswered"/>).
+    /// </param>
+    internal static RobotsState StateOf(int? statusCode, string? error, bool onStartOrigin = true) => statusCode switch
     {
         >= 200 and <= 299 => RobotsState.Read,
         >= 400 and <= 499 and not 429 => RobotsState.Missing,
 
         // A robots.txt behind redirects that can't be followed is stored without a status, and allows everything.
         null when error?.Contains("redirects", StringComparison.OrdinalIgnoreCase) == true => RobotsState.Missing,
+        null when !onStartOrigin => RobotsState.Unanswered,
         _ => RobotsState.Unreachable
     };
 
@@ -152,7 +157,8 @@ public static class RobotsReader
     {
         var status = reader.IsDBNull(first) || reader.GetInt64(first) is < int.MinValue or > int.MaxValue ? (int?)null : reader.GetInt32(first);
         var error = reader.IsDBNull(first + 1) ? null : reader.GetString(first + 1);
-        return new RobotsOrigin(origin, IsInternal(origin, scope), StateOf(status, error), status, reader.IsDBNull(first + 2) ? null : Time(reader.GetInt64(first + 2)), error,
+        var onStartOrigin = origin == scope?.StartOrigin.GetLeftPart(UriPartial.Authority);
+        return new RobotsOrigin(origin, IsInternal(origin, scope), StateOf(status, error, onStartOrigin), status, reader.IsDBNull(first + 2) ? null : Time(reader.GetInt64(first + 2)), error,
             reader.IsDBNull(first + 3) ? null : reader.GetInt64(first + 3), blocked);
     }
 

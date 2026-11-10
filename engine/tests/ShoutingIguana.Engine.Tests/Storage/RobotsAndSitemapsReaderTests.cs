@@ -167,6 +167,12 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
             (site.Origin, site.IsInternal, site.State, site.StatusCode, site.Error, site.Bytes, site.Blocked));
         Assert.InRange(site.FetchedAt!.Value, DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow);
 
+        // The site's other scheme never answered the crawler's probe of it, and isn't the start URL's origin: the crawl gave
+        // no verdict and went ahead, which the answer says. It's the site's own, and comes next.
+        var twin = origins.Origins[1];
+        Assert.Equal(("https" + Site[4..], true, RobotsState.Unanswered, null, null, 0), (twin.Origin, twin.IsInternal, twin.State, twin.StatusCode, twin.Bytes, twin.Blocked));
+        Assert.False(string.IsNullOrEmpty(twin.Error));
+
         // The partner site's answers 404: no rules, and nothing of it blocked. The list pages.
         var partner = Assert.Single(origins.Origins, origin => !origin.IsInternal);
         Assert.Equal((RobotsState.Missing, 404, null, 0), (partner.State, partner.StatusCode, partner.Bytes, partner.Blocked));
@@ -262,6 +268,35 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         var unanswered = RobotsReader.ReadOrigins(With("UPDATE robots SET status_code = NULL, content = NULL, error = 'Timed out' WHERE origin = $site")).Origins[0];
         Assert.Equal((RobotsState.Unreachable, "Timed out"), (unanswered.State, unanswered.Error));
         Assert.Equal(RobotsState.Missing, RobotsReader.ReadOrigins(With("UPDATE robots SET status_code = NULL, content = NULL, error = 'More than 5 redirects' WHERE origin = $site")).Origins[0].State);
+
+        // What an answer meant to the crawl, by status: a 429 is a server's "not now", which refuses as a 5xx does, on any
+        // origin; every other 4xx means there are no rules.
+        Assert.Equal(
+            [RobotsState.Read, RobotsState.Read, RobotsState.Missing, RobotsState.Missing, RobotsState.Missing, RobotsState.Unreachable, RobotsState.Unreachable, RobotsState.Unreachable, RobotsState.Unreachable],
+            new int?[] { 200, 204, 404, 403, 410, 429, 500, 503, 301 }.Select(status => RobotsReader.StateOf(status, null)));
+        Assert.Equal([RobotsState.Unreachable, RobotsState.Unreachable, RobotsState.Missing], new int?[] { 429, 503, 404 }.Select(status => RobotsReader.StateOf(status, null, onStartOrigin: false)));
+        foreach (var (status, state) in new[] { (429, RobotsState.Unreachable), (430, RobotsState.Missing), (428, RobotsState.Missing) })
+        {
+            var answered = RobotsReader.ReadFile(With("UPDATE robots SET status_code = $status, content = NULL WHERE origin = $site", ("$status", status)), Site)!;
+            Assert.Equal((state, status), (answered.Origin.State, answered.Origin.StatusCode));
+            Assert.Equal(state == RobotsState.Unreachable ? new RobotsUnmatched(blocked.Count, 0) : new RobotsUnmatched(0, blocked.Count), answered.Unmatched);
+        }
+
+        // No answer at all. From the start URL's origin, the crawl refused everything there. From any other, the site's own
+        // other versions included, it gave no verdict and went ahead: nothing was refused, and the answer says which.
+        var twin = (Site.StartsWith("https:", StringComparison.Ordinal) ? "http:" : "https:") + Site[Site.IndexOf(':', StringComparison.Ordinal)..][1..];
+        var silent = With("""
+            UPDATE robots SET status_code = NULL, content = NULL, error = 'Connection refused' WHERE origin <> $site;
+            INSERT OR REPLACE INTO robots (origin, status_code, content, error, fetched_at) VALUES ($twin, NULL, NULL, 'Connection refused', 0), ('https://failing.example', 503, NULL, NULL, 0);
+            """, ("$twin", twin));
+        var origins = RobotsReader.ReadOrigins(silent).Origins;
+        Assert.Equal((RobotsState.Read, true), (origins[0].State, origins[0].IsInternal));
+        Assert.Equal((twin, true, RobotsState.Unanswered, "Connection refused", 0L), (origins[1].Origin, origins[1].IsInternal, origins[1].State, origins[1].Error, origins[1].Blocked));
+        Assert.Equal(RobotsState.Unreachable, origins.Single(origin => origin.Origin == "https://failing.example").State);
+        Assert.All(origins.Skip(2).Where(origin => origin.Origin != "https://failing.example"), origin => Assert.Equal((false, RobotsState.Unanswered, null), (origin.IsInternal, origin.State, origin.StatusCode)));
+        Assert.True(origins.Count > 3);
+        var twinFile = RobotsReader.ReadFile(silent, twin)!;
+        Assert.Equal((RobotsState.Unanswered, 0, new RobotsUnmatched(0, 0)), (twinFile.Origin.State, twinFile.Lines.Count, twinFile.Unmatched));
 
         // An origin the file keeps no robots.txt for still lists what was refused there.
         var gone = RobotsReader.ReadOrigins(With("DELETE FROM robots WHERE origin = $site"));

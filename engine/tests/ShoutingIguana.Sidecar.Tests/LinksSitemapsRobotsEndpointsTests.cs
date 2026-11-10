@@ -170,6 +170,11 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         Assert.Equal((site, true, "read", 200, 1L), ((string?)first["origin"], (bool)first["isInternal"]!, (string?)first["state"], (int)first["statusCode"]!, (long)first["blocked"]!));
         Assert.EndsWith("Z", (string?)first["fetchedAt"]);
         Assert.Contains(origins["origins"]!.AsArray(), origin => (string?)origin!["state"] == "missing" && !(bool)origin["isInternal"]!);
+
+        // The site's https twin never answered, and isn't the start URL's origin: the crawl gave no verdict and went ahead.
+        var twin = Assert.Single(origins["origins"]!.AsArray(), origin => (string?)origin!["origin"] == "https" + site[4..])!;
+        Assert.Equal((true, "unanswered", null, 0L), ((bool)twin["isInternal"]!, (string?)twin["state"], (int?)twin["statusCode"], (long)twin["blocked"]!));
+        Assert.NotNull((string?)twin["error"]);
         Assert.Equal((long)origins["total"]!, origins["origins"]!.AsArray().Count);
         var paged = await PostOkAsync($"api/crawls/{id}/robots", JsonNode.Parse("""{"offset":1,"limit":1}"""));
         Assert.Equal(origins["origins"]![1]!.ToJsonString(), Assert.Single(paged["origins"]!.AsArray())!.ToJsonString());
