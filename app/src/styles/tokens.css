@@ -326,6 +326,7 @@
   --check-row-columns: var(--leading-13) minmax(0, 1fr);
   --chain-columns: var(--icon-box) minmax(0, 1fr); /* a redirect chain's rail, then each step */
   --hreflang-columns: 5.5rem minmax(0, 1fr); /* the language ("x-default"), then where it points */
+  --tree-row-min: 12rem; /* a structured data tree's row, however deep: past the sheet's width it scrolls sideways */
   --content-max: 1136px;
   --page-gutter: var(--space-8);
   --sheet-inset: var(--space-2);

@@ -807,6 +807,11 @@ export const StructuredDataNestedTooDeep: Story = {
       last.click();
       await settle();
     }
+    // Where the tree stops: far to the right of a sheet this narrow, which scrolls sideways to it.
+    const cut = [...canvasElement.querySelectorAll('[role="tabpanel"] li')].find(
+      (item) => item.textContent === 'Nested too deep to show',
+    );
+    cut?.scrollIntoView({ block: 'center', inline: 'center' });
   },
   render: () => inspect(2),
 };

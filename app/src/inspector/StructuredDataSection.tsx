@@ -116,7 +116,7 @@ function Node({ node, depth, root = false }: { node: DataNode; depth: number; ro
 
   if (!branch) {
     return (
-      <li className="flex gap-2 py-0.5 pl-5">
+      <li className="flex min-w-(--tree-row-min) gap-2 py-0.5 pl-5">
         {key ? <span className="shrink-0">{key}</span> : null}
         <span className={`min-w-0 wrap-anywhere ${VALUE_CLASSES[node.kind]}`}>
           {node.kind === 'string' ? `"${node.label}"` : node.label}
@@ -127,7 +127,9 @@ function Node({ node, depth, root = false }: { node: DataNode; depth: number; ro
 
   const { children, more } = visibleChildren(node, shown);
   return (
-    <li>
+    // A row keeps a readable width however deep it is: a deeply nested block scrolls sideways, it isn't squeezed
+    // into a column of letters against the sheet's edge.
+    <li className="min-w-(--tree-row-min)">
       <button
         type="button"
         aria-expanded={open}
@@ -157,7 +159,9 @@ function Node({ node, depth, root = false }: { node: DataNode; depth: number; ro
             </li>
           ) : null}
           {node.children.length === 0 ? (
-            <li className="py-0.5 pl-5 font-sans text-text-muted">{node.cut ? 'Nested too deep to show' : 'Empty'}</li>
+            <li className="min-w-(--tree-row-min) py-0.5 pl-5 font-sans text-text-muted">
+              {node.cut ? 'Nested too deep to show' : 'Empty'}
+            </li>
           ) : null}
         </ul>
       ) : null}
