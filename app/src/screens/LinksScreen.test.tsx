@@ -651,7 +651,9 @@ describe('a read of the links that takes a while', () => {
     const words = 'Reading all 13 links: a search looks at each link’s anchor text and both its URLs.';
     expect(screen.queryByText(words)).toBeNull();
     expect(await screen.findByText(words, undefined, { timeout: 2_000 })).toBeVisible();
-    expect(said).toContain(words);
+    // Said once, by the screen, as the words show: its effect runs after the paint that shows them.
+    await waitFor(() => expect(said).toContain(words));
+    expect(said.filter((message) => message === words)).toHaveLength(1);
     const held = transport.requests.find(
       (request) => request.path.endsWith('/links') && (request.body as GridQuery).search === 'gone',
     );

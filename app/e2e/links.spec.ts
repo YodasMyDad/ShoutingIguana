@@ -6,6 +6,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { colourTweensEnd } from './colourTweens';
+import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -41,11 +42,16 @@ async function api<T>(route: string, body?: unknown): Promise<T> {
 }
 
 let crawl = '';
+let seeded: string[] = [];
 test.beforeAll(async () => {
   const library = await api<{ id: string; site: string | null; fileName: string }[]>('/api/crawls');
   crawl = library.find((item) => (item.site ?? item.fileName) === site())?.id ?? '';
   expect(crawl).not.toBe('');
+  seeded = await libraryIds();
 });
+
+/** The crawl the live test starts is stopped and its file deleted: the library is the seeded crawl again. */
+test.afterEach(() => removeCrawlsNotIn(seeded));
 
 const links = (filters: Filter[], more: Record<string, unknown> = {}) =>
   api<LinksPage>(`/api/crawls/${crawl}/links`, { filters, sort: [], limit: 50, ...more });
@@ -528,4 +534,79 @@ test('holds at 1280x720 and at 200% zoom: nothing overprints, and the toolbar wr
     const count = main(page).locator('.si-result-count');
     expect(await count.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   }
+});
+
+test('while a crawl runs, links arrive in place: the count moves, the grid is never drawn again, the cursor stays', async ({
+  page,
+}) => {
+  // A crawl of the engine's test site, started as a user starts one. Never a real site.
+  await page.goto('/');
+  await page.getByPlaceholder('Paste a URL, then press Enter').fill(env('SI_E2E_TESTSITE'));
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/crawls\/[0-9a-f]{16}\/overview$/);
+  const running = /crawls\/([0-9a-f]{16})/.exec(page.url())?.[1] ?? '';
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: /^Links/ })
+    .first()
+    .click();
+  await expect(main(page).getByRole('heading', { name: 'Links', level: 1 })).toBeVisible();
+  await expect(main(page).getByText('Live', { exact: true })).toBeVisible();
+  const table = grid(page);
+  await expect(table.getByRole('row').nth(1)).toBeVisible();
+  // The cursor, a few rows down, and a mark on the grid's own element: a grid drawn again would have neither.
+  await table.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  const cursor = await table.getAttribute('aria-activedescendant');
+  expect(cursor).not.toBeNull();
+  await table.evaluate((element) => element.setAttribute('data-watched', 'from the first rows'));
+  const first = await shown(page);
+  await expect.poll(() => shown(page), { timeout: 20_000 }).toBeGreaterThan(first);
+  const later = await shown(page);
+  await expect.poll(() => shown(page), { timeout: 20_000 }).toBeGreaterThan(later);
+  // In place: the same grid, never busy, no skeleton, the cursor where it was, and the rows it had still there.
+  await expect(table).toHaveAttribute('data-watched', 'from the first rows');
+  await expect(table).toHaveAttribute('aria-busy', 'false');
+  expect(await table.getAttribute('aria-activedescendant')).toBe(cursor);
+  await expect(table.locator('.si-skeleton')).toHaveCount(0);
+  // The count is no live region: a screen reader isn't read every tick.
+  expect(
+    await main(page)
+      .locator('.si-result-count')
+      .evaluate((element) => element.closest('[aria-live], [role="status"]')),
+  ).toBeNull();
+  // The facets count the links there are now, and add up to them.
+  await main(page).getByRole('button', { name: 'Filter by kind' }).click();
+  const label = page.getByRole('menu').getByText(/^Kind, of [\d,]+ links$/);
+  await expect(label).toBeVisible();
+  const inView = number((await label.innerText()).split(', of ')[1] ?? '');
+  expect(inView).toBeGreaterThanOrEqual(first);
+  const counts = await page
+    .getByRole('menu')
+    .getByRole('menuitem')
+    .evaluateAll((items) => items.map((item) => item.querySelector('[aria-hidden="true"]')?.textContent ?? ''));
+  // One read, one moment of the crawl: the values add up to the links the menu says it counted.
+  expect(counts.map(number).reduce((sum, count) => sum + count, 0)).toBe(
+    number(
+      (
+        await page
+          .getByRole('menu')
+          .getByText(/^Kind, of [\d,]+ links$/)
+          .innerText()
+      ).split(', of ')[1] ?? '',
+    ),
+  );
+  await page.keyboard.press('Escape');
+  // A view of it while it runs: the sidecar's count for the same filters is never less than what was shown first.
+  await main(page).getByRole('button', { name: 'Nofollow links' }).click();
+  await expect(main(page).getByRole('group', { name: 'Filters' })).toContainText('Nofollow is yes');
+  await expect(main(page).locator('.si-result-count__n')).toBeVisible({ timeout: 20_000 });
+  const filtered = await shown(page);
+  const now = await api<LinksPage>(`/api/crawls/${running}/links`, {
+    filters: [{ column: 'noFollow', op: 'is', value: true }],
+    sort: [],
+    limit: 1,
+  });
+  expect(now.matching).toBeGreaterThanOrEqual(filtered);
 });
