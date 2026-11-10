@@ -662,6 +662,41 @@ describe('the Issues screen', () => {
     ).toBeNull();
   });
 
+  it('keeps saying a crawl hasn’t been analysed while that is read again, rather than a loading frame', async () => {
+    let slow: ((response: Response) => void) | null = null;
+    let asked = 0;
+    const notAnalysed = () =>
+      new Response(
+        JSON.stringify({ type: 'not-analyzed', title: 'This crawl hasn’t been analysed yet.', status: 404 }),
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/problem+json' },
+        },
+      );
+    setTransport(
+      fakeSidecar([
+        [
+          'GET',
+          /^\/api\/crawls\/[0-9a-f]{16}\/analysis$/,
+          () => (asked++ === 0 ? notAnalysed() : new Promise<Response>((resolve) => (slow = resolve))),
+        ],
+        ...issuesRoutes({ analysis: null }),
+      ]),
+    );
+    const { queryClient } = await open(ISSUES);
+    const heading = await screen.findByRole('heading', { name: 'This crawl hasn’t been analysed yet' });
+    act(() => void queryClient.invalidateQueries({ queryKey: queryKeys.analysis(TEST_CRAWL_ID) }));
+    await waitFor(() => expect(slow).not.toBeNull());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 200)));
+    expect(heading.isConnected).toBe(true);
+    expect(document.querySelector('[aria-label="Loading the issues"]')).toBeNull();
+    await act(async () => {
+      slow?.(notAnalysed());
+      await Promise.resolve();
+    });
+    expect(heading.isConnected).toBe(true);
+  });
+
   it('says why a crawl never analysed can’t be, offering Continue for an interrupted one', async () => {
     const { resume } = sidecar({ analysis: null, item: { analyzedAt: null, issues: null, status: 'interrupted' } });
     await open(ISSUES);

@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
-import { isProblem } from '../api/errors';
 import { GRID_PAGE_SIZE, type CheckGroupRef, type GridPage, type GridSort, type IssueGroup } from '../api/grids';
 import {
   analysisQuery,
@@ -46,6 +45,7 @@ import {
 } from './issues/checkList';
 import { checkUrlsReader, copyUrls } from './issues/copyUrls';
 import { groupRefOf } from './issues/groupTree';
+import { useAnalysisAnswer } from './issues/useAnalysisAnswer';
 import { useAnalysisControl } from './issues/useAnalysisControl';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
@@ -80,7 +80,9 @@ export function IssuesScreen() {
   const crawling = status !== null && isCrawling(status);
   const analysing = status === 'analyzing';
   const canAnalyse = crawlControls(status, item).canAnalyse;
-  const neverAnalysed = isProblem(analysis.error, 'not-analyzed');
+  // Never analysed, remembered while the read is asked again: the screen keeps saying so, rather than swap itself
+  // for its loading frame until the answer comes.
+  const { neverAnalysed, rereading, finishing } = useAnalysisAnswer(crawlId, analysis, { analysing });
 
   const hiddenIds = useSettings((settings) => settings.hiddenChecks);
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
@@ -399,7 +401,7 @@ export function IssuesScreen() {
     ],
   );
 
-  const loading = (checks.isPending || analysis.isPending) && !checks.error && !analysis.error;
+  const loading = (checks.isPending || (analysis.isPending && !rereading)) && !checks.error && !analysis.error;
   const skeleton = useDelayedLoading(loading);
 
   const subtitle = totals ? answerSentence(totals) : neverAnalysed ? 'No issues to show yet.' : undefined;
@@ -412,8 +414,8 @@ export function IssuesScreen() {
     body = (
       <NotAnalysed
         crawling={crawling}
-        analysing={analysing}
-        event={analysisEvent}
+        analysing={analysing || finishing}
+        event={finishing ? { crawlId, phase: 'writing', done: 1, total: 1 } : analysisEvent}
         canAnalyse={canAnalyse}
         status={status}
         missing={item?.missing === true}

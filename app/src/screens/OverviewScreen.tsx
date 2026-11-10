@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Play } from 'lucide-react';
 import { useMemo, useRef, type ReactNode } from 'react';
-import { isProblem } from '../api/errors';
 import { alertsQuery, analysisQuery, checksQuery, crawlQuery, startUrlQuery, statsQuery } from '../api/queries';
 import { isCrawling, type Checks, type CrawlListItem, type CrawlStatus } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
@@ -32,6 +31,7 @@ import {
   type AnalysisTotals,
   type CheckEntry,
 } from './issues/checkList';
+import { useAnalysisAnswer } from './issues/useAnalysisAnswer';
 import { useAnalysisControl } from './issues/useAnalysisControl';
 import { AlertList } from './overview/AlertList';
 import { alertEntries } from './overview/alerts';
@@ -73,7 +73,9 @@ export function OverviewScreen() {
 
   const checks = useQuery(checksQuery());
   const analysis = useQuery({ ...analysisQuery(crawlId), enabled: !crawling && readable });
-  const neverAnalysed = isProblem(analysis.error, 'not-analyzed');
+  // Never analysed, remembered while the read is asked again (when the analysis ends, when the stream reconnects):
+  // the screen keeps what it shows, the crawl's cards among it, rather than swap itself for its loading frame.
+  const { neverAnalysed, rereading, finishing } = useAnalysisAnswer(crawlId, analysis, { crawling, analysing });
   const facets = useCrawlFacets(crawlId, !crawling && readable);
   const control = useAnalysisControl(crawlId, analysing, neverAnalysed);
   // A banner's button goes once its action has worked (Resume, Continue), and the live crawl's cards go when it ends:
@@ -119,15 +121,20 @@ export function OverviewScreen() {
   );
 
   const answerLoading =
-    !crawling && readable && (checks.isPending || analysis.isPending) && !checks.error && !analysis.error;
+    !crawling &&
+    readable &&
+    (checks.isPending || (analysis.isPending && !rereading)) &&
+    !checks.error &&
+    !analysis.error;
   const loading = item === undefined || answerLoading;
   const skeleton = useDelayedLoading(loading);
   const refreshing =
     !loading &&
     !crawling &&
-    [checks, analysis, facets.status, facets.indexability, facets.pages].some(
-      (query) => query.isFetching && query.data !== undefined,
-    );
+    ((rereading && analysis.isFetching) ||
+      [checks, analysis, facets.status, facets.indexability, facets.pages].some(
+        (query) => query.isFetching && query.data !== undefined,
+      ));
 
   const subtitle = crawling
     ? undefined
@@ -196,8 +203,8 @@ export function OverviewScreen() {
         ) : neverAnalysed ? (
           <NotAnalysed
             crawling={false}
-            analysing={analysing}
-            event={analysisEvent}
+            analysing={analysing || finishing}
+            event={finishing ? { crawlId, phase: 'writing', done: 1, total: 1 } : analysisEvent}
             canAnalyse={controls.canAnalyse}
             status={status}
             missing={item.missing}

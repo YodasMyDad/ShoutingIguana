@@ -318,6 +318,30 @@ describe('the Overview of an analysed crawl', () => {
   });
 });
 
+/** Counts every time an element matching the selector is added to the page, however briefly. */
+function watchFor(selector: string) {
+  let seen = 0;
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node instanceof Element && (node.matches(selector) || node.querySelector(selector))) seen++;
+      }
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  return {
+    seen: () => {
+      for (const record of observer.takeRecords()) {
+        for (const node of record.addedNodes) {
+          if (node instanceof Element && (node.matches(selector) || node.querySelector(selector))) seen++;
+        }
+      }
+      return seen;
+    },
+    stop: () => observer.disconnect(),
+  };
+}
+
 /** Whether the element with these words is in a live region: what a screen reader reads out as it changes. */
 const LIVE_REGION = '[role="status"], [role="alert"], [role="log"], [aria-live="polite"], [aria-live="assertive"]';
 const liveRegionOf = (element: HTMLElement) => element.closest(LIVE_REGION);
@@ -357,6 +381,54 @@ describe('the Overview when there’s no answer yet, or something’s off', () =
     expect(await region('Status codes').findByText('4,492')).toBeVisible();
     fireEvent.click(main().getByRole('button', { name: /Analyse it/ }));
     await waitFor(() => expect(analyse).toHaveBeenCalledTimes(1));
+  });
+
+  it('keeps the crawl on screen while a never-analysed crawl’s analysis is read again', async () => {
+    // Not analysed is an answer that comes as an error, which the query forgets when it's asked again (a stream that
+    // reconnected asks for every read again): the whole screen was swapped for its loading frame while it was.
+    let slow: ((response: Response) => void) | null = null;
+    let asked = 0;
+    const notAnalysed = () =>
+      new Response(
+        JSON.stringify({ type: 'not-analyzed', title: 'This crawl hasn’t been analysed yet.', status: 404 }),
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/problem+json' },
+        },
+      );
+    setTransport(
+      fakeSidecar([
+        [
+          'GET',
+          /^\/api\/crawls\/[0-9a-f]{16}\/analysis$/,
+          () => (asked++ === 0 ? notAnalysed() : new Promise<Response>((resolve) => (slow = resolve))),
+        ],
+        ...overviewRoutes({ analysis: null, item: NEVER }),
+      ]),
+    );
+    const { queryClient } = await open();
+    expect(await main().findByRole('heading', { name: 'This crawl hasn’t been analysed yet' })).toBeVisible();
+    const codes = await region('Status codes').findByText('4,492');
+    const frames = watchFor('[aria-label="Loading the overview"]');
+
+    act(() => void queryClient.invalidateQueries({ queryKey: queryKeys.analysis(TEST_CRAWL_ID) }));
+    await waitFor(() => expect(slow).not.toBeNull());
+    // Still here, the same elements, with the line that says it's being read again: no frame in their place.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 200)));
+    expect(codes.isConnected).toBe(true);
+    expect(main().getByRole('heading', { name: 'This crawl hasn’t been analysed yet' })).toBeVisible();
+    expect(main().getByRole('progressbar', { name: 'Refreshing the overview' })).toBeVisible();
+    expect(frames.seen()).toBe(0);
+
+    // The read says the same again: nothing changes but the line going.
+    await act(async () => {
+      slow?.(notAnalysed());
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(main().queryByRole('progressbar', { name: 'Refreshing the overview' })).toBeNull());
+    expect(codes.isConnected).toBe(true);
+    expect(frames.seen()).toBe(0);
+    frames.stop();
   });
 
   it('shows the analysis’s phase and progress while it runs, and cancels it', async () => {
@@ -792,6 +864,9 @@ describe('the Overview while the crawl runs', () => {
     const { queryClient } = await open();
     await heard(progress(100));
     expect(main().getByText('Live')).toBeVisible();
+    // From here to the answer the screen is never swapped for its loading frame: not as the crawl ends, when its
+    // analysis is asked for the first time, nor as the analysis ends, when it's asked again.
+    const frames = watchFor('[aria-label="Loading the overview"]');
 
     // Focus is on one of the live crawl's figures, which go with it.
     const crawled = region('Progress').getByRole('link', { name: /Crawled/ });
@@ -820,5 +895,7 @@ describe('the Overview while the crawl runs', () => {
       await main().findByText('3 checks found 11 issues on this crawl. 1 passed and 1 was skipped.'),
     ).toBeVisible();
     expect(region('Fix first').getByRole('link', { name: /Error:\s?Internal URL returns 4xx/ })).toBeVisible();
+    expect(frames.seen()).toBe(0);
+    frames.stop();
   });
 });
