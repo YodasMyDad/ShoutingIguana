@@ -16,6 +16,7 @@ import type {
 } from '../grids';
 import { LINK_KINDS, type LinkKind, type LinkPage, type LinksQuery } from '../inspector';
 import type { Transport, TransportRequest } from '../transport';
+import { sitemapsRobotsRoutes } from './sitemapsRobots';
 import {
   isCrawling,
   type Analysis,
@@ -946,6 +947,17 @@ export function createMockTransport(): Transport {
         return answer.ok ? json(answer.page) : problem(answer.problem);
       },
     ],
+    // Sitemaps and robots.txt (E3b): their own file.
+    ...sitemapsRobotsRoutes({
+      json,
+      problem,
+      item: itemOrNull,
+      notFound: crawlNotFound,
+      folder: folderOf,
+      rows: crawlRows,
+      summary: summaryOf,
+      live: (id) => live(id) !== undefined,
+    }),
   ];
 
   async function itemOrNull(id: string) {

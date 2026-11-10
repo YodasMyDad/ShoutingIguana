@@ -40,6 +40,7 @@ in this order. Each later step needs the ones before it.
 | `copy-crawls.mjs` | Copies both crawl files, with any `-wal` and `-shm`, into `<work>/crawls` |
 | `sidecar-api.mjs` | Starts `si-sidecar` on the copies, as the contract's process section says: a token in `SI_SIDECAR_TOKEN`, the ready line on stdout, a `127.0.0.1:<port>` Host, and `--data-dir`/`--state-dir` in the work folder, so your real library and defaults are never touched. It analyses both copies, records the event stream meanwhile, saves `fixtures/api/`, spot-checks a few contract rules, then `POST /api/shutdown` |
 | `urls.mjs` | `garden/urls.json` and `synthetic/urls-sample.json`, from the analysed copies with `node:sqlite` |
+| `sitemaps-robots.mjs` | Starts `si-sidecar` on the copies again (a state folder of its own) and saves, per crawl, `api/<crawl>/sitemaps.json`, `sitemap-urls.json`, `robots.json`, `robots-files.json` and `robots-blocked.json`. It needs `urls.mjs`'s fixtures, and analyses a copy this engine hasn't |
 | `inspector.mjs` | `garden/inspector/*.json` |
 | `live.mjs` | `garden/live.json` |
 | `brand.mjs` | `brand.json` and `app/design/assets/logo.png` |
@@ -84,6 +85,11 @@ About 11.2 MB in 122 files.
 | `api/<crawl>/stats.json` | 1 KB | `GET /api/crawls/{id}/stats` |
 | `api/<crawl>/options.json` | 1 KB | `GET /api/crawls/{id}/options` |
 | `api/<crawl>/alerts.json` | | `GET /api/crawls/{id}/alerts`: `[]` (see the live replay) |
+| `api/<crawl>/sitemaps.json` | 0.4 KB, 3.5 KB | `GET /sitemaps`: the garden crawl's one sitemap (404), the 100k crawl's index and the 12 under it |
+| `api/<crawl>/sitemap-urls.json` | 18 KB | Per sitemap, the ids of the URL fixture's rows it lists: the mock's grid for one sitemap is those rows (the 100k crawl's URL fixture is a sample, so the mock counts over the sample) |
+| `api/<crawl>/robots.json` | 3 KB, 0.5 KB | `POST /robots`, every origin: 17 and 2 |
+| `api/<crawl>/robots-files.json` | 189 KB, 1 KB | `POST /robots/file` for each of those origins, by origin: the files as the crawl kept them, line by line |
+| `api/<crawl>/robots-blocked.json` | 0.4 KB, 1.3 KB | `POST /robots/blocked` for each origin that blocked URLs, by origin (up to 1,000 rows each) |
 | `api/garden/issues/<checkId>.json` | 134 KB | 19 files, one per check with issues, with **every** row (paged at the API's limit of 1,000 and joined) |
 | `api/synthetic/issues/<checkId>.json` | 327 KB | 76 files, the first 200 rows of each, with the real `total` |
 | `garden/urls.json` | 5.9 MB | One row per fetched URL: all 4,521 |
