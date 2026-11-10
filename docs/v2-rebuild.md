@@ -39,81 +39,58 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `o
 `v2` and `master` were not moved. The temp checkpoint under
 `%LOCALAPPDATA%\Temp\claude\...\c67f90ea-...\scratchpad\checkpoint.md` is history. This section is the place to resume.
 
-**Resumed on 2026-11-10**, after the owner's pause on 2026-11-04. All three branches are built and reviewed, and a
-fixer is running on each for what its review found. The branches started from `e0780d0` (`f3c0b6c` plus a docs
-commit) and are local, unmerged and not pushed. The test counts and timings below are each build agent's own:
+**Round 2 is under way (2026-11-10).** The owner asked for step 3 to be finished without reports in between: carry
+on round by round and tell them when it is done. Pausing is theirs to call. Merging to `master` or releasing still
+needs an explicit yes.
 
-- **The Overview slice**, on `ui/overview` (worktree `.claude/worktrees/overview`), built to `1978fe4`.
-  - **Built:**
-    - the live crawl: counts, rate, time left when a URL limit is set, the found-and-crawled chart, the magnified
-      status bar, alerts and waits;
-    - the answer: the sentence, severity, Fix first, categories, skipped checks, status codes, indexability, depth
-      and response times, every number a link;
-    - 29 stories; 586 unit tests, e2e 43; 60 fps through a live crawl at 2,900 to 3,600 URLs/s; 48 ms to open the
-      100k crawl to its answer.
-  - **Review:** 18 defects, 2 of them high. A category's link opens other categories' checks. URLs that weren't
-    checked count as crawled in the figures but not in the grid. Among the rest: the time left is wrong after a
-    pause, and the "Crawl stopped" toast is dismissed as it appears, which fails the slice's own e2e test 2 runs in 8.
-    Every other link landed on its count on four crawls.
-  - **Decided under the owner's delegation, theirs to overturn:** Pause, Resume and Stop stay in the top bar only, as
-    in design B. The screen's banners carry each state's next action instead.
-- **The URL inspector slice**, on `ui/inspector` (worktree `.claude/worktrees/inspector`), built to `afc004c`.
-  - **Built:**
-    - Summary (the four indexability tests, values drawn on the engine's limits), Issues, Inlinks and Outlinks (each
-      URL walks the inspector to it), Redirects, Headers, Structured data, Hreflang and Source (CodeMirror 6, with
-      the app's own search);
-    - the palette's "Go to URL…";
-    - 32 stories; 623 unit tests, e2e 45; about 45 ms from Enter to the summary on the garden and 100k crawls.
-  - **Review:** 30 defects, 3 of them high. The source's search field takes focus on every URL once the palette has
-    used it. A duplicate check's link opens a group that doesn't exist, when the engine sends no group key. Esc and
-    Close do nothing after a walk of more than 50 steps. A sweep of every inspect answer on two crawls found no wrong
-    verdict.
-  - **Decided:** a check the user has hidden stays listed for the URL, marked Hidden, and is left out of the counts.
-- **Engine E3b**, on `ui/e3b` (worktree `.claude/worktrees/e3b`), built to `2985ece`.
-  - **Built:**
-    - `GET /api/link-columns`, `POST /links` and `/links/facets`, `GET /sitemaps`, `POST /sitemaps/urls`,
-      `POST /robots`, `/robots/file` and `/robots/blocked`;
-    - `subject` (`page` or `url`) on every check: 68 and 18;
-    - `group` on each of the inspector's issues, so every check links to its group;
-    - the analysis builds `link_summary`, `link_blocks` and `link_summary_state` (4.5 MB on the 100k crawl);
-      `AnalysisFreshness.VERSION` is still 6;
-    - a robots-blocked URL's `fetched: true` is by design, and the contract now says so;
-    - 1,139 tests; the 100k bench in 36 to 42 s at 188 to 195 MB, flat.
-  - **Review:** 8 defects, 1 of them high: `/links/facets` answers 500 while a crawl runs, because caches with
-    separate clocks are read together. Two are medium: the newest-first page comes back empty while a crawl runs, and
-    a filter on several heavily linked targets takes 0.5 to 2 s a page. Over 20,000 calls matched the reviewer's own
-    SQL on crawls that stand still.
-  - **Known miss:** a links text filter takes 0.33 to 0.55 s and a search 0.85 s on the 100k crawl, over the 300 ms
-    budget. A table of distinct link texts would fix the filter. It is not in this fix round.
+Overview, the URL inspector and engine E3b are merged, verified and pushed (below). Four agents are running from
+`17b340d`, each on its own local branch, unmerged and not pushed:
 
-Each fixer gives every fix a test seen failing with the fix reverted, then runs the full checks. When one reports:
-merge into `ui/step-3`, run the full checks on the merge, and push. E3b goes first, then the two UI slices.
+| Work | Branch and worktree | Brief |
+| --- | --- | --- |
+| Engine E3c: what the slices found the engine lacks | `ui/e3c`, `.claude/worktrees/e3c` | `brief-e3c.md` |
+| The Links screen, the Issues "pages affected" wording, and `npm run dev` keeping analysed copies | `ui/links`, `.claude/worktrees/links` | `brief-links.md` |
+| The Sitemaps and robots.txt screens | `ui/sitemaps-robots`, `.claude/worktrees/sitemaps-robots` | `brief-sitemaps-robots.md` |
+| The real shell: a Tauri and WebView2 run, its timings, and screenshots for the owner | `ui/shell-pass`, `.claude/worktrees/shell-pass` | `brief-shell-pass.md` |
 
-- Both UI branches changed `app/e2e/global-setup.ts`, `package.json` and its lock, `src/api/queries.ts`,
-  `src/live/liveBridge.ts`, the two stylesheets and the two UI docs, so the second merge has conflicts to resolve.
-- The inspector branch types `UrlIssue.group` as optional. At the merge it takes E3b's `IssueGroupOfUrl`.
+The briefs are in the 2026-11-10 scratchpad folder that the owner's memory file names. So are `ui-slice-rules.md`
+(the rules every UI slice follows, and the kinds of defect the first reviews found) and `checkpoint.md` (the log and
+the plan).
 
-Engine work the slices found, for one engine agent after E3b merges, with a review of its own:
+How each piece goes:
 
-1. `GET /stats` takes 1.1 to 1.4 s on the 100k crawl. Overview calls it once per crawl.
-2. The live progress counts the crawler's probe of the site's https version, so a crawl of an http-only site shows
+1. A build agent.
+2. A read-only, fresh-eyes review. A review agent can't write its report to a file, so save its findings as
+   `<name>-review\findings.md` for the fixer.
+3. A fixer, which gives every fix a test seen failing without it.
+4. The merge into `ui/step-3`.
+5. The full checks, run again on the merge and not taken from the agent: `tools\verify-app.sh` and
+   `tools\verify-engine.sh` in the scratchpad folder.
+6. The push.
+
+E3c's review also covers the E3b fix round (`2985ece..1adf63e`). That round rewrote how a running crawl's links are
+read, and has had no second review.
+
+E3c's eight items:
+
+1. `GET /stats` takes 1.1 to 1.4 s on the 100k crawl.
+2. The live progress counts the crawler's probes of the site's other versions, so a crawl of an http-only site shows
    "Network error × 1" from its first seconds.
-3. `/urls/inspect` counts hyperlinks only, so the inspector's tab counts cost two more reads per URL. It gives
-   `limits.maxUrlLength` but not the length the check measured.
-4. Inlink and outlink rows carry no `outcome`, so a link to a robots-blocked URL can only say "No status".
-5. The table of distinct link texts, above.
+3. `fetchedUrlCount` includes URLs that weren't checked, so Home, the top bar and the "Crawl stopped" toast show a
+   larger number than the grid.
+4. Nothing gives the time spent crawling across runs, or where each run began and ended.
+5. `/urls/inspect` counts hyperlinks only, and doesn't give the URL length the check measured.
+6. Inlink and outlink rows carry no `outcome`.
+7. A links text filter takes 0.33 to 0.55 s and a search 0.85 s on the 100k crawl. A table of distinct link texts
+   would fix the filter, if it measures cheap.
+8. Two reads the E3b fix round left: a filter most links pass on a crawl with gaps in its link ids (not measured),
+   and a filter on the target with a link's position (565 ms half way down).
 
-Also found: the session's first Ctrl+K takes about 320 ms, over the 100 ms budget. `npm run dev` recopies the dev
-crawls on every start, so they always read as out of date.
+If the work stops before the agents report, to resume:
 
-If the work stops again before the fixers report, to resume:
-
-1. Read each branch's log. The owner's memory file names two scratchpad folders. The 2026-11-04 one holds the build
-   briefs. The 2026-11-10 one holds `checkpoint.md` (the log and the plan), each review's `findings.md`
-   (`overview-review\`, `inspector-review\`, `e3b-review\`), each fixer's brief (`brief-<name>-fixes.md`) and each
-   fixer's own `checkpoint.md` (`<name>-fixes\`).
-2. Relaunch a fixer per branch from its brief and its checkpoint, to carry on from the last commit. Don't redo what
-   a branch already committed.
+1. Read each branch's log, and the agent's own `checkpoint.md` (a folder per agent in the scratchpad: `e3c\`,
+   `links\`, `sitemaps-robots\`, `shell-pass\`).
+2. Relaunch an agent per branch from its brief and its checkpoint. Don't redo what a branch already committed.
 
 Done on this branch, on top of `v2`:
 
@@ -156,16 +133,56 @@ Done on this branch, on top of `v2`:
     14 script tests, and e2e 36 of 36. Timings are inside the budgets on the garden and 100k crawls: switching checks
     takes 77–96 ms, opening a group 37–47 ms.
   - **Export** waits for E5.
+- The Overview screen (merged `ui/overview`, 2026-11-10):
+  - **Live:** counts, rate, time left when a URL limit is set, the found-and-crawled chart, the magnified status
+    bar, alerts and waits. One clock: the time this run has spent crawling.
+  - **Done:** the answer sentence, severity, Fix first, categories, skipped checks, status codes, indexability,
+    depth and response times. Every number is a link. 220 of them were checked against where they land, on three
+    crawls.
+  - **Controls:** Pause, Resume and Stop stay in the top bar only, and the banners carry each state's next action.
+    The owner was told and can overturn it.
+  - **Review:** 18 defects, all fixed, each with a test seen failing without its fix.
+- The URL inspector (merged `ui/inspector`, 2026-11-10):
+  - **Sections:** Summary (the four indexability tests, values drawn on the engine's limits), Issues, Inlinks and
+    Outlinks (each URL walks the inspector to it), Redirects, Headers, Structured data, Hreflang and Source
+    (CodeMirror 6 with the app's own search).
+  - **Palette:** "Go to URL…".
+  - **Hidden checks:** a check the user has hidden stays listed for the URL, marked Hidden, out of the counts.
+  - **Review:** 30 defects, all fixed the same way.
+- Engine E3b (merged `ui/e3b`, 2026-11-10):
+  - `GET /api/link-columns`, `POST /links` and `/links/facets`, `GET /sitemaps`, `POST /sitemaps/urls`,
+    `POST /robots`, `/robots/file` and `/robots/blocked`.
+  - `subject` (`page` or `url`) on every check, and `group` on each of the inspector's issues.
+  - The analysis builds a link summary (4.5 MB on the 100k crawl). `AnalysisFreshness.VERSION` is still 6.
+  - robots.txt has a new state, `unanswered`: no answer, and the crawl went ahead.
+  - **Review:** 8 defects, 7 fixed in the engine and 1 in the merge. The worst: `/links/facets` answered 500 while a
+    crawl ran. A running crawl's links reads now answer for one moment of the crawl, and a test reads every kind of
+    query about 11,500 times while a crawl grows.
+- After the merges (merged `ui/palette-handoff`, 2026-11-10):
+  - A command chosen in the palette runs once the palette has given focus back, so it keeps the focus it takes.
+  - The session's first Ctrl+K takes about 20 ms, not 320.
+  - A grid's result count is no live region. It is said once, after the user changes the view.
+- **Verification on the merges**, run again by the orchestrator:
+  - App: 873 unit tests, 15 script tests, 167 stories clean in both themes, forced colours and reduced motion, and
+    e2e 62 of 62.
+  - Engine: 1,156 tests, the 100k bench (every planted issue, flat at 193 MB) and `readbench --gate`.
+  - The gate failed once, under load, on four URL-grid sorts: 201 to 264 ms against 200. On a quieter machine the
+    same reads took 26 to 35 ms with E3b and 25 to 33 ms without it, and the whole gate then passed.
+- **Not verified by anyone yet:** the real Tauri and WebView2 shell (every test and timing is headless Chromium), a
+  real screen reader, and anything at 1M URLs.
 - The clickable prototype is the app itself: `npm run dev` runs it against copies of the real crawls. A static mock
   build isn't published, as it can't be reviewed file by file.
 
 Left, in this order:
 
-1. Overview and the URL inspector (running, above), each reviewed and fixed, then merged.
-2. E3b (running, above), reviewed, fixed and merged. Then the Issues screen's "pages affected" wording from E3b's
-   `subject` field, and the Links, Sitemaps and robots.txt screens; New crawl settings; the crawl's settings; the rest
-   of Settings.
-3. Later engine work the UI still needs: export (E5), full-text search and favicons (E6).
+1. Round 2, running (above): E3c; Links, with the Issues "pages affected" wording; Sitemaps and robots.txt; the real
+   shell. Each reviewed, fixed, merged and verified.
+2. Round 3: New crawl settings, the crawl's settings and the rest of Settings (the Overview's alert actions then get
+   their real targets); export (E5, engine and UI); full-text search and favicons (E6, engine and UI).
+3. A screenshot gallery for the owner, from the real shell.
+
+Known and open: a links filter on the target with a link's position takes 565 ms half way down a big crawl, and
+nothing is measured at 1M URLs.
 
 Never edit the files in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls`.
 
