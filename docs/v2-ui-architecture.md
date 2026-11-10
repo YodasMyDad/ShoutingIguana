@@ -337,6 +337,14 @@ slices.
   `inert` and the registry runs none of its keys, but the one that toggles the overlay (`inOverlays`). When an
   overlay closes, focus goes back where it was, else to the view's grid, else to the main area (`restoreFocus`); a
   navigation that removes the focused element puts focus in the new view.
+- A command chosen in the palette runs once the palette has given focus back (`afterFocusReturns` in
+  `app/overlays.ts`), never a frame or a timer after the close: Radix gives focus back from a timer of its own once
+  the palette's content has gone, nothing orders that before a frame, and a command that ran first had the focus it
+  took (the inspector's for "Go to URL…", the source's search field, the checks' filter) taken back to the view. The
+  wait is bounded (250 ms): then focus is given back anyway and the command runs, and Radix saying so later moves
+  nothing. Focus is given back once per close, and only with no overlay open: the `?` sheet closing under the
+  palette (Ctrl+K on it) keeps the place for when the palette closes. A menu needs none of this: its item acts
+  while the menu is still open, and Radix gives no focus back once focus has left the menu.
 - A view that takes away the control that had focus, without a navigation, gives the focus somewhere to go
   (`feedback/useFocusRescue.ts`): a banner's button goes once its action has worked (Resume, Continue) and focus goes
   to the page's title; the top bar's Pause becomes Resume and takes the focus, and Stop, which leaves no control
@@ -364,6 +372,12 @@ slices.
   (1.1.1) leaves `aria-activedescendant` naming a stale or removed option, so screen readers hear the wrong command.
   Option ids are the entries' own, so the attribute changes whenever the highlighted command does, and a live region
   that's always there says how many results there are once typing pauses.
+- The palette and the `?` sheet are chunks of their own, fetched as soon as the app is idle
+  (`layout/overlayChunks.ts`) and shown without `lazy` and Suspense (`lib/chunk.ts`), as the source viewer is.
+  `lazy` suspends on its first render even when its chunk is there, and React holds back what follows a Suspense
+  fallback for 300 ms: a session's first Ctrl+K took 320 ms in the production build with the main thread idle
+  throughout, against 20 ms for every later one. A loaded chunk now renders in the render that opens it (first
+  Ctrl+K 16 to 31 ms to the dialog on the 100k crawl); one not fetched yet shows nothing until it arrives.
 
 ## Theming and tokens
 
@@ -439,6 +453,11 @@ are drawn for the app and are never swapped for Lucide's.
   crawl isn't live here) gets none.
 - **Announcements**: `announce()` speaks through one polite and one assertive live region. Crawl status changes are
   announced by the live bridge, and by nothing else: a banner that states a crawl's status isn't a live region.
+  A figure that moves with a crawl is never a live region either: the URL grid's count (`GridHeader`) and an
+  inspector link grid's change about once a second while a crawl runs, and would be read out for as long as it
+  lasts. A count is said once when the user changes the view (a filter, a search, a kind of link), through
+  `useAnnounceResults`: when it's first known for the new view, in the words on screen (`formatShownOf`), and not on
+  arriving at a screen or another URL, where focus and what has it are read.
 
 ## Rules every slice follows
 
@@ -450,7 +469,11 @@ are drawn for the app and are never swapped for Lucide's.
 6. Crawled text renders as text, never HTML. Check titles and words come from the API, never hard-coded.
 7. UK English and the glossary in every string. No raw engine ids or errors without plain words.
 8. `aria-*` right the first time: axe runs on every story and in the end-to-end tests, with zero violations allowed.
-9. Tests with every change: pure logic unit-tested, components with Testing Library, flows in Playwright.
+9. Tests with every change: pure logic unit-tested, components with Testing Library, flows in Playwright. A test
+   that waits for what a view says once a read has failed for good opens with `createQueryClientWithoutBackoff`
+   (`test/queryClient.ts`): the app's two retries take 750 ms of real time, of the second a test waits, and on a
+   busy machine the wait ran out first. A test never asserts an order that only a clock keeps: it holds what must
+   come later (`test/lateTimers.ts`).
 10. New npm packages pinned exactly, two weeks old at least, installed with `npm install --before=`.
 
 ## Left for the slices

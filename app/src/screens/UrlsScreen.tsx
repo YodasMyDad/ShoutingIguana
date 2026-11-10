@@ -11,6 +11,7 @@ import { analyseCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { notifyResult } from '../feedback/notify';
+import { useAnnounceResults } from '../feedback/useAnnounceResults';
 import { LOOKING_UP, filterSentences } from '../grid/filterSentence';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
 import { useGridMetrics } from '../grid/metrics';
@@ -19,7 +20,7 @@ import { usePagedRows } from '../grid/usePagedRows';
 import { useInspector } from '../routing/inspector';
 import { MAX_COPY_ROWS } from '../grid/tsv';
 import { urlColumnWords, urlEmptyWords, urlValueWords } from '../grid/urlFilterWords';
-import { formatBytes, formatCount, formatMilliseconds } from '../lib/format';
+import { formatBytes, formatCount, formatMilliseconds, formatShownOf } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
 import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
@@ -178,6 +179,15 @@ export function UrlsScreen() {
     rows.rowCount === null || rows.unfilteredTotal === null ? null : (
       <ResultCount shown={rows.rowCount} total={rows.unfilteredTotal} noun="URL" />
     );
+  // A filter or a search the user applied is answered once, with the count it leaves. The count itself is no live
+  // region: a running crawl moves it every second.
+  useAnnounceResults(
+    crawlId,
+    useMemo(() => JSON.stringify({ filters, q: q ?? '' }), [filters, q]),
+    rows.rowCount === null || rows.unfilteredTotal === null
+      ? null
+      : formatShownOf(rows.rowCount, rows.unfilteredTotal, 'URL'),
+  );
 
   const summary = rows.firstPage?.summary;
   const unavailable = (rows.firstPage?.unavailable ?? []).filter((id) => COLUMNS.some((column) => column.id === id));

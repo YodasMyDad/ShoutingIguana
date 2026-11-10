@@ -4,12 +4,13 @@ import { createMemoryHistory, type RouterHistory } from '@tanstack/react-router'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { UrlDetail } from '../api/inspector';
-import { queryKeys } from '../api/queries';
+import type { LinkRow, UrlDetail } from '../api/inspector';
+import { gridPagesOf, queryKeys } from '../api/queries';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
+import { onAnnounce } from '../feedback/announce';
 import { commands, installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { inspectFromGrid } from '../routing/inspector';
@@ -24,6 +25,7 @@ import {
   testUrlDetail,
   type InspectorSidecarOptions,
 } from '../test/inspectorSidecar';
+import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { resetLinkKinds, resetLinkRows } from './links';
 import { resetRememberedSection } from './sections';
 
@@ -105,16 +107,23 @@ async function open(
   options: InspectorSidecarOptions = SITE,
   history?: RouterHistory,
   issues: IssuesSidecarOptions = {},
+  queryClient = createQueryClient(),
 ) {
   sidecar = fakeSidecar([...inspectorRoutes(options), ...issuesRoutes(issues)]);
   setTransport(sidecar);
-  const queryClient = createQueryClient();
   const router = createAppRouter(queryClient, history ?? createMemoryHistory({ initialEntries: [path] }));
   render(<App router={router} queryClient={queryClient} />);
   await act(() => router.load());
   const inspector = await screen.findByRole('complementary', { name: 'Inspector' });
   return { router, queryClient, inspector, user: userEvent.setup() };
 }
+
+/**
+ * `open`, for a read that fails for good: its tries come at once, without the app's back-off between them (750 ms
+ * in real time, of the second a test waits for what the section says then).
+ */
+const openFailing = (path: string, options: InspectorSidecarOptions) =>
+  open(path, options, undefined, {}, createQueryClientWithoutBackoff());
 
 const inspected = (router: { state: { location: { search: unknown } } }) =>
   (router.state.location.search as { inspect?: number }).inspect;
@@ -931,7 +940,7 @@ describe('the source', () => {
   });
 
   it('says why there’s no HTML, and fails on its own', async () => {
-    const { user } = await open(`${URLS}?inspect=2`, {
+    const { user } = await openFailing(`${URLS}?inspect=2`, {
       urls: { 2: PAGE, 3: OTHER },
       source: { 2: { stored: false, reason: 'notStored' }, 3: 'error' },
       inlinks: { 2: [testLinkRow({ id: 3, url: OTHER.url })] },
@@ -1117,6 +1126,44 @@ describe('walking the site', () => {
     await waitFor(() => expect(within(inspector).getByRole('grid', { name: 'Inlinks' })).toHaveFocus());
   });
 
+  it('never reads the links’ count out as a running crawl moves it, and says it once for a kind chosen', async () => {
+    const heard: string[] = [];
+    const stop = onAnnounce((message) => heard.push(message));
+    const found = [...(SITE.inlinks?.[2] as LinkRow[])];
+    const { queryClient, inspector, user } = await open(
+      `${URLS}?inspect=2`,
+      {
+        ...SITE,
+        get inlinks() {
+          return { 2: found };
+        },
+      },
+      undefined,
+      { item: { status: 'running' } },
+    );
+    await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
+    const panel = await within(inspector).findByRole('tabpanel', { name: /^Inlinks/ });
+    const liveRegions = () => panel.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"]');
+    expect(await within(panel).findByText('2 inlinks')).toBeVisible();
+    expect(liveRegions()).toHaveLength(0);
+    // A tick of the crawl: another page links here.
+    found.push(testLinkRow({ id: 4, url: 'https://example.com/c', text: 'More' }));
+    await act(() => queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
+    expect(await within(panel).findByText('3 inlinks')).toBeVisible();
+    expect(liveRegions()).toHaveLength(0);
+    expect(heard).toEqual([]);
+    // A kind is the user's own choice: its count is said, once.
+    await user.click(within(panel).getByRole('button', { name: /Kind of link/ }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Hyperlink' }));
+    expect(await within(panel).findByText('2 hyperlink inlinks')).toBeVisible();
+    await waitFor(() => expect(heard).toEqual(['2 hyperlink inlinks']));
+    found.push(testLinkRow({ id: 5, url: 'https://example.com/d', text: 'And more' }));
+    await act(() => queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
+    expect(await within(panel).findByText('3 hyperlink inlinks')).toBeVisible();
+    expect(heard).toEqual(['2 hyperlink inlinks']);
+    stop();
+  });
+
   it('leaves focus on the kind’s control when a kind is chosen, whatever the view did before', async () => {
     const { router, inspector, user } = await open(`${URLS}?inspect=2`);
     await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
@@ -1178,7 +1225,7 @@ describe('loading, failing and not there', () => {
 
   it('keeps the other sections working when the URL itself can’t be read, and tries again', async () => {
     let fail = true;
-    const { inspector, user } = await open(`${URLS}?inspect=2`, {
+    const { inspector, user } = await openFailing(`${URLS}?inspect=2`, {
       ...SITE,
       urls: (id) => (id === 2 ? (fail ? 'error' : PAGE) : id === 1 ? HOME : undefined),
     });
@@ -1197,7 +1244,10 @@ describe('loading, failing and not there', () => {
   });
 
   it('says the links couldn’t be read in their own section, the summary untouched', async () => {
-    const { inspector, user } = await open(`${URLS}?inspect=2`, { urls: { 2: PAGE }, inlinks: { 2: 'error' } });
+    const { inspector, user } = await openFailing(`${URLS}?inspect=2`, {
+      urls: { 2: PAGE },
+      inlinks: { 2: 'error' },
+    });
     await within(inspector).findByRole('heading', { name: 'Indexable' });
     await user.click(within(inspector).getByRole('tab', { name: /^Inlinks/ }));
     expect(await within(inspector).findByText('The inlinks couldn’t be read.')).toBeVisible();

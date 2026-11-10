@@ -1,25 +1,20 @@
 import { Outlet, useRouter } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Suspense, lazy, useEffect } from 'react';
+import { useEffect } from 'react';
 import { focusFallback, useModalOpen, useOverlay } from '../app/overlays';
 import { Announcer } from '../feedback/Announcer';
 import { AppToaster } from '../feedback/AppToaster';
 import { RegionBoundary } from '../feedback/RegionBoundary';
 import { useAppCommands } from '../keyboard/useAppCommands';
+import { useChunk } from '../lib/chunk';
 import { useSettings } from '../settings/settingsStore';
 import { InspectorSlot } from './InspectorSlot';
+import { paletteChunk, preloadOverlays, shortcutsChunk } from './overlayChunks';
 import { SidecarBanner } from './SidecarBanner';
 import { Sidebar } from './Sidebar';
 import { StoppingOverlay } from './StoppingOverlay';
 import { TopBar } from './TopBar';
 import { useShellIntegration } from './useShellIntegration';
-
-// The palette and the shortcut sheet load when first opened (the dialog code stays off the first paint), and are fetched
-// as soon as the app is idle, so the first Ctrl+K is as quick as the next.
-const loadPalette = () => import('../keyboard/CommandPalette');
-const loadShortcuts = () => import('../keyboard/ShortcutSheet');
-const CommandPalette = lazy(() => loadPalette().then((module) => ({ default: module.CommandPalette })));
-const ShortcutSheet = lazy(() => loadShortcuts().then((module) => ({ default: module.ShortcutSheet })));
 
 /**
  * The shell (docs/v2-ui-ia.md): the sidebar, the top bar, the main area and the inspector's slot, plus the
@@ -37,14 +32,14 @@ export function AppShell() {
   const dock = useSettings((settings) => settings.inspectorDock);
   const overlay = useOverlay();
   const modal = useModalOpen();
+  // The palette and the shortcut sheet are chunks of their own (overlayChunks.ts), fetched as soon as the app is
+  // idle and shown in the render that opens them: the first Ctrl+K is as quick as the next.
+  const palette = useChunk(paletteChunk, overlay === 'palette');
+  const shortcuts = useChunk(shortcutsChunk, overlay === 'shortcuts');
   useEffect(() => {
-    const preload = () => {
-      void loadPalette();
-      void loadShortcuts();
-    };
     // WebKit has no requestIdleCallback.
-    if ('requestIdleCallback' in window) window.requestIdleCallback(preload);
-    else setTimeout(preload, 500);
+    if ('requestIdleCallback' in window) window.requestIdleCallback(preloadOverlays);
+    else setTimeout(preloadOverlays, 500);
   }, []);
   return (
     <>
@@ -75,10 +70,8 @@ export function AppShell() {
           </div>
         </div>
       </div>
-      <Suspense fallback={null}>
-        {overlay === 'palette' ? <CommandPalette /> : null}
-        {overlay === 'shortcuts' ? <ShortcutSheet /> : null}
-      </Suspense>
+      {palette}
+      {shortcuts}
       <StoppingOverlay />
       <AppToaster />
       <Announcer />

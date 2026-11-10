@@ -60,7 +60,8 @@ export function SectionHeader({ title, id, meta, actions, level = 2, size = 'md'
 
 /**
  * "264 of 4,521 URLs": a view's count, which never leaves the screen. The shown count leads; the total follows,
- * quieter. Unfiltered it's "4,521 URLs". Unknown yet, nothing.
+ * quieter. Unfiltered it's "4,521 URLs". Unknown yet, nothing. Its words are `formatShownOf`'s, which is what a
+ * screen announces when the user changes the view.
  */
 export function ResultCount({
   shown,
@@ -91,7 +92,11 @@ export function ResultCount({
 export interface GridHeaderProps {
   /** The view's h1: "URLs". */
   title: ReactNode;
-  /** A `ResultCount`, announced politely as it changes. */
+  /**
+   * A `ResultCount`. Not a live region: while a crawl runs the count changes every second, and it would be read
+   * out for as long as the crawl lasts. The screen says it once when the user changes the view
+   * (`useAnnounceResults`).
+   */
   count?: ReactNode;
   /** A `LiveBadge` while the crawl runs. */
   badge?: ReactNode;
@@ -105,7 +110,7 @@ export function GridHeader({ title, count, badge, actions, className }: GridHead
   return (
     <header className={clsx('si-grid-header', className)}>
       <h1 className="si-grid-header__title">{title}</h1>
-      {count !== undefined ? <span aria-live="polite">{count}</span> : null}
+      {count !== undefined ? <span>{count}</span> : null}
       {badge}
       {actions ? <div className="si-grid-header__actions">{actions}</div> : null}
     </header>

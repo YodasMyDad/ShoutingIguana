@@ -127,6 +127,50 @@ describe('menus', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
   });
 
+  // A menu gives focus back as the palette does, from a timer after it has closed, but its item acts first, with
+  // the menu still open: Radix sees focus leave the menu and gives none back.
+  it('leave focus where the chosen item’s command put it, a dropdown’s or a right-click menu’s', async () => {
+    unregister = commands.register([
+      {
+        id: 'test.find',
+        title: 'Find',
+        group: 'View',
+        run: () => screen.getByRole('textbox', { name: 'Find' }).focus(),
+      },
+    ]);
+    render(
+      <>
+        <input aria-label="Find" />
+        <DropdownMenu trigger={<Button>More</Button>}>
+          <MenuItem command="test.find">Find in the page</MenuItem>
+        </DropdownMenu>
+        <ContextMenu content={<MenuItem command="test.find">Find in the page</MenuItem>}>
+          <div tabIndex={-1}>/harpswell-metal-patio-set/</div>
+        </ContextMenu>
+      </>,
+    );
+    const field = screen.getByRole('textbox', { name: 'Find' });
+    const closed = async () => {
+      expect(screen.queryByRole('menu')).toBeNull();
+      // Past the timer a closed menu gives focus back from.
+      await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    };
+
+    act(() => screen.getByRole('button', { name: 'More' }).focus());
+    await userEvent.keyboard('{Enter}');
+    await screen.findByRole('menu');
+    await userEvent.keyboard('{Enter}');
+    await closed();
+    expect(field).toHaveFocus();
+
+    const row = screen.getByText('/harpswell-metal-patio-set/');
+    act(() => row.focus());
+    await userEvent.pointer({ keys: '[MouseRight]', target: row });
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Find in the page' }));
+    await closed();
+    expect(field).toHaveFocus();
+  });
+
   it('open on a right-click, with the same items', async () => {
     const copy = vi.fn();
     render(

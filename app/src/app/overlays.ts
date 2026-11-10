@@ -3,7 +3,9 @@
 // - while anything modal is open (an overlay, a dialog, or "Stopping crawls…"), the app behind it is inert (AppShell) and the
 //   shortcut registry leaves its keys alone (keyboard/registry.ts), so F7 or Ctrl+1 never act behind it;
 // - when an overlay closes, focus goes back where it was, or somewhere sensible when that's gone: the view's grid, else
-//   its main area. Overlays opened from the keyboard have no trigger for Radix to give focus back to.
+//   its main area. Overlays opened from the keyboard have no trigger for Radix to give focus back to;
+// - what an overlay closes to do (a command chosen in the palette) runs once focus has been given back
+//   (afterFocusReturns), so focus the command takes stays where the command put it.
 import { useEffect, useSyncExternalStore } from 'react';
 
 export type Overlay = 'palette' | 'shortcuts' | null;
@@ -11,6 +13,18 @@ export type Overlay = 'palette' | 'shortcuts' | null;
 let open: Overlay = null;
 /** Where focus was when the overlay opened. */
 let returnFocus: Element | null = null;
+/** Focus is owed to where it was: from when an overlay opens until it has been given back, once, after it closed. */
+let owed = false;
+/** What waits for the closing overlay to give focus back, and the timer that bounds the wait. */
+let waiting: (() => void)[] = [];
+let waitTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * The longest a command waits for the closing overlay to give focus back. Radix says when (`onCloseAutoFocus`), from
+ * a timer it starts once the overlay's content has gone: a few milliseconds. Should it never say, focus is given back
+ * here and the command runs: a command is never lost.
+ */
+export const FOCUS_RETURN_TIMEOUT_MS = 250;
 /** Modal states the app draws itself, such as "Stopping crawls…". */
 const modals = new Set<symbol>();
 const listeners = new Set<() => void>();
@@ -26,7 +40,10 @@ function subscribe(listener: () => void): () => void {
 
 export function setOverlay(next: Overlay): void {
   if (open === next) return;
-  if (open === null && next !== null && typeof document !== 'undefined') returnFocus = document.activeElement;
+  if (open === null && typeof document !== 'undefined') {
+    returnFocus = document.activeElement;
+    owed = true;
+  }
   open = next;
   changed();
 }
@@ -72,21 +89,56 @@ export function focusFallback(): void {
  * Gives focus back after an overlay closes: to where it was when the overlay opened, if that's still there, else
  * focusFallback. Overlays call it from Radix's onCloseAutoFocus, after preventing Radix's own (which focuses the
  * trigger, and there is none for a keyboard shortcut).
+ *
+ * Once per close, and only with no overlay open: a second call does nothing (Radix saying so after the wait for it
+ * ran out), nor does one overlay's while another is open (the palette opened over the `?` sheet), which keeps the
+ * place to go back to for when that one closes. What waited for it (afterFocusReturns) runs next, in the same turn.
  */
 export function restoreFocus(): void {
-  const target = returnFocus;
-  returnFocus = null;
-  if (target instanceof HTMLElement && target.isConnected && target !== document.body) {
-    target.focus({ preventScroll: true });
-    if (document.activeElement === target) return;
+  if (owed && open === null) {
+    owed = false;
+    const target = returnFocus;
+    returnFocus = null;
+    if (!focusIfThere(target)) focusFallback();
   }
-  focusFallback();
+  if (waitTimer !== null) clearTimeout(waitTimer);
+  waitTimer = null;
+  const actions = waiting;
+  waiting = [];
+  for (const action of actions) action();
+}
+
+/** Whether the element is still in the page and took the focus. */
+function focusIfThere(target: Element | null): boolean {
+  if (!(target instanceof HTMLElement) || !target.isConnected || target === document.body) return false;
+  target.focus({ preventScroll: true });
+  return document.activeElement === target;
+}
+
+/**
+ * Runs `action` once the overlay that has just closed has given focus back (restoreFocus), so that focus the action
+ * takes stays where it put it. Radix gives focus back from a timer of its own, a moment after the close: nothing
+ * orders that before the next frame or another timer, and whichever of the two came second had the focus. The wait is
+ * bounded (FOCUS_RETURN_TIMEOUT_MS): then focus is given back here, and the action runs. With nothing closing, it
+ * runs at once.
+ */
+export function afterFocusReturns(action: () => void): void {
+  if (!owed || open !== null) {
+    action();
+    return;
+  }
+  waiting.push(action);
+  waitTimer ??= setTimeout(restoreFocus, FOCUS_RETURN_TIMEOUT_MS);
 }
 
 /** Tests only: no overlay, no modal state, nothing to give focus back to. */
 export function resetOverlaysForTests(): void {
   open = null;
   returnFocus = null;
+  owed = false;
+  if (waitTimer !== null) clearTimeout(waitTimer);
+  waitTimer = null;
+  waiting = [];
   modals.clear();
   changed();
 }

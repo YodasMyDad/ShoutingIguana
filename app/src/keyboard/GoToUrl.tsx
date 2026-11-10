@@ -5,6 +5,7 @@ import { useEffect, useEffectEvent, useId, useState } from 'react';
 import { api } from '../api/client';
 import { errorTitle, isProblem } from '../api/errors';
 import type { UrlLookup } from '../api/grids';
+import { afterFocusReturns } from '../app/overlays';
 import { notifyResult } from '../feedback/notify';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { goToUrl } from '../routing/inspector';
@@ -47,8 +48,9 @@ export function GoToUrl({ crawlId, initialText, onBack, onClose }: GoToUrlProps)
   const found = asked === null ? undefined : lookup.data;
   const open = useEffectEvent((url: UrlLookup) => {
     onClose();
-    // Once the palette has given focus back, so the inspector opens over the view as it was.
-    requestAnimationFrame(() => {
+    // Once the palette has given focus back: the inspector opens over the view as it was, and keeps the keyboard
+    // it takes for a URL asked for by name.
+    afterFocusReturns(() => {
       void goToUrl(router, crawlId, url.id);
       if (url.requested !== null) {
         notifyResult('Opened another version of that URL', {

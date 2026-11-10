@@ -9,8 +9,10 @@ import type { Checks, CrawlStatus } from '../api/types';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
+import { onAnnounce } from '../feedback/announce';
 import { installKeyboard } from '../keyboard/registry';
 import { ISSUES_CHECKS } from '../test/issuesSidecar';
+import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { wholeText } from '../test/text';
 import {
   TEST_CRAWL_ID,
@@ -76,8 +78,7 @@ function sidecar(options: {
   return { transport, analyse, state };
 }
 
-async function open(path: string) {
-  const queryClient = createQueryClient();
+async function open(path: string, queryClient = createQueryClient()) {
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
   render(<App router={router} queryClient={queryClient} />);
   await act(() => router.load());
@@ -165,6 +166,45 @@ describe('the URL grid while the crawl runs', () => {
   });
 });
 
+describe('the URL grid’s count', () => {
+  it('isn’t read out as a running crawl moves it, and is said once for a search the user makes', async () => {
+    const heard: string[] = [];
+    const stop = onAnnounce((message) => heard.push(message));
+    const { state } = sidecar({
+      status: 'running',
+      analyzedAt: null,
+      summary: { available: false, reason: 'crawling' },
+    });
+    const { queryClient } = await open(URLS);
+    const header = (await screen.findByRole('heading', { level: 1, name: 'URLs' })).parentElement!;
+    const liveRegions = () => header.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"]');
+    expect(await within(header).findByText(wholeText('3 URLs'))).toBeVisible();
+    // A screen reader reads what changes in a live region: about once a second here, for as long as the crawl runs.
+    expect(liveRegions()).toHaveLength(0);
+    /** What the live bridge does on a progress tick, the crawl having found another URL. */
+    const tick = (row: UrlRow) => {
+      state.rows = [...state.rows, row];
+      return act(() => queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
+    };
+    await tick({ id: 4, url: 'https://example.com/c', statusCode: 200, statusClass: '2xx' });
+    expect(await within(header).findByText(wholeText('4 URLs'))).toBeVisible();
+    expect(liveRegions()).toHaveLength(0);
+    expect(heard).toEqual([]);
+
+    // A search is the user's own change: its count is said, once.
+    const field = screen.getByRole('searchbox', { name: 'Search URLs and titles' });
+    fireEvent.change(field, { target: { value: 'example.com/a' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(await within(header).findByText(wholeText('1 of 4 URLs'))).toBeVisible();
+    await waitFor(() => expect(heard).toEqual(['1 of 4 URLs']));
+    // The crawl goes on under the search: the count moves, and nothing more is said.
+    await tick({ id: 5, url: 'https://example.com/a/b', statusCode: 200, statusClass: '2xx' });
+    expect(await within(header).findByText(wholeText('2 of 5 URLs'))).toBeVisible();
+    expect(heard).toEqual(['1 of 4 URLs']);
+    stop();
+  });
+});
+
 describe('the URL grid opened from a check’s group', () => {
   it('shows its filters as chips that read as sentences, the check and its group each removable', async () => {
     sidecar({ summary: { available: true, reason: null } });
@@ -233,7 +273,8 @@ describe('the URL grid opened from a check’s group', () => {
     expect(within(chips).queryByText('empty-anchor-text')).toBeNull();
     cleanup();
     sidecar({ summary: { available: true, reason: null }, checks: 'error', relatedFails: true });
-    await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}`);
+    // Reads that fail for good: their tries come at once, without the app's back-off between them.
+    await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}`, createQueryClientWithoutBackoff());
     const failed = await screen.findByRole('group', { name: 'Filters' });
     expect(await within(failed).findByText('a check whose name couldn’t be read')).toBeVisible();
     expect(await within(failed).findByText('a URL that couldn’t be read')).toBeVisible();
