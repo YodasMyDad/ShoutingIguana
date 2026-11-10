@@ -499,13 +499,17 @@ is what it shows. What it settled:
 - **Walking.** A URL of the crawl inside the inspector is `WalkUrl` (`Url` with `onGo`): a push through
   `useInspector().walk`. In the link grids Enter, a double-click or a click on the URL walks; the grid stays one Tab
   stop, and the keyboard stays in the new URL's grid. Elsewhere the section's panel takes the focus the link loses.
-- **The source** (`SourceViewer.tsx`, loaded when first opened) is CodeMirror 6, read-only but focusable, with a
-  caret, so the keyboard moves through it and selects. It shows the stored HTML as text nodes: nothing of the page is
+- **The source** (`SourceViewer.tsx`) is CodeMirror 6, read-only but focusable, with a caret, so the keyboard moves
+  through it and selects. It's a chunk of its own (239 kB), loaded while the app is idle once an inspector is open
+  (`sourceViewerLoader.ts`), and without `lazy` and Suspense: React holds back what follows a Suspense fallback for
+  300 ms, which made a session's first Source take a third of a second however small the page. It shows the stored HTML as text nodes: nothing of the page is
   ever markup in the app. Its theme and highlight colours are tokens (`--color-code-*`: each 4.5:1 on the surfaces
   and on a match's tint, system colours under forced colours). The search is the app's own field driving a state
   field (`sourceSearch.ts`): matches are marked whether or not the field has focus, counted to 10,000, stepped with
   Enter and Shift+Enter, searched 150 ms after typing pauses. Ctrl+F anywhere in the section focuses the field (the
   section takes the key before the registry does). Alt+Left and Alt+Right stay the app's.
+- **Docked at the bottom** the sheet is short, so its head is one line (what the URL is, the URL cut at its end, the
+  actions), and it takes at most `--inspector-height-max` of the window, so the view above keeps some rows.
 - **Its commands** are the registry's Inspector group: open in the browser, copy the URL, dock at the bottom or on
   the right, show each section, search the HTML source. None has a key of its own: Esc closes, and the rest are in
   the palette and on the sheet's buttons.

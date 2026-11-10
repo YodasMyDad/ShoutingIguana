@@ -322,7 +322,7 @@ export const LongValues: Story = {
                 { text: LONG_TEXT, length: LONG_TEXT.length },
                 { text: 'A second H1', length: 11 },
               ],
-              wordCount: 1_204_511,
+              wordCount: 48_211,
             },
             response: testResponse({ responseMs: 48_250, bodyBytes: 9_437_184, sizeBytes: 1_310_720 }),
             issues: [

@@ -316,6 +316,7 @@
   --inspector-width: 400px;
   --inspector-width-min: 320px;
   --inspector-height: 320px; /* docked at the bottom */
+  --inspector-height-max: 62vh; /* docked at the bottom, the view above it keeps the rest */
   --checks-width: 372px;
   --issues-columns: var(--checks-width) minmax(0, 1fr); /* the checks list, then the selected check */
   --checks-height-stacked: max(50vh, 18rem); /* the checks list's rows above the selected check, when they stack */

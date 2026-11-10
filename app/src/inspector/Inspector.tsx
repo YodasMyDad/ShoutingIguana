@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import clsx from 'clsx';
 import {
   Check,
   Copy,
@@ -52,6 +53,7 @@ import {
   type SectionId,
 } from './sections';
 import { SourceSection } from './SourceSection';
+import { preloadSourceViewer } from './sourceViewerLoader';
 import { StructuredDataSection } from './StructuredDataSection';
 import { SummarySection } from './SummarySection';
 import { TYPE_WORDS } from './words';
@@ -139,6 +141,9 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
     rememberSection(next);
     setSection(next);
   }, []);
+
+  // An inspector is open, so its source may be asked for: the viewer's code loads while the app is idle.
+  useEffect(() => preloadSourceViewer(), []);
 
   // The chosen tab is in view, in a list that scrolls sideways when the sheet is narrow.
   useEffect(() => {
@@ -273,40 +278,40 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
   }, [state, inlinks, outlinks, choose, urlId, focusSearch]);
 
   const refreshing = query.isFetching && !waiting && !crawling;
+  const compact = dock === 'bottom';
   return (
     <InspectorContext value={context}>
       <div ref={sheet} className="relative flex min-h-0 flex-1 flex-col" aria-busy={waiting || refreshing}>
         {refreshing ? <RefreshLine label="Reading this URL again" /> : null}
-        <div className="px-5 pt-3 pb-2">
-          <div className="flex min-h-(--control-height-sm) items-center gap-2">
-            <Kind detail={own} loading={state.status === 'loading'} crawling={crawling} />
-            <div className="ml-auto flex shrink-0 gap-0.5">
-              <IconButton label="Open in the browser" icon={ExternalLink} size="sm" disabled={!web} onClick={openUrl} />
-              <IconButton
-                label="Copy the URL"
-                tooltip={copied ? 'Copied' : 'Copy the URL'}
-                icon={copied ? Check : Copy}
-                size="sm"
-                disabled={url === undefined}
-                onClick={() => void copyUrl()}
-              />
-              <IconButton
-                label={dock === 'right' ? 'Dock at the bottom' : 'Dock on the right'}
-                icon={dock === 'right' ? PanelBottom : PanelRight}
-                size="sm"
-                onClick={toggleDock}
-              />
-              <IconButton
-                label="Close the inspector"
-                tooltip="Close"
-                icon={X}
-                size="sm"
-                command="inspector.close"
-                onClick={onClose}
-              />
-            </div>
+        {/* Docked at the bottom the sheet is short: what the URL is, the URL and the actions share one line. */}
+        <div className={clsx('flex flex-wrap items-center gap-x-3 px-5', compact ? 'pt-2 pb-1' : 'pt-3 pb-2')}>
+          <Kind detail={own} loading={state.status === 'loading'} crawling={crawling} compact={compact} />
+          <div className={clsx('ml-auto flex shrink-0 gap-0.5', compact && 'order-3')}>
+            <IconButton label="Open in the browser" icon={ExternalLink} size="sm" disabled={!web} onClick={openUrl} />
+            <IconButton
+              label="Copy the URL"
+              tooltip={copied ? 'Copied' : 'Copy the URL'}
+              icon={copied ? Check : Copy}
+              size="sm"
+              disabled={url === undefined}
+              onClick={() => void copyUrl()}
+            />
+            <IconButton
+              label={dock === 'right' ? 'Dock at the bottom' : 'Dock on the right'}
+              icon={dock === 'right' ? PanelBottom : PanelRight}
+              size="sm"
+              onClick={toggleDock}
+            />
+            <IconButton
+              label="Close the inspector"
+              tooltip="Close"
+              icon={X}
+              size="sm"
+              command="inspector.close"
+              onClick={onClose}
+            />
           </div>
-          <Heading url={detail?.url} loading={state.status === 'loading'} notFound={notFound} />
+          <Heading url={detail?.url} loading={state.status === 'loading'} notFound={notFound} compact={compact} />
         </div>
         {notFound ? (
           <div className="px-5 py-4">
@@ -339,11 +344,22 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
 }
 
 /** "Page, depth 2": what the URL is, and how far from the start. */
-function Kind({ detail, loading, crawling }: { detail: UrlDetail | undefined; loading: boolean; crawling: boolean }) {
+function Kind({
+  detail,
+  loading,
+  crawling,
+  compact,
+}: {
+  detail: UrlDetail | undefined;
+  loading: boolean;
+  crawling: boolean;
+  compact: boolean;
+}) {
+  const room = compact ? 'flex-none' : 'min-h-(--control-height-sm) min-w-0 flex-1';
   if (!detail) {
     return (
-      <span className="flex min-w-0 flex-1 items-center gap-2 text-12 text-text-muted">
-        {loading ? <Skeleton className="h-(--skeleton-text) w-1/3" /> : null}
+      <span className={clsx('flex items-center gap-2 text-12 text-text-muted', room)}>
+        {loading ? <Skeleton className={compact ? 'h-(--skeleton-text) w-16' : 'h-(--skeleton-text) w-1/3'} /> : null}
         {crawling ? <LiveBadge /> : null}
       </span>
     );
@@ -352,7 +368,7 @@ function Kind({ detail, loading, crawling }: { detail: UrlDetail | undefined; lo
   const icon = type === 'page' || type === 'image' ? TYPE_ICONS[type] : File;
   const depth = detail.discovery.depth;
   return (
-    <span className="flex min-w-0 flex-1 items-center gap-1.5 text-12 text-text-muted">
+    <span className={clsx('flex items-center gap-1.5 text-12 text-text-muted', room)}>
       <Icon icon={icon} size="sm" className="shrink-0" />
       <span className="truncate">
         {TYPE_WORDS[type]}
@@ -365,11 +381,23 @@ function Kind({ detail, loading, crawling }: { detail: UrlDetail | undefined; lo
 }
 
 /** The URL, in full: the inspector is about this one URL, so nothing of it is left out. A very long one folds. */
-function Heading({ url, loading, notFound }: { url: string | undefined; loading: boolean; notFound: boolean }) {
+function Heading({
+  url,
+  loading,
+  notFound,
+  compact,
+}: {
+  url: string | undefined;
+  loading: boolean;
+  notFound: boolean;
+  /** On one line beside the actions (docked at the bottom): cut at its end, in full in its tooltip and by Copy. */
+  compact: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  const place = compact ? 'order-2 min-w-0 flex-1' : 'mt-2 w-full';
   if (url === undefined) {
     return (
-      <h2 className="mt-2 min-h-(--leading-14) text-13">
+      <h2 className={clsx('min-h-(--leading-14) text-13', place)}>
         {loading ? (
           <>
             <span className="sr-only">Loading the URL</span>
@@ -384,15 +412,15 @@ function Heading({ url, loading, notFound }: { url: string | undefined; loading:
     );
   }
   const display = urlDisplay(url);
-  const long = url.length > LONG_URL;
+  const long = !compact && url.length > LONG_URL;
   return (
-    <div className="mt-2">
+    <div className={place}>
       <h2
-        className={
-          long && !open
-            ? 'line-clamp-3 font-mono text-13 wrap-anywhere text-text'
-            : 'font-mono text-13 wrap-anywhere text-text'
-        }
+        title={compact ? url : undefined}
+        className={clsx(
+          'font-mono text-13 wrap-anywhere text-text',
+          compact ? 'line-clamp-1' : long && !open && 'line-clamp-3',
+        )}
       >
         {display.origin ? <span className="text-text-muted">{display.origin}</span> : null}
         {url.slice(display.origin.length)}

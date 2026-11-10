@@ -101,7 +101,8 @@ function InspectorPanel({ crawlId, urlId, onClose }: { crawlId: string; urlId: n
       className={clsx(
         // A sheet above the grid: the raised surface, the large radius and the second elevation (clarity's inspector).
         'relative flex min-h-0 min-w-0 shrink-0 flex-col rounded-xl border border-border bg-surface-raised shadow-2',
-        dock === 'right' ? 'my-2 mr-2' : 'mx-2 mb-2',
+        // Docked at the bottom it never takes the whole height: the view above keeps some rows (a short window, 200%).
+        dock === 'right' ? 'my-2 mr-2' : 'mx-2 mb-2 max-h-(--inspector-height-max)',
         chosen === null && (dock === 'right' ? 'w-(--inspector-width)' : 'h-(--inspector-height)'),
       )}
       style={chosen === null ? undefined : dock === 'right' ? { width: size } : { height: size }}

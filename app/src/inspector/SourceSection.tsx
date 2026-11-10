@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, FileX } from 'lucide-react';
-import { Suspense, lazy, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { urlSourceQuery } from '../api/queries';
 import { Skeleton } from '../feedback/Skeleton';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
@@ -15,9 +15,7 @@ import { useInspectorContext } from './inspectorContext';
 import { SectionError } from './parts';
 import { rememberWrapLines, rememberedWrapLines } from './sections';
 import { matchCountWords } from './sourceSearch';
-
-// CodeMirror loads when the section first opens: its code stays out of the app's first paint.
-const SourceViewer = lazy(() => import('./SourceViewer'));
+import { useSourceViewer } from './sourceViewerLoader';
 
 /** Typing pauses this long before the document is searched: a 16 MB page isn't searched on every key. */
 export const SOURCE_SEARCH_DELAY_MS = 150;
@@ -59,11 +57,15 @@ function SourceSkeleton() {
 export function SourceSection({ focusSearch }: { focusSearch?: number | undefined }) {
   const { crawlId, urlId } = useInspectorContext();
   const source = useQuery(urlSourceQuery(crawlId, urlId));
-  const skeleton = useDelayedLoading(source.isPending);
+  // The viewer is a chunk of its own (CodeMirror), loaded when an inspector first opens: usually here already.
+  const viewer = useSourceViewer();
+  const waiting = source.isPending || (viewer.Viewer === null && viewer.error === null);
+  const skeleton = useDelayedLoading(waiting);
   const [text, setText] = useState('');
   const [query, setQuery] = useState('');
   const [current, setCurrent] = useState(0);
-  const [matches, setMatches] = useState({ count: 0, capped: false });
+  /** How many matches the viewer found, and for which query: nothing is said about one it hasn't searched yet. */
+  const [found, setFound] = useState({ query: '', count: 0, capped: false });
   const [wrap, setWrap] = useState(rememberedWrapLines);
   const field = useRef<HTMLInputElement>(null);
 
@@ -74,7 +76,7 @@ export function SourceSection({ focusSearch }: { focusSearch?: number | undefine
     pause.current = null;
     setQuery(value);
     setCurrent(0);
-    if (value === '') setMatches({ count: 0, capped: false });
+    if (value === '') setFound({ query: '', count: 0, capped: false });
   };
   const type = (value: string) => {
     setText(value);
@@ -96,9 +98,14 @@ export function SourceSection({ focusSearch }: { focusSearch?: number | undefine
     if (focusSearch !== undefined && focusSearch > 0) field.current?.focus();
   }, [focusSearch, source.data]);
 
-  if (source.isPending || skeleton) return <SourceSkeleton />;
-  if (source.error)
+  if (skeleton) return <SourceSkeleton />;
+  // A moment's wait shows nothing, as everywhere: a skeleton only for a load worth one.
+  if (waiting) return <div aria-busy="true" className="min-h-0 flex-1" />;
+  if (source.error) {
     return <SectionError error={source.error} onRetry={() => void source.refetch()} what="The HTML source" />;
+  }
+  const Viewer = viewer.Viewer;
+  if (Viewer === null) return <SectionError error={viewer.error} onRetry={viewer.retry} what="The source viewer" />;
   if (!source.data.stored) {
     const words = NOT_STORED[source.data.reason];
     return (
@@ -122,7 +129,8 @@ export function SourceSection({ focusSearch }: { focusSearch?: number | undefine
       field.current?.select();
     }
   };
-  const searching = query !== '';
+  const searching = query !== '' && found.query === query;
+  const matches = searching ? found : { count: 0, capped: false };
   const countWords = matchCountWords(current, matches.count, matches.capped, formatCount);
 
   return (
@@ -191,16 +199,14 @@ export function SourceSection({ focusSearch }: { focusSearch?: number | undefine
         />
       </div>
       <div className="si-source mx-2 mb-2 min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-surface-sunken">
-        <Suspense fallback={<SourceSkeleton />}>
-          <SourceViewer
-            html={html}
-            label="HTML source"
-            wrap={wrap}
-            query={query}
-            current={current}
-            onMatches={(count, capped) => setMatches({ count, capped })}
-          />
-        </Suspense>
+        <Viewer
+          html={html}
+          label="HTML source"
+          wrap={wrap}
+          query={query}
+          current={current}
+          onMatches={(count, capped) => setFound({ query, count, capped })}
+        />
       </div>
     </div>
   );
