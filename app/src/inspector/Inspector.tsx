@@ -97,6 +97,9 @@ function useLinkCount(crawlId: string, urlId: number, direction: 'inlinks' | 'ou
     queryFn: async ({ signal }) => (await api.urlLinks(crawlId, urlId, direction, { limit: 1 }, signal)).total,
     enabled,
     staleTime: Infinity,
+    // The last URL's count stays on its tab until this one's is read (it's read once the inspector has stayed), as
+    // the URL shown stays for a moment: the tabs after it don't move sideways and back on every URL.
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === crawlId ? previous : undefined),
   }).data;
 }
 

@@ -342,6 +342,21 @@ describe('the sections', () => {
     expect(within(inspector).getByRole('tab', { name: /^Hreflang/ })).toHaveTextContent(/^Hreflang$/);
   });
 
+  it('keeps the link counts on the tabs while the inspector moves to another URL, until that URL’s are read', async () => {
+    const { router, inspector } = await open(`${URLS}?inspect=2`);
+    const tab = await within(inspector).findByRole('tab', { name: 'Inlinks 2' });
+    // Everything the tab says on the way to the next URL.
+    const said: string[] = [];
+    const observer = new MutationObserver(() => said.push(tab.textContent));
+    observer.observe(tab, { childList: true, characterData: true, subtree: true });
+    await act(() => inspectFromGrid(router, 1));
+    await within(inspector).findByRole('heading', { level: 2, name: HOME.url });
+    await waitFor(() => expect(tab).toHaveAccessibleName('Inlinks 1'));
+    observer.disconnect();
+    // Never without its count: the tabs after it would move sideways, and back when the count came.
+    expect(said).not.toContain('Inlinks');
+  });
+
   it('lists the issues, and says so when the crawl was never analysed', async () => {
     const { inspector, user } = await open(`${URLS}?inspect=2`, {
       urls: {
