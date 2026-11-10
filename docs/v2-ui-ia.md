@@ -4,6 +4,9 @@ Stage 2 of [the UI brief](v2-ui-brief.md#how-to-work): the screens, the navigati
 page. The words follow [the glossary](v2-ui-discovery.md#glossary). Signed off on 2026-11-01, under the owner's
 delegation of the stage sign-offs.
 
+**Changed on 2026-11-10.** This is the IA of Advanced. Simple, the switch and the report are added here at the
+Simple design: [Simple first](v2-rebuild.md#simple-first-advanced-on-a-switch-2026-11-10).
+
 ## The shell
 
 ```text

@@ -23,7 +23,8 @@ v2 is a fresh solution that ports the useful logic.
 | --- | --- | --- |
 | 1 | Headless engine, storage and CLI (`si`), proven on a generated 100k-page site, with the benchmark in CI | Done: `3e556be` |
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
-| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md) | In progress on `ui/step-3`. Pick up at [Where step 3 stands](#where-step-3-stands-2026-11-10) |
+| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | In progress on `ui/step-3`. Pick up at [Where step 3 stands](#where-step-3-stands-2026-11-10) |
+| 3b | The check audit: every check proven against real sites and worded for a non-expert, then the old app's checks worth keeping and those a comparison with Screaming Frog shows are missing | Planned on 2026-11-10: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) |
 | 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | Later |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
 
@@ -31,7 +32,94 @@ v2 is a fresh solution that ports the useful logic.
 enterprise level" UI and UX. The old app was "clunky and a bit all over the place". **[The UI brief](v2-ui-brief.md)
 sets the bar and the process**: discovery, sign-off on mockups and a clickable prototype, vertical slices, and a
 definition of done for every screen. It also covers the performance budgets and the engine work the UI needs.
-Discovery and the visual direction were settled on 2026-11-01 (direction B, "clarity"). Do not restart them.
+Discovery and the visual direction were settled on 2026-11-01 (direction B, "clarity"). Do not restart them. Simple
+(below) is added to them, in the same look.
+
+## Simple first, Advanced on a switch (2026-11-10)
+
+On 2026-11-10 the owner changed what the app is for. This section is the plan for that change. None of it is
+designed or built yet: the owner asked only for the plan.
+
+**What the owner asked for:**
+
+- An SEO tool that is "super easy for anyone to understand".
+- The app opens in a "simplified user friendly UI" that shows the overview. A switch to an "advanced mode" lets a
+  technical SEO "look at everything in detail".
+- All the same checks, each "properly audited and analysed to make sure they work".
+- "A report for everything at the end."
+- A quick comparison with Screaming Frog: "what we're missing compared to them", and whether the UI is as good or
+  better.
+
+**What it changes:**
+
+- **Who the app is for.** The 2026-11-01 answer was an agency with many client sites. Now anyone comes first, and
+  the agency and the technical SEO are one switch away.
+- **What a crawl opens on.** Simple shows the answer, what to fix first and how to fix it, in plain words, and the
+  report. Advanced adds URLs, Links, Sitemaps, robots.txt, the inspector, the filters and columns, and the crawl
+  settings beyond the start URL.
+- **The report moves into step 3.** The UI brief and the IA had client reports as "later". The report is now what a
+  Simple crawl ends in.
+- **The checks' words.** They were written for an SEO. Each check gets words a non-expert can act on. Whether that
+  is a new line for each check or the existing texts rewritten is settled in the Simple design.
+
+**What it doesn't change:**
+
+- The engine, the crawl file, the sidecar API and the 86 checks.
+- Everything step 3 has built or has in flight. Those screens are Advanced as they stand, and none is redone.
+- Steps 4 and 5, unless the comparison reorders them.
+
+**Rules for the Simple design:**
+
+- Simple is a view over the same crawl, the same checks and the same numbers. It is not a second app, and it shows
+  no figure that Advanced can't list the URLs for.
+- One switch, in the same place on every screen, and remembered. A first start is Simple.
+- Simple starts from what exists: Overview (done), with its answer and "Fix first", and each check's "what's wrong,
+  why it matters and how to fix it".
+- "Simple" and "Advanced" go in [the glossary](v2-ui-discovery.md#glossary) before the app uses them.
+
+**Where it fits: inside step 3, before round 3.** It doesn't interrupt what is in flight, and it doesn't wait until
+everything else is finished.
+
+- Round 2 isn't held up. Links, Sitemaps, robots.txt and E3c are Advanced, and already built.
+- Round 3 waits for the Simple design. It builds Settings, New crawl and export. The switch lives in the first,
+  Simple's "paste a URL and go" is the second, and the report rides on the third. Built before the design, all
+  three would be changed afterwards, and step 3's closing audit would be run twice.
+- Simple itself is a fourth round, after round 3. Step 3 isn't finished without it, as it is the first thing a
+  user sees.
+
+The order, item by item, is "Left, in this order" under [Where step 3 stands](#where-step-3-stands-2026-11-10).
+
+**The comparison.** Research only, no code. It writes `docs/v2-comparison.md`.
+
+- Screaming Frog for features, checks and how much a screen holds. Sitebulb beside it for the Simple side: the
+  owner picked it on 2026-11-01 for how it explains issues.
+- Three lists: features, checks and UI. Each gap gets a verdict: step 3, the check audit, step 4, step 5, later, or
+  not doing.
+- The plan already holds the known gaps. Step 4: JavaScript rendering, include and exclude rules, logins, list mode
+  and custom extraction. Step 5: Search Console and analytics. Later: crawl comparison, scheduled crawls and
+  projects.
+- It reads the vendors' documentation. If the owner has a Screaming Frog licence, the same sites are crawled in
+  both and the results compared, which is also the best test of the checks.
+
+**Step 3b, the check audit.** After step 3 and before step 4.
+
+- **Why.** The synthetic site proves each check flags its planted case and nothing else. It doesn't prove a check
+  is right on real HTML. One real site has been audited: 20 checks fired there, and 3 of them were wrong (since
+  fixed or documented). Most of the 86 have never met a real site. A wrong flag costs more in Simple, where the
+  reader can't tell.
+- **How.**
+  - Real sites, crawled with their HTML kept, chosen so that every check fires on at least one: different
+    platforms, a multilingual site, structured data, a faulty sitemap.
+  - For each check: its flags sampled against the stored HTML, for wrong flags; a second tool's results for the
+    same site, where there are any, for misses; and its words read as a non-expert would read them.
+  - A verdict for each check in `docs/v2-check-audit.md`: right, fixed, reworded, severity changed or dropped. Each
+    fix gets a planted case and a test seen failing without it, as before.
+  - Then the checks in [the old app's backlog](v2-ui-discovery.md#backlog-checks-from-the-old-app), and those the
+    comparison shows are missing.
+- **When.** It is engine work and touches no screen, so it can run beside step 3's rounds if the owner wants it
+  sooner. It costs usage, and that is theirs to call.
+
+What the owner still has to answer is under [Open items](#open-items-and-owner-decisions).
 
 ## Where step 3 stands (2026-11-10)
 
@@ -210,20 +298,32 @@ Done on this branch, on top of `v2`:
 - The clickable prototype is the app itself: `npm run dev` runs it against copies of the real crawls. A static mock
   build isn't published, as it can't be reviewed file by file.
 
-Left, in this order:
+Left, in this order. Items 3, 4 and 6 were added on 2026-11-10, and items 5 and 8 widened: the reasons are in
+[Simple first](#simple-first-advanced-on-a-switch-2026-11-10).
 
 1. Round 2, in flight (above): E3c; Links, with the Issues "pages affected" wording; Sitemaps and robots.txt. Each
    reviewed, fixed, merged and verified.
 2. The UI takes up E3c's fields (the list above), and the shell pass's open findings are fixed.
-3. Round 3: New crawl settings, the crawl's settings and the rest of Settings (the Overview's alert actions then get
-   their real targets); export (E5, engine and UI); full-text search and favicons (E6, engine and UI). E3c left one
-   engine idea for this round: run the pass over every link on several connections, which would bring text filters
-   and search (0.3 to 1.4 s on 100k) down with no cost to the file or the analysis.
-4. The screenshot gallery is published for the owner as a private artifact: 36 views from the shell pass. Its
+3. The comparison with Screaming Frog and Sitebulb: research only, into `docs/v2-comparison.md`. It can run beside
+   items 1 and 2.
+4. The Simple design. The IA, the design doc and the glossary say what Simple shows, where the switch is, what the
+   report holds and how it is made, and what New crawl and Settings look like in each mode. Mockups are published
+   for the owner as a private artifact. The work then goes on under the standing delegation unless the owner
+   steers it. Round 3 doesn't start before this.
+5. Round 3: New crawl settings, the crawl's settings and the rest of Settings (the Overview's alert actions then get
+   their real targets); export (E5, engine and UI); full-text search and favicons (E6, engine and UI). All of it is
+   built to the Simple design: the switch's home in Settings, New crawl in both modes, and an export that can carry
+   the report. E3c left one engine idea for this round: run the pass over every link on several connections, which
+   would bring text filters and search (0.3 to 1.4 s on 100k) down with no cost to the file or the analysis.
+6. Round 4: Simple. The summary, what to fix in plain words, the report, the switch and the checks' plain words.
+   Each piece goes the way every piece does (above).
+7. The screenshot gallery is published for the owner as a private artifact: 36 views from the shell pass. Its
    builder and where it is published from are in the scratchpad's `checkpoint.md`. Re-shoot and republish it when
    the remaining screens land.
-5. Before step 3 is called finished: a read-only audit of what is built against the IA and the UI brief (screens,
-   the Keyboard table, the definition of done).
+8. Before step 3 is called finished: a read-only audit of what is built against the IA and the UI brief (screens,
+   the Keyboard table, the definition of done), in both modes.
+
+After step 3 comes step 3b, the check audit, and then step 4.
 
 Known and open: a links filter on the target with a link's position takes 565 ms half way down a big crawl, and
 nothing is measured at 1M URLs.
@@ -342,6 +442,10 @@ As of 2026-10-31:
     version and can't tell a harmless copy from a harmful one.
   - `meta-refresh` stays a Warning. One severity per id. Google treats an instant refresh as a permanent redirect,
     but a server redirect is what Google recommends, and every client follows it.
+- **Simple first, Advanced on a switch (2026-11-10).** The owner wants an SEO tool "super easy for anyone to
+  understand", with the detail one switch away for a technical SEO. That replaces the 2026-11-01 aim, an agency's
+  tool, as the first face of the app. The screens built for that aim stay, as Advanced. The plan is
+  [Simple first](#simple-first-advanced-on-a-switch-2026-11-10).
 
 ## Handoff to step 3 (the UI)
 
@@ -408,6 +512,17 @@ Everything below is public in `ShoutingIguana.Engine`.
 - **Decided this round under delegation, easy to revisit:**
   - stopping after 10 minutes without an answer;
   - the checks skipped on crawls that can't support them.
+- **Asked on 2026-11-10 with [the Simple plan](#simple-first-advanced-on-a-switch-2026-11-10). No work waits on
+  them yet:**
+  - A score on the Simple summary? Proposed: yes, one number, with how it is worked out one click away. If the
+    owner doesn't say, the Simple design decides and the mockups show it.
+  - The owner said the checks are for "flagging things and potentially changing things". Each check already says
+    how to fix what it flags. If "changing things" means more (the app drafting a new title, or making a fix),
+    that is new work and nothing is planned for it.
+  - Is there a Screaming Frog licence to crawl the same sites with? Without one, the comparison reads its
+    documentation only.
+  - Which real sites may be crawled for the check audit? The owner's and their clients' are best, as what is
+    really wrong with them is known. The audit doesn't start without an answer.
 
 ## Known limitations
 

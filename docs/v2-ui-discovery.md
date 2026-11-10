@@ -10,6 +10,11 @@ Stage 1 of [the UI brief](v2-ui-brief.md#how-to-work). It records:
 Signed off on 2026-11-01. The owner delegated the stage sign-offs: "you don't really need my input ... just
 continue".
 
+**Changed on 2026-11-10.** The owner now wants the app to open in Simple, for anyone, with Advanced one switch away.
+The answers below describe Advanced, and the report moves into step 3. The plan is
+[Simple first](v2-rebuild.md#simple-first-advanced-on-a-switch-2026-11-10). This doc is amended at the Simple
+design.
+
 ## The owner's answers (2026-11-01)
 
 | Question | Answer | What it means for the design |

@@ -4,6 +4,11 @@ This is the bar for step 3 of the [v2 rebuild](v2-rebuild.md). Read it together 
 [Handoff to step 3](v2-rebuild.md#handoff-to-step-3-the-ui), which lists the engine API that exists and the engine
 rules the UI must keep. Where the two disagree, ask the owner.
 
+**Changed on 2026-11-10.** The app now opens in Simple, for anyone, with Advanced one switch away, and the report is
+part of step 3, not "later". The plan is
+[Simple first](v2-rebuild.md#simple-first-advanced-on-a-switch-2026-11-10). This brief stays the bar for every
+screen in both.
+
 ## The bar
 
 In the owner's words: a "super slick, enterprise level UI and UX ... really, really good". The app being replaced
