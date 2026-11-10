@@ -2015,6 +2015,23 @@
     cursor: copy;
   }
 
+  /* A URL that goes somewhere in the app (the inspector walks to it): the link's colour, underlined on hover. */
+  .si-url__go {
+    cursor: pointer;
+  }
+
+  .si-url__go .si-url__path,
+  .si-url--wrap .si-url__go {
+    color: var(--color-accent-text);
+  }
+
+  .si-url__go:hover,
+  .si-url.is-link-hover .si-url__go {
+    text-decoration: underline;
+    text-decoration-color: var(--color-accent-text);
+    text-underline-offset: var(--underline-offset);
+  }
+
   /* The full URL: what screen readers, find-in-page and the layout's width read. It takes no height. */
   .si-url__full {
     display: block;
@@ -2407,6 +2424,17 @@
   .si-list-heading__meta {
     color: var(--color-text-muted);
     font-weight: var(--font-weight-regular);
+  }
+
+  /* ---------------------------------------------------------- Source viewer */
+  /* The frame carries the focus ring for the editor inside it, whose own scroller would clip one. */
+  .si-source:focus-within {
+    outline: var(--focus-width) solid var(--color-focus);
+    outline-offset: calc(var(--focus-width) * -1);
+  }
+
+  .si-source .cm-content:focus-visible {
+    outline: none;
   }
 
   /* ------------------------------------------------------------------ Facts */

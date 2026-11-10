@@ -26,6 +26,17 @@ export interface UrlProps {
   truncate?: 'middle' | 'wrap' | undefined;
   /** In a line of text rather than a cell of its own. */
   inline?: boolean | undefined;
+  /**
+   * Makes the URL a link that goes somewhere in the app (the inspector walks to it): a click calls this instead of
+   * copying. `goHint` says where, in its tooltip ("Inspect").
+   */
+  onGo?: (() => void) | undefined;
+  goHint?: string | undefined;
+  /**
+   * False keeps the link out of the tab order, for a URL in a grid's cell: the grid stays one Tab stop, and its own
+   * Enter does what the click does.
+   */
+  tabbable?: boolean | undefined;
   className?: string | undefined;
 }
 
@@ -111,7 +122,8 @@ function useMiddleTruncate(text: string, keepStart: number, enabled: boolean) {
 /**
  * A URL: monospace, its host muted and its path strong, truncated in the middle so the host and the end stay visible.
  * The full URL shows on hover, copies on click (with "Copied" in the tooltip and a word to screen readers), and opens
- * in the browser from the icon that shows on hover or focus. URLs on the crawl's own origin show their path.
+ * in the browser from the icon that shows on hover or focus. URLs on the crawl's own origin show their path. With
+ * `onGo` it's a link instead: the click goes there (the inspector walks to it), in the link's colour.
  */
 export function Url({
   url,
@@ -120,6 +132,9 @@ export function Url({
   openable = true,
   truncate = 'middle',
   inline = false,
+  onGo,
+  goHint = 'Inspect',
+  tabbable = true,
   className,
 }: UrlProps) {
   const display = urlDisplay(url, siteOrigin);
@@ -167,7 +182,20 @@ export function Url({
         className,
       )}
     >
-      {copyable ? (
+      {onGo ? (
+        <Tooltip content={url} hint={goHint} triggerName={display.full}>
+          <button
+            type="button"
+            className="si-url__copy si-url__go"
+            tabIndex={tabbable ? undefined : -1}
+            // Out of the tab order, a press leaves focus where it is (on the grid the link is in).
+            onMouseDown={tabbable ? undefined : (event) => event.preventDefault()}
+            onClick={onGo}
+          >
+            {text}
+          </button>
+        </Tooltip>
+      ) : copyable ? (
         <Tooltip
           content={copied ? 'Copied' : url}
           hint={copied ? undefined : 'Click to copy'}

@@ -88,9 +88,21 @@ export function rememberSection(section: SectionId): void {
   }
 }
 
-/** Tests: forget the session's section. */
+/** Whether the source viewer wraps long lines: on until the session says otherwise. */
+let wrapLines = true;
+
+export function rememberedWrapLines(): boolean {
+  return wrapLines;
+}
+
+export function rememberWrapLines(wrap: boolean): void {
+  wrapLines = wrap;
+}
+
+/** Tests: forget the session's section and choices. */
 export function resetRememberedSection(): void {
   remembered = null;
+  wrapLines = true;
   try {
     storage()?.removeItem(STORAGE_KEY);
   } catch {

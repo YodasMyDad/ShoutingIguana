@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Indexability, IndexabilityTest } from '../api/inspector';
 import { testResponse, testUrlDetail } from '../test/inspectorSidecar';
-import { indexabilityVerdict } from './indexability';
+import { canonicalFact, indexabilityVerdict } from './indexability';
 
 const PASSING: IndexabilityTest[] = [
   { test: 'answered', outcome: 'pass', statusCode: 200 },
@@ -45,6 +45,8 @@ describe('indexabilityVerdict', () => {
     expect(verdict.note).toBeNull();
     expect(row(verdict, 'answered').detail).toBe('Answered 200 OK');
     expect(row(verdict, 'canonical').detail).toBe('Its canonical is itself');
+    // What only repeats its label can go unsaid; the status it answered with is worth saying.
+    expect(verdict.rows.map((entry) => entry.plain ?? false)).toEqual([false, true, true, true]);
   });
 
   it('says a page without a canonical has none', () => {
@@ -254,5 +256,31 @@ describe('indexabilityVerdict', () => {
       testUrlDetail({ indexability: { ...testUrlDetail().indexability, tests: PASSING.slice(0, 2) } }),
     );
     expect(states(verdict)).toEqual(['pass', 'pass', 'notChecked', 'notChecked']);
+  });
+});
+
+describe('canonicalFact', () => {
+  it('tells none, itself, another URL and not read apart', () => {
+    expect(canonicalFact(testUrlDetail())).toEqual({ kind: 'self' });
+    expect(canonicalFact(testUrlDetail({ indexability: withTests({}) }))).toEqual({ kind: 'none' });
+    const other = { id: 7, url: 'https://example.com/blog/', statusCode: 200 };
+    expect(
+      canonicalFact(
+        testUrlDetail({
+          indexability: withTests({ canonical: { outcome: 'fail', canonical: other, canonicalUrl: other.url } }),
+        }),
+      ),
+    ).toEqual({ kind: 'other', target: other });
+    expect(canonicalFact(testUrlDetail({ indexability: withTests({ canonical: { outcome: 'notChecked' } }) }))).toEqual(
+      { kind: 'notRead' },
+    );
+    // A canonical the crawl doesn't have is still the page's canonical.
+    expect(
+      canonicalFact(
+        testUrlDetail({
+          indexability: withTests({ canonical: { outcome: 'fail', canonicalUrl: 'https://other.example/x' } }),
+        }),
+      ),
+    ).toEqual({ kind: 'other', target: { id: null, url: 'https://other.example/x', statusCode: null } });
   });
 });

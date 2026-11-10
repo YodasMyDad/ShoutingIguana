@@ -3,6 +3,7 @@
 import { queryOptions, type QueryFilters } from '@tanstack/react-query';
 import { api } from './client';
 import type { CheckGroupRef, GridPage, GridQuery, GridSort, IssueGroup, IssueGroupPage, IssueRow } from './grids';
+import type { LinkKind, LinkPage, LinkRow } from './inspector';
 
 export const queryKeys = {
   health: ['health'] as const,
@@ -30,6 +31,15 @@ export const queryKeys = {
   /** Where one of a check's groups is among its groups, to open it from the route. */
   issueGroupPlace: (id: string, checkId: string, group: CheckGroupRef) =>
     ['crawl', id, 'issues', checkId, 'place', group] as const,
+  /** One URL in full, for the inspector. Under the crawl's prefix, so whatever changes the crawl refreshes it. */
+  urlDetail: (id: string, urlId: number) => ['crawl', id, 'inspect', urlId] as const,
+  /** Every URL the inspector has read of one crawl: what a running crawl may change. */
+  urlDetails: (id: string) => ['crawl', id, 'inspect'] as const,
+  /** A URL's stored HTML. */
+  urlSource: (id: string, urlId: number) => ['crawl', id, 'source', urlId] as const,
+  /** A URL's inlinks or outlinks, as grid pages: a running crawl adds to them, so they refresh live. */
+  urlLinksGrid: (direction: 'inlinks' | 'outlinks', id: string, urlId: number, kinds: readonly LinkKind[]) =>
+    ['grid', direction, id, { urlId, kinds }] as const,
   /**
    * Grid pages live under their own prefix, so the page cache can be capped (see queryClient.ts). Every grid's keys
    * are `['grid', <grid>, <crawl id>, <query>, ...]`, so a crawl's pages can be found (gridPagesOf).
@@ -105,6 +115,40 @@ export const alertsQuery = (id: string) =>
     queryFn: ({ signal }) => api.alerts(id, signal),
     staleTime: Infinity,
   });
+
+/** One URL in full: the inspector's summary, its issues, its redirects, headers, structured data and hreflang. */
+export const urlDetailQuery = (id: string, urlId: number) =>
+  queryOptions({
+    queryKey: queryKeys.urlDetail(id, urlId),
+    queryFn: ({ signal }) => api.urlDetail(id, urlId, signal),
+    staleTime: Infinity,
+  });
+
+/** How long a URL's HTML is kept once nothing shows it: a page can be 16 MB, so not for long. */
+export const SOURCE_GC_MS = 30_000;
+
+/** A URL's stored HTML: read when the Source section is opened, never before. */
+export const urlSourceQuery = (id: string, urlId: number) =>
+  queryOptions({
+    queryKey: queryKeys.urlSource(id, urlId),
+    queryFn: ({ signal }) => api.urlSource(id, urlId, signal),
+    staleTime: Infinity,
+    gcTime: SOURCE_GC_MS,
+  });
+
+/** A page of a URL's links in the grid's shape: the links of the kinds asked for are what "match". */
+export function linksAsGridPage(page: LinkPage): GridPage<LinkRow> {
+  return {
+    columns: [],
+    rows: page.rows,
+    offset: page.offset,
+    matching: page.total,
+    total: page.total,
+    next: page.next,
+    summary: { available: true, reason: null },
+    unavailable: [],
+  };
+}
 
 /** A page of a check's groups in the grid's shape: a group is a row, and the groups are what "match". */
 export function groupsAsGridPage(page: IssueGroupPage): GridPage<IssueGroup> {

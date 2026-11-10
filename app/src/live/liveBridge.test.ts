@@ -277,8 +277,10 @@ describe('what the live bridge refreshes', () => {
     stop();
   });
 
-  it('refreshes a crawling crawl’s grids at most once a second, and nothing else', async () => {
+  it('refreshes a crawling crawl’s grids and inspected URL at most once a second, and nothing else', async () => {
     const { queryClient, stale } = cachedClient();
+    for (const crawl of [ID, OTHER]) queryClient.setQueryData(queryKeys.urlDetail(crawl, 7), {});
+    queryClient.setQueryData(queryKeys.urlSource(ID, 7), {});
     const { stop, send } = setup(queryClient);
     const tick = (fetched: number, status = 'running') => send('progress', { crawlId: ID, status, fetched });
     tick(1);
@@ -286,6 +288,10 @@ describe('what the live bridge refreshes', () => {
     expect(stale(gridKey(ID, 3))).toBe(true);
     expect(stale(gridKey(OTHER, 0))).toBe(false);
     expect(stale(queryKeys.crawlItem(ID))).toBe(false);
+    // The URL the inspector shows may have been fetched since; its HTML, once stored, doesn't change.
+    expect(stale(queryKeys.urlDetail(ID, 7))).toBe(true);
+    expect(stale(queryKeys.urlDetail(OTHER, 7))).toBe(false);
+    expect(stale(queryKeys.urlSource(ID, 7))).toBe(false);
     queryClient.setQueryData(gridKey(ID, 0), testUrlPage());
     await vi.advanceTimersByTimeAsync(LIVE_GRID_REFRESH_MS / 2);
     tick(2);

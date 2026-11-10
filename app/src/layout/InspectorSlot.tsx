@@ -1,27 +1,26 @@
-import { useMatches } from '@tanstack/react-router';
+import { useMatches, useParams } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { PanelBottom, PanelRight, X } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { Inspector } from '../inspector/Inspector';
 import { useCommands } from '../keyboard/registry';
 import { useInspector } from '../routing/inspector';
 import { inspectedUrl } from '../routing/search';
 import { INSPECTOR_HEIGHT_RANGE, INSPECTOR_WIDTH_RANGE } from '../settings/schema';
 import { updateSettings, useSettings } from '../settings/settingsStore';
-import { IconButton } from '../ui/IconButton';
 
 const KEY_STEP = 16;
 
 /**
  * Where the URL inspector opens (docs/v2-ui-ia.md, The shell): on the right or docked at the bottom, resizable by
  * pointer or keyboard, closed with Esc. It opens for `?inspect=<url id>` on any view, so back and forward retrace
- * it (routing/inspector.ts has its place in history). The inspector's content is its own slice (it reads
- * `POST /urls/inspect`).
+ * it (routing/inspector.ts has its place in history). What it shows is `inspector/Inspector.tsx`.
  */
 export function InspectorSlot() {
   const inspector = useInspector();
   // The current view's own checked search: a view without `inspect` (Home, Overview, Settings) never opens it.
   const inspect = useMatches({ select: (matches) => inspectedUrl(matches[matches.length - 1]?.search) });
-  const open = inspect !== undefined;
+  const { crawl: crawlId } = useParams({ strict: false });
+  const open = inspect !== undefined && crawlId !== undefined;
 
   // Esc and Close go back over the steps walked inside it, then close it in place: Alt+Left after Esc goes back to
   // where the user was before it opened, not to a URL that was open.
@@ -43,14 +42,14 @@ export function InspectorSlot() {
     'app',
   );
 
-  return open ? <InspectorPanel urlId={inspect} onClose={close} /> : null;
+  return open ? <InspectorPanel crawlId={crawlId} urlId={inspect} onClose={close} /> : null;
 }
 
 /**
  * The panel itself. Until the user resizes it, it takes the layout's size (tokens.css `--inspector-width` and
  * `--inspector-height`, which narrow with the window); once resized, the size they chose, remembered.
  */
-function InspectorPanel({ urlId, onClose }: { urlId: number; onClose: () => void }) {
+function InspectorPanel({ crawlId, urlId, onClose }: { crawlId: string; urlId: number; onClose: () => void }) {
   const dock = useSettings((settings) => settings.inspectorDock);
   const chosen = useSettings((settings) => (dock === 'right' ? settings.inspectorWidth : settings.inspectorHeight));
   const range = dock === 'right' ? INSPECTOR_WIDTH_RANGE : INSPECTOR_HEIGHT_RANGE;
@@ -101,7 +100,7 @@ function InspectorPanel({ urlId, onClose }: { urlId: number; onClose: () => void
       aria-label="Inspector"
       className={clsx(
         // A sheet above the grid: the raised surface, the large radius and the second elevation (clarity's inspector).
-        'relative flex shrink-0 flex-col rounded-xl border border-border bg-surface-raised shadow-2',
+        'relative flex min-h-0 min-w-0 shrink-0 flex-col rounded-xl border border-border bg-surface-raised shadow-2',
         dock === 'right' ? 'my-2 mr-2' : 'mx-2 mb-2',
         chosen === null && (dock === 'right' ? 'w-(--inspector-width)' : 'h-(--inspector-height)'),
       )}
@@ -127,30 +126,7 @@ function InspectorPanel({ urlId, onClose }: { urlId: number; onClose: () => void
           dock === 'right' ? 'inset-y-0 -left-1 w-2 cursor-col-resize' : 'inset-x-0 -top-1 h-2 cursor-row-resize',
         )}
       />
-      <div className="flex h-(--tab-height) items-center gap-2 border-b border-border-subtle pr-2 pl-5">
-        <h2 className="text-13 font-semibold">Inspector</h2>
-        <span className="figures text-12 text-text-muted">URL {urlId}</span>
-        <div className="ml-auto flex gap-0.5">
-          <IconButton
-            label={dock === 'right' ? 'Dock at the bottom' : 'Dock on the right'}
-            icon={dock === 'right' ? PanelBottom : PanelRight}
-            size="sm"
-            onClick={() => updateSettings({ inspectorDock: dock === 'right' ? 'bottom' : 'right' })}
-          />
-          <IconButton
-            label="Close the inspector"
-            tooltip="Close"
-            icon={X}
-            size="sm"
-            command="inspector.close"
-            onClick={onClose}
-          />
-        </div>
-      </div>
-      <p className="px-5 py-4 text-13 text-text-secondary">
-        Everything about this URL shows here: its summary, issues, inlinks and outlinks, redirects, headers, structured
-        data, hreflang and source. It arrives with the inspector’s slice.
-      </p>
+      <Inspector crawlId={crawlId} urlId={urlId} onClose={onClose} />
     </aside>
   );
 }

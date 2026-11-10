@@ -100,6 +100,20 @@ describe('Url', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
+  it('is a link that goes somewhere when given `onGo`: a click calls it, and copies nothing', async () => {
+    layOut(400);
+    const onGo = vi.fn();
+    const { rerender } = render(<Url url={`${SITE}/login/`} siteOrigin={SITE} onGo={onGo} openable={false} />);
+    const link = screen.getByRole('button', { name: `${SITE}/login/` });
+    expect(link).not.toHaveAttribute('tabindex');
+    await userEvent.click(link);
+    expect(onGo).toHaveBeenCalledTimes(1);
+    expect(writeText).not.toHaveBeenCalled();
+    // In a grid's cell it stays out of the tab order: the grid is one Tab stop.
+    rerender(<Url url={`${SITE}/login/`} siteOrigin={SITE} onGo={onGo} openable={false} tabbable={false} />);
+    expect(screen.getByRole('button', { name: `${SITE}/login/` })).toHaveAttribute('tabindex', '-1');
+  });
+
   it('fits again when its box changes size', () => {
     let resize: (() => void) | undefined;
     vi.stubGlobal(

@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { StructuredDataBlock, UrlIssue } from '../api/inspector';
 import { testResponse, testUrlDetail } from '../test/inspectorSidecar';
 import { fetchState } from './fetchState';
+import { hreflangProblem } from './hreflang';
 import { LONG_HEADER_VALUE, filterHeaders, headersText, shapeHeaders } from './headers';
 import { issueLink } from './issueLinks';
+import { chooseLinkKind, chosenLinkKind, followWords, linkStatusWords, resetLinkKinds } from './links';
 import {
   SECTION_IDS,
   isSectionId,
@@ -306,6 +308,61 @@ describe('fetchState', () => {
       kind: 'failed',
       title: 'No response',
     });
+  });
+});
+
+describe('hreflangProblem', () => {
+  const entry = { language: 'fr', href: '/fr/', url: 'https://example.com/fr/', inHead: true, fromHttpHeader: false };
+  const target = (statusCode: number | null) => ({ id: 9, url: 'https://example.com/fr/', statusCode });
+
+  it('finds nothing wrong with an annotation in the head whose target answers', () => {
+    expect(hreflangProblem({ ...entry, target: target(200) })).toBeNull();
+    expect(hreflangProblem({ ...entry, inHead: false, fromHttpHeader: true, target: target(200) })).toBeNull();
+  });
+
+  it('says what’s wrong, the address first', () => {
+    expect(hreflangProblem({ ...entry, url: null, target: null })).toBe('Its address isn’t a URL');
+    expect(hreflangProblem({ ...entry, inHead: false, target: target(200) })).toBe(
+      'Outside the head, where search engines ignore it',
+    );
+    expect(hreflangProblem({ ...entry, target: null })).toBe('Not in this crawl');
+    expect(hreflangProblem({ ...entry, target: target(null) })).toBe('Not fetched');
+    expect(hreflangProblem({ ...entry, target: target(404) })).toBe('Answers 404');
+    expect(hreflangProblem({ ...entry, target: target(301) })).toBe('Answers 301');
+  });
+});
+
+describe('the link grids’ words', () => {
+  it('says whether a hyperlink is followed, then its other flags', () => {
+    expect(followWords({ followed: true, flags: [] })).toBe('Followed');
+    expect(followWords({ followed: true, flags: ['imageLink'] })).toBe('Followed, image link');
+    expect(followWords({ followed: false, flags: ['noFollow', 'sponsored'] })).toBe('nofollow, sponsored');
+    // The page's own nofollow stops a link that carries no flag.
+    expect(followWords({ followed: false, flags: [] })).toBe('Not followed');
+    expect(followWords({ followed: false, flags: ['ugc'] })).toBe('Not followed, ugc');
+  });
+
+  it('gives any other kind of link its flags alone', () => {
+    expect(followWords({ followed: null, flags: [] })).toBe('');
+    expect(followWords({ followed: null, flags: ['outsideHead', 'fromHttpHeader'] })).toBe(
+      'outside the head, from the HTTP header',
+    );
+  });
+
+  it('says why the other end has no status', () => {
+    expect(linkStatusWords({ statusCode: 404, fetched: true })).toBe('404');
+    expect(linkStatusWords({ statusCode: null, fetched: true })).toBe('No response');
+    expect(linkStatusWords({ statusCode: null, fetched: false })).toBe('Not fetched');
+  });
+
+  it('remembers the kind each grid showed', () => {
+    resetLinkKinds();
+    expect(chosenLinkKind('inlinks')).toBe('all');
+    chooseLinkKind('inlinks', 'hyperlink');
+    expect(chosenLinkKind('inlinks')).toBe('hyperlink');
+    expect(chosenLinkKind('outlinks')).toBe('all');
+    resetLinkKinds();
+    expect(chosenLinkKind('inlinks')).toBe('all');
   });
 });
 

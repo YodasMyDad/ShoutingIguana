@@ -14,6 +14,8 @@ export interface IndexabilityRow {
   state: TestState;
   /** What the crawl saw: "Answered 404 Not Found", "noindex in its robots meta tag". */
   detail: string;
+  /** The detail only says again what the label does (a test that passed with nothing more to tell): it can go unsaid. */
+  plain?: boolean | undefined;
   /** The other URL the test names: a canonical's target, an instant meta refresh's. */
   target?: { id: number | null; url: string; statusCode: number | null } | undefined;
 }
@@ -88,14 +90,15 @@ function rowFor(subject: Subject, test: IndexabilityTest, earlierFailed: boolean
       return { ...base, detail: answeredWords(test.statusCode ?? subject.response?.statusCode) };
     }
     case 'robotsTxt':
-      if (test.outcome === 'pass') return { ...base, detail: 'robots.txt allows it' };
+      if (test.outcome === 'pass') return { ...base, detail: 'robots.txt allows it', plain: true };
       return {
         ...base,
         detail: test.unreachable ? 'robots.txt couldn’t be read, which blocks every URL' : 'robots.txt disallows it',
       };
     case 'noindex': {
-      if (test.outcome === 'pass')
-        return { ...base, detail: 'No noindex in a robots meta tag or the X-Robots-Tag header' };
+      if (test.outcome === 'pass') {
+        return { ...base, detail: 'No noindex in a robots meta tag or the X-Robots-Tag header', plain: true };
+      }
       const where =
         test.meta && test.header
           ? 'its robots meta tag and its X-Robots-Tag header'
@@ -110,7 +113,7 @@ function rowFor(subject: Subject, test: IndexabilityTest, earlierFailed: boolean
       if (!target) return { ...base, detail: 'It has no canonical' };
       const itself = target.id === subject.id || target.url === subject.url;
       return itself
-        ? { ...base, detail: 'Its canonical is itself' }
+        ? { ...base, detail: 'Its canonical is itself', plain: true }
         : { ...base, detail: 'Its canonical leads back to it', target };
     }
   }
@@ -152,4 +155,15 @@ export function indexabilityVerdict(subject: Subject): IndexabilityVerdict {
         ? 'Only its status was checked, so the crawl never read what decides it.'
         : 'The crawl couldn’t judge it.';
   return { state: 'notJudged', title: 'Not judged', why, failed, note, rows };
+}
+
+/** What the page says its canonical is: none, itself, another URL, or not read (a URL whose content wasn't). */
+export type CanonicalFact =
+  { kind: 'notRead' | 'none' | 'self' } | { kind: 'other'; target: NonNullable<IndexabilityRow['target']> };
+
+export function canonicalFact(subject: Pick<UrlDetail, 'id' | 'url' | 'indexability'>): CanonicalFact {
+  const test = subject.indexability.tests.find((candidate) => candidate.test === 'canonical');
+  const target = test ? canonicalTarget(test) : undefined;
+  if (!target) return { kind: !test || test.outcome === 'notChecked' ? 'notRead' : 'none' };
+  return target.id === subject.id || target.url === subject.url ? { kind: 'self' } : { kind: 'other', target };
 }
