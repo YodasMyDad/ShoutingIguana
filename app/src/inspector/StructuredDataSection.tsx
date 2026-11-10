@@ -7,7 +7,7 @@ import { Callout } from '../ui/Callout';
 import { EmptyState } from '../ui/EmptyState';
 import { Icon } from '../ui/Icon';
 import { fetchState } from './fetchState';
-import { useIssuesIn } from './inspectorContext';
+import { useInspectorContext, useIssuesIn } from './inspectorContext';
 import { Block, IssueList, SectionBody } from './parts';
 import {
   CHILD_PAGE,
@@ -28,11 +28,12 @@ const OPEN_DEPTH = 1;
  * message. Values are the site's: text only.
  */
 export function StructuredDataSection({ detail }: { detail: UrlDetail }) {
+  const { crawling } = useInspectorContext();
   const blocks = useMemo(() => parseStructuredData(detail.structuredData), [detail.structuredData]);
   const issues = useIssuesIn(detail.issues, STRUCTURED_DATA_CATEGORIES);
 
   if (blocks.length === 0) {
-    const state = fetchState(detail);
+    const state = fetchState(detail, crawling);
     return (
       <SectionBody>
         <EmptyState title="No structured data" icon={Braces} layout="row" level={3}>

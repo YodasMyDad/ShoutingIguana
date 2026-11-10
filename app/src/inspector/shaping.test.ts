@@ -194,8 +194,11 @@ describe('fetchState', () => {
   const base = testUrlDetail();
   const found = (overrides: Partial<typeof base.discovery>) => ({ ...base.discovery, ...overrides });
 
+  /** As a crawl that's done says it: only a URL the crawl hadn't reached reads differently while it runs. */
+  const after = (subject: Parameters<typeof fetchState>[0]) => fetchState(subject, false);
+
   it('is quiet for a page fetched and read', () => {
-    expect(fetchState(base)).toEqual({
+    expect(fetchState(base, false)).toEqual({
       kind: 'ok',
       answered: true,
       hasContent: true,
@@ -205,16 +208,32 @@ describe('fetchState', () => {
     });
   });
 
-  it('says a queued URL hasn’t been reached, and one being fetched is', () => {
-    const queued = fetchState({ ...base, response: null, content: null, discovery: found({ state: 'queued' }) });
+  it('says a queued URL hasn’t been reached, and one being fetched is, while the crawl runs', () => {
+    const queued = fetchState({ ...base, response: null, content: null, discovery: found({ state: 'queued' }) }, true);
     expect(queued).toMatchObject({ kind: 'queued', title: 'Not fetched yet', pending: true, answered: false });
-    const fetching = fetchState({ ...base, response: null, content: null, discovery: found({ state: 'fetching' }) });
+    const fetching = fetchState(
+      { ...base, response: null, content: null, discovery: found({ state: 'fetching' }) },
+      true,
+    );
     expect(fetching).toMatchObject({ kind: 'fetching', title: 'Being fetched', pending: true });
+  });
+
+  it('says the crawl stopped before it reached a URL still queued, with nothing on its way', () => {
+    for (const waiting of ['queued', 'fetching'] as const) {
+      const state = fetchState({ ...base, response: null, content: null, discovery: found({ state: waiting }) }, false);
+      expect(state).toMatchObject({
+        kind: waiting,
+        title: 'Not fetched',
+        why: 'The crawl stopped before it reached this URL.',
+        pending: false,
+        answered: false,
+      });
+    }
   });
 
   it('says why a skipped URL wasn’t fetched', () => {
     const skipped = (reason: (typeof base.discovery)['notFetchedBecause']) =>
-      fetchState({
+      after({
         ...base,
         response: null,
         content: null,
@@ -235,7 +254,7 @@ describe('fetchState', () => {
   });
 
   it('goes by the outcome for a URL robots.txt disallows, whatever `fetched` says', () => {
-    const state = fetchState({
+    const state = after({
       ...base,
       content: null,
       response: testResponse({ fetched: true, outcome: 'robotsDisallowed', statusCode: null }),
@@ -250,7 +269,7 @@ describe('fetchState', () => {
   });
 
   it('gives the server’s reason when it blocked the crawler', () => {
-    const state = fetchState({
+    const state = after({
       ...base,
       content: null,
       response: testResponse({ outcome: 'blocked', statusCode: 403, blockReason: 'a challenge page' }),
@@ -260,7 +279,7 @@ describe('fetchState', () => {
       why: 'The server refused the crawler: a challenge page.',
       answered: true,
     });
-    const bare = fetchState({
+    const bare = after({
       ...base,
       content: null,
       response: testResponse({ outcome: 'blocked', statusCode: null }),
@@ -270,7 +289,7 @@ describe('fetchState', () => {
 
   it('says what went wrong when there was no answer', () => {
     const failed = (outcome: 'timeout' | 'networkError' | 'processingError' | 'notChecked') =>
-      fetchState({ ...base, content: null, response: testResponse({ outcome, statusCode: null, fetched: false }) });
+      after({ ...base, content: null, response: testResponse({ outcome, statusCode: null, fetched: false }) });
     expect(failed('timeout')).toMatchObject({ kind: 'failed', title: 'Timed out' });
     expect(failed('networkError')).toMatchObject({ kind: 'failed', title: 'Couldn’t be reached' });
     expect(failed('processingError')).toMatchObject({ kind: 'failed', title: 'Couldn’t be read' });
@@ -279,7 +298,7 @@ describe('fetchState', () => {
 
   it('tells a redirect, an error, a status check and a file from a page with no body', () => {
     const answered = (overrides: Parameters<typeof testResponse>[0], rest: Partial<typeof base> = {}) =>
-      fetchState({ ...base, content: null, response: testResponse(overrides), ...rest });
+      after({ ...base, content: null, response: testResponse(overrides), ...rest });
     expect(answered({ outcome: 'redirect', statusCode: 301 })).toMatchObject({ kind: 'redirected', answered: true });
     expect(answered({ outcome: 'clientError', statusCode: 404 })).toMatchObject({
       kind: 'errorStatus',
@@ -306,7 +325,7 @@ describe('fetchState', () => {
 
   it('says there’s no answer stored when an outcome comes without a status', () => {
     expect(
-      fetchState({ ...base, content: null, response: testResponse({ outcome: null, statusCode: null }) }),
+      after({ ...base, content: null, response: testResponse({ outcome: null, statusCode: null }) }),
     ).toMatchObject({
       kind: 'failed',
       title: 'No response',

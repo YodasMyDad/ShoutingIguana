@@ -42,7 +42,7 @@ export interface FetchState {
   title: string | null;
   /** Why, in a sentence. Null for a page fetched and read. */
   why: string | null;
-  /** The crawl is still going to get to it: it may change while the crawl runs. */
+  /** The crawl is still going to get to it: it may change while the crawl runs. Never set for a crawl that stopped. */
   pending: boolean;
 }
 
@@ -62,14 +62,21 @@ const state = (
   pending: flags.pending ?? false,
 });
 
-export function fetchState(subject: Subject): FetchState {
+/** What a URL the crawl had still to fetch says once the crawl isn't running: nothing is on its way to it. */
+export const NEVER_REACHED = 'The crawl stopped before it reached this URL.';
+
+/**
+ * What the crawl did with the URL. `crawling`: the crawl is running (or paused), so a URL it hasn't reached is still
+ * on its way; in a crawl that stopped, it never was fetched and won't be until the crawl is continued.
+ */
+export function fetchState(subject: Subject, crawling: boolean): FetchState {
   const { discovery, response, content } = subject;
   if (response === null) {
-    if (discovery.state === 'queued') {
-      return state('queued', 'Not fetched yet', 'It’s in the queue: the crawl hasn’t reached it.', { pending: true });
-    }
-    if (discovery.state === 'fetching') {
-      return state('fetching', 'Being fetched', 'The crawl is fetching it now.', { pending: true });
+    if (discovery.state === 'queued' || discovery.state === 'fetching') {
+      if (!crawling) return state(discovery.state, 'Not fetched', NEVER_REACHED);
+      return discovery.state === 'queued'
+        ? state('queued', 'Not fetched yet', 'It’s in the queue: the crawl hasn’t reached it.', { pending: true })
+        : state('fetching', 'Being fetched', 'The crawl is fetching it now.', { pending: true });
     }
     if (discovery.state === 'skipped') {
       const reason = discovery.notFetchedBecause;

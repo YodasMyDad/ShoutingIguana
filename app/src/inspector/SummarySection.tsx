@@ -42,7 +42,8 @@ export interface SummarySectionProps {
  * the scale the analysis used, its content, timings and size, its issues, and how the crawl found it.
  */
 export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
-  const state = fetchState(detail);
+  const { crawling } = useInspectorContext();
+  const state = fetchState(detail, crawling);
   const measures = measuresOf(detail);
   const verdict = indexabilityVerdict(detail);
   return (

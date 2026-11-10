@@ -8,6 +8,7 @@ import { Button } from '../ui/Button';
 import { EmptyState, FilteredEmptyState } from '../ui/EmptyState';
 import { SearchField } from '../ui/SearchField';
 import { fetchState } from './fetchState';
+import { useInspectorContext } from './inspectorContext';
 import { filterHeaders, headersText, shapeHeaders, type HeaderRow } from './headers';
 import { SectionBody } from './parts';
 
@@ -18,6 +19,7 @@ const COPIED_MS = 1_500;
  * filterable, and copyable as text.
  */
 export function HeadersSection({ detail }: { detail: UrlDetail }) {
+  const { crawling } = useInspectorContext();
   const rows = useMemo(() => shapeHeaders(detail.headers), [detail.headers]);
   const [filter, setFilter] = useState('');
   const [copied, setCopied] = useState(false);
@@ -30,7 +32,7 @@ export function HeadersSection({ detail }: { detail: UrlDetail }) {
   }, [copied]);
 
   if (rows.length === 0) {
-    const state = fetchState(detail);
+    const state = fetchState(detail, crawling);
     return (
       <SectionBody>
         <EmptyState title="No headers" icon={FileX} layout="row" level={3}>

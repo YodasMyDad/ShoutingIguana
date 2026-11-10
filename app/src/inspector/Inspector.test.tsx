@@ -281,13 +281,21 @@ describe('a URL the crawl didn’t read', () => {
       discovery: { ...testUrlDetail().discovery, ...discovery },
     });
 
-  it('says a queued URL hasn’t been fetched yet', async () => {
+  it('says a crawl that stopped never reached a URL still queued, in every section that has nothing to show', async () => {
     const inspector = await state(notFetched({ state: 'queued' }));
-    expect(within(inspector).getByText('Not fetched yet')).toBeVisible();
-    expect(within(inspector).getByText(/It’s in the queue: the crawl hasn’t reached it\./)).toBeVisible();
+    expect(within(inspector).getByText('Not fetched')).toBeVisible();
+    expect(within(inspector).getByText('The crawl stopped before it reached this URL.')).toBeVisible();
+    // Nothing is on its way: the crawl isn't running.
+    expect(within(inspector).queryByText(/It’ll show here once the crawl has fetched it/)).toBeNull();
+    expect(within(inspector).queryByText(/It’s in the queue/)).toBeNull();
     expect(within(inspector).getByRole('heading', { name: 'Not judged' })).toBeVisible();
     // Nothing it doesn't have is shown as 0.
     expect(within(inspector).queryByText('Words')).toBeNull();
+    const user = userEvent.setup();
+    for (const section of [/^Headers/, /^Structured data/, /^Hreflang/]) {
+      const panel = await showTab(user, section);
+      expect(within(panel).getByText('The crawl stopped before it reached this URL.')).toBeVisible();
+    }
   });
 
   it('says why a skipped URL wasn’t fetched', async () => {

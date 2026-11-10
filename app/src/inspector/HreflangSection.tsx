@@ -5,7 +5,7 @@ import { Badge } from '../ui/Badge';
 import { EmptyState } from '../ui/EmptyState';
 import { fetchState } from './fetchState';
 import { hreflangProblem } from './hreflang';
-import { useIssuesIn } from './inspectorContext';
+import { useInspectorContext, useIssuesIn } from './inspectorContext';
 import { Block, IssueList, SectionBody, WalkUrl } from './parts';
 
 const HREFLANG_CATEGORIES = ['hreflang'] as const;
@@ -15,11 +15,12 @@ const HREFLANG_CATEGORIES = ['hreflang'] as const;
  * found first.
  */
 export function HreflangSection({ detail }: { detail: UrlDetail }) {
+  const { crawling } = useInspectorContext();
   const entries = detail.hreflang;
   const issues = useIssuesIn(detail.issues, HREFLANG_CATEGORIES);
 
   if (entries.length === 0 && issues.length === 0) {
-    const state = fetchState(detail);
+    const state = fetchState(detail, crawling);
     return (
       <SectionBody>
         <EmptyState title="No hreflang" icon={Languages} layout="row" level={3}>
