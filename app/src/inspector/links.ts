@@ -1,4 +1,5 @@
-// The link grids' words and their one piece of memory: the kind of link each last showed.
+// The link grids' words and what they remember for the session: the kind of link each last showed, and the row the
+// cursor was left on in each URL's links.
 import type { LinkKind, LinkRow } from '../api/inspector';
 import { FLAG_WORDS } from './words';
 
@@ -20,6 +21,30 @@ export function chooseLinkKind(direction: LinkDirection, kind: KindChoice): void
 export function resetLinkKinds(): void {
   chosenKinds.inlinks = 'all';
   chosenKinds.outlinks = 'all';
+}
+
+/** A session's walk can be long: the rows remembered are the latest of this many grids. */
+const REMEMBERED_GRIDS = 500;
+
+/** The row the cursor was left on in each link grid (a URL's links of a kind), so going back along a walk finds it. */
+const cursorRows = new Map<string, number>();
+
+/** Remembers the cursor's row in a link grid, by the grid's key; null (no cursor) forgets it. */
+export function rememberLinkRow(grid: string, row: number | null): void {
+  cursorRows.delete(grid);
+  if (row === null) return;
+  cursorRows.set(grid, row);
+  const oldest = cursorRows.size > REMEMBERED_GRIDS ? cursorRows.keys().next() : null;
+  if (oldest && !oldest.done) cursorRows.delete(oldest.value);
+}
+
+export function rememberedLinkRow(grid: string): number | undefined {
+  return cursorRows.get(grid);
+}
+
+/** Tests: no row remembered. */
+export function resetLinkRows(): void {
+  cursorRows.clear();
 }
 
 /**

@@ -290,6 +290,8 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   `data-tree-toggle` (the chevron, `.si-tree-toggle`) toggles on press. `onToggle` returns where the group's row is
   afterwards when opening it moved it (Issues opens one group at a time, so opening one closes another above it): the
   cursor stays on it. Rows carry `aria-level` and `aria-expanded`; placeholders keep their level.
+- **A place to start** (`startRow`): read when the grid mounts, the cursor starts on that row, which comes into view
+  once the rows are there. For a grid shown again where it was left (the inspector's links).
 - **Span rows** (`spanRow`): a row drawn as one cell across every column (`aria-colspan`), such as a group's pages and
   its "Show all N pages in URLs"; it is the cursor's cell whatever the cursor's column. Columns' `text` still gives
   every row's words for copying.
@@ -508,7 +510,13 @@ is what it shows. What it settled:
   it builds against the real groups of three analyses (`scripts/issue-links-fixture.mjs` makes its fixture).
 - **Walking.** A URL of the crawl inside the inspector is `WalkUrl` (`Url` with `onGo`): a push through
   `useInspector().walk`. In the link grids Enter, a double-click or a click on the URL walks; the grid stays one Tab
-  stop, and the keyboard stays in the new URL's grid. Elsewhere the section's panel takes the focus the link loses.
+  stop.
+- **Focus stays in the inspector from URL to URL.** Another URL (a walk, back or forward) takes away what the
+  section shows, so before a navigation that changes `inspect`, focus inside the section moves to its panel
+  (`onBeforeNavigate`): it never falls to the view behind, where the next arrow key would change the URL inspected.
+  A link grid keeps the keyboard itself (`data-keeps-focus`): the new URL's grid takes focus, and starts on the row
+  its cursor was left on (`GridCore`'s `startRow`; `links.ts` remembers each grid's row for the session), so back
+  along a walk is where the walk left from.
 - **The source** (`SourceViewer.tsx`) is CodeMirror 6, read-only but focusable, with a caret, so the keyboard moves
   through it and selects. It's a chunk of its own (239 kB), loaded while the app is idle once an inspector is open
   (`sourceViewerLoader.ts`), and without `lazy` and Suspense: React holds back what follows a Suspense fallback for

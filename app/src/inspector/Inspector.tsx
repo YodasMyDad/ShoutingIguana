@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from '@tanstack/react-router';
 import clsx from 'clsx';
 import {
   Check,
@@ -157,16 +158,25 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
     if (tab && typeof tab.scrollIntoView === 'function') tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [section]);
 
-  // A link inside the inspector: the section's panel takes the focus the link is about to lose, then the walk.
-  const walkTo = inspector.walk;
-  const walk = useCallback(
-    (id: number) => {
-      const panel = sheet.current?.querySelector<HTMLElement>('[role="tabpanel"]');
-      if (panel?.contains(document.activeElement)) panel.focus({ preventScroll: true });
-      walkTo(id);
-    },
-    [walkTo],
+  // Another URL (a walk, back or forward) takes away what the section shows: each URL has its own content, link grid
+  // and source. Focus that was in the section moves to its panel first, so it stays in the inspector and never falls
+  // to the view behind, where the next arrow key would change the URL inspected. A part that keeps the keyboard
+  // itself from URL to URL (the links' grid) says so with `data-keeps-focus`.
+  const router = useRouter();
+  useEffect(
+    () =>
+      router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+        const next = (toLocation.search as { inspect?: unknown }).inspect;
+        if (next === undefined || next === urlId) return;
+        // Every section has a panel in the page; the others are hidden and empty.
+        const panel = sheet.current?.querySelector<HTMLElement>('[role="tabpanel"][data-state="active"]');
+        const focused = document.activeElement;
+        if (!panel || !focused || focused === panel || !panel.contains(focused)) return;
+        if (!focused.closest('[data-keeps-focus]')) panel.focus({ preventScroll: true });
+      }),
+    [router, urlId],
   );
+  const walk = inspector.walk;
   const context = useMemo<InspectorContextValue>(
     () => ({ crawlId, urlId, siteOrigin, walk, crawling }),
     [crawlId, urlId, siteOrigin, walk, crawling],

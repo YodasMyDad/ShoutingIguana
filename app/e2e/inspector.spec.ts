@@ -112,6 +112,40 @@ test('inspect a URL: walk an inlink, then an outlink; back and forward retrace i
   await expect(inspector).toBeHidden();
 });
 
+test('back along a walk keeps the keyboard in the link grid, on the row the walk left from', async ({ page }) => {
+  const inspector = await inspectPlant(page, 'hreflang-en');
+  const opened = inspected(page);
+  await showTab(inspector, /^Inlinks/);
+  const inlinks = inspector.getByRole('grid', { name: 'Inlinks' });
+  await expect(inlinks.getByRole('row').nth(5)).toBeVisible();
+  /** The cursor's row in the inlinks, as the grid tells assistive technology (the header is row 1). */
+  const cursorRow = () =>
+    inspector.getByRole('grid', { name: 'Inlinks' }).evaluate((grid) => {
+      const cell = document.getElementById(grid.getAttribute('aria-activedescendant') ?? '');
+      return cell?.closest('[role="row"]')?.getAttribute('aria-rowindex') ?? null;
+    });
+  await inlinks.focus();
+  for (let row = 0; row < 3; row++) await page.keyboard.press('ArrowDown');
+  expect(await cursorRow()).toBe('5');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => inspected(page)).not.toBe(opened);
+  await expect(inspector.getByRole('grid', { name: 'Inlinks' })).toBeFocused();
+
+  // Back: the URL walked from, its inlinks where they were left, the keyboard still in them.
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect.poll(() => inspected(page)).toBe(opened);
+  await expect(inspector.getByRole('grid', { name: 'Inlinks' })).toBeFocused();
+  await expect.poll(cursorRow).toBe('5');
+  // So an arrow key moves on in the inlinks, never the view behind (which would change the URL inspected).
+  await page.keyboard.press('ArrowDown');
+  await expect.poll(cursorRow).toBe('6');
+  expect(inspected(page)).toBe(opened);
+  // Forward again: the keyboard is still in the inspector.
+  await page.keyboard.press('Alt+ArrowRight');
+  await expect.poll(() => inspected(page)).not.toBe(opened);
+  await expect(inspector.getByRole('grid', { name: 'Inlinks' })).toBeFocused();
+});
+
 /** The steps the inspector has walked to this history entry, as the history model counts them. */
 const walkedSteps = (page: Page) =>
   page.evaluate(() => (history.state as { inspectSteps?: number } | null)?.inspectSteps ?? 0);

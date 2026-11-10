@@ -252,6 +252,27 @@ describe('GridCore', () => {
     expect(view.scrollLeft()).toBe(500);
   });
 
+  it('starts with the cursor on the row it was handed, in view once the rows are there', () => {
+    const props = { label: 'URLs', columns, getRow: (index: number) => rows[index], rowHeight: 32, headerHeight: 32 };
+    const { rerender } = render(<GridCore<Row> {...props} rowCount={null} startRow={60} />);
+    const grid = screen.getByRole('grid', { name: 'URLs' });
+    layOut(grid, { width: 800, height: 32 * 11 });
+    rerender(<GridCore<Row> {...props} rowCount={rows.length} startRow={60} />);
+    const activeCell = () => document.getElementById(grid.getAttribute('aria-activedescendant') ?? '');
+    expect(activeCell()).toHaveTextContent('https://example.com/60');
+    expect(grid.scrollTop).toBeGreaterThan(32 * 40);
+    // Focus arriving keeps the cursor there, and the keys go on from it.
+    act(() => grid.focus());
+    expect(activeCell()).toHaveTextContent('https://example.com/60');
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    expect(activeCell()).toHaveTextContent('https://example.com/61');
+  });
+
+  it('starts on the last row when the row it was handed is past the end', () => {
+    const { activeCell } = setup({ startRow: 5_000 });
+    expect(activeCell()).toHaveTextContent('https://example.com/99');
+  });
+
   it('puts the cursor on the first row wholly in view when focused, not one half under the header', () => {
     const { grid, activeCell } = setup();
     const view = layOut(grid, { width: 800, height: 32 * 11 });

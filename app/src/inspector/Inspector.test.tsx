@@ -24,7 +24,7 @@ import {
   testUrlDetail,
   type InspectorSidecarOptions,
 } from '../test/inspectorSidecar';
-import { resetLinkKinds } from './links';
+import { resetLinkKinds, resetLinkRows } from './links';
 import { resetRememberedSection } from './sections';
 
 // CodeMirror needs a browser's layout: the viewer itself is covered end to end. Here it's a stand-in that shows what
@@ -86,6 +86,7 @@ beforeEach(() => {
   uninstall = installKeyboard();
   resetRememberedSection();
   resetLinkKinds();
+  resetLinkRows();
   liveStore.reset();
   updateSettings({ ...DEFAULT_SETTINGS });
 });
@@ -399,6 +400,9 @@ describe('the sections', () => {
     );
     await user.click(within(steps[1]!).getByRole('button', { name: 'https://example.com/b' }));
     await waitFor(() => expect(inspected(router)).toBe(3));
+    // The link went with the URL it was on: its section's panel has the focus, never the view behind.
+    await screen.findByRole('heading', { level: 2, name: OTHER.url });
+    await waitFor(() => expect(screen.getByRole('tabpanel', { name: /^Redirects/ })).toHaveFocus());
   });
 
   it('merges a header sent twice, filters, and says when nothing matches', async () => {
@@ -657,6 +661,62 @@ describe('walking the site', () => {
       await router.load();
     });
     expect(router.state.location.pathname).toBe(`/crawls/${TEST_CRAWL_ID}/overview`);
+  });
+
+  it('keeps the keyboard in the link grid, on the row it was left on, back and forward along a walk', async () => {
+    const history = createMemoryHistory({ initialEntries: [`${URLS}?inspect=2`] });
+    const { router, inspector, user } = await open('', SITE, history);
+    await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
+    const cursorRow = () => {
+      const grid = within(inspector).getByRole('grid', { name: 'Inlinks' });
+      const cell = document.getElementById(grid.getAttribute('aria-activedescendant') ?? '');
+      return cell?.closest('[role="row"]')?.getAttribute('aria-rowindex');
+    };
+    const inlinks = await within(inspector).findByRole('grid', { name: 'Inlinks' });
+    await within(inlinks).findByText('Patio set');
+    // The second inlink (the header is row 1), then Enter: a walk to it.
+    act(() => inlinks.focus());
+    fireEvent.keyDown(inlinks, { key: 'ArrowDown' });
+    expect(cursorRow()).toBe('3');
+    fireEvent.keyDown(inlinks, { key: 'Enter' });
+    await waitFor(() => expect(inspected(router)).toBe(3));
+    await within(inspector).findByRole('heading', { level: 2, name: OTHER.url });
+
+    // Back: the first URL's inlinks, the keyboard still in them, on the row the walk left from.
+    await act(async () => {
+      history.back();
+      await router.load();
+    });
+    await within(inspector).findByRole('heading', { level: 2, name: PAGE.url });
+    await waitFor(() => expect(within(inspector).getByRole('grid', { name: 'Inlinks' })).toHaveFocus());
+    await waitFor(() => expect(cursorRow()).toBe('3'));
+    // Forward again: the keyboard stays in the inspector, so an arrow key never moves the view behind it.
+    await act(async () => {
+      history.forward();
+      await router.load();
+    });
+    await within(inspector).findByRole('heading', { level: 2, name: OTHER.url });
+    await waitFor(() => expect(within(inspector).getByRole('grid', { name: 'Inlinks' })).toHaveFocus());
+  });
+
+  it('keeps focus in the inspector when back takes away a source that had it', async () => {
+    const history = createMemoryHistory({ initialEntries: [`${URLS}?inspect=2`] });
+    const { router, inspector, user } = await open('', SITE, history);
+    await within(inspector).findByRole('heading', { level: 2, name: PAGE.url });
+    await act(
+      () =>
+        inspector.querySelector('[role="tabpanel"]') && router.navigate({ to: '.', search: { inspect: 3 } as never }),
+    );
+    await within(inspector).findByRole('heading', { level: 2, name: OTHER.url });
+    const panel = await showTab(user, /^Source/);
+    const field = await within(panel).findByRole('searchbox', { name: 'Search the HTML source' });
+    act(() => field.focus());
+    await act(async () => {
+      history.back();
+      await router.load();
+    });
+    await within(inspector).findByRole('heading', { level: 2, name: PAGE.url });
+    await waitFor(() => expect(within(inspector).getByRole('tabpanel')).toHaveFocus());
   });
 
   it('filters the links by kind, remembers it, and says when there are none of a kind', async () => {

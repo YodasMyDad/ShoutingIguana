@@ -103,6 +103,11 @@ export interface GridCoreProps<Row> {
    * replaced one sorted from its header, so the cursor stays where the user pressed.
    */
   focusHeader?: string | undefined;
+  /**
+   * Read when the grid mounts: the cursor starts on this row, which comes into view once the rows are there. For a
+   * grid shown again where it was left (a URL's links, back along a walk).
+   */
+  startRow?: number | undefined;
 }
 
 const SKELETON_ROWS = 12;
@@ -137,10 +142,13 @@ function GridCoreInner<Row>({
   spanRow,
   onSort,
   focusHeader,
+  startRow,
 }: GridCoreProps<Row>) {
   const id = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [nav, setNav] = useState<GridNavState>(INITIAL_NAV);
+  const [nav, setNav] = useState<GridNavState>(() =>
+    startRow === undefined || startRow < 0 ? INITIAL_NAV : { ...INITIAL_NAV, active: { row: startRow, col: 0 } },
+  );
   // The header row is a row the cursor reaches when the columns sort: the column it's on there, or null in the rows.
   const sortable = onSort !== undefined && columns.some((column) => column.sortable);
   const [headerCursor, setHeaderCursor] = useState<number | null>(() => {
@@ -185,6 +193,15 @@ function GridCoreInner<Row>({
   );
   const reportOffset = useEffectEvent((offset: number) => onScrollOffset?.(offset));
   useEffect(() => model.onOffset((offset) => reportOffset(offset)), [model]);
+
+  // The row the cursor started on (`startRow`) comes into view once, when the rows are first there.
+  const started = useRef(startRow === undefined);
+  const revealStart = useEffectEvent(() => {
+    if (started.current || count === 0) return;
+    started.current = true;
+    if (nav.active) model.scrollToIndex(Math.min(nav.active.row, count - 1));
+  });
+  useEffect(() => revealStart(), [count]);
 
   const template = columns.map((column) => `${column.width}px`).join(' ');
   const width = columns.reduce((sum, column) => sum + column.width, 0);

@@ -1,3 +1,4 @@
+import { useRouter } from '@tanstack/react-router';
 import { Link2Off } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
@@ -21,6 +22,8 @@ import {
   chosenLinkKind,
   followWords,
   linkStatusWords,
+  rememberLinkRow,
+  rememberedLinkRow,
   type KindChoice,
   type LinkDirection,
 } from './links';
@@ -89,15 +92,20 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
   );
   const rows = usePagedRows<LinkRow>({ queryKey, fetchPage, rowHeight });
 
-  // A walk made from the grid lands on a new grid (another URL's links): the keyboard stays in it.
+  // Each URL's links are a grid of their own, so a walk from the grid, and back or forward along it, takes away the
+  // grid that had focus: the keyboard stays in the grid that comes, never falls to the view behind (where the next
+  // arrow key would change the URL inspected). Each grid starts on the row its cursor was left on.
+  const gridKey = JSON.stringify(queryKey);
   const frame = useRef<HTMLDivElement | null>(null);
   const refocus = useRef(false);
-  const walkFromGrid = useCallback(
-    (id: number) => {
-      refocus.current = true;
-      walk(id);
-    },
-    [walk],
+  const router = useRouter();
+  useEffect(
+    () =>
+      router.subscribe('onBeforeNavigate', () => {
+        const grid = frame.current?.querySelector('[role="grid"]');
+        refocus.current = grid?.contains(document.activeElement) ?? false;
+      }),
+    [router],
   );
   useEffect(() => {
     if (!refocus.current) return;
@@ -116,13 +124,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
         header: words.url,
         width: urlWidth,
         cell: (row) => (
-          <Url
-            url={row.url}
-            siteOrigin={siteOrigin}
-            openable={false}
-            tabbable={false}
-            onGo={() => walkFromGrid(row.id)}
-          />
+          <Url url={row.url} siteOrigin={siteOrigin} openable={false} tabbable={false} onGo={() => walk(row.id)} />
         ),
         text: (row) => row.url,
       },
@@ -165,7 +167,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
         text: followWords,
       },
     ],
-    [words.url, urlWidth, siteOrigin, walkFromGrid],
+    [words.url, urlWidth, siteOrigin, walk],
   );
 
   const chooseKind = (next: KindChoice) => {
@@ -176,7 +178,8 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
   const failed = rows.error !== null && rows.error !== undefined && rows.rowCount === null;
   const kindNoun = kind === 'all' ? words.noun : `${KIND_WORDS[kind].toLowerCase()} ${words.noun}`;
   return (
-    <div ref={frame} className="flex min-h-0 flex-1 flex-col">
+    // The grid keeps the keyboard itself from URL to URL (the inspector leaves focus in here alone).
+    <div ref={frame} data-keeps-focus="" className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-(--control-height) flex-wrap items-center gap-2 px-5 py-2">
         <p className="figures text-13 text-text-secondary" aria-live="polite">
           {rows.rowCount === null ? ' ' : formatCountOf(rows.rowCount, kindNoun)}
@@ -197,7 +200,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
       ) : (
         <div ref={measure} className="flex min-h-0 flex-1 flex-col px-2 pb-2">
           <GridCore<LinkRow>
-            key={JSON.stringify(queryKey)}
+            key={gridKey}
             label={words.grid}
             columns={columns}
             rowCount={rows.rowCount}
@@ -208,8 +211,10 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
             onScrollOffset={rows.onScrollOffset}
             fetchRows={rows.fetchRows}
             onActivate={(_index, row) => {
-              if (row) walkFromGrid(row.id);
+              if (row) walk(row.id);
             }}
+            startRow={rememberedLinkRow(gridKey)}
+            onActiveRowChange={(row) => rememberLinkRow(gridKey, row)}
             // A crawl's refreshes update in place: the progress line is for a refresh the user asked for.
             busy={rows.isRefreshing && !crawling}
             emptyState={
