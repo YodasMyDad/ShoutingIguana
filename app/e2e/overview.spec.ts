@@ -3,8 +3,8 @@
 // continued (docs/v2-ui-ia.md, flows 1 and 2), with axe at zero violations in both themes and under forced colours.
 // Never a real site. Every crawl a test starts is stopped and its file deleted, so the library is as the other tests
 // expect it.
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expectNoViolations } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -54,30 +54,7 @@ test.afterEach(async () => {
   }
 });
 
-/**
- * A theme changed on an open page tweens its colours, and axe measuring part-way through sees a contrast that
- * neither theme has. Waits for the tweens to end. Only transitions: a spinner's animation never does.
- */
-async function colourTweensEnd(page: Page) {
-  await page.evaluate(async () => {
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const tweens = document.getAnimations().filter((animation) => animation instanceof CSSTransition);
-    await Promise.all(tweens.map((tween) => tween.finished.catch(() => undefined)));
-  });
-}
-
-async function expectNoViolations(page: Page) {
-  await colourTweensEnd(page);
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
-    .analyze();
-  expect(
-    results.violations.map(
-      (violation) =>
-        `${violation.id}: ${violation.help}: ${violation.nodes.map((node) => `${node.target.join(' ')} ${node.failureSummary ?? ''}`).join('; ')}`,
-    ),
-  ).toEqual([]);
-}
+// axe, with the wait for a theme's colours to settle (`colourTweensEnd`), is the specs' own: e2e/support.ts.
 
 const main = (page: Page) => page.getByRole('main');
 const count = (text: string | null) => Number((text ?? '').replace(/[^\d]/g, ''));

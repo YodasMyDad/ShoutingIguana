@@ -101,13 +101,13 @@ const theme = EditorView.theme({
   // Marked lines (sourceLines.ts). Every line keeps room for the rule at its left edge, so the text never shifts:
   // what applies carries the accent's rule there, what doesn't is quiet, and the chosen line is the selected tint
   // with the rule, in the text's own colour so it stays readable on it.
-  '&.cm-si-marked .cm-line': { borderLeft: 'var(--rule-width) solid transparent' },
-  '&.cm-si-marked .cm-si-line-strong': { borderLeftColor: 'var(--color-accent)' },
-  '&.cm-si-marked .cm-si-line-quiet': { color: 'var(--color-text-muted)' },
-  '&.cm-si-marked .cm-si-comment': { color: 'var(--color-code-comment)', fontStyle: 'italic' },
-  '&.cm-si-marked .cm-si-name': { color: 'var(--color-code-keyword)' },
-  '&.cm-si-marked .cm-si-line-quiet .cm-si-name': { color: 'inherit' },
-  '&.cm-si-marked .cm-si-line-chosen': {
+  '.cm-si-marked .cm-line': { borderLeft: 'var(--rule-width) solid transparent' },
+  '.cm-si-marked .cm-si-line-strong': { borderLeftColor: 'var(--color-accent)' },
+  '.cm-si-marked .cm-si-line-quiet': { color: 'var(--color-text-muted)' },
+  '.cm-si-marked .cm-si-comment': { color: 'var(--color-code-comment)', fontStyle: 'italic' },
+  '.cm-si-marked .cm-si-name': { color: 'var(--color-code-keyword)' },
+  '.cm-si-marked .cm-si-line-quiet .cm-si-name': { color: 'inherit' },
+  '.cm-si-marked .cm-si-line-chosen': {
     backgroundColor: 'var(--color-surface-selected)',
     borderLeftColor: 'var(--color-accent)',
     color: 'var(--color-text)',
@@ -136,9 +136,9 @@ const theme = EditorView.theme({
     },
     // A transparent edge would show: the page's own colour hides it, the text's marks what applies, and the chosen
     // line is outlined in the system's highlight.
-    '&.cm-si-marked .cm-line': { borderLeftColor: 'Canvas' },
-    '&.cm-si-marked .cm-si-line-strong': { borderLeftColor: 'CanvasText' },
-    '&.cm-si-marked .cm-si-line-chosen': {
+    '.cm-si-marked .cm-line': { borderLeftColor: 'Canvas' },
+    '.cm-si-marked .cm-si-line-strong': { borderLeftColor: 'CanvasText' },
+    '.cm-si-marked .cm-si-line-chosen': {
       borderLeftColor: 'Highlight',
       outline: 'var(--rule-width) solid Highlight',
       outlineOffset: 'calc(var(--rule-width) * -1)',
@@ -230,7 +230,8 @@ export default function SourceViewer({
           ...(marked
             ? [
                 sourceLines,
-                EditorView.editorAttributes.of({ class: 'cm-si-marked' }),
+                // On the content, not the editor: a theme's rules inside a media query can't name the editor itself.
+                EditorView.contentAttributes.of({ class: 'cm-si-marked' }),
                 // Enter chooses the caret's line when it has a link, as a press on the link does. The text can't be
                 // typed in, so Enter has no other use.
                 keymap.of([
