@@ -247,6 +247,29 @@ export const Columns: Story = {
             </CardBody>
           </Card>
         </div>
+        <StorySection title="Numbers wider than their columns: written shorter, whole in the column’s name and tooltip">
+          {/* Half the frame, as the card is on Overview: eleven columns then have about 38 px each. */}
+          <div className="grid grid-cols-2 gap-4">
+            <Card>
+              <CardBody>
+                <ColumnChart
+                  label="Pages by depth, on a deep, big site"
+                  axis="Clicks from the start URL"
+                  columns={[1, 84, 2_310, 48_211, 312_876, 401_532, 188_240, 96_411, 42_118, 18_332, 15_718].map(
+                    (value, depth) => ({
+                      key: String(depth),
+                      label: depth === 10 ? '10+' : String(depth),
+                      value,
+                      valueText: value.toLocaleString('en-GB'),
+                      name: `Depth ${depth}: ${value.toLocaleString('en-GB')} pages`,
+                      link: URLS,
+                    }),
+                  )}
+                />
+              </CardBody>
+            </Card>
+          </div>
+        </StorySection>
         <StorySection title="Eleven columns, the last gathering depth 10 and deeper">
           <Card>
             <CardBody>

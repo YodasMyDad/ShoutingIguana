@@ -2677,6 +2677,7 @@
 
   /* Columns: each its number, its bar and its label. */
   .si-columns {
+    position: relative;
     min-width: 0;
   }
 
@@ -2726,11 +2727,20 @@
   }
 
   .si-columns__value {
+    /* Centred on its column whatever its width: one a little wider than the plot runs over the padding either side. */
+    align-self: center;
     font-size: var(--text-12);
     line-height: var(--leading-12);
     font-weight: var(--font-weight-medium);
     font-variant-numeric: tabular-nums lining-nums;
     white-space: nowrap;
+  }
+
+  /* Gives a way of writing a value its width, in the values' own type: out of the layout, never seen. */
+  .si-columns__probe {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
   }
 
   .si-columns__bar {

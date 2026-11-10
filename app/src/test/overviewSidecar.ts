@@ -75,6 +75,25 @@ export interface OverviewFacets {
   pages: FacetsPage;
 }
 
+/** A deep, big site's pages: fifteen depths, with counts in the hundreds of thousands. */
+const DEEP_COUNTS = [
+  1, 84, 2_310, 48_211, 312_876, 401_532, 188_240, 96_411, 42_118, 18_332, 9_114, 4_002, 1_250, 310, 42,
+];
+export const DEEP_SITE_PAGES: FacetsPage = page(
+  DEEP_COUNTS.reduce((sum, count) => sum + count, 0),
+  1_240_000,
+  {
+    depth: DEEP_COUNTS.map((count, depth) => bucket('depth', depth, count)),
+    responseTime: [
+      band(0, 249, 812_345),
+      band(250, 499, 201_118),
+      band(500, 999, 88_402),
+      band(1_000, 1_999, 21_877),
+      band(2_000, null, 1_081),
+    ],
+  },
+);
+
 /** A crawl that fetched one URL and read no pages: its start URL answered 403. */
 export const EMPTY_FACETS: OverviewFacets = {
   status: page(1, 1, { statusClass: [bucket('statusClass', '4xx', 1)], statusCode: [bucket('statusCode', 403, 1)] }),

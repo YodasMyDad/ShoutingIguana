@@ -16,6 +16,7 @@ import { TEST_CRAWL_ID, fakeSidecar, json } from '../test/fakeSidecar';
 import { ISSUES_ANALYSIS, ISSUES_CHECKS } from '../test/issuesSidecar';
 import {
   DEAD_TWIN,
+  DEEP_SITE_PAGES,
   EMPTY_FACETS,
   OVERVIEW_STATS,
   alert,
@@ -461,6 +462,16 @@ export const AnalysingAgain: Story = {
 /** Never analysed: why there's no answer yet, with Analyse it. The crawl's own breakdowns don't need the analysis. */
 export const NeverAnalysed: Story = {
   loaders: [() => own({ analysis: null, item: NEVER })],
+  render: () => <OverviewApp />,
+};
+
+/**
+ * A deep, big site: eleven depth columns in half the window, with counts in the hundreds of thousands. A number wider
+ * than its column is written shorter ("313k") rather than run into its neighbour's; the whole number is the column's
+ * name and its tooltip.
+ */
+export const DeepBigSite: Story = {
+  loaders: [() => own({ facets: { pages: DEEP_SITE_PAGES } })],
   render: () => <OverviewApp />,
 };
 
