@@ -136,6 +136,13 @@ the site's host gates:
 
 - every URL fetched by status class (2xx to 5xx, another status, no response, blocked) and by status code, a block
   page's status being the firewall's rather than the site's, and why the URLs without a status have none;
+- the part of each of those that is the crawler's own probes of the site's other versions (`SiteVersions`): they are
+  counted in every figure, as the crawl file has them, and said apart, so the https probe of a site served over http
+  only reads as the crawler's question and not as the site failing to answer. A probe the site turns out to lead to
+  becomes one of the site's URLs and leaves that part, and a crawl continued has the part it had;
+- the URLs crawled (`Crawled`): those fetched but for the URLs never asked, their host having stopped answering, which
+  have an outcome and are done with, but weren't crawled. It's the URL grid's count of fetched URLs, and
+  `CrawlFileSummary.CrawledUrlCount` for a crawl at rest;
 - the site's own URLs (internal, not the probes of its other versions) found and fetched, which a URL limit counts and
   they never pass, and the limit itself;
 - the phase: starting, reading robots.txt (nothing else can be fetched), crawling, reading sitemaps (nothing else is

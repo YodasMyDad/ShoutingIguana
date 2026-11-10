@@ -242,17 +242,27 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 ```json
 {"id":"…","path":"C:\\…\\example.com-20261101-101500.sicrawl","fileName":"…","site":"example.com",
  "startUrl":"https://www.example.com/","status":"completed","startedAt":"…","finishedAt":"…","updatedAt":"…",
- "fetchedUrlCount":4521,"pageCount":265,"issues":{"error":3,"warning":12,"notice":7},"analyzedAt":"…",
- "outOfDate":false,"sizeBytes":18276352,"missing":false}
+ "fetchedUrlCount":4521,"crawledUrlCount":4516,"pageCount":265,"issues":{"error":3,"warning":12,"notice":7},
+ "analyzedAt":"…","outOfDate":false,"sizeBytes":18276352,"missing":false}
 ```
 
 - **`site`** is the host without a leading `www.`. The UI groups crawls by it.
-- **`fetchedUrlCount`** is the URLs with a stored outcome: those the crawl requested, and those robots.txt kept it from
-  requesting (stored as disallowed). URLs it only found (a nofollow link, past a limit) aren't counted. It matches
-  `si stats`'s fetched count and a running crawl's `fetched` progress. (The full count of every URL in the file, fetched
-  or not, is `/stats`'s `urlCount`.) **`pageCount`** is the pages — internal URLs that returned HTML the crawler
-  parsed — as in `si stats`, and the same definition a running crawl's `htmlPages` uses, so the count doesn't shift
-  when a crawl ends.
+- **`crawledUrlCount`** (E3c) is the URLs crawled: those the crawl requested, and those robots.txt kept it from
+  requesting (stored as disallowed). It is the URL grid's `fetched` column: `{"column":"fetched","op":"is","value":true}`
+  lists exactly this many, so it's the count to show as "N URLs". A running crawl's is the progress event's `crawled`.
+  It's counted from the file as it's read, so every crawl has it, whichever engine made it.
+- **`fetchedUrlCount`** is the URLs the crawl is done with: every URL with a stored outcome. That is the URLs crawled
+  **and those that weren't checked** (never asked, their host having stopped answering: the grid's `outcome`
+  `notChecked`, which it has as not fetched), so no filter on `fetched` gives it; `crawledUrlCount` is the grid's
+  count. URLs only found (a nofollow link, past a limit) are in neither. It matches `si stats`'s outcomes added up and
+  a running crawl's `fetched` progress. (The full count of every URL in the file is `/stats`'s `urlCount`.)
+  **Why two counts** and not one made smaller: `fetched` is what the live figures add up to (the status classes, and
+  with the queued, in-flight and skipped URLs, every URL found), mid-crawl and at the end, and a URL that wasn't
+  checked has its place in those sums as `noResponse.notChecked`. Taking it out of `fetched` would break every sum a
+  client makes with it, the UI's own among them, to save one subtraction; so the count that leaves it out has its own
+  name.
+- **`pageCount`** is the pages — internal URLs that returned HTML the crawler parsed — as in `si stats`, and the same
+  definition a running crawl's `htmlPages` uses, so the count doesn't shift when a crawl ends.
 - **`status`** is one of:
 
   | Status | Meaning |
@@ -347,7 +357,7 @@ use, as `si crawl --resume` allows. It's analysed when it completes.
 
 | Event | Data | When |
 | --- | --- | --- |
-| `progress` | `{ crawlId, status, elapsedMs, discovered, queued, inFlight, fetched, htmlPages, redirects, errors, blocked, robotsDisallowed, skipped, bytesDownloaded, urlsPerSecond, at, phase, internalFound, internalFetched, maxUrls, statusClasses, statusCodes, noResponse, waits, moreWaits }` | Every 500 ms per live crawl (the engine's pace). The UI batches to 4 renders a second. `urlsPerSecond` is the rate of every URL fetched, pages and the rest alike. The fields from `at` on are E4's, below |
+| `progress` | `{ crawlId, status, elapsedMs, discovered, queued, inFlight, fetched, htmlPages, redirects, errors, blocked, robotsDisallowed, skipped, bytesDownloaded, urlsPerSecond, at, phase, internalFound, internalFetched, maxUrls, statusClasses, statusCodes, noResponse, waits, moreWaits, crawled, siteVersions }` | Every 500 ms per live crawl (the engine's pace). The UI batches to 4 renders a second. `urlsPerSecond` is the rate of every URL fetched, pages and the rest alike. The fields from `at` on are E4's, and the last two E3c's, below |
 | `alert` | `{ crawlId, id, level, code, message, at, data }` | Each `CrawlNotice` (see below) |
 | `crawl` | `{ crawlId, status, error?, errorType? }` | Every status change, with the library's statuses. An analysis shows as `analyzing`, then back to `completed` or `stopped` with a `library` event, and `error` if it failed. `errorType` is the problem type when the UI can act on it: `crawl-busy` when the analysis found the file busy (someone reading it, another program writing to it), within seconds, so trying again can work |
 | `library` | `{}` | The library changed. The UI fetches `/api/crawls` again |
@@ -382,6 +392,30 @@ on, mid-crawl as at the end.
   `statusClasses.noResponse`. `robotsDisallowed` is the same count as the top-level field (refused by a rule, or because
   robots.txt couldn't be read). `notChecked` is URLs never asked, their host having stopped answering: unknown, not
   broken, so the UI shouldn't call them errors. `networkError` doesn't include them.
+- **`crawled`** (E3c) is the URLs crawled so far, as the URL grid counts them (`fetched` is true): `fetched` less
+  `noResponse.notChecked`. It ends at the library item's `crawledUrlCount`, as `fetched` ends at `fetchedUrlCount`.
+- **`siteVersions`** (E3c) is the part of the event's figures that is the crawler's own probes of the site's other
+  versions (http or https, www or not: the URL grid's `source` `siteVersion`), which nothing on the site leads to:
+  `{ fetched, statusClasses, statusCodes, noResponse }`, each shaped as the event's own and counted within it.
+
+  ```json
+  {"fetched":3,"statusClasses":{"2xx":0,"3xx":2,"4xx":0,"5xx":0,"other":0,"noResponse":1,"blocked":0},
+   "statusCodes":{"301":2},"noResponse":{"robotsDisallowed":0,"timeout":0,"networkError":1,"notChecked":0,"processingError":0}}
+  ```
+
+  - **What the figures count.** Every figure of the event counts every URL the crawl has, its own probes among them,
+    as the URL grid lists them: so each figure lands on its count in the grid, and `fetched`, the classes and what
+    was found add up as they always have. The probes are the crawler's questions, though, not the site's URLs: the
+    https probe of a site served over http only is a network error from the crawl's first seconds, and it isn't the
+    site failing to answer. `siteVersions` says how much of each figure they are, so the UI shows the site's own
+    (the figure less its part here) and says the probes apart, as it does the URLs that weren't checked.
+  - **Each lands on its count.** A figure less its part is the URLs the site itself led to, which the grid lists with
+    `{"column":"source","op":"notIn","values":["siteVersion"]}` added to the figure's filter; the part itself is the
+    grid's count with `"op":"in"`.
+  - **Live and done agree.** `/stats` gives the same part of a crawl at rest (its `siteVersions`), and the URL
+    facets count under any filter, that one included.
+  - A probe the site turns out to link to, list in a sitemap or redirect to becomes one of the site's own URLs (its
+    `source` changes), and leaves these counts as it does.
 - **`internalFound`** and **`internalFetched`** are the site's own URLs (internal, not the crawler's probes of its other
   versions) the crawl means to fetch, queued, in flight or fetched, and those it has fetched. URLs it skipped (nofollow,
   a limit) aren't counted. A URL limit counts these, so a crawl with one heads for the smaller of `internalFound` and
@@ -549,7 +583,13 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 | `GET /api/crawls/{id}/stats` | `CrawlStatsReader.Read`. `nonIndexableReasons` counts the site's URLs as the checks and the URL summary do: the probes of its other versions are left out, and so are the URLs that weren't checked, which `notCheckedCount` gives |
 | `GET /api/crawls/{id}/issues/{checkId}?limit=200&offset=0` | `{ rows: [{ url, detail, relatedUrl }], total }`. `total` is null for a check that was skipped, never 0 |
 
-**`/stats` is read as a grid is** (E3c), and its answer is what it always was:
+**`siteVersions`** (E3c), on `/stats`, is the part of `outcomes` and `statusCodes` that is the crawler's probes of the
+site's other versions, `{ "fetched": 3, "outcomes": { "redirect": 2, "networkError": 1 }, "statusCodes": { "301": 2 } }`:
+`outcomes` and `statusCodes` count every stored outcome, the probes' among them, as the live figures do, and this is
+the progress event's `siteVersions` for a crawl at rest (see **Progress**). `fetched` is how many probes have an
+outcome.
+
+**`/stats` is read as a grid is** (E3c), and its other answers are what they always were:
 
 - **One snapshot.** Every number is of the same moment of the file, a running crawl's included.
 - **Kept.** The numbers are kept with the grids' counts, per crawl file, crawl stamp and analysis: they're read once
@@ -588,7 +628,7 @@ The GET issues endpoint above stays as it is, for scripts and the design fixture
 ### URLs (E3a)
 
 The URL grid: every URL the crawl found is a row, fetched or not (filter on `fetched` for the library's
-`fetchedUrlCount`), the probes of the site's other versions included (filter on `source`). Each call reads one snapshot
+`crawledUrlCount`), the probes of the site's other versions included (filter on `source`). Each call reads one snapshot
 of the file and holds it for that one page only.
 
 - **A grid never keeps an analysis or a continue waiting.** Starting one here stops the grids' reads of that crawl for
@@ -1621,3 +1661,22 @@ nothing kept, on a 32-core Windows machine that other work was sharing.
   It grows with the URLs, so the first read of a million URLs would take about a second, which wasn't measured; the
   reads after it are kept. `si readbench` times both (`stats`, `stats-pass`) and holds them to twice the desktop's
   worst, for CI's runner.
+- **The probes' part of the counts.** A crawl's live figures count its own probes of the site's other versions, as its
+  file and the URL grid have them, so a crawl of a site served over http only showed "No response: Network error × 1"
+  from its first seconds: the https probe. The figures still count them, so each lands on its count in the grid and
+  the sums a client makes hold; the progress event now says how much of each figure the probes are (`siteVersions`:
+  `CrawlProgress.SiteVersions`, a second set of the writer's counters), and `/stats` says the same of a crawl at rest
+  (`CrawlStats.SiteVersions`, two more tallies of its one pass), so the UI can show the site's own figures, live and
+  done, and say the probes apart. A probe the site comes to lead to leaves the part, whether its answer is kept for
+  the site or it's fetched again, and a continued crawl restores it; every end-to-end crawl checks the part of its
+  last progress against SQL over the file, as it does the whole. **Not done:** taking the probes out of the figures
+  themselves. That would move every count of a crawl by its probes (found, fetched, each class, the library's
+  counts), so that none met the URL grid's rows without a filter on `source`: a change to what the user sees
+  everywhere for a handful of URLs, and not one to make behind the UI's back.
+- **Two counts of a crawl's URLs, each named for what it is.** `fetched` and the library's `fetchedUrlCount` count the
+  URLs with a stored outcome, and that includes the URLs never asked because their host had stopped answering, which
+  the URL grid has as not fetched: the API said a filter on `fetched` gave the count, and it didn't. The count that
+  does is new: `crawled` on the progress event (`CrawlProgress.Crawled`) and `crawledUrlCount` on the library item
+  (`CrawlFileSummary.CrawledUrlCount`, counted in the summary's one pass over the responses, so every crawl file has
+  it; the sidecar's kept summaries are read again once, their format having moved on). `fetched` stays as it is, for
+  the sums made with it ([why](#library-e1)).
