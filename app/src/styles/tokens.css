@@ -370,6 +370,7 @@
   --spark-height: 28px;
   --spark-height-lg: 36px;
   --chart-height: 188px; /* the least a line chart gets; it grows to fill its card */
+  --column-height: 104px; /* a column chart's tallest column, with its number */
   --meter-mark-height: 12px;
   --chart-axis-width: 40px;
   --chart-label-width: 84px;

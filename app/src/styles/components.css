@@ -2431,6 +2431,411 @@
     color: var(--color-text);
     overflow-wrap: anywhere;
   }
+
+  /* ----------------------------------------------------------------- Charts */
+  /* Lines are drawn with visx in real pixels (ui/Sparkline.tsx, ui/LineChart.tsx): the SVG fills a box the chart
+     measures, so strokes keep their weight at any width. Bars are elements, so each part is a link with a name. */
+  .si-chart__svg {
+    position: absolute;
+    inset: 0;
+    display: block;
+    overflow: visible;
+  }
+
+  .si-chart__line {
+    fill: none;
+    stroke-width: var(--rule-width);
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+
+  .si-chart__line--primary {
+    stroke: var(--color-chart-primary);
+  }
+
+  .si-chart__line--secondary {
+    stroke: var(--color-chart-secondary);
+  }
+
+  .si-chart__area {
+    fill: var(--color-chart-primary-fill);
+    stroke: none;
+  }
+
+  .si-chart__grid {
+    stroke: var(--color-chart-grid);
+    stroke-width: var(--hairline);
+    shape-rendering: crispEdges;
+  }
+
+  .si-chart__dot {
+    stroke: var(--color-surface);
+    stroke-width: var(--rule-width);
+  }
+
+  .si-chart__dot--primary {
+    fill: var(--color-chart-primary);
+  }
+
+  .si-chart__dot--secondary {
+    fill: var(--color-chart-secondary);
+  }
+
+  .si-spark {
+    position: relative;
+    height: var(--spark-height);
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .si-spark--lg {
+    height: var(--spark-height-lg);
+  }
+
+  .si-line-chart {
+    display: grid;
+    grid-template-columns: var(--chart-axis-width) minmax(0, 1fr);
+    grid-template-rows: minmax(var(--chart-height), 1fr) auto;
+    column-gap: var(--space-2-5);
+    min-width: 0;
+  }
+
+  .si-line-chart__y {
+    position: relative;
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .si-line-chart__plot {
+    position: relative;
+    grid-row: 1;
+    grid-column: 2;
+    min-width: 0;
+  }
+
+  .si-line-chart__x {
+    position: relative;
+    grid-row: 2;
+    grid-column: 2;
+    height: var(--leading-11);
+    margin-top: var(--space-2);
+  }
+
+  .si-line-chart__tick {
+    position: absolute;
+    color: var(--color-chart-axis);
+    font-size: var(--text-11);
+    line-height: var(--leading-11);
+    font-variant-numeric: tabular-nums lining-nums;
+    white-space: nowrap;
+  }
+
+  .si-line-chart__tick--y {
+    top: var(--at);
+    right: 0;
+    transform: translateY(-50%);
+  }
+
+  .si-line-chart__tick--x {
+    left: var(--at);
+    transform: translateX(-50%);
+  }
+
+  .si-line-chart__tick--x:first-child {
+    transform: none;
+  }
+
+  /* The magnified status bar: the full bar, the zoom, and the part that didn't answer 2xx across the full width. */
+  .si-split {
+    display: grid;
+    min-width: 0;
+  }
+
+  .si-split__bar {
+    display: flex;
+    gap: var(--space-0-5);
+    height: var(--space-3);
+  }
+
+  .si-split__bar--magnified,
+  .si-split__bar--none {
+    height: var(--space-5);
+  }
+
+  .si-split__bar--none {
+    border-radius: var(--mark-radius);
+    background: var(--color-chart-track);
+  }
+
+  .si-split__part {
+    flex: var(--share) 1 0;
+    min-width: var(--bar-min);
+    height: 100%;
+    border-radius: var(--mark-radius);
+    background-color: var(--color-no-response);
+  }
+
+  .si-split__part--2xx {
+    background-color: var(--color-2xx);
+  }
+
+  .si-split__part--3xx {
+    background-color: var(--color-3xx);
+  }
+
+  .si-split__part--4xx {
+    background-color: var(--color-4xx);
+  }
+
+  .si-split__part--5xx {
+    background-color: var(--color-5xx);
+  }
+
+  .si-split__part--other,
+  .si-split__part--rest {
+    background-color: var(--color-chart-secondary);
+  }
+
+  /* Blocked has no status of its own: hatched, so it's told from "no response" by more than a shade. */
+  .si-split__part--blocked {
+    background-color: var(--color-chart-track);
+    background-image: repeating-linear-gradient(
+      135deg,
+      transparent 0 var(--bar-min),
+      var(--color-no-response) var(--bar-min) var(--bar-height-thin)
+    );
+  }
+
+  a.si-split__part:hover {
+    box-shadow:
+      0 0 0 var(--hairline) var(--color-surface),
+      0 0 0 var(--rule-width) var(--color-text);
+  }
+
+  .si-split__zoom {
+    display: block;
+    width: 100%;
+    height: var(--space-5);
+  }
+
+  .si-split__zoom--none {
+    visibility: hidden;
+  }
+
+  .si-split__zoom-fill {
+    fill: var(--color-chart-track);
+  }
+
+  .si-split__zoom-edge {
+    stroke: var(--color-border-strong);
+    stroke-width: var(--hairline);
+    vector-effect: non-scaling-stroke;
+  }
+
+  .si-split__ends {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-split__ends b {
+    color: var(--color-text);
+    font-weight: var(--font-weight-semibold);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* Columns: each its number, its bar and its label. */
+  .si-columns {
+    min-width: 0;
+  }
+
+  .si-columns__list {
+    display: grid;
+    grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
+    gap: var(--space-1);
+  }
+
+  .si-columns__item {
+    display: flex;
+    min-width: 0;
+  }
+
+  .si-columns__column {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-1-5);
+    min-width: 0;
+    padding: var(--space-1) var(--space-1) var(--space-1-5);
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+    text-align: center;
+    text-decoration: none;
+  }
+
+  .si-columns__column--link:hover {
+    background: var(--color-surface-hover);
+  }
+
+  .si-columns__column--zero .si-columns__value {
+    color: var(--color-text-muted);
+  }
+
+  .si-columns__parts {
+    display: contents;
+  }
+
+  .si-columns__plot {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: var(--space-1);
+    height: var(--column-height);
+    border-bottom: var(--hairline) solid var(--color-border-strong);
+  }
+
+  .si-columns__value {
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    font-weight: var(--font-weight-medium);
+    font-variant-numeric: tabular-nums lining-nums;
+    white-space: nowrap;
+  }
+
+  .si-columns__bar {
+    flex: none;
+    height: calc(var(--share) * (100% - var(--leading-12) - var(--space-1)));
+    border-radius: var(--mark-radius) var(--mark-radius) 0 0;
+    background: var(--color-chart-primary);
+  }
+
+  .si-columns__bar--some {
+    min-height: var(--bar-min);
+  }
+
+  .si-columns__label {
+    color: var(--color-text-secondary);
+    font-size: var(--text-11);
+    line-height: var(--leading-11);
+    font-variant-numeric: tabular-nums lining-nums;
+    overflow-wrap: anywhere;
+  }
+
+  .si-columns__axis {
+    margin-top: var(--space-1-5);
+    color: var(--color-text-muted);
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+    text-align: center;
+  }
+
+  /* A whole in a few parts, with its key. */
+  .si-stack {
+    display: grid;
+    gap: var(--space-2-5);
+    min-width: 0;
+  }
+
+  .si-stack__bar {
+    display: flex;
+    gap: var(--space-0-5);
+    height: var(--stack-height);
+  }
+
+  .si-stack__bar > .si-stack__part {
+    flex: var(--share) 1 0;
+    min-width: var(--bar-min);
+    height: 100%;
+  }
+
+  .si-stack__bar > .si-stack__part:first-child {
+    border-radius: var(--radius-full) 0 0 var(--radius-full);
+  }
+
+  .si-stack__bar > .si-stack__part:last-child {
+    border-radius: 0 var(--radius-full) var(--radius-full) 0;
+  }
+
+  .si-stack__bar > .si-stack__part:only-child {
+    border-radius: var(--radius-full);
+  }
+
+  .si-stack__part--primary {
+    background-color: var(--color-accent);
+  }
+
+  .si-stack__part--soft {
+    background-color: var(--color-accent-border);
+  }
+
+  .si-stack__part--hatched {
+    background-color: var(--color-chart-track);
+    background-image: repeating-linear-gradient(
+      135deg,
+      transparent 0 var(--bar-min),
+      var(--color-border-strong) var(--bar-min) var(--bar-height-thin)
+    );
+  }
+
+  .si-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-5);
+    color: var(--color-text-secondary);
+    font-size: var(--text-13);
+    line-height: var(--leading-13);
+  }
+
+  .si-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    white-space: nowrap;
+  }
+
+  .si-legend__item--end {
+    margin-left: auto;
+    color: var(--color-text-muted);
+  }
+
+  .si-legend__swatch {
+    display: inline-flex;
+    flex: none;
+    width: var(--swatch-size);
+    height: var(--swatch-size);
+    overflow: hidden;
+    border-radius: var(--swatch-radius);
+  }
+
+  .si-legend__swatch > * {
+    flex: 1;
+  }
+
+  .si-legend__swatch--line {
+    align-items: center;
+    width: var(--space-4);
+    border-radius: 0;
+  }
+
+  .si-legend__line {
+    height: var(--rule-width);
+    border-radius: var(--radius-full);
+    background: var(--color-chart-secondary);
+  }
+
+  .si-legend__line--primary {
+    background: var(--color-chart-primary);
+  }
+
+  .si-legend__value {
+    color: var(--color-text);
+    font-weight: var(--font-weight-medium);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
 }
 
 @keyframes si-spin {
@@ -2687,5 +3092,63 @@
 
   .si-field[data-invalid] {
     border-style: dashed;
+  }
+
+  /* Charts: the class colours all become CanvasText, so parts are told apart by the gaps between them and by their
+     names; fills drawn as backgrounds keep their system colour, and a hatch stays a hatch. */
+  .si-split__part,
+  .si-stack__part,
+  .si-columns__bar,
+  .si-legend__line {
+    forced-color-adjust: none;
+  }
+
+  .si-split__part,
+  .si-columns__bar,
+  .si-stack__part--primary {
+    background-color: CanvasText;
+  }
+
+  .si-split__part--2xx,
+  .si-legend__line--primary {
+    background-color: Highlight;
+  }
+
+  .si-split__part--blocked,
+  .si-stack__part--hatched {
+    background-color: Canvas;
+    background-image: repeating-linear-gradient(
+      135deg,
+      Canvas 0 var(--bar-min),
+      CanvasText var(--bar-min) var(--bar-height-thin)
+    );
+  }
+
+  .si-stack__part--soft {
+    border: var(--hairline) solid CanvasText;
+    background-color: Canvas;
+  }
+
+  .si-split__bar--none {
+    border: var(--hairline) solid GrayText;
+    background: Canvas;
+  }
+
+  .si-split__zoom-fill {
+    fill: Canvas;
+  }
+
+  .si-split__zoom-edge {
+    stroke: CanvasText;
+  }
+
+  a.si-split__part:hover {
+    box-shadow: none;
+    outline: var(--hairline) solid Highlight;
+    outline-offset: var(--hairline);
+  }
+
+  .si-columns__column--link:hover {
+    outline: var(--hairline) solid Highlight;
   }
 }
