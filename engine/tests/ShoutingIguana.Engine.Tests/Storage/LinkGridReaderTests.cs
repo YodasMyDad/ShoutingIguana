@@ -404,6 +404,17 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(withoutItsSize);
         AssertRead(withoutItsSize, fromTheSummary: true);
 
+        // Numbers that can't be true of the file: a highest id that isn't the links', more links than there are ids for or
+        // than the file could hold, none where there are some. Passed over, never believed: the links are counted.
+        foreach (var untrue in new[]
+                 {
+                     "max_link_id = max_link_id + 1", "max_link_id = max_link_id - 1", "links = max_link_id + 1", "links = 0", "links = -5",
+                     "links = 1073741824, max_link_id = 1073741824", "links = 9223372036854775807"
+                 })
+        {
+            AssertRead(With($"UPDATE link_summary_state SET {untrue}"), fromTheSummary: false);
+        }
+
         // A summary counted another way (an earlier or a later version of the counting), or one that doesn't say which,
         // as an engine from before the version built it: passed over too, with whatever it counted, and counted again by
         // the next analysis, as this engine counts.
@@ -550,6 +561,36 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
             Assert.Equal(links.Links.Select(link => link.Id), ByCursor(gaps, new UrlQuery(), cache));
             Assert.Equal(filtered, ByOffset(gaps, new UrlQuery { Filters = [Names("kind", FilterOperator.In, "hyperlink")] }, cache));
             Assert.Equal(links.Links.Skip(4_321).Take(9).Select(link => link.Id), LinkGridReader.Query(gaps, new UrlQuery { Offset = 4_321, Limit = 9 }).Rows.Select(row => row.Id));
+        }
+    }
+
+    /// <summary>
+    /// What a links read keeps is sized by what the file holds, not by what it says: a link summary that claims a quarter
+    /// of a billion links in a file of a few megabytes, beside one real link with an id of a billion, is passed over, and
+    /// a URL whose id is far past the URLs there are doesn't make a set of URL ids a bit an id.
+    /// </summary>
+    [Fact]
+    public void ALinksReadAllocatesByWhatTheFileHolds()
+    {
+        const long FAR = 1L << 30;
+        var claimed = crawl.Copy();
+        Change(claimed, $"INSERT INTO links (rowid, from_id, to_id, kind, flags, position) VALUES ({FAR}, 1, 1, 0, 0, 0)");
+        Change(claimed, $"UPDATE link_summary_state SET links = {FAR / 4}, max_link_id = {FAR}");
+        var far = crawl.Copy();
+        Change(far, "INSERT INTO urls (id, url, is_internal, fetch_mode, depth, state, skip_reason, source) VALUES (134217727, 'https://far.example/', 0, 0, 1, 0, 0, 1)");
+        Stamp(far);
+
+        // A filter on a link's text keeps the matching ids, and a search the URLs it matches; the facets count by target.
+        foreach (var path in new[] { claimed, far })
+        {
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            var page = LinkGridReader.Query(path, new UrlQuery { Filters = [Text("text", FilterOperator.Contains, "product")], Search = "p", Sort = [new UrlSort("id", true)], Limit = 5 });
+            var facets = LinkGridReader.Facets(path, new UrlFacetQuery { Search = "about" });
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.Equal((Reference.Links.Count + (path == claimed ? 1 : 0), 5), (page.Total, page.Rows.Count));
+            Assert.InRange(page.Matching, 1_000, Reference.Links.Count);
+            Assert.InRange(facets.Matching, 1, Reference.Links.Count);
+            Assert.True(allocated < 12_000_000, $"The reads allocated {allocated:N0} bytes.");
         }
     }
 

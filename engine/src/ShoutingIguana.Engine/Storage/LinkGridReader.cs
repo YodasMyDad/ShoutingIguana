@@ -569,7 +569,7 @@ public static class LinkGridReader
                 return only;
             }
 
-            var matched = new UrlIdSet(LargestUrlId(context));
+            var matched = UrlIds(context);
             var slot = context.Use(matched);
             using var command = context.Command(
                 GridPlanner.Over(context, compiled, $"COUNT({ReaderFunctions.ADD_TO_SET}({slot.ToString(CultureInfo.InvariantCulture)}, {GridPlanner.Id(compiled)}))", groupBy: 0),
@@ -600,7 +600,7 @@ public static class LinkGridReader
         var pattern = $"%{UrlQueryCompiler.Escape(search)}%";
         var urls = HeldLarge(context, $"linksearch|{UrlQueryCompiler.Describe(pattern)}", () =>
         {
-            var matched = new UrlIdSet(LargestUrlId(context));
+            var matched = UrlIds(context);
             using var command = context.Command(
                 $@"SELECT COUNT({ReaderFunctions.ADD_TO_SET}({Slot(context, matched)}, u.id)) FROM urls u WHERE u.url LIKE $q ESCAPE '\'", [new("$q", pattern)]);
             command.ExecuteScalar();
@@ -616,11 +616,18 @@ public static class LinkGridReader
     /// <summary>The pages whose robots directives say nofollow: none of their hyperlinks are followed.</summary>
     private static UrlIdSet NofollowPages(GridReadContext context) => HeldLarge(context, "links|nofollow pages", () =>
     {
-        var pages = new UrlIdSet(LargestUrlId(context));
+        var pages = UrlIds(context);
         using var command = context.Command($"SELECT COUNT({ReaderFunctions.ADD_TO_SET}({Slot(context, pages)}, r.url_id)) FROM responses r WHERE r.is_nofollow <> 0", []);
         command.ExecuteScalar();
         return pages.Seal(GridPlanner.ID_SET_CAP);
     });
+
+    /// <summary>
+    /// An empty set for this crawl's URL ids: a bit an id, unless the ids run far past the URLs there are (a crafted
+    /// file's), which are then kept one by one, as a tally counts them together: what a file's highest id is can't make
+    /// what a links read keeps large.
+    /// </summary>
+    private static UrlIdSet UrlIds(GridReadContext context) => new(LargestUrlId(context) <= 4 * UrlCount(context) + 4_096 ? LargestUrlId(context) : -1);
 
     private static long LargestUrlId(GridReadContext context) =>
         Live(context)?.MaxUrlId ?? Held(context, "urls|largest", () => context.Scalar("SELECT COALESCE(MAX(id), 0) FROM urls", []));

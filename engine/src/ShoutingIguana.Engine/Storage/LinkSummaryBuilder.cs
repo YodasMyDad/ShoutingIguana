@@ -20,6 +20,12 @@ internal static class LinkSummaryBuilder
     private const int LARGEST_BLOCK_SHIFT = 40;
 
     /// <summary>
+    /// Fewer bytes than any stored link takes (its row is 14 at the least): a file of so many bytes holds at most that many
+    /// links, whatever it says it holds.
+    /// </summary>
+    private const int LEAST_LINK_BYTES = 8;
+
+    /// <summary>
     /// Each link as it's counted: its id, both ends, its kind, position and flags as stored, and whether it has text. Whether
     /// it leads to its own page, and sits on a page whose robots directives say nofollow (as the inspector judges a link
     /// followed), the count works out from its ends.
@@ -56,6 +62,12 @@ internal static class LinkSummaryBuilder
     /// stands, as this engine counts: its tables are this engine's, column for column, of this engine's version of the
     /// counting, and carry the crawl row's stamp. Null otherwise: no summary, another shape's or version's (an earlier or
     /// later engine's, another program's), or one of the crawl before its last run.
+    /// <para>
+    /// The numbers are a file's word, and the links grid sizes what it keeps by them, so they're taken only when they can be
+    /// true of the file, as far as that costs nothing to tell: the highest id is the links' own, and the count is no more
+    /// than the ids from the lowest to the highest, nor than a file of this size can hold. A summary that fails is passed
+    /// over as one of another shape is, and counted again by the next analysis.
+    /// </para>
     /// </summary>
     internal static (long Links, long MaxLinkId, int BlockShift)? ReadCurrent(SqliteConnection connection, SqliteTransaction? transaction)
     {
@@ -81,8 +93,34 @@ internal static class LinkSummaryBuilder
         command.Parameters.AddWithValue("$version", CrawlSchema.LINK_SUMMARY_VERSION);
         command.Parameters.AddWithValue("$least", LEAST_BLOCK_SHIFT);
         command.Parameters.AddWithValue("$largest", LARGEST_BLOCK_SHIFT);
-        using var reader = command.ExecuteReader();
-        return reader.Read() && !reader.IsDBNull(0) && !reader.IsDBNull(1) ? (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt32(2)) : null;
+        long links, maxLinkId;
+        int blockShift;
+        using (var reader = command.ExecuteReader())
+        {
+            if (!reader.Read() || reader.IsDBNull(0) || reader.IsDBNull(1))
+            {
+                return null;
+            }
+
+            (links, maxLinkId, blockShift) = (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt32(2));
+        }
+
+        // Each from an end of the links' key or the file's header: nothing is counted.
+        command.CommandText = """
+            SELECT (SELECT MIN(rowid) FROM links), (SELECT MAX(rowid) FROM links), (SELECT page_count FROM pragma_page_count()) * (SELECT page_size FROM pragma_page_size())
+            """;
+        command.Parameters.Clear();
+        using var file = command.ExecuteReader();
+        file.Read();
+        if (file.IsDBNull(0) || file.IsDBNull(1))
+        {
+            return (links, maxLinkId) == (0, 0) ? (links, maxLinkId, blockShift) : null;
+        }
+
+        var (lowest, highest, bytes) = (file.GetInt64(0), file.GetInt64(1), file.GetInt64(2));
+        return maxLinkId == highest && lowest >= 1 && links >= 1 && links <= highest - lowest + 1 && links <= bytes / LEAST_LINK_BYTES
+            ? (links, maxLinkId, blockShift)
+            : null;
     }
 
     /// <returns>The rows written.</returns>

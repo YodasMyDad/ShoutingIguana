@@ -18,7 +18,7 @@ internal sealed class UrlIdSet
     private readonly ulong[]? _bits;
     private readonly HashSet<long>? _sparse;
 
-    /// <param name="largestId">The largest URL id in the crawl, which sizes the bits.</param>
+    /// <param name="largestId">The largest URL id in the crawl, which sizes the bits; negative for ids kept one by one.</param>
     public UrlIdSet(long largestId)
     {
         if (largestId is >= 0 and <= MAX_BIT_ID)
