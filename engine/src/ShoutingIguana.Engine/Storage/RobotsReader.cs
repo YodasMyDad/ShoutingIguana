@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Robots;
 using ShoutingIguana.Engine.Robots.Models;
@@ -13,7 +14,9 @@ namespace ShoutingIguana.Engine.Storage;
 /// so the line is worked out here, from the stored file, by the crawler's own parser and matcher
 /// (<see cref="RobotsTxtParser"/>, <see cref="RobotsTxt.Match"/>) for the crawl's own user agent: the answer the crawl
 /// acted on, never a second reading of the rules. Each read is one snapshot of the file; what's worked out is kept per
-/// origin while the crawl stands still.
+/// origin while the crawl stands still, and briefly while it runs. An origin's answer, its lines and its blocked URLs are
+/// read and kept as one, so everything one answer says of an origin is of one moment of a running crawl: the lines'
+/// counts and the URLs no line accounts for add up to the origin's blocked URLs.
 /// </summary>
 public static class RobotsReader
 {
@@ -45,14 +48,14 @@ public static class RobotsReader
     public static RobotsFile? ReadFile(string databasePath, string origin, ReadCache? cache = null, CancellationToken cancellationToken = default) =>
         GridReadContext.Read(databasePath, cache, cancellationToken, context =>
         {
-            if (Origins(context).FirstOrDefault(known => known.Origin == origin) is not { } found)
+            if (!Origins(context).Any(known => known.Origin == origin))
             {
                 return null;
             }
 
-            var read = Read(context, found);
+            var read = Read(context, origin);
             var blocked = read.Blocked.Where(url => url.Reason == RobotsBlockReason.Rule).GroupBy(url => url.Line!.Value).ToDictionary(line => line.Key, line => line.LongCount());
-            return new RobotsFile(found, context.RobotsToken,
+            return new RobotsFile(read.Origin, context.RobotsToken,
                 [
                     .. read.Lines.Select(line => new RobotsFileLine(line.Number, line.Text, line.Kind, line.Applies,
                         line is { Kind: RobotsLineKind.Disallow, Applies: true } ? blocked.GetValueOrDefault(line.Number) : null, line.Problem))
@@ -74,12 +77,12 @@ public static class RobotsReader
         ThrowIfInvalid(offset, limit);
         return GridReadContext.Read(databasePath, cache, cancellationToken, context =>
         {
-            if (Origins(context).FirstOrDefault(known => known.Origin == origin) is not { } found)
+            if (!Origins(context).Any(known => known.Origin == origin))
             {
                 return null;
             }
 
-            var blocked = Read(context, found).Blocked;
+            var blocked = Read(context, origin).Blocked;
             var matching = blocked.Where(url => (line is null || url.Line == line) && (reason is null || url.Reason == reason)).ToList();
             return new RobotsBlockedPage(origin, blocked.Count, matching.Count, offset, [.. matching.Skip(offset).Take(limit)]);
         });
@@ -120,49 +123,75 @@ public static class RobotsReader
             }
         }
 
-        var start = Uri.TryCreate(context.StartUrl, UriKind.Absolute, out var startUri) ? startUri : null;
-        var scope = start is null ? null : new CrawlScope(start, context.Options.IncludeSubdomains, context.Options.StayInStartFolder);
-        bool IsInternal(string origin) => scope is not null && Uri.TryCreate(origin, UriKind.Absolute, out var uri) && scope.IsInternal(uri);
-
+        var (start, scope) = Site(context);
         List<RobotsOrigin> origins = [];
-        using (var command = context.Command("SELECT origin, status_code, error, fetched_at, length(CAST(content AS BLOB)) FROM robots", []))
+        using (var command = context.Command($"SELECT origin, {ANSWER} FROM robots", []))
         using (var reader = command.ExecuteReader())
         {
             while (reader.Read())
             {
                 var origin = reader.GetString(0);
-                var status = reader.IsDBNull(1) || reader.GetInt64(1) is < int.MinValue or > int.MaxValue ? (int?)null : reader.GetInt32(1);
-                var error = reader.IsDBNull(2) ? null : reader.GetString(2);
-                origins.Add(new RobotsOrigin(origin, IsInternal(origin), StateOf(status, error), status, reader.IsDBNull(3) ? null : Time(reader.GetInt64(3)), error,
-                    reader.IsDBNull(4) ? null : reader.GetInt64(4), blocked.GetValueOrDefault(origin)));
+                origins.Add(Answered(origin, scope, reader, first: 1, blocked.GetValueOrDefault(origin)));
             }
         }
 
         // URLs stored as refused on an origin the crawl kept no robots.txt for (another program's file) still count, and list.
         origins.AddRange(blocked.Keys.Except(origins.Select(origin => origin.Origin), StringComparer.Ordinal)
-            .Select(origin => new RobotsOrigin(origin, IsInternal(origin), null, null, null, null, null, blocked[origin])));
+            .Select(origin => new RobotsOrigin(origin, IsInternal(origin, scope), null, null, null, null, null, blocked[origin])));
 
         var startOrigin = start?.GetLeftPart(UriPartial.Authority);
         return origins.OrderByDescending(origin => origin.Origin == startOrigin).ThenByDescending(origin => origin.IsInternal)
             .ThenByDescending(origin => origin.IsInternal ? 0 : origin.Blocked).ThenBy(origin => origin.Origin, StringComparer.Ordinal).ToList();
     });
 
+    /// <summary>What <c>robots</c> keeps of an origin's answer, as <see cref="Answered"/> reads it.</summary>
+    private const string ANSWER = "status_code, error, fetched_at, length(CAST(content AS BLOB))";
+
+    /// <summary>An origin with its stored answer, from a row that holds <see cref="ANSWER"/> from <paramref name="first"/> on.</summary>
+    private static RobotsOrigin Answered(string origin, CrawlScope? scope, SqliteDataReader reader, int first, long blocked)
+    {
+        var status = reader.IsDBNull(first) || reader.GetInt64(first) is < int.MinValue or > int.MaxValue ? (int?)null : reader.GetInt32(first);
+        var error = reader.IsDBNull(first + 1) ? null : reader.GetString(first + 1);
+        return new RobotsOrigin(origin, IsInternal(origin, scope), StateOf(status, error), status, reader.IsDBNull(first + 2) ? null : Time(reader.GetInt64(first + 2)), error,
+            reader.IsDBNull(first + 3) ? null : reader.GetInt64(first + 3), blocked);
+    }
+
+    /// <summary>The crawl's start URL and what it took for the site's own, by its options.</summary>
+    private static (Uri? Start, CrawlScope? Scope) Site(GridReadContext context)
+    {
+        var start = Uri.TryCreate(context.StartUrl, UriKind.Absolute, out var startUri) ? startUri : null;
+        return (start, start is null ? null : new CrawlScope(start, context.Options.IncludeSubdomains, context.Options.StayInStartFolder));
+    }
+
+    private static bool IsInternal(string origin, CrawlScope? scope) => scope is not null && Uri.TryCreate(origin, UriKind.Absolute, out var uri) && scope.IsInternal(uri);
+
     private static DateTimeOffset Time(long milliseconds) =>
         DateTimeOffset.FromUnixTimeMilliseconds(Math.Clamp(milliseconds, DateTimeOffset.MinValue.ToUnixTimeMilliseconds(), DateTimeOffset.MaxValue.ToUnixTimeMilliseconds()));
 
     /// <summary>
-    /// An origin's stored file as the crawler's parser reads it, and its blocked URLs, each matched against it by the
-    /// crawler's own matcher. Kept per origin while the crawl stands still: every blocked URL is matched once.
+    /// An origin's answer, its stored file as the crawler's parser reads it, and its blocked URLs, each matched against the
+    /// file by the crawler's own matcher: all of one read, and kept as one per origin, so every blocked URL is matched once
+    /// and what's said of the origin is of the moment its URLs were read, not of the list's (<see cref="Origins"/>).
     /// </summary>
-    private static (IReadOnlyList<RobotsLine> Lines, IReadOnlyList<RobotsBlockedUrl> Blocked) Read(GridReadContext context, RobotsOrigin origin) =>
-        context.CachedLarge("robots|file|" + origin.Origin, () =>
+    private sealed record OriginRead(RobotsOrigin Origin, IReadOnlyList<RobotsLine> Lines, IReadOnlyList<RobotsBlockedUrl> Blocked);
+
+    private static OriginRead Read(GridReadContext context, string name) =>
+        context.CachedLarge("robots|file|" + name, () =>
         {
             List<RobotsLine> lines = [];
             RobotsTxt? rules = null;
-            if (origin.State == RobotsState.Read)
+            var origin = new RobotsOrigin(name, IsInternal(name, Site(context).Scope), null, null, null, null, null, 0);
+            using (var file = context.Command($"SELECT content, {ANSWER} FROM robots WHERE origin = $origin", [new("$origin", name)]))
+            using (var answer = file.ExecuteReader())
             {
-                using var file = context.Command("SELECT content FROM robots WHERE origin = $origin", [new("$origin", origin.Origin)]);
-                rules = RobotsTxtParser.Parse(file.ExecuteScalar() as string ?? string.Empty, context.RobotsToken, lines);
+                if (answer.Read())
+                {
+                    origin = Answered(name, Site(context).Scope, answer, first: 1, blocked: 0);
+                    if (origin.State == RobotsState.Read)
+                    {
+                        rules = RobotsTxtParser.Parse(answer.GetValue(0) as string ?? string.Empty, context.RobotsToken, lines);
+                    }
+                }
             }
 
             // The origin's URLs sort between its "/" and the character after it, on the index of URLs.
@@ -179,7 +208,7 @@ public static class RobotsReader
                 blocked.Add(Why(reader.GetInt32(0), url, reader.IsDBNull(2) ? null : reader.GetString(2), origin, rules, lines));
             }
 
-            return ((IReadOnlyList<RobotsLine>)lines, (IReadOnlyList<RobotsBlockedUrl>)blocked);
+            return new OriginRead(origin with { Blocked = blocked.Count }, lines, blocked);
         });
 
     /// <summary>

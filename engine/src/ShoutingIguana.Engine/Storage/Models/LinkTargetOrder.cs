@@ -6,4 +6,5 @@ namespace ShoutingIguana.Engine.Storage.Models;
 /// </summary>
 /// <param name="Targets">Target URL ids, in sort order.</param>
 /// <param name="Through">For each target, the matching links to it and to every target before it.</param>
-internal sealed record LinkTargetOrder(int[] Targets, long[] Through);
+/// <param name="Of">The tally its counts are from: a page read by this order is counted by that tally and no other.</param>
+internal sealed record LinkTargetOrder(int[] Targets, long[] Through, LinkTally Of);

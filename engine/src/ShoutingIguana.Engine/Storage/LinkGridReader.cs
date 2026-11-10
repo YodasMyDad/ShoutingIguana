@@ -12,6 +12,12 @@ namespace ShoutingIguana.Engine.Storage;
 /// (<c>from.</c>, <c>to.</c>), read and filtered by the URL grid's own code. Each read takes one snapshot of the file, as
 /// the URL grid's do.
 /// <para>
+/// What's counted is kept between reads, and while a crawl runs each read's snapshot is a later one than the last. So a
+/// running crawl is answered for one moment of it (<see cref="LinkMoment"/>), kept for <see cref="ReadCache.LIVE_FOR"/>:
+/// everything counted is counted for that moment's links, whichever read counts it, and an answer's count, total, rows,
+/// facets and cursor are of the same links.
+/// </para>
+/// <para>
 /// A crawl has some 50 links a page, so nothing here may read them all and stay in budget. With the link summary an
 /// analysis stores (<see cref="CrawlSchema.LINK_SUMMARY"/>), the count, the facets and each target's matching links come
 /// from its rows, about 2 a URL, for any filter on what a link is and on its target; the rows of a page are then read from
@@ -70,6 +76,9 @@ public static class LinkGridReader
     /// <summary>Unknown, among the status classes a URL's facts hold.</summary>
     private const int NO_STATUS_CLASS = 7;
 
+    /// <summary>The moment a running crawl's reads answer for is kept under this.</summary>
+    private const string MOMENT = "links|moment";
+
     /// <summary>Tests only: each statement that reads links as it runs, so the way a page was read can be told.</summary>
     internal static Action<string>? Ran { get; set; }
 
@@ -89,8 +98,11 @@ public static class LinkGridReader
     public static LinkGridPage Query(string databasePath, UrlQuery query, ReadCache? cache = null, CancellationToken cancellationToken = default)
     {
         UrlGridReader.ThrowIfInvalid(Validate(query));
-        return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context => Read(context, query)));
+        return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context => Query(context, query)));
     }
+
+    /// <summary>One page of the links grid through a context already open, whose snapshot is the read's; the query is taken as checked.</summary>
+    internal static LinkGridPage Query(GridReadContext context, UrlQuery query) => Settled(context, () => Read(context, query));
 
     /// <summary>
     /// The matching links counted by the values of each facet, each value with the filter that selects its links.
@@ -109,11 +121,14 @@ public static class LinkGridReader
         }
 
         UrlGridReader.ThrowIfInvalid(errors);
-        return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context => Facets(context, query)));
+        return UrlGridReader.Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context => Settled(context, () => Facets(context, query))));
     }
 
-    private static LinkGridPage Read(GridReadContext context, UrlQuery query)
+    /// <returns>Null when a running crawl's moment no longer holds (<see cref="Settled"/>).</returns>
+    private static LinkGridPage? Read(GridReadContext context, UrlQuery query)
     {
+        // Before anything is counted, so that all of it is counted for this moment.
+        var moment = Live(context);
         var sort = query.Sort.Count == 0 ? null : query.Sort[0];
         var byTarget = sort is not null && LinkColumns.Own(sort.Column) is null;
         var filters = Compile(context, query.Filters, query.Search, byTarget ? sort : null);
@@ -130,7 +145,7 @@ public static class LinkGridReader
         var after = query.After is { } cursor ? GridCursor.Decode(cursor, hash, id => Keys(id)) : null;
 
         bool more;
-        long[] ids;
+        long[]? ids;
         if (target is null)
         {
             ids = Page(context, filters, total, matching, descending, query.Offset, query.Limit, after?.Id, out more);
@@ -140,17 +155,40 @@ public static class LinkGridReader
             ids = TargetPage(context, filters, Order(context, filters, target, descending), matching, query.Offset, query.Limit, after?.Id, out more);
         }
 
+        if (ids is null)
+        {
+            return null;
+        }
+
         var (columns, unavailable) = Shown(context, query.Columns);
         var rows = Values(context, columns, ids);
+
+        // The rows are read from this read's snapshot, the places from the moment: a link the moment counted that's gone
+        // since (its page was fetched again) leaves the page short of what the count says it holds.
+        if (moment is { Shared: true } && (rows.Count != ids.Length || (after is null && rows.Count != Math.Clamp(matching - query.Offset, 0, query.Limit))))
+        {
+            return null;
+        }
+
         var next = more && ids.Length > 0 ? GridCursor.Encode(hash, Keys(ids[^1]) ?? [], ids[^1]) : null;
         return new LinkGridPage([.. columns.Select(column => column.Id)], rows, after is null ? query.Offset : null, matching, total, next, context.Summary, unavailable);
     }
 
-    private static UrlFacets Facets(GridReadContext context, UrlFacetQuery query)
+    /// <returns>Null when a running crawl's moment no longer holds (<see cref="Settled"/>).</returns>
+    private static UrlFacets? Facets(GridReadContext context, UrlFacetQuery query)
     {
+        var moment = Live(context);
         var filters = Compile(context, query.Filters, query.Search, sort: null);
         var total = Total(context);
         var tally = Tally(context, filters);
+
+        // Each facet's counts add up to the tally's links. With no filter those are every link of the moment, unless some
+        // have gone since it was taken.
+        if (moment is { Shared: true } && filters.Conditions.Count == 0 && tally.Links != total)
+        {
+            return null;
+        }
+
         var asked = (query.Facets.Count == 0 ? FACETS : query.Facets).Distinct(StringComparer.Ordinal).ToList();
         Dictionary<string, IReadOnlyList<FacetBucket>> facets = new(StringComparer.Ordinal);
         foreach (var facet in asked)
@@ -170,6 +208,100 @@ public static class LinkGridReader
         }
 
         return new UrlFacets(filters.Conditions.Count == 0 ? total : tally.Links, total, context.Summary, [], facets);
+    }
+
+    // ---- A running crawl's moment.
+
+    /// <summary>
+    /// The moment of a running crawl this read answers for (<see cref="LinkMoment"/>); null for a crawl that stands still,
+    /// whose counts are kept under its stamp. The moment the last reads answered for is kept for
+    /// <see cref="ReadCache.LIVE_FOR"/>, so a running crawl's links are counted at most that often, and this read takes it
+    /// too, unless its own snapshot is the older one (it began before the read that took the moment, and can't see all of
+    /// the moment's links): then it takes a moment of its own, as a read without a cache does.
+    /// </summary>
+    private static LinkMoment? Live(GridReadContext context) => context.Stamp is not { Live: true } ? null : context.Once(MOMENT, () =>
+    {
+        LinkMoment? mine = null;
+        var kept = context.Cached(MOMENT, () =>
+        {
+            var taken = Take(context, shared: true);
+            mine = taken;
+            return taken;
+        });
+        if (ReferenceEquals(kept, mine))
+        {
+            return kept;
+        }
+
+        using var command = context.Command("SELECT (SELECT COALESCE(MAX(rowid), 0) FROM links), (SELECT COALESCE(MAX(id), 0) FROM urls)", []);
+        using var reader = command.ExecuteReader();
+        reader.Read();
+        return kept.MaxLinkId <= reader.GetInt64(0) && kept.MaxUrlId <= reader.GetInt64(1) ? kept : Take(context, shared: false);
+    });
+
+    /// <summary>The crawl as this read's snapshot has it, as a moment: its links and URLs counted, with their highest ids, in one statement.</summary>
+    private static LinkMoment Take(GridReadContext context, bool shared)
+    {
+        using var command = context.Command(
+            "SELECT (SELECT COUNT(*) FROM links), (SELECT COALESCE(MAX(rowid), 0) FROM links), (SELECT COUNT(*) FROM urls), (SELECT COALESCE(MAX(id), 0) FROM urls)", []);
+        using var reader = command.ExecuteReader();
+        reader.Read();
+        return new LinkMoment(LinkMoment.NextId(), reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetInt64(3), shared);
+    }
+
+    /// <summary>
+    /// A read whose answer is of one moment. A read of a running crawl that finds the moment it took doesn't hold any more
+    /// (links it counted are gone: the crawl fetched their page again) answers null, and is run again on a moment of its
+    /// own snapshot, which the reads after it take too; should that one not hold either (another read counted for it after
+    /// more links went), once more on a moment nothing else counts for, which is this read's snapshot and nothing else.
+    /// </summary>
+    private static T Settled<T>(GridReadContext context, Func<T?> read) where T : class
+    {
+        var answer = read();
+        for (var again = 0; answer is null; again++)
+        {
+            var shared = again == 0;
+            context.StartOver();
+            var moment = Take(context, shared);
+            context.Hold(MOMENT, moment);
+            if (shared)
+            {
+                context.Keep(MOMENT, moment);
+            }
+
+            answer = read();
+        }
+
+        return answer;
+    }
+
+    /// <summary>A key as what's counted is kept under it: a running crawl's under its moment, so nothing counted for one moment is read for another.</summary>
+    private static string Under(GridReadContext context, string key) => Live(context) is { } moment ? moment.Key + key : key;
+
+    /// <summary>For a running crawl, the condition that keeps a read of the links within its moment; otherwise none.</summary>
+    private static string? Within(GridReadContext context) =>
+        Live(context) is { } moment ? string.Create(CultureInfo.InvariantCulture, $"l.rowid <= {moment.MaxLinkId}") : null;
+
+    /// <summary>
+    /// Something counted, kept between reads (<see cref="GridReadContext.Cached{T}"/>) and held by this one: whatever the
+    /// cache lets go of or counts again meanwhile, the read answers with what it read first.
+    /// </summary>
+    private static T Held<T>(GridReadContext context, string key, Func<T> read) where T : notnull =>
+        context.Once(key, () => context.Cached(Under(context, key), read));
+
+    /// <inheritdoc cref="Held{T}"/>
+    private static T HeldLarge<T>(GridReadContext context, string key, Func<T> read) where T : notnull =>
+        context.Once(key, () => context.CachedLarge(Under(context, key), read));
+
+    /// <inheritdoc cref="Held{T}"/>
+    private static T HeldHuge<T>(GridReadContext context, string key, Func<T> read) where T : notnull =>
+        context.Once(key, () => context.CachedHuge(Under(context, key), read));
+
+    /// <summary>Holds and keeps something read while reading something else, in place of any kept.</summary>
+    private static void HoldHuge<T>(GridReadContext context, string key, T value) where T : notnull
+    {
+        context.Hold(key, value);
+        context.KeepHuge(Under(context, key), value);
     }
 
     // ---- The query, checked.
@@ -430,7 +562,7 @@ public static class LinkGridReader
 
         var compiled = GridPlanner.Materialize(context, UrlQueryCompiler.Compile(new UrlQuery { Filters = rest }, context.Mode, scope, context.Reason));
         var key = prefix + string.Join("&", compiled.All.Select(predicate => predicate.Key));
-        var set = context.CachedLarge("linkend|" + key, () =>
+        var set = HeldLarge(context, "linkend|" + key, () =>
         {
             if (compiled.Predicates is [{ Matched: { } only }])
             {
@@ -466,7 +598,7 @@ public static class LinkGridReader
     private static Condition Search(GridReadContext context, string search)
     {
         var pattern = $"%{UrlQueryCompiler.Escape(search)}%";
-        var urls = context.CachedLarge($"linksearch|{UrlQueryCompiler.Describe(pattern)}", () =>
+        var urls = HeldLarge(context, $"linksearch|{UrlQueryCompiler.Describe(pattern)}", () =>
         {
             var matched = new UrlIdSet(LargestUrlId(context));
             using var command = context.Command(
@@ -482,7 +614,7 @@ public static class LinkGridReader
     private static string Slot(GridReadContext context, UrlIdSet set) => context.Use(set).ToString(CultureInfo.InvariantCulture);
 
     /// <summary>The pages whose robots directives say nofollow: none of their hyperlinks are followed.</summary>
-    private static UrlIdSet NofollowPages(GridReadContext context) => context.CachedLarge("links|nofollow pages", () =>
+    private static UrlIdSet NofollowPages(GridReadContext context) => HeldLarge(context, "links|nofollow pages", () =>
     {
         var pages = new UrlIdSet(LargestUrlId(context));
         using var command = context.Command($"SELECT COUNT({ReaderFunctions.ADD_TO_SET}({Slot(context, pages)}, r.url_id)) FROM responses r WHERE r.is_nofollow <> 0", []);
@@ -490,17 +622,18 @@ public static class LinkGridReader
         return pages.Seal(GridPlanner.ID_SET_CAP);
     });
 
-    private static long LargestUrlId(GridReadContext context) => context.Count("urls|largest", () => context.Scalar("SELECT COALESCE(MAX(id), 0) FROM urls", []));
+    private static long LargestUrlId(GridReadContext context) =>
+        Live(context)?.MaxUrlId ?? Held(context, "urls|largest", () => context.Scalar("SELECT COALESCE(MAX(id), 0) FROM urls", []));
 
-    private static long UrlCount(GridReadContext context) => context.Count("urls|count", () => context.Scalar("SELECT COUNT(*) FROM urls", []));
+    private static long UrlCount(GridReadContext context) => Live(context)?.Urls ?? Held(context, "urls|count", () => context.Scalar("SELECT COUNT(*) FROM urls", []));
 
     // ---- Counts.
 
     private static long Total(GridReadContext context) =>
-        context.LinkSummary?.Links ?? context.Count("links|total", () => context.Scalar("SELECT COUNT(*) FROM links", []));
+        Live(context)?.Links ?? context.LinkSummary?.Links ?? Held(context, "links|total", () => context.Scalar("SELECT COUNT(*) FROM links", []));
 
     private static long LargestLinkId(GridReadContext context) =>
-        context.LinkSummary?.MaxLinkId ?? context.Count("links|largest", () => context.Scalar("SELECT COALESCE(MAX(rowid), 0) FROM links", []));
+        Live(context)?.MaxLinkId ?? context.LinkSummary?.MaxLinkId ?? Held(context, "links|largest", () => context.Scalar("SELECT COALESCE(MAX(rowid), 0) FROM links", []));
 
     private static long Matching(GridReadContext context, Filters filters, long total) =>
         filters.Conditions.Count == 0 ? total
@@ -509,23 +642,27 @@ public static class LinkGridReader
         : Ids(context, filters, total).Count;
 
     /// <summary>
+    /// What one pass over the links gives for a filter set the link summary can't answer (there's none, or the filters test
+    /// what it doesn't hold): the matching links' ids and their tally. They're kept as one, so the count, the pages, the
+    /// facets and a sort by the target are all of the same pass, whatever else is counted again meanwhile. Without a
+    /// filter there are no ids: every link matches.
+    /// </summary>
+    private sealed record Pass(LinkIdSet? Ids, LinkTally Tally);
+
+    private static Pass Passed(GridReadContext context, Filters filters) => HeldHuge(context, "linkpass|" + filters.Key, () =>
+    {
+        var (ids, tally) = Scan(context, filters, Total(context), ids: filters.Conditions.Count > 0, tally: true);
+        return new Pass(ids, tally!);
+    });
+
+    /// <summary>
     /// The matching links counted by shape and by target, kept per filter set: from the link summary's rows when it holds
     /// everything the filters test, otherwise from the links, in the pass that also keeps their ids.
     /// </summary>
-    private static LinkTally Tally(GridReadContext context, Filters filters) => context.CachedHuge("linktally|" + filters.Key, () =>
+    private static LinkTally Tally(GridReadContext context, Filters filters) => context.LinkSummary is null || !filters.Summarised
+        ? Passed(context, filters).Tally
+        : HeldHuge(context, "linktally|" + filters.Key, () =>
     {
-        if (context.LinkSummary is null || !filters.Summarised)
-        {
-            // One pass serves the count, the facets and the pages: the ids it read are kept for the pages.
-            var (ids, counted) = Scan(context, filters, Total(context), ids: filters.Conditions.Count > 0, tally: true);
-            if (ids is not null)
-            {
-                context.KeepHuge("linkids|" + filters.Key, ids);
-            }
-
-            return counted!;
-        }
-
         var tally = NewTally(context);
         context.LinkTally = tally;
         try
@@ -549,23 +686,10 @@ public static class LinkGridReader
     /// The ids of the matching links, kept per filter set: read through the targets of a filter that matches few links,
     /// when the link summary can say which those are, otherwise in one pass over the links.
     /// </summary>
-    private static LinkIdSet Ids(GridReadContext context, Filters filters, long total) => context.CachedHuge("linkids|" + filters.Key, () =>
-    {
-        var summarised = filters.Summarised && context.LinkSummary is not null;
-        if (summarised && !filters.Shaped && Drive(context, filters, total) is { } driven)
-        {
-            return driven;
-        }
-
-        // Without the summary's counts, the pass counts them too, and they're kept for the facets and a sort by the target.
-        var (ids, counted) = Scan(context, filters, total, ids: true, tally: !summarised);
-        if (counted is not null)
-        {
-            context.KeepHuge("linktally|" + filters.Key, counted);
-        }
-
-        return ids!;
-    });
+    private static LinkIdSet Ids(GridReadContext context, Filters filters, long total) => context.LinkSummary is null || !filters.Summarised
+        ? Passed(context, filters).Ids!
+        : HeldHuge(context, "linkids|" + filters.Key, () =>
+            !filters.Shaped && Drive(context, filters, total) is { } driven ? driven : Scan(context, filters, total, ids: true, tally: false).Ids!);
 
     /// <summary>
     /// One pass over the links for a filter set: the matching links' ids, their tally, or both. A condition that names
@@ -578,7 +702,7 @@ public static class LinkGridReader
         (context.LinkIds, context.LinkTally, context.NofollowPages) = (found, counted, tally ? NofollowPages(context) : null);
         try
         {
-            var sql = $"SELECT COUNT({ReaderFunctions.LINK}(l.rowid, l.to_id, l.from_id, l.kind, l.position, l.flags)) FROM {filters.From}{filters.Where()}";
+            var sql = $"SELECT COUNT({ReaderFunctions.LINK}(l.rowid, l.to_id, l.from_id, l.kind, l.position, l.flags)) FROM {filters.From}{filters.Where(Within(context))}";
             Ran?.Invoke(sql);
             using var command = context.Command(sql, filters.Parameters);
             command.ExecuteScalar();
@@ -602,7 +726,7 @@ public static class LinkGridReader
             return null;
         }
 
-        context.KeepHuge("linkids|" + filters.Key, driven);
+        HoldHuge(context, "linkids|" + filters.Key, driven);
         return driven;
     }
 
@@ -627,7 +751,7 @@ public static class LinkGridReader
         }
 
         var driven = $"[{string.Join(",", targets)}]";
-        var reads = context.Count("linkdrive|" + filters.Key, () => context.Scalar(
+        var reads = Held(context, "linkdrive|" + filters.Key, () => context.Scalar(
             "SELECT COALESCE(SUM(c.links), 0) FROM link_summary c WHERE c.to_id IN (SELECT value FROM json_each($driven))", [new("$driven", driven)]));
         if (reads > Math.Max(DRIVE_ROWS, total / 32))
         {
@@ -670,7 +794,7 @@ public static class LinkGridReader
         var summarised = filters.Summarised && context.LinkSummary is not null;
         var dense = unfiltered && LargestLinkId(context) == total;
         LinkIdSet Set() => unfiltered ? All(context, total) : Ids(context, filters, total);
-        LinkIdSet? Kept() => !dense && (!summarised || context.HasHuge("linkids|" + filters.Key)) ? Set() : null;
+        LinkIdSet? Kept() => !dense && (!summarised || context.HasHuge(Under(context, "linkids|" + filters.Key))) ? Set() : null;
         LinkIdSet? Through() => summarised && !unfiltered && !filters.Shaped ? Driven(context, filters, total) : null;
 
         if (after is { } cursor)
@@ -731,7 +855,7 @@ public static class LinkGridReader
             // Otherwise from the set, read once.
             var fromEnd = matching - first - take;
             var passed = (Math.Min(first, fromEnd) + take) * (double)total / Math.Max(1, matching);
-            var slow = "linkwalk|slow|" + filters.Key;
+            var slow = Under(context, "linkwalk|slow|" + filters.Key);
             if (filters.Direct || (WalkRows >= 0 && passed <= Math.Max(WalkRows, total / 16) && !context.Noted(slow)))
             {
                 var clock = Stopwatch.GetTimestamp();
@@ -787,7 +911,7 @@ public static class LinkGridReader
     /// </summary>
     private sealed record Blocks(long[] Ids, long[] Through);
 
-    private static Blocks BlocksOf(GridReadContext context, Filters filters) => context.CachedLarge("linkblocks|" + filters.Key, () =>
+    private static Blocks BlocksOf(GridReadContext context, Filters filters) => HeldLarge(context, "linkblocks|" + filters.Key, () =>
     {
         List<long> ids = [];
         List<long> through = [];
@@ -874,7 +998,7 @@ public static class LinkGridReader
     /// again): where each place is can't be told from the ids, so they're read once.
     /// </summary>
     private static LinkIdSet All(GridReadContext context, long total) =>
-        context.CachedHuge("linkids|", () => Scan(context, new Filters([]), total, ids: true, tally: false).Ids!);
+        HeldHuge(context, "linkids|", () => Scan(context, new Filters([]), total, ids: true, tally: false).Ids!);
 
     // ---- A page sorted by the target.
 
@@ -893,68 +1017,84 @@ public static class LinkGridReader
     /// once (the URLs in their index's order, for a sort by URL), the targets with links picked out and put in order,
     /// unknown values last and ties by id in the key's direction, as the URL grid sorts.
     /// </summary>
-    private static LinkTargetOrder Order(GridReadContext context, Filters filters, TargetKey key, bool descending) =>
-        context.CachedHuge($"linkorder|{key.Column}|{(descending ? "desc" : "asc")}|{filters.Key}", () =>
+    private static LinkTargetOrder Order(GridReadContext context, Filters filters, TargetKey key, bool descending)
+    {
+        var tally = Tally(context, filters);
+        var name = $"linkorder|{key.Column}|{(descending ? "desc" : "asc")}|{filters.Key}";
+        var order = HeldHuge(context, name, () => Ordered(context, tally, key, descending));
+
+        // A running crawl's order is kept apart from the tally it was put in order from, and either can be let go and
+        // counted again: the page is read by an order of the very tally its count is from.
+        if (Live(context) is not null && !ReferenceEquals(order.Of, tally))
         {
-            var tally = Tally(context, filters);
-            List<int> targets;
-            if (key.Text)
-            {
-                var byUrl = context.CachedLarge("urls|by url", () =>
-                {
-                    List<int> ids = [];
-                    using var command = context.Command("SELECT id FROM urls ORDER BY url", []);
-                    using var reader = command.ExecuteReader();
-                    while (reader.Read())
-                    {
-                        ids.Add(reader.GetInt32(0));
-                    }
+            order = Ordered(context, tally, key, descending);
+            HoldHuge(context, name, order);
+        }
 
-                    return ids.ToArray();
-                });
-                targets = [.. (descending ? Enumerable.Reverse(byUrl) : byUrl).Where(id => tally.To(id) > 0)];
-            }
-            else
+        return order;
+    }
+
+    private static LinkTargetOrder Ordered(GridReadContext context, LinkTally tally, TargetKey key, bool descending)
+    {
+        List<int> targets;
+        if (key.Text)
+        {
+            var byUrl = HeldLarge(context, "urls|by url", () =>
             {
-                // By value, then by id within a value: both as numbers that sort ascending whichever way the sort goes, unknown
-                // values after every known one.
-                var rows = GridPlanner.Keys(context, key.Query).Where(row => tally.To(row.Id) > 0).ToList();
-                var values = new long[rows.Count];
-                var ids = new long[rows.Count];
-                for (var index = 0; index < rows.Count; index++)
+                List<int> ids = [];
+                using var command = context.Command("SELECT id FROM urls ORDER BY url", []);
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
                 {
-                    values[index] = rows[index].Key is { } value ? descending ? unchecked(-value) : value : long.MaxValue;
-                    ids[index] = descending ? -rows[index].Id : rows[index].Id;
+                    ids.Add(reader.GetInt32(0));
                 }
 
-                Array.Sort(values, ids);
-                for (var (start, end) = (0, 0); start < values.Length; start = end)
-                {
-                    for (end = start + 1; end < values.Length && values[end] == values[start]; end++)
-                    {
-                    }
+                return ids.ToArray();
+            });
+            targets = [.. (descending ? Enumerable.Reverse(byUrl) : byUrl).Where(id => tally.To(id) > 0)];
+        }
+        else
+        {
+            // By value, then by id within a value: both as numbers that sort ascending whichever way the sort goes, unknown
+            // values after every known one.
+            var rows = GridPlanner.Keys(context, key.Query).Where(row => tally.To(row.Id) > 0).ToList();
+            var values = new long[rows.Count];
+            var ids = new long[rows.Count];
+            for (var index = 0; index < rows.Count; index++)
+            {
+                values[index] = rows[index].Key is { } value ? descending ? unchecked(-value) : value : long.MaxValue;
+                ids[index] = descending ? -rows[index].Id : rows[index].Id;
+            }
 
-                    Array.Sort(ids, start, end - start);
+            Array.Sort(values, ids);
+            for (var (start, end) = (0, 0); start < values.Length; start = end)
+            {
+                for (end = start + 1; end < values.Length && values[end] == values[start]; end++)
+                {
                 }
 
-                targets = [.. ids.Select(id => (int)Math.Abs(id))];
+                Array.Sort(ids, start, end - start);
             }
 
-            var through = new long[targets.Count];
-            long links = 0;
-            for (var index = 0; index < targets.Count; index++)
-            {
-                through[index] = links += tally.To(targets[index]);
-            }
+            targets = [.. ids.Select(id => (int)Math.Abs(id))];
+        }
 
-            return new LinkTargetOrder([.. targets], through);
-        });
+        var through = new long[targets.Count];
+        long links = 0;
+        for (var index = 0; index < targets.Count; index++)
+        {
+            through[index] = links += tally.To(targets[index]);
+        }
+
+        return new LinkTargetOrder([.. targets], through, tally);
+    }
 
     /// <summary>
     /// One page of a sort by the target: the page's place found among the targets' counts, then each target's matching links
     /// read in crawl order on the links' index by target, from where the page (or the cursor) starts within it.
     /// </summary>
-    private static long[] TargetPage(GridReadContext context, Filters filters, LinkTargetOrder order, long matching, int offset, int limit, long? after, out bool more)
+    /// <returns>Null when a target has fewer links than a running crawl's moment counted (<see cref="Settled"/>).</returns>
+    private static long[]? TargetPage(GridReadContext context, Filters filters, LinkTargetOrder order, long matching, int offset, int limit, long? after, out bool more)
     {
         // Where the page starts: a target, and how many of its links come before, or the link they come after.
         int index;
@@ -992,9 +1132,11 @@ public static class LinkGridReader
         // links (a menu's target has a link from every page), they're read from their far end.
         // Every target here passes the conditions on the target, so only the rest are tested; a target's links of one kind
         // are in crawl order on the index by target and kind, with no link's row to read.
+        var within = Within(context) is { } bound ? " AND " + bound : string.Empty;
         var of = filters.OneKind is { } kind && context.HasLinkKindIndex
-            ? string.Create(CultureInfo.InvariantCulture, $"links l INDEXED BY ix_links_to_kind WHERE l.to_id = $target AND l.kind = {kind} AND l.rowid > $after")
-            : $"links l INDEXED BY ix_links_to{filters.Where("l.to_id = $target AND l.rowid > $after", targetsGiven: true)}";
+            ? string.Create(CultureInfo.InvariantCulture, $"links l INDEXED BY ix_links_to_kind WHERE l.to_id = $target AND l.kind = {kind} AND l.rowid > $after{within}")
+            : $"links l INDEXED BY ix_links_to{filters.Where("l.to_id = $target AND l.rowid > $after" + within, targetsGiven: true)}";
+        var counted = Live(context) is { Shared: true };
         string Sql(bool reverse) => $"SELECT l.rowid FROM {of} ORDER BY l.rowid {(reverse ? "DESC" : "ASC")} LIMIT $take OFFSET $skip";
         Ran?.Invoke(Sql(false));
         List<long> ids = [];
@@ -1018,6 +1160,13 @@ public static class LinkGridReader
             if (reverse)
             {
                 ids.Reverse(from, ids.Count - from);
+            }
+
+            // Read from its start (or a place in it), a target has the links the moment's tally counted, unless some are gone.
+            if (counted && afterId is null && ids.Count - from < take)
+            {
+                more = false;
+                return null;
             }
 
             (skip, afterId) = (0, null);
@@ -1182,9 +1331,10 @@ public static class LinkGridReader
 
     /// <summary>
     /// What the target's facets need of every URL, read once per crawl: its status class and whether it's the site's own,
-    /// by the URL grid's own columns, a byte a URL.
+    /// by the URL grid's own columns, a byte a URL. As many as a tally counts one by one, both sized by the same count of
+    /// the crawl's URLs: a running crawl's by its moment's, so a tally's every target has its facts.
     /// </summary>
-    private static byte[] UrlFacts(GridReadContext context) => context.CachedLarge("links|url facts", () =>
+    private static byte[] UrlFacts(GridReadContext context) => HeldLarge(context, "links|url facts", () =>
     {
         var none = UrlQueryCompiler.Compile(new UrlQuery(), context.Mode, GridScope.AllUrls, context.Reason);
         var statusClass = UrlColumns.STATUS_CLASS.Sql(context.Mode)!.Replace(UrlColumns.REASON, context.Reason, StringComparison.Ordinal);

@@ -225,8 +225,10 @@ public static class UrlGridReader
         var matching = GridPlanner.Matching(context, compiled, total);
         if (scope.SitemapId is { } sitemap)
         {
-            // A sitemap's grid is the URLs it lists: the first condition's own count, which its set gives with a URL summary.
-            total = compiled.Predicates[0].KnownCount ?? context.Count($"sitemap|{sitemap}", () => context.Scalar(
+            // A sitemap's grid is the URLs it lists. With no other condition those are the rows that match, counted once: two
+            // counts of them, each kept for its own while, differ as a running crawl reads the sitemap. Otherwise the first
+            // condition's own count, which its set gives with a URL summary.
+            total = compiled.All.Count() == 1 ? matching : compiled.Predicates[0].KnownCount ?? context.Count($"sitemap|{sitemap}", () => context.Scalar(
                 $"SELECT COUNT(DISTINCT url_id) FROM sitemap_urls WHERE sitemap_id IN ({UrlQueryCompiler.SITEMAPS_UNDER})", [new(UrlQueryCompiler.SITEMAP_PARAMETER, sitemap)]));
         }
 

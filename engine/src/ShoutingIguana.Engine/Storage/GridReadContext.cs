@@ -69,6 +69,7 @@ internal sealed class GridReadContext : IDisposable
     private readonly List<UrlIdSet> _sets = [];
     private readonly Dictionary<string, object> _huge = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object> _large = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, object> _once = new(StringComparer.Ordinal);
     private (long Links, long MaxLinkId, int BlockShift)? _linkSummary;
     private bool _linkSummaryRead;
     private readonly Dictionary<string, Regex> _patterns = new(StringComparer.Ordinal);
@@ -272,6 +273,36 @@ internal sealed class GridReadContext : IDisposable
         else
         {
             _huge[key] = value;
+        }
+    }
+
+    /// <summary>
+    /// Something this read reads at most once and then holds on to, whatever a cache shared with other reads does
+    /// meanwhile (a value there can be counted again, by a read of a later moment of a running crawl): the same object
+    /// for the rest of the read, so what the read answers with is counted once.
+    /// </summary>
+    public T Once<T>(string key, Func<T> read) where T : notnull
+    {
+        if (!_once.TryGetValue(key, out var held))
+        {
+            _once[key] = held = read();
+        }
+
+        return (T)held;
+    }
+
+    /// <summary>Holds on to a value this read read some other way, as <see cref="Once"/> would have.</summary>
+    public void Hold<T>(string key, T value) where T : notnull => _once[key] = value;
+
+    /// <summary>Lets go of everything the read held on to (<see cref="Once"/>): it starts over.</summary>
+    public void StartOver() => _once.Clear();
+
+    /// <summary>Keeps a value for the reads that follow, in place of any kept under the key.</summary>
+    public void Keep<T>(string key, T value) where T : notnull
+    {
+        if (Stamp is { } stamp)
+        {
+            _cache?.Set($"{stamp}|{key}", value);
         }
     }
 
@@ -503,9 +534,10 @@ internal sealed class GridReadContext : IDisposable
 
     private (long Links, long MaxLinkId, int BlockShift)? ReadLinkSummary()
     {
-        // A crawl that's running has links its summary, if it has one, doesn't count yet: its stamp moved when the run began.
+        // A crawl that's running has links its summary, if it has one, doesn't count yet: its stamp moved when the run
+        // began, and whatever a file says of itself, a crawl that's running is read from its links.
         Token.ThrowIfCancellationRequested();
-        return ReadWithoutLinkSummary ? null : LinkSummaryBuilder.ReadCurrent(Connection, Transaction);
+        return ReadWithoutLinkSummary || Stamp is { Live: true } ? null : LinkSummaryBuilder.ReadCurrent(Connection, Transaction);
     }
 
     private CrawlOptions ReadOptions()
