@@ -33,7 +33,7 @@ Webview (React, app/src) ──────────────────�
 | `src/settings` | Preferences: schema, store (the shell's settings commands, or `localStorage`), appearance |
 | `src/feedback` | The loading rule, skeletons, toasts, error states, route errors, announcements |
 | `src/layout` | The shell's layout: sidebar, top bar, inspector slot, banners, the stopping overlay |
-| `src/screens` | One file per route, a screen's own pieces in a folder beside it (`screens/issues/`). Home, Issues and the URLs grid work; the rest are stubs for their slices |
+| `src/screens` | One file per route, a screen's own pieces in a folder beside it (`screens/issues/`). Home, Overview, Issues and the URLs grid work; the rest are stubs for their slices |
 | `src/app` | The router, the query client, overlays, sections, the root component |
 | `src/ui` | The component library: buttons, fields, menus, severity, figures, URLs and the rest (see Components) |
 | `src/styles` | `tokens.css` (every design value), `base.css`, `components.css` (the library's look), the Tailwind entry |
@@ -160,7 +160,7 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
 
 ## The API client
 
-- `api/client.ts` has a function for every E1, E2 and E3a call: the URL grid, its columns, facets and lookup, the
+- `api/client.ts` has a function for every E1, E2 and E3a call, and E4's `/history`: the URL grid, its columns, facets and lookup, the
   inspector (one URL, its links both ways, its HTML) and a check's groups and rows. `api/grids.ts` and
   `api/inspector.ts` type them as the sidecar answers them:
   - the inspector, its links and its HTML are POSTs (`/urls/inspect`, `/urls/inlinks`, `/urls/outlinks`,
@@ -200,6 +200,14 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   `progress`): never cancelling a page still on its way, with no skeleton and no progress line, and a "Live" mark by
   the count.
 - A count the stream sends malformed is null, shown as "–", never 0. A status the contract doesn't have is dropped.
+- E4's part of a progress event is read at the same boundary (`LiveProgressDetail`): when it was taken, the phase,
+  the site's own counts, the URL limit (null is "no limit", undefined "not said"), the status classes and codes, why
+  URLs got no response, and the waits. A breakdown with a part missing is null rather than short, as its parts
+  wouldn't add up. An alert keeps its `id` and its facts; a hello's `analyzing` crawls are live.
+- Each crawl keeps a **trail** for the found-and-crawled chart: a point per progress event at first, at most 600
+  however long it runs (when full, every other point goes and from then on every second event is kept, then every
+  fourth), with the newest always last. `GET /history` gives what came before the page heard of the crawl; the trail
+  carries the chart on (`screens/overview/foundAndCrawled.ts`).
 - Select from the live store with `useLive`, `useLiveCrawl` and `useLiveIds`. A selector returns stored values or
   primitives, never a new object.
 
@@ -360,7 +368,8 @@ screen, and one that a second screen needs moves here.
 | Severity | `SeverityMark` (shape and colour, the word its name) in dense rows; `SeverityBadge` (with the word) wherever there's room; `SeverityCount(s)` for counts. Notices are the quietest |
 | Status | `StatusPill` for a crawl's status (the words of `crawl/status.ts`), `LiveBadge` and `LiveDot` for what updates live, `StatusCode` for a status code's class (only that meaning), `Badge` for a label without colour (`dashed`: what didn't happen) |
 | Filters | `FilterChip` reads as a sentence, opens its editor, goes with ✕ or Delete (focus moves on to the next chip, else the one before, else Add filter); `AddFilterChip`; the `preview` chip beside a number that opens its URLs |
-| Numbers | `Num` (counts, bytes, ms, rates, percentages; the unit smaller and muted), `Duration`, `RelativeTime` (kept current by one minute clock for the app, `lib/clock.ts`, idle while the window is hidden; the exact time in its tooltip and read after it); `Stat` and `StatLink` (a figure that opens its URLs) in `Stats`, `MiniStat`s; `Meter` for a value on its check's scale; `ShareBar` for a share; `ProgressBar` with its phase; `RefreshLine` for a panel that's refreshing; `Spinner` only inside what's working |
+| Charts | `Sparkline` and `LineChart` (lines over time, drawn with visx in real pixels: the plot measures its box with `useElementSize`, so strokes keep their weight; no tweening), `StatusSplit` (the magnified status bar: the full bar, and the share that didn't answer 2xx across the full width beneath), `ColumnChart` (counts side by side), `StackBar` with `Legend` (a whole in a few parts). Every part that counts URLs is a `ChartLink` (the router's link) with its name and number, so a chart is never read by colour or by its bars alone; each chart says itself in words (`label`). Bars are elements, not SVG, so parts are real links with focus rings and names that wrap; under forced colours parts are told apart by their gaps and a hatch stays a hatch |
+| Numbers | `Num` (counts, bytes, ms, rates, percentages; the unit smaller and muted), `Duration`, `RelativeTime` (kept current by one minute clock for the app, `lib/clock.ts`, idle while the window is hidden; the exact time in its tooltip and read after it); `Stat` and `StatLink` (a figure that opens its URLs) in `Stats` (`wrap` for more figures than columns), `MiniStat`s; `Meter` for a value on its check's scale; `ShareBar` for a share; `ProgressBar` with its phase; `RefreshLine` for a panel that's refreshing; `Spinner` only inside what's working |
 | Messages | `Callout` (insight, info, warning, error), `Banner` for a view's state with its one action, `EmptyState`, `FilteredEmptyState` (the filters and one-click clear), `SkippedState` (the reason in words). A callout's or banner's warning and error are the app's messages, never a finding's severity: they take the message tones (`--color-message-caution*`, quiet as clarity's out-of-date note; `--color-message-failure*`, the error hue under its own name, as the destructive fills) and Lucide's message icons, never the severity marks |
 | URLs and places | `Url` (mono, truncated in the middle to its measured width, path-only on the crawl's origin, copy on click, open in the browser), `Favicon`, `TextLink` and `NavItem` (router links; the current place keeps `.si-current`), `ListRow` and `ListHeading`, `PageHeader`, `SectionHeader`, `GridHeader` with `ResultCount`, `Facts`, `Card` |
 
@@ -404,10 +413,10 @@ are drawn for the app and are never swapped for Lucide's.
 
 ## Left for the slices
 
-- Every screen except Home and Issues: Overview (live and done), the full URL and Links grids, Sitemaps, robots.txt,
+- Every screen except Home, Overview and Issues: the full URL and Links grids, Sitemaps, robots.txt,
   New crawl, the crawl's settings, the inspector's content, the rest of Settings.
 - The engine's E3b to E6: the links, sitemaps and robots grids, export, search, favicons. Analysis progress (E4) is in
-  use on Issues (`crawl/analysis.ts` words its phases, for Overview too).
+  use on Issues and Overview (`crawl/analysis.ts` words its phases), as are E4's progress, alerts and history.
 - Export (E5) on Issues: this check, or every check with a summary sheet, and Ctrl+E. Until the engine has it, Issues
   offers Copy URLs and no Export button.
 - The URL grid's filter bar: it shows the route's filters as removable chips that read as sentences
@@ -452,3 +461,56 @@ are drawn for the app and are never swapped for Lucide's.
   has show passed, show hidden, Learn more and Cancel the analysis. Every check is in the palette by its title. J and
   K take focus in the list to the new check's option, and focus in the check (which goes with it) to the new check's
   title; anywhere else focus stays, and the new check is announced ("Title too long, 3 URLs").
+
+## Overview (the second slice)
+
+`screens/OverviewScreen.tsx` and `screens/overview/`. One route, two screens: the live crawl while it runs, then the
+answer. What it settled:
+
+- **Pure first**, as Issues: `statusSplit.ts` (the magnified bar's classes, what each is made of, the bars' widths and
+  the filter that opens each class), `liveFigures.ts` (the pace over the last minute, the time left, the sparkline's
+  window, what was found split three ways), `foundAndCrawled.ts` (the history joined to the trail, and round ticks),
+  `alerts.ts` and `waits.ts` (plain words and the next action by the engine's stable codes), `answer.ts` (issues by
+  severity, Fix first, categories, skipped checks by reason, indexability, depth, response times), `emptyCrawl.ts`
+  (why a crawl read no pages) and `links.ts` (where every figure leads). All unit-tested, each figure with its link.
+- **It builds on Issues' list** (`issues/checkList.ts`): the answer sentence, the totals and the severity counts are
+  the same functions, and `rankChecksToFix` is the order both screens use (`firstCheckToFix` is its first). Hidden
+  checks are left out of the figures and Fix first, as the sidebar leaves them. Analysing from a screen is one hook,
+  `issues/useAnalysisControl.ts`.
+- **Every number is a link to exactly what it counts.** A figure carries an `OverviewLink` (the URL grid's filters, or
+  Issues at a check, a severity or a category's title), which `overviewLinks.ts` checks against its route. The URL
+  grid's chips word the columns those filters use (`grid/urlFilterWords.ts`), so the landing reads as a sentence.
+- **Blocked is a class of its own**, live and done, so the two bars agree: E4's `statusClasses` count a firewall's
+  answer as blocked whatever its status, and the finished crawl's facets are read under `outcome notIn [blocked]`, the
+  blocked being what that filter left out. Each class links by `statusClass` with the same filter, and Blocked by
+  `outcome`.
+- **What the breakdowns count.** Status codes: every URL fetched. Indexability: the site's page URLs the crawl asked
+  for (`isInternal`, `type` page, `fetched`), errors and redirects included, as "why not" names them. Depth and response
+  times: the site's pages that answered 2xx. Each card says its own count (the facets' `matching`), which is why the
+  pages by depth can differ by one from the library's page count (a page whose HTML wasn't parsed).
+- **The answer never waits for `/stats`**, which counts every link (1.1 to 1.4 s on the 100k crawl). It adds why URLs
+  got no response to one row when it arrives, and a stopped crawl's queue to its banner. The answer is the analysis,
+  the catalog and three facet reads, each card with its own skeleton and its own error.
+- **The time left** shows only with a URL limit: what's left of the limit at the pace of the last minute, worded
+  "done within" while the crawl may still find fewer URLs than its limit, and "about ... left" once it has found as
+  many as it may fetch.
+- **Nothing moves as the numbers grow.** Figures update in place at most 4 times a second; each row of figures has a
+  context line with room for two lines; six figures in a row are the smaller size unless the window is wide, so
+  1,000,000 fits; the status bar keeps its height with nothing to magnify; what holds the crawl up (which comes and
+  goes) is the last card of its column.
+- **Pause, Resume and Stop stay in the top bar**, on every screen, with F7 and F8. The screen's banners carry the next
+  action for the state it's in: Resume when paused, Continue when stopped or interrupted, Analyse it, Analyse again.
+- **States.** Live (running, paused, stopping, just started), the analysis running after the crawl (its phase and
+  progress, with Cancel, over the crawl's breakdowns) or again (over the last answer), never analysed, out of date,
+  partial (the notes), stopped and interrupted (how far it got, Continue), failed (the engine's reason), running in
+  another window, unreadable, and a crawl that read no pages, which says how its start URL answered and offers the next
+  action. Each is a story under Screens/Overview, the live ones from a scripted stream (2,900 URLs a second among them).
+- **Its commands**: Cancel the analysis, and "Open the first check to fix" in the palette. The rest are the app's
+  (Pause or resume, Stop, Continue, Analyse again).
+- **Measured** (10 Nov 2026, this machine, the production build in headless Chromium at 1280x720, against the real
+  sidecar). A live crawl of the engine's test site at the Fast preset (16 at a time, about 2,000 URLs a second here,
+  66,283 URLs): 60 fps from the first figure to the answer, 99% of frames within 16.8 ms and none over 33 ms. The 100k
+  crawl from a click in the library: the answer is painted within 48 ms (62 at most over 7 opens) and every breakdown
+  within 64 ms (78 at most); 136 ms the first time, before the sidecar has counted the crawl. A click on a status class
+  shows URLs within 48 ms and its first rows within 63; Fix first shows its check in Issues within 52 ms; Tab moves
+  focus within 18 ms.

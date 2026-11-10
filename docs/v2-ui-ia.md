@@ -87,9 +87,13 @@ links and "reopen where I left off" all work.
 
 - Crawled, found and queued, pages per second with a sparkline, elapsed time, and an ETA when a URL limit makes one
   meaningful.
-- The status-code breakdown, where each bar opens its URLs.
-- Alerts, each with what to do. "Blocked" offers Continue more slowly, and Add headers.
-- When the crawl ends, analysis progress by phase replaces the counters.
+- Found and crawled over time, and what was found split into crawled, queued and not followed.
+- The status-code breakdown as the magnified bar, where each class opens its URLs.
+- Alerts, each with what to do and a link to where it's done: the crawl's settings (continue more slowly, add
+  headers, another user agent), Sitemaps, or a new crawl from where the start URL leads. What holds the crawl up
+  right now (a Crawl-delay, a site that isn't answering) is listed apart, as it comes and goes.
+- Pause, Resume and Stop are the top bar's, as on every screen. A paused crawl's banner carries Resume.
+- When the crawl ends, analysis progress by phase replaces the counters, over the crawl's breakdowns.
 
 **Overview (done).**
 
@@ -98,6 +102,10 @@ links and "reopen where I left off" all work.
 - Every number opens its URLs.
 - Skipped checks and analysis notes, in plain words.
 - An "out of date" banner offers to analyse again.
+- A stopped or interrupted crawl says how far it got, with Continue. A crawl never analysed offers Analyse it, and
+  still shows the crawl's own breakdowns, which need no analysis.
+- A crawl that read no pages says why (how its start URL answered), with the next action.
+- The crawl's alerts stay with it, under the breakdowns.
 
 **Issues.**
 

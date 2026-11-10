@@ -42,7 +42,8 @@ function FacetCard({
   const skeleton = useDelayedLoading(loading);
   return (
     <Card as="section" aria-labelledby={titleId} aria-busy={loading || query.isFetching}>
-      <CardHeader title={title} titleId={titleId} meta={query.data ? meta : undefined} />
+      {/* Under the screen's "The crawl" heading. */}
+      <CardHeader title={title} titleId={titleId} level={3} meta={query.data ? meta : undefined} />
       <CardBody className="min-h-(--overview-card-min)">
         {query.data && !skeleton ? (
           children(query.data)
@@ -139,7 +140,7 @@ export function IndexabilityCard({ crawlId, facets }: { crawlId: string; facets:
             </ul>
             {figures.reasons.length > 0 ? (
               <>
-                <h3 className="pt-1 text-12 font-medium text-text-muted">Why not</h3>
+                <p className="pt-1 text-12 font-medium text-text-muted">Why not</p>
                 <ul aria-label="Why not indexable" className="-mx-2.5 flex flex-col">
                   {figures.reasons.map((reason) => (
                     <li key={reason.reason}>

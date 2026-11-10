@@ -206,6 +206,10 @@ test('a crawl started from Home is watched live to its answer: paused, resumed, 
   await expect(main(page).getByText('Live', { exact: true })).toBeHidden();
   await expect(main(page).getByText(/^\d+ checks found [\d,]+ issues on this crawl\./)).toBeVisible();
   await expect(main(page).getByRole('list', { name: 'Status codes by class' })).toBeVisible();
+  // The "Crawl finished" toast has faded in: its colours are its own, not half way there.
+  const toast = page.locator('.si-toast').filter({ hasText: 'Crawl finished' });
+  await expect(toast).toBeVisible();
+  await expect(toast).toHaveCSS('opacity', '1');
   await expectNoViolations(page);
 });
 
@@ -221,6 +225,10 @@ test('a stopped crawl says how far it got, and continues from there', async ({ p
   await expect(main(page).getByText('Live', { exact: true })).toBeHidden();
   // A stopped crawl isn't analysed on its own, and says so, rather than show an answer.
   await expect(main(page).getByRole('heading', { name: 'This crawl hasn’t been analysed yet' })).toBeVisible();
+  // The "Crawl stopped" toast has faded in: its colours are its own, not half way there.
+  const toast = page.locator('.si-toast').filter({ hasText: 'Crawl stopped' });
+  await expect(toast).toBeVisible();
+  await expect(toast).toHaveCSS('opacity', '1');
   await expectNoViolations(page);
 
   await main(page).getByRole('button', { name: 'Continue' }).first().click();

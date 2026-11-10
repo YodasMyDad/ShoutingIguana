@@ -246,6 +246,8 @@ export function LiveOverview({
                   yTicks={chart.yTicks}
                 />
                 <Legend>
+                  {/* The chart is of the site's own URLs, which a URL limit counts; the bar below is of every URL. */}
+                  <span className="si-legend__item text-text-muted">On the site</span>
                   <LegendItem swatch={<span className="si-legend__line" />}>
                     Found <span className="si-legend__value">{formatCount(series.found)}</span>
                   </LegendItem>
@@ -286,7 +288,7 @@ export function LiveOverview({
                       tone: 'hatched',
                     },
                   ]}
-                  total={`Of the ${formatCount(found.found)} found`}
+                  total={`Of all ${formatCount(found.found)} found`}
                 />
               </div>
             ) : null}

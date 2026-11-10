@@ -66,6 +66,11 @@ synthetic crawl an older engine analysed is made again, and an out-of-date `SI_E
 (never the file itself). An out-of-date analysis would put its "Analyse again" offer on the screens, a Tab stop of its
 own. It needs `npm run build:sidecar` first, and Playwright's Chromium (`npx playwright install chromium`).
 
+The setup also serves the engine's synthetic test site (the CLI's `testsite`, on a free port), which the Overview's
+tests crawl live from Home: watched to the answer, paused, resumed, stopped and continued. They never crawl a real
+site, and they stop and delete every crawl they start. The CLI is built into `.engine-build`, so a `si` left running
+from there (a test site started by hand) keeps the build from replacing it: stop it first.
+
 ## Build the desktop app
 
 ```powershell

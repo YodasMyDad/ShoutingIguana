@@ -458,7 +458,7 @@ function CrawlAlerts({ crawlId, canContinue }: { crawlId: string; canContinue: b
   if (entries.length === 0) return null;
   return (
     <Card as="section" aria-labelledby="overview-alerts-title">
-      <CardHeader title="Alerts" titleId="overview-alerts-title" meta="From while it crawled" />
+      <CardHeader title="Alerts" titleId="overview-alerts-title" level={3} meta="From while it crawled" />
       <CardBody>
         <AlertList
           crawlId={crawlId}
