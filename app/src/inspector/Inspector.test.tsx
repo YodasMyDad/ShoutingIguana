@@ -363,6 +363,31 @@ describe('a URL the crawl didn’t read', () => {
     expect(within(inspector).queryByText('Timings and size')).toBeNull();
   });
 
+  it('draws an image’s size on the limit for images, naming the check the pages that use it were flagged with', async () => {
+    const image = testUrlDetail({
+      url: 'https://example.com/img/large.jpg',
+      type: 'image',
+      content: null,
+      structuredData: [],
+      response: testResponse({ contentType: 'image/jpeg', sizeBytes: 307_200, bodyBytes: null }),
+      discovery: { ...testUrlDetail().discovery, foundVia: 'image', fetchMode: 'check' },
+      issues: [],
+      namedBy: { total: 1, checks: [{ checkId: 'image-too-large', count: 1 }] },
+    });
+    const large = { ...ISSUES_CHECKS.checks[2]!, id: 'image-too-large', title: 'Image too large' };
+    const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: image } }, undefined, {
+      checks: { ...ISSUES_CHECKS, checks: [...ISSUES_CHECKS.checks, large] },
+    });
+    const meter = await within(inspector).findByRole('meter', { name: 'Image size' });
+    expect(meter).toHaveAttribute('aria-valuetext', '300 KB, Limit 200 KB, over the limit');
+    expect(within(inspector).getByText('100 KB over the 200 KB limit')).toBeVisible();
+    // The check is on the pages that use the image: its link opens their group, named after this URL.
+    const link = await within(inspector).findByRole('link', { name: 'Image too large' });
+    expect(groupOf(link)).toEqual({ detail: null, relatedUrlId: 2 });
+    // The figure at the top carries the limit too.
+    expect(within(inspector).getByText('Size').parentElement).toHaveTextContent('Limit 200 KB');
+  });
+
   it('says a page answered with no body, and still shows how it answered', async () => {
     const inspector = await state(
       testUrlDetail({ response: testResponse({ bodyBytes: 0, sizeBytes: 0 }), content: null, structuredData: [] }),

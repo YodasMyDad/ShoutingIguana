@@ -506,10 +506,12 @@ is what it shows. What it settled:
   them with the summary and a tab never says less than its section. That makes three small reads a second for the
   URL shown while a crawl runs (2 to 4 ms each on the 100k crawl): `/urls/inspect` doesn't carry the totals of every
   kind, and only the engine could make it one read.
-- **Values on their scales.** `Meter` draws the title's and description's length, the word count, the response time
-  and the HTML's size against `limits`, which are the engine's (never hard-coded). A check is named beside a value
-  only when the URL's `issues` have it: a value out of range that the analysis didn't flag says how far out it is,
-  and no more. A title's or description's `length` is the engine's display width (a full-width character or an
+- **Values on their scales.** `Meter` draws the title's and description's length, the word count, the response time,
+  the HTML's size and an image's size (as sent, against `largeImageBytes`) against `limits`, which are the engine's
+  (never hard-coded). A check is named beside a value only when the URL's `issues` have it: a value out of range
+  that the analysis didn't flag says how far out it is, and no more. An image's check is on the pages that use it,
+  so it's named when their issues name the image (`namedBy`), and its link opens their group. A value past its
+  limit whose rounded words are the limit's own (1,015 ms and "1 s") is written to its last unit. A title's or description's `length` is the engine's display width (a full-width character or an
   emoji counts as two), so it's called "characters" only when it is the text's count of them (`characterCount`,
   user-perceived characters as the engine counts them); otherwise it reads as the engine's own details do, "48
   characters (96 counting full-width characters as two)".

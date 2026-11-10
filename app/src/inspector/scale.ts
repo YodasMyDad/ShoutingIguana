@@ -1,5 +1,5 @@
 // Every value on its scale (docs/v2-ui-design.md): a title's length, a description's, the word count, the response
-// time and the HTML's size, each read against the limit the analysis used (`limits` of `/urls/inspect`). The limits
+// time, the HTML's size and an image's, each read against the limit the analysis used (`limits` of `/urls/inspect`). The limits
 // are the engine's, and so are the comparisons: over is past the maximum, under is short of the minimum, and a value
 // on a limit is within it, as the checks judge (`length > titleMax`, `wordCount < minWords`).
 import type { ContentLimits, UrlDetail } from '../api/inspector';
@@ -25,7 +25,7 @@ export function readOnScale(value: number, range: ScaleRange): ScaleReading {
   return { state: 'within', by: 0 };
 }
 
-export type MeasureId = 'title' | 'description' | 'words' | 'response' | 'htmlSize';
+export type MeasureId = 'title' | 'description' | 'words' | 'response' | 'htmlSize' | 'imageSize';
 
 /** A value drawn on its scale, with its words. */
 export interface Measure extends ScaleRange, ScaleReading {
@@ -208,6 +208,26 @@ export function htmlSizeMeasure(bodyBytes: number, limits: ContentLimits): Measu
   );
 }
 
+/**
+ * An image's size as it was sent, against the analysis's limit: what `image-too-large` goes by. The check's issues
+ * are on the pages that use the image, so it's those that name it (`namedBy`), not the image's own issues.
+ */
+export function imageSizeMeasure(sizeBytes: number, limits: ContentLimits): Measure {
+  return measure(
+    {
+      id: 'imageSize',
+      label: 'Image size',
+      max: limits.largeImageBytes,
+      format: formatBytes,
+      formatAmount: formatBytes,
+      formatExact: (value) => formatCountOf(value, 'byte'),
+      limitText: `Limit ${formatBytes(limits.largeImageBytes)}`,
+      over: 'image-too-large',
+    },
+    sizeBytes,
+  );
+}
+
 export interface UrlMeasures {
   /** One per title on the page, in page order. */
   titles: Measure[];
@@ -215,15 +235,19 @@ export interface UrlMeasures {
   words: Measure | null;
   response: Measure | null;
   htmlSize: Measure | null;
+  /** For an image that answered: its size against the limit for images. */
+  imageSize: Measure | null;
 }
 
 /** Every value of a URL that has a limit. A value the crawl doesn't have has no measure, never one of 0. */
-export function measuresOf(detail: Pick<UrlDetail, 'content' | 'response' | 'limits'>): UrlMeasures {
+export function measuresOf(detail: Pick<UrlDetail, 'type' | 'content' | 'response' | 'limits'>): UrlMeasures {
   const { content, response, limits } = detail;
   const number = (value: number | null | undefined) =>
     value !== null && value !== undefined && Number.isFinite(value) ? value : null;
   const responseMs = number(response?.responseMs);
   const bodyBytes = number(response?.bodyBytes);
+  const sizeBytes = number(response?.sizeBytes);
+  const image = detail.type === 'image' && response?.outcome === 'success';
   return {
     titles: (content?.titles ?? []).map((title) => titleMeasure(title.length, limits, title.text)),
     descriptions: (content?.descriptions ?? []).map((description) =>
@@ -232,6 +256,7 @@ export function measuresOf(detail: Pick<UrlDetail, 'content' | 'response' | 'lim
     words: content ? wordsMeasure(content.wordCount, limits) : null,
     response: responseMs === null ? null : responseMeasure(responseMs, limits),
     htmlSize: bodyBytes === null || content === null ? null : htmlSizeMeasure(bodyBytes, limits),
+    imageSize: image && sizeBytes !== null ? imageSizeMeasure(sizeBytes, limits) : null,
   };
 }
 

@@ -190,7 +190,14 @@ describe('measuresOf', () => {
 
   it('has no measure for what the crawl doesn’t have, never one of 0', () => {
     const notFetched = measuresOf(testUrlDetail({ response: null, content: null }));
-    expect(notFetched).toEqual({ titles: [], descriptions: [], words: null, response: null, htmlSize: null });
+    expect(notFetched).toEqual({
+      titles: [],
+      descriptions: [],
+      words: null,
+      response: null,
+      htmlSize: null,
+      imageSize: null,
+    });
 
     const noTimes = measuresOf(testUrlDetail({ response: testResponse({ responseMs: null, bodyBytes: null }) }));
     expect(noTimes.response).toBeNull();
@@ -204,6 +211,26 @@ describe('measuresOf', () => {
     );
     expect(image.htmlSize).toBeNull();
     expect(image.response).not.toBeNull();
+  });
+
+  it('draws an image’s size against the limit for images, and nothing else’s', () => {
+    const image = (overrides: Parameters<typeof testResponse>[0]) =>
+      measuresOf(testUrlDetail({ type: 'image', content: null, response: testResponse(overrides) }));
+    expect(image({ sizeBytes: 307_200, bodyBytes: null }).imageSize).toMatchObject({
+      label: 'Image size',
+      value: 307_200,
+      max: 204_800,
+      state: 'over',
+      valueText: '300 KB',
+      limitText: 'Limit 200 KB',
+      note: '100 KB over the 200 KB limit',
+      checkId: 'image-too-large',
+    });
+    expect(image({ sizeBytes: 18_000 }).imageSize).toMatchObject({ state: 'within', note: null, checkId: null });
+    // One that didn't answer as an image has no size to judge, and a page's size is its HTML's.
+    expect(image({ sizeBytes: 300_000, outcome: 'clientError', statusCode: 404 }).imageSize).toBeNull();
+    expect(image({ sizeBytes: null }).imageSize).toBeNull();
+    expect(measuresOf(testUrlDetail()).imageSize).toBeNull();
   });
 });
 

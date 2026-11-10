@@ -48,7 +48,7 @@ export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
   const verdict = indexabilityVerdict(detail);
   return (
     <SectionBody>
-      <TopFigures detail={detail} state={state} response={measures.response} />
+      <TopFigures detail={detail} state={state} response={measures.response} imageSize={measures.imageSize} />
       {state.title ? (
         <Block>
           <Callout tone="info" title={state.title}>
@@ -95,6 +95,7 @@ export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
           <div className="flex flex-col gap-4">
             {measures.response ? <ScaleMeter measure={measures.response} detail={detail} /> : null}
             {measures.htmlSize ? <ScaleMeter measure={measures.htmlSize} detail={detail} /> : null}
+            {measures.imageSize ? <ScaleMeter measure={measures.imageSize} detail={detail} /> : null}
             <Facts>
               <Fact label="First byte">
                 <Num value={detail.response.ttfbMs} format="ms" />
@@ -130,11 +131,14 @@ function TopFigures({
   detail,
   state,
   response: responseTime,
+  imageSize,
 }: {
   detail: UrlDetail;
   state: FetchState;
   /** The response time on its scale: its words are exact where rounding would put it on its limit. */
   response: Measure | null;
+  /** An image's size on its scale, with the limit for images. */
+  imageSize: Measure | null;
 }) {
   const { response, content, limits } = detail;
   if (!response || !state.answered) return null;
@@ -168,8 +172,16 @@ function TopFigures({
         ) : (
           <MiniStat
             label="Size"
-            value={<Num value={response.sizeBytes} format="bytes" />}
-            context={TYPE_WORDS[detail.type]}
+            value={
+              imageSize ? (
+                <span className="figures">
+                  <FigureParts text={imageSize.valueText} />
+                </span>
+              ) : (
+                <Num value={response.sizeBytes} format="bytes" />
+              )
+            }
+            context={imageSize ? imageSize.limitText : TYPE_WORDS[detail.type]}
           />
         )}
       </MiniStats>
@@ -242,23 +254,39 @@ function TestRow({ row }: { row: IndexabilityRow }) {
   );
 }
 
-/** The severity and title of the check a value out of range trips, when the analysis flagged this URL with it. */
-function useFlagged(detail: UrlDetail, checkId: string | null) {
+/**
+ * The severity and title of the check a value out of range trips, when the analysis flagged this URL with it. An
+ * image's size is judged on the pages that use the image: the check is theirs, and its issues name this URL.
+ */
+function useFlagged(detail: UrlDetail, measure: Measure) {
   const { byId, ready } = useChecks();
+  const checkId = measure.checkId;
   if (checkId === null) return null;
-  const issue = detail.issues?.find((candidate) => candidate.checkId === checkId);
-  if (!issue) return null;
   const check = byId.get(checkId);
+  const issue = detail.issues?.find((candidate) => candidate.checkId === checkId);
+  if (issue) {
+    return {
+      severity: issue.severity ?? check?.severity ?? 'notice',
+      title: checkTitle(check, ready),
+      link: issueLink(issue, check?.grouping, detail),
+    };
+  }
+  const named = measure.id === 'imageSize' && detail.namedBy?.checks.some((entry) => entry.checkId === checkId);
+  if (!named) return null;
   return {
-    severity: issue.severity ?? check?.severity ?? 'notice',
+    severity: check?.severity ?? 'notice',
     title: checkTitle(check, ready),
-    link: issueLink(issue, check?.grouping, detail),
+    // The pages whose issue names this image: its group on a check grouped by the other URL.
+    link: {
+      checkId,
+      group: check?.grouping === 'relatedUrl' ? { detail: null, relatedUrlId: detail.id } : undefined,
+    },
   };
 }
 
 /** A value on its scale, and, when the analysis flagged it, the check with how far out it is. */
 function ScaleMeter({ measure, detail }: { measure: Measure; detail: UrlDetail }) {
-  const flagged = useFlagged(detail, measure.checkId);
+  const flagged = useFlagged(detail, measure);
   return (
     <div>
       <Meter
