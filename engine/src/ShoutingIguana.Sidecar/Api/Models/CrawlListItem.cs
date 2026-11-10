@@ -21,6 +21,12 @@ internal sealed record CrawlListItem
     public DateTime? UpdatedAt { get; init; }
 
     /// <summary>
+    /// The time spent crawling over every run, pauses and the time between runs left out; live, the crawl's progress. Null
+    /// when it isn't known: a run of the crawl was made by an engine that didn't keep it.
+    /// </summary>
+    public long? CrawlingMs { get; init; }
+
+    /// <summary>
     /// URLs with a stored outcome, as <c>si stats</c> and a crawl's progress count them; live, the crawl's progress. Those
     /// that weren't checked are among them, which <see cref="CrawledUrlCount"/> leaves out.
     /// </summary>

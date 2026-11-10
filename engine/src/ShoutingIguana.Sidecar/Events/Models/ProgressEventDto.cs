@@ -17,6 +17,10 @@ namespace ShoutingIguana.Sidecar.Events.Models;
 /// <param name="MoreWaits">For each reason with more waits than are listed, how many more: "and 212 more hosts".</param>
 /// <param name="Crawled">The URLs crawled, as the URL grid counts them (fetched): <c>fetched</c> less those that weren't checked.</param>
 /// <param name="SiteVersions">The part of the figures that is the crawler's own probes of the site's other versions.</param>
+/// <param name="CrawlingMs">
+/// The time spent crawling over every run of the crawl, this run's without its pauses, where <c>elapsedMs</c> is this
+/// run's with them. Null when an earlier run's time wasn't kept.
+/// </param>
 internal sealed record ProgressEventDto(
     string CrawlId,
     CrawlListStatus Status,
@@ -44,7 +48,8 @@ internal sealed record ProgressEventDto(
     IReadOnlyList<CrawlWaitDto> Waits,
     IReadOnlyDictionary<string, int> MoreWaits,
     long Crawled,
-    SiteVersionsDto SiteVersions)
+    SiteVersionsDto SiteVersions,
+    long? CrawlingMs)
 {
     public static ProgressEventDto From(string crawlId, CrawlListStatus status, CrawlProgress progress, DateTime at) => new(
         crawlId,
@@ -74,5 +79,6 @@ internal sealed record ProgressEventDto(
         // Keyed by the reason's name as the waits spell it.
         progress.MoreWaits.ToDictionary(more => JsonNamingPolicy.CamelCase.ConvertName(more.Key.ToString()), more => more.Value, StringComparer.Ordinal),
         progress.Crawled,
-        SiteVersionsDto.From(progress.SiteVersions));
+        SiteVersionsDto.From(progress.SiteVersions),
+        progress.TimeCrawling is { } time ? (long)time.TotalMilliseconds : null);
 }
