@@ -34,6 +34,7 @@ Webview (React, app/src) ──────────────────�
 | `src/feedback` | The loading rule, skeletons, toasts, error states, route errors, announcements |
 | `src/layout` | The shell's layout: sidebar, top bar, inspector slot, banners, the stopping overlay |
 | `src/screens` | One file per route, a screen's own pieces in a folder beside it (`screens/issues/`). Home, Issues and the URLs grid work; the rest are stubs for their slices |
+| `src/inspector` | The URL inspector: its sections, their pure logic, and the HTML source viewer (see The inspector) |
 | `src/app` | The router, the query client, overlays, sections, the root component |
 | `src/ui` | The component library: buttons, fields, menus, severity, figures, URLs and the rest (see Components) |
 | `src/styles` | `tokens.css` (every design value), `base.css`, `components.css` (the library's look), the Tailwind entry |
@@ -168,6 +169,9 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   - lookup returns `requested`, null when the URL found is the one asked for;
   - a skipped check has `groupCount`, `matching` and `total` null, never 0, and a page read on from `after` has
     `offset` null;
+  - each of the inspector's `issues` may carry `group`, the group it's in on `/issues/{checkId}/groups` (null for a
+    check that doesn't group). It's optional: an engine from before it leaves it out (`inspector/issueLinks.ts` has
+    what the link does then);
   - the canonical test includes `canonicalUrl`, and `limits` includes `largeImageBytes`, `imageAltMaxLength` and
     `maxUrlLength`;
   - an enum value this engine doesn't know is null (`source`, `fetchMode`, `state`, `foundVia`, `notFetchedBecause`,
@@ -198,7 +202,8 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   everything when it comes.
 - While a crawl runs, its open grids' counts and rows refresh in place at most once a second (the bridge, on
   `progress`): never cancelling a page still on its way, with no skeleton and no progress line, and a "Live" mark by
-  the count.
+  the count. The URL open in the inspector (`['crawl', id, 'inspect', …]`) refreshes with them, so a queued URL fills
+  in once it's fetched; its links are grids, and refresh as grids do.
 - A count the stream sends malformed is null, shown as "–", never 0. A status the contract doesn't have is dropped.
 - Select from the live store with `useLive`, `useLiveCrawl` and `useLiveIds`. A selector returns stored values or
   primitives, never a new object.
@@ -220,7 +225,9 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   from where it opened (`inspectSteps` in its history state), so back and forward retrace the walk; Esc or Close goes
   back over those steps to the entry it opened on, then drops `inspect` there in place. So Esc then Alt+Left leaves
   the screen, and from a walk A, B, C, Alt+Left shows B while Esc from C closes to the screen as it was before A. A
-  screen's own replaces while it's open (Issues' filters and group) keep the history state (`state: true`).
+  screen's own replaces while it's open (Issues' filters and group) keep the history state (`state: true`). The
+  palette's "Go to URL…" is `goToUrl`: a walk on a view that has the inspector (`viewInspects`), and from any other
+  (Overview, the crawl's settings) the crawl's URLs with the inspector open, a place of its own that back leaves.
 - `/crawls/:crawl` opens the crawl's last view. The app reopens where it was left.
 - Each screen's route renders `RouteError` when it fails (Try again where it could work, and Go to Home); the shell
   keeps working around it. Each part of the shell (sidebar, top bar, the engine's banner, the inspector) has its own
@@ -313,6 +320,12 @@ slices.
   again only the controls whose keys changed, and a control without a command looks nothing up (grids put buttons and
   URLs in their cells).
 - The grid's keys are registered with `scope: 'grid'`: listed, never dispatched (the focused grid handles them).
+- The palette has two modes (`keyboard/paletteMode.ts`): the commands, and "Go to URL…" (`keyboard/GoToUrl.tsx`), a
+  field that looks a URL or a path up in the open crawl (`POST /urls/lookup`) and opens the inspector on it. The
+  command `go.url` opens it; so does a URL typed among the commands ("Go to URL /contact/": first for a scheme or a
+  path, after the commands for a bare host, which could be a word with a dot). What's wrong is said under the field
+  (`url-not-found`, `invalid-query`), never in a toast; a URL the crawl has only on another version of the site opens
+  with a toast naming the one asked for (`requested`). Backspace in the empty field goes back to the commands.
 - The palette is an ARIA combobox over a listbox on a Radix dialog. cmdk was the brief's pick, but its last release
   (1.1.1) leaves `aria-activedescendant` naming a stale or removed option, so screen readers hear the wrong command.
   Option ids are the entries' own, so the attribute changes whenever the highlighted command does, and a live region
@@ -360,9 +373,9 @@ screen, and one that a second screen needs moves here.
 | Severity | `SeverityMark` (shape and colour, the word its name) in dense rows; `SeverityBadge` (with the word) wherever there's room; `SeverityCount(s)` for counts. Notices are the quietest |
 | Status | `StatusPill` for a crawl's status (the words of `crawl/status.ts`), `LiveBadge` and `LiveDot` for what updates live, `StatusCode` for a status code's class (only that meaning), `Badge` for a label without colour (`dashed`: what didn't happen) |
 | Filters | `FilterChip` reads as a sentence, opens its editor, goes with ✕ or Delete (focus moves on to the next chip, else the one before, else Add filter); `AddFilterChip`; the `preview` chip beside a number that opens its URLs |
-| Numbers | `Num` (counts, bytes, ms, rates, percentages; the unit smaller and muted), `Duration`, `RelativeTime` (kept current by one minute clock for the app, `lib/clock.ts`, idle while the window is hidden; the exact time in its tooltip and read after it); `Stat` and `StatLink` (a figure that opens its URLs) in `Stats`, `MiniStat`s; `Meter` for a value on its check's scale; `ShareBar` for a share; `ProgressBar` with its phase; `RefreshLine` for a panel that's refreshing; `Spinner` only inside what's working |
+| Numbers | `Num` (counts, bytes, ms, rates, percentages; the unit smaller and muted), `Duration`, `RelativeTime` (kept current by one minute clock for the app, `lib/clock.ts`, idle while the window is hidden; the exact time in its tooltip and read after it); `Stat` and `StatLink` (a figure that opens its URLs) in `Stats`, `MiniStat`s; `Meter` for a value on its check's scale (limits that would print over each other, the value being far past them, are one tick: "30–60"); `ShareBar` for a share; `ProgressBar` with its phase; `RefreshLine` for a panel that's refreshing; `Spinner` only inside what's working |
 | Messages | `Callout` (insight, info, warning, error), `Banner` for a view's state with its one action, `EmptyState`, `FilteredEmptyState` (the filters and one-click clear), `SkippedState` (the reason in words). A callout's or banner's warning and error are the app's messages, never a finding's severity: they take the message tones (`--color-message-caution*`, quiet as clarity's out-of-date note; `--color-message-failure*`, the error hue under its own name, as the destructive fills) and Lucide's message icons, never the severity marks |
-| URLs and places | `Url` (mono, truncated in the middle to its measured width, path-only on the crawl's origin, copy on click, open in the browser), `Favicon`, `TextLink` and `NavItem` (router links; the current place keeps `.si-current`), `ListRow` and `ListHeading`, `PageHeader`, `SectionHeader`, `GridHeader` with `ResultCount`, `Facts`, `Card` |
+| URLs and places | `Url` (mono, truncated in the middle to its measured width, path-only on the crawl's origin, copy on click, open in the browser; with `onGo` a link in the app instead, in the link's colour, as the inspector walks to a URL, and `tabbable={false}` in a grid's cell), `Favicon`, `TextLink` and `NavItem` (router links; the current place keeps `.si-current`), `ListRow` and `ListHeading`, `PageHeader`, `SectionHeader`, `GridHeader` with `ResultCount`, `Facts`, `Card` |
 
 The states rule: a component isn't done until each state it can be in (default, hover, focus-visible, active or
 pressed, disabled, loading, invalid, selected or current, long text, empty) has its look in `components.css` and its
@@ -405,7 +418,7 @@ are drawn for the app and are never swapped for Lucide's.
 ## Left for the slices
 
 - Every screen except Home and Issues: Overview (live and done), the full URL and Links grids, Sitemaps, robots.txt,
-  New crawl, the crawl's settings, the inspector's content, the rest of Settings.
+  New crawl, the crawl's settings, the rest of Settings. The inspector is built (below).
 - The engine's E3b to E6: the links, sitemaps and robots grids, export, search, favicons. Analysis progress (E4) is in
   use on Issues (`crawl/analysis.ts` words its phases, for Overview too).
 - Export (E5) on Issues: this check, or every check with a summary sheet, and Ctrl+E. Until the engine has it, Issues
@@ -414,8 +427,8 @@ are drawn for the app and are never swapped for Lucide's.
   (`grid/filterSentence.ts`), so a group's "Show all N pages in URLs" lands somewhere legible, but nothing edits them.
 - A grid sorted by something other than crawl order keeps its selection by row index while a crawl adds rows, so a
   live refresh can move rows under it: selecting by row id comes with the full grid.
-- Each screen's own pieces, built from the components by its slice: the explanation band, charts, the inspector's
-  sections. A piece two screens need joins `src/ui`.
+- Each screen's own pieces, built from the components by its slice: the explanation band, charts. A piece two screens
+  need joins `src/ui`.
 - Drag-and-drop of `.sicrawl` files (the shell already delivers drops through Tauri's drag-drop event).
 
 ## Issues (the first slice)
@@ -452,3 +465,48 @@ are drawn for the app and are never swapped for Lucide's.
   has show passed, show hidden, Learn more and Cancel the analysis. Every check is in the palette by its title. J and
   K take focus in the list to the new check's option, and focus in the check (which goes with it) to the new check's
   title; anywhere else focus stays, and the new check is announced ("Title too long, 3 URLs").
+
+## The inspector
+
+`layout/InspectorSlot.tsx` is the sheet (where it docks, its size, the resize handle, Esc); `inspector/Inspector.tsx`
+is what it shows. What it settled:
+
+- **Pure first**, each unit-tested: `indexability.ts` (the four tests as a checklist, the failed ones, the verdict's
+  words), `scale.ts` (a value against the limits the analysis used: under, within or over, by how much, and the
+  check it trips), `redirectChain.ts` (the URL itself, then each hop, loops and too-long chains), `headers.ts`,
+  `structuredData.ts` (a block to a tree, its children capped), `fetchState.ts` (what the crawl did with the URL:
+  queued, skipped and why, blocked by robots.txt, no body…), `issueLinks.ts`, `hreflang.ts`, `links.ts`,
+  `sections.ts`, `sourceSearch.ts`. The words for the engine's values are in `words.ts`.
+- **One read for the URL, and sections with reads of their own.** `urlDetailQuery` (`/urls/inspect`) feeds the
+  summary, issues, redirects, headers, structured data and hreflang. The links are grids
+  (`['grid', 'inlinks' | 'outlinks', crawl, { urlId, kinds }]`, `GridCore` over `usePagedRows`), and the source is
+  read only while its section is open (kept 30 s once it isn't: a page can be 16 MB). So a section fails alone: when
+  `/urls/inspect` fails, its sections say so with Try again while the links and the source still load, and each
+  section has its own `RegionBoundary`. A stale id (`url-not-found`) is said plainly, with Close.
+- **Loading.** While another URL loads, the one shown stays for 150 ms (the query's placeholder), then the section's
+  skeleton: a quick walk never flashes, and a slow one never shows the wrong URL for long. A refresh keeps what's
+  shown under the thin line; a crawl's refreshes show nothing but the Live mark.
+- **Sections are tabs** (`ui/Tabs`), the one chosen remembered for the session (`sections.ts`, in `sessionStorage`)
+  and kept while walking, so inlink to inlink stays on Inlinks. A tab's count is what its section lists: the link
+  tabs' counts are the link endpoints' totals (every kind), read once the inspector has stayed on a URL for 200 ms;
+  the summary's `links` are the analysis's hyperlink counts, and are labelled so.
+- **Values on their scales.** `Meter` draws the title's and description's length, the word count, the response time
+  and the HTML's size against `limits`, which are the engine's (never hard-coded). A check is named beside a value
+  only when the URL's `issues` have it: a value out of range that the analysis didn't flag says how far out it is,
+  and no more.
+- **Issues lead to Issues**: each check's title is a link to it with the issue's group open (the engine's `group`,
+  or `issueLinks.ts`'s fallback for an engine without it), leaving the inspector; back returns to the URL.
+- **Walking.** A URL of the crawl inside the inspector is `WalkUrl` (`Url` with `onGo`): a push through
+  `useInspector().walk`. In the link grids Enter, a double-click or a click on the URL walks; the grid stays one Tab
+  stop, and the keyboard stays in the new URL's grid. Elsewhere the section's panel takes the focus the link loses.
+- **The source** (`SourceViewer.tsx`, loaded when first opened) is CodeMirror 6, read-only but focusable, with a
+  caret, so the keyboard moves through it and selects. It shows the stored HTML as text nodes: nothing of the page is
+  ever markup in the app. Its theme and highlight colours are tokens (`--color-code-*`: each 4.5:1 on the surfaces
+  and on a match's tint, system colours under forced colours). The search is the app's own field driving a state
+  field (`sourceSearch.ts`): matches are marked whether or not the field has focus, counted to 10,000, stepped with
+  Enter and Shift+Enter, searched 150 ms after typing pauses. Ctrl+F anywhere in the section focuses the field (the
+  section takes the key before the registry does). Alt+Left and Alt+Right stay the app's.
+- **Its commands** are the registry's Inspector group: open in the browser, copy the URL, dock at the bottom or on
+  the right, show each section, search the HTML source. None has a key of its own: Esc closes, and the rest are in
+  the palette and on the sheet's buttons.
+- **Targets.** Links stacked in lists (issues, a tree's rows) are at least `--target-min` (24 px) tall.

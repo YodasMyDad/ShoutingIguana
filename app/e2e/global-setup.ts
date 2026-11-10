@@ -1,5 +1,6 @@
 // Starts what the end-to-end tests run against, and returns the teardown:
-// 1. a temp data folder holding one crawl: SI_E2E_CRAWL's file, or a small synthetic crawl made with the CLI;
+// 1. a temp data folder holding one crawl: SI_E2E_CRAWL's file, or a small synthetic crawl made with the CLI, every
+//    planted case fetched and its HTML stored;
 // 2. the real sidecar (the one the shell bundles) on that folder, with a fresh state folder, allowing only the
 //    preview server's origin. The crawl's analysis must stand, as the tests assume: a cached synthetic crawl an
 //    older engine analysed is made again, and SI_E2E_CRAWL's copy is analysed again (startOnCurrentCrawl);
@@ -36,7 +37,9 @@ export default async function globalSetup() {
 
   const given = process.env.SI_E2E_CRAWL;
   const { sidecar, item } = await startOnCurrentCrawl({
-    crawl: given ? path.resolve(given) : path.join(appRoot, '.engine-build', 'crawls', 'e2e-synthetic.sicrawl'),
+    // Every planted case fetched and its HTML stored, for the inspector: a cache from before that has another name,
+    // so it's made again.
+    crawl: given ? path.resolve(given) : path.join(appRoot, '.engine-build', 'crawls', 'e2e-synthetic-full.sicrawl'),
     cached: !given,
     dataDir,
     token: E2E_TOKEN,
@@ -48,7 +51,7 @@ export default async function globalSetup() {
         dataDir,
         stateDir,
       }),
-    remake: (out) => makeSyntheticCrawl({ out, pages: 40 }),
+    remake: (out) => makeSyntheticCrawl({ out, pages: 40, maxUrls: 5_000, storeHtml: true }),
   });
 
   // What the library says the crawl is, for the tests to look for.

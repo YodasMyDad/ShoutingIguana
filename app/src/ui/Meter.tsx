@@ -26,12 +26,16 @@ export interface MeterProps {
 /** Room past the furthest of the value and the limit, so neither sits on the scale's end. */
 const SCALE_HEADROOM = 1.25;
 
+/** Limits closer together than this share of the scale (a value far past its range) are named by one tick. */
+const TICK_MERGE = 0.12;
+
 const pct = (value: number, scale: number) => `${Math.min(100, Math.max(0, (value / scale) * 100))}%`;
 
 /**
  * A value drawn on the scale its check used ("every value on its scale"): the allowed range as a band, its limits
  * marked, the value as a tick, and the part out of range in the severity's colour. Normal stays quiet; only what's
- * out of range glows. Read by screen readers as the value and its limits.
+ * out of range glows. Read by screen readers as the value and its limits. A value so far out that its limits would
+ * print over each other gets them as one tick ("30–60").
  */
 export function Meter({
   label,
@@ -60,6 +64,8 @@ export function Meter({
           : '');
   const state = under ? 'under the range' : over ? 'over the limit' : 'within the range';
   const style = (from: number, to: number): CSSProperties => ({ left: pct(from, scale), width: pct(to - from, scale) });
+  // Two ticks that would print over each other are one: "30–60".
+  const oneTick = min !== undefined && max !== undefined && (max - min) / scale < TICK_MERGE;
 
   return (
     <div className={clsx('si-meter', className)}>
@@ -93,16 +99,24 @@ export function Meter({
         <span className="si-meter__mark" style={{ left: pct(value, scale) }} />
       </div>
       <div className="si-meter__legend" aria-hidden="true">
-        {min !== undefined ? (
-          <span className="si-meter__tick" style={{ left: pct(min, scale) }}>
-            {formatTick(min)}
+        {oneTick ? (
+          <span className="si-meter__tick" style={{ left: pct((min + max) / 2, scale) }}>
+            {formatTick(min)}–{formatTick(max)}
           </span>
-        ) : null}
-        {max !== undefined ? (
-          <span className="si-meter__tick" style={{ left: pct(max, scale) }}>
-            {formatTick(max)}
-          </span>
-        ) : null}
+        ) : (
+          <>
+            {min !== undefined ? (
+              <span className="si-meter__tick" style={{ left: pct(min, scale) }}>
+                {formatTick(min)}
+              </span>
+            ) : null}
+            {max !== undefined ? (
+              <span className="si-meter__tick" style={{ left: pct(max, scale) }}>
+                {formatTick(max)}
+              </span>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );

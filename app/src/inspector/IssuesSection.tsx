@@ -87,7 +87,7 @@ export function IssuesSection({ detail }: { detail: UrlDetail }) {
                     checkId={entry.checkId}
                     // A check grouped by the other URL has this URL's group: the pages whose issue names it.
                     group={check?.grouping === 'relatedUrl' ? { detail: null, relatedUrlId: urlId } : undefined}
-                    className="min-w-0 font-medium"
+                    className="inline-flex min-h-(--target-min) min-w-0 items-center font-medium"
                   >
                     {checkTitle(check, ready)}
                   </IssueCheckLink>

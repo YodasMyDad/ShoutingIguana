@@ -121,10 +121,27 @@ export function buildCli(root = engineRoot()) {
 }
 
 /**
- * Crawls a synthetic site (the CLI's `testsite`, planted SEO issues) into `out`, analysed. Small by default, so it
- * takes seconds: enough for tests and for a quick look, with the 100k crawl kept for performance work.
+ * The CLI's arguments for a synthetic crawl. `maxUrls` is four URLs a page unless given: enough for the pages, and it
+ * leaves most of the planted cases unfetched. `storeHtml` keeps each page's HTML, for the inspector's source.
  */
-export async function makeSyntheticCrawl({ out, pages = 60, root = engineRoot(), log = console.log }) {
+export function syntheticCrawlArgs({ url, out, pages, maxUrls = pages * 4, storeHtml = false }) {
+  return ['crawl', url, '--db', out, '--max-urls', String(maxUrls), '--quiet', ...(storeHtml ? ['--store-html'] : [])];
+}
+
+/**
+ * Crawls a synthetic site (the CLI's `testsite`, planted SEO issues) into `out`, analysed. Small by default, so it
+ * takes seconds: enough for tests and for a quick look, with the 100k crawl kept for performance work. `maxUrls`
+ * lifts the URL limit so the planted cases (redirect chains, hreflang, broken JSON-LD) are fetched too, and
+ * `storeHtml` keeps each page's HTML in the crawl file, as the inspector's source needs.
+ */
+export async function makeSyntheticCrawl({
+  out,
+  pages = 60,
+  maxUrls,
+  storeHtml = false,
+  root = engineRoot(),
+  log = console.log,
+}) {
   const cli = buildCli(root);
   mkdirSync(path.dirname(out), { recursive: true });
   const site = spawn(cli, ['testsite', '--pages', String(pages), '--port', '0'], {
@@ -142,9 +159,8 @@ export async function makeSyntheticCrawl({ out, pages = 60, root = engineRoot(),
       site.once('exit', (code) => reject(new Error(`testsite exited with code ${code}`)));
     });
     log(`Crawling the synthetic site at ${url}…`);
-    const crawl = spawnSync(cli, ['crawl', url, '--db', out, '--max-urls', String(pages * 4), '--quiet'], {
-      stdio: 'inherit',
-    });
+    const args = syntheticCrawlArgs({ url, out, pages, storeHtml, ...(maxUrls === undefined ? {} : { maxUrls }) });
+    const crawl = spawnSync(cli, args, { stdio: 'inherit' });
     if (crawl.status !== 0) throw new Error(`The crawl failed with code ${crawl.status}`);
   } finally {
     site.kill();

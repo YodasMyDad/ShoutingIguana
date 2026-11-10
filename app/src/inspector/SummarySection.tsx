@@ -16,7 +16,7 @@ import { fetchState, type FetchState } from './fetchState';
 import { canonicalFact, indexabilityVerdict, type IndexabilityRow, type IndexabilityVerdict } from './indexability';
 import { checkTitle, useChecks, useInspectorContext } from './inspectorContext';
 import { issueLink } from './issueLinks';
-import { Block, IssueCheckLink, IssueList, SectionBody, WalkUrl } from './parts';
+import { Block, IssueCheckLink, IssueList, PageText, SectionBody, WalkUrl } from './parts';
 import { measuresOf, scaleEnd, type Measure } from './scale';
 import type { SectionId } from './sections';
 import { KIND_WORDS, SOURCE_WORDS, TYPE_WORDS, protocolWords, reasonPhrase, wordFor } from './words';
@@ -64,6 +64,11 @@ export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
         <>
           <Block>
             <div className="flex flex-col gap-5">
+              {detail.limits.fromAnalysis ? null : (
+                <p className="text-12 text-text-muted">
+                  Drawn against the default limits: this crawl hasn’t been analysed, so no limits of its own apply yet.
+                </p>
+              )}
               <MeasuredTexts
                 name="Title"
                 none="The page has no title."
@@ -304,7 +309,7 @@ function MeasuredTexts({
         return (
           <div key={index} className="flex flex-col gap-1.5">
             <TextHeading name={name} count={texts.length} index={index} />
-            <p className="text-14 wrap-anywhere text-text">{text.text}</p>
+            <PageText text={text.text} what={name.toLowerCase()} />
             {measure ? <ScaleMeter measure={measure} detail={detail} /> : null}
           </div>
         );
@@ -323,11 +328,7 @@ function PlainTexts({ name, none, texts }: { name: string; none: string; texts: 
       {texts.length === 0 ? (
         <p className="text-13 text-text-secondary">{none}</p>
       ) : (
-        texts.map((text, index) => (
-          <p key={index} className="text-14 wrap-anywhere text-text">
-            {text.text}
-          </p>
-        ))
+        texts.map((text, index) => <PageText key={index} text={text.text} what={name} />)
       )}
     </div>
   );

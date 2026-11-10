@@ -2017,6 +2017,8 @@
 
   /* A URL that goes somewhere in the app (the inspector walks to it): the link's colour, underlined on hover. */
   .si-url__go {
+    /* A pointer target of 24 px, however small the type: links like this stack in lists. */
+    padding-block: max(0px, calc((var(--target-min) - 1lh) / 2));
     cursor: pointer;
   }
 

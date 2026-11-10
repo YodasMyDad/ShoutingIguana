@@ -118,5 +118,8 @@ export function structuredDataSummary(blocks: readonly ParsedBlock[]): string {
   const parts = [...types, ...(invalid > 0 ? [`${invalid} that ${invalid === 1 ? 'doesn’t' : 'don’t'} parse`] : [])];
   const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1) ?? ''}` : (parts[0] ?? '');
   const count = formatCountOf(blocks.length, 'block');
+  // Nothing but blocks that don't parse: "1 block that doesn’t parse".
+  if (types.length === 0 && invalid === blocks.length)
+    return `${count} that ${invalid === 1 ? 'doesn’t' : 'don’t'} parse`;
   return list ? `${count}: ${list}` : count;
 }

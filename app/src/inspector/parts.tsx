@@ -1,7 +1,7 @@
 // The pieces the inspector's sections share: a titled block, a URL that walks the inspector to it, an issue's row,
 // the skeleton of a section, and what a section says when it couldn't be read.
 import clsx from 'clsx';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { CheckGroupRef } from '../api/grids';
 import type { UrlIssue } from '../api/inspector';
 import { ErrorState } from '../feedback/ErrorState';
@@ -129,19 +129,26 @@ export function IssueRow({ issue }: { issue: UrlIssue }) {
   const link = issueLink(issue, check?.grouping);
   const severity = issue.severity ?? check?.severity ?? 'notice';
   return (
-    <li className="grid min-h-(--row-height-issue) grid-cols-(--issue-row-columns) items-baseline gap-x-2.5 gap-y-0.5 py-1 text-13">
-      <span className="self-center">
+    <li className="grid min-h-(--row-height-issue) grid-cols-(--check-row-columns) gap-x-2 py-0.5 text-13">
+      <span className="flex h-(--target-min) items-center">
         <SeverityMark severity={severity} />
       </span>
-      <IssueCheckLink checkId={link.checkId} group={link.group} className="min-w-0 font-medium">
-        {checkTitle(check, ready)}
-      </IssueCheckLink>
-      <span className="figures text-12 text-text-muted">{issue.detail ?? ''}</span>
-      {issue.related ? (
-        <span className="col-span-2 col-start-2 min-w-0">
-          <WalkUrl id={issue.related.id} url={issue.related.url} />
-        </span>
-      ) : null}
+      <div className="min-w-0">
+        {/* The detail sits beside the title while there's room; a long one (a parser's message) goes under it. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3">
+          <IssueCheckLink
+            checkId={link.checkId}
+            group={link.group}
+            className="inline-flex min-h-(--target-min) items-center font-medium"
+          >
+            {checkTitle(check, ready)}
+          </IssueCheckLink>
+          {issue.detail ? (
+            <span className="figures min-w-0 text-12 wrap-anywhere text-text-muted">{issue.detail}</span>
+          ) : null}
+        </div>
+        {issue.related ? <WalkUrl id={issue.related.id} url={issue.related.url} /> : null}
+      </div>
     </li>
   );
 }
@@ -153,6 +160,32 @@ export function IssueList({ issues, label }: { issues: readonly UrlIssue[]; labe
         <IssueRow key={`${issue.checkId}-${index}`} issue={issue} />
       ))}
     </ul>
+  );
+}
+
+/** Text longer than this (a stuffed description) folds to a few lines until it's asked for. */
+const LONG_TEXT = 320;
+
+/** A title, a description or an H1 as the page gives it. A very long one folds, so it never buries the rest. */
+export function PageText({ text, what }: { text: string; what: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > LONG_TEXT;
+  return (
+    <div>
+      <p className={long && !open ? 'line-clamp-4 text-14 wrap-anywhere text-text' : 'text-14 wrap-anywhere text-text'}>
+        {text}
+      </p>
+      {long ? (
+        <button
+          type="button"
+          className="si-link mt-1 min-h-(--target-min) text-12"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {open ? 'Show less' : 'Show it all'} <span className="sr-only">of the {what}</span>
+        </button>
+      ) : null}
+    </div>
   );
 }
 

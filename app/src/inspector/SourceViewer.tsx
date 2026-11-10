@@ -118,6 +118,8 @@ export default function SourceViewer({ html: source, label, wrap, query, current
             'aria-label': start.label,
             'aria-readonly': 'true',
             'aria-multiline': 'true',
+            // In the tab order by name, so the scrolling region it's in is the keyboard's too.
+            tabindex: '0',
           }),
           lineNumbers(),
           highlightSpecialChars(),

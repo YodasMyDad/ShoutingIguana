@@ -16,7 +16,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, it } from 'node:test';
-import { copyCrawl, isCurrentCopy, readyLine, startOnCurrentCrawl } from './engine.mjs';
+import { copyCrawl, isCurrentCopy, readyLine, startOnCurrentCrawl, syntheticCrawlArgs } from './engine.mjs';
 
 const folders = [];
 function folder() {
@@ -226,5 +226,21 @@ describe('the crawl the end-to-end tests run on', () => {
     await sidecar.stop();
     assert.equal(item.outOfDate, false);
     assert.deepEqual([next.record.starts, next.record.analyses], [1, 0]);
+  });
+});
+
+describe('a synthetic crawl', () => {
+  const site = { url: 'http://127.0.0.1:5000/', out: 'out.sicrawl', pages: 40 };
+
+  it('fetches four URLs a page unless told how many, and stores HTML only when asked', () => {
+    const plain = syntheticCrawlArgs(site);
+    assert.deepEqual(plain, ['crawl', site.url, '--db', 'out.sicrawl', '--max-urls', '160', '--quiet']);
+    assert.deepEqual(syntheticCrawlArgs({ ...site, storeHtml: true }), [...plain, '--store-html']);
+    assert.deepEqual(syntheticCrawlArgs({ ...site, maxUrls: 5_000, storeHtml: true }).slice(4), [
+      '--max-urls',
+      '5000',
+      '--quiet',
+      '--store-html',
+    ]);
   });
 });

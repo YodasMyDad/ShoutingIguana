@@ -95,28 +95,31 @@ function Header({ row }: { row: HeaderRow }) {
           <span className="shrink-0 font-sans text-text-muted">sent {row.values.length} times</span>
         ) : null}
       </dt>
-      {row.values.map((value, index) => (
-        <dd
-          key={index}
-          className={
-            folded
-              ? 'mt-0.5 line-clamp-2 font-mono text-12 wrap-anywhere text-text'
-              : 'mt-0.5 font-mono text-12 wrap-anywhere text-text'
-          }
-        >
-          {value === '' ? <span className="font-sans text-text-muted">Empty</span> : value}
-        </dd>
-      ))}
-      {row.long ? (
-        <button
-          type="button"
-          className="si-link mt-1 text-12"
-          aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
-        >
-          {open ? 'Show less' : 'Show it all'} <span className="sr-only">of {row.name}</span>
-        </button>
-      ) : null}
+      {/* One `dd` for every value sent under the name, and the button that unfolds them: a `dl` takes nothing else. */}
+      <dd className="mt-0.5">
+        {row.values.map((value, index) => (
+          <p
+            key={index}
+            className={
+              folded
+                ? 'line-clamp-2 font-mono text-12 wrap-anywhere text-text'
+                : 'font-mono text-12 wrap-anywhere text-text'
+            }
+          >
+            {value === '' ? <span className="font-sans text-text-muted">Empty</span> : value}
+          </p>
+        ))}
+        {row.long ? (
+          <button
+            type="button"
+            className="si-link mt-1 min-h-(--target-min) text-12"
+            aria-expanded={open}
+            onClick={() => setOpen((value) => !value)}
+          >
+            {open ? 'Show less' : 'Show it all'} <span className="sr-only">of {row.name}</span>
+          </button>
+        ) : null}
+      </dd>
     </div>
   );
 }

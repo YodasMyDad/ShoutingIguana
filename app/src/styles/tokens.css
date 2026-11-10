@@ -321,11 +321,10 @@
   --checks-height-stacked: max(50vh, 18rem); /* the checks list's rows above the selected check, when they stack */
   --evidence-max-height: 64vh; /* a check's affected pages: its grid scrolls inside this */
   --explain-columns: repeat(auto-fit, minmax(13rem, 1fr)); /* what's wrong, why it matters, how to fix it */
-  /* The inspector's rows: a mark, then the words; an issue's mark, its check and its detail. */
+  /* The inspector's rows: a mark, then the words. */
   --check-row-columns: var(--leading-13) minmax(0, 1fr);
-  --issue-row-columns: var(--icon-sm) minmax(0, 1fr) auto;
   --chain-columns: var(--icon-box) minmax(0, 1fr); /* a redirect chain's rail, then each step */
-  --hreflang-columns: minmax(3rem, max-content) minmax(0, 1fr); /* the language, then where it points */
+  --hreflang-columns: 5.5rem minmax(0, 1fr); /* the language ("x-default"), then where it points */
   --content-max: 1136px;
   --page-gutter: var(--space-8);
   --sheet-inset: var(--space-2);
@@ -337,6 +336,7 @@
   --control-height-sm: 28px;
   --control-height-lg: 52px;
   --control-height-xs: 24px; /* status pill, small chips, badges with text */
+  --target-min: 24px; /* the least a pointer target may be (WCAG 2.2, 2.5.8), where targets stack */
   --chip-height: 28px;
   --icon-xs: 12px;
   --icon-sm: 14px;

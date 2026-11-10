@@ -18,4 +18,14 @@ describe('Meter', () => {
     );
     expect(meter).toHaveAttribute('aria-valuetext', '150 characters, limit 60, over the limit');
   });
+
+  it('names limits that would print over each other with one tick', () => {
+    const { container, rerender } = render(
+      <Meter label="Title length" value={569} min={30} max={60} valueText="569 characters" />,
+    );
+    const ticks = () => [...container.querySelectorAll('.si-meter__tick')].map((tick) => tick.textContent);
+    expect(ticks()).toEqual(['30–60']);
+    rerender(<Meter label="Title length" value={72} min={30} max={60} valueText="72 characters" />);
+    expect(ticks()).toEqual(['30', '60']);
+  });
 });

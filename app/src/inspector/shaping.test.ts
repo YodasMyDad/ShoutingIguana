@@ -184,6 +184,9 @@ describe('structured data', () => {
     expect(structuredDataSummary(blocks)).toBe('3 blocks: Product, BreadcrumbList and 1 that doesn’t parse');
     expect(structuredDataSummary(blocks.slice(0, 1))).toBe('1 block: Product');
     expect(structuredDataSummary(parseStructuredData([block({})]))).toBe('1 block');
+    const broken = block('{', { valid: false, error: 'Unexpected end.' });
+    expect(structuredDataSummary(parseStructuredData([broken]))).toBe('1 block that doesn’t parse');
+    expect(structuredDataSummary(parseStructuredData([broken, broken]))).toBe('2 blocks that don’t parse');
   });
 });
 

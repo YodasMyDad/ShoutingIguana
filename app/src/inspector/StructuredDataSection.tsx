@@ -126,13 +126,13 @@ function Node({ node, depth, root = false }: { node: DataNode; depth: number; ro
 
   const { children, more } = visibleChildren(node, shown);
   return (
-    <li className="py-0.5">
+    <li>
       <button
         type="button"
         aria-expanded={open}
         aria-controls={groupId}
         onClick={() => setOpen((value) => !value)}
-        className="flex max-w-full items-center gap-1 rounded-xs text-left hover:bg-surface-hover"
+        className="flex min-h-(--target-min) max-w-full items-center gap-1 rounded-xs text-left hover:bg-surface-hover"
       >
         <Icon icon={open ? ChevronDown : ChevronRight} size="xs" className="shrink-0 text-text-muted" />
         {key ?? (root ? null : <span className="text-text-muted">item</span>)}
@@ -145,7 +145,11 @@ function Node({ node, depth, root = false }: { node: DataNode; depth: number; ro
           ))}
           {more > 0 ? (
             <li className="py-1 pl-5 font-sans">
-              <button type="button" className="si-link text-12" onClick={() => setShown((value) => value + CHILD_PAGE)}>
+              <button
+                type="button"
+                className="si-link min-h-(--target-min) text-12"
+                onClick={() => setShown((value) => value + CHILD_PAGE)}
+              >
                 Show {formatCount(Math.min(more, CHILD_PAGE))} more
                 <span className="text-text-muted"> of {formatCount(more)}</span>
               </button>
