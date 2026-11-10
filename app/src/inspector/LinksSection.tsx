@@ -1,6 +1,6 @@
 import { useRouter } from '@tanstack/react-router';
 import { Link2Off } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { api } from '../api/client';
 import { LINK_KINDS, type LinkKind, type LinkRow } from '../api/inspector';
 import { linksAsGridPage, queryKeys } from '../api/queries';
@@ -113,6 +113,18 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
     frame.current?.querySelector<HTMLElement>('[role="grid"]')?.focus({ preventScroll: true });
   }, [urlId]);
 
+  // A double-click on a row walks once. The first click of one on a row's URL has walked already, and its second
+  // may land on the grid that came (the next URL's links): a double-click counts for a grid only when both its
+  // presses were on it, and never on the URL, whose click is the walk.
+  const presses = useRef({ grid: '', count: 0 });
+  const countPress = () => {
+    presses.current = { grid: gridKey, count: presses.current.grid === gridKey ? presses.current.count + 1 : 1 };
+  };
+  const ownDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
+    const onUrl = event.target instanceof Element && event.target.closest('.si-url__go') !== null;
+    if (onUrl || presses.current.grid !== gridKey || presses.current.count < 2) event.stopPropagation();
+  };
+
   const urlWidth = Math.max(
     MIN_URL_WIDTH,
     (width ?? 0) - STATUS_WIDTH - TEXT_WIDTH - KIND_WIDTH - POSITION_WIDTH - FOLLOW_WIDTH - FRAME_SLACK,
@@ -198,7 +210,13 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
       {failed ? (
         <SectionError error={rows.error} onRetry={rows.refetch} what={`The ${words.noun}s`} />
       ) : (
-        <div ref={measure} className="flex min-h-0 flex-1 flex-col px-2 pb-2">
+        // The presses are counted on their way to the grid, which has the keys and the pointer's own handlers.
+        <div
+          ref={measure}
+          className="flex min-h-0 flex-1 flex-col px-2 pb-2"
+          onPointerDownCapture={countPress}
+          onDoubleClickCapture={ownDoubleClick}
+        >
           <GridCore<LinkRow>
             key={gridKey}
             label={words.grid}

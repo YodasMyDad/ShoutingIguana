@@ -190,7 +190,11 @@ export function Url({
             tabIndex={tabbable ? undefined : -1}
             // Out of the tab order, a press leaves focus where it is (on the grid the link is in).
             onMouseDown={tabbable ? undefined : (event) => event.preventDefault()}
-            onClick={onGo}
+            // The second click of a double-click isn't another go: the first has gone, and what's under the pointer
+            // now may be another link (the inspector's next URL).
+            onClick={(event) => {
+              if (event.detail <= 1) onGo();
+            }}
           >
             {text}
           </button>

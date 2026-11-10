@@ -663,6 +663,39 @@ describe('walking the site', () => {
     expect(router.state.location.pathname).toBe(`/crawls/${TEST_CRAWL_ID}/overview`);
   });
 
+  it('walks one step for a double-click on a link grid’s URL, whichever grid its second click lands on', async () => {
+    const history = createMemoryHistory({ initialEntries: [`${URLS}?inspect=2`] });
+    const { router, inspector, user } = await open('', SITE, history);
+    await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
+    const inlinks = await within(inspector).findByRole('grid', { name: 'Inlinks' });
+    // Both clicks before the next URL's grid is there: the first walks, the second and the double-click don't.
+    await user.dblClick(await within(inlinks).findByRole('button', { name: HOME.url }));
+    await waitFor(() => expect(inspected(router)).toBe(1));
+    await within(inspector).findByRole('heading', { level: 2, name: HOME.url });
+    expect(history.length).toBe(2);
+
+    // The second click landing on the grid that came, on a row beside its URL: one press there, then the
+    // double-click, which isn't this grid's.
+    const next = within(inspector).getByRole('grid', { name: 'Inlinks' });
+    const cell = await within(next).findByText('Home');
+    fireEvent.pointerDown(cell);
+    fireEvent.click(cell, { detail: 2 });
+    fireEvent.doubleClick(cell);
+    // Or on its URL: a double-click's second click is no go of its own.
+    const link = within(next).getByRole('button', { name: OTHER.url });
+    fireEvent.pointerDown(link);
+    fireEvent.click(link, { detail: 2 });
+    fireEvent.doubleClick(link);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(inspected(router)).toBe(1);
+    expect(history.length).toBe(2);
+
+    // A double-click of its own on a row still walks.
+    await user.dblClick(within(next).getByText('Home'));
+    await waitFor(() => expect(inspected(router)).toBe(3));
+    expect(history.length).toBe(3);
+  });
+
   it('keeps the keyboard in the link grid, on the row it was left on, back and forward along a walk', async () => {
     const history = createMemoryHistory({ initialEntries: [`${URLS}?inspect=2`] });
     const { router, inspector, user } = await open('', SITE, history);

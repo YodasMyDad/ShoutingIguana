@@ -510,7 +510,9 @@ is what it shows. What it settled:
   it builds against the real groups of three analyses (`scripts/issue-links-fixture.mjs` makes its fixture).
 - **Walking.** A URL of the crawl inside the inspector is `WalkUrl` (`Url` with `onGo`): a push through
   `useInspector().walk`. In the link grids Enter, a double-click or a click on the URL walks; the grid stays one Tab
-  stop.
+  stop. A double-click is one step wherever it lands: the second click of one is no go of its own (`Url`), and a
+  double-click counts for a link grid only when both its presses were on that grid, off the URL (the first click on
+  a URL has walked, and the second may land on the next URL's grid).
 - **Focus stays in the inspector from URL to URL.** Another URL (a walk, back or forward) takes away what the
   section shows, so before a navigation that changes `inspect`, focus inside the section moves to its panel
   (`onBeforeNavigate`): it never falls to the view behind, where the next arrow key would change the URL inspected.
