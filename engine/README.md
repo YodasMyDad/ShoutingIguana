@@ -490,7 +490,9 @@ method takes a `CancellationToken`, which stops the read within milliseconds.
   (`ReadRows`).
 
 Three more read what the Links, Sitemaps and robots.txt screens show (see [below](#links-sitemaps-and-robotstxt)):
-`LinkGridReader`, `SitemapListReader` (with `UrlGridReader.QuerySitemap`) and `RobotsReader`.
+`LinkGridReader`, `SitemapListReader` (with `UrlGridReader.QuerySitemap`) and `RobotsReader`. `CrawlStatsReader.Read`,
+the crawl's headline numbers (`si stats`, the API's `/stats`), reads the same way: one snapshot, stopped by its token,
+and kept in the `ReadCache` it's given while the crawl stands still.
 
 A query (`UrlQuery`) has typed filters per column, up to three sort keys with unknown values last, a quick search of
 the URL and title, the columns to read, and `offset` plus `limit` (up to 1,000) to reach any row, or the `after` cursor
@@ -668,6 +670,8 @@ half way or just past it), on a 32-core Windows machine (20 runs at 100k, 5 at 1
 | The links grid, one pass over the links: text and search filters, and everything without the link summary (`link-pass`) | 1,232 | not measured | | 2,500 |
 | Sitemaps: the list, a sitemap's URLs (`sitemaps`) | 31 | not measured | | 200 |
 | robots.txt: origins, a file, its blocked URLs (`robots`) | 34 | not measured | | 200 |
+| The crawl's headline numbers: read, and read again from what was kept (`stats`) | 165 | not measured | | 350 |
+| The same without the link summary: the links counted, each sitemap page looked up among them (`stats-pass`) | 257 | not measured | | 600 |
 
 The facets of the pages without the summary take 1.35 s at 1M: they read and judge every row of the crawl's own tables.
 Every other read of 1M in the table is under 1 s apart from `links-kind`, which was measured before its index (below);
@@ -681,6 +685,14 @@ pages' links would take ten times that. Of the rest, the slowest are a filter on
 that say nofollow are read first), the facets (49–51 ms), a sort by the target (42–55 ms at any place) and links to a
 few thousand targets (27–47 ms); a page of any filter on what a link is, anywhere in 4.4 million hyperlinks, takes
 3 ms.
+
+`stats` and `stats-pass` (E3c) are `CrawlStatsReader.Read`, Overview's headline numbers. It reads the URLs once and the
+responses once, counting each row every way it's wanted as it's read (`si_tally(slot, value)`), where it ran a statement
+for each number (0.96 s, 1.16 s at p95): 100 ms, and 1 ms from what's kept once read. With the link summary no link is
+read: it has the number of links, and counts each URL's links from other pages apart from a page's links to itself,
+which says which pages a sitemap led to have none. Without it the links are counted and each of those pages is looked
+up among them (183 ms). The gates are twice the desktop's worst p95, for the runner. Both grow with the URLs: a first
+read of a million would take about a second, which wasn't measured.
 
 The E3b review added the links to a few targets with many links between them, a menu's, to `link-grid`: the twelve most
 linked pages, URLs under `/c/`, URLs with over 50,000 inlinks, pages a click from the start (1.3 to 2.7 million links,

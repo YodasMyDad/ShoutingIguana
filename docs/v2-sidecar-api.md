@@ -549,6 +549,20 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 | `GET /api/crawls/{id}/stats` | `CrawlStatsReader.Read`. `nonIndexableReasons` counts the site's URLs as the checks and the URL summary do: the probes of its other versions are left out, and so are the URLs that weren't checked, which `notCheckedCount` gives |
 | `GET /api/crawls/{id}/issues/{checkId}?limit=200&offset=0` | `{ rows: [{ url, detail, relatedUrl }], total }`. `total` is null for a check that was skipped, never 0 |
 
+**`/stats` is read as a grid is** (E3c), and its answer is what it always was:
+
+- **One snapshot.** Every number is of the same moment of the file, a running crawl's included.
+- **Kept.** The numbers are kept with the grids' counts, per crawl file, crawl stamp and analysis: they're read once
+  while the crawl stands still, so Overview's call costs a read once per crawl, and a running crawl's are kept for 2 s.
+- **Served as the grids' reads are.** It takes one of the grid read slots, a request given up stops its read, and an
+  analysis or a continue starting never waits on it.
+- **What the first read costs.** One pass over the URLs and one over the responses, whatever is counted from them
+  (it was a pass for each number). Where the analysis's link summary counts the crawl as it stands, no link is read:
+  `linkCount` is the links grid's `total`, and `unlinkedPageCount` comes from the summary's count of each URL's links
+  from other pages. Without it (a crawl running, never analysed, continued since its analysis, or analysed before
+  E3b), the links are counted and each page a sitemap led to is looked up among them. Measured under
+  [Engine changes E3c made](#engine-changes-e3c-made).
+
 E3 replaces the issues endpoint with keyset paging and grouping. Its grid queries are `POST`s to one fixed URL
 per grid (see CORS above). The URL grids read the URL summary each analysis builds (E2, `url_summary` in
 [the engine's README](../engine/README.md#url-summary)): one row per URL, with indexes for the common sorts and
@@ -1583,3 +1597,27 @@ nothing kept, on a 32-core Windows machine that other work was sharing.
   assertion that fails without the code.
 - **Not changed:** the inspector's `issues[].group` in the client's types (finding 6), which the inspector's own
   branch already has as optional.
+
+## Engine changes E3c made
+
+What the Overview and inspector slices found the engine lacked. Each has its own tests. Measured on the 100k benchmark
+crawl (112,589 URLs, 5,054,060 links), p95 over 20 runs with `si readbench`, each read on a fresh connection with
+nothing kept, on a 32-core Windows machine that other work was sharing.
+
+- **`/stats` in one pass.** `CrawlStatsReader.Read` read the responses six times, a statement a number, and looked
+  every page a sitemap led to up among the links: 0.96 s at p50 and 1.16 s at p95, and nothing was kept. It now reads
+  the URLs once and the responses once (the rows counted as they're read, by outcome, status and reason at once), on
+  one snapshot, through the grids' own way in (`GridReadContext`), so it's stopped, queued and kept as their reads
+  are. With the link summary it reads no link. The answers are the same: the tests hold every number to a statement
+  of its own, as the reader first had them, on a crawl analysed, continued since, never analysed, and holding values
+  no engine writes.
+
+  | Read | Before | Now |
+  | --- | --- | --- |
+  | `/stats`, with the link summary | 0.76 to 0.96 s (0.95 to 1.16 at p95) | 100 ms (125 to 165 at p95) |
+  | `/stats`, without it: the links counted, each sitemap page looked up among them | the same read | 183 ms (189 to 257) |
+  | `/stats` again, the crawl unchanged | as the first | 1 ms |
+
+  It grows with the URLs, so the first read of a million URLs would take about a second, which wasn't measured; the
+  reads after it are kept. `si readbench` times both (`stats`, `stats-pass`) and holds them to twice the desktop's
+  worst, for CI's runner.
