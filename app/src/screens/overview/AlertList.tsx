@@ -64,10 +64,14 @@ interface AlertItemProps {
 
 /** One alert. Drawn again only when it changes: the list is redrawn with every alert raised, and may be long. */
 const AlertItem = memo(function AlertItem({ crawlId, entry, live, canContinue, onContinue }: AlertItemProps) {
+  // A count that goes on rising is the file's as it was read, once: not said beside a crawl that's still running.
+  const tally = live ? null : entry.tally;
   return (
     <li>
       <Callout tone={TONES[entry.level]} title={entry.title}>
-        {entry.detail ? <p className="break-words">{entry.detail}</p> : null}
+        {entry.detail || tally ? (
+          <p className="break-words">{[entry.detail, tally].filter(Boolean).join(' ')}</p>
+        ) : null}
         {entry.advice ? <p>{entry.advice}</p> : null}
         {/* Under the words, not beside them: the card is narrow, and the words need its width. */}
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">

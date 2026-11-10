@@ -343,7 +343,8 @@ describe('the Overview of an analysed crawl', () => {
     await open();
     const alerts = await findRegion('Alerts');
     expect(await alerts.findByText('The site is blocking the crawl')).toBeVisible();
-    expect(alerts.getByText(/37 responses blocked so far/)).toBeVisible();
+    // The crawl is over: what it came to, not "so far".
+    expect(alerts.getByText('example.com answered with a Cloudflare challenge. 37 responses blocked.')).toBeVisible();
     expect(pathOf(alerts.getByRole('link', { name: 'Open the crawl’s settings' }))).toBe(
       `/crawls/${TEST_CRAWL_ID}/settings`,
     );
@@ -900,6 +901,36 @@ describe('the Overview while the crawl runs', () => {
     expect(
       region('Holding it up now').getByText('example.com asks for 5 s between requests in its robots.txt.'),
     ).toBeVisible();
+  });
+
+  it('makes no claim of how many responses a host has blocked “so far” while the crawl runs', async () => {
+    // The count is the file's, read once when the screen opens (`GET /alerts`): 37 then. The crawl goes on being
+    // blocked, the alert isn't raised again for the host, and nothing asks again, so "37 so far" stood for as long
+    // as the screen was open, beside a Blocked class that had long passed it.
+    const blocked = alert({
+      id: 2,
+      code: 'blocked',
+      data: { host: 'example.com', reason: 'Cloudflare challenge', count: 37 },
+    });
+    const { requests } = sidecar({ analysis: null, item: LIVE_ITEM, alerts: [blocked] });
+    await open();
+    await heard(progress(100));
+    const alerts = region('Alerts');
+    expect(await alerts.findByText('The site is blocking the crawl')).toBeVisible();
+    // Ten minutes on, with 600 blocked responses by the crawl's own count.
+    const later = progressAt(700, POLITE);
+    await heard(
+      message('progress', { ...later, blocked: 600, statusClasses: { ...later.statusClasses, blocked: 600 } }),
+    );
+    expect(requests.filter((request) => request.path.endsWith('/alerts'))).toHaveLength(1);
+    expect(
+      within(region('Status codes').getByRole('list', { name: 'Status codes by class' })).getByRole('link', {
+        name: /^Blocked/,
+      }),
+    ).toHaveTextContent('600');
+    expect(alerts.queryByText(/so far/)).toBeNull();
+    expect(alerts.queryByText(/37 responses/)).toBeNull();
+    expect(alerts.getByText('example.com answered with a Cloudflare challenge.')).toBeVisible();
   });
 
   it('reads out an alert as it’s raised, the first included, and not its age again every minute', async () => {

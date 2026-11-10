@@ -21,6 +21,13 @@ export interface AlertEntry {
   title: string;
   /** The facts: which host, how many, why. Null when the title says it all. */
   detail: string | null;
+  /**
+   * What it came to in the whole crawl, for an alert whose count goes on rising while the crawl runs (a blocked
+   * host's responses): "37 responses blocked.". It's the crawl file's count as it was when the alerts were read, and
+   * nothing reads them again while the crawl runs, so it's said only of a crawl that isn't running: beside a live
+   * crawl it stood still, as "so far", while the crawl went on being blocked. Null when there's none.
+   */
+  tally: string | null;
   /** What to do about it. Null for one that needs nothing done. */
   advice: string | null;
   action: AlertAction | null;
@@ -35,19 +42,17 @@ const SITEMAPS: AlertAction = { kind: 'sitemaps', label: 'Open Sitemaps' };
 const BLOCKED_ADVICE =
   'Stop the crawl and continue it more slowly, add the headers the site expects, or crawl as another user agent.';
 
-function words(alert: AlertEvent): Pick<AlertEntry, 'title' | 'detail' | 'advice' | 'action'> {
+function words(alert: AlertEvent): Pick<AlertEntry, 'title' | 'detail' | 'advice' | 'action'> & { tally?: string } {
   const data = alert.data ?? {};
   const where = data.host ?? data.origin ?? 'The site';
   switch (alert.code) {
     case 'blocked':
       return {
         title: 'The site is blocking the crawl',
-        detail: [
-          `${where} answered with ${data.reason ? withArticle(data.reason) : 'a block page'}.`,
-          data.count !== undefined && data.count > 1 ? `${formatCountOf(data.count, 'response')} blocked so far.` : '',
-        ]
-          .filter(Boolean)
-          .join(' '),
+        detail: `${where} answered with ${data.reason ? withArticle(data.reason) : 'a block page'}.`,
+        ...(data.count !== undefined && data.count > 1
+          ? { tally: `${formatCountOf(data.count, 'response')} blocked.` }
+          : {}),
         advice: BLOCKED_ADVICE,
         action: SETTINGS,
       };
@@ -151,7 +156,7 @@ function withArticle(reason: string): string {
 /**
  * The alerts to show, newest first. An alert is its id and its time together, so one heard live and read back from the
  * file is shown once. `blocked` is raised once per host in each run, each time with the host's count so far: it shows
- * once per host, as the latest.
+ * once per host, as the latest, and its count is the entry's `tally`, for a crawl that isn't running.
  */
 export function alertEntries(...sources: readonly (readonly AlertEvent[] | undefined)[]): AlertEntry[] {
   const byKey = new Map<string, AlertEvent>();
@@ -172,7 +177,14 @@ export function alertEntries(...sources: readonly (readonly AlertEvent[] | undef
       if (blockedHosts.has(host)) continue;
       blockedHosts.add(host);
     }
-    entries.push({ key: alertKey(alert), code: alert.code, level: alert.level, at: alert.at, ...words(alert) });
+    entries.push({
+      key: alertKey(alert),
+      code: alert.code,
+      level: alert.level,
+      at: alert.at,
+      tally: null,
+      ...words(alert),
+    });
   }
   return entries;
 }

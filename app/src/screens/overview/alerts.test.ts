@@ -22,7 +22,9 @@ describe('alerts', () => {
     expect(blocked).toMatchObject({
       level: 'warning',
       title: 'The site is blocking the crawl',
-      detail: 'www.example.com answered with a Cloudflare challenge. 12 responses blocked so far.',
+      detail: 'www.example.com answered with a Cloudflare challenge.',
+      // What it came to, apart: said of a crawl that isn't running, as the count is read once and would stand still.
+      tally: '12 responses blocked.',
       action: { kind: 'crawlSettings' },
     });
     expect(blocked?.advice).toMatch(/more slowly/);
@@ -104,7 +106,7 @@ describe('alerts', () => {
     ]);
     expect(entries).toHaveLength(1);
     expect(entries[0]?.at).toBe('2026-11-10T08:55:57.52Z');
-    expect(entries[0]?.detail).toContain('9 responses');
+    expect(entries[0]?.tally).toBe('9 responses blocked.');
   });
 
   it('tells apart two alerts that share an id but not a time (a crash lost the first)', () => {
@@ -115,7 +117,7 @@ describe('alerts', () => {
     expect(entries).toHaveLength(2);
   });
 
-  it('shows a blocked host once, as the latest, with the count so far', () => {
+  it('shows a blocked host once, as the latest, with what it came to', () => {
     const entries = alertEntries(
       // Heard live: the one response that raised it.
       [alert({ id: 5, code: 'blocked', at: '2026-11-01T12:00:00.000Z', data: { host: 'www.example.com', count: 1 } })],
@@ -126,10 +128,16 @@ describe('alerts', () => {
         alert({ id: 3, code: 'blocked', at: '2026-11-01T10:30:00.000Z', data: { host: 'shop.example.com', count: 2 } }),
       ],
     );
-    expect(entries.map((entry) => [entry.key, entry.detail])).toEqual([
-      ['5@2026-11-01T12:00:00.000Z', 'www.example.com answered with a block page. 40 responses blocked so far.'],
-      ['3@2026-11-01T10:30:00.000Z', 'shop.example.com answered with a block page. 2 responses blocked so far.'],
+    expect(entries.map((entry) => [entry.key, entry.detail, entry.tally])).toEqual([
+      ['5@2026-11-01T12:00:00.000Z', 'www.example.com answered with a block page.', '40 responses blocked.'],
+      ['3@2026-11-01T10:30:00.000Z', 'shop.example.com answered with a block page.', '2 responses blocked.'],
     ]);
+    // The one response that raised it isn't a count worth saying, and no other alert has one.
+    const [once, sitemaps] = alertEntries([
+      alert({ id: 6, code: 'blocked', at: '2026-11-01T12:00:01.000Z', data: { host: 'b.example.com', count: 1 } }),
+      alert({ id: 1, code: 'sitemaps', data: { count: 3, urlCount: 4_180 } }),
+    ]);
+    expect([once?.tally, sitemaps?.tally]).toEqual([null, null]);
   });
 });
 
