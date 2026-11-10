@@ -204,10 +204,18 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   the site's own counts, the URL limit (null is "no limit", undefined "not said"), the status classes and codes, why
   URLs got no response, and the waits. A breakdown with a part missing is null rather than short, as its parts
   wouldn't add up. An alert keeps its `id` and its facts; a hello's `analyzing` crawls are live.
+- Each crawl keeps a **run clock** (`RunClock`): how long the run being watched has spent crawling. It advances by the
+  time between progress events while the crawl's status is `running`, stands still while it's paused or stopping, and
+  starts again when the crawl is continued (the engine's `elapsedMs` starts again). The engine has no such figure: its
+  `elapsedMs` is the run's wall time, pauses included, which is where the clock starts for a run the page comes to
+  part-way. It is the one clock the live screen's times go by.
 - Each crawl keeps a **trail** for the found-and-crawled chart: a point per progress event at first, at most 600
   however long it runs (when full, every other point goes and from then on every second event is kept, then every
-  fourth), with the newest always last. `GET /history` gives what came before the page heard of the crawl; the trail
-  carries the chart on (`screens/overview/foundAndCrawled.ts`).
+  fourth), with the newest always last, each placed on the run clock. `GET /history` gives what came before the page
+  heard of the run; the trail carries the chart on (`screens/overview/foundAndCrawled.ts`). It starts again with a new
+  run.
+- Each crawl keeps its **pace samples**: one per progress event taken while it was running, as far back as a minute of
+  the run clock, never thinned. A long crawl's pace is as exact as a short one's, and a pause is no part of it.
 - Select from the live store with `useLive`, `useLiveCrawl` and `useLiveIds`. A selector returns stored values or
   primitives, never a new object.
 
@@ -512,9 +520,18 @@ answer. What it settled:
 - **The answer never waits for `/stats`**, which counts every link (1.1 to 1.4 s on the 100k crawl). It adds why URLs
   got no response to one row when it arrives, and a stopped crawl's queue to its banner. The answer is the analysis,
   the catalog and three facet reads, each card with its own skeleton and its own error.
-- **The time left** shows only with a URL limit: what's left of the limit at the pace of the last minute, worded
-  "done within" while the crawl may still find fewer URLs than its limit, and "about ... left" once it has found as
-  many as it may fetch.
+- **One clock for the live screen's times**: the time the run being watched has spent crawling (the live store's
+  run clock). Elapsed shows it, the chart's time axis is it, and the pace is read over the last minute of it, so the
+  three agree, a pause moves none of them, and a resumed crawl's time left is right at once. A continued crawl's
+  screen is of this run: its chart starts where the run did, at the counts it started with, and says "since it was
+  continued". The earlier runs are in `/history`, counted back from the file, but the file doesn't keep when each run
+  began and ended, so the hours or days between them can't be told from crawling, and on one axis they were most of
+  the chart. The finished crawl's line says when it started and not how long it took, for the same reason: nothing
+  the engine keeps is the time spent crawling (an engine gap; `finishedAt - startedAt` has every pause and stop in
+  it).
+- **The time left** shows only with a URL limit: what's left of the limit at the pace of the last minute of crawling,
+  worded "done within" while the crawl may still find fewer URLs than its limit, and "about ... left" once it has
+  found as many as it may fetch. At the limit there's none: the figure says the limit is reached.
 - **Nothing moves as the numbers grow.** Figures update in place at most 4 times a second; each row of figures has a
   context line with room for two lines; six figures in a row are the smaller size unless the window is wide, so
   1,000,000 fits; the status bar keeps its height with nothing to magnify; what holds the crawl up (which comes and

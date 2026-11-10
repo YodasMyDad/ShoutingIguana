@@ -386,6 +386,8 @@ export function createMockTransport(): Transport {
     internalFound: snapshot.discovered - snapshot.skipped,
     errors: snapshot.errors,
     blocked: snapshot.blocked,
+    // As the sidecar's own live points: the time spent in the run they belong to.
+    elapsedMs: snapshot.elapsedMs,
   });
 
   /** The replay as far as `end`, as a history: at most HISTORY_POINTS evenly spread, and the latest. */

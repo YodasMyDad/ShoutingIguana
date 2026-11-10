@@ -86,8 +86,9 @@ links and "reopen where I left off" all work.
 **Overview (live).**
 
 - Crawled, found and queued, pages per second with a sparkline, elapsed time, and an ETA when a URL limit makes one
-  meaningful.
-- Found and crawled over time, and what was found split into crawled, queued and not followed.
+  meaningful. Elapsed is the time this run has spent crawling: it stands still while the crawl is paused, and starts
+  again when a crawl is continued.
+- Found and crawled over that same time, and what was found split into crawled, queued and not followed.
 - The status-code breakdown as the magnified bar, where each class opens its URLs.
 - Alerts, each with what to do and a link to where it's done: the crawl's settings (continue more slowly, add
   headers, another user agent), Sitemaps, or a new crawl from where the start URL leads. What holds the crawl up

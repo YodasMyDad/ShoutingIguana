@@ -76,7 +76,9 @@ function running(seconds: number, script: CrawlScript, options: OverviewSidecarO
       ...options.item,
     },
   });
-  progressUntil(seconds, script).forEach((event) => liveStore.ingest(event));
+  // It ran until now, whatever its status is now: a crawl paused or stopping was running until it was.
+  progressUntil(seconds - 0.5, { ...script, status: 'running' }).forEach((event) => liveStore.ingest(event));
+  liveStore.ingest(message('progress', now));
 }
 
 function OverviewApp({
@@ -293,6 +295,74 @@ export const LiveStopping: Story = {
 export const LiveLimitReached: Story = {
   loaders: [() => running(600, { rate: 12, size: 40_000, maxUrls: 10_000 })],
   render: () => <OverviewApp />,
+};
+
+/** At the limit: every URL it may fetch is fetched, and it says so, rather than "about 0 s left" or a pace. */
+export const LiveAtLimit: Story = {
+  loaders: [() => running(840, { rate: 12, size: 40_000, maxUrls: 10_000 })],
+  render: () => <OverviewApp />,
+};
+
+/** A crawl continued three days after it was stopped, four minutes into this run. */
+const CONTINUED_AFTER = 600;
+const CONTINUED_FOR = 240;
+
+/**
+ * Continued: the screen's times are this run's. Elapsed is the four minutes it has spent crawling since, the chart
+ * starts where this run did, at the counts it started with (the ten minutes of crawling three days ago aren't on its
+ * time axis, nor the days between), and the pace is this run's.
+ */
+export const LiveContinued: Story = {
+  loaders: [
+    () => {
+      const runStart = Date.parse(progressAt(CONTINUED_AFTER, POLITE).at ?? '');
+      const firstStart = runStart - 3 * 86_400_000;
+      // This run's events: the counts carry on from the first run's, the engine's `elapsedMs` starts again.
+      const event = (seconds: number) => ({
+        ...progressAt(CONTINUED_AFTER + seconds, POLITE),
+        elapsedMs: seconds * 1_000,
+      });
+      const earlier = historyUntil(CONTINUED_AFTER, POLITE).points.map(({ elapsedMs: _run, ...point }, index) => ({
+        ...point,
+        // Counted back from the file: when each was fetched, three days ago, and nothing of the run it was in.
+        at: new Date(firstStart + index * 2_000).toISOString(),
+      }));
+      const now = event(CONTINUED_FOR);
+      own({
+        analysis: null,
+        item: {
+          status: 'running',
+          finishedAt: null,
+          analyzedAt: null,
+          issues: null,
+          fetchedUrlCount: now.fetched,
+          pageCount: now.htmlPages,
+        },
+        history: {
+          crawlId: TEST_CRAWL_ID,
+          startedAt: new Date(firstStart).toISOString(),
+          liveFrom: new Date(runStart).toISOString(),
+          points: [
+            ...earlier,
+            {
+              at: new Date(runStart).toISOString(),
+              fetched: event(0).fetched,
+              htmlPages: event(0).htmlPages,
+              internalFetched: event(0).internalFetched ?? 0,
+              internalFound: event(0).internalFound ?? 0,
+              errors: 0,
+              blocked: 0,
+              elapsedMs: 0,
+            },
+          ],
+        },
+      });
+      for (let seconds = 0; seconds <= CONTINUED_FOR; seconds += 0.5) {
+        liveStore.ingest(message('progress', event(seconds)));
+      }
+    },
+  ],
+  render: () => <OverviewApp stream={{ script: POLITE, from: CONTINUED_AFTER + CONTINUED_FOR }} />,
 };
 
 /**

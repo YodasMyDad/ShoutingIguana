@@ -264,6 +264,8 @@ export function historyUntil(seconds: number, script: CrawlScript): CrawlHistory
       internalFound: progress.internalFound ?? 0,
       errors: progress.errors,
       blocked: progress.blocked,
+      // As the sidecar's own live points: the time spent in the run they belong to.
+      elapsedMs: progress.elapsedMs,
     });
   }
   return {

@@ -1,11 +1,15 @@
 // The live crawl's figures (docs/v2-ui-ia.md, Overview (live)): the time left when a URL limit makes one meaningful,
 // the rate's sparkline, what the crawl is doing, and what was found split into crawled, queued and not followed. Pure,
-// from what the live store keeps.
+// from what the live store keeps. Every time here is the run's time spent crawling (the store's `RunClock`): it stands
+// still while the crawl is paused, so a pause is no part of the pace.
 import type { CrawlPhase, CrawlStatus } from '../../api/types';
-import type { LiveProgress, TrailPoint } from '../../live/liveStore';
+import { PACE_WINDOW_MS, type LiveProgress, type PaceSample } from '../../live/liveStore';
 
-/** The pace is measured over the last minute: long enough to ride out a slow page, short enough to follow a change. */
-export const PACE_WINDOW_MS = 60_000;
+/**
+ * The pace is measured over the last minute the run spent crawling: long enough to ride out a slow page, short enough
+ * to follow a change. The store keeps a sample of every progress event that far back.
+ */
+export { PACE_WINDOW_MS };
 /** Less than this much of the crawl seen, and there's no pace to speak of yet. */
 export const PACE_MIN_WINDOW_MS = 5_000;
 /** The sparkline draws at most this many points: each then stands for a stretch of the rate's history. */
@@ -20,31 +24,45 @@ export interface TimeLeft {
   bound: 'about' | 'within';
 }
 
-/** The site's URLs fetched per ms over the pace window, or null when too little has been seen or nothing moved. */
-export function paceOf(trail: readonly TrailPoint[]): number | null {
-  const newest = trail.at(-1);
+/**
+ * The site's URLs fetched per ms of crawling, over the pace window: from the newest sample back to the oldest within a
+ * minute of the run's time. Null when too little has been seen or nothing moved. The samples are the store's
+ * (`LiveCrawl.pace`): taken only while the crawl was running, on the run's clock.
+ */
+export function paceOf(samples: readonly PaceSample[]): number | null {
+  const newest = samples.at(-1);
   if (!newest) return null;
-  const from = trail.find((point) => point.at >= newest.at - PACE_WINDOW_MS) ?? newest;
-  const span = newest.at - from.at;
+  const from = samples.find((sample) => sample.runMs >= newest.runMs - PACE_WINDOW_MS) ?? newest;
+  const span = newest.runMs - from.runMs;
   if (span < PACE_MIN_WINDOW_MS) return null;
   const pace = (newest.internalFetched - from.internalFetched) / span;
   return pace > 0 ? pace : null;
 }
 
+/** Whether the crawl has fetched as many of the site's URLs as its limit allows: nothing is left to wait for. */
+export function atUrlLimit(progress: Pick<LiveProgress, 'maxUrls' | 'internalFetched'> | null): boolean {
+  const limit = progress?.maxUrls;
+  const fetched = progress?.internalFetched;
+  return typeof limit === 'number' && limit > 0 && typeof fetched === 'number' && fetched >= limit;
+}
+
 /**
  * How long a running crawl with a URL limit has left at its present pace. Null without a limit (it ends when it runs
- * out of URLs, which nothing can foretell), while it isn't running, and before there's a pace to go by.
+ * out of URLs, which nothing can foretell), while it isn't running, before there's a pace to go by, and once the
+ * limit is reached: there's no time left to speak of then, and "about 0 s left" would only count the last requests
+ * settling.
  */
 export function timeLeft(
   status: CrawlStatus | null,
   progress: Pick<LiveProgress, 'maxUrls' | 'internalFound' | 'internalFetched'> | null,
-  trail: readonly TrailPoint[],
+  samples: readonly PaceSample[],
 ): TimeLeft | null {
   if (status !== 'running' || !progress) return null;
   const { maxUrls, internalFound, internalFetched } = progress;
   if (maxUrls === null || maxUrls === undefined || maxUrls <= 0) return null;
   if (internalFound === null || internalFetched === null) return null;
-  const pace = paceOf(trail);
+  if (atUrlLimit(progress)) return null;
+  const pace = paceOf(samples);
   if (pace === null) return null;
   // The limit counts the site's own URLs, so the crawl heads for the smaller of what it has found and the limit.
   return { ms: Math.max(0, maxUrls - internalFetched) / pace, bound: internalFound >= maxUrls ? 'about' : 'within' };

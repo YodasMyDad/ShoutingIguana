@@ -27,6 +27,10 @@ export const MAX_ALERTS = 200;
 export const PUBLISH_INTERVAL_MS = 250;
 /** The found-and-crawled trail: at most this many points however long the crawl runs, as the sidecar's own history. */
 export const TRAIL_POINTS = 600;
+/** The pace is read over this much of the time the run has spent crawling: its samples go back that far, and no further. */
+export const PACE_WINDOW_MS = 60_000;
+/** At most this many pace samples are kept: the window at four events a second, twice the engine's pace. */
+export const PACE_SAMPLES = 240;
 
 const PROGRESS_COUNTS = [
   'elapsedMs',
@@ -80,18 +84,43 @@ export type LiveProgress = Omit<ProgressEvent, ProgressCount | keyof LiveProgres
 /** A stream event as the store reads it at the boundary. */
 export type LiveEvent = Exclude<SidecarEvent, { type: 'progress' }> | { type: 'progress'; data: LiveProgress };
 
+/**
+ * How long the run being watched has spent crawling: the one clock the live screen's times go by (the pace, Elapsed,
+ * the chart's time axis). It runs while the crawl's status is `running` and stands still while it's paused or
+ * stopping, and it starts again with each run (a continued crawl). The engine has no such figure: its `elapsedMs` is
+ * the wall time since the run began, time paused included, so the page counts from there, by the progress events it
+ * hears. What was paused before the page first heard of the run can't be told, and counts.
+ */
+export interface RunClock {
+  /** Ms this run has spent crawling, as far as the page can tell. */
+  runMs: number;
+  /** The progress event it was last advanced by: when it was taken, its `elapsedMs`, and the crawl's status then. */
+  at: number;
+  elapsedMs: number | null;
+  status: CrawlStatus;
+}
+
 /** One point of the found-and-crawled chart, taken from a progress event at its `at`. */
 export interface TrailPoint {
   /** Ms since the epoch. */
   at: number;
+  /** Ms the run had spent crawling by then (`RunClock`): where the point sits on the chart's time axis. */
+  runMs: number;
   fetched: number | null;
   internalFound: number;
   internalFetched: number;
 }
 
+/** The site's URLs fetched after so much of the run's time spent crawling: what the pace is worked out from. */
+export interface PaceSample {
+  runMs: number;
+  internalFetched: number;
+}
+
 /**
- * A crawl's progress since this page first heard of it: at most TRAIL_POINTS points however long it runs, evenly
- * spread, as the sidecar keeps its own history. `GET /history` gives what came before; this carries the chart on.
+ * The progress of the run being watched since this page first heard of it: at most TRAIL_POINTS points however long it
+ * runs, evenly spread, as the sidecar keeps its own history. `GET /history` gives what came before; this carries the
+ * chart on. It starts again when the crawl is continued, as the run's clock does.
  */
 export interface LiveTrail {
   /** Oldest first. The last is always the newest progress, so the chart ends where the headline figures are. */
@@ -111,8 +140,16 @@ export interface LiveCrawl {
   progress: LiveProgress | null;
   /** URLs per second, oldest first, for the sparkline. */
   history: readonly number[];
-  /** The crawl's progress since this page first heard of it, for the found-and-crawled chart. */
+  /** The run's progress since this page first heard of it, for the found-and-crawled chart. */
   trail: LiveTrail;
+  /** How long the run has spent crawling; null until a progress event says when it was taken. */
+  clock: RunClock | null;
+  /**
+   * The newest samples for the pace, oldest first: one per progress event taken while the crawl was running, as far
+   * back as PACE_WINDOW_MS of the run's time. Every event, never thinned as the trail is, so a long crawl's pace is as
+   * exact as a short one's; and by the run's clock, so time paused is no part of it.
+   */
+  pace: readonly PaceSample[];
   /** Newest last. */
   alerts: readonly AlertEvent[];
   analysis: AnalysisEvent | null;
@@ -448,6 +485,39 @@ export function addTrailPoint(trail: LiveTrail, point: TrailPoint, capacity: num
   };
 }
 
+/**
+ * The run's clock after a progress event. It advances by the time since the last event when the crawl was running
+ * then, and not at all when it was paused or stopping. A new run (the crawl was continued: the engine's `elapsedMs`
+ * starts again, or the last event was a finished run's) starts it again from the engine's `elapsedMs`, which is all
+ * that's known of a run the page comes to part-way. An event that isn't newer than the last (a reconnect replays the
+ * latest) changes nothing.
+ */
+export function advanceRunClock(clock: RunClock | null, progress: LiveProgress): RunClock | null {
+  const { at, elapsedMs, status } = progress;
+  if (at === null) return clock;
+  if (clock === null || startsNewRun(clock, progress))
+    return { runMs: Math.max(0, elapsedMs ?? 0), at, elapsedMs, status };
+  if (at <= clock.at) return clock;
+  return { runMs: clock.runMs + (clock.status === 'running' ? at - clock.at : 0), at, elapsedMs, status };
+}
+
+function startsNewRun(clock: RunClock, progress: LiveProgress): boolean {
+  if (progress.at === null || progress.at <= clock.at) return false;
+  if (progress.elapsedMs !== null && clock.elapsedMs !== null && progress.elapsedMs < clock.elapsedMs) return true;
+  // The last event was of a run that had ended, and this one is of a crawl that's live.
+  return !isLive(clock.status) && isLive(progress.status);
+}
+
+/** Adds a sample for the pace, and lets go of the ones older than the window (but for the one that spans it). */
+export function addPaceSample(samples: readonly PaceSample[], sample: PaceSample): readonly PaceSample[] {
+  const from = sample.runMs - PACE_WINDOW_MS;
+  // The last sample at or before the window's start stays, so the window is spanned in full.
+  let keep = 0;
+  while (keep + 1 < samples.length && (samples[keep + 1]?.runMs ?? Number.POSITIVE_INFINITY) <= from) keep++;
+  const kept = [...samples.slice(Math.max(keep, samples.length + 1 - PACE_SAMPLES)), sample];
+  return kept;
+}
+
 function blankCrawl(id: string): LiveCrawl {
   return {
     id,
@@ -455,6 +525,8 @@ function blankCrawl(id: string): LiveCrawl {
     progress: null,
     history: [],
     trail: EMPTY_TRAIL,
+    clock: null,
+    pace: [],
     alerts: [],
     analysis: null,
     error: null,
@@ -500,14 +572,31 @@ export function applyEvent(state: LiveState, event: LiveEvent): LiveState {
       const rate = progress.urlsPerSecond;
       const next = updateCrawl(state, progress.crawlId, (crawl) => {
         const { at, internalFound, internalFetched } = progress;
+        const clock = advanceRunClock(crawl.clock, progress);
+        // A new run: its chart and its pace start with it, as its clock does.
+        const restarted = crawl.clock !== null && clock !== crawl.clock && startsNewRun(crawl.clock, progress);
+        const before = restarted ? { trail: EMPTY_TRAIL, pace: [] } : crawl;
+        const placed = clock !== null && clock !== crawl.clock && at !== null;
         const trail =
-          at !== null && internalFound !== null && internalFetched !== null
-            ? addTrailPoint(crawl.trail, { at, fetched: progress.fetched, internalFound, internalFetched })
-            : crawl.trail;
+          placed && internalFound !== null && internalFetched !== null
+            ? addTrailPoint(before.trail, {
+                at,
+                runMs: clock.runMs,
+                fetched: progress.fetched,
+                internalFound,
+                internalFetched,
+              })
+            : before.trail;
+        const pace =
+          placed && progress.status === 'running' && internalFetched !== null
+            ? addPaceSample(before.pace, { runMs: clock.runMs, internalFetched })
+            : before.pace;
         return {
           ...crawl,
           status: progress.status,
           progress,
+          clock,
+          pace,
           // A rate the stream didn't give leaves a gap rather than a false 0 in the sparkline.
           history:
             rate === null

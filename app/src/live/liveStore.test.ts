@@ -361,7 +361,13 @@ describe('E4’s alerts and hello', () => {
 });
 
 describe('the found-and-crawled trail', () => {
-  const point = (at: number): TrailPoint => ({ at, fetched: at, internalFound: at * 2, internalFetched: at });
+  const point = (at: number): TrailPoint => ({
+    at,
+    runMs: at,
+    fetched: at,
+    internalFound: at * 2,
+    internalFetched: at,
+  });
 
   it('keeps a point per progress event at first', () => {
     let trail = EMPTY_TRAIL;
@@ -408,10 +414,110 @@ describe('the found-and-crawled trail', () => {
     // An event that doesn't say what the site's own counts are adds nothing, rather than a false point.
     store.ingest(event(3, {}));
     advance(PUBLISH_INTERVAL_MS);
+    // Each sits on the run's clock: the page first heard of the run here, so from there.
     expect(store.getState().crawls.a?.trail.points).toEqual([
-      { at: Date.parse(at(1)), fetched: 10, internalFound: 50, internalFetched: 9 },
-      { at: Date.parse(at(2)), fetched: 20, internalFound: 80, internalFetched: 19 },
+      { at: Date.parse(at(1)), runMs: 0, fetched: 10, internalFound: 50, internalFetched: 9 },
+      { at: Date.parse(at(2)), runMs: 1_000, fetched: 20, internalFound: 80, internalFetched: 19 },
     ]);
+  });
+});
+
+describe('the run’s clock: how long the run being watched has spent crawling', () => {
+  const START = Date.UTC(2026, 10, 10, 9, 0, 0);
+  /** A progress event `wallMs` after the crawl first started; `elapsedMs` is the engine's, the run's own wall time. */
+  const event = (wallMs: number, extra: Record<string, unknown> = {}) => ({
+    event: 'progress',
+    id: '',
+    data: JSON.stringify({
+      crawlId: 'a',
+      status: 'running',
+      elapsedMs: wallMs,
+      at: new Date(START + wallMs).toISOString(),
+      fetched: wallMs / 10,
+      internalFound: 9_000,
+      internalFetched: wallMs / 10,
+      ...extra,
+    }),
+  });
+  const crawlAfter = (events: readonly ReturnType<typeof event>[]) => {
+    const { clock, advance } = manualClock();
+    const store = new LiveStore(clock);
+    events.forEach((message) => store.ingest(message));
+    advance(PUBLISH_INTERVAL_MS);
+    const crawl = store.getState().crawls.a;
+    if (!crawl) throw new Error('no crawl');
+    return crawl;
+  };
+
+  it('runs while the crawl runs, and stands still while it’s paused, though progress keeps arriving', () => {
+    const running = [0, 500, 1_000, 1_500, 2_000].map((ms) => event(ms));
+    expect(crawlAfter(running).clock?.runMs).toBe(2_000);
+    // Paused for 45 s: the engine's `elapsedMs` runs on through it, and an event comes every half second.
+    const paused = Array.from({ length: 90 }, (_, index) =>
+      event(2_500 + index * 500, { status: 'paused', internalFetched: 200, fetched: 200 }),
+    );
+    const through = crawlAfter([...running, ...paused]);
+    expect(through.progress?.elapsedMs).toBe(47_000);
+    // The half second in which it was paused counts: the stream can't place the pause closer than that.
+    expect(through.clock?.runMs).toBe(2_500);
+    const resumed = crawlAfter([...running, ...paused, event(47_500), event(48_000)]);
+    expect(resumed.clock?.runMs).toBe(3_000);
+    // The chart's points sit on it, so a pause isn't a flat stretch 45 s wide; the pace's samples are only of running.
+    expect(resumed.trail.points.at(-1)?.runMs).toBe(3_000);
+    expect(resumed.pace.map((sample) => sample.runMs)).toEqual([0, 500, 1_000, 1_500, 2_000, 2_500, 3_000]);
+  });
+
+  it('starts from the engine’s count of a run the page comes to part-way', () => {
+    // All that's known of what came before: the wall time since the run began.
+    const crawl = crawlAfter([event(120_000), event(120_500)]);
+    expect(crawl.clock?.runMs).toBe(120_500);
+    expect(crawl.trail.points.map((point) => point.runMs)).toEqual([120_000, 120_500]);
+  });
+
+  it('starts again when the crawl is continued, and the run’s chart and pace with it', () => {
+    const first = [0, 500, 1_000].map((ms) => event(ms));
+    const stopped = event(1_010, { status: 'stopped', phase: 'finishing' });
+    // Three days later: the engine's `elapsedMs` starts again, the counts carry on.
+    const later = 3 * 86_400_000;
+    const second = [0, 500, 1_000, 1_500].map((ms) =>
+      event(later + ms, { elapsedMs: ms, internalFetched: 101 + ms / 10, fetched: 101 + ms / 10 }),
+    );
+    const crawl = crawlAfter([...first, stopped, ...second]);
+    expect(crawl.clock?.runMs).toBe(1_500);
+    expect(crawl.trail.points.map((point) => point.runMs)).toEqual([0, 500, 1_000, 1_500]);
+    expect(crawl.trail.points[0]?.internalFetched).toBe(101);
+    expect(crawl.pace).toHaveLength(4);
+    // An engine that doesn't count the run's time still starts it again: the last event was of a run that had ended.
+    const bare = crawlAfter([
+      event(0, { elapsedMs: 'x' }),
+      event(500, { elapsedMs: 'x' }),
+      event(510, { elapsedMs: 'x', status: 'stopped' }),
+      event(later, { elapsedMs: 'x' }),
+      event(later + 500, { elapsedMs: 'x' }),
+    ]);
+    expect(bare.clock?.runMs).toBe(500);
+    expect(bare.trail.points).toHaveLength(2);
+  });
+
+  it('isn’t moved by an event that isn’t newer than the last (a reconnect replays the latest)', () => {
+    const crawl = crawlAfter([event(0), event(500), event(500), event(0), event(1_000)]);
+    expect(crawl.clock?.runMs).toBe(1_000);
+    expect(crawl.trail.points.map((point) => point.runMs)).toEqual([0, 500, 1_000]);
+    expect(crawl.pace).toHaveLength(3);
+  });
+
+  it('counts a stretch it heard nothing of as the crawl’s status was when it began (a hidden window, a reconnect)', () => {
+    expect(crawlAfter([event(0), event(500), event(60_500)]).clock?.runMs).toBe(60_500);
+    expect(crawlAfter([event(0), event(500, { status: 'paused' }), event(60_500)]).clock?.runMs).toBe(500);
+  });
+
+  it('keeps the pace’s samples to the last minute of crawling, however long the crawl runs', () => {
+    const crawl = crawlAfter(Array.from({ length: 1_000 }, (_, index) => event(index * 500)));
+    expect(crawl.pace).toHaveLength(121);
+    expect((crawl.pace.at(-1)?.runMs ?? 0) - (crawl.pace[0]?.runMs ?? 0)).toBe(60_000);
+    // A burst of events closer together than the engine's pace never grows it without bound.
+    const burst = crawlAfter(Array.from({ length: 2_000 }, (_, index) => event(index * 10)));
+    expect(burst.pace.length).toBeLessThanOrEqual(240);
   });
 });
 

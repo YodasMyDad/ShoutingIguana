@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { TrailPoint } from '../../live/liveStore';
+import type { ProgressEvent } from '../../api/types';
+import { applyEvent, liveProgressOf, type LiveCrawl, type LiveState, type TrailPoint } from '../../live/liveStore';
 import { countTicks, progressSeries, timeTicks } from './foundAndCrawled';
 import {
   PACE_MIN_WINDOW_MS,
   PACE_WINDOW_MS,
   SPARK_POINTS,
   activityWords,
+  atUrlLimit,
   crawledSoFar,
   foundSplit,
   paceOf,
@@ -13,22 +15,109 @@ import {
   timeLeft,
 } from './liveFigures';
 
-/** A trail at a steady pace: a point every half second, `perSecond` of the site’s URLs fetched each second. */
+/**
+ * A crawl at a steady pace, as its points on the run's clock: one every half second, `perSecond` of the site’s URLs
+ * fetched each second.
+ */
 function steady(seconds: number, perSecond: number, from = 0): TrailPoint[] {
   return Array.from({ length: seconds * 2 + 1 }, (_, index) => ({
     at: 1_000_000 + index * 500,
+    runMs: index * 500,
     fetched: from + (index * perSecond) / 2,
     internalFound: 50_000,
     internalFetched: from + (index * perSecond) / 2,
   }));
 }
 
+const START = Date.parse('2026-11-10T09:00:00.000Z');
+
+/** A progress event `wallMs` after the crawl started, as the engine sends it: `elapsedMs` is the run's wall time. */
+function event(wallMs: number, extra: Partial<ProgressEvent>): ProgressEvent {
+  return {
+    crawlId: 'a',
+    status: 'running',
+    elapsedMs: wallMs,
+    discovered: 0,
+    queued: 0,
+    inFlight: 0,
+    fetched: 0,
+    htmlPages: 0,
+    redirects: 0,
+    errors: 0,
+    blocked: 0,
+    robotsDisallowed: 0,
+    skipped: 0,
+    bytesDownloaded: 0,
+    urlsPerSecond: 0,
+    at: new Date(START + wallMs).toISOString(),
+    phase: 'crawling',
+    internalFound: 50_000,
+    internalFetched: 0,
+    maxUrls: 50_000,
+    ...extra,
+  };
+}
+
+/** The live store's crawl after these progress events, as the stream brings them. */
+function heard(events: readonly ProgressEvent[], from?: LiveState): { state: LiveState; crawl: LiveCrawl } {
+  let state: LiveState = from ?? { stream: 'open', live: [], crawls: {} };
+  for (const progress of events) state = applyEvent(state, { type: 'progress', data: liveProgressOf(progress) });
+  const crawl = state.crawls.a;
+  if (!crawl) throw new Error('no crawl');
+  return { state, crawl };
+}
+
 describe('the pace', () => {
   it('is the site’s URLs fetched over the last minute', () => {
     expect(paceOf(steady(120, 10))).toBeCloseTo(10 / 1000);
     // Fast for a minute, then slow for a minute: only the last minute counts.
-    const slowed = [...steady(60, 100), ...steady(60, 2, 6_000).map((point) => ({ ...point, at: point.at + 60_000 }))];
+    const slowed = [
+      ...steady(60, 100),
+      ...steady(60, 2, 6_000).map((point) => ({ ...point, at: point.at + 60_000, runMs: point.runMs + 60_000 })),
+    ];
     expect(paceOf(slowed)).toBeCloseTo(2 / 1000);
+  });
+
+  it('is of the time spent crawling: a pause is no part of it, though progress keeps arriving through one', () => {
+    // 100 URLs a second for a minute, 45 s paused (an event every half second all the while, nothing fetched), then on.
+    const running = (wallMs: number, crawledMs: number) => event(wallMs, { internalFetched: crawledMs / 10 });
+    const before = Array.from({ length: 121 }, (_, index) => running(index * 500, index * 500));
+    const paused = Array.from({ length: 90 }, (_, index) =>
+      event(60_500 + index * 500, { status: 'paused', internalFetched: 6_000 }),
+    );
+    const after = Array.from({ length: 4 }, (_, index) => running(105_500 + index * 500, 60_000 + index * 500));
+    const { crawl } = heard([...before, ...paused, ...after]);
+    // By the wall clock the last minute fetched 15 s' worth: the pace would read 25 a second, and the time left four
+    // times too long.
+    // (Within the half second either side of the pause, which the stream can't place.)
+    expect(paceOf(crawl.pace)).toBeGreaterThan(98 / 1000);
+    expect(paceOf(crawl.pace)).toBeLessThan(102 / 1000);
+    const left = timeLeft('running', crawl.progress, crawl.pace);
+    const truly = ((50_000 - (crawl.progress?.internalFetched ?? 0)) / 100) * 1000;
+    expect(left?.ms).toBeGreaterThan(truly * 0.95);
+    expect(left?.ms).toBeLessThan(truly * 1.05);
+  });
+
+  it('is as exact twelve hours in as at the start: its samples aren’t thinned as the chart’s points are', () => {
+    // A polite crawl with a limit: 2 URLs a second, an event every half second. The chart's trail keeps one point in
+    // 256 by then, more than two minutes apart, and a pace read from it came and went.
+    let state: LiveState | undefined;
+    let without = 0;
+    const total = 12 * 3600 * 2;
+    for (let index = 0; index < total; index++) {
+      const now = heard(
+        [event(index * 500, { internalFetched: index, maxUrls: 1_000_000, internalFound: 1_000_000 })],
+        state,
+      );
+      state = now.state;
+      if (index > 20 && paceOf(now.crawl.pace) === null) without++;
+    }
+    expect(without).toBe(0);
+    const crawl = state?.crawls.a;
+    expect(crawl?.trail.every).toBeGreaterThan(100);
+    expect(paceOf(crawl?.pace ?? [])).toBeCloseTo(2 / 1000, 6);
+    // And they stay a minute's worth, however long it runs.
+    expect(crawl?.pace.length).toBeLessThanOrEqual(122);
   });
 
   it('isn’t known before enough of the crawl has been seen, or while nothing moves', () => {
@@ -41,8 +130,22 @@ describe('the pace', () => {
   it('looks no further back than its window', () => {
     const trail = steady(600, 4);
     const newest = trail.at(-1);
-    const from = trail.find((point) => point.at >= (newest?.at ?? 0) - PACE_WINDOW_MS);
-    expect((newest?.at ?? 0) - (from?.at ?? 0)).toBe(PACE_WINDOW_MS);
+    const from = trail.find((point) => point.runMs >= (newest?.runMs ?? 0) - PACE_WINDOW_MS);
+    expect((newest?.runMs ?? 0) - (from?.runMs ?? 0)).toBe(PACE_WINDOW_MS);
+  });
+
+  it('starts again when the crawl is continued, with the run', () => {
+    const first = Array.from({ length: 21 }, (_, index) => event(index * 500, { internalFetched: index * 50 }));
+    const stopped = event(10_010, { status: 'stopped', phase: 'finishing', internalFetched: 1_000 });
+    // Continued three days later, more slowly: the engine's `elapsedMs` starts again.
+    const later = 3 * 86_400_000;
+    const second = Array.from({ length: 21 }, (_, index) => ({
+      ...event(later + index * 500, { internalFetched: 1_000 + index * 5 }),
+      elapsedMs: index * 500,
+    }));
+    const { crawl } = heard([...first, stopped, ...second]);
+    expect(paceOf(crawl.pace)).toBeCloseTo(10 / 1000, 6);
+    expect(crawl.pace[0]).toEqual({ runMs: 0, internalFetched: 1_000 });
   });
 });
 
@@ -78,8 +181,19 @@ describe('the time left', () => {
     expect(timeLeft('running', null, trail)).toBeNull();
   });
 
-  it('is never less than nothing', () => {
-    expect(timeLeft('running', { maxUrls: 2_000, internalFound: 2_000, internalFetched: fetched }, trail)?.ms).toBe(0);
+  it('is nothing once the limit is reached: not “about 0 s left” while the last requests settle', () => {
+    expect(timeLeft('running', { maxUrls: 2_713, internalFound: 2_713, internalFetched: fetched }, trail)).toBeNull();
+    expect(timeLeft('running', { maxUrls: 2_000, internalFound: 2_000, internalFetched: fetched }, trail)).toBeNull();
+    expect(atUrlLimit({ maxUrls: 2_713, internalFetched: 2_713 })).toBe(true);
+    expect(atUrlLimit({ maxUrls: 2_713, internalFetched: 2_712 })).toBe(false);
+    expect(atUrlLimit({ maxUrls: null, internalFetched: 2_713 })).toBe(false);
+    expect(atUrlLimit({ maxUrls: undefined, internalFetched: 2_713 })).toBe(false);
+    expect(atUrlLimit(null)).toBe(false);
+    // One short of it, there still is.
+    expect(timeLeft('running', { maxUrls: 2_714, internalFound: 2_714, internalFetched: fetched }, trail)).toEqual({
+      ms: 500,
+      bound: 'about',
+    });
   });
 });
 
@@ -195,11 +309,11 @@ describe('the found-and-crawled series', () => {
   };
   const at = (ms: number) => Date.parse('2026-11-01T14:00:00.000Z') + ms;
   const trail: TrailPoint[] = [
-    { at: at(1_000), fetched: 9, internalFound: 90, internalFetched: 8 },
-    { at: at(1_500), fetched: 20, internalFound: 130, internalFetched: 18 },
+    { at: at(1_000), runMs: 1_000, fetched: 9, internalFound: 90, internalFetched: 8 },
+    { at: at(1_500), runMs: 1_500, fetched: 20, internalFound: 130, internalFetched: 18 },
   ];
 
-  it('is the history, then the trail from where the history ends, from the crawl’s start', () => {
+  it('is the run’s history, then the trail from its first point, on the run’s clock', () => {
     expect(progressSeries(history, trail)).toEqual({
       points: [
         { elapsedMs: 500, found: 40, crawled: 1 },
@@ -209,16 +323,94 @@ describe('the found-and-crawled series', () => {
       spanMs: 1_500,
       found: 130,
       crawled: 18,
+      continued: false,
     });
   });
 
-  it('is the trail alone before the history arrives, and nothing before either', () => {
+  it('is the trail alone before the history arrives, where the run’s clock puts it, and nothing before either', () => {
     expect(progressSeries(undefined, trail)?.points).toEqual([
-      { elapsedMs: 0, found: 90, crawled: 8 },
-      { elapsedMs: 500, found: 130, crawled: 18 },
+      { elapsedMs: 1_000, found: 90, crawled: 8 },
+      { elapsedMs: 1_500, found: 130, crawled: 18 },
     ]);
     expect(progressSeries(undefined, [])).toBeNull();
     expect(progressSeries({ ...history, points: [] }, [])).toBeNull();
+  });
+
+  it('is of the run being watched: a continued crawl’s earlier runs, days ago, are no part of its time', () => {
+    // Ten minutes of crawling three days ago, as the file's points have it (no `elapsedMs`: they aren't of this run),
+    // then this run, two minutes old. On one wall-clock axis this run was 0.05% of the chart.
+    const first = Date.parse('2026-11-07T09:00:00.000Z');
+    const liveFrom = first + 3 * 86_400_000;
+    const iso = (ms: number) => new Date(ms).toISOString();
+    const point = (ms: number, fetched: number) => ({
+      at: iso(ms),
+      fetched,
+      htmlPages: fetched,
+      internalFetched: fetched,
+      internalFound: 5_000,
+      errors: 0,
+      blocked: 0,
+    });
+    const continued = {
+      crawlId: 'c',
+      startedAt: iso(first),
+      liveFrom: iso(liveFrom),
+      points: [
+        ...Array.from({ length: 11 }, (_, index) => point(first + index * 60_000, index * 100)),
+        { ...point(liveFrom, 1_000), elapsedMs: 0 },
+        { ...point(liveFrom + 500, 1_005), elapsedMs: 500 },
+      ],
+    };
+    const now: TrailPoint[] = Array.from({ length: 239 }, (_, index) => ({
+      at: liveFrom + (index + 2) * 500,
+      runMs: (index + 2) * 500,
+      fetched: 1_010 + index * 5,
+      internalFound: 5_000,
+      internalFetched: 1_010 + index * 5,
+    }));
+    const series = progressSeries(continued, now);
+    expect(series?.continued).toBe(true);
+    // Two minutes, all of it this run: it starts at the counts the run started with.
+    expect(series?.spanMs).toBe(120_000);
+    expect(series?.points[0]).toEqual({ elapsedMs: 0, found: 5_000, crawled: 1_000 });
+    expect(series?.points).toHaveLength(241);
+    expect(
+      series?.points.every((entry, index, all) => index === 0 || entry.elapsedMs > (all[index - 1]?.elapsedMs ?? 0)),
+    ).toBe(true);
+    // A history without `elapsedMs` on its live points is placed by where the run began.
+    const bare = {
+      ...continued,
+      points: continued.points.map(({ at: when, ...rest }) => ({ ...rest, at: when, elapsedMs: undefined })),
+    };
+    expect(progressSeries(bare as typeof continued, [])?.points).toEqual([
+      { elapsedMs: 0, found: 5_000, crawled: 1_000 },
+      { elapsedMs: 500, found: 5_000, crawled: 1_005 },
+    ]);
+  });
+
+  it('stands still through a pause the page saw, where the history alone would count it', () => {
+    // The page has watched from 1 s in; the crawl was paused from 2 s to 47 s of the run's wall time. A history read
+    // afterwards has points all through the pause, by wall time: the trail takes over from its own first point.
+    const pausedHistory = {
+      ...history,
+      points: [
+        { ...history.points[0]!, elapsedMs: 500 },
+        ...[1_000, 2_000, 25_000, 47_000, 48_000].map((ms) => ({
+          ...history.points[1]!,
+          at: new Date(at(ms)).toISOString(),
+          elapsedMs: ms,
+        })),
+      ],
+    };
+    const watched: TrailPoint[] = [
+      { at: at(1_000), runMs: 1_000, fetched: 9, internalFound: 90, internalFetched: 8 },
+      { at: at(2_000), runMs: 2_000, fetched: 20, internalFound: 130, internalFetched: 18 },
+      { at: at(47_000), runMs: 2_000, fetched: 20, internalFound: 130, internalFetched: 18 },
+      { at: at(48_000), runMs: 3_000, fetched: 30, internalFound: 150, internalFetched: 28 },
+    ];
+    const series = progressSeries(pausedHistory, watched);
+    expect(series?.points.map((entry) => entry.elapsedMs)).toEqual([500, 1_000, 2_000, 2_000, 3_000]);
+    expect(series?.spanMs).toBe(3_000);
   });
 });
 

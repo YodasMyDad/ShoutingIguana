@@ -11,7 +11,7 @@ import { ErrorState } from '../feedback/ErrorState';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { useElementWidth } from '../grid/useElementWidth';
 import { useCommands } from '../keyboard/registry';
-import { formatCount, formatCountOf, formatDuration, formatExactTime } from '../lib/format';
+import { formatCount, formatCountOf, formatExactTime } from '../lib/format';
 import { useLive } from '../live/liveStore';
 import { useSettings } from '../settings/settingsStore';
 import { Banner } from '../ui/Banner';
@@ -443,11 +443,12 @@ function EmptyAction({ crawlId, item, reason }: { crawlId: string; item: CrawlLi
   }
 }
 
-/** The crawl in a line: what it fetched (opening its URLs), its pages, when it ran and for how long. */
+/**
+ * The crawl in a line: what it fetched (opening its URLs), its pages and when it started. Not how long it took: from
+ * when it started to when it finished has every pause in it, and the hours or days between stopping it and continuing
+ * it, and nothing the engine keeps says how long it spent crawling.
+ */
 function CrawlFacts({ crawlId, item, crawled }: { crawlId: string; item: CrawlListItem; crawled: number }) {
-  const started = item.startedAt ? Date.parse(item.startedAt) : Number.NaN;
-  const finished = item.finishedAt ? Date.parse(item.finishedAt) : Number.NaN;
-  const took = Number.isNaN(started) || Number.isNaN(finished) ? null : finished - started;
   return (
     <p className="text-13 text-text-secondary">
       <TextLink
@@ -457,8 +458,7 @@ function CrawlFacts({ crawlId, item, crawled }: { crawlId: string; item: CrawlLi
         {formatCountOf(crawled, 'URL')}
       </TextLink>{' '}
       crawled, {formatCountOf(item.pageCount, 'page')} read
-      {item.startedAt ? `, started ${formatExactTime(item.startedAt)}` : ''}
-      {took !== null ? `, over ${formatDuration(took)}` : ''}.
+      {item.startedAt ? `, started ${formatExactTime(item.startedAt)}` : ''}.
     </p>
   );
 }

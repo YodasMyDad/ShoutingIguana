@@ -109,6 +109,15 @@ afterEach(() => {
 });
 
 describe('the Overview of an analysed crawl', () => {
+  it('says when the crawl started, and not how long it took, which nothing the engine keeps can say', async () => {
+    // From when it started to when it finished has every pause in it, and the time between stopping and continuing.
+    sidecar();
+    await open();
+    const facts = (await main().findByRole('link', { name: '4,521 URLs' })).closest('p');
+    expect(facts).toHaveTextContent(/^4,521 URLs crawled, 265 pages read, started .+ 2026.*\.$/);
+    expect(facts).not.toHaveTextContent(/over|5 min/);
+  });
+
   it('answers first, in one sentence built from the counts', async () => {
     sidecar();
     await open();
@@ -495,6 +504,93 @@ describe('the Overview while the crawl runs', () => {
         name: 'Of 7,054 URLs found: 6,909 crawled, 0 queued, 140 not followed, 5 not checked',
       }),
     ).toBeVisible();
+  });
+
+  // A progress event `wall` seconds after the run began, with the counts the crawl has `crawling` seconds in.
+  const at = (wall: number, crawling: number, extra: Record<string, unknown> = {}) => {
+    const event = progressAt(crawling, POLITE);
+    return message('progress', {
+      ...event,
+      elapsedMs: wall * 1_000,
+      at: new Date(Date.parse(progressAt(0, POLITE).at ?? '') + wall * 1_000).toISOString(),
+      ...extra,
+    });
+  };
+
+  it('keeps one clock: Elapsed and the time left go by the time spent crawling, which a pause is no part of', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM, history: historyUntil(60, POLITE) });
+    await open();
+    await heard(...Array.from({ length: 121 }, (_, index) => progress(index / 2)));
+    expect(cell('Elapsed')).toHaveTextContent('1 min');
+    expect(cell('Elapsed')).toHaveTextContent('At this pace, done within 1 h 22 min');
+    // Paused for 45 s: progress keeps arriving, and the engine's own count of the run goes on.
+    await heard(...Array.from({ length: 90 }, (_, index) => at(60.5 + index / 2, 60, { status: 'paused' })));
+    expect(cell('Elapsed')).toHaveTextContent('Paused');
+    expect(cell('Elapsed')).not.toHaveTextContent('1 min 4');
+    // Resumed: no 45 s of nothing in the pace, so the time left is as it was, at once, and Elapsed goes on from 1 min.
+    await heard(at(105.5, 60), at(106, 60.5), at(106.5, 61), at(107, 61.5), at(107.5, 62));
+    expect(cell('Elapsed')).toHaveTextContent(/1 min 2 s|1 min 3 s/);
+    expect(cell('Elapsed')).not.toHaveTextContent('1 min 4');
+    expect(cell('Elapsed')).toHaveTextContent('At this pace, done within 1 h 22 min');
+    // And the chart's time is the same clock.
+    expect(
+      region('Found and crawled').getByRole('img', { name: /^Found and crawled URLs of the site over 1 min [23] s: / }),
+    ).toBeVisible();
+  });
+
+  it('is of the run being watched when the crawl was continued: its time, its chart, and the pace', async () => {
+    // Ten minutes of crawling three days ago, counted back from the file, then this run, 4 s old.
+    const first = Date.parse('2026-10-29T10:15:00.000Z');
+    const runStart = Date.parse(progressAt(0, POLITE).at ?? '');
+    const filePoint = (ms: number, fetched: number) => ({
+      at: new Date(ms).toISOString(),
+      fetched,
+      htmlPages: fetched,
+      internalFetched: fetched,
+      internalFound: 3_000,
+      errors: 0,
+      blocked: 0,
+    });
+    sidecar({
+      analysis: null,
+      item: LIVE_ITEM,
+      history: {
+        crawlId: TEST_CRAWL_ID,
+        startedAt: new Date(first).toISOString(),
+        liveFrom: new Date(runStart).toISOString(),
+        points: [
+          ...Array.from({ length: 11 }, (_, index) => filePoint(first + index * 60_000, index * 120)),
+          { ...filePoint(runStart, 1_200), elapsedMs: 0 },
+        ],
+      },
+    });
+    await open();
+    await heard(
+      ...Array.from({ length: 9 }, (_, index) =>
+        at(index / 2, 0, { fetched: 1_200 + index, internalFetched: 1_200 + index, internalFound: 3_000 }),
+      ),
+    );
+    expect(cell('Elapsed')).toHaveTextContent('4 s');
+    const chart = region('Found and crawled');
+    expect(chart.getByText('The site’s URLs over the 4 s since it was continued')).toBeVisible();
+    expect(
+      chart.getByRole('img', { name: /^Found and crawled URLs of the site over the 4 s since it was continued: / }),
+    ).toBeVisible();
+    // Not the three days and ten minutes since it first started.
+    expect(main().queryByText(/72 h|3 days|10 min/)).toBeNull();
+  });
+
+  it('says the limit is reached, not that there’s no time left, while the last requests finish', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM });
+    await open();
+    const limited: CrawlScript = { rate: 100, size: 40_000, maxUrls: 3_000 };
+    await heard(
+      ...Array.from({ length: 61 }, (_, index) => message('progress', progressAt(index / 2, limited))),
+      message('progress', { ...progressAt(30.5, limited), phase: 'crawling' }),
+    );
+    expect(figure('Crawled')).toHaveTextContent('3,000');
+    expect(cell('Elapsed')).toHaveTextContent('At its URL limit: the last requests are finishing');
+    expect(cell('Elapsed')).not.toHaveTextContent(/About 0 s left|Working out the pace/);
   });
 
   it('carries Resume when the crawl is paused', async () => {

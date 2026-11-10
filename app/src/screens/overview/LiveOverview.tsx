@@ -22,7 +22,7 @@ import { AlertList, WaitList } from './AlertList';
 import { alertEntries } from './alerts';
 import { countTicks, progressSeries, timeTicks } from './foundAndCrawled';
 import { ANSWERED_SITE_PAGES } from './links';
-import { activityWords, crawledSoFar, foundSplit, sparkOf, timeLeft } from './liveFigures';
+import { activityWords, atUrlLimit, crawledSoFar, foundSplit, sparkOf, timeLeft } from './liveFigures';
 import { linkProps } from './overviewLinks';
 import { StatusCodes } from './StatusCodes';
 import { statusSplit } from './statusSplit';
@@ -49,6 +49,10 @@ const TWO_COLUMNS_BELOW = 520;
  * comes from the live store, which tells React at most 4 times a second, and updates in place: nothing here changes
  * size as the numbers grow. Pause, Resume and Stop are the top bar's, on every screen; this screen's banners carry the
  * next action for the state it's in.
+ *
+ * Its times are one clock: how long the run being watched has spent crawling (the store's `RunClock`). Elapsed shows
+ * it, the chart's time axis is it, and the pace behind the time left is read over the last minute of it. It stands
+ * still while the crawl is paused, and starts again when a crawl is continued.
  */
 export function LiveOverview({
   crawlId,
@@ -76,7 +80,16 @@ export function LiveOverview({
   const liveAlerts = live?.alerts;
   const series = useMemo(() => progressSeries(history, trail ?? []), [history, trail]);
   const spark = useMemo(() => sparkOf(rates ?? []), [rates]);
-  const left = timeLeft(status, progress, trail ?? []);
+  const left = timeLeft(status, progress, live?.pace ?? []);
+  // The run's time spent crawling; the engine's own count of the run (which runs on through a pause) only for an
+  // engine whose progress doesn't say when it was taken.
+  const elapsedMs = live?.clock?.runMs ?? progress?.elapsedMs;
+  // "over 4 s", and for a crawl that was continued, of which only this run is drawn, "over the 4 s since it was continued".
+  const over = series
+    ? series.continued
+      ? `over the ${formatDuration(series.spanMs)} since it was continued`
+      : `over ${formatDuration(series.spanMs)}`
+    : '';
   const statusClasses = progress?.statusClasses ?? null;
   const statusCodes = progress?.statusCodes ?? null;
   const noResponse = progress?.noResponse ?? null;
@@ -128,9 +141,11 @@ export function LiveOverview({
       : `At this pace, done within ${formatDuration(left.ms)}`
     : status !== 'running'
       ? activityWords(status, progress?.phase ?? null)
-      : limit
-        ? 'Working out the pace'
-        : 'No URL limit, so no end time';
+      : atUrlLimit(progress)
+        ? 'At its URL limit: the last requests are finishing'
+        : limit
+          ? 'Working out the pace'
+          : 'No URL limit, so no end time';
 
   return (
     <>
@@ -218,12 +233,7 @@ export function LiveOverview({
                 />
               }
             />
-            <Stat
-              size={size}
-              label="Elapsed"
-              value={<Duration ms={progress?.elapsedMs} />}
-              context={lines(elapsedContext)}
-            />
+            <Stat size={size} label="Elapsed" value={<Duration ms={elapsedMs} />} context={lines(elapsedContext)} />
           </Stats>
         </Card>
       </div>
@@ -233,13 +243,13 @@ export function LiveOverview({
           <CardHeader
             title="Found and crawled"
             titleId="overview-progress-title"
-            meta={series ? `The site’s URLs over ${formatDuration(series.spanMs)}` : undefined}
+            meta={series ? `The site’s URLs ${over}` : undefined}
           />
           <CardBody className="flex flex-col gap-4">
             {chart && series ? (
               <>
                 <LineChart
-                  label={`Found and crawled URLs of the site over ${formatDuration(series.spanMs)}: ${formatCount(series.found)} found, ${formatCount(series.crawled)} crawled`}
+                  label={`Found and crawled URLs of the site ${over}: ${formatCount(series.found)} found, ${formatCount(series.crawled)} crawled`}
                   series={chart.lines}
                   xMax={chart.xMax}
                   yMax={chart.yMax}
