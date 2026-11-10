@@ -144,13 +144,15 @@ fixes, and their checks are the build agents' own, not run again:
 
 | Work | Branch and worktree | State | Saved in the scratchpad |
 | --- | --- | --- | --- |
-| Engine E3c: what the slices found the engine lacks | `ui/e3c`, `.claude/worktrees/e3c` | Built to `4400814` (25 commits). Its review (`brief-e3c-review.md`, which also covers the E3b fix round) was still running when this was written | `e3c-review\findings.md` once the review ends. If that file is missing, the review didn't finish: run it again from its brief |
+| Engine E3c: what the slices found the engine lacks | `ui/e3c`, `.claude/worktrees/e3c` | Built to `4400814` (25 commits) and reviewed, with the E3b fix round: every number was right against the reviewer's own SQL, and it found one medium defect and six low. Not fixed yet | `e3c-review\findings.md` |
 | The Links screen, the Issues "pages affected" wording, and `npm run dev` keeping analysed copies | `ui/links`, `.claude/worktrees/links` | Built to `2175872` (24 commits). No review yet | `links\report.md` |
 | The Sitemaps and robots.txt screens | `ui/sitemaps-robots`, `.claude/worktrees/sitemaps-robots` | Built to `8d77343` (20 commits). No review yet | `sitemaps-robots\report.md` |
 
 To resume:
 
-1. E3c: a fixer from the review's findings, then the merge, both verify scripts and the push.
+1. E3c: a fixer from the review's findings, then the merge, both verify scripts and the push. The medium defect
+   matters to Links: while a links grid reads a running crawl, the write-ahead log is never reset (160 to 220 MB on
+   a 40k-page crawl, against 22 MB with no reader), so fix it before Links merges or with it.
 2. Links: a review (model: `brief-overview-review.md`, plus the open points in `links\report.md`), a fixer, the
    merge, `verify-app.sh` and the push. Merge it before Sitemaps: it is the one that reshaped the grid's shared
    pieces.
