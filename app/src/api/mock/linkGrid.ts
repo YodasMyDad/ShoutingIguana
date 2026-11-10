@@ -210,6 +210,8 @@ export function answerLinkFacets(
   const facets: LinkFacetsPage['facets'] = {};
   for (const id of wanted) {
     if (id === 'follow') facets.follow = followFacet(matched);
+    // The site's own URLs first, as the sidecar lists them.
+    else if (id === 'to.isInternal') facets[id] = valueFacet(matched, id, ['true', 'false']);
     else facets[id] = valueFacet(matched, id, linkColumn(id)?.values);
   }
   return { ok: true, page: { matching: matched.length, total: rows.length, summary, unavailable: [], facets } };

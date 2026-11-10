@@ -2,6 +2,7 @@
 // gives the columns as ids (`GET /api/link-columns`: `kind`, `to.statusCode`); nothing on screen shows one. A link's
 // own columns are named here; either end's are the URL grid's column under "Source" or "Target" ("Target status"),
 // with the URL grid's own words for its values, so the two grids never name a column or a value two ways.
+import type { GridFilter } from '../../api/grids';
 import type { FilterSentence, FilterWords } from '../../grid/filterSentence';
 import { midPhrase, urlColumnWords, urlEmptyWords, urlValueWords } from '../../grid/urlFilterWords';
 import { KIND_WORDS, OUTCOME_WORDS, POSITION_WORDS, SOURCE_WORDS, TYPE_WORDS } from '../../inspector/words';
@@ -160,10 +161,10 @@ export function linkFilterWords(urlWords: (urlId: number) => string): FilterWord
 }
 
 /** The ids of the URLs a filter set names by id, for their words to be read: `to.id`, `from.id`. */
-export function urlIdsNamed(filters: readonly { column: string; value?: unknown; values?: unknown }[]): number[] {
+export function urlIdsNamed(filters: readonly GridFilter[]): number[] {
   const ids = filters.flatMap((filter) => {
     if (endColumn(filter.column)?.column !== 'id') return [];
-    const values = Array.isArray(filter.values) ? (filter.values as unknown[]) : [filter.value];
+    const values: unknown[] = 'values' in filter ? filter.values : 'value' in filter ? [filter.value] : [];
     return values.filter((value): value is number => typeof value === 'number');
   });
   return [...new Set(ids)].sort((a, b) => a - b);

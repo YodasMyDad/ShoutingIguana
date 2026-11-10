@@ -1,0 +1,638 @@
+import { createMemoryHistory } from '@tanstack/react-router';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GridFilter, GridQuery } from '../api/grids';
+import { liveGridPagesOf } from '../api/queries';
+import { setTransport, type TransportRequest } from '../api/transport';
+import { App } from '../app/App';
+import { createQueryClient } from '../app/queryClient';
+import { createAppRouter } from '../app/router';
+import { onAnnounce } from '../feedback/announce';
+import { commands } from '../keyboard/registry';
+import { TEST_CRAWL_ID, fakeSidecar } from '../test/fakeSidecar';
+import { inspectorRoutes, testLinkRow, testUrlDetail } from '../test/inspectorSidecar';
+import {
+  LINKS_COUNTS,
+  LINKS_FACTS,
+  LINKS_URLS,
+  linksRoutes,
+  testLinkRows,
+  type LinksSidecarOptions,
+} from '../test/linksSidecar';
+import { createQueryClientWithoutBackoff } from '../test/queryClient';
+import { wholeText } from '../test/text';
+import { LINK_PRESETS } from './links/presets';
+
+const LINKS = `/crawls/${TEST_CRAWL_ID}/links`;
+
+function sidecar(options: LinksSidecarOptions = {}, first: Parameters<typeof fakeSidecar>[0] = []) {
+  const { routes, state } = linksRoutes(options);
+  const analyse = vi.fn(() => new Response(null, { status: 202 }));
+  const transport = fakeSidecar([...first, ['POST', /^\/api\/crawls\/[0-9a-f]{16}\/analyze$/, analyse], ...routes]);
+  setTransport(transport);
+  return { transport, state, analyse };
+}
+
+async function open(path: string, queryClient = createQueryClient()) {
+  const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
+  render(<App router={router} queryClient={queryClient} />);
+  await act(() => router.load());
+  return { router, queryClient, user: userEvent.setup() };
+}
+
+const header = async () => (await screen.findByRole('heading', { level: 1, name: 'Links' })).parentElement!;
+const counted = async (words: string) =>
+  expect(await within(await header()).findByText(wholeText(words))).toBeVisible();
+const grid = () => screen.findByRole('grid', { name: 'Links' });
+const filtersOf = (router: { state: { location: { search: unknown } } }) =>
+  (router.state.location.search as { filter?: GridFilter[] }).filter;
+const linkRequests = (transport: { requests: TransportRequest[] }) =>
+  transport.requests.filter((request) => request.path.endsWith('/links')).map((request) => request.body as GridQuery);
+
+let said: string[] = [];
+let stopListening: () => void = () => undefined;
+beforeEach(() => {
+  said = [];
+  stopListening = onAnnounce((message) => said.push(message));
+});
+afterEach(() => {
+  stopListening();
+  setTransport(fakeSidecar([]));
+});
+
+describe('the Links grid', () => {
+  it('lists every link in crawl order, each end as its path, with what the link is and how its target answered', async () => {
+    const { transport } = sidecar();
+    await open(LINKS);
+    await counted('13 links');
+    const table = await grid();
+    const second = (await within(table).findByText('About us')).closest<HTMLElement>('[role="row"]')!;
+    expect(within(second).getByText('/')).toBeVisible();
+    expect(within(second).getByText('/about')).toBeVisible();
+    expect(within(second).getByText('Hyperlink')).toBeVisible();
+    expect(within(second).getByText('Navigation')).toBeVisible();
+    expect(within(second).getByText('Followed')).toBeVisible();
+    expect(within(second).getByText('200')).toBeVisible();
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((cell) => cell.textContent),
+    ).toEqual(['Source URL', 'Target URL', 'Anchor or alt text', 'Kind', 'Position', 'Follow', 'Target status']);
+    // Crawl order is the engine's default: nothing is asked of it but the columns.
+    expect(linkRequests(transport)[0]).toMatchObject({ sort: [], filters: [], offset: 0 });
+  });
+
+  it('says what happened to a target with no status, by how the crawl left it', async () => {
+    sidecar();
+    await open(LINKS);
+    const table = await grid();
+    const refused = (await within(table).findByText('Partner')).closest<HTMLElement>('[role="row"]')!;
+    expect(within(refused).getByText('Blocked by robots.txt')).toBeVisible();
+    expect(within(refused).getByText('nofollow, sponsored')).toBeVisible();
+    // The never-fetched target of a link with no text.
+    const hidden = within(table).getByText('/hidden').closest<HTMLElement>('[role="row"]')!;
+    expect(within(hidden).getByText('Not fetched')).toBeVisible();
+    expect(within(hidden).getByText('None')).toBeVisible();
+    expect(within(hidden).getByText('nofollow')).toBeVisible();
+    // A kind that isn't followed or not has no word for it, and no status of 0.
+    const canonical = within(table).getByText('Canonical').closest<HTMLElement>('[role="row"]')!;
+    expect(within(canonical).getAllByText('–')).toHaveLength(1);
+  });
+
+  it('lands each preset on its count, as chips that say what it filters by', async () => {
+    sidecar();
+    const { router, user } = await open(LINKS);
+    await counted('13 links');
+    const views = screen.getByRole('group', { name: 'Views' });
+    expect(within(views).getByRole('button', { name: 'All links' })).toHaveAttribute('aria-pressed', 'true');
+    const expected: Record<string, number> = {
+      broken: LINKS_COUNTS.broken,
+      redirects: LINKS_COUNTS.redirects,
+      nofollow: LINKS_COUNTS.nofollow,
+      'no-text': LINKS_COUNTS.noText,
+      external: LINKS_COUNTS.external,
+    };
+    for (const preset of LINK_PRESETS.filter((candidate) => candidate.id !== 'all')) {
+      await user.click(within(views).getByRole('button', { name: preset.title }));
+      const landed = expected[preset.id]!;
+      await counted(`${landed} of 13 links`);
+      expect(filtersOf(router)).toEqual(preset.filters);
+      expect(within(views).getByRole('button', { name: preset.title })).toHaveAttribute('aria-pressed', 'true');
+      expect(within(views).getByRole('button', { name: 'All links' })).toHaveAttribute('aria-pressed', 'false');
+    }
+    const bar = screen.getByRole('group', { name: 'Filters' });
+    expect(within(bar).getByText('another site')).toBeVisible();
+    await user.click(within(views).getByRole('button', { name: 'All links' }));
+    await counted('13 links');
+    expect(filtersOf(router)).toBeUndefined();
+  });
+
+  it('counts the links in view by value, and narrows to exactly a value’s count', async () => {
+    sidecar();
+    const { router, user } = await open(LINKS);
+    await counted('13 links');
+    await user.click(screen.getByRole('button', { name: 'Filter by kind' }));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByText('Kind, of 13 links')).toBeVisible();
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Hyperlink9, 9 links', 'Image2, 2 links', 'Canonical1, 1 link', 'Redirect1, 1 link']);
+    await user.click(within(menu).getByRole('menuitem', { name: /^Image/ }));
+    await counted('2 of 13 links');
+    expect(filtersOf(router)).toEqual([{ column: 'kind', op: 'in', values: ['image'] }]);
+    // The next facet's counts are of the links now in view, and add up to them.
+    await user.click(screen.getByRole('button', { name: 'Filter by position' }));
+    const positions = await screen.findByRole('menu');
+    expect(within(positions).getByText('Position, of 2 links')).toBeVisible();
+    await user.click(within(positions).getByRole('menuitem', { name: /^Header/ }));
+    await counted('1 of 13 links');
+    expect(filtersOf(router)).toEqual([
+      { column: 'kind', op: 'in', values: ['image'] },
+      { column: 'position', op: 'in', values: ['header'] },
+    ]);
+    // The keyboard is still on the facet's button: the menu gave it back.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Filter by position' })).toHaveFocus());
+  });
+
+  it('says so when the counts can’t be read, and the grid works without them', async () => {
+    sidecar({ facetsFail: true });
+    const { user } = await open(LINKS, createQueryClientWithoutBackoff());
+    await counted('13 links');
+    await user.click(screen.getByRole('button', { name: 'Filter by follow' }));
+    const menu = await screen.findByRole('menu');
+    expect(await within(menu).findByText('The counts couldn’t be read.')).toBeVisible();
+    expect(within(menu).getByRole('menuitem', { name: 'Try again' })).toBeVisible();
+  });
+});
+
+describe('the Links filter bar', () => {
+  it('reads a link’s filters as sentences, and gives focus somewhere to go when one is removed', async () => {
+    sidecar();
+    const filter = JSON.stringify([
+      { column: 'to.statusClass', op: 'in', values: ['4xx', '5xx'] },
+      { column: 'to.id', op: 'eq', value: 4 },
+    ]);
+    const { router, user } = await open(`${LINKS}?filter=${encodeURIComponent(filter)}`);
+    await counted('2 of 13 links');
+    const bar = screen.getByRole('group', { name: 'Filters' });
+    expect(within(bar).getByRole('button', { name: 'Target status class is 4xx or 5xx' })).toBeVisible();
+    // A URL named by its id reads as the URL, as the grid shows it. Its chip is read and removed, not edited: no
+    // one types a URL's id.
+    expect(await within(bar).findByText('/gone')).toBeVisible();
+    expect(within(bar).queryByRole('button', { name: 'Target URL is /gone' })).toBeNull();
+    await user.click(within(bar).getByRole('button', { name: 'Remove the filter Target URL is /gone' }));
+    await counted('3 of 13 links');
+    // The chip went: the keyboard is on the one that's left, where Delete removes that too.
+    expect(within(bar).getByRole('button', { name: 'Target status class is 4xx or 5xx' })).toHaveFocus();
+    await user.keyboard('{Delete}');
+    await counted('13 links');
+    expect(filtersOf(router)).toBeUndefined();
+    expect(within(bar).getByRole('button', { name: 'Add filter' })).toHaveFocus();
+  });
+
+  it('adds a filter on either end by the column’s type, and edits one from its chip', async () => {
+    sidecar();
+    const { router, user } = await open(LINKS);
+    await counted('13 links');
+    const bar = screen.getByRole('group', { name: 'Filters' });
+    await user.click(within(bar).getByRole('button', { name: 'Add filter' }));
+    const editor = await screen.findByRole('dialog', { name: 'Add a filter' });
+    // Its target's status code, at least 400.
+    await user.click(within(editor).getByRole('button', { name: /^About:/ }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Its target' }));
+    await user.click(within(editor).getByRole('button', { name: /^Column:/ }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Status' }));
+    await user.click(within(editor).getByRole('button', { name: /^Condition:/ }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'is at least' }));
+    // What's wrong is said under the field, and nothing is applied.
+    await user.click(within(editor).getByRole('button', { name: 'Add filter' }));
+    expect(within(editor).getByText('Give a number.')).toBeVisible();
+    expect(filtersOf(router)).toBeUndefined();
+    await user.type(within(editor).getByRole('textbox', { name: 'Number' }), '400{Enter}');
+    await counted('3 of 13 links');
+    expect(filtersOf(router)).toEqual([{ column: 'to.statusCode', op: 'gte', value: 400 }]);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // Its chip opens the same editor on it.
+    await user.click(within(bar).getByRole('button', { name: 'Target status is at least 400' }));
+    const editing = await screen.findByRole('dialog', { name: 'Change the filter' });
+    const number = within(editing).getByRole('textbox', { name: 'Number' });
+    expect(number).toHaveValue('400');
+    await user.clear(number);
+    await user.type(number, '500');
+    await user.click(within(editing).getByRole('button', { name: 'Apply' }));
+    await counted('1 of 13 links');
+    expect(filtersOf(router)).toEqual([{ column: 'to.statusCode', op: 'gte', value: 500 }]);
+    // The editor gave the keyboard back to the chip it came from.
+    await waitFor(() =>
+      expect(within(bar).getByRole('button', { name: 'Target status is at least 500' })).toHaveFocus(),
+    );
+  });
+
+  it('filters by some of an enum’s values, and clears every filter at once', async () => {
+    sidecar();
+    const { router, user } = await open(LINKS);
+    await counted('13 links');
+    const bar = screen.getByRole('group', { name: 'Filters' });
+    await user.click(within(bar).getByRole('button', { name: 'Add filter' }));
+    const editor = await screen.findByRole('dialog', { name: 'Add a filter' });
+    await user.click(within(editor).getByRole('checkbox', { name: 'Image' }));
+    await user.click(within(editor).getByRole('checkbox', { name: 'Canonical' }));
+    await user.click(within(editor).getByRole('button', { name: 'Add filter' }));
+    await counted('3 of 13 links');
+    expect(filtersOf(router)).toEqual([{ column: 'kind', op: 'in', values: ['image', 'canonical'] }]);
+    expect(within(bar).getByRole('button', { name: 'Kind is Image or Canonical' })).toBeVisible();
+    await user.click(within(bar).getByRole('button', { name: 'Clear filters' }));
+    await counted('13 links');
+    expect(filtersOf(router)).toBeUndefined();
+    expect(within(bar).getByRole('button', { name: 'Add filter' })).toHaveFocus();
+  });
+
+  it('lists a column the analysis fills, and won’t take it, while there’s no analysis', async () => {
+    sidecar({ item: { analyzedAt: null }, summary: { available: false, reason: 'notAnalyzed' } });
+    const { user } = await open(LINKS);
+    await counted('13 links');
+    await user.click(screen.getByRole('button', { name: 'Add filter' }));
+    const editor = await screen.findByRole('dialog', { name: 'Add a filter' });
+    await user.click(within(editor).getByRole('button', { name: /^About:/ }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Its target' }));
+    await user.click(within(editor).getByRole('button', { name: /^Column:/ }));
+    expect(await screen.findByRole('menuitemradio', { name: 'Inlinks (needs an analysis)' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+});
+
+describe('searching the links', () => {
+  it('searches on Enter, says the count once, and clears', async () => {
+    const { transport } = sidecar();
+    const { router, user } = await open(LINKS);
+    await counted('13 links');
+    const field = screen.getByRole('searchbox', { name: 'Search link text and URLs' });
+    await user.type(field, 'gone{Enter}');
+    await counted('2 of 13 links');
+    expect(router.state.location.search).toMatchObject({ q: 'gone' });
+    expect(linkRequests(transport).at(-1)).toMatchObject({ search: 'gone' });
+    // The field kept the keyboard: nothing was taken away under it.
+    expect(field).toHaveFocus();
+    await waitFor(() => expect(said).toContain('2 of 13 links'));
+    expect(said.filter((message) => message === '2 of 13 links')).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Clear the search' }));
+    await counted('13 links');
+    expect((router.state.location.search as { q?: string }).q).toBeUndefined();
+  });
+
+  it('focuses the search on Ctrl+F, from the registry', async () => {
+    sidecar();
+    await open(LINKS);
+    await counted('13 links');
+    expect(commands.get('links.search')?.keys).toEqual(['mod+f']);
+    act(() => void commands.run('links.search'));
+    expect(screen.getByRole('searchbox', { name: 'Search link text and URLs' })).toHaveFocus();
+  });
+});
+
+describe('sorting the links', () => {
+  it('sorts by a column of the target from its header, and says why another column doesn’t sort', async () => {
+    const { transport } = sidecar();
+    const { router, user } = await open(LINKS);
+    await counted('13 links');
+    const table = await grid();
+    const status = within(table).getByRole('columnheader', { name: /Target status/ });
+    await user.click(within(status).getByRole('button'));
+    await waitFor(() =>
+      expect(router.state.location.search).toMatchObject({ sort: [{ column: 'to.statusCode', desc: false }] }),
+    );
+    await waitFor(() =>
+      expect(linkRequests(transport).at(-1)?.sort).toEqual([{ column: 'to.statusCode', desc: false }]),
+    );
+    const sorted = await grid();
+    await waitFor(() =>
+      expect(within(sorted).getByRole('columnheader', { name: /Target status/ })).toHaveAttribute(
+        'aria-sort',
+        'ascending',
+      ),
+    );
+    await user.click(within(within(sorted).getByRole('columnheader', { name: /Target status/ })).getByRole('button'));
+    await waitFor(() =>
+      expect(router.state.location.search).toMatchObject({ sort: [{ column: 'to.statusCode', desc: true }] }),
+    );
+    // A link's own columns have no button, and say why.
+    const text = within(await grid()).getByRole('columnheader', { name: 'Anchor or alt text' });
+    expect(within(text).queryByRole('button')).toBeNull();
+    expect(text).toHaveAttribute(
+      'title',
+      'Links can’t be sorted by anchor or alt text: they sort by crawl order, or by a column of the target.',
+    );
+  });
+
+  it('says why on Enter, for the keyboard, on a header that doesn’t sort', async () => {
+    sidecar();
+    await open(LINKS);
+    await counted('13 links');
+    const table = await grid();
+    await within(table).findByText('About us');
+    act(() => table.focus());
+    fireEvent.keyDown(table, { key: 'ArrowUp' });
+    fireEvent.keyDown(table, { key: 'Enter' });
+    expect(said).toContain(
+      'Links can’t be sorted by source URL: they sort by crawl order, or by a column of the target.',
+    );
+  });
+});
+
+describe('a link’s two ends', () => {
+  it('opens the inspector on the end the cursor is in, and follows the cursor down that end', async () => {
+    sidecar({}, inspectorRoutes({ urls: () => testUrlDetail() }));
+    const { router } = await open(LINKS);
+    await counted('13 links');
+    const table = await grid();
+    await within(table).findByText('About us');
+    act(() => table.focus());
+    // The cursor starts in the source's column: Enter opens the page the link is on.
+    fireEvent.keyDown(table, { key: 'ArrowDown' });
+    fireEvent.keyDown(table, { key: 'Enter' });
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 1 }));
+    // From the target's column, the link's target; and the inspector then follows the cursor down the targets.
+    fireEvent.keyDown(table, { key: 'ArrowRight' });
+    fireEvent.keyDown(table, { key: 'Enter' });
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 2 }));
+    fireEvent.keyDown(table, { key: 'ArrowDown' });
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 3 }));
+    fireEvent.keyDown(table, { key: 'ArrowDown' });
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 4 }));
+  });
+
+  it('opens either end from its URL, and the target from a double-click anywhere else on the row', async () => {
+    sidecar({}, inspectorRoutes({ urls: () => testUrlDetail() }));
+    const { router, user } = await open(LINKS);
+    await counted('13 links');
+    const table = await grid();
+    const row = (await within(table).findByText('About us')).closest<HTMLElement>('[role="row"]')!;
+    // Each end's URL is a button in the app: its name is the whole URL, whatever of it the cell has room for.
+    const source = within(row).getByRole('button', { name: 'https://example.com/' });
+    const target = within(row).getByRole('button', { name: 'https://example.com/about' });
+    await user.click(target);
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 2 }));
+    await user.click(source);
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 1 }));
+    await user.dblClick(within(table).getByText('Old page'));
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 3 }));
+  });
+
+  it('lists a URL’s inlinks in Links from the inspector, the same links by the same count', async () => {
+    const inlinks = [
+      testLinkRow({ id: 1, url: 'https://example.com/' }),
+      testLinkRow({ id: 3, url: 'https://example.com/old' }),
+    ];
+    sidecar({}, inspectorRoutes({ urls: () => testUrlDetail(), inlinks: { 2: inlinks } }));
+    const { router, user } = await open(`${LINKS}?inspect=2`);
+    await counted('13 links');
+    await user.click(await screen.findByRole('tab', { name: /^Inlinks/ }));
+    const all = await screen.findByRole('link', { name: 'All 2 in Links' });
+    await user.click(all);
+    await counted('2 of 13 links');
+    expect(router.state.location.search).toEqual({
+      filter: [
+        { column: 'to.id', op: 'eq', value: 2 },
+        { column: 'selfLink', op: 'is', value: false },
+      ],
+    });
+    const bar = screen.getByRole('group', { name: 'Filters' });
+    expect(await within(bar).findByText('/about')).toBeVisible();
+    expect(within(bar).getByText('doesn’t lead to')).toBeVisible();
+  });
+});
+
+describe('the links’ columns', () => {
+  it('shows and hides a column from the chooser, at once, and goes back to the default set', async () => {
+    const { transport } = sidecar();
+    const { router, user } = await open(LINKS);
+    await counted('13 links');
+    await user.click(screen.getByRole('button', { name: 'Columns' }));
+    const chooser = await screen.findByRole('dialog', { name: 'Columns' });
+    expect(within(chooser).getByRole('checkbox', { name: 'Follow' })).toBeChecked();
+    await user.type(within(chooser).getByRole('searchbox', { name: 'Find a column' }), 'indexab');
+    // Both ends have one: each under its own heading.
+    const found = within(chooser).getAllByRole('checkbox');
+    expect(found.map((box) => box.getAttribute('aria-checked'))).toEqual(['false', 'false', 'false', 'false']);
+    await user.click(
+      within(within(chooser).getByRole('group', { name: 'Its target' })).getByRole('checkbox', {
+        name: 'Indexability',
+      }),
+    );
+    await waitFor(() =>
+      expect((router.state.location.search as { cols?: string[] }).cols).toEqual([
+        'from.url',
+        'to.url',
+        'text',
+        'kind',
+        'position',
+        'follow',
+        'to.statusCode',
+        'to.indexability',
+      ]),
+    );
+    expect(await within(await grid()).findByRole('columnheader', { name: /Target indexability/ })).toBeVisible();
+    await waitFor(() => expect(linkRequests(transport).at(-1)?.columns).toContain('to.indexability'));
+    // The grid behind kept its count while the rows were read again with the new column.
+    await counted('13 links');
+    await user.click(within(chooser).getByRole('button', { name: 'Reset to the default columns' }));
+    await waitFor(() => expect((router.state.location.search as { cols?: string[] }).cols).toBeUndefined());
+    expect(within(chooser).getByRole('searchbox', { name: 'Find a column' })).toHaveFocus();
+  });
+
+  it('leaves out a column this engine doesn’t have, from a link made by another version', async () => {
+    const { transport } = sidecar();
+    await open(`${LINKS}?cols=${encodeURIComponent(JSON.stringify(['to.url', 'to.madeUp', 'kind']))}`);
+    await counted('13 links');
+    expect(
+      within(await grid())
+        .getAllByRole('columnheader')
+        .map((cell) => cell.textContent),
+    ).toEqual(['Target URL', 'Kind']);
+    expect(linkRequests(transport).every((query) => !query.columns?.includes('to.madeUp'))).toBe(true);
+  });
+});
+
+describe('copying from the links', () => {
+  it('copies the target URLs of the view, each once', async () => {
+    sidecar();
+    const { user } = await open(LINKS);
+    // The clipboard is user-event's own once it's set up: the copy is watched there.
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    await counted('13 links');
+    await user.click(screen.getByRole('button', { name: 'Broken links' }));
+    await counted('3 of 13 links');
+    act(() => void commands.run('links.copyTargets'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://example.com/gone\nhttps://example.com/error'));
+    await waitFor(() => expect(said).toContain('Copied 2 target URLs.'));
+  });
+});
+
+describe('the Links grid’s states', () => {
+  it('says what a crawl never analysed still has here, and offers to analyse it', async () => {
+    const { analyse } = sidecar({ item: { analyzedAt: null }, summary: { available: false, reason: 'notAnalyzed' } });
+    const { user } = await open(LINKS);
+    await counted('13 links');
+    const note = await screen.findByText(
+      /This crawl hasn’t been analysed yet\. Every link is here to search, filter and sort/,
+    );
+    expect(note).toHaveTextContent(
+      'The columns an analysis fills (inlinks, issues, where redirects end) are empty until it’s analysed.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Analyse it' }));
+    await waitFor(() => expect(analyse).toHaveBeenCalledOnce());
+  });
+
+  it('names the columns shown that wait for an analysis another version made', async () => {
+    sidecar({ summary: { available: false, reason: 'engineChanged' } });
+    await open(`${LINKS}?cols=${encodeURIComponent(JSON.stringify(['to.url', 'to.inlinks']))}`);
+    await counted('13 links');
+    expect(
+      await screen.findByText(
+        /Another version of Shouting Iguana analysed this crawl\. .*and Target inlinks is empty until it’s analysed again\./,
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Analyse again' })).toBeVisible();
+    // The column is there, with a dash and no 0.
+    const table = await grid();
+    expect(within(table).getByRole('columnheader', { name: /Target inlinks/ })).toBeVisible();
+    await waitFor(() => expect(within(table).getAllByText('–').length).toBeGreaterThanOrEqual(5));
+    expect(within(table).queryByText('0')).toBeNull();
+  });
+
+  it('turns a filter on such a column into the engine’s reason, with what can work', async () => {
+    sidecar({ item: { analyzedAt: null }, summary: { available: false, reason: 'notAnalyzed' } });
+    const filter = JSON.stringify([{ column: 'to.inlinks', op: 'gte', value: 2 }]);
+    const { router, user } = await open(
+      `${LINKS}?filter=${encodeURIComponent(filter)}`,
+      createQueryClientWithoutBackoff(),
+    );
+    expect(
+      await screen.findByText(
+        'Filtering or sorting by these columns needs an analysis, and this crawl hasn’t been analysed yet.',
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    const clear = screen.getByRole('button', { name: 'Clear the sort and filters' });
+    clear.focus();
+    await user.click(clear);
+    await counted('13 links');
+    expect(router.state.location.search).toEqual({});
+    // The button went with what it cleared: the keyboard is in the grid that came.
+    await waitFor(() => expect(screen.getByRole('grid', { name: 'Links' })).toHaveFocus());
+  });
+
+  it('says there are no links, and why, by whether the crawl is still running', async () => {
+    sidecar({ links: [] });
+    await open(LINKS);
+    expect(await screen.findByText('No links')).toBeVisible();
+    expect(screen.getByText('The crawl stored none: it read no page with a link on it.')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+  });
+
+  it('says nothing matches, shows the filters, and clears them in one press', async () => {
+    sidecar();
+    const filter = JSON.stringify([{ column: 'to.statusClass', op: 'in', values: ['other'] }]);
+    const { router, user } = await open(`${LINKS}?filter=${encodeURIComponent(filter)}&q=rattan`);
+    expect(await screen.findByText('No links match “rattan” with these filters.')).toBeVisible();
+    await counted('0 of 13 links');
+    const empty = screen.getByText('No links match “rattan” with these filters.').closest('div')!.parentElement!;
+    const clear = within(empty).getByRole('button', { name: /Clear/ });
+    clear.focus();
+    await user.click(clear);
+    await counted('13 links');
+    expect(router.state.location.search).toEqual({});
+    await waitFor(() => expect(screen.getByRole('grid', { name: 'Links' })).toHaveFocus());
+  });
+
+  it('says a read failed in plain words, and tries again', async () => {
+    const failing = sidecar({
+      linksProblem: { type: 'internal', title: 'Something went wrong in the engine.', status: 500 },
+    });
+    const { user } = await open(LINKS, createQueryClientWithoutBackoff());
+    expect(await screen.findByText('Something went wrong in the engine.')).toBeVisible();
+    // The engine comes back.
+    const { routes } = linksRoutes();
+    setTransport(fakeSidecar(routes));
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    await counted('13 links');
+    expect(failing.transport.requests.length).toBeGreaterThan(0);
+  });
+
+  it('turns a query the engine can’t run into a plain sentence, with a way back', async () => {
+    sidecar();
+    const { router, user } = await open(`${LINKS}?sort=-text`, createQueryClientWithoutBackoff());
+    expect(await screen.findByText('This view’s query can’t be run.')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Reset the view' }));
+    await counted('13 links');
+    expect(router.state.location.search).toEqual({});
+  });
+});
+
+describe('the Links grid while the crawl runs', () => {
+  it('shows it’s live, takes new links in place, and reads no count out as it moves', async () => {
+    const { state } = sidecar({
+      item: { status: 'running', analyzedAt: null },
+      summary: { available: false, reason: 'crawling' },
+    });
+    const { queryClient, user } = await open(LINKS);
+    await counted('13 links');
+    expect(within(await header()).getByText('Live')).toBeVisible();
+    // No banner for a running crawl whose shown columns need no analysis: its status says it.
+    expect(screen.queryByText(/fill in once the crawl has finished/)).toBeNull();
+    const table = await grid();
+    act(() => table.focus());
+    fireEvent.keyDown(table, { key: 'ArrowDown' });
+    fireEvent.keyDown(table, { key: 'ArrowDown' });
+    const cursor = table.getAttribute('aria-activedescendant');
+
+    // The crawl stores another page's links: what the live bridge does on a progress tick.
+    state.links = testLinkRows(
+      [...LINKS_FACTS, { ...LINKS_FACTS[1]!, fromId: 8, toId: 1, text: 'Back home' }],
+      LINKS_URLS,
+    );
+    await act(() => queryClient.invalidateQueries(liveGridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
+    await counted('14 links');
+    // In place: no skeleton, no progress line, the cursor where it was.
+    expect(table.isConnected).toBe(true);
+    expect(table).toHaveAttribute('aria-busy', 'false');
+    expect(table.getAttribute('aria-activedescendant')).toBe(cursor);
+    expect(said).toEqual([]);
+    // The facets moved with the rows.
+    await user.click(screen.getByRole('button', { name: 'Filter by kind' }));
+    expect(await within(await screen.findByRole('menu')).findByText('Kind, of 14 links')).toBeVisible();
+  });
+});
+
+describe('a read of the links that takes a while', () => {
+  it('says what it is doing after 150 ms, and is given up when the view changes', async () => {
+    const { state, transport } = sidecar();
+    const { user } = await open(LINKS);
+    await counted('13 links');
+    let release: () => void = () => undefined;
+    state.hold = new Promise<void>((resolve) => (release = resolve));
+    state.holds = (query) => query.search === 'gone';
+    await user.type(screen.getByRole('searchbox', { name: 'Search link text and URLs' }), 'gone{Enter}');
+    // Nothing for a moment, then what it's doing, over the grid's skeleton.
+    const words = 'Reading all 13 links: a search looks at each link’s text and both its URLs.';
+    expect(screen.queryByText(words)).toBeNull();
+    expect(await screen.findByText(words, undefined, { timeout: 2_000 })).toBeVisible();
+    expect(said).toContain(words);
+    const held = transport.requests.find(
+      (request) => request.path.endsWith('/links') && (request.body as GridQuery).search === 'gone',
+    );
+    expect(held?.signal?.aborted).toBe(false);
+    // The rest of the screen stays usable: another view gives the read up.
+    await user.click(screen.getByRole('button', { name: 'Broken links' }));
+    await counted('3 of 13 links');
+    expect(held?.signal?.aborted).toBe(true);
+    expect(screen.queryByText(words)).toBeNull();
+    release();
+  });
+});
