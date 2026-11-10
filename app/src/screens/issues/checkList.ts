@@ -160,22 +160,25 @@ export function foundBySeverity(
 const SEVERITY_RANK: Record<Severity, number> = { error: 0, warning: 1, notice: 2 };
 
 /**
+ * The checks that found issues, in the order to fix them: the most severe, then the most pages affected, then catalog
+ * order. Hidden checks are left out, unless every check with issues is hidden. Overview's "Fix first" is this list,
+ * and Issues opens on its first.
+ */
+export function rankChecksToFix(entries: readonly CheckEntry[]): CheckEntry[] {
+  const found = entries.filter((entry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped');
+  const candidates = found.some((entry) => !entry.hidden) ? found.filter((entry) => !entry.hidden) : found;
+  // A stable sort, so checks level on severity and count keep catalog order.
+  return [...candidates].sort(
+    (a, b) => SEVERITY_RANK[a.check.severity] - SEVERITY_RANK[b.check.severity] || (b.count ?? 0) - (a.count ?? 0),
+  );
+}
+
+/**
  * The check to fix first: the most severe, then the most pages affected, then catalog order. Hidden checks are left
  * out, unless every check with issues is hidden. Null when no check found an issue.
  */
 export function firstCheckToFix(entries: readonly CheckEntry[]): CheckEntry | null {
-  const found = entries.filter((entry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped');
-  const candidates = found.some((entry) => !entry.hidden) ? found.filter((entry) => !entry.hidden) : found;
-  let best: CheckEntry | null = null;
-  for (const entry of candidates) {
-    if (!best) {
-      best = entry;
-      continue;
-    }
-    const rank = SEVERITY_RANK[entry.check.severity] - SEVERITY_RANK[best.check.severity];
-    if (rank < 0 || (rank === 0 && (entry.count ?? 0) > (best.count ?? 0))) best = entry;
-  }
-  return best;
+  return rankChecksToFix(entries)[0] ?? null;
 }
 
 function matchesText(entry: CheckEntry, category: string, words: readonly string[]): boolean {

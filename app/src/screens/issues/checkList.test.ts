@@ -6,6 +6,7 @@ import {
   buildCheckList,
   checkEntries,
   firstCheckToFix,
+  rankChecksToFix,
   type CheckListFilters,
 } from './checkList';
 
@@ -132,6 +133,38 @@ describe('the first check to fix', () => {
 
   it('is nothing when no check found an issue', () => {
     expect(firstCheckToFix(checkEntries(CHECKS, { ...ANALYSIS, counts: [] }))).toBeNull();
+  });
+});
+
+describe('the order to fix checks in', () => {
+  it('is by severity, then pages affected, then catalog order, and starts with the first to fix', () => {
+    const entries = checkEntries(CHECKS, {
+      ...ANALYSIS,
+      counts: [...ANALYSIS.counts.filter((entry) => entry.checkId !== 'title-duplicate')].concat([
+        { checkId: 'title-duplicate', count: 86 },
+        { checkId: 'future-check', count: 86 },
+      ]),
+    });
+    const ranked = rankChecksToFix(entries);
+    expect(ids(ranked)).toEqual([
+      'internal-client-error',
+      'broken-internal-links',
+      // Level on severity and count: catalog order.
+      'title-duplicate',
+      'future-check',
+      'empty-anchor-text',
+      'title-too-long',
+    ]);
+    expect(firstCheckToFix(entries)).toBe(ranked[0]);
+  });
+
+  it('leaves out passed, skipped and hidden checks', () => {
+    const hidden = new Set(['broken-internal-links']);
+    expect(ids(rankChecksToFix(checkEntries(CHECKS, ANALYSIS, hidden)))).toEqual([
+      'internal-client-error',
+      'empty-anchor-text',
+      'title-too-long',
+    ]);
   });
 });
 
