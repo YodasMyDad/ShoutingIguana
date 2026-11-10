@@ -1130,6 +1130,35 @@ describe('the sheet', () => {
     expect(splitter).toHaveAttribute('aria-valuenow', '960');
   });
 
+  it('says the sizes it can really take, and clamps one chosen in a bigger window, in both docks', async () => {
+    // The view and the sheet share 668 px of height (a 720 px window) and 1,056 px of width.
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(668);
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1_056);
+    updateSettings({ inspectorDock: 'bottom', inspectorHeight: 720, inspectorWidth: 960 });
+    const { inspector, user } = await open(`${URLS}?inspect=2`);
+    const splitter = within(inspector).getByRole('separator', { name: 'Resize the inspector' });
+    // The view above keeps its minimum: 508 px is the most the sheet takes, whatever was stored.
+    expect(splitter).toHaveAttribute('aria-valuemax', '508');
+    expect(splitter).toHaveAttribute('aria-valuemin', '200');
+    expect(splitter).toHaveAttribute('aria-valuenow', '508');
+    expect(inspector).toHaveStyle({ height: '508px', maxHeight: '508px' });
+    // So the first press of a key changes it, from what it is.
+    act(() => splitter.focus());
+    fireEvent.keyDown(splitter, { key: 'ArrowDown' });
+    await waitFor(() => expect(getSettings().inspectorHeight).toBe(492));
+    expect(splitter).toHaveAttribute('aria-valuenow', '492');
+    fireEvent.keyDown(splitter, { key: 'End' });
+    await waitFor(() => expect(getSettings().inspectorHeight).toBe(508));
+
+    // On the right the view keeps a column's width: 728 px of the 1,056, not the 960 stored.
+    await user.click(within(inspector).getByRole('button', { name: 'Dock on the right' }));
+    await waitFor(() => expect(splitter).toHaveAttribute('aria-valuemax', '728'));
+    expect(splitter).toHaveAttribute('aria-valuenow', '728');
+    expect(inspector).toHaveStyle({ width: '728px', maxWidth: '728px' });
+    fireEvent.keyDown(splitter, { key: 'ArrowLeft' });
+    expect(splitter).toHaveAttribute('aria-valuenow', '728');
+  });
+
   it('docks at the bottom and back, and remembers it', async () => {
     const { inspector, user } = await open(`${URLS}?inspect=2`);
     await user.click(within(inspector).getByRole('button', { name: 'Dock at the bottom' }));

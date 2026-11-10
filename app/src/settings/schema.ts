@@ -43,6 +43,11 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const INSPECTOR_WIDTH_RANGE = { min: 320, max: 960 } as const;
 export const INSPECTOR_HEIGHT_RANGE = { min: 200, max: 720 } as const;
+/**
+ * What the view keeps of the room it shares with the inspector, px: beside it, a column of the grid; above it, the
+ * view's head, the grid's header and a row or two. The inspector takes at most the rest (layout/inspectorSize.ts).
+ */
+export const VIEW_MIN = { width: 320, height: 152 } as const;
 export const ZOOM_RANGE = { min: 0.5, max: 2 } as const;
 const MAX_REMEMBERED_CRAWLS = 200;
 /** The catalog has about 90 checks; ids are its kebab-case names. */

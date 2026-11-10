@@ -550,7 +550,14 @@ is what it shows. What it settled:
   `nav.forward`, `shortcuts.show`), and every key of the app's works with focus in the HTML; docs/v2-ui-ia.md's
   keys table says whose each key is there.
 - **Docked at the bottom** the sheet is short, so its head is one line (what the URL is, the URL cut at its end, the
-  actions), and it takes at most `--inspector-height-max` of the window, so the view above keeps some rows.
+  actions).
+- **The sheet's size has one rule in both docks** (`layout/inspectorSize.ts`): the view it shares the window with
+  always keeps its minimum (`VIEW_MIN` in `settings/schema.ts`: a column of its grid beside the sheet, its head and a
+  row or two above it), so the sheet's range is the settings' own (320 to 960 px wide, 200 to 720 px high) cut to
+  the room that's left, measured from what holds them both. The resize handle's `aria-valuemin`, `aria-valuemax`
+  and `aria-valuenow` are the sizes the sheet can really take and has; a size chosen in a bigger window stays stored
+  and is clamped where it's read, so the first press of a key changes it. In a window too small for both minimums
+  (1280x720 at 200%) the view keeps its own and the sheet has what's left.
 - **Its commands** are the registry's Inspector group: open in the browser, copy the URL, dock at the bottom or on
   the right, show each section, search the HTML source. None has a key of its own: Esc closes, and the rest are in
   the palette and on the sheet's buttons.

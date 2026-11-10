@@ -447,6 +447,65 @@ test('the sheet resizes from the keyboard, docks at the bottom, and remembers bo
   await expect.poll(async () => (await inspectorOf(page).boundingBox())?.width ?? 0).toBe(before + 32);
 });
 
+const boxOf = async (locator: Locator) => (await locator.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
+
+/** The handle's value is what the sheet measures, within its range: no size is promised that it can't take. */
+async function expectHandleSays(splitter: Locator, size: number) {
+  await expect(splitter).toHaveAttribute('aria-valuenow', String(Math.round(size)));
+  expect(Number(await splitter.getAttribute('aria-valuemax'))).toBeGreaterThanOrEqual(Math.round(size));
+  expect(Number(await splitter.getAttribute('aria-valuemin'))).toBeLessThanOrEqual(Math.round(size));
+}
+
+test('on the right the sheet at its widest leaves the view a column, and its handle says that width', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const inspector = await inspectPlant(page, 'thin');
+  const splitter = inspector.getByRole('separator', { name: 'Resize the inspector' });
+  await splitter.focus();
+  await page.keyboard.press('End');
+  await expect.poll(async () => (await boxOf(page.locator('#main'))).width).toBe(320);
+  const widest = (await boxOf(inspector)).width;
+  await expectHandleSays(splitter, widest);
+  await expect(splitter).toHaveAttribute('aria-valuemax', String(Math.round(widest)));
+});
+
+test('at the bottom the handle says the height the sheet has, and a step smaller is a step smaller', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const inspector = await inspectPlant(page, 'thin');
+  const splitter = inspector.getByRole('separator', { name: 'Resize the inspector' });
+  await inspector.getByRole('button', { name: 'Dock at the bottom' }).click();
+  await splitter.focus();
+  await page.keyboard.press('End');
+  // At its tallest the view above keeps its head and a row or two.
+  await expect.poll(async () => (await boxOf(page.locator('#main'))).height).toBe(152);
+  const tallest = (await boxOf(inspector)).height;
+  await expectHandleSays(splitter, tallest);
+  await page.keyboard.press('ArrowDown');
+  await expect.poll(async () => (await boxOf(inspector)).height).toBe(tallest - 16);
+  await expectHandleSays(splitter, tallest - 16);
+});
+
+test('at 200% the sheet docked at the bottom still leaves a row of the view', async ({ page }) => {
+  const inspector = await inspectPlant(page, 'thin');
+  const splitter = inspector.getByRole('separator', { name: 'Resize the inspector' });
+  await inspector.getByRole('button', { name: 'Dock at the bottom' }).click();
+  // 1280x720 at 200%.
+  await page.setViewportSize({ width: 640, height: 360 });
+  const main = page.locator('#main');
+  await expect.poll(async () => (await boxOf(main)).height).toBe(152);
+  const row = await boxOf(page.getByRole('grid', { name: 'URLs' }).getByRole('row').nth(1));
+  const view = await boxOf(main);
+  expect(row.height).toBeGreaterThan(0);
+  expect(row.y + row.height).toBeLessThanOrEqual(view.y + view.height);
+  // The handle says the one size there's room for.
+  const short = (await boxOf(inspector)).height;
+  await expectHandleSays(splitter, short);
+  await expect(splitter).toHaveAttribute('aria-valuemin', String(Math.round(short)));
+});
+
 test('an empty link grid in a short window passes axe, and the keyboard reaches the reason it scrolls', async ({
   page,
 }) => {

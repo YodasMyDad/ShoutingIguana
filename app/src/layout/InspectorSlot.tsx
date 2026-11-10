@@ -5,10 +5,13 @@ import { Inspector } from '../inspector/Inspector';
 import { useCommands } from '../keyboard/registry';
 import { useInspector } from '../routing/inspector';
 import { inspectedUrl } from '../routing/search';
-import { INSPECTOR_HEIGHT_RANGE, INSPECTOR_WIDTH_RANGE } from '../settings/schema';
+import { INSPECTOR_HEIGHT_RANGE, INSPECTOR_WIDTH_RANGE, VIEW_MIN } from '../settings/schema';
 import { updateSettings, useSettings } from '../settings/settingsStore';
+import { clampSize, sheetRange } from './inspectorSize';
 
 const KEY_STEP = 16;
+/** The sheet's inset from the window's edge (tokens.css `--sheet-inset`): room the view doesn't get either. */
+const SHEET_INSET = 8;
 
 /**
  * Where the URL inspector opens (docs/v2-ui-ia.md, The shell): on the right or docked at the bottom, resizable by
@@ -47,29 +50,47 @@ export function InspectorSlot() {
 
 /**
  * The panel itself. Until the user resizes it, it takes the layout's size (tokens.css `--inspector-width` and
- * `--inspector-height`, which narrow with the window); once resized, the size they chose, remembered.
+ * `--inspector-height`, which narrow with the window); once resized, the size they chose, remembered. Either way it
+ * takes no more than the view beside or above it can spare (layout/inspectorSize.ts): the handle's range is the
+ * sizes it can really take, and a size chosen in a bigger window is clamped to it here, where it's read.
  */
 function InspectorPanel({ crawlId, urlId, onClose }: { crawlId: string; urlId: number; onClose: () => void }) {
   const dock = useSettings((settings) => settings.inspectorDock);
   const chosen = useSettings((settings) => (dock === 'right' ? settings.inspectorWidth : settings.inspectorHeight));
-  const range = dock === 'right' ? INSPECTOR_WIDTH_RANGE : INSPECTOR_HEIGHT_RANGE;
   const panelRef = useRef<HTMLElement>(null);
   const drag = useRef<{ start: number; size: number } | null>(null);
-  const [measured, setMeasured] = useState<number>(range.min);
+  const [measured, setMeasured] = useState<number>(
+    dock === 'right' ? INSPECTOR_WIDTH_RANGE.min : INSPECTOR_HEIGHT_RANGE.min,
+  );
+  /** The size of what holds the view and the sheet, along the dock's axis; null until it's laid out. */
+  const [room, setRoom] = useState<number | null>(null);
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
     if (!panel) return undefined;
-    const measure = () => setMeasured(dock === 'right' ? panel.offsetWidth : panel.offsetHeight);
+    const holder = panel.parentElement;
+    const measure = () => {
+      setMeasured(dock === 'right' ? panel.offsetWidth : panel.offsetHeight);
+      const space = holder ? (dock === 'right' ? holder.clientWidth : holder.clientHeight) : 0;
+      setRoom(space > 0 ? space : null);
+    };
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     observer?.observe(panel);
+    if (holder) observer?.observe(holder);
     return () => observer?.disconnect();
   }, [dock]);
 
-  const size = Math.min(range.max, Math.max(range.min, chosen ?? measured));
-  const resize = (next: number) =>
-    updateSettings(dock === 'right' ? { inspectorWidth: next } : { inspectorHeight: next });
+  const range = sheetRange(
+    dock === 'right' ? INSPECTOR_WIDTH_RANGE : INSPECTOR_HEIGHT_RANGE,
+    room,
+    (dock === 'right' ? VIEW_MIN.width : VIEW_MIN.height) + SHEET_INSET,
+  );
+  const size = clampSize(chosen ?? measured, range);
+  const resize = (next: number) => {
+    const fitted = clampSize(next, range);
+    updateSettings(dock === 'right' ? { inspectorWidth: fitted } : { inspectorHeight: fitted });
+  };
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -101,11 +122,15 @@ function InspectorPanel({ crawlId, urlId, onClose }: { crawlId: string; urlId: n
       className={clsx(
         // A sheet above the grid: the raised surface, the large radius and the second elevation (clarity's inspector).
         'relative flex min-h-0 min-w-0 shrink-0 flex-col rounded-xl border border-border bg-surface-raised shadow-2',
-        // Docked at the bottom it never takes the whole height: the view above keeps some rows (a short window, 200%).
-        dock === 'right' ? 'my-2 mr-2' : 'mx-2 mb-2 max-h-(--inspector-height-max)',
+        dock === 'right' ? 'my-2 mr-2' : 'mx-2 mb-2',
         chosen === null && (dock === 'right' ? 'w-(--inspector-width)' : 'h-(--inspector-height)'),
       )}
-      style={chosen === null ? undefined : dock === 'right' ? { width: size } : { height: size }}
+      // Never more than the view can spare: it keeps its minimum in a narrow or a short window (200% zoom).
+      style={
+        dock === 'right'
+          ? { ...(chosen === null ? {} : { width: size }), ...(room === null ? {} : { maxWidth: range.max }) }
+          : { ...(chosen === null ? {} : { height: size }), ...(room === null ? {} : { maxHeight: range.max }) }
+      }
     >
       {/* A focusable separator is the APG window-splitter widget; jsx-a11y only knows the static separator. */}
       {/* eslint-disable-next-line jsx-a11y-x/no-noninteractive-element-interactions */}
