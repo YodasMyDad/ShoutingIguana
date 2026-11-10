@@ -116,7 +116,8 @@ export function LinksScreen() {
     queryKey,
     fetchPage,
     rowHeight,
-    enabled: search.cols === undefined || catalogue.data !== undefined,
+    // Without the list (it couldn't be read), the route's columns are asked for as they are: the engine checks them.
+    enabled: search.cols === undefined || catalogue.data !== undefined || catalogue.isError,
   });
 
   // Another column asks for the rows again, with it: the count of the same view stands meanwhile, so the grid keeps
@@ -364,8 +365,9 @@ export function LinksScreen() {
     [view, columns, editor, chooserGroups, hasRows, copying, copyColumnTitle, clearView, navigate],
   );
 
-  // A button that goes with what it cleared (Clear in the empty grid, "Clear the sort and filters") leaves the
-  // keyboard in the grid that comes, never on the page.
+  // A button that goes with the state it was in, without a navigation (Try again, once the read works), leaves the
+  // keyboard in the grid that comes, never on the page. One that clears the view navigates, and the shell does the
+  // same for it.
   const frame = useRef<HTMLDivElement>(null);
   useFocusRescue(frame, () => frame.current?.querySelector<HTMLElement>('[role="grid"]') ?? searchRef.current);
 
@@ -442,6 +444,7 @@ export function LinksScreen() {
             open={choosing}
             onOpenChange={setChoosing}
             command="links.columns"
+            disabled={chooserGroups.length === 0}
           />
           <DropdownMenu
             align="end"
@@ -480,6 +483,21 @@ export function LinksScreen() {
           />
         ))}
       </FilterBar>
+      {catalogue.isError ? (
+        <Banner
+          inset
+          tone="warning"
+          className="mx-6 mb-3"
+          actions={
+            <Button size="sm" icon={RefreshCw} onClick={() => void catalogue.refetch()}>
+              Try again
+            </Button>
+          }
+        >
+          The list of the links’ columns couldn’t be read. The links are here, but they can’t be sorted, given another
+          column or filtered by one until it is.
+        </Banner>
+      ) : null}
       {note ? (
         <Banner inset className="mx-6 mb-3" actions={note.action ? analyse(note.action) : undefined}>
           {note.text}

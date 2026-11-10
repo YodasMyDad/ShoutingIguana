@@ -33,6 +33,8 @@ export interface ColumnChooserProps {
   onOpenChange?: ((open: boolean) => void) | undefined;
   /** The command that opens it, for the button's tooltip and keys. */
   command?: string | undefined;
+  /** There are no columns to choose from yet (their list isn't read): the button is there, and can't be pressed. */
+  disabled?: boolean | undefined;
 }
 
 const sameColumns = (a: readonly string[], b: readonly string[]) =>
@@ -43,7 +45,16 @@ const sameColumns = (a: readonly string[], b: readonly string[]) =>
  * a hundred of them. A tick applies at once, the grid behind following; the last column shown can't be unticked, as
  * a grid with none says nothing.
  */
-export function ColumnChooser({ groups, shown, onChange, defaults, open, onOpenChange, command }: ColumnChooserProps) {
+export function ColumnChooser({
+  groups,
+  shown,
+  onChange,
+  defaults,
+  open,
+  onOpenChange,
+  command,
+  disabled = false,
+}: ColumnChooserProps) {
   const id = useId();
   const findRef = useRef<HTMLInputElement>(null);
   const [find, setFind] = useState('');
@@ -58,7 +69,7 @@ export function ColumnChooser({ groups, shown, onChange, defaults, open, onOpenC
   return (
     <Popover
       trigger={
-        <Button variant="ghost" size="sm" icon={Columns3} command={command}>
+        <Button variant="ghost" size="sm" icon={Columns3} command={command} disabled={disabled}>
           Columns
         </Button>
       }

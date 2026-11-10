@@ -528,6 +528,32 @@ describe('the Links grid’s states', () => {
     await waitFor(() => expect(screen.getByRole('grid', { name: 'Links' })).toHaveFocus());
   });
 
+  it('still lists the links when the engine’s list of columns can’t be read, and says what isn’t there', async () => {
+    sidecar({ columnsFail: true });
+    const { user } = await open(LINKS, createQueryClientWithoutBackoff());
+    await counted('13 links');
+    const note = await screen.findByText(/The list of the links’ columns couldn’t be read\./);
+    expect(note).toHaveTextContent('they can’t be sorted, given another column or filtered by one until it is');
+    const table = await grid();
+    expect(await within(table).findByText('About us')).toBeVisible();
+    // Nothing is offered that can't be done: no sort buttons, no Add filter, and Columns can't be pressed.
+    expect(within(table).queryAllByRole('button', { name: /Target status/ })).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'Add filter' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Columns' })).toBeDisabled();
+    // The presets and the facets are the engine's own filters: they still work.
+    await user.click(screen.getByRole('button', { name: 'Broken links' }));
+    await counted('3 of 13 links');
+    // The list comes back: the grid sorts again, and the keyboard isn't left on a button that went.
+    const { routes } = linksRoutes();
+    setTransport(fakeSidecar(routes));
+    const again = screen.getByRole('button', { name: 'Try again' });
+    again.focus();
+    await user.click(again);
+    await waitFor(() => expect(screen.queryByText(/couldn’t be read/)).toBeNull());
+    expect(await screen.findByRole('button', { name: 'Add filter' })).toBeVisible();
+    await waitFor(() => expect(screen.getByRole('grid', { name: 'Links' })).toHaveFocus());
+  });
+
   it('says there are no links, and why, by whether the crawl is still running', async () => {
     sidecar({ links: [] });
     await open(LINKS);
@@ -563,6 +589,8 @@ describe('the Links grid’s states', () => {
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     await counted('13 links');
     expect(failing.transport.requests.length).toBeGreaterThan(0);
+    // The button went with the error it was in, and nothing navigated: the keyboard is in the grid that came.
+    await waitFor(() => expect(screen.getByRole('grid', { name: 'Links' })).toHaveFocus());
   });
 
   it('turns a query the engine can’t run into a plain sentence, with a way back', async () => {

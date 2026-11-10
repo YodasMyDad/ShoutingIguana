@@ -300,6 +300,12 @@ export const ReadError: Story = {
   render: () => <LinksApp path={LINKS} />,
 };
 
+/** The engine's list of columns couldn't be read: the links are still here, and what can't be done says so. */
+export const ColumnsUnreadable: Story = {
+  loaders: [() => own({ columnsFail: true })],
+  render: () => <LinksApp path={LINKS} />,
+};
+
 const LONG_TEXT =
   'Shop our complete range of rattan garden furniture, including corner sofas, dining sets, bistro sets, sun loungers and day beds, all with free delivery to mainland UK and a five-year guarantee against fading, cracking and unravelling. '.repeat(
     14,
