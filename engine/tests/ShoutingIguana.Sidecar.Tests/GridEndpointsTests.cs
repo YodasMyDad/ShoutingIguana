@@ -194,8 +194,8 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
     {
         var product = await InspectAsync(IdOf("/p/7"));
         Assert.Equal(
-            ["id", "url", "isInternal", "type", "discovery", "response", "redirects", "indexability", "content", "limits", "links", "headers", "structuredData",
-             "hreflang", "issues", "namedBy", "summary", "source"],
+            ["id", "url", "urlLength", "isInternal", "type", "discovery", "response", "redirects", "indexability", "content", "limits", "links", "linkTotals",
+             "headers", "structuredData", "hreflang", "issues", "namedBy", "summary", "source"],
             product.AsObject().Select(property => property.Key));
         Assert.Equal("page", (string?)product["type"]);
         Assert.Equal("success", (string?)product["response"]!["outcome"]);
@@ -215,7 +215,19 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Equal("""{"test":"noindex","outcome":"pass","meta":false,"header":false}""", tests[2]!.ToJsonString());
         Assert.Equal(grid.Url("/p/7"), (string?)tests[3]!["canonical"]!["url"]);
 
+        // A URL it names carries what became of the request for it beside its status; the URL itself, its length as the
+        // check for long URLs measures it; and its lists of links, their totals of every kind.
+        Assert.Equal(["id", "url", "statusCode", "outcome"], tests[3]!["canonical"]!.AsObject().Select(property => property.Key));
+        Assert.Equal("success", (string?)tests[3]!["canonical"]!["outcome"]);
+        Assert.Equal("success", (string?)product["redirects"]!["final"]!["outcome"]);
+        Assert.Equal(grid.Url("/p/7").Length, (int?)product["urlLength"]);
+        var inlinks = await PostOkAsync($"api/crawls/{grid.Id}/urls/inlinks", new JsonObject { ["urlId"] = IdOf("/p/7"), ["limit"] = 1 });
+        var outlinks = await PostOkAsync($"api/crawls/{grid.Id}/urls/outlinks", new JsonObject { ["urlId"] = IdOf("/p/7"), ["limit"] = 1 });
+        Assert.Equal($$"""{"inlinks":{{inlinks["total"]}},"outlinks":{{outlinks["total"]}}}""", product["linkTotals"]!.ToJsonString());
+        Assert.True((long)outlinks["total"]! > (long)product["links"]!["outlinks"]!, "A product page links to more than its hyperlinks: its images, its stylesheet.");
+
         var gone = await InspectAsync(IdOf("/plants/gone"));
+        Assert.Equal("clientError", (string?)gone["redirects"]!["final"]!["outcome"]);
         Assert.Equal("clientError", (string?)gone["indexability"]!["reason"]);
         Assert.Equal("""{"test":"answered","outcome":"fail","statusCode":404}""", gone["indexability"]!["tests"]![0]!.ToJsonString());
         Assert.Null(gone["content"]);
@@ -260,7 +272,9 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         var home = IdOf("/");
         var first = await PostOkAsync($"api/crawls/{grid.Id}/urls/inlinks", JsonNode.Parse($$"""{"urlId":{{home}},"kinds":["hyperlink"],"limit":5}"""));
         var link = first["rows"]![0]!;
-        Assert.Equal(["id", "url", "kind", "text", "position", "flags", "followed", "fragment", "statusCode", "indexable", "fetched"], link.AsObject().Select(property => property.Key));
+        Assert.Equal(["id", "url", "kind", "text", "position", "flags", "followed", "fragment", "statusCode", "indexable", "fetched", "outcome"],
+            link.AsObject().Select(property => property.Key));
+        Assert.Equal("success", (string?)link["outcome"]);
         Assert.Equal("hyperlink", (string?)link["kind"]);
         Assert.NotNull(link["flags"]!.AsArray());
         Assert.True((long?)first["total"] > 5);
@@ -278,6 +292,20 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         var outlinks = await PostOkAsync($"api/crawls/{grid.Id}/urls/outlinks", new JsonObject { ["urlId"] = home });
         Assert.NotEmpty(outlinks["rows"]!.AsArray());
         Assert.DoesNotContain(outlinks["rows"]!.AsArray(), row => (int?)row!["id"] == home);
+
+        // Each link says what became of the request for its other end, not only its status: a page that's gone, and a
+        // URL the crawl found and never asked for, which has neither.
+        var gone = IdOf("/plants/gone");
+        var linking = (int)(await PostOkAsync($"api/crawls/{grid.Id}/urls/inlinks", new JsonObject { ["urlId"] = gone, ["limit"] = 1 }))["rows"]![0]!["id"]!;
+        var from = await PostOkAsync($"api/crawls/{grid.Id}/urls/outlinks", new JsonObject { ["urlId"] = linking, ["limit"] = 1_000 });
+        var broken = from["rows"]!.AsArray().First(row => (int?)row!["id"] == gone)!;
+        Assert.Equal(("clientError", 404, true), ((string?)broken["outcome"], (int?)broken["statusCode"], (bool?)broken["fetched"]));
+        var unfetched = (int)(await PostOkAsync($"api/crawls/{grid.Id}/urls", JsonNode.Parse(
+            """{"filters":[{"column":"fetched","op":"is","value":false},{"column":"linkingPages","op":"gte","value":1}],"limit":1}""")))["rows"]![0]!["id"]!;
+        linking = (int)(await PostOkAsync($"api/crawls/{grid.Id}/urls/inlinks", new JsonObject { ["urlId"] = unfetched, ["limit"] = 1 }))["rows"]![0]!["id"]!;
+        from = await PostOkAsync($"api/crawls/{grid.Id}/urls/outlinks", new JsonObject { ["urlId"] = linking, ["limit"] = 1_000 });
+        var never = from["rows"]!.AsArray().First(row => (int?)row!["id"] == unfetched)!.AsObject();
+        Assert.True(never.ContainsKey("outcome") && never["outcome"] is null && never["statusCode"] is null && (bool?)never["fetched"] == false, never.ToJsonString());
 
         var kind = TestSidecar.AssertProblem(await Sidecar.PostAsync($"api/crawls/{grid.Id}/urls/outlinks", JsonNode.Parse($$"""{"urlId":{{home}},"kinds":["anchor"]}""")),
             HttpStatusCode.UnprocessableEntity, "invalid-query");

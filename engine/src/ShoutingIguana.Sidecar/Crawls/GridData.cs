@@ -133,11 +133,11 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
                   ?? throw Problems.UrlNotFound();
         var indexability = url.Indexability;
         return new UrlDetailDto(
-            url.Id, url.Url, url.IsInternal, url.Type, url.Discovery,
+            url.Id, url.Url, url.UrlLength, url.IsInternal, url.Type, url.Discovery,
             url.Response is { } response ? UrlResponseDto.From(response) : null,
             url.Redirects,
             new IndexabilityDto(indexability.Indexable, indexability.Reason, indexability.JudgedBy, [.. indexability.Tests.Select(IndexabilityTestDto.From)]),
-            url.Content, url.Limits, url.Links, url.Headers, url.StructuredData, url.Hreflang, url.Issues, url.NamedBy, url.Summary,
+            url.Content, url.Limits, url.Links, url.LinkTotals, url.Headers, url.StructuredData, url.Hreflang, url.Issues, url.NamedBy, url.Summary,
             new SourceStateDto(url.SourceStored));
     }
 
