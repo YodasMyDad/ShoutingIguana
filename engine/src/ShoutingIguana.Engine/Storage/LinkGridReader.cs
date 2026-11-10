@@ -271,8 +271,10 @@ public static class LinkGridReader
     /// <param name="Key">The condition with its values, to keep counts and sets by.</param>
     /// <param name="Direct">It names links by their id or an end's, which the links' key or an index finds without reading the rest.</param>
     /// <param name="OnTarget">It tests the link's target, which the summary by target holds and the one by block doesn't.</param>
+    /// <param name="Indexed">It reads nothing of a link but its id, target and kind, which the links' index by target and kind holds.</param>
+    /// <param name="Kind">The one kind of link it asks for, when that's all it does.</param>
     private sealed record Condition(string Key, string LinkSql, string? SummarySql, IReadOnlyList<KeyValuePair<string, object>> Parameters, bool Direct = false,
-        bool OnTarget = false);
+        bool OnTarget = false, bool Indexed = false, long? Kind = null);
 
     /// <param name="HasSummary">The crawl has a link summary, and so its links counted by block.</param>
     private sealed record Filters(IReadOnlyList<Condition> Conditions, bool HasSummary = false)
@@ -293,8 +295,21 @@ public static class LinkGridReader
         public IReadOnlyList<KeyValuePair<string, object>> Parameters { get; } = [.. Conditions.SelectMany(condition => condition.Parameters)];
 
         /// <summary>" WHERE …", or nothing; <paramref name="and"/> for more conditions before these.</summary>
-        public string Where(string? and = null) =>
-            Join(Conditions.Select(condition => condition.LinkSql).Prepend(and).OfType<string>());
+        /// <param name="targetsGiven">The links read are those of targets already known to pass: the conditions on the target are left out.</param>
+        public string Where(string? and = null, bool targetsGiven = false) =>
+            Join(Conditions.Where(condition => !(targetsGiven && condition.OnTarget)).Select(condition => condition.LinkSql).Prepend(and).OfType<string>());
+
+        /// <summary>
+        /// The conditions read nothing of a link but its id, target and kind: its links to some targets are then read on the
+        /// index by target and kind alone, no link's row with them.
+        /// </summary>
+        public bool Indexed { get; } = Conditions.All(condition => condition.Indexed);
+
+        /// <summary>
+        /// Beyond the target, the conditions ask for one kind of link and nothing else: a target's links of that kind are in
+        /// crawl order on the index by target and kind.
+        /// </summary>
+        public long? OneKind { get; } = Conditions.Where(condition => !condition.OnTarget).ToList() is [{ Kind: { } kind }] ? kind : null;
 
         public string SummaryWhere() => Join(Conditions.Select(condition => condition.SummarySql!));
 
@@ -376,7 +391,9 @@ public static class LinkGridReader
         // By what the filter says, not its SQL: that names sets by their place in this read.
         var key = string.Create(CultureInfo.InvariantCulture,
             $"{column.Id} {filter.Operator} {UrlQueryCompiler.Describe(filter.Value)} [{string.Join(",", (filter.Values ?? []).Select(value => UrlQueryCompiler.Describe(value)))}] {filter.Min}..{filter.Max}");
-        return new Condition(key, linkSql, onSummary is null ? null : Compiled(onSummary).Sql, parameters, Direct: column == LinkColumns.ID);
+        long? kind = column == LinkColumns.KIND && filter is { Operator: FilterOperator.In, Values: [{ Text: { } name }] } ? column.Values.ToList().IndexOf(name) : null;
+        return new Condition(key, linkSql, onSummary is null ? null : Compiled(onSummary).Sql, parameters, Direct: column == LinkColumns.ID,
+            Indexed: column == LinkColumns.ID || column == LinkColumns.KIND, Kind: kind);
     }
 
     /// <summary>
@@ -397,7 +414,8 @@ public static class LinkGridReader
                 List<long> ids = [.. (filter.Operator == FilterOperator.Eq ? [filter.Value!.Value] : filter.Values!).Select(value => value.Number!.Value)
                     .Where(number => Math.Floor(number) == number && number is >= long.MinValue and <= long.MaxValue).Select(number => (long)number).Distinct().Order()];
                 var list = ids.Count == 0 ? "NULL" : string.Join(", ", ids.Select(id => id.ToString(CultureInfo.InvariantCulture)));
-                yield return new Condition($"{prefix}id in {list}", $"l.{end} IN ({list})", inSummary ? $"c.{end} IN ({list})" : null, [], Direct: true, OnTarget: inSummary);
+                yield return new Condition($"{prefix}id in {list}", $"l.{end} IN ({list})", inSummary ? $"c.{end} IN ({list})" : null, [], Direct: true, OnTarget: inSummary,
+                    Indexed: inSummary);
             }
             else
             {
@@ -435,12 +453,12 @@ public static class LinkGridReader
         {
             var name = prefix == LinkColumns.TO ? "$toIds" : "$fromIds";
             yield return new Condition(key, $"l.{end} IN (SELECT value FROM json_each({name}))", inSummary ? $"c.{end} IN (SELECT value FROM json_each({name}))" : null,
-                [new(name, json)], Direct: true, OnTarget: inSummary);
+                [new(name, json)], Direct: true, OnTarget: inSummary, Indexed: inSummary);
         }
         else
         {
             var test = $"{ReaderFunctions.IN_SET}({Slot(context, set)}, ";
-            yield return new Condition(key, $"{test}l.{end})", inSummary ? $"{test}c.{end})" : null, [], OnTarget: inSummary);
+            yield return new Condition(key, $"{test}l.{end})", inSummary ? $"{test}c.{end})" : null, [], OnTarget: inSummary, Indexed: inSummary);
         }
     }
 
@@ -616,7 +634,10 @@ public static class LinkGridReader
             return null;
         }
 
-        var sql = $"SELECT l.rowid FROM links l INDEXED BY ix_links_to{filters.Where("l.to_id IN (SELECT value FROM json_each($driven))")}";
+        // The targets are those the conditions on the target pass, so only the rest are tested; where they read nothing but a
+        // link's kind, the index by target and kind answers them without the links' rows.
+        var index = filters.Indexed && context.HasLinkKindIndex ? "ix_links_to_kind" : "ix_links_to";
+        var sql = $"SELECT l.rowid FROM links l INDEXED BY {index}{filters.Where("l.to_id IN (SELECT value FROM json_each($driven))", targetsGiven: true)}";
         Ran?.Invoke(sql);
         using var command = context.Command(sql, [.. filters.Parameters, new("$driven", driven)]);
         using var reader = command.ExecuteReader();
@@ -895,15 +916,28 @@ public static class LinkGridReader
             }
             else
             {
-                var nullable = key.Query.Sort[0].Nullable;
-                targets =
-                [
-                    .. GridPlanner.Keys(context, key.Query).Where(row => tally.To(row.Id) > 0)
-                        .OrderBy(row => nullable && row.Key is null)
-                        .ThenBy(row => descending ? -(Int128)(row.Key ?? 0) : row.Key ?? 0)
-                        .ThenBy(row => descending ? -row.Id : row.Id)
-                        .Select(row => (int)row.Id)
-                ];
+                // By value, then by id within a value: both as numbers that sort ascending whichever way the sort goes, unknown
+                // values after every known one.
+                var rows = GridPlanner.Keys(context, key.Query).Where(row => tally.To(row.Id) > 0).ToList();
+                var values = new long[rows.Count];
+                var ids = new long[rows.Count];
+                for (var index = 0; index < rows.Count; index++)
+                {
+                    values[index] = rows[index].Key is { } value ? descending ? unchecked(-value) : value : long.MaxValue;
+                    ids[index] = descending ? -rows[index].Id : rows[index].Id;
+                }
+
+                Array.Sort(values, ids);
+                for (var (start, end) = (0, 0); start < values.Length; start = end)
+                {
+                    for (end = start + 1; end < values.Length && values[end] == values[start]; end++)
+                    {
+                    }
+
+                    Array.Sort(ids, start, end - start);
+                }
+
+                targets = [.. ids.Select(id => (int)Math.Abs(id))];
             }
 
             var through = new long[targets.Count];
@@ -956,8 +990,12 @@ public static class LinkGridReader
 
         // One more than the page, to say whether anything follows it. Where the page starts past half way through a target's
         // links (a menu's target has a link from every page), they're read from their far end.
-        string Sql(bool reverse) =>
-            $"SELECT l.rowid FROM links l INDEXED BY ix_links_to{filters.Where("l.to_id = $target AND l.rowid > $after")} ORDER BY l.rowid {(reverse ? "DESC" : "ASC")} LIMIT $take OFFSET $skip";
+        // Every target here passes the conditions on the target, so only the rest are tested; a target's links of one kind
+        // are in crawl order on the index by target and kind, with no link's row to read.
+        var of = filters.OneKind is { } kind && context.HasLinkKindIndex
+            ? string.Create(CultureInfo.InvariantCulture, $"links l INDEXED BY ix_links_to_kind WHERE l.to_id = $target AND l.kind = {kind} AND l.rowid > $after")
+            : $"links l INDEXED BY ix_links_to{filters.Where("l.to_id = $target AND l.rowid > $after", targetsGiven: true)}";
+        string Sql(bool reverse) => $"SELECT l.rowid FROM {of} ORDER BY l.rowid {(reverse ? "DESC" : "ASC")} LIMIT $take OFFSET $skip";
         Ran?.Invoke(Sql(false));
         List<long> ids = [];
         for (; index < order.Targets.Length && ids.Count <= limit; index++)
