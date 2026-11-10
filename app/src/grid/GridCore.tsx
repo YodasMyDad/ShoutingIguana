@@ -66,6 +66,11 @@ export interface GridCoreProps<Row> {
   onScrollOffset?: (offset: number) => void;
   /** Enter or double-click: open the inspector. */
   onActivate?: (index: number, row: Row | undefined) => void;
+  /**
+   * Enter or double-click, with the column the cursor (or the pointer) was on: for a grid whose cells lead to
+   * different places (a sitemap's counts). Called in place of `onActivate` when given.
+   */
+  onActivateCell?: (index: number, row: Row | undefined, column: string) => void;
   /** The cursor moved to another row (the inspector follows it). */
   onActiveRowChange?: (index: number | null) => void;
   /** Right-click, Shift+F10 or the menu key. */
@@ -130,6 +135,7 @@ function GridCoreInner<Row>({
   onRangeChange,
   onScrollOffset,
   onActivate,
+  onActivateCell,
   onActiveRowChange,
   onContextMenu,
   fetchRows,
@@ -277,7 +283,7 @@ function GridCoreInner<Row>({
     if (!tree || !active || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
     const firstCell = active.col === 0 || spans(active.row);
     const expanded = tree.expanded(active.row);
-    if (event.key === 'Enter' && expanded !== undefined) {
+    if (event.key === 'Enter' && expanded !== undefined && !tree.activates) {
       toggle(active.row, !expanded);
       return true;
     }
@@ -439,12 +445,19 @@ function GridCoreInner<Row>({
     event.preventDefault();
     apply(result.state, result.reveal);
     const effect = result.effect;
-    if (effect?.type === 'activate') onActivate?.(effect.row, getRow(effect.row));
+    if (effect?.type === 'activate') activate(effect.row, result.state.active?.col ?? 0);
     else if (effect?.type === 'copy') void copy();
     else if (effect?.type === 'contextMenu') {
       const cell = document.getElementById(cellId(effect.row, effect.col))?.getBoundingClientRect();
       onContextMenu?.(effect.row, effect.col, cell ? { x: cell.left, y: cell.bottom } : { x: 0, y: 0 });
     }
+  };
+
+  /** Enter or a double-click on a row: the cell's own place when the grid has those, else the row's. */
+  const activate = (row: number, col: number) => {
+    const column = columns[col];
+    if (onActivateCell && column) onActivateCell(row, getRow(row), column.id);
+    else onActivate?.(row, getRow(row));
   };
 
   const positionOf = (target: EventTarget): GridPosition | null => {
@@ -479,8 +492,8 @@ function GridCoreInner<Row>({
     // The chevron's own press has opened or closed the group already.
     if (event.target instanceof Element && event.target.closest('[data-tree-toggle]')) return;
     const expanded = tree?.expanded(position.row);
-    if (expanded !== undefined) toggle(position.row, !expanded);
-    else onActivate?.(position.row, getRow(position.row));
+    if (expanded !== undefined && !tree?.activates) toggle(position.row, !expanded);
+    else activate(position.row, position.col);
   };
 
   const onContextMenuEvent = (event: MouseEvent<HTMLDivElement>) => {
