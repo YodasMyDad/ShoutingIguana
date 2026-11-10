@@ -5,6 +5,7 @@
 // expect it.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { colourTweensEnd } from './colourTweens';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -53,18 +54,6 @@ test.afterEach(async () => {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 });
-
-/**
- * A theme changed on an open page tweens its colours, and axe measuring part-way through sees a contrast that
- * neither theme has. Waits for the tweens to end. Only transitions: a spinner's animation never does.
- */
-async function colourTweensEnd(page: Page) {
-  await page.evaluate(async () => {
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const tweens = document.getAnimations().filter((animation) => animation instanceof CSSTransition);
-    await Promise.all(tweens.map((tween) => tween.finished.catch(() => undefined)));
-  });
-}
 
 async function expectNoViolations(page: Page) {
   await colourTweensEnd(page);
