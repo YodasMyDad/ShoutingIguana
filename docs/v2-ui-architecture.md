@@ -469,7 +469,11 @@ are drawn for the app and are never swapped for Lucide's.
 6. Crawled text renders as text, never HTML. Check titles and words come from the API, never hard-coded.
 7. UK English and the glossary in every string. No raw engine ids or errors without plain words.
 8. `aria-*` right the first time: axe runs on every story and in the end-to-end tests, with zero violations allowed.
-9. Tests with every change: pure logic unit-tested, components with Testing Library, flows in Playwright.
+9. Tests with every change: pure logic unit-tested, components with Testing Library, flows in Playwright. A test
+   that waits for what a view says once a read has failed for good opens with `createQueryClientWithoutBackoff`
+   (`test/queryClient.ts`): the app's two retries take 750 ms of real time, of the second a test waits, and on a
+   busy machine the wait ran out first. A test never asserts an order that only a clock keeps: it holds what must
+   come later (`test/lateTimers.ts`).
 10. New npm packages pinned exactly, two weeks old at least, installed with `npm install --before=`.
 
 ## Left for the slices
