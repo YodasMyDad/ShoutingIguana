@@ -54,7 +54,15 @@ function SourceSkeleton() {
  * The stored HTML, with search and syntax highlighting. Read only when the section is open. The search is the app's
  * own field: Enter and Shift+Enter step through the matches, and Ctrl+F from anywhere in the section focuses it.
  */
-export function SourceSection({ focusSearch }: { focusSearch?: number | undefined }) {
+export function SourceSection({
+  focusSearch = false,
+  onSearchFocused,
+}: {
+  /** The search field is asked to take focus (the palette's "Search the HTML source"): once, when it's there. */
+  focusSearch?: boolean | undefined;
+  /** The field took the focus it was asked to: the request is met. */
+  onSearchFocused?: (() => void) | undefined;
+}) {
   const { crawlId, urlId } = useInspectorContext();
   const source = useQuery(urlSourceQuery(crawlId, urlId));
   // The viewer is a chunk of its own (CodeMirror), loaded when an inspector first opens: usually here already.
@@ -93,10 +101,17 @@ export function SourceSection({ focusSearch }: { focusSearch?: number | undefine
     [],
   );
 
-  // "Search the HTML source" from the palette: the field takes focus once it's there.
+  // "Search the HTML source" from the palette: the field takes focus once it's there, and once per request. A
+  // section that mounts with no request (another URL's, or this one's when its tab is shown again) leaves focus alone.
+  const met = useRef(false);
   useEffect(() => {
-    if (focusSearch !== undefined && focusSearch > 0) field.current?.focus();
-  }, [focusSearch, source.data]);
+    if (!focusSearch) met.current = false;
+    else if (!met.current && field.current) {
+      met.current = true;
+      field.current.focus();
+      onSearchFocused?.();
+    }
+  });
 
   if (skeleton) return <SourceSkeleton />;
   // A moment's wait shows nothing, as everywhere: a skeleton only for a load worth one.

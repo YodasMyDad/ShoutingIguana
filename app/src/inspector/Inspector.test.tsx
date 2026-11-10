@@ -10,8 +10,9 @@ import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
-import { installKeyboard } from '../keyboard/registry';
+import { commands, installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
+import { inspectFromGrid } from '../routing/inspector';
 import { DEFAULT_SETTINGS } from '../settings/schema';
 import { getSettings, updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, type FakeSidecar } from '../test/fakeSidecar';
@@ -529,6 +530,32 @@ describe('the source', () => {
     act(() => wrap.focus());
     fireEvent.keyDown(wrap, { key: 'f', code: 'KeyF', ctrlKey: true });
     expect(within(panel).getByRole('searchbox', { name: 'Search the HTML source' })).toHaveFocus();
+  });
+
+  it('gives its search field focus once when the palette asks, never again on another URL or back on the tab', async () => {
+    const { router, inspector, user } = await open(`${URLS}?inspect=2`);
+    await within(inspector).findByRole('heading', { level: 2, name: PAGE.url });
+    act(() => void commands.run('inspector.searchSource'));
+    const name = { name: 'Search the HTML source' };
+    await waitFor(() => expect(within(inspector).getByRole('searchbox', name)).toHaveFocus());
+
+    // The grid's cursor moves on: the inspector follows with the next URL's source, and focus stays where it is.
+    const close = within(inspector).getByRole('button', { name: 'Close the inspector' });
+    act(() => close.focus());
+    await act(() => inspectFromGrid(router, 3));
+    await within(inspector).findByRole('heading', { level: 2, name: OTHER.url });
+    await within(inspector).findByRole('searchbox', name);
+    expect(close).toHaveFocus();
+
+    // Shown again by its tab, the section leaves focus on the tab.
+    await user.click(within(inspector).getByRole('tab', { name: /^Summary/ }));
+    await user.click(within(inspector).getByRole('tab', { name: /^Source/ }));
+    await within(inspector).findByRole('searchbox', name);
+    expect(within(inspector).getByRole('tab', { name: /^Source/ })).toHaveFocus();
+
+    // Asked again, it takes focus again.
+    act(() => void commands.run('inspector.searchSource'));
+    await waitFor(() => expect(within(inspector).getByRole('searchbox', name)).toHaveFocus());
   });
 
   it('says why there’s no HTML, and fails on its own', async () => {

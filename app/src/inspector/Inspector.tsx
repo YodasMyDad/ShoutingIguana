@@ -135,11 +135,17 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
   }, [detail, query.error, skeleton, refetch]);
 
   const [section, setSection] = useState<SectionId>(rememberedSection);
-  const [focusSearch, setFocusSearch] = useState(0);
+  // "Search the HTML source" asks the source's field to take focus: once, on the URL shown when it was asked. The
+  // request goes when the field has taken it, when another section is chosen and when the inspector shows another
+  // URL, so a section that mounts later (each URL has its own) never takes focus from where the keyboard is.
+  const [searchRequest, setSearchRequest] = useState<{ urlId: number } | null>(null);
+  if (searchRequest !== null && searchRequest.urlId !== urlId) setSearchRequest(null);
+  const searchFocused = useCallback(() => setSearchRequest(null), []);
   const sheet = useRef<HTMLDivElement>(null);
   const choose = useCallback((next: SectionId) => {
     rememberSection(next);
     setSection(next);
+    setSearchRequest(null);
   }, []);
 
   // An inspector is open, so its source may be asked for: the viewer's code loads while the app is idle.
@@ -220,11 +226,11 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
         enabled: () => !notFound,
         run: () => {
           choose('source');
-          setFocusSearch((value) => value + 1);
+          setSearchRequest({ urlId });
         },
       },
     ],
-    [web, url, openUrl, copyUrl, dockTitle, toggleDock, section, choose, notFound],
+    [web, url, openUrl, copyUrl, dockTitle, toggleDock, section, choose, notFound, urlId],
     'app',
   );
 
@@ -270,12 +276,12 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
       hreflang: fromDetail('hreflang', (value) => <HreflangSection detail={value} />),
       source: (
         <RegionBoundary key={urlId} name="inspector’s source">
-          <SourceSection focusSearch={focusSearch} />
+          <SourceSection focusSearch={searchRequest?.urlId === urlId} onSearchFocused={searchFocused} />
         </RegionBoundary>
       ),
     };
     return SECTION_IDS.map((id) => ({ value: id, label: SECTION_TITLES[id], count: counts[id], content: content[id] }));
-  }, [state, inlinks, outlinks, choose, urlId, focusSearch]);
+  }, [state, inlinks, outlinks, choose, urlId, searchRequest, searchFocused]);
 
   const refreshing = query.isFetching && !waiting && !crawling;
   const compact = dock === 'bottom';
