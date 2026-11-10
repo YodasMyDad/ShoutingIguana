@@ -23,6 +23,8 @@ export interface SourceViewerProps {
   current: number;
   /** How many matches the query has, and whether counting stopped at the limit. */
   onMatches: (count: number, capped: boolean) => void;
+  /** The lines are laid out as `wrap` says: called once the editor has drawn them, after each change of it. */
+  onWrapped?: (() => void) | undefined;
 }
 
 const highlightStyle = HighlightStyle.define([
@@ -110,11 +112,20 @@ const appKeys: readonly KeyBinding[] = [
  */
 const viewerKeys: readonly KeyBinding[] = [...appKeys, ...standardKeymap];
 
-export default function SourceViewer({ html: source, label, wrap, query, current, onMatches }: SourceViewerProps) {
+export default function SourceViewer({
+  html: source,
+  label,
+  wrap,
+  query,
+  current,
+  onMatches,
+  onWrapped,
+}: SourceViewerProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const wrapping = useRef(new Compartment());
   const reportMatches = useEffectEvent(onMatches);
+  const reportWrapped = useEffectEvent(() => onWrapped?.());
 
   // One editor per document. The search and the wrapping it starts with are the current ones.
   const initial = useRef({ wrap, query, current, label });
@@ -163,6 +174,16 @@ export default function SourceViewer({ html: source, label, wrap, query, current
 
   useEffect(() => {
     view.current?.dispatch({ effects: wrapping.current.reconfigure(wrap ? EditorView.lineWrapping : []) });
+    // The editor measures and draws in the frame after: the one after that, the lines are laid out. (Deep in a
+    // one-line page of megabytes that's over half a second, during which nothing else runs.)
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(reportWrapped);
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
   }, [wrap]);
 
   useEffect(() => {

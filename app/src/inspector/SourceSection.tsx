@@ -9,6 +9,7 @@ import { formatBytes, formatCount } from '../lib/format';
 import { isMac } from '../lib/platform';
 import { EmptyState } from '../ui/EmptyState';
 import { IconButton } from '../ui/IconButton';
+import { RefreshLine } from '../ui/ProgressBar';
 import { SearchField } from '../ui/SearchField';
 import { Switch } from '../ui/Switch';
 import { useInspectorContext } from './inspectorContext';
@@ -75,6 +76,22 @@ export function SourceSection({
   /** How many matches the viewer found, and for which query: nothing is said about one it hasn't searched yet. */
   const [found, setFound] = useState({ query: '', count: 0, capped: false });
   const [wrap, setWrap] = useState(rememberedWrapLines);
+  // What the viewer has been given: it follows the switch a frame later. Laying the lines out again holds
+  // everything up while it lasts (over half a second deep in a one-line page of megabytes), so the switch answers
+  // first, with the progress line, and the work starts once that's on screen.
+  const [viewerWrap, setViewerWrap] = useState(wrap);
+  const [rewrapping, setRewrapping] = useState(false);
+  useEffect(() => {
+    if (viewerWrap === wrap) return undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      timer = setTimeout(() => setViewerWrap(wrap), 0);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [wrap, viewerWrap]);
   const field = useRef<HTMLInputElement>(null);
 
   // The document is searched once typing pauses; an emptied field clears the marks at once.
@@ -210,17 +227,24 @@ export function SourceSection({
           onCheckedChange={(next) => {
             rememberWrapLines(next);
             setWrap(next);
+            setRewrapping(true);
           }}
         />
       </div>
-      <div className="si-source mx-2 mb-2 min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-surface-sunken">
+      <div
+        aria-busy={rewrapping}
+        className="si-source relative mx-2 mb-2 min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-surface-sunken"
+      >
+        {rewrapping ? <RefreshLine label="Laying the lines out again" /> : null}
         <Viewer
           html={html}
           label="HTML source"
-          wrap={wrap}
+          wrap={viewerWrap}
           query={query}
           current={current}
           onMatches={(count, capped) => setFound({ query, count, capped })}
+          // The viewer says so after every change of `wrap`, its first included: only a change asked for here waits.
+          onWrapped={() => setRewrapping(false)}
         />
       </div>
     </div>

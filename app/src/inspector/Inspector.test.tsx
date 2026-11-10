@@ -36,6 +36,7 @@ vi.mock('./SourceViewer', () => ({
     current: number;
     wrap: boolean;
     onMatches: (n: number, c: boolean) => void;
+    onWrapped?: () => void;
   }) => (
     <div
       data-testid="source-viewer"
@@ -45,6 +46,9 @@ vi.mock('./SourceViewer', () => ({
     >
       <button type="button" onClick={() => props.onMatches(3, false)}>
         report three matches
+      </button>
+      <button type="button" onClick={() => props.onWrapped?.()}>
+        report the lines laid out
       </button>
       {props.html}
     </div>
@@ -875,10 +879,29 @@ describe('the source', () => {
     const wrap = within(panel).getByRole('switch', { name: 'Wrap lines' });
     expect(viewer).toHaveAttribute('data-wrap', 'true');
     await user.click(wrap);
-    expect(viewer).toHaveAttribute('data-wrap', 'false');
+    await waitFor(() => expect(viewer).toHaveAttribute('data-wrap', 'false'));
     act(() => wrap.focus());
     fireEvent.keyDown(wrap, { key: 'f', code: 'KeyF', ctrlKey: true });
     expect(within(panel).getByRole('searchbox', { name: 'Search the HTML source' })).toHaveFocus();
+  });
+
+  it('answers the wrap switch at once, then lays the lines out, saying so until the viewer has', async () => {
+    const { user } = await open(`${URLS}?inspect=2`);
+    const panel = await showTab(user, /^Source/);
+    const viewer = await within(panel).findByTestId('source-viewer');
+    const wrap = within(panel).getByRole('switch', { name: 'Wrap lines' });
+    const busy = () => within(panel).queryByRole('progressbar', { name: 'Laying the lines out again' });
+    expect(busy()).toBeNull();
+    // The work can hold everything up (a one-line page of megabytes): the switch and the progress line come first.
+    fireEvent.click(wrap);
+    expect(wrap).toHaveAttribute('aria-checked', 'false');
+    expect(busy()).toBeVisible();
+    expect(viewer).toHaveAttribute('data-wrap', 'true');
+    // A frame later the viewer is given it, and the line stays until the viewer says the lines are laid out.
+    await waitFor(() => expect(viewer).toHaveAttribute('data-wrap', 'false'));
+    expect(busy()).toBeVisible();
+    await user.click(within(viewer).getByRole('button', { name: 'report the lines laid out' }));
+    expect(busy()).toBeNull();
   });
 
   it('gives its search field focus once when the palette asks, never again on another URL or back on the tab', async () => {

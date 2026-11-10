@@ -558,7 +558,10 @@ is what it shows. What it settled:
   section takes the key before the registry does). To the registry the viewer is a text field (it has a caret), which
   keeps the keys a command doesn't claim `inInputs`: so its keymap runs those commands itself, first (`nav.back`,
   `nav.forward`, `shortcuts.show`), and every key of the app's works with focus in the HTML; docs/v2-ui-ia.md's
-  keys table says whose each key is there.
+  keys table says whose each key is there. Turning "Wrap lines" on or off lays every line out again, which holds
+  everything up while it lasts: nothing to notice on most pages, over half a second deep in a one-line page of
+  megabytes (CodeMirror measuring one enormous line). It isn't made faster: the switch answers first, with the
+  progress line, and the viewer is given the change a frame later, the line staying until it has drawn.
 - **Docked at the bottom** the sheet is short, so its head is one line (what the URL is, the URL cut at its end, the
   actions).
 - **The sheet's size has one rule in both docks** (`layout/inspectorSize.ts`): the view it shares the window with
