@@ -1,4 +1,5 @@
 using ShoutingIguana.Engine.Robots;
+using ShoutingIguana.Engine.Robots.Models;
 using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Tests.Robots;
@@ -171,6 +172,65 @@ public sealed class RobotsTxtParserTests
     [Fact]
     public void RulesBeforeAnyUserAgentAreIgnored() =>
         Assert.True(RobotsTxtParser.Parse("Disallow: /\nUser-agent: *\nAllow: /", TOKEN).IsAllowed("/page"));
+
+    /// <summary>
+    /// The parse can keep every line as it reads it, for showing the file: what each is, whether its group is the crawler's,
+    /// and why nothing was made of it. A rule knows its line, and the rule that decides a URL is the one the crawl obeys.
+    /// </summary>
+    [Fact]
+    public void TheParseCanKeepEveryLineWithWhatItIs()
+    {
+        const string FILE = "\uFEFF# Rules\r\nDisallow: /early\r\n\r\nUser-agent: Googlebot\rUser-agent: ShoutingIguana/2.0\nDisallow: /private/ # ours\nAllow: /private/open\n" +
+                            "Crawl-delay: soon\nDisallow:\n\nUser-agent: *\nDisallow: /\nCrawl-delay: 2\nSitemap: /sitemap.xml\nSitemap:\nHost: example.com\njust words\n: no name\n";
+        List<RobotsLine> lines = [];
+        var robots = RobotsTxtParser.Parse(FILE, TOKEN, lines);
+
+        (int, string, RobotsLineKind, bool?, RobotsLineProblem?)[] expected =
+        [
+            (1, "# Rules", RobotsLineKind.Comment, null, null),
+            (2, "Disallow: /early", RobotsLineKind.Disallow, false, RobotsLineProblem.NoUserAgent),
+            (3, "", RobotsLineKind.Blank, null, null),
+            (4, "User-agent: Googlebot", RobotsLineKind.UserAgent, true, null),
+            (5, "User-agent: ShoutingIguana/2.0", RobotsLineKind.UserAgent, true, null),
+            (6, "Disallow: /private/ # ours", RobotsLineKind.Disallow, true, null),
+            (7, "Allow: /private/open", RobotsLineKind.Allow, true, null),
+            (8, "Crawl-delay: soon", RobotsLineKind.CrawlDelay, true, RobotsLineProblem.InvalidValue),
+            (9, "Disallow:", RobotsLineKind.Disallow, true, null),
+            (10, "", RobotsLineKind.Blank, null, null),
+            (11, "User-agent: *", RobotsLineKind.UserAgent, false, null),
+            (12, "Disallow: /", RobotsLineKind.Disallow, false, null),
+            (13, "Crawl-delay: 2", RobotsLineKind.CrawlDelay, false, null),
+            (14, "Sitemap: /sitemap.xml", RobotsLineKind.Sitemap, true, null),
+            (15, "Sitemap:", RobotsLineKind.Sitemap, false, RobotsLineProblem.InvalidValue),
+            (16, "Host: example.com", RobotsLineKind.Other, null, RobotsLineProblem.UnknownDirective),
+            (17, "just words", RobotsLineKind.Invalid, null, RobotsLineProblem.NotADirective),
+            (18, ": no name", RobotsLineKind.Invalid, null, RobotsLineProblem.NotADirective)
+        ];
+        Assert.Equal(expected, lines.Select(line => (line.Number, line.Text, line.Kind, line.Applies, line.Problem)));
+
+        // The rule that decides a URL names its line: the longest match, an allow winning a tie, none for what nothing refuses.
+        Assert.Equal((6, false), (robots.Match("/private/report")!.Line, robots.Match("/private/report")!.Allow));
+        Assert.Equal((7, true), (robots.Match("/private/open/day")!.Line, robots.Match("/private/open/day")!.Allow));
+        Assert.Null(robots.Match("/early"));
+        Assert.Null(robots.Match("/robots.txt"));
+        Assert.Null(robots.CrawlDelaySeconds);
+        Assert.Equal(["/sitemap.xml"], robots.Sitemaps);
+
+        // Kept or not, the rules are the same, and what's allowed is what the deciding rule says.
+        var unkept = RobotsTxtParser.Parse(FILE, TOKEN);
+        string[] paths = ["/", "/early", "/private/", "/private/open", "/private/x?y=1", "/sitemap.xml", "/robots.txt"];
+        Assert.All(paths, path => Assert.Equal((unkept.IsAllowed(path), robots.Match(path)?.Line), (robots.Match(path)?.Allow ?? true, unkept.Match(path)?.Line)));
+        Assert.Equal(12, RobotsTxtParser.Parse(FILE, "OtherBot").Match("/anything")!.Line);
+
+        // No text has no lines; a last line without a line break is a line.
+        List<RobotsLine> none = [];
+        RobotsTxtParser.Parse(string.Empty, TOKEN, none);
+        Assert.Empty(none);
+        List<RobotsLine> two = [];
+        RobotsTxtParser.Parse("User-agent: *\nDisallow: /", TOKEN, two);
+        Assert.Equal([1, 2], two.Select(line => line.Number));
+        Assert.Equal(0, RobotsTxt.DisallowAll.Match("/x")!.Line);
+    }
 
     /// <summary>The path the crawler checks: that of the stored (normalised) URL, as PageProcessor reads it.</summary>
     private static string PathAndQueryOf(string url) => new Uri(UrlNormalizer.Normalize(new Uri(url))).PathAndQuery;

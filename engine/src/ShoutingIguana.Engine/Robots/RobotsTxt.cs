@@ -50,11 +50,18 @@ public sealed class RobotsTxt
     internal static RobotsTxt Unanswered(RobotsNoAnswer noAnswer) => new([], [], null, null, noAnswer);
 
     /// <param name="pathAndQuery">Path and query of a URL normalised by <c>UrlNormalizer</c>.</param>
-    public bool IsAllowed(string pathAndQuery)
+    public bool IsAllowed(string pathAndQuery) => Match(pathAndQuery)?.Allow ?? true;
+
+    /// <summary>
+    /// The rule that decides a URL: the most specific one that matches, an allow winning a tie. Null when none matches, which
+    /// allows it. What the crawl obeys and what the robots.txt screen shows for a blocked URL are this one answer.
+    /// </summary>
+    /// <param name="pathAndQuery">Path and query of a URL normalised by <c>UrlNormalizer</c>.</param>
+    internal RobotsRule? Match(string pathAndQuery)
     {
         if (_rules.Count == 0 || pathAndQuery == "/robots.txt")
         {
-            return true;
+            return null;
         }
 
         RobotsRule? best = null;
@@ -73,7 +80,7 @@ public sealed class RobotsTxt
             }
         }
 
-        return best?.Allow ?? true;
+        return best;
     }
 
     private static bool Matches(RobotsRule rule, string path)

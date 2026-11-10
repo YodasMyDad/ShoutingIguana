@@ -18,24 +18,47 @@ internal static class RobotsTxtParser
     /// <summary>A longer Crawl-delay would stall the crawl (and a huge one overflows TimeSpan), so it is capped.</summary>
     internal const double MAX_CRAWL_DELAY_SECONDS = 60;
 
-    public static RobotsTxt Parse(string content, string productToken)
+    /// <param name="lines">
+    /// When given, every line of the file is added to it as it's read: what it is, whether it's part of what applies to the
+    /// crawler, and why the parser made nothing of it when it didn't. The rules are the same either way.
+    /// </param>
+    public static RobotsTxt Parse(string content, string productToken, List<RobotsLine>? lines = null)
     {
         var token = productToken.ToLowerInvariant();
         List<RobotsGroupBuilder> groups = [];
         List<string> sitemaps = [];
         RobotsGroupBuilder? current = null;
 
-        foreach (var rawLine in content.TrimStart('\uFEFF').Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        foreach (var (number, rawLine) in Lines(content.TrimStart('\uFEFF')))
         {
             var line = StripComment(rawLine).Trim();
             var colon = line.IndexOf(':');
             if (colon <= 0)
             {
+                lines?.Add(line.Length > 0
+                    ? new RobotsLine(number, rawLine, RobotsLineKind.Invalid) { Problem = RobotsLineProblem.NotADirective }
+                    : new RobotsLine(number, rawLine, rawLine.Trim().Length > 0 ? RobotsLineKind.Comment : RobotsLineKind.Blank));
                 continue;
             }
 
             var key = line[..colon].Trim().ToLowerInvariant();
             var value = line[(colon + 1)..].Trim();
+
+            // What the line is and, where the parser makes nothing of it, why; a group's lines are kept with the group.
+            void Read(RobotsLineKind kind, RobotsLineProblem? problem = null, bool? applies = null)
+            {
+                if (lines is null)
+                {
+                    return;
+                }
+
+                var read = new RobotsLine(number, rawLine, kind) { Problem = problem, Applies = applies };
+                lines.Add(read);
+                if (problem != RobotsLineProblem.NoUserAgent && kind is RobotsLineKind.UserAgent or RobotsLineKind.Allow or RobotsLineKind.Disallow or RobotsLineKind.CrawlDelay)
+                {
+                    current?.Lines.Add(read);
+                }
+            }
 
             switch (key)
             {
@@ -47,27 +70,43 @@ internal static class RobotsTxtParser
                     }
 
                     current.Agents.Add(ProductTokenOf(value));
+                    Read(RobotsLineKind.UserAgent);
                     break;
                 case "allow" or "disallow" when current is not null:
                     // An empty rule allows everything, but like any rule it ends the run of user-agent lines, so a
                     // following user-agent starts a new group (RFC 9309 grammar, and Google's parser).
                     if (value.Length > 0)
                     {
-                        current.Rules.Add(CreateRule(value, key == "allow"));
+                        current.Rules.Add(CreateRule(value, key == "allow") with { Line = number });
                     }
 
                     current.HasDirectives = true;
+                    Read(key == "allow" ? RobotsLineKind.Allow : RobotsLineKind.Disallow);
                     break;
                 case "crawl-delay" when current is not null:
-                    if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var delay) && delay >= 0)
+                    var valid = double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var delay) && delay >= 0;
+                    if (valid)
                     {
                         current.CrawlDelaySeconds = Math.Min(delay, MAX_CRAWL_DELAY_SECONDS);
                     }
 
                     current.HasDirectives = true;
+                    Read(RobotsLineKind.CrawlDelay, valid ? null : RobotsLineProblem.InvalidValue);
                     break;
                 case "sitemap" when value.Length > 0:
                     sitemaps.Add(value);
+                    Read(RobotsLineKind.Sitemap, applies: true);
+                    break;
+                case "allow" or "disallow" or "crawl-delay":
+                    // Before any user-agent line: it belongs to no group, so it's no rule of anyone's.
+                    Read(key switch { "allow" => RobotsLineKind.Allow, "disallow" => RobotsLineKind.Disallow, _ => RobotsLineKind.CrawlDelay },
+                        RobotsLineProblem.NoUserAgent, applies: false);
+                    break;
+                case "sitemap":
+                    Read(RobotsLineKind.Sitemap, RobotsLineProblem.InvalidValue, applies: false);
+                    break;
+                default:
+                    Read(RobotsLineKind.Other, RobotsLineProblem.UnknownDirective);
                     break;
             }
         }
@@ -76,6 +115,11 @@ internal static class RobotsTxtParser
         if (applicable.Count == 0)
         {
             applicable = groups.Where(group => group.Agents.Contains("*")).ToList();
+        }
+
+        foreach (var group in groups)
+        {
+            group.Lines.ForEach(line => line.Applies = applicable.Contains(group));
         }
 
         var rules = applicable.SelectMany(group => group.Rules).ToList();
@@ -138,6 +182,35 @@ internal static class RobotsTxtParser
         }
 
         return builder.ToString();
+    }
+
+    /// <summary>
+    /// The text's lines, numbered from 1: a line ends at <c>\n</c>, <c>\r</c> or <c>\r\n</c>, and a line break that ends the
+    /// text starts no line after it.
+    /// </summary>
+    private static IEnumerable<(int Number, string Line)> Lines(string text)
+    {
+        var (number, start) = (0, 0);
+        for (var index = 0; index <= text.Length; index++)
+        {
+            if (index < text.Length && text[index] is not ('\r' or '\n'))
+            {
+                continue;
+            }
+
+            if (index == text.Length && start == text.Length)
+            {
+                yield break;
+            }
+
+            yield return (++number, text[start..index]);
+            if (index + 1 < text.Length && text[index] == '\r' && text[index + 1] == '\n')
+            {
+                index++;
+            }
+
+            start = index + 1;
+        }
     }
 
     private static RobotsRule CreateRule(string value, bool allow)
