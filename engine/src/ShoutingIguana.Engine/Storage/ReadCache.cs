@@ -24,6 +24,12 @@ public sealed class ReadCache(int capacity = ReadCache.DEFAULT_CAPACITY, int lar
     /// <summary>Id sets, of 140 KB per million URLs each.</summary>
     public const int DEFAULT_LARGE_CAPACITY = 32;
 
+    /// <summary>
+    /// What the links grid keeps of a filter set: its links' ids (a bit per link in the crawl, 6 MB for a million pages' 50
+    /// million), their counts by target, a sort's order of targets. Each is megabytes on a large crawl, so few are kept.
+    /// </summary>
+    public const int HUGE_CAPACITY = 12;
+
     /// <summary>Keys longer than this are kept by their hash.</summary>
     private const int MAX_KEY_LENGTH = 256;
 
@@ -32,12 +38,13 @@ public sealed class ReadCache(int capacity = ReadCache.DEFAULT_CAPACITY, int lar
 
     private readonly Store _entries = new(capacity);
     private readonly Store _large = new(largeCapacity);
+    private readonly Store _huge = new(HUGE_CAPACITY);
 
     /// <summary>How many entries it holds, counted or being counted: for tests.</summary>
-    public int Count => _entries.Count + _large.Count;
+    public int Count => _entries.Count + _large.Count + _huge.Count;
 
     /// <summary>Tests only: the characters its keys take.</summary>
-    internal long KeyLength => _entries.KeyLength + _large.KeyLength;
+    internal long KeyLength => _entries.KeyLength + _large.KeyLength + _huge.KeyLength;
 
     /// <summary>The value kept under the key, or <paramref name="read"/>'s, which is then kept; while another request is reading it, its value.</summary>
     /// <param name="maxAge">How long a value is good for; for ever when null.</param>
@@ -48,6 +55,16 @@ public sealed class ReadCache(int capacity = ReadCache.DEFAULT_CAPACITY, int lar
     /// <summary>As <see cref="GetOrAdd{T}"/>, for something large (an id set), of which only a few are kept.</summary>
     internal T GetOrAddLarge<T>(string key, Func<T> read, TimeSpan? maxAge = null, CancellationToken cancellationToken = default) where T : notnull =>
         _large.GetOrAdd(Shorten(key), read, maxAge, cancellationToken);
+
+    /// <summary>As <see cref="GetOrAdd{T}"/>, for what the links grid keeps of a filter set, of which only <see cref="HUGE_CAPACITY"/> are kept.</summary>
+    internal T GetOrAddHuge<T>(string key, Func<T> read, TimeSpan? maxAge = null, CancellationToken cancellationToken = default) where T : notnull =>
+        _huge.GetOrAdd(Shorten(key), read, maxAge, cancellationToken);
+
+    /// <summary>Whether such a value is kept, read already; one being read isn't.</summary>
+    internal bool HasHuge(string key, TimeSpan? maxAge = null) => _huge.Has(Shorten(key), maxAge);
+
+    /// <summary>Keeps such a value under the key, in place of any.</summary>
+    internal void SetHuge<T>(string key, T value) where T : notnull => _huge.Set(Shorten(key), value);
 
     /// <summary>Whether a large value is kept, read already; one being read isn't.</summary>
     internal bool HasLarge(string key, TimeSpan? maxAge = null) => _large.Has(Shorten(key), maxAge);

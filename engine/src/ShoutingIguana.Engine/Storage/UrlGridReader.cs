@@ -255,7 +255,7 @@ public static class UrlGridReader
     }
 
     /// <summary>The columns' values of the page's rows, by URL id, in one read.</summary>
-    private static Dictionary<long, object?[]> Values(GridReadContext context, CompiledQuery query, IReadOnlyList<long> ids)
+    internal static Dictionary<long, object?[]> Values(GridReadContext context, CompiledQuery query, IReadOnlyList<long> ids)
     {
         Dictionary<long, object?[]> values = [];
         if (ids.Count == 0)

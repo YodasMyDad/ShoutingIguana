@@ -293,7 +293,8 @@ internal static class UrlQueryCompiler
         return new GridSortKey(sorted, sql, "+" + sql, sort.Descending, sorted.Nullable, indexed);
     }
 
-    private static void ValidateFilter(UrlFilter filter, string field, GridScope scope, Dictionary<string, List<string>> errors)
+    /// <summary>One filter of a grid query, its errors keyed under <paramref name="field"/> (<c>filters[2]</c>).</summary>
+    internal static void ValidateFilter(UrlFilter filter, string field, GridScope scope, Dictionary<string, List<string>> errors)
     {
         if (filter.Column == UrlColumns.CHECK)
         {
@@ -313,6 +314,12 @@ internal static class UrlQueryCompiler
             return;
         }
 
+        ValidateOperator(filter, column, field, errors);
+    }
+
+    /// <summary>A filter on a column that exists: that the column filters, takes the operator, and is given what the operator needs.</summary>
+    internal static void ValidateOperator(UrlFilter filter, UrlColumnDefinition column, string field, Dictionary<string, List<string>> errors)
+    {
         if (!column.Filterable)
         {
             Add(errors, $"{field}.column", $"The grid can't filter by '{filter.Column}'.");
@@ -506,7 +513,7 @@ internal static class UrlQueryCompiler
     }
 
     /// <summary>A condition on the row the query reads: the URL summary's, or the crawl's tables joined.</summary>
-    private static GridPredicate Inline(UrlFilter filter, UrlColumnDefinition column, string sql, string? urlId, bool indexed, Func<object, string> parameter,
+    internal static GridPredicate Inline(UrlFilter filter, UrlColumnDefinition column, string sql, string? urlId, bool indexed, Func<object, string> parameter,
         List<KeyValuePair<string, object>> parameters)
     {
         if (POSITIVE.TryGetValue(filter.Operator, out var positive))
@@ -705,7 +712,7 @@ internal static class UrlQueryCompiler
     private static string Like(Func<object, string> parameter, string pattern) => $@"{COLUMN} LIKE {parameter(pattern)} ESCAPE '\'";
 
     /// <summary>LIKE's wildcards in the user's text, matched as themselves.</summary>
-    private static string Escape(string text) =>
+    internal static string Escape(string text) =>
         text.Replace(@"\", @"\\", StringComparison.Ordinal).Replace("%", @"\%", StringComparison.Ordinal).Replace("_", @"\_", StringComparison.Ordinal);
 
     private static object Value(FilterValue value) => value.Number is { } number ? Number(number) : (object?)value.Text ?? value.Boolean!.Value;
@@ -730,7 +737,7 @@ internal static class UrlQueryCompiler
     }
 
     /// <summary>A value as the keys and hashes hold it: text quoted, its quotes doubled, so no text can pass for more conditions.</summary>
-    private static string Describe(object? value) => value switch
+    internal static string Describe(object? value) => value switch
     {
         null or DBNull => "null",
         string text => $"'{text.Replace("'", "''", StringComparison.Ordinal)}'",
@@ -741,7 +748,7 @@ internal static class UrlQueryCompiler
 
     private static string Name(FilterOperator op) => char.ToLowerInvariant(op.ToString()[0]) + op.ToString()[1..];
 
-    private static void Add(Dictionary<string, List<string>> errors, string field, string message)
+    internal static void Add(Dictionary<string, List<string>> errors, string field, string message)
     {
         if (!errors.TryGetValue(field, out var messages))
         {

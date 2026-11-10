@@ -42,6 +42,7 @@ internal sealed class GridReadContext : IDisposable
     private const int CACHE_KIB = 65_536;
 
     private static readonly AsyncLocal<bool> WITHOUT_SUMMARY = new();
+    private static readonly AsyncLocal<bool> WITHOUT_LINK_SUMMARY = new();
 
     /// <summary>
     /// For the reader benchmark: reads in this flow (this thread and what it awaits) read the file as a crawl continued
@@ -54,8 +55,22 @@ internal sealed class GridReadContext : IDisposable
         set => WITHOUT_SUMMARY.Value = value;
     }
 
+    /// <summary>
+    /// For the reader benchmark: reads in this flow read the links grid as a crawl analysed by an engine from before the
+    /// link summary would be, from the links themselves. Nothing about the file changes.
+    /// </summary>
+    internal static bool ReadWithoutLinkSummary
+    {
+        get => WITHOUT_LINK_SUMMARY.Value;
+        set => WITHOUT_LINK_SUMMARY.Value = value;
+    }
+
     private readonly ReadCache? _cache;
     private readonly List<UrlIdSet> _sets = [];
+    private readonly Dictionary<string, object> _huge = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, object> _large = new(StringComparer.Ordinal);
+    private (long Links, long MaxLinkId)? _linkSummary;
+    private bool _linkSummaryRead;
     private readonly Dictionary<string, Regex> _patterns = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _patternTicks = new(StringComparer.Ordinal);
     private readonly long _regexBudgetTicks = (long)(RegexBudget.TotalSeconds * Stopwatch.Frequency);
@@ -205,9 +220,72 @@ internal sealed class GridReadContext : IDisposable
     public T Cached<T>(string key, Func<T> read) where T : notnull =>
         Stamp is { } stamp && _cache is { } cache ? cache.GetOrAdd($"{stamp}|{key}", read, MaxAge(stamp), Token) : read();
 
-    /// <summary>As <see cref="Cached{T}"/>, for something large (an id set), of which only a few are kept.</summary>
-    public T CachedLarge<T>(string key, Func<T> read) where T : notnull =>
-        Stamp is { } stamp && _cache is { } cache ? cache.GetOrAddLarge($"{stamp}|{key}", read, MaxAge(stamp), Token) : read();
+    /// <summary>
+    /// As <see cref="Cached{T}"/>, for something large (an id set), of which only a few are kept. Without a cache, it's kept
+    /// for this read, which may count with it and then page through it.
+    /// </summary>
+    public T CachedLarge<T>(string key, Func<T> read) where T : notnull
+    {
+        if (Stamp is { } stamp && _cache is { } cache)
+        {
+            return cache.GetOrAddLarge($"{stamp}|{key}", read, MaxAge(stamp), Token);
+        }
+
+        if (!_large.TryGetValue(key, out var kept))
+        {
+            _large[key] = kept = read();
+        }
+
+        return (T)kept;
+    }
+
+    /// <summary>
+    /// As <see cref="Cached{T}"/>, for what the links grid keeps of a filter set, megabytes each, of which few are kept.
+    /// Without a cache, it's kept for this read, which counts with it and then pages through it.
+    /// </summary>
+    public T CachedHuge<T>(string key, Func<T> read) where T : notnull
+    {
+        if (Stamp is { } stamp && _cache is { } cache)
+        {
+            return cache.GetOrAddHuge($"{stamp}|{key}", read, MaxAge(stamp), Token);
+        }
+
+        if (!_huge.TryGetValue(key, out var kept))
+        {
+            _huge[key] = kept = read();
+        }
+
+        return (T)kept;
+    }
+
+    /// <summary>Whether one of those is kept already, read by an earlier read, or earlier in this one.</summary>
+    public bool HasHuge(string key) =>
+        Stamp is { } stamp && _cache is { } cache ? cache.HasHuge($"{stamp}|{key}", MaxAge(stamp)) : _huge.ContainsKey(key);
+
+    /// <summary>Keeps one of those, read while reading something else.</summary>
+    public void KeepHuge<T>(string key, T value) where T : notnull
+    {
+        if (Stamp is { } stamp && _cache is { } cache)
+        {
+            cache.SetHuge($"{stamp}|{key}", value);
+        }
+        else
+        {
+            _huge[key] = value;
+        }
+    }
+
+    /// <summary>Notes something about the crawl as it stands, for the reads that follow (<see cref="Noted"/>).</summary>
+    public void Note(string key)
+    {
+        if (Stamp is { } stamp)
+        {
+            _cache?.Set($"{stamp}|{key}", true);
+        }
+    }
+
+    /// <summary>Whether an earlier read noted this of the crawl as it stands.</summary>
+    public bool Noted(string key) => Stamp is { } stamp && _cache?.Has($"{stamp}|{key}", MaxAge(stamp)) == true;
 
     /// <summary>Whether something large is kept already, read by an earlier read.</summary>
     public bool HasLarge(string key) => Stamp is { } stamp && _cache is { } cache && cache.HasLarge($"{stamp}|{key}", MaxAge(stamp));
@@ -323,6 +401,42 @@ internal sealed class GridReadContext : IDisposable
 
     public void Tally(long value) => CollectionsMarshal.GetValueRefOrAddDefault(Tallies, value, out _)++;
 
+    /// <summary>The ids of the links a statement is reading (<c>si_link</c>), in the order it reads them.</summary>
+    public LinkIdSet? LinkIds { get; set; }
+
+    /// <summary>The links a statement is counting by target and shape (<c>si_link</c>, <c>si_links</c>).</summary>
+    public LinkTally? LinkTally { get; set; }
+
+    /// <summary>The pages whose robots directives say nofollow, which a link read from the links themselves is judged followed by.</summary>
+    public UrlIdSet? NofollowPages { get; set; }
+
+    /// <summary>One link read from <c>links</c>: its id kept, and the link counted, as the statement set up.</summary>
+    public void ReadLink(long id, long toId, long fromId, long kind, long position, long flags)
+    {
+        LinkIds?.Add(id);
+        LinkTally?.Add(toId, kind, position, flags, NofollowPages?.Contains(fromId) == true, 1);
+    }
+
+    /// <summary>
+    /// The link summary the last analysis stored, when it describes the crawl: the URL summary does (so the crawl hasn't
+    /// changed since, and this engine's kind of analysis made it), and the table carries that analysis's time, so it isn't
+    /// one an engine from before it left behind when it analysed the file again. With it, how many links the crawl has and
+    /// their highest id; null when the links grid must read the links themselves.
+    /// </summary>
+    public (long Links, long MaxLinkId)? LinkSummary
+    {
+        get
+        {
+            if (!_linkSummaryRead)
+            {
+                _linkSummaryRead = true;
+                _linkSummary = ReadLinkSummary();
+            }
+
+            return _linkSummary;
+        }
+    }
+
     /// <summary>The options the crawl ran with, read once; an option its engine didn't have takes its default.</summary>
     public CrawlOptions Options => _options ??= ReadOptions();
 
@@ -385,6 +499,30 @@ internal sealed class GridReadContext : IDisposable
         }
 
         throw new RegexTooComplexException(pattern);
+    }
+
+    private (long Links, long MaxLinkId)? ReadLinkSummary()
+    {
+        if (ReadWithoutLinkSummary || !Summary.Available || Analysis is null ||
+            TableColumns("link_summary") != "to_id,kind,position,flags,self,has_text,source_nofollow,links" ||
+            TableColumns("link_blocks") != "block,kind,position,flags,self,has_text,source_nofollow,links" ||
+            TableColumns("link_summary_state") != "id,analyzed_at,links,max_link_id")
+        {
+            return null;
+        }
+
+        using var command = Command("SELECT analyzed_at, links, max_link_id FROM link_summary_state WHERE id = 1", []);
+        using var reader = command.ExecuteReader();
+        return reader.Read() && !reader.IsDBNull(0) && reader.GetInt64(0) == Analysis.AnalyzedAt.ToUnixTimeMilliseconds() && !reader.IsDBNull(1) && !reader.IsDBNull(2)
+            ? (reader.GetInt64(1), reader.GetInt64(2))
+            : null;
+    }
+
+    /// <summary>A table's columns in order, so one another program made its own way isn't taken for the engine's; empty when there's none.</summary>
+    private string TableColumns(string table)
+    {
+        using var command = Command("SELECT group_concat(name, ',') FROM (SELECT name FROM pragma_table_info($table) ORDER BY cid)", [new("$table", table)]);
+        return command.ExecuteScalar() as string ?? string.Empty;
     }
 
     private CrawlOptions ReadOptions()

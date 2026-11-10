@@ -228,6 +228,12 @@ internal sealed class IssueWriter : IDisposable
         // which the analyzer reports the end of.
         progress.Start(AnalysisPhase.Writing, 1);
 
+        // The links grid's counts, stamped with this analysis's time: one pass over the links, part of the analysis's time
+        // (the summary's clock is still running).
+        var linkTime = Stopwatch.StartNew();
+        var linkRows = LinkSummaryBuilder.Build(_connection, _transaction, info.AnalyzedAt.ToUnixTimeMilliseconds());
+        _logger.LogDebug("Stored the link summary in {Rows} rows in {Elapsed}", linkRows, linkTime.Elapsed);
+
         // The crawl row's updated_at as it stands: the lock keeps any crawl out until this commits, so it's the one analysed.
         using (var analysis = Command("""
                    INSERT INTO analysis (id, analyzed_at, engine_version, settings_json, pages, duration_ms, is_partial, crawl_updated_at,
