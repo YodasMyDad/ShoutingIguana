@@ -344,7 +344,7 @@ const LIVE_ITEM = { ...NEVER, status: 'running', finishedAt: null } as const;
 
 describe('the Overview while the crawl runs', () => {
   const progress = (seconds: number, script: CrawlScript = POLITE) => message('progress', progressAt(seconds, script));
-  const cell = (label: string) => region('Progress').getByText(label).closest('.si-stat')!;
+  const cell = (label: string) => region('Progress').getByText(label).closest<HTMLElement>('.si-stat')!;
   const figure = (label: string) =>
     within(cell(label)).getByText(/^[\d,.–]+$/, { selector: '.si-stat__value > .figures > span:first-child' });
 
