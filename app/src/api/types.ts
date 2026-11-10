@@ -85,7 +85,16 @@ export interface Check {
   learnMore: string | null;
   /** How its issues group on the Issues screen (E3a). */
   grouping: CheckGrouping;
+  /**
+   * What the URLs it flags are (E3b): `page` when every one is a page, as `pageCount` counts them, so its count is a part
+   * of the pages crawled; `url` when it can flag any URL (a missing image, a redirect, a URL that didn't answer), so its
+   * count is of URLs and can pass the pages crawled. Every sidecar from E3b sends it; fixtures captured before don't.
+   */
+  subject?: CheckSubject;
 }
+
+/** What a check's flagged URLs are: `GET /api/checks` gives it as each check's `subject` (E3b). */
+export type CheckSubject = 'page' | 'url';
 
 export interface Checks {
   categories: CheckCategory[];

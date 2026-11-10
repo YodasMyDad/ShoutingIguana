@@ -225,6 +225,23 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
             chain["redirects"]!["hops"]!.AsArray().Select(hop => (string?)hop!["url"]));
         Assert.Equal("http", (string?)chain["redirects"]!["hops"]![0]!["via"]);
 
+        // Each issue carries the key of its group, which opens that group's rows: for a check grouped by a fault, the fault,
+        // where the issue's own detail says where in the page it is.
+        var invalid = IdOf("/plants/jsonld-invalid");
+        var issue = (await InspectAsync(invalid))["issues"]!.AsArray().Single(issue => (string?)issue!["checkId"] == "structured-data-invalid")!;
+        Assert.Equal(["checkId", "severity", "detail", "related", "group"], issue.AsObject().Select(property => property.Key));
+        Assert.Equal(["detail", "relatedUrlId"], issue["group"]!.AsObject().Select(property => property.Key));
+        Assert.NotEqual((string?)issue["detail"], (string?)issue["group"]!["detail"]);
+        var groups = await PostOkAsync($"api/crawls/{grid.Id}/issues/structured-data-invalid/groups");
+        Assert.Contains(groups["groups"]!.AsArray(), group => (string?)group!["detail"] == (string?)issue["group"]!["detail"] && group["relatedUrlId"] is null);
+        var groupRows = await PostOkAsync($"api/crawls/{grid.Id}/issues/structured-data-invalid/rows", new JsonObject { ["group"] = issue["group"]!.DeepClone() });
+        Assert.Contains(groupRows["rows"]!.AsArray(), row => (int?)row!["id"] == invalid);
+
+        // A check that isn't grouped has no group to open.
+        var measured = (await InspectAsync(IdOf("/plants/title-long")))["issues"]!.AsArray();
+        Assert.Contains(measured, found => (string?)found!["checkId"] == "title-too-long");
+        Assert.All(measured, found => Assert.Equal(IssueCatalog.Find((string)found!["checkId"]!)!.Grouping == IssueGrouping.None, found["group"] is null));
+
         // Any id no URL has, past what an id holds too (this one is 1 if cut to an int), is a URL the crawl doesn't have;
         // none at all is a field error.
         foreach (var missing in new[] { "999999", "0", "-1", "4294967297" })
@@ -288,6 +305,11 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
     {
         var checks = (await Sidecar.GetJsonAsync("api/checks"))["checks"]!.AsArray();
         Assert.All(checks, check => Assert.Equal(GroupingName(IssueCatalog.Find((string)check!["id"]!)!.Grouping), (string?)check["grouping"]));
+
+        // What each check's flagged URLs are: pages, or any URL, as a missing image is flagged for answering 404.
+        Assert.All(checks, check => Assert.Equal(IssueCatalog.Find((string)check!["id"]!)!.Subject == IssueSubject.Page ? "page" : "url", (string?)check["subject"]));
+        Assert.Equal("url", (string?)checks.Single(check => (string?)check!["id"] == "internal-client-error")!["subject"]);
+        Assert.Equal("page", (string?)checks.Single(check => (string?)check!["id"] == "title-too-long")!["subject"]);
 
         var counts = IssueReader.ReadCounts(grid.Path);
         var related = counts.Where(count => count.Value > 0).Select(count => IssueCatalog.Find(count.Key)!)

@@ -409,6 +409,25 @@ internal static class GridPlanner
     }
 
     /// <summary>
+    /// Every URL's value of the query's one sort key, which isn't text, with its id, in no order: for the links grid, which
+    /// sorts links by their target's.
+    /// </summary>
+    public static List<(long? Key, long Id)> Keys(GridReadContext context, CompiledQuery query)
+    {
+        var key = query.Sort[0];
+        var sql = $"SELECT COUNT({ReaderFunctions.KEEP}({(query.Mode == GridMode.Crawl ? key.Sql : key.Disabled)}, {Id(query)})) FROM {From(context, query, Plan.Scan)}";
+        context.Kept.Clear();
+        using (var command = context.Command(sql, []))
+        {
+            command.ExecuteScalar();
+        }
+
+        List<(long? Key, long Id)> keys = [.. context.Kept];
+        context.Kept.Clear();
+        return keys;
+    }
+
+    /// <summary>
     /// Puts the row at place <paramref name="nth"/> of the order there, those before it ordered no later, those after no
     /// earlier, without ordering either side (Hoare's selection: linear on average).
     /// </summary>

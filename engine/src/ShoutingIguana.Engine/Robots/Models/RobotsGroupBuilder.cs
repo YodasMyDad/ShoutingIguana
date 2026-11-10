@@ -5,6 +5,9 @@ internal sealed class RobotsGroupBuilder
 {
     public List<string> Agents { get; } = [];
     public List<RobotsRule> Rules { get; } = [];
+
+    /// <summary>The group's lines, when the parse keeps them: its user agents, rules and crawl delay.</summary>
+    public List<RobotsLine> Lines { get; } = [];
     public double? CrawlDelaySeconds { get; set; }
 
     /// <summary>Once a group has rules, the next user-agent line starts a new group.</summary>

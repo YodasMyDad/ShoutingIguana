@@ -67,6 +67,10 @@ internal static class Problems
 
     public static ProblemException UrlNotFound() => new(new ProblemDto("url-not-found", "This crawl didn't find that URL.", 404));
 
+    public static ProblemException SitemapNotFound() => new(new ProblemDto("sitemap-not-found", "This crawl has no sitemap with that id.", 404));
+
+    public static ProblemException OriginNotFound() => new(new ProblemDto("origin-not-found", "This crawl has no robots.txt for that origin.", 404));
+
     /// <summary>A request the UI shouldn't send: a missing or malformed body, a parameter out of range.</summary>
     public static ProblemException BadRequest(string title, string? detail = null) =>
         new(new ProblemDto("bad-request", title, 400) { Detail = detail });

@@ -728,27 +728,36 @@ public static class UrlInspectorReader
         return new HreflangEntry(entry.Language, entry.Href, entry.Url, target, entry.InHead, entry.FromHttpHeader);
     }
 
-    /// <summary>The checks that flagged the URL, errors first, with the other URL involved.</summary>
+    /// <summary>The checks that flagged the URL, errors first, with the other URL involved and the group each is in.</summary>
     private static List<UrlIssue> Issues(GridReadContext context, int urlId)
     {
-        using var command = context.Command("""
-            SELECT i.issue, t.severity, i.detail, i.related_url_id, ru.url
-            FROM issues i JOIN issue_types t ON t.id = i.issue LEFT JOIN urls ru ON ru.id = i.related_url_id
-            WHERE i.url_id = $id
-            """, [new("$id", urlId)]);
-        using var reader = command.ExecuteReader();
-        List<(UrlIssue Issue, int Order)> issues = [];
-        while (reader.Read())
+        List<(UrlIssue Issue, int? RelatedId, int Order)> issues = [];
+        using (var command = context.Command("""
+                   SELECT i.issue, t.severity, i.detail, i.related_url_id, ru.url
+                   FROM issues i JOIN issue_types t ON t.id = i.issue LEFT JOIN urls ru ON ru.id = i.related_url_id
+                   WHERE i.url_id = $id
+                   """, [new("$id", urlId)]))
+        using (var reader = command.ExecuteReader())
         {
-            var severity = reader.GetString(1);
-            issues.Add((new UrlIssue(
-                reader.GetString(0),
-                Enum.TryParse<IssueSeverity>(severity, ignoreCase: false, out var known) && Enum.IsDefined(known) ? known : null,
-                reader.IsDBNull(2) ? null : reader.GetString(2),
-                reader.IsDBNull(3) || reader.IsDBNull(4) ? null : new UrlRef(reader.GetInt32(3), reader.GetString(4))), SEVERITY_ORDER.GetValueOrDefault(severity, 3)));
+            while (reader.Read())
+            {
+                var severity = reader.GetString(1);
+                var relatedId = Int32OrNull(reader, 3);
+                issues.Add((new UrlIssue(
+                        reader.GetString(0),
+                        Enum.TryParse<IssueSeverity>(severity, ignoreCase: false, out var known) && Enum.IsDefined(known) ? known : null,
+                        reader.IsDBNull(2) ? null : reader.GetString(2),
+                        relatedId is null || reader.IsDBNull(4) ? null : new UrlRef(relatedId.Value, reader.GetString(4))),
+                    relatedId, SEVERITY_ORDER.GetValueOrDefault(severity, 3)));
+            }
         }
 
-        return [.. issues.OrderBy(issue => issue.Order).ThenBy(issue => issue.Issue.CheckId, StringComparer.Ordinal).Select(issue => issue.Issue)];
+        // Once the issues are read: a group's key can take a read of its own.
+        return
+        [
+            .. issues.OrderBy(issue => issue.Order).ThenBy(issue => issue.Issue.CheckId, StringComparer.Ordinal)
+                .Select(issue => issue.Issue with { Group = IssueGroupReader.GroupOf(context, issue.Issue.CheckId, urlId, issue.Issue.Detail, issue.RelatedId) })
+        ];
     }
 
     /// <summary>

@@ -31,6 +31,21 @@ internal static class ReaderFunctions
     /// <summary><c>si_tally(value)</c>: counts one more row with this value (<see cref="GridReadContext.Tallies"/>), and gives 1.</summary>
     public const string TALLY = "si_tally";
 
+    /// <summary>
+    /// <c>si_link(id, to_id, from_id, kind, position, flags)</c>: one link read from <c>links</c>, its id kept and the link
+    /// counted, whichever the read set up (<see cref="GridReadContext.ReadLink"/>), and gives 1.
+    /// </summary>
+    public const string LINK = "si_link";
+
+    /// <summary><c>si_link_id(id)</c>: one link's id kept, where a read keeps the ids and counts nothing (<see cref="GridReadContext.LinkIds"/>), and gives 1.</summary>
+    public const string LINK_ID = "si_link_id";
+
+    /// <summary>
+    /// <c>si_links(to_id, kind, position, flags, source_nofollow, links)</c>: one row of the link summary, its links counted
+    /// by target and shape (<see cref="GridReadContext.LinkTally"/>), and gives 1.
+    /// </summary>
+    public const string LINKS = "si_links";
+
     /// <summary>What the user is told of a pattern whose matches took too long on the crawl's text.</summary>
     public const string TOO_COMPLEX = "This pattern is too complex to run on this crawl. Simplify it.";
 
@@ -106,6 +121,47 @@ internal static class ReaderFunctions
             {
                 ((GridReadContext)state).Keep(raw.sqlite3_value_type(arguments[0]) == raw.SQLITE_NULL ? null : raw.sqlite3_value_int64(arguments[0]),
                     raw.sqlite3_value_int64(arguments[1]));
+                raw.sqlite3_result_int(call, 1);
+            }
+            catch (Exception exception)
+            {
+                raw.sqlite3_result_error(call, exception.Message);
+            }
+        });
+
+        raw.sqlite3_create_function(handle, LINK, 6, raw.SQLITE_UTF8, context, static (call, state, arguments) =>
+        {
+            try
+            {
+                ((GridReadContext)state).ReadLink(raw.sqlite3_value_int64(arguments[0]), raw.sqlite3_value_int64(arguments[1]), raw.sqlite3_value_int64(arguments[2]),
+                    raw.sqlite3_value_int64(arguments[3]), raw.sqlite3_value_int64(arguments[4]), raw.sqlite3_value_int64(arguments[5]));
+                raw.sqlite3_result_int(call, 1);
+            }
+            catch (Exception exception)
+            {
+                raw.sqlite3_result_error(call, exception.Message);
+            }
+        });
+
+        raw.sqlite3_create_function(handle, LINK_ID, 1, raw.SQLITE_UTF8, context, static (call, state, arguments) =>
+        {
+            try
+            {
+                ((GridReadContext)state).LinkIds?.Add(raw.sqlite3_value_int64(arguments[0]));
+                raw.sqlite3_result_int(call, 1);
+            }
+            catch (Exception exception)
+            {
+                raw.sqlite3_result_error(call, exception.Message);
+            }
+        });
+
+        raw.sqlite3_create_function(handle, LINKS, 6, raw.SQLITE_UTF8, context, static (call, state, arguments) =>
+        {
+            try
+            {
+                ((GridReadContext)state).LinkTally?.Add(raw.sqlite3_value_int64(arguments[0]), raw.sqlite3_value_int64(arguments[1]), raw.sqlite3_value_int64(arguments[2]),
+                    raw.sqlite3_value_int64(arguments[3]), raw.sqlite3_value_int64(arguments[4]) != 0, raw.sqlite3_value_int64(arguments[5]));
                 raw.sqlite3_result_int(call, 1);
             }
             catch (Exception exception)

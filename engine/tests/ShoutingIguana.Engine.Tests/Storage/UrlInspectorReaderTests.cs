@@ -118,6 +118,12 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
         Assert.Null(refused.Response!.ResponseMs);
         Assert.Null(refused.Response.TtfbMs);
 
+        // Its response is the outcome the crawl stored for it, as the grid's fetched column counts it: done with, though never
+        // asked for. What happened is the outcome's to say.
+        Assert.True(refused.Response.Fetched);
+        Assert.Equal(UrlOutcome.RobotsDisallowed, refused.Response.Outcome);
+        Assert.Null(refused.Response.StatusCode);
+
         // A noindex in a robots meta tag; with a canonical elsewhere too, the noindex decides, and the canonical still fails.
         var noindex = AssertDecidedBy("/plants/noindex", IndexabilityReason.Noindex, Noindex);
         Assert.True(noindex.Meta);

@@ -30,6 +30,12 @@ public sealed record IssueDefinition(
     public required IssueGrouping Grouping { get; init; }
 
     /// <summary>
+    /// What the URLs the check flags are: always pages, or any URL the crawl has, as its rule can flag them. Only how its
+    /// count is worded: it isn't stored with an analysis, nor part of <see cref="AnalysisFreshness.ChecksFingerprint"/>.
+    /// </summary>
+    public required IssueSubject Subject { get; init; }
+
+    /// <summary>
     /// For a check grouped by detail whose detail is each page's own instance of a fault (the href of its relative canonical,
     /// a JSON parser's message saying where in the block it failed): the fault the detail shows, which its groups are by
     /// instead, so a fault in the site's template is one group. The analysis stores it beside each issue, and the issue keeps

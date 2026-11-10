@@ -239,13 +239,26 @@ public sealed class CliTests : IAsyncLifetime
         Assert.True((bool?)result["summaryAvailable"]);
         Assert.Equal(2, (int?)result["runs"]);
         Assert.Empty(result["failures"]!.AsArray());
-        Assert.Equal(["facets", "grid", "groups", "inspector", "links", "lookup", "rows"],
+        Assert.Equal(["facets", "grid", "groups", "inspector", "links", "links-grid", "lookup", "robots", "rows", "sitemaps"],
             result["cases"]!.AsArray().Select(read => (string)read!["kind"]!).Distinct().Order(StringComparer.Ordinal));
+
+        // The links grid is timed with its link summary and without, and so are the sitemaps and robots.txt.
+        Assert.All(new[] { "Links grid: ", "Without the link summary: ", "Sitemaps: ", "robots.txt: " }, name =>
+            Assert.Contains(result["cases"]!.AsArray(), read => ((string)read!["name"]!).StartsWith(name, StringComparison.Ordinal)));
+        Assert.Equal(["link-grid", "link-pass", "link-targets"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "links-grid" || ((string)read["name"]!).StartsWith("Links grid: facets", StringComparison.Ordinal))
+            .Select(read => (string)read!["class"]!).Distinct().Order(StringComparer.Ordinal));
         Assert.All(result["cases"]!.AsArray(), read => Assert.True((double?)read!["firstP95Ms"] >= (double?)read["firstP50Ms"]));
 
         // Every read has a class, each class its gate; the reads without the summary are timed too, and so is the page
         // just past half way, which is read from the far end.
         Assert.All(result["cases"]!.AsArray(), read => Assert.Contains((string)read!["class"]!, ReaderBenchmark.GATE_MS.Keys));
+
+        // Among the links grid's: the links to a few targets with many between them, held to the grid's own gate, which a
+        // page of them read by passing over the links before it would miss.
+        var fewTargets = result["cases"]!.AsArray().Where(read => ((string)read!["name"]!).Contains("few targets, many links", StringComparison.Ordinal)).ToList();
+        Assert.Equal(5, fewTargets.Count);
+        Assert.All(fewTargets, read => Assert.Equal("link-grid", (string)read!["class"]!));
+        Assert.Contains(result["cases"]!.AsArray(), read => (string)read!["class"]! == "link-targets");
         Assert.Contains(result["cases"]!.AsArray(), read => ((string)read!["name"]!).StartsWith("Without the summary", StringComparison.Ordinal));
         Assert.Contains(result["cases"]!.AsArray(), read => read!["pastHalfP95Ms"] is not null);
         var gated = await RunAsync("readbench", crawl, "--runs", "1", "--gate", "--only", "sort by depth");

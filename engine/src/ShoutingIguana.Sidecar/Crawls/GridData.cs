@@ -37,6 +37,13 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
             UrlGridReader.Columns.All(other => other.Id != column.Id)))
     ];
 
+    /// <summary>The links grid's columns: a link's own, then each end's.</summary>
+    public static IReadOnlyList<LinkColumnDto> LinkColumns { get; } =
+    [
+        .. LinkGridReader.Columns.Select(column => new LinkColumnDto(
+            column.Id, column.Type.ToString().ToLowerInvariant(), column.NeedsAnalysis, column.Sortable, column.Filterable, column.Values))
+    ];
+
     /// <summary>Tests only: called as each read starts, on its own thread, with the token that stops it.</summary>
     internal Action<CancellationToken>? ReadStarting { get; set; }
 
@@ -46,6 +53,8 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         {
             throw Problems.BadRequest("Only a check's rows take a group: filter by the check, with its group, instead.");
         }
+
+        RefuseSitemap(request);
 
         var path = crawls.PathOf(id);
         var query = GridRequests.Query(request);
@@ -60,11 +69,38 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         var asked = GridRequests.Facets(request?.Facets, errors);
         GridRequests.ThrowIfAny(errors);
         var query = new UrlFacetQuery { Filters = filters, Search = request?.Search, Facets = asked };
-        var facets = await ReadAsync(token => UrlGridReader.Facets(path, query, cache, token), cancellationToken).ConfigureAwait(false);
-        return new FacetsDto(facets.Matching, facets.Total, facets.Summary, facets.Unavailable,
+        return Facets(await ReadAsync(token => UrlGridReader.Facets(path, query, cache, token), cancellationToken).ConfigureAwait(false));
+    }
+
+    private static FacetsDto Facets(UrlFacets facets) =>
+        new(facets.Matching, facets.Total, facets.Summary, facets.Unavailable,
             facets.Facets.ToDictionary(facet => facet.Key, facet => (IReadOnlyList<FacetBucketDto>)
                 [.. facet.Value.Select(bucket => new FacetBucketDto(GridRequests.Element(bucket.Value), bucket.Count, GridRequests.Dto(bucket.Filter)) { Min = bucket.Min, Max = bucket.Max })],
                 StringComparer.Ordinal));
+
+    public async Task<LinkGridPageDto> LinkGridAsync(string id, GridQueryRequest? request, CancellationToken cancellationToken)
+    {
+        if (request?.Group is not null)
+        {
+            throw Problems.BadRequest("Only a check's rows take a group: filter by either end's check, with its group, instead.");
+        }
+
+        RefuseSitemap(request);
+        var path = crawls.PathOf(id);
+        var query = GridRequests.Query(request);
+        var page = await ReadAsync(token => LinkGridReader.Query(path, query, cache, token), cancellationToken).ConfigureAwait(false);
+        return new LinkGridPageDto(page.Columns, new LinkRowsDto(page.Columns, page.Rows), page.Offset, page.Matching, page.Total, page.Next, page.Summary, page.Unavailable);
+    }
+
+    public async Task<FacetsDto> LinkFacetsAsync(string id, FacetsRequest? request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
+        var filters = GridRequests.Filters(request?.Filters, errors);
+        var asked = GridRequests.Facets(request?.Facets, errors);
+        GridRequests.ThrowIfAny(errors);
+        var query = new UrlFacetQuery { Filters = filters, Search = request?.Search, Facets = asked };
+        return Facets(await ReadAsync(token => LinkGridReader.Facets(path, query, cache, token), cancellationToken).ConfigureAwait(false));
     }
 
     public async Task<UrlLookup> LookupAsync(string id, UrlLookupRequest request, CancellationToken cancellationToken)
@@ -147,6 +183,7 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
 
     public async Task<UrlPageDto> RowsAsync(string id, string checkId, GridQueryRequest? request, CancellationToken cancellationToken)
     {
+        RefuseSitemap(request);
         var path = crawls.PathOf(id);
         var query = GridRequests.Query(request);
         var group = request?.Group is { } key ? new IssueGroupKey(key.Detail, key.RelatedUrlId) : null;
@@ -161,6 +198,87 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         return IssueCatalog.Find(checkId) is null
             ? throw Problems.CheckNotFound(checkId)
             : new UrlPageDto(["id"], new UrlRowsDto(["id"], []), query.Offset, null, null, null, rows.Summary, []);
+    }
+
+    /// <summary>The sitemaps the crawl looked for, as the engine lists them.</summary>
+    public async Task<SitemapList> SitemapsAsync(string id, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        return await ReadAsync(token => SitemapListReader.Read(path, cache, token), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>The URL grid for one sitemap: the sitemap's id beside the grid's query.</summary>
+    public async Task<UrlPageDto> SitemapUrlsAsync(string id, GridQueryRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Group is not null)
+        {
+            throw Problems.BadRequest("Only a check's rows take a group: filter by the check, with its group, instead.");
+        }
+
+        var path = crawls.PathOf(id);
+        var query = GridRequests.Query(request);
+        var sitemap = request.SitemapId switch
+        {
+            null => throw Problems.InvalidQuery(new Dictionary<string, IReadOnlyList<string>> { ["sitemapId"] = ["Give the sitemap's id."] }),
+            < 1 or > int.MaxValue => (int?)null,
+            { } known => (int)known
+        };
+        return Page((sitemap is { } sitemapId
+                        ? await ReadAsync(token => UrlGridReader.QuerySitemap(path, sitemapId, query, cache, token), cancellationToken).ConfigureAwait(false)
+                        : null)
+                    ?? throw Problems.SitemapNotFound());
+    }
+
+    public async Task<RobotsOriginPageDto> RobotsAsync(string id, GroupsRequest? request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        var page = await ReadAsync(token => RobotsReader.ReadOrigins(path, request?.Offset ?? 0, request?.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token),
+            cancellationToken).ConfigureAwait(false);
+        return new RobotsOriginPageDto(page.Total, page.Offset, page.Respected, page.UserAgent, page.Blocked, [.. page.Origins.Select(RobotsOriginDto.From)]);
+    }
+
+    public async Task<RobotsFileDto> RobotsFileAsync(string id, RobotsFileRequest request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        var origin = Origin(request.Origin);
+        var file = await ReadAsync(token => RobotsReader.ReadFile(path, origin, cache, token), cancellationToken).ConfigureAwait(false) ?? throw Problems.OriginNotFound();
+        var read = RobotsOriginDto.From(file.Origin);
+        return new RobotsFileDto(read.Origin, read.IsInternal, read.State, read.StatusCode, read.FetchedAt, read.Error, read.Bytes, read.Blocked, file.UserAgent, file.Lines,
+            file.Unmatched);
+    }
+
+    public async Task<RobotsBlockedPage> RobotsBlockedAsync(string id, RobotsBlockedRequest request, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        var origin = Origin(request.Origin);
+        RobotsBlockReason? reason = request.Reason switch
+        {
+            null => null,
+            "rule" => RobotsBlockReason.Rule,
+            "unreachable" => RobotsBlockReason.Unreachable,
+            "unknown" => RobotsBlockReason.Unknown,
+            var other => throw Problems.InvalidQuery(new Dictionary<string, IReadOnlyList<string>>
+            {
+                ["reason"] = [$"There's no reason called '{other}': there are rule, unreachable and unknown."]
+            })
+        };
+        return await ReadAsync(token => RobotsReader.ReadBlocked(path, origin, request.Line, reason, request.Offset ?? 0, request.Limit ?? UrlGridReader.DEFAULT_LIMIT, cache, token),
+                   cancellationToken).ConfigureAwait(false)
+               ?? throw Problems.OriginNotFound();
+    }
+
+    /// <summary>The origin a robots.txt call names: none is a field error.</summary>
+    private static string Origin(string? origin) => string.IsNullOrWhiteSpace(origin)
+        ? throw Problems.InvalidQuery(new Dictionary<string, IReadOnlyList<string>> { ["origin"] = ["Give the origin, as the list of origins names it."] })
+        : origin;
+
+    /// <summary>A sitemap's id belongs to the sitemap's own grid.</summary>
+    private static void RefuseSitemap(GridQueryRequest? request)
+    {
+        if (request?.SitemapId is not null)
+        {
+            throw Problems.BadRequest("Only a sitemap's URLs take a sitemapId: ask /sitemaps/urls for them.");
+        }
     }
 
     private static UrlPageDto Page(UrlPage page) =>

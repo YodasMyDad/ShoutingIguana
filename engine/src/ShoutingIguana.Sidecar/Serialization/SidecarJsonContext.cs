@@ -3,6 +3,7 @@ using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Parsing.Models;
+using ShoutingIguana.Engine.Robots.Models;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Errors.Models;
@@ -45,7 +46,17 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<IndexabilityReason>),
         typeof(CamelCaseEnumConverter<IndexabilityJudge>),
         typeof(CamelCaseEnumConverter<IndexabilityTestKind>),
-        typeof(CamelCaseEnumConverter<TestOutcome>)
+        typeof(CamelCaseEnumConverter<TestOutcome>),
+
+        // Links, sitemaps and robots.txt (E3b).
+        typeof(CamelCaseEnumConverter<IssueSubject>),
+        typeof(CamelCaseEnumConverter<SitemapDiscovery>),
+        typeof(CamelCaseEnumConverter<SitemapSource>),
+        typeof(CamelCaseEnumConverter<SitemapState>),
+        typeof(CamelCaseEnumConverter<RobotsState>),
+        typeof(CamelCaseEnumConverter<RobotsLineKind>),
+        typeof(CamelCaseEnumConverter<RobotsLineProblem>),
+        typeof(CamelCaseEnumConverter<RobotsBlockReason>)
     ])]
 [JsonSerializable(typeof(ReadyEvent))]
 [JsonSerializable(typeof(ProblemDto))]
@@ -88,6 +99,16 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(HtmlSourceDto))]
 [JsonSerializable(typeof(GroupsRequest))]
 [JsonSerializable(typeof(IssueGroupPageDto))]
+
+// Links, sitemaps and robots.txt (E3b).
+[JsonSerializable(typeof(IReadOnlyList<LinkColumnDto>))]
+[JsonSerializable(typeof(LinkGridPageDto))]
+[JsonSerializable(typeof(SitemapList))]
+[JsonSerializable(typeof(RobotsOriginPageDto))]
+[JsonSerializable(typeof(RobotsFileRequest))]
+[JsonSerializable(typeof(RobotsFileDto))]
+[JsonSerializable(typeof(RobotsBlockedRequest))]
+[JsonSerializable(typeof(RobotsBlockedPage))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(bool))]
 [JsonSerializable(typeof(double))]

@@ -230,7 +230,12 @@ internal sealed class GridReference
             return filter.Operator == FilterOperator.In ? flagged.Any() : !flagged.Any();
         }
 
-        var value = Rows[id][filter.Column];
+        return Holds(Rows[id][filter.Column], filter);
+    }
+
+    /// <summary>Whether a value passes a filter on its column, as the contract defines each operator.</summary>
+    public static bool Holds(object? value, UrlFilter filter)
+    {
         bool Positive(FilterOperator op) => op switch
         {
             FilterOperator.Eq => value is not null && Equal(value, filter.Value!.Value),

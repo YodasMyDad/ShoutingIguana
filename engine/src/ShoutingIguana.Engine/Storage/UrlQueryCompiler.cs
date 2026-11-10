@@ -21,6 +21,13 @@ internal static class UrlQueryCompiler
     public const int MAX_TEXT = 1_000;
     public const int MAX_SORT = 3;
 
+    /// <summary>The sitemap a grid is narrowed to, as a parameter of <see cref="SITEMAPS_UNDER"/>.</summary>
+    public const string SITEMAP_PARAMETER = "$m0";
+
+    /// <summary>The ids of a sitemap and every sitemap under it, however deep, each once.</summary>
+    public const string SITEMAPS_UNDER =
+        $"WITH RECURSIVE under(id) AS (SELECT {SITEMAP_PARAMETER} UNION SELECT c.id FROM sitemaps c JOIN under ON c.parent_id = under.id) SELECT id FROM under";
+
     /// <summary>Stands for the column's SQL in a condition, so one condition gives both its forms.</summary>
     private const string COLUMN = "@column";
 
@@ -169,6 +176,11 @@ internal static class UrlQueryCompiler
     public static CompiledQuery Compile(UrlQuery query, GridMode mode, GridScope scope, string reason)
     {
         var predicates = Filters(query.Filters, query.Search, mode, scope, reason);
+        if (scope.SitemapId is { } sitemap)
+        {
+            predicates.Insert(0, Sitemap(sitemap, mode));
+        }
+
         var sort = query.Sort.Select(key => SortKey(key, mode, scope, reason)).ToList();
         List<UrlColumnDefinition> columns = [UrlColumns.ID];
         List<string> unavailable = [];
@@ -249,6 +261,28 @@ internal static class UrlQueryCompiler
     }
 
     /// <summary>
+    /// The URLs a sitemap lists, and those of every sitemap under it: with a URL summary, read into a set, on the key of
+    /// what each sitemap lists; without one, matched against the crawl's own URLs.
+    /// </summary>
+    public static GridPredicate Sitemap(int sitemapId, GridMode mode)
+    {
+        List<KeyValuePair<string, object>> parameters = [new(SITEMAP_PARAMETER, sitemapId)];
+        const string LISTED = $"m.sitemap_id IN ({SITEMAPS_UNDER})";
+        const string IDS = $"SELECT m.url_id FROM sitemap_urls m WHERE {LISTED}";
+        if (mode == GridMode.Crawl)
+        {
+            return Plain($"u.id IN ({IDS})", parameters);
+        }
+
+        const string SQL = $"s.url_id IN ({IDS})";
+        return new GridPredicate(SQL, "+" + SQL, parameters, Driving: true, Key(SQL, parameters))
+        {
+            Ids = IDS,
+            Source = new IdSource([new IdScan("sitemap_urls m", "m.url_id", LISTED, Combinable: false)], ROW_ID, Negated: false)
+        };
+    }
+
+    /// <summary>
     /// The URL ids of one group of a check, as its count on the Issues screen came from the analysis's targets or faults:
     /// those naming the other URL, a page in each group of the URLs it names (no URL being those naming none); or those
     /// that are instances of the fault. Null when the group is the issues' own (one by detail, an earlier engine's analysis).
@@ -293,7 +327,8 @@ internal static class UrlQueryCompiler
         return new GridSortKey(sorted, sql, "+" + sql, sort.Descending, sorted.Nullable, indexed);
     }
 
-    private static void ValidateFilter(UrlFilter filter, string field, GridScope scope, Dictionary<string, List<string>> errors)
+    /// <summary>One filter of a grid query, its errors keyed under <paramref name="field"/> (<c>filters[2]</c>).</summary>
+    internal static void ValidateFilter(UrlFilter filter, string field, GridScope scope, Dictionary<string, List<string>> errors)
     {
         if (filter.Column == UrlColumns.CHECK)
         {
@@ -313,6 +348,12 @@ internal static class UrlQueryCompiler
             return;
         }
 
+        ValidateOperator(filter, column, field, errors);
+    }
+
+    /// <summary>A filter on a column that exists: that the column filters, takes the operator, and is given what the operator needs.</summary>
+    internal static void ValidateOperator(UrlFilter filter, UrlColumnDefinition column, string field, Dictionary<string, List<string>> errors)
+    {
         if (!column.Filterable)
         {
             Add(errors, $"{field}.column", $"The grid can't filter by '{filter.Column}'.");
@@ -506,7 +547,7 @@ internal static class UrlQueryCompiler
     }
 
     /// <summary>A condition on the row the query reads: the URL summary's, or the crawl's tables joined.</summary>
-    private static GridPredicate Inline(UrlFilter filter, UrlColumnDefinition column, string sql, string? urlId, bool indexed, Func<object, string> parameter,
+    internal static GridPredicate Inline(UrlFilter filter, UrlColumnDefinition column, string sql, string? urlId, bool indexed, Func<object, string> parameter,
         List<KeyValuePair<string, object>> parameters)
     {
         if (POSITIVE.TryGetValue(filter.Operator, out var positive))
@@ -705,7 +746,7 @@ internal static class UrlQueryCompiler
     private static string Like(Func<object, string> parameter, string pattern) => $@"{COLUMN} LIKE {parameter(pattern)} ESCAPE '\'";
 
     /// <summary>LIKE's wildcards in the user's text, matched as themselves.</summary>
-    private static string Escape(string text) =>
+    internal static string Escape(string text) =>
         text.Replace(@"\", @"\\", StringComparison.Ordinal).Replace("%", @"\%", StringComparison.Ordinal).Replace("_", @"\_", StringComparison.Ordinal);
 
     private static object Value(FilterValue value) => value.Number is { } number ? Number(number) : (object?)value.Text ?? value.Boolean!.Value;
@@ -730,7 +771,7 @@ internal static class UrlQueryCompiler
     }
 
     /// <summary>A value as the keys and hashes hold it: text quoted, its quotes doubled, so no text can pass for more conditions.</summary>
-    private static string Describe(object? value) => value switch
+    internal static string Describe(object? value) => value switch
     {
         null or DBNull => "null",
         string text => $"'{text.Replace("'", "''", StringComparison.Ordinal)}'",
@@ -741,7 +782,7 @@ internal static class UrlQueryCompiler
 
     private static string Name(FilterOperator op) => char.ToLowerInvariant(op.ToString()[0]) + op.ToString()[1..];
 
-    private static void Add(Dictionary<string, List<string>> errors, string field, string message)
+    internal static void Add(Dictionary<string, List<string>> errors, string field, string message)
     {
         if (!errors.TryGetValue(field, out var messages))
         {

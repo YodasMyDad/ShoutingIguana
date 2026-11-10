@@ -149,6 +149,9 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 
         // The URLs grid shows what the checks judged.
         UrlSummaryAgreement.AssertAgreesWithTheChecks(path, expected, stats);
+
+        // A check that says it flags pages flagged nothing else, on this variant of the site.
+        IssueSubjectAgreement.AssertPageChecksFlagOnlyPages(path);
     }
 
     [Fact]

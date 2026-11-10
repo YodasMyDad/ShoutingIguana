@@ -140,6 +140,86 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
         Assert.Equal(naming, UrlInspectorReader.Read(copy, gone)!.NamedBy!.Total);
     }
 
+    /// <summary>
+    /// The inspector gives each issue the key of a group it's in, which finds that group among the check's groups and among
+    /// its rows: the other URL for a check grouped by it (the one the issue shows, when it's grouped under it), the fault for a
+    /// check grouped by one, and nothing for a check that isn't grouped.
+    /// </summary>
+    [Fact]
+    public void TheInspectorGivesEachIssueTheKeyOfItsGroup()
+    {
+        Dictionary<(string Check, IssueGroupKey Key), List<int>> members = [];
+        foreach (var (url, issues) in crawl.Reference.Issues)
+        {
+            var inspected = UrlInspectorReader.Read(crawl.Path, url)!.Issues!;
+            Assert.Equal(issues.Select(issue => issue.Issue).Order(StringComparer.Ordinal), inspected.Select(issue => issue.CheckId).Order(StringComparer.Ordinal));
+            foreach (var issue in inspected)
+            {
+                var grouping = IssueCatalog.Find(issue.CheckId)!.Grouping;
+                var stored = issues.Single(other => other.Issue == issue.CheckId);
+                if (grouping == IssueGrouping.None)
+                {
+                    Assert.Null(issue.Group);
+                    continue;
+                }
+
+                var keys = Keys(issue.CheckId, grouping, (url, stored.Detail, stored.Related)).ToList();
+                Assert.Contains((issue.Group!.Detail, issue.Group.RelatedUrlId), keys);
+
+                // The group of the URL the issue shows, when it's in that one.
+                if (grouping == IssueGrouping.RelatedUrl && keys.Contains((null, stored.Related)))
+                {
+                    Assert.Equal(stored.Related, issue.Group.RelatedUrlId);
+                }
+
+                if (!members.TryGetValue((issue.CheckId, issue.Group), out var urls))
+                {
+                    members[(issue.CheckId, issue.Group)] = urls = [];
+                }
+
+                urls.Add(url);
+            }
+        }
+
+        // Each key is one of its check's groups, whose rows hold every URL the inspector gave it for.
+        Assert.Equal(Checks().Where(check => IssueCatalog.Find(check)!.Grouping != IssueGrouping.None), members.Keys.Select(key => key.Check).Distinct().Order(CatalogOrder()));
+        foreach (var ((check, key), urls) in members)
+        {
+            var group = Assert.Single(IssueGroupReader.ReadGroups(crawl.Path, check, 0, 1_000)!.Groups, group => (group.Detail, group.RelatedUrlId) == (key.Detail, key.RelatedUrlId));
+            var rows = IssueGroupReader.ReadRows(crawl.Path, check, new UrlQuery { Limit = 1_000 }, key)!.Page!;
+            Assert.Equal(group.Pages, rows.Total);
+            Assert.Subset(rows.Rows.Select(row => row.Id).ToHashSet(), urls.ToHashSet());
+        }
+
+        // A fault's key is the fault, not the page's own detail, which differs from page to page.
+        foreach (var check in new[] { IssueCatalog.CANONICAL_RELATIVE, IssueCatalog.CANONICAL_INVALID, IssueCatalog.STRUCTURED_DATA_INVALID })
+        {
+            var (url, detail, _) = Flagged(check.Id).First();
+            var issue = UrlInspectorReader.Read(crawl.Path, url)!.Issues!.Single(issue => issue.CheckId == check.Id);
+            Assert.Equal(new IssueGroupKey(check.FaultOf!(detail!), null), issue.Group);
+        }
+
+        Assert.NotEqual(Flagged("structured-data-invalid").First().Detail, crawl.Reference.Faults[("structured-data-invalid", Flagged("structured-data-invalid").First().Url)]);
+
+        // An analysis from before the groups were stored is grouped by each issue's own detail and other URL, and so keyed.
+        var earlier = crawl.Copy();
+        Change(earlier, "UPDATE analysis SET analysis_version = 3");
+        foreach (var check in Checks().Where(check => IssueCatalog.Find(check)!.Grouping != IssueGrouping.None))
+        {
+            var grouping = IssueCatalog.Find(check)!.Grouping;
+            var (url, detail, related) = Flagged(check).First();
+            var key = UrlInspectorReader.Read(earlier, url)!.Issues!.Single(issue => issue.CheckId == check).Group;
+            Assert.Equal(new IssueGroupKey(grouping == IssueGrouping.RelatedUrl ? null : detail, related), key);
+            Assert.Contains(IssueGroupReader.ReadGroups(earlier, check, 0, 1_000)!.Groups, group => (group.Detail, group.RelatedUrlId) == (key!.Detail, key.RelatedUrlId));
+        }
+
+        // An analysis from before the index of the URLs each issue names reads the same keys through the table's own key.
+        var unindexed = crawl.Copy();
+        Change(unindexed, "DROP INDEX ix_issue_targets_url");
+        var broken = Flagged("broken-internal-links").First().Url;
+        Assert.Equal(UrlInspectorReader.Read(crawl.Path, broken)!.Issues!.Select(issue => issue.Group), UrlInspectorReader.Read(unindexed, broken)!.Issues!.Select(issue => issue.Group));
+    }
+
     /// <summary>Each analysis indexes a check's issues as they're grouped, which the groups read without the table.</summary>
     [Fact]
     public void EachAnalysisIndexesTheIssuesAsTheyAreGrouped()
@@ -364,6 +444,13 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
         return [.. IssueCatalog.All.Select(check => check.Id).Where(flagged.Contains)];
     }
 
+    /// <summary>Check ids in the order the catalog lists them.</summary>
+    private static Comparer<string> CatalogOrder()
+    {
+        var order = IssueCatalog.All.Select((check, index) => (check.Id, index)).ToDictionary(entry => entry.Id, entry => entry.index, StringComparer.Ordinal);
+        return Comparer<string>.Create((one, other) => order[one].CompareTo(order[other]));
+    }
+
     /// <summary>The check's issues: the URL flagged, the detail and the other URL involved.</summary>
     private List<(int Url, string? Detail, int? Related)> Flagged(string check) =>
     [
@@ -428,6 +515,10 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
             var page = IssueGroupReader.ReadRows(crawl.Path, check, query with { After = after, Limit = PAGE })!.Page!;
             ids.AddRange(page.Rows.Select(row => row.Id));
             after = page.Next;
+            if (after is not null)
+            {
+                GridWalks.AssertGoesOn(page.Rows.Count, ids.Count, page.Matching);
+            }
         }
         while (after is not null);
 

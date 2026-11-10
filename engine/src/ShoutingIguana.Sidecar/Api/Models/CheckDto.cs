@@ -7,6 +7,7 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 /// <param name="Fix">What to do about it.</param>
 /// <param name="LearnMore">A page that explains the check, or null.</param>
 /// <param name="Grouping">How the check's issues group (E3a): <c>detail</c>, <c>relatedUrl</c> or <c>none</c>.</param>
+/// <param name="Subject">What the URLs it flags are (E3b): <c>page</c> when always pages, <c>url</c> when any URL.</param>
 internal sealed record CheckDto(
     string Id,
     IssueCategory Category,
@@ -16,4 +17,5 @@ internal sealed record CheckDto(
     string Fix,
     string Why,
     string? LearnMore,
-    string Grouping);
+    string Grouping,
+    IssueSubject Subject);

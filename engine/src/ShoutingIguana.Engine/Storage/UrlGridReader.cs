@@ -76,6 +76,20 @@ public static class UrlGridReader
     }
 
     /// <summary>
+    /// One page of the URL grid for one sitemap: the URLs it lists (an index: those of every sitemap under it), with every
+    /// column, filter and sort of the URL grid. <see cref="UrlPage.Total"/> is the URLs the sitemap lists, each once. Null
+    /// when the crawl has no sitemap with this id.
+    /// </summary>
+    /// <inheritdoc cref="Query" path="/exception"/>
+    public static UrlPage? QuerySitemap(string databasePath, int sitemapId, UrlQuery query, ReadCache? cache = null, CancellationToken cancellationToken = default)
+    {
+        var scope = GridScope.AllUrls with { SitemapId = sitemapId };
+        ThrowIfInvalid(UrlQueryCompiler.Validate(query, scope));
+        return Refusing(query.Filters, () => GridReadContext.Read(databasePath, cache, cancellationToken, context =>
+            context.Scalar("SELECT COUNT(*) FROM sitemaps WHERE id = $id", [new("$id", sitemapId)]) == 0 ? null : Read(context, query, scope)));
+    }
+
+    /// <summary>
     /// The matching URLs counted by the values of each facet, each value with the filter that selects its URLs: for the
     /// filter chips, with a query's filters, and for Overview's breakdowns, with none.
     /// </summary>
@@ -209,6 +223,15 @@ public static class UrlGridReader
         compiled = GridPlanner.Materialize(context, compiled);
         var total = GridPlanner.Total(context, compiled);
         var matching = GridPlanner.Matching(context, compiled, total);
+        if (scope.SitemapId is { } sitemap)
+        {
+            // A sitemap's grid is the URLs it lists. With no other condition those are the rows that match, counted once: two
+            // counts of them, each kept for its own while, differ as a running crawl reads the sitemap. Otherwise the first
+            // condition's own count, which its set gives with a URL summary.
+            total = compiled.All.Count() == 1 ? matching : compiled.Predicates[0].KnownCount ?? context.Count($"sitemap|{sitemap}", () => context.Scalar(
+                $"SELECT COUNT(DISTINCT url_id) FROM sitemap_urls WHERE sitemap_id IN ({UrlQueryCompiler.SITEMAPS_UNDER})", [new(UrlQueryCompiler.SITEMAP_PARAMETER, sitemap)]));
+        }
+
         var after = query.After is { } cursor ? GridCursor.Decode(cursor, compiled.Hash, id => GridPlanner.KeysOf(context, compiled, id)) : null;
         var rows = GridPlanner.Page(context, compiled, matching, query.Offset, query.Limit, after, out var more);
         var values = Values(context, compiled, [.. rows.Select(row => row.Id)]);
@@ -255,7 +278,7 @@ public static class UrlGridReader
     }
 
     /// <summary>The columns' values of the page's rows, by URL id, in one read.</summary>
-    private static Dictionary<long, object?[]> Values(GridReadContext context, CompiledQuery query, IReadOnlyList<long> ids)
+    internal static Dictionary<long, object?[]> Values(GridReadContext context, CompiledQuery query, IReadOnlyList<long> ids)
     {
         Dictionary<long, object?[]> values = [];
         if (ids.Count == 0)
