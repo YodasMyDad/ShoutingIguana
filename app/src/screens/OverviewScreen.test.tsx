@@ -137,7 +137,7 @@ describe('the Overview of an analysed crawl', () => {
       expect.stringContaining('Notice: Internal links without anchor text'),
       expect.stringContaining('Notice: Title too long'),
     ]);
-    const first = within(rows[0] as HTMLElement).getByRole('link');
+    const first = within(rows[0]!).getByRole('link');
     expect(first).toHaveTextContent('2 URLs');
     expect(pathOf(first)).toBe(`/crawls/${TEST_CRAWL_ID}/issues/internal-client-error`);
   });
@@ -282,7 +282,7 @@ describe('the Overview when there’s no answer yet, or something’s off', () =
     });
     await open();
     expect(await main().findByText(/This crawl was stopped after 2,713 URLs, with 1,417 still queued\./)).toBeVisible();
-    fireEvent.click(main().getAllByRole('button', { name: /Continue/ })[0] as HTMLElement);
+    fireEvent.click(main().getAllByRole('button', { name: /Continue/ })[0]!);
     await waitFor(() => expect(proceed).toHaveBeenCalledTimes(1));
   });
 
@@ -344,7 +344,7 @@ const LIVE_ITEM = { ...NEVER, status: 'running', finishedAt: null } as const;
 
 describe('the Overview while the crawl runs', () => {
   const progress = (seconds: number, script: CrawlScript = POLITE) => message('progress', progressAt(seconds, script));
-  const cell = (label: string) => region('Progress').getByText(label).closest('.si-stat') as HTMLElement;
+  const cell = (label: string) => region('Progress').getByText(label).closest('.si-stat')!;
   const figure = (label: string) =>
     within(cell(label)).getByText(/^[\d,.–]+$/, { selector: '.si-stat__value > .figures > span:first-child' });
 
