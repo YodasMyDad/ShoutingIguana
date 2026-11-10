@@ -23,7 +23,7 @@ v2 is a fresh solution that ports the useful logic.
 | --- | --- | --- |
 | 1 | Headless engine, storage and CLI (`si`), proven on a generated 100k-page site, with the benchmark in CI | Done: `3e556be` |
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
-| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md) | In progress on `ui/step-3` at `e9edd0c`. Pick up at [Where step 3 stands](#where-step-3-stands-2026-11-04) |
+| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md) | In progress on `ui/step-3`. Pick up at [Where step 3 stands](#where-step-3-stands-2026-11-10) |
 | 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | Later |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
 
@@ -33,29 +33,33 @@ sets the bar and the process**: discovery, sign-off on mockups and a clickable p
 definition of done for every screen. It also covers the performance budgets and the engine work the UI needs.
 Discovery and the visual direction were settled on 2026-11-01 (direction B, "clarity"). Do not restart them.
 
-## Where step 3 stands (2026-11-04)
+## Where step 3 stands (2026-11-10)
 
 Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `origin/ui/step-3`.
 `v2` and `master` were not moved. The temp checkpoint under
 `%LOCALAPPDATA%\Temp\claude\...\c67f90ea-...\scratchpad\checkpoint.md` is history. This section is the place to resume.
 
-**Paused on 2026-11-04 by the owner, who ran low on usage.** Nothing is running. Three pieces of work were started from
-`e0780d0` (`f3c0b6c` plus a docs commit), each on its own local branch, unmerged and not pushed:
+**Resumed on 2026-11-10**, after the owner's pause on 2026-11-04. Three agents are running again, one per branch, each
+relaunched from its brief and its handoff. The branches started from `e0780d0` (`f3c0b6c` plus a docs commit) and are
+local, unmerged and not pushed. The entries below say where each stood when it was relaunched. Each branch's own log
+says where it is now:
 
 - **The Overview slice**, on `ui/overview` (worktree `.claude/worktrees/overview`), at `0a8f280` (WIP).
   - **Done:** visx is pinned (`@visx/shape`, `scale` and `group` 4.0.0), and the E4 progress, alert and history types
     are added. Typecheck passes and the unit tests pass (488).
   - **Next:** the live store's E4 fields, from the plan in the handoff folder (`livestore-e4-plan.md`).
-  - **Owner to confirm:** Pause, Resume and Stop stay in the top bar only, as in design B. The screen's banners carry
-    each state's next action instead.
+  - **Decided under the owner's delegation, theirs to overturn:** Pause, Resume and Stop stay in the top bar only, as
+    in design B. The screen's banners carry each state's next action instead.
 - **The URL inspector slice**, on `ui/inspector` (worktree `.claude/worktrees/inspector`), at `3a25a89` (WIP).
   - **Done:** CodeMirror 6 is pinned. The inspector's words for the engine's values, and the "Indexable, and why"
     checklist, are written, but not tested or used yet. Typecheck passes and the unit tests pass (488).
   - **Next:** the checklist's tests, then the values drawn on their limits.
-  - **Engine findings:**
+  - **Engine findings, both handed to E3b on 2026-11-10:**
     - An issue in the inspector doesn't name its group key, so the three fault-grouped checks can't link to their
-      group.
-    - A URL blocked by robots.txt reads `fetched: true` with no status.
+      group. E3b adds `group` (`{ detail, relatedUrlId }` or `null`) to each of the inspector's `issues[]`. The
+      inspector reads it as optional.
+    - A URL blocked by robots.txt reads `fetched: true` with no status. E3b fixes it or documents it. The inspector
+      goes by `outcome`.
 - **Engine E3b**, on `ui/e3b` (worktree `.claude/worktrees/e3b`), at `e0780d0`. No code yet.
   - **Done:** the contract is decided but not written, in the handoff:
     - links come from a `link_summary` table the analysis builds;
@@ -65,12 +69,18 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `o
   - **Base bench:** 52.9 s and 198 MB peak, flat, measured under load; compare E3b against it.
   - **Next:** write the E3b section of the API doc.
 
-Each agent stopped at a clean point and wrote a handoff. To resume:
+When an agent reports: a fresh-eyes review (read-only), a fixer for what it finds, then merge into `ui/step-3`, run
+the full checks on the merge, and push. E3b merges first if it is ready, since the inspector's group links and the
+Issues screen's "pages affected" fix both read its new fields.
 
-1. Read each branch's log and its handoff (`handoff-<name>.md` in the session's checkpoint folder, which the owner's
-   memory file names, next to the briefs `brief-<name>.md`).
-2. Relaunch an agent per branch from its brief plus its handoff, to carry on from the last commit. Don't redo what a
-   branch already committed.
+If the work stops again before they report, to resume:
+
+1. Read each branch's log. The owner's memory file names two scratchpad folders. The 2026-11-04 one holds the briefs
+   (`brief-<name>.md`) and the first handoffs (`handoff-<name>.md`). The 2026-11-10 one holds `checkpoint.md` (what the
+   relaunch changed in each brief) and a folder per agent with its own `checkpoint.md`, or its `handoff-<name>.md` if
+   it was told to pause.
+2. Relaunch an agent per branch from its brief, its handoffs and its checkpoint, to carry on from the last commit.
+   Don't redo what a branch already committed.
 3. Each slice gets a fresh-eyes review and its fixes before it merges.
 
 Done on this branch, on top of `v2`:
@@ -120,8 +130,9 @@ Done on this branch, on top of `v2`:
 Left, in this order:
 
 1. Overview and the URL inspector (running, above), each reviewed and fixed, then merged.
-2. Links, Sitemaps and robots.txt on E3b (running, above); New crawl settings; the crawl's settings; the rest of
-   Settings.
+2. E3b (running, above), reviewed, fixed and merged. Then the Issues screen's "pages affected" wording from E3b's
+   `subject` field, and the Links, Sitemaps and robots.txt screens; New crawl settings; the crawl's settings; the rest
+   of Settings.
 3. Later engine work the UI still needs: export (E5), full-text search and favicons (E6).
 
 Never edit the files in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls`.
