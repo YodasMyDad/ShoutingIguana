@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ArrowLeft, Copy, ExternalLink, FileX } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, type FocusEvent } from 'react';
 import { api } from '../../api/client';
 import { STALE_PLACE_WORDS, isProblem } from '../../api/errors';
 import type { RobotsBlockedUrl, RobotsFile } from '../../api/grids';
@@ -421,6 +421,19 @@ function BlockedUrls({
     [origin, urlWidth],
   );
 
+  // Focus arriving on the grid puts its cursor on a row without a move to hear of: the row is read from the grid
+  // itself (the cell it names as active), so the file shows that URL's line as it does once the cursor moves.
+  const getRow = rows.getRow;
+  const onGridFocus = (event: FocusEvent<HTMLDivElement>) => {
+    const grid = event.target;
+    if (grid.getAttribute('role') !== 'grid') return;
+    requestAnimationFrame(() => {
+      const active = document.getElementById(grid.getAttribute('aria-activedescendant') ?? '');
+      const index = Number(active?.dataset.row);
+      if (active && Number.isInteger(index)) onCursor(getRow(index));
+    });
+  };
+
   const narrowed = narrowingWords(narrowing, file);
   // The list's count is said once when the user narrows it or widens it again, never as it moves with a crawl.
   useAnnounceResults(
@@ -438,7 +451,7 @@ function BlockedUrls({
     );
 
   return (
-    <div ref={measure} className="flex min-h-0 flex-1 flex-col">
+    <div ref={measure} className="flex min-h-0 flex-1 flex-col" onFocus={onGridFocus}>
       <SectionHeader
         title="Blocked URLs"
         size="sm"
