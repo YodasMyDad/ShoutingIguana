@@ -11,6 +11,7 @@ import type {
   IssueGroup,
   IssueGroupPage,
   IssueRow,
+  LinkFacetsQuery,
   SummaryState,
   UrlLookup,
 } from '../grids';
@@ -41,6 +42,7 @@ import {
   adaptStats,
   fixture,
   inspectorFixtures,
+  linkFacts,
   optionalFixture,
   urlRows,
   type FixtureCrawl,
@@ -56,6 +58,7 @@ import {
   queryErrors,
   withPagingDefaults,
 } from './gridQuery';
+import { LINK_COLUMNS, answerLinkFacets, answerLinkQuery, linkRows } from './linkGrid';
 import { URL_COLUMNS } from './urlColumns';
 
 /** Every answer waits this long, so loading states behave as they will against the sidecar. */
@@ -872,6 +875,34 @@ export function createMockTransport(): Transport {
         } satisfies LinkPage);
       },
     ],
+    // ---- Links (E3b): the links grid's columns, a page of links, and the links counted by value.
+    ['GET', /^\/api\/link-columns$/, () => Promise.resolve(json(LINK_COLUMNS))],
+    [
+      'POST',
+      /^\/api\/crawls\/([0-9a-f]{16})\/links$/,
+      async ([, id = ''], request) => {
+        const item = await itemOrNull(id);
+        if (!item) return problem(crawlNotFound(id));
+        const body = (request.body ?? {}) as GridQuery;
+        if (body.group !== undefined) return problem(badRequest('Only a check’s rows take a group.'));
+        const links = await crawlLinks(id);
+        if (!links) return problem(sampleLacks('this crawl’s links'));
+        const answer = answerLinkQuery(links, body, summaryOf(item));
+        return answer.ok ? json(answer.page) : problem(answer.problem);
+      },
+    ],
+    [
+      'POST',
+      /^\/api\/crawls\/([0-9a-f]{16})\/links\/facets$/,
+      async ([, id = ''], request) => {
+        const item = await itemOrNull(id);
+        if (!item) return problem(crawlNotFound(id));
+        const links = await crawlLinks(id);
+        if (!links) return problem(sampleLacks('this crawl’s links'));
+        const answer = answerLinkFacets(links, (request.body as LinkFacetsQuery | undefined) ?? {}, summaryOf(item));
+        return answer.ok ? json(answer.page) : problem(answer.problem);
+      },
+    ],
     [
       'POST',
       /^\/api\/crawls\/([0-9a-f]{16})\/urls\/source$/,
@@ -951,6 +982,18 @@ export function createMockTransport(): Transport {
   async function itemOrNull(id: string) {
     await load();
     return items.get(id) ?? null;
+  }
+
+  // ---- Links (E3b). The links grid, over the links the inspector fixtures hold: the garden crawl's alone.
+
+  /**
+   * A crawl's links as the grid's rows, each end joined to its URL as the crawl has it now (while a crawl started
+   * here runs, only the links between the URLs its replay has reached), or null for a crawl the fixtures hold no
+   * links of.
+   */
+  async function crawlLinks(id: string) {
+    if (folderOf(id) !== 'garden') return null;
+    return linkRows(await linkFacts(), await crawlRows(id));
   }
 
   /**
