@@ -730,8 +730,10 @@ public static class LinkGridReader
     private static LinkTally NewTally(GridReadContext context) => new(LargestUrlId(context), UrlCount(context));
 
     /// <summary>
-    /// The ids of the matching links, kept per filter set: read through the targets of a filter that matches few links,
-    /// when the link summary can say which those are, otherwise in one pass over the links.
+    /// The ids of the matching links, kept per filter set. With the link summary, which says which targets they lead to:
+    /// every link but the others, where most links match (<see cref="AllBut"/>); else read through those targets, when
+    /// they have few links in all or their index holds all the filters ask (<see cref="Drive"/>); otherwise, and without
+    /// the summary, in one pass over the links.
     /// </summary>
     private static LinkIdSet Ids(GridReadContext context, Filters filters, long total) => context.LinkSummary is null || !filters.Summarised
         ? Passed(context, filters).Ids!
@@ -1088,8 +1090,9 @@ public static class LinkGridReader
     /// <item>filters on the target too: through the targets, when they have few links in all (<see cref="Drive"/>); else on
     /// the links' index by target, when it holds all the filters ask and the targets are few enough to list
     /// (<see cref="Placed"/>); else by walking from the nearer end when the page is near one, or at any place when a filter
-    /// names one target, whose index the walk follows; else from the set, read once: through the targets again when their
-    /// index holds all that's asked, however many they are, otherwise in one pass over the links.</item>
+    /// names one target, whose index the walk follows; else from the set, read once (<see cref="Ids"/>): as every link but
+    /// the others when most links match, through the targets again when their index holds all that's asked, however many
+    /// they are, otherwise in one pass over the links.</item>
     /// </list>
     /// </summary>
     private static long[] Page(GridReadContext context, Filters filters, long total, long matching, bool descending, int offset, int limit, long? after, out bool more)

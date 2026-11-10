@@ -364,7 +364,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, whether it was partial, what it ran against (the crawl's `updated_at`, the analysis version, the checks' fingerprint), and what it couldn't do and why |
 | `skipped_checks` | Each check the last analysis skipped, with a reason code and a sentence |
 | `effective_indexability` | Indexability as analysed, for URLs where it differs from the crawl's (an instant meta refresh, a canonical leading back to the page) |
-| `link_summary`, `link_blocks`, `link_summary_state` | The links counted for the links grid, by the first analysis of the crawl as it stands: by target, and by block of 16,384 consecutive link ids, each by kind, position, flags, whether the link leads to its own page, has text, and sits on a nofollow page; and the crawl row's stamp they were counted under, with the number of links, their highest id and the size of a block |
+| `link_summary`, `link_blocks`, `link_summary_state` | The links counted for the links grid, by the first analysis of the crawl as it stands: by target, and by block of 16,384 consecutive link ids, each by kind, position, flags, whether the link leads to its own page, has text, and sits on a nofollow page; and the crawl row's stamp they were counted under, with the number of links, their highest id, the size of a block and the version of the counting |
 | `url_summary` | One row per URL for the grids, rebuilt by each analysis: how it was found, indexable or not and why, where redirects end and the status there, the type (page, image, script, stylesheet, font, media, PDF, other), in a sitemap, inlinks (all, followed, nofollow, linking pages), outlinks, issues by severity, the room the title and meta description take as the checks measure it, and copies of the URL's depth, status, size, time and word count |
 
 URLs that only appear in sitemaps keep depth `1000000` (`CrawlDepth.UNLINKED`) in `urls`, which is how orphan pages
@@ -462,6 +462,19 @@ for the pass again), an engine from before them analysing the file doesn't make 
 crawl has moved the stamp on the readers pass them over until the next analysis counts afresh. Tables of another
 shape (a later engine's) are passed over too, and built again. `AnalysisFreshness.VERSION` didn't change for them:
 nothing an analysis already stored did, and the links grid reads without them, only slower.
+
+A summary is trusted in one place (`LinkSummaryBuilder.ReadCurrent`), which takes it only when:
+
+- its tables have this engine's columns, and `link_summary_state.version` is this engine's
+  (`CrawlSchema.LINK_SUMMARY_VERSION`): the version says how the links were counted, so a fix to the counting that
+  keeps the columns moves it on, and the next analysis counts again though the crawl hasn't changed. A summary
+  without a version is one from before it, and is counted again too;
+- its stamp is the crawl row's;
+- its numbers can be true of the file, as far as that costs nothing: the highest link id it gives is the links' own,
+  and the count is no more than the ids from the lowest to the highest, nor than a file of this size can hold (a
+  stored link takes 14 bytes at the least), with none only where there are no links. The grid sizes what it keeps by
+  those two numbers, so a file's word for them isn't enough: changed by hand to a billion, they made each filter
+  set's ids 128 MB.
 
 ## Grid reads
 
@@ -562,11 +575,24 @@ a page gives to read on. The API, with every column and operator, is in
   together.
   - **A page is read the cheapest way its filters allow**, each bounded. No filter: the ids are the places. Filters
     on what a link is: the blocks that hold the page, found by adding up `link_blocks`' counts, at most a block a link
-    of the page. Filters on the target: through the targets (`ix_links_to`, or `ix_links_to_kind` alone when a link's
-    kind is all that's asked of it) when they're at most 20,000 with few links in all, which `link_summary` says
-    before anything is read; otherwise a walk from the nearer end when the page is near one, remembered when it ran
-    long (a filter on deep targets has its links bunched on the pages crawled last); otherwise a set of the matching
-    ids, a bit per link, read once in one pass and kept (`LinkIdSet`).
+    of the page. Filters on the target go by the links' index by target (`ix_links_to`, or `ix_links_to_kind` when
+    one kind of link is asked for too), where each target's links are in crawl order:
+    - through the targets, all their links read once and kept, when they're at most 20,000 with few links in all,
+      which `link_summary` says before anything is read;
+    - a page at a time when they have many (a menu's few dozen targets hold half a crawl's links): the index counts
+      the targets' links between two ids without reading them, so the id the page starts after is closed in on
+      (first where an even spread would put it, then by halves) and the page read from the ids after it. No link is
+      read to be passed over, at any depth, and nothing is kept;
+    - more targets than that: a walk from the nearer end when the page is near one; deeper in, their links' ids read
+      through them once, on the index, a bit per link (`LinkIdSet`), and kept; a filter most links pass, on a crawl
+      with no link id missing, as every id but the others' (the links to the other targets and, for one kind, the
+      other kinds to these).
+
+    One target named outright is walked on the index at any depth, whatever else is asked. A filter on the target
+    with something the index doesn't hold (a link's position, its flags, more than one kind): through the targets
+    when they have few links in all; otherwise a walk of the links from the nearer end when the page is near one,
+    remembered when it ran long (a filter on deep targets has its links bunched on the pages crawled last);
+    otherwise a set of the matching ids read once in one pass over the links, and kept.
   - **A sort by the target** puts the targets with matching links in order (every URL's sort value is read once), adds
     up their counts to find the page's first target, and reads each target's links in crawl order on the index, from
     the nearer end of a target with many.
@@ -576,6 +602,16 @@ a page gives to read on. The API, with every column and operator, is in
     only their links, through `ix_links_from`: a page's links are stored together.
   - What's kept per filter set (ids, counts by target, a sort's order) is megabytes on a large crawl, so the cache
     keeps 12 of them (`ReadCache.HUGE_CAPACITY`).
+  - **A running crawl is answered for one moment of it** (`LinkMoment`). What's counted is kept between reads, and
+    each read's snapshot is later than the last, so counts kept under clocks of their own would put two moments in
+    one answer. The links and URLs are counted, with their highest ids, in one statement, kept for 2 s
+    (`ReadCache.LIVE_FOR`); whatever a read counts for that moment it counts within those ids and keeps under the
+    moment, so every read adds the same links to it, a crawl only ever adding links: an answer's count, total, rows,
+    facets and cursor are of the same links. A pass's ids and tally are kept as one, a sort's order with the tally it
+    was put in order from, and a read holds what it read first whatever the cache lets go of meanwhile. A read whose
+    own snapshot is older than the moment kept takes one of its own. A page fetched again has its links stored
+    again, which is the one way links go: a read that finds links its moment counted gone starts over on a moment
+    of its own snapshot.
 - **`SitemapListReader.Read`**: each sitemap with how the crawl came by it (worked out from the stored robots.txt, by
   the crawler's parser, and the crawl's options, as its discovery reads them), what became of it, and the URLs it
   lists counted as the URL grid's `fetched` and `indexable` columns judge them. An index counts every sitemap under
@@ -587,8 +623,12 @@ a page gives to read on. The API, with every column and operator, is in
   URL, so the line is worked out when read, by the crawler's own code: `RobotsTxtParser.Parse` can keep every line as
   it parses (`RobotsLine`: what it is, whether its group applies to the crawler, why nothing was made of it), each
   rule knows its line, and `RobotsTxt.Match` gives the rule that decides a URL, which `IsAllowed` goes by. An
-  origin's blocked URLs are matched once and kept. A URL the stored file doesn't refuse says so: a crawl continued
-  later keeps each origin's last answer.
+  origin's answer, its lines and its blocked URLs are read and kept as one, each URL matched once, so what one answer
+  says of an origin is of one moment of a running crawl. A URL the stored file doesn't refuse says so: a crawl
+  continued later keeps each origin's last answer. An origin's state is what its answer meant to the crawl, as the
+  crawler's `RobotsCache` took it: read, missing (no rules), unreachable (a 5xx, a 429, or no answer from the start
+  URL's origin: its URLs were refused) or unanswered (no answer from any other origin: no verdict, and the crawl
+  went ahead).
 
 `si readbench <crawl>` times the grids' reads as the UI makes them, each on a fresh connection with nothing cached, as
 a filter set's first read is: the first page, the page half way down and the one just past it (read from the far end),
@@ -623,7 +663,8 @@ half way or just past it), on a 32-core Windows machine (20 runs at 100k, 5 at 1
 | Links of one kind to the most linked URLs (`links-kind`) | 111 | 1,782 | 16.1 | 240 |
 | Without the summary: pages, sorted and filtered (`crawl`) | 87 | 920 | 10.6 | 185 |
 | Without the summary: facets (`crawl-facets`) | 111 | 1,353 | 12.2 | 245 |
-| The links grid, from the link summary: pages in crawl order and by the target, filters, facets (`link-grid`) | 69 | not measured | | 200 |
+| The links grid, from the link summary: pages in crawl order and by the target, filters, a few targets with many links, facets (`link-grid`) | 69 | not measured | | 200 |
+| The links grid, through many targets' links on their index, once per filter set (`link-targets`) | 237 | not measured | | 550 |
 | The links grid, one pass over the links: text and search filters, and everything without the link summary (`link-pass`) | 1,232 | not measured | | 2,500 |
 | Sitemaps: the list, a sitemap's URLs (`sitemaps`) | 31 | not measured | | 200 |
 | robots.txt: origins, a file, its blocked URLs (`robots`) | 34 | not measured | | 200 |
@@ -632,7 +673,7 @@ The facets of the pages without the summary take 1.35 s at 1M: they read and jud
 Every other read of 1M in the table is under 1 s apart from `links-kind`, which was measured before its index (below);
 the slowest of the rest is the pages by response time without the summary (0.92 s).
 
-The last four classes (E3b) were measured on the 100k benchmark crawl only (5,054,060 links, 20 runs, twice, the slower figures given): their gates
+The last five classes (E3b) were measured on the 100k benchmark crawl only (5,054,060 links, 20 runs, twice, the slower figures given): their gates
 take the least growth the others have, tenfold. `link-pass` is over the budget at 100k by what it is, one pass over
 every link (0.3 s for a rare text filter, 0.5 s for a common one, 0.8–0.9 s for a search, 0.7–1.2 s for a common
 filter or a sort by the target without the link summary), and is held to 2.5 s so it can't get slower; a million
@@ -640,6 +681,18 @@ pages' links would take ten times that. Of the rest, the slowest are a filter on
 that say nofollow are read first), the facets (49–51 ms), a sort by the target (42–55 ms at any place) and links to a
 few thousand targets (27–47 ms); a page of any filter on what a link is, anywhere in 4.4 million hyperlinks, takes
 3 ms.
+
+The E3b review added the links to a few targets with many links between them, a menu's, to `link-grid`: the twelve most
+linked pages, URLs under `/c/`, URLs with over 50,000 inlinks, pages a click from the start (1.3 to 2.7 million links,
+to 12 to 77 targets), and the hyperlinks among the last. A page of them is found on the links' index by target: 6 to
+30 ms for a first page and 36 to 74 ms half way down, on a machine other work was sharing, where the same run's
+slowest `link-grid` read was a sort by the target's status (116 ms; 69 ms was a quiet machine's). Before the review
+they walked the links to each page, 0.7 to 3 s half way down, which the gate now fails. `link-targets` is its two
+reads through many targets' links on that index, once per filter set and then kept: the links to pages four clicks
+from the start (1.4 million links to 74,000 targets, 237 ms half way down) and the hyperlinks to the site's own URLs
+(4.4 million, kept as every link but the rest, 158 ms). They're inside the 100k budget and grow with the links, so
+they'd miss at 1M; the gate is twice the desktop's worst, for the runner, so they can't get slower. `link-pass` gained
+the read the index can't place: a filter on the target with one on a link's position, deep among many links (0.57 s).
 
 The `links-kind` cell, and the inspector's, were measured before `ix_links_to_kind` and `issue_targets`. With those, on
 the same 1M crawl, links of one kind half way down take 94–241 ms (they were 1.7–3.1 s) and "named by" is 2 ms, 8 ms for
