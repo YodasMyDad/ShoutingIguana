@@ -87,6 +87,9 @@ describe('redirectChainLayout', () => {
     expect(layout.summary).toBe('The chain goes on past 20 hops, further than the crawl follows.');
     expect(layout.steps).toHaveLength(21);
     expect(layout.resolves).toBe(false);
+    // Its last hop is only as far as the crawl went: the chain has no end the crawl saw.
+    expect(layout.steps.map((step) => step.role).filter((role) => role === 'end')).toEqual([]);
+    expect(layout.steps.at(-1)?.role).toBe('hop');
   });
 
   it('says when the chain ends somewhere broken', () => {

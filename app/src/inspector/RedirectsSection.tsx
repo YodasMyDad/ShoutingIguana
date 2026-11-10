@@ -81,7 +81,7 @@ function Step({ step, index, last }: { step: ChainStep; index: number; last: boo
               {step.current ? 'Back at this URL' : 'Seen before: the loop closes here'}
             </Badge>
           ) : null}
-          {last && !step.repeat && index > 0 ? <Badge variant="outline">Where it ends</Badge> : null}
+          {step.role === 'end' && !step.repeat && index > 0 ? <Badge variant="outline">Where it ends</Badge> : null}
         </div>
         <WalkUrl id={step.id} url={step.url} truncate="wrap" className="mt-1" />
       </div>

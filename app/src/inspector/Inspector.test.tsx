@@ -446,6 +446,38 @@ describe('the sections', () => {
     await waitFor(() => expect(screen.getByRole('tabpanel', { name: /^Redirects/ })).toHaveFocus());
   });
 
+  it('marks where a chain ends, but not the last hop of one too long to follow', async () => {
+    const hops = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        id: 100 + index,
+        url: `https://example.com/hop-${index + 1}/`,
+        statusCode: index === count - 1 && count < 20 ? 200 : 301,
+        outcome: index === count - 1 && count < 20 ? ('success' as const) : ('redirect' as const),
+        via: 'http' as const,
+      }));
+    const chain = (count: number, tooLong: boolean) =>
+      testUrlDetail({
+        response: testResponse({ outcome: 'redirect', statusCode: 301 }),
+        content: null,
+        redirects: {
+          hops: hops(count),
+          final: { id: 99 + count, url: `https://example.com/hop-${count}/`, statusCode: tooLong ? 301 : 200 },
+          loop: false,
+          tooLong,
+        },
+      });
+    const { user, router } = await open(`${URLS}?inspect=2`, { urls: { 2: chain(2, false), 3: chain(20, true) } });
+    const ends = await showTab(user, /^Redirects/);
+    expect(within(ends).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(within(ends).getAllByRole('listitem')[2]!).getByText('Where it ends')).toBeVisible();
+    await act(() => inspectFromGrid(router, 3));
+    const long = await screen.findByRole('tabpanel', { name: /^Redirects/ });
+    expect(await within(long).findByText('Too long a chain')).toBeVisible();
+    expect(within(long).getAllByRole('listitem')).toHaveLength(21);
+    // The twentieth hop is a redirect the crawl stopped at, not where the chain ends.
+    expect(within(long).queryByText('Where it ends')).toBeNull();
+  });
+
   it('merges a header sent twice, filters, and says when nothing matches', async () => {
     const { user } = await open(`${URLS}?inspect=2`);
     const panel = await showTab(user, /^Headers/);

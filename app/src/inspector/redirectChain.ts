@@ -93,7 +93,8 @@ export function redirectChainLayout(subject: Subject, crawling: boolean): ChainL
       // A hop comes with its status and outcome alone: without either, why isn't said.
       noCode: noCodeWords(hop.statusCode, hop.outcome, false),
       via: hop.via,
-      role: index === hops.length - 1 ? 'end' : 'hop',
+      // A chain too long to follow has no end the crawl saw: its last hop is only as far as the crawl went.
+      role: index === hops.length - 1 && !tooLong ? 'end' : 'hop',
       current: hop.id === subject.id,
       repeat,
     });
