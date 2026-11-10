@@ -78,19 +78,17 @@ export function AlertList({
     <ul aria-label="Alerts" className="flex flex-col gap-2.5">
       {entries.map((entry) => (
         <li key={entry.key}>
-          <Callout
-            tone={TONES[entry.level]}
-            title={entry.title}
-            actions={
-              entry.action ? (
-                <ActionFor crawlId={crawlId} action={entry.action} canContinue={canContinue} onContinue={onContinue} />
-              ) : null
-            }
-          >
+          <Callout tone={TONES[entry.level]} title={entry.title}>
             {entry.detail ? <p className="break-words">{entry.detail}</p> : null}
             {entry.advice ? <p>{entry.advice}</p> : null}
-            <p className="text-12 text-text-muted">
-              <RelativeTime iso={entry.at} />
+            {/* Under the words, not beside them: the card is narrow, and the words need its width. */}
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+              {entry.action ? (
+                <ActionFor crawlId={crawlId} action={entry.action} canContinue={canContinue} onContinue={onContinue} />
+              ) : null}
+              <span className="text-12 text-text-muted">
+                <RelativeTime iso={entry.at} />
+              </span>
             </p>
           </Callout>
         </li>

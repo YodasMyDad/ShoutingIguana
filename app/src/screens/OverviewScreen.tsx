@@ -264,7 +264,7 @@ function Answer({
         crawlId={crawlId}
         entries={entries}
         totals={totals}
-        columns={width !== null && width < TWO_COLUMNS_BELOW ? 2 : 4}
+        columns={width !== null && width > 0 && width < TWO_COLUMNS_BELOW ? 2 : 4}
       />
       <div className="grid grid-cols-(--overview-columns) gap-4 @max-split:grid-cols-1">
         <FixFirst crawlId={crawlId} entries={entries} />

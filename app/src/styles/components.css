@@ -2659,6 +2659,11 @@
     line-height: var(--leading-12);
   }
 
+  .si-split__ends > :last-child:not(:first-child) {
+    flex: none;
+    white-space: nowrap;
+  }
+
   .si-split__ends b {
     color: var(--color-text);
     font-weight: var(--font-weight-semibold);

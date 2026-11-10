@@ -90,7 +90,7 @@ export const StatusCodes = memo(function StatusCodes({
         caption={
           split.rest > 0 ? (
             <>
-              The <b>{formatCount(split.rest)}</b> that didn’t answer 2xx, magnified
+              The <b>{formatCount(split.rest)}</b> not 2xx, magnified
             </>
           ) : split.total > 0 ? (
             live ? (
@@ -122,7 +122,10 @@ export const StatusCodes = memo(function StatusCodes({
             title: (
               <span className="flex min-w-0 items-baseline gap-2.5">
                 <span className="shrink-0 font-medium">{segment.label}</span>
-                <span className="truncate text-text-muted">
+                <span
+                  className="truncate text-text-muted"
+                  title={segment.count > 0 ? parts || segment.meaning : undefined}
+                >
                   {segment.count === 0 ? (live ? 'None so far' : 'None') : parts || segment.meaning}
                 </span>
               </span>

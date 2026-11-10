@@ -143,7 +143,7 @@ export const StatusSplits: Story = {
             ]}
             caption={
               <>
-                The <b>20</b> that didn’t answer 2xx, magnified
+                The <b>20</b> not 2xx, magnified
               </>
             }
             share={
@@ -170,7 +170,7 @@ export const StatusSplits: Story = {
             ]}
             caption={
               <>
-                The <b>11,316</b> that didn’t answer 2xx, magnified
+                The <b>11,316</b> not 2xx, magnified
               </>
             }
             share={

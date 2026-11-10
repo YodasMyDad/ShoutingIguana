@@ -34,8 +34,13 @@ import { waitEntries } from './waits';
  */
 const lines = (content: ReactNode) => <span className="block min-h-8">{content}</span>;
 
+/** The sparkline's scale ends this far above the highest rate. */
+const SPARK_HEADROOM = 1.25;
+
 /** Below this the six figures take two rows of three, and below the next, three rows of two (200% zoom). */
 const THREE_COLUMNS_BELOW = 880;
+/** From this width six figures in a row can be the larger size and still hold 1,000,000. */
+const LARGER_FIGURES_FROM = 1100;
 const TWO_COLUMNS_BELOW = 520;
 
 /**
@@ -59,8 +64,12 @@ export function LiveOverview({
   const history = useQuery(historyQuery(crawlId)).data;
   const fileAlerts = useQuery(alertsQuery(crawlId)).data;
   const checkCount = useQuery(checksQuery()).data?.checks.length;
-  const [widthRef, width] = useElementWidth();
+  const [widthRef, measured] = useElementWidth();
+  // Nothing measured yet (or no layout, in tests): the full-width layout stands.
+  const width = measured && measured > 0 ? measured : null;
   const columns = width === null || width >= THREE_COLUMNS_BELOW ? 6 : width >= TWO_COLUMNS_BELOW ? 3 : 2;
+  // Six figures in a row have room for millions only at the smaller size, unless the window is wide.
+  const size = columns === 6 && (width === null || width < LARGER_FIGURES_FROM) ? 'sm' : 'md';
 
   const trail = live?.trail.points;
   const rates = live?.history;
@@ -162,17 +171,20 @@ export function LiveOverview({
           <Stats columns={columns} wrap={columns < 6}>
             <StatLink
               {...linkProps(crawlId, { to: 'urls', filters: [{ column: 'fetched', op: 'is', value: true }] })}
+              size={size}
               label="Crawled"
               value={<Num value={progress?.fetched} />}
               context={lines(crawledContext)}
             />
             <StatLink
               {...linkProps(crawlId, { to: 'urls', filters: [] })}
+              size={size}
               label="Found"
               value={<Num value={progress?.discovered} />}
               context={progress?.skipped ? `${formatCount(progress.skipped)} not followed` : 'URLs, crawled or not'}
             />
             <Stat
+              size={size}
               label="Queued"
               value={<Num value={progress?.queued} />}
               context={
@@ -183,16 +195,20 @@ export function LiveOverview({
             />
             <StatLink
               {...linkProps(crawlId, { to: 'urls', filters: [...ANSWERED_SITE_PAGES] })}
+              size={size}
               label="Pages"
               value={<Num value={progress?.htmlPages} />}
               context={lines('HTML pages read')}
             />
             <Stat
+              size={size}
               label="URLs a second"
               value={<Num value={progress?.urlsPerSecond} format="rate" />}
               context={
                 <Sparkline
                   values={spark.values}
+                  // Headroom above the peak, so a steady rate reads as a line, not as a full box.
+                  max={(spark.peak ?? 0) * SPARK_HEADROOM}
                   label={
                     spark.now === null
                       ? 'URLs a second: none yet'
@@ -201,7 +217,12 @@ export function LiveOverview({
                 />
               }
             />
-            <Stat label="Elapsed" value={<Duration ms={progress?.elapsedMs} />} context={lines(elapsedContext)} />
+            <Stat
+              size={size}
+              label="Elapsed"
+              value={<Duration ms={progress?.elapsedMs} />}
+              context={lines(elapsedContext)}
+            />
           </Stats>
         </Card>
       </div>
