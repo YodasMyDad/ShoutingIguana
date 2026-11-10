@@ -63,15 +63,21 @@ export const StatLink = createLink(StatAnchor);
 /** Figures side by side, divided by hairlines: put it in a `Card`. */
 export function Stats({
   columns,
+  wrap = false,
   className,
   children,
 }: {
   columns: number;
+  /** More figures than columns: they run on to further rows, with a hairline between every two. */
+  wrap?: boolean | undefined;
   className?: string | undefined;
   children: ReactNode;
 }) {
   return (
-    <div className={clsx('si-stats', className)} style={{ '--stat-columns': columns } as CSSProperties}>
+    <div
+      className={clsx('si-stats', wrap && 'si-stats--wrap', className)}
+      style={{ '--stat-columns': columns } as CSSProperties}
+    >
       {children}
     </div>
   );

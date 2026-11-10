@@ -31,7 +31,7 @@ export const Sparkline = memo(function Sparkline({ values, label, max, size = 'm
   const y = scaleLinear({ domain: [0, top], range: [height - 1, 1] });
   const points = values.map((value, index) => ({ index, value }));
   return (
-    <div
+    <span
       ref={ref}
       role="img"
       aria-label={label}
@@ -54,6 +54,6 @@ export const Sparkline = memo(function Sparkline({ values, label, max, size = 'm
           />
         </svg>
       ) : null}
-    </div>
+    </span>
   );
 });

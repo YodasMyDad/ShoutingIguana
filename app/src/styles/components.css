@@ -1455,6 +1455,22 @@
     border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
   }
 
+  /* Figures over more than one row: the hairlines are the gaps, so every two figures have one between them. */
+  .si-stats--wrap {
+    gap: var(--hairline);
+    overflow: hidden;
+    border-radius: inherit;
+    background: var(--color-border-subtle);
+  }
+
+  .si-stats--wrap > .si-stat,
+  .si-stats--wrap > .si-stat:first-child,
+  .si-stats--wrap > .si-stat:last-child {
+    border-left: 0;
+    border-radius: 0;
+    background: var(--color-surface);
+  }
+
   .si-stat--link {
     cursor: pointer;
   }
@@ -2483,6 +2499,7 @@
 
   .si-spark {
     position: relative;
+    display: block;
     height: var(--spark-height);
     min-width: 0;
     overflow: hidden;
