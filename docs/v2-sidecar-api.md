@@ -242,11 +242,17 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 ```json
 {"id":"…","path":"C:\\…\\example.com-20261101-101500.sicrawl","fileName":"…","site":"example.com",
  "startUrl":"https://www.example.com/","status":"completed","startedAt":"…","finishedAt":"…","updatedAt":"…",
- "fetchedUrlCount":4521,"crawledUrlCount":4516,"pageCount":265,"issues":{"error":3,"warning":12,"notice":7},
+ "crawlingMs":41250,"fetchedUrlCount":4521,"crawledUrlCount":4516,"pageCount":265,"issues":{"error":3,"warning":12,"notice":7},
  "analyzedAt":"…","outOfDate":false,"sizeBytes":18276352,"missing":false}
 ```
 
 - **`site`** is the host without a leading `www.`. The UI groups crawls by it.
+- **`crawlingMs`** (E3c) is the time the crawl has spent crawling, over every run of it: each run from its start to its
+  end, less the time it was paused. Neither a pause nor the time between a stop and a continue is in it, so it's the
+  figure for "crawled in 41 seconds", which `finishedAt` less `startedAt` isn't for a crawl stopped and continued. A
+  running crawl's is the progress event's `crawlingMs`. **Null when it isn't known**: a crawl an engine from before
+  E3c made, or made any run of, didn't keep the time that run took, so there's no total, and no part of one is given.
+  A run cut short (the process died) counts up to when the engine last stored it, within about five seconds of its end.
 - **`crawledUrlCount`** (E3c) is the URLs crawled: those the crawl requested, and those robots.txt kept it from
   requesting (stored as disallowed). It is the URL grid's `fetched` column: `{"column":"fetched","op":"is","value":true}`
   lists exactly this many, so it's the count to show as "N URLs". A running crawl's is the progress event's `crawled`.
@@ -357,7 +363,7 @@ use, as `si crawl --resume` allows. It's analysed when it completes.
 
 | Event | Data | When |
 | --- | --- | --- |
-| `progress` | `{ crawlId, status, elapsedMs, discovered, queued, inFlight, fetched, htmlPages, redirects, errors, blocked, robotsDisallowed, skipped, bytesDownloaded, urlsPerSecond, at, phase, internalFound, internalFetched, maxUrls, statusClasses, statusCodes, noResponse, waits, moreWaits, crawled, siteVersions }` | Every 500 ms per live crawl (the engine's pace). The UI batches to 4 renders a second. `urlsPerSecond` is the rate of every URL fetched, pages and the rest alike. The fields from `at` on are E4's, and the last two E3c's, below |
+| `progress` | `{ crawlId, status, elapsedMs, discovered, queued, inFlight, fetched, htmlPages, redirects, errors, blocked, robotsDisallowed, skipped, bytesDownloaded, urlsPerSecond, at, phase, internalFound, internalFetched, maxUrls, statusClasses, statusCodes, noResponse, waits, moreWaits, crawled, siteVersions, crawlingMs }` | Every 500 ms per live crawl (the engine's pace). The UI batches to 4 renders a second. `urlsPerSecond` is the rate of every URL fetched, pages and the rest alike. `elapsedMs` is this run's time, pauses included. The fields from `at` on are E4's, and the last three E3c's, below |
 | `alert` | `{ crawlId, id, level, code, message, at, data }` | Each `CrawlNotice` (see below) |
 | `crawl` | `{ crawlId, status, error?, errorType? }` | Every status change, with the library's statuses. An analysis shows as `analyzing`, then back to `completed` or `stopped` with a `library` event, and `error` if it failed. `errorType` is the problem type when the UI can act on it: `crawl-busy` when the analysis found the file busy (someone reading it, another program writing to it), within seconds, so trying again can work |
 | `library` | `{}` | The library changed. The UI fetches `/api/crawls` again |
@@ -392,6 +398,10 @@ on, mid-crawl as at the end.
   `statusClasses.noResponse`. `robotsDisallowed` is the same count as the top-level field (refused by a rule, or because
   robots.txt couldn't be read). `notChecked` is URLs never asked, their host having stopped answering: unknown, not
   broken, so the UI shouldn't call them errors. `networkError` doesn't include them.
+- **`crawlingMs`** (E3c) is the time spent crawling so far, over every run of the crawl: the earlier runs' time, and
+  this run's without its pauses, so it stands still while the crawl is paused, where `elapsedMs` (this run's alone)
+  runs on. It ends at the library item's `crawlingMs`, to the millisecond. Null when an earlier run's time wasn't
+  kept (see the library item).
 - **`crawled`** (E3c) is the URLs crawled so far, as the URL grid counts them (`fetched` is true): `fetched` less
   `noResponse.notChecked`. It ends at the library item's `crawledUrlCount`, as `fetched` ends at `fetchedUrlCount`.
 - **`siteVersions`** (E3c) is the part of the event's figures that is the crawler's own probes of the site's other
@@ -509,7 +519,11 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 ```json
 {"crawlId":"…","startedAt":"2026-11-01T14:13:02.114Z","liveFrom":"2026-11-01T14:13:02.114Z",
  "points":[{"at":"…","fetched":499,"htmlPages":420,"internalFetched":480,"internalFound":3912,"errors":3,"blocked":0,
-            "elapsedMs":240000,"discovered":5384,"queued":3384,"skipped":1501}]}
+            "elapsedMs":240000,"discovered":5384,"queued":3384,"skipped":1501}],
+ "crawlingMs":251250,
+ "runs":[{"startedAt":"2026-11-01T14:13:02.114Z","endedAt":"2026-11-01T14:18:13.364Z","crawlingMs":251250,
+          "crawling":[{"from":"2026-11-01T14:13:02.114Z","to":"2026-11-01T14:15:02.114Z"},
+                      {"from":"2026-11-01T14:16:02.114Z","to":"2026-11-01T14:18:13.364Z"}]}]}
 ```
 
 - **`startedAt`** is when the crawl first started: the chart's zero.
@@ -518,7 +532,9 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
   on, and the latest. Memory stays flat however long it runs.
 - **`internalFound`** and **`internalFetched`**, on every point, are the progress event's: the chart's "found" and
   "crawled" lines meet the headline and its ETA.
-- **`liveFrom`** is where the points taken live begin: the start of the run this sidecar is watching. Before it, and
+- **`liveFrom`** is where the points taken live begin: the start of the run this sidecar is watching: when the sidecar
+  was asked to run it, a moment before the engine's own start of the run in `runs`, which is when the crawl file was
+  open and crawling began (continuing a big crawl reads its URLs first). Before it, and
   for a crawl not live here (`liveFrom` null), the points are counted back from the crawl file: a zero at `startedAt`,
   then at most 600 evenly spread over the seconds anything was fetched or found in, and the last.
 - **What the file can say.** It keeps when each URL was fetched, so its points have `fetched`, `htmlPages`,
@@ -528,9 +544,22 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
   list, which no page links, from the crawl's start, as the sitemaps are read then. A URL the crawl skipped isn't
   counted at any point, though a live count had one skipped for the URL limit until the limit was reached. The rest of
   what was found (`discovered`, `queued`, `skipped`) can't be counted back, so file points leave it out, and
-  `elapsedMs`. Nor does the file keep when each run began and ended: a stretch where nothing was fetched can be a
-  pause, a stop between sessions, or a site that wasn't answering. A URL fetched twice (a status check made a full
-  fetch) counts from its last fetch.
+  `elapsedMs`. A URL fetched twice (a status check made a full fetch) counts from its last fetch.
+- **`runs`** (E3c) is when the crawl was crawling: each run of it, oldest first, from its `startedAt` to its
+  `endedAt`, with the time it spent crawling (`crawlingMs`) and the stretches it spent it in (`crawling`, each
+  `{ from, to }`): one stretch for a run never paused, and a pause is the gap between two. The top-level
+  **`crawlingMs`** is their sum: the library item's.
+  - **Plotting crawled time.** A moment's place on an axis of time spent crawling is the stretches' time up to it:
+    every stretch that ended before it, and the part of the one it falls in. A moment in no stretch (a pause, the
+    time between runs, a site waited out isn't one: that's crawling) sits where the stretch before it ended, so the
+    gaps close.
+  - **A run that hasn't ended** has `endedAt` null: the run going now, or one cut short when its process died (the
+    item's status says which). Its last stretch's `to` is as the engine last stored it, at most about five seconds
+    before the present for a crawl that's running: a client drawing a live crawl takes the stretch to run on to
+    its latest `progress`.
+  - **Null when not known**, both of them: for a crawl any run of which was made by an engine from before E3c, whose
+    time wasn't kept. A chart then has only clock time, as before. Also null past 1,000 stretches (a crawl paused a
+    thousand times), which aren't listed; `crawlingMs` is still given then.
 - **Cost.** A live crawl's own points cost nothing to serve. Counting back from the file reads every response's time
   and every one of the site's URLs once: about 0.1 s for 100,000 URLs and 1.2 s for a million. It's done once and kept:
   for a live crawl that continued an earlier one, for that run; for a crawl not live here, until its file changes (its
@@ -1680,3 +1709,15 @@ nothing kept, on a 32-core Windows machine that other work was sharing.
   (`CrawlFileSummary.CrawledUrlCount`, counted in the summary's one pass over the responses, so every crawl file has
   it; the sidecar's kept summaries are read again once, their format having moved on). `fetched` stays as it is, for
   the sums made with it ([why](#library-e1)).
+- **Time spent crawling.** Nothing said how long a crawl had spent crawling: `elapsedMs` is one run's, pauses
+  included, and the file kept only the crawl's start and end. The crawl writer now keeps it, a stretch of crawling at
+  a time, in a new table, `run_time` ([the engine's README](../engine/README.md#time-spent-crawling)): created
+  whenever the writer opens a file, as `notices` is, so the crawl's schema version is unchanged and either engine
+  reads and continues either file. It's served as `crawlingMs` on the library item, the progress event and
+  `/history`, and as `/history`'s `runs`, each with its stretches, so a chart can close the time between runs and the
+  time paused. It costs a row at each start, pause, resume and end, and one small update every five seconds while a
+  crawl runs, which bounds what a run cut short can lose. **Older files read as null**, and so does any crawl a run
+  of which wasn't timed: a file from before the table that's continued here, or one an engine without it continued
+  since (told by the crawl row's stamp, which every run moves and the last stretch keeps). The time is given whole or
+  not at all. Tested on a clock the test moves: three runs with pauses and an hour between two, to the millisecond,
+  live and from the file.

@@ -140,6 +140,9 @@ the site's host gates:
   counted in every figure, as the crawl file has them, and said apart, so the https probe of a site served over http
   only reads as the crawler's question and not as the site failing to answer. A probe the site turns out to lead to
   becomes one of the site's URLs and leaves that part, and a crawl continued has the part it had;
+- the time spent crawling over every run of the crawl (`TimeCrawling`): the earlier runs' as the file has it, and this
+  run's without its pauses, where `Elapsed` is this run's with them; null when an earlier run wasn't timed
+  ([Time spent crawling](#time-spent-crawling));
 - the URLs crawled (`Crawled`): those fetched but for the URLs never asked, their host having stopped answering, which
   have an outcome and are done with, but weren't crawled. It's the URL grid's count of fetched URLs, and
   `CrawlFileSummary.CrawledUrlCount` for a crawl at rest;
@@ -364,6 +367,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `links` | Every link: source, target, kind (link/image/script/canonical/hreflang/redirect...), rel flags, page region, anchor text |
 | `robots`, `sitemaps`, `sitemap_urls` | robots.txt per origin, sitemaps read (under the URL they were found at, which may redirect elsewhere; `is_probe` marks a guess at `/sitemap.xml` when nothing declared one; the first one left unread, past 1,000 sitemaps or nested more than 3 deep, has an error starting "Not read"), and which URLs each listed |
 | `notices` | What the crawl told the person running it, every run's, in order: an id numbered across runs, when, the level as text, a stable code, the message, and JSON of the facts it's about (host, origin, URL, reason, counts, a duration) |
+| `run_time` | The time the crawl spent crawling: a row for each stretch of it, from a run's start (or its resuming after a pause) to its next pause or its end, with the run it belongs to, when it began, how long it went on, whether it has ended, and the crawl row's stamp it was stored under |
 | `issues` | One row per flagged URL and issue: a short detail, and the other URL involved (broken target, duplicate, canonical): the first, where there are several |
 | `issue_targets` | Every other URL each issue is about (each broken target of a page's links, the canonical, a duplicate cluster's first page), which the Issues screen groups by and the inspector's "named by" counts; `0` stands for no other URL |
 | `issue_faults` | The fault an issue of `canonical-relative`, `canonical-invalid` or `structured-data-invalid` is an instance of, which its groups are by |
@@ -389,13 +393,34 @@ The analysis's tables carry on growing the same way: `link_summary` and `link_bl
 issue is in. A file analysed before them reads without them, and gets them when it's analysed again.
 
 `notices` is created whenever the crawl writer opens a file,
-so an earlier engine's crawl gets it when it's continued, and reads as having none until then. The writer adds the
+so an earlier engine's crawl gets it when it's continued, and reads as having none until then. `run_time` is created
+the same way ([below](#time-spent-crawling)). The writer adds the
 fingerprint's `responses.simhash_1` to `_3` the same way: pages fetched before then, and any an earlier engine fetches
 into a newer file, have none. The crawl's own schema version doesn't change, so either engine reads and continues
 either file. Files are shared, so a notice another program wrote oddly is read as well as it can be (one
 without a code or a message is left out, a missing level reads as a warning and a missing time as the crawl's start),
 and a `notices` table of another shape reads as none; the writer won't continue a crawl whose table it couldn't store
 a notice in, and says so.
+
+### Time spent crawling
+
+How long a crawl took isn't its end less its start: it may have been paused, or stopped and continued a day later.
+`run_time` keeps the time it spent crawling, a stretch at a time, and `CrawlRunReader` reads it back as the crawl's
+runs, each with its stretches, and their total (`CrawlFileSummary.TimeCrawling`, `CrawlHistory.Runs`; live,
+`CrawlProgress.TimeCrawling`, which a run ends on to the millisecond the file has).
+
+- **A stretch** begins when a run starts or resumes after a pause, and ends when it's paused or the run ends, so paused
+  time and the time between runs are in none. The session times each by a clock that only runs forward (`RunClock`)
+  and hands it to the writer as it begins, as it ends, and every five seconds between, so a run cut short (the process
+  died) loses at most those: its last stretch is left going, read as ending where it was last stored, and ended there
+  when the crawl is continued. Nothing is written per response, and no stamp moves: a pause costs one small row.
+- **Known whole, or not known.** The total is given only when every run was timed. A file from before the table gets
+  it when it's continued, with one row without a time standing for all its earlier runs; and since every run stamps
+  the crawl row (`updated_at`) whichever engine makes it, each run's last stretch keeps the stamp its run ended on: when
+  that isn't the crawl row's own, an engine that keeps no time ran the crawl since, and the next run here adds the row
+  without a time for it. With such a row, or such a stamp, the crawl's time reads as not known, for good: never a part
+  of it given for the whole. A table of another shape (another program's) is neither written to nor read, and times
+  that can't be true (negative, ten years long) read as not known.
 
 ### URL summary
 
