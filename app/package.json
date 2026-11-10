@@ -26,7 +26,8 @@
     "make:crawl": "node scripts/make-crawl.mjs",
     "tauri": "tauri",
     "check:orphans": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-no-orphans.ps1",
-    "smoke:tauri": "node scripts/smoke-tauri.mjs"
+    "smoke:tauri": "node scripts/smoke-tauri.mjs",
+    "smoke:shell": "node scripts/smoke-shell.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "6.11.1",

@@ -36,9 +36,11 @@ export function useAnalysisAnswer(
   // The crawl whose last answer was "not analysed". State, adjusted as the answers come, so it's per crawl.
   const [unanalysed, setUnanalysed] = useState<string | null>(null);
   if ((notAnalysed || crawling) && unanalysed !== crawlId) setUnanalysed(crawlId);
-  if (unanalysed === crawlId && (analysis.data !== undefined || (analysis.error !== null && !notAnalysed))) {
-    setUnanalysed(null);
-  }
+  // Never while it's crawling: a crawl that still reads as running when its analysis is already there (the page back
+  // from the tray, or a stream that reconnected, before the crawl's item is read again) would be marked and let go
+  // on every render, for ever.
+  const answered = analysis.data !== undefined || (analysis.error !== null && !notAnalysed);
+  if (unanalysed === crawlId && !crawling && answered) setUnanalysed(null);
   const rereading = unanalysed === crawlId && analysis.isPending && !analysis.error;
 
   const [analysedHere, setAnalysedHere] = useState<string | null>(null);
