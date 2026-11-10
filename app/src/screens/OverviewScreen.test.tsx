@@ -84,9 +84,11 @@ const searchOf = (link: HTMLElement) => new URL((link as HTMLAnchorElement).href
 const pathOf = (link: HTMLElement) => new URL((link as HTMLAnchorElement).href).pathname;
 
 const NOT_BLOCKED: GridFilter = { column: 'outcome', op: 'notIn', values: ['blocked'] };
+// The site's page URLs, without the crawler's probes of its other versions.
 const SITE_PAGES: GridFilter[] = [
   { column: 'isInternal', op: 'is', value: true },
   { column: 'type', op: 'in', values: ['page'] },
+  { column: 'source', op: 'notIn', values: ['siteVersion'] },
 ];
 // A page is HTML the crawl read (it has a word count): a URL whose status alone was checked isn't one.
 const ANSWERED: GridFilter[] = [

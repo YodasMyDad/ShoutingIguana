@@ -3,6 +3,7 @@ import type { FacetBucket, FacetsPage } from '../../api/grids';
 import type { Analysis, Check, Checks } from '../../api/types';
 import { buildCheckList, checkEntries } from '../issues/checkList';
 import {
+  INDEXABILITY_FACETS,
   PAGE_FACETS,
   categoryFigures,
   depthFigures,
@@ -12,7 +13,7 @@ import {
   severityFigures,
   skippedGroups,
 } from './answer';
-import { ANSWERED_SITE_PAGES, CRAWLED_SITE_PAGES } from './links';
+import { ANSWERED_SITE_PAGES, CRAWLED_SITE_PAGES, SITE_PAGES } from './links';
 
 const check = (id: string, category: string, severity: Check['severity'], title = id): Check => ({
   id,
@@ -310,11 +311,27 @@ describe('what counts as a page', () => {
     expect(ANSWERED_SITE_PAGES).toEqual([
       { column: 'isInternal', op: 'is', value: true },
       { column: 'type', op: 'in', values: ['page'] },
+      { column: 'source', op: 'notIn', values: ['siteVersion'] },
       { column: 'statusClass', op: 'in', values: ['2xx'] },
       { column: 'wordCount', op: 'isNotEmpty' },
     ]);
     // Depth and response times are read under the same filters their columns then add to.
     expect(PAGE_FACETS.filters).toEqual(ANSWERED_SITE_PAGES);
+  });
+
+  it('leaves the crawler’s probes of the site’s other versions out of the site’s pages', () => {
+    // A probe is on the site and looks like a page, but nothing on the site leads to it: the https version of an http
+    // site not answering made Indexability say "Didn’t answer" one more than the engine counts for the site.
+    const noProbes = { column: 'source', op: 'notIn', values: ['siteVersion'] };
+    expect(SITE_PAGES).toContainEqual(noProbes);
+    expect(CRAWLED_SITE_PAGES).toEqual([...SITE_PAGES, { column: 'fetched', op: 'is', value: true }]);
+    // Indexability, depth and response times are all read without them, and so every link from them.
+    expect(INDEXABILITY_FACETS.filters).toContainEqual(noProbes);
+    expect(PAGE_FACETS.filters).toContainEqual(noProbes);
+    const figures = indexabilityFigures(page(274, { indexability: [bucket('indexability', 'unreachable', 2)] }));
+    expect(figures.reasons[0]?.link.filters).toContainEqual(noProbes);
+    expect(figures.indexableLink.filters).toContainEqual(noProbes);
+    expect(figures.notIndexableLink.filters).toContainEqual(noProbes);
   });
 });
 

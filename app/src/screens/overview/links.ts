@@ -35,10 +35,17 @@ export const NOT_CHECKED: GridFilter = { column: 'outcome', op: 'in', values: ['
 /** URLs with no outcome at all: only found (not followed, past a limit, still queued), never asked or looked at. */
 export const NO_OUTCOME: GridFilter = { column: 'outcome', op: 'isEmpty' };
 
-/** The site's own URLs that are pages, by their content type or, without one, their extension. */
+/**
+ * The site's own URLs that are pages, by their content type or, without one, their extension. Not the crawler's own
+ * probes of the site's other versions (http or https, www or not), which nothing on the site leads to: they're on the
+ * site and look like pages, but the engine leaves them out of every count of the site's pages (`/stats`'s
+ * `nonIndexableReasons`, the checks), and that the https version of an http site doesn't answer says nothing of its
+ * pages.
+ */
 export const SITE_PAGES: readonly GridFilter[] = [
   { column: 'isInternal', op: 'is', value: true },
   { column: 'type', op: 'in', values: ['page'] },
+  { column: 'source', op: 'notIn', values: ['siteVersion'] },
 ];
 
 /** The site's page URLs the crawl asked for: what indexability is judged on, errors and redirects included. */

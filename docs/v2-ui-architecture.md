@@ -500,7 +500,11 @@ answer. What it settled:
   crawl's "after N URLs" are the status breakdown's total, which is what their link opens.
 - **What the breakdowns count.** Status codes: every URL fetched, as the grid counts them. Indexability: the site's
   page URLs the crawl asked for (`isInternal`, `type` page, `fetched`), errors and redirects included, as "why not"
-  names them. Depth and response times: the site's pages, which is one count everywhere. A page is the engine's
+  names them. The crawler's own probes of the site's other versions (`source` `siteVersion`) are on the site and look
+  like pages, but aren't the site's: every page filter leaves them out (`SITE_PAGES`), as the engine's own counts do,
+  so an http site's https version not answering isn't one of its pages that "Didn't answer". The status codes count
+  every URL fetched, probes included, live and done: a crawl's first "Network error × 1" is often that probe, which
+  the live event counts (the engine's `statusClasses` are of every URL). Depth and response times: the site's pages, which is one count everywhere. A page is the engine's
   (`CrawlSchema.PAGE`): a URL of the site that answered 2xx with HTML the crawl read, so the filter ends with
   `wordCount isNotEmpty` (only parsed HTML has a word count; a URL whose status alone was checked, an iframe's target,
   has none). The cards' "N pages", the live "Pages" and its link, and the library's "pages read" are then the same
