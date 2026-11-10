@@ -53,8 +53,9 @@ internal static class LinkSummaryBuilder
 
     /// <summary>
     /// The link summary's own facts (the links, their highest id, and the size of its blocks) when it counts the crawl as it
-    /// stands: its tables are this engine's, column for column, and carry the crawl row's stamp. Null otherwise: no
-    /// summary, another shape's (a later engine's, another program's), or one of the crawl before its last run.
+    /// stands, as this engine counts: its tables are this engine's, column for column, of this engine's version of the
+    /// counting, and carry the crawl row's stamp. Null otherwise: no summary, another shape's or version's (an earlier or
+    /// later engine's, another program's), or one of the crawl before its last run.
     /// </summary>
     internal static (long Links, long MaxLinkId, int BlockShift)? ReadCurrent(SqliteConnection connection, SqliteTransaction? transaction)
     {
@@ -74,9 +75,10 @@ internal static class LinkSummaryBuilder
 
         command.CommandText = """
             SELECT s.links, s.max_link_id, s.block_shift FROM link_summary_state s JOIN crawl c ON c.id = 1 AND c.updated_at = s.crawl_updated_at
-            WHERE s.id = 1 AND s.block_shift BETWEEN $least AND $largest
+            WHERE s.id = 1 AND s.version = $version AND s.block_shift BETWEEN $least AND $largest
             """;
         command.Parameters.Clear();
+        command.Parameters.AddWithValue("$version", CrawlSchema.LINK_SUMMARY_VERSION);
         command.Parameters.AddWithValue("$least", LEAST_BLOCK_SHIFT);
         command.Parameters.AddWithValue("$largest", LARGEST_BLOCK_SHIFT);
         using var reader = command.ExecuteReader();
@@ -119,8 +121,12 @@ internal static class LinkSummaryBuilder
 
         // The crawl row's stamp as it stands: the analysis holds the crawl's lock, so no run can move it before this commits.
         using var state = Command(connection, transaction,
-            "INSERT INTO link_summary_state (id, crawl_updated_at, links, max_link_id, block_shift) VALUES (1, (SELECT updated_at FROM crawl WHERE id = 1), $links, $max, $shift)");
+            """
+            INSERT INTO link_summary_state (id, crawl_updated_at, links, max_link_id, block_shift, version)
+            VALUES (1, (SELECT updated_at FROM crawl WHERE id = 1), $links, $max, $shift, $version)
+            """);
         state.Parameters.AddWithValue("$shift", blockShift);
+        state.Parameters.AddWithValue("$version", CrawlSchema.LINK_SUMMARY_VERSION);
         state.Parameters.AddWithValue("$links", links);
         state.Parameters.AddWithValue("$max", maxLinkId);
         state.ExecuteNonQuery();
