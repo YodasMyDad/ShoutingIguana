@@ -67,6 +67,12 @@ synthetic crawl an older engine analysed is made again, and an out-of-date `SI_E
 (never the file itself). An out-of-date analysis would put its "Analyse again" offer on the screens, a Tab stop of its
 own. It needs `npm run build:sidecar` first, and Playwright's Chromium (`npx playwright install chromium`).
 
+`e2e/links-sweep.spec.ts` walks every count on Links (the header's under each view, every value of every facet, the
+inspector's "All N in Links") against the screen it lands on and the sidecar's own count. It runs with the rest on the
+synthetic crawl; to sweep a real crawl, every preset included, give it the file:
+`SI_E2E_CRAWL=<a .sicrawl file> npx playwright test e2e/links-sweep.spec.ts`. Most other specs look for the synthetic
+site's planted pages, so they are run on the synthetic crawl only.
+
 The setup also serves the engine's synthetic test site (the CLI's `testsite`, on a free port), which the Overview's
 tests crawl live from Home: watched to the answer, paused, resumed, stopped and continued. They never crawl a real
 site, and they stop and delete every crawl they start. The CLI is built into `.engine-build`, so a `si` left running
