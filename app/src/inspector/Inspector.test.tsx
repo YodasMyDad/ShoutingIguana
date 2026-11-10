@@ -876,8 +876,15 @@ describe('loading, failing and not there', () => {
       discovery: { ...testUrlDetail().discovery, state: 'queued' },
     });
     let fetched = false;
+    // While it's queued one page links to it; by the time it's fetched, two do.
+    const linking = [testLinkRow({ id: 1, url: HOME.url }), testLinkRow({ id: 3, url: OTHER.url })];
     sidecar = fakeSidecar([
-      ...inspectorRoutes({ urls: () => (fetched ? PAGE : queued) }),
+      ...inspectorRoutes({
+        urls: () => (fetched ? PAGE : queued),
+        get inlinks() {
+          return { 2: fetched ? linking : linking.slice(0, 1) };
+        },
+      }),
       ...issuesRoutes({ item: { status: 'running' } }),
     ]);
     setTransport(sidecar);
@@ -889,9 +896,13 @@ describe('loading, failing and not there', () => {
     expect(await within(inspector).findByText('Not fetched yet')).toBeVisible();
     expect(within(inspector).getByText(/It’ll show here once the crawl has fetched it\./)).toBeVisible();
     await waitFor(() => expect(within(inspector).getAllByText('Live').length).toBeGreaterThan(0));
+    expect(await within(inspector).findByRole('tab', { name: 'Inlinks 1' })).toBeVisible();
     fetched = true;
+    // What the live bridge does on a crawl's tick: everything read about the URLs inspected.
     await act(() => queryClient.invalidateQueries({ queryKey: queryKeys.urlDetails(TEST_CRAWL_ID) }));
     expect(await within(inspector).findByRole('heading', { name: 'Indexable' })).toBeVisible();
+    // The tabs' link counts are live with it: the same tick refreshes them.
+    expect(await within(inspector).findByRole('tab', { name: 'Inlinks 2' })).toBeVisible();
     expect(within(inspector).queryByRole('status', { name: 'Loading the summary' })).toBeNull();
     expect(within(inspector).queryByRole('progressbar', { name: 'Reading this URL again' })).toBeNull();
   });

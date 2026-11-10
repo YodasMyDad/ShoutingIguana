@@ -203,7 +203,7 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
 - While a crawl runs, its open grids' counts and rows refresh in place at most once a second (the bridge, on
   `progress`): never cancelling a page still on its way, with no skeleton and no progress line, and a "Live" mark by
   the count. The URL open in the inspector (`['crawl', id, 'inspect', …]`) refreshes with them, so a queued URL fills
-  in once it's fetched; its links are grids, and refresh as grids do.
+  in once it's fetched, and its tabs' link counts with it; its links are grids, and refresh as grids do.
 - A count the stream sends malformed is null, shown as "–", never 0. A status the contract doesn't have is dropped.
 - Select from the live store with `useLive`, `useLiveCrawl` and `useLiveIds`. A selector returns stored values or
   primitives, never a new object.
@@ -500,7 +500,12 @@ is what it shows. What it settled:
 - **Sections are tabs** (`ui/Tabs`), the one chosen remembered for the session (`sections.ts`, in `sessionStorage`)
   and kept while walking, so inlink to inlink stays on Inlinks. A tab's count is what its section lists: the link
   tabs' counts are the link endpoints' totals (every kind), read once the inspector has stayed on a URL for 200 ms;
-  the summary's `links` are the analysis's hyperlink counts, and are labelled so.
+  the summary's `links` are the analysis's hyperlink counts, and are labelled so. The last URL's counts stay on the
+  tabs until the next URL's are read, so the tabs never jump sideways. **The link counts are live**: their keys are
+  under the URL's own (`['crawl', id, 'inspect', urlId, 'linkCount', …]`), so a crawl's once-a-second refresh reads
+  them with the summary and a tab never says less than its section. That makes three small reads a second for the
+  URL shown while a crawl runs (2 to 4 ms each on the 100k crawl): `/urls/inspect` doesn't carry the totals of every
+  kind, and only the engine could make it one read.
 - **Values on their scales.** `Meter` draws the title's and description's length, the word count, the response time
   and the HTML's size against `limits`, which are the engine's (never hard-coded). A check is named beside a value
   only when the URL's `issues` have it: a value out of range that the analysis didn't flag says how far out it is,

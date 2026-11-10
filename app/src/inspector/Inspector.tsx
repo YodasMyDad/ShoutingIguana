@@ -90,7 +90,11 @@ function useSettled<T>(value: T, delayMs: number): T | undefined {
   return settled === value ? settled : undefined;
 }
 
-/** How many links the Inlinks or Outlinks section lists, for its tab: every kind, as the section shows them. */
+/**
+ * How many links the Inlinks or Outlinks section lists, for its tab: every kind, as the section shows them. Live: the
+ * key is under the URL's own read on purpose, so a crawl's tick refreshes the counts with the summary, never behind
+ * it. That's two more small reads a tick for the URL shown: only the link endpoints know these totals.
+ */
 function useLinkCount(crawlId: string, urlId: number, direction: 'inlinks' | 'outlinks', enabled: boolean) {
   return useQuery({
     queryKey: [...queryKeys.urlDetail(crawlId, urlId), 'linkCount', direction],
