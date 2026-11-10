@@ -28,12 +28,12 @@ Webview (React, app/src) ──────────────────�
 | `src/api` | The contract's types, the typed client, its errors, the transports (`http`, and `mock` over the design fixtures), query keys and options |
 | `src/shell` | The IPC with Rust (`ipc.ts`), the connection store and its wait for a ready engine, OS actions with browser fallbacks (`os.ts`), and the start-up failure screen |
 | `src/live` | The SSE parser and reconnecting stream, the live store, and the bridge from events to the rest of the app |
-| `src/grid` | The grid primitive: windowed scroll space, virtualiser, keyboard and selection model, copy, paging hook |
+| `src/grid` | The grid primitive (windowed scroll space, virtualiser, keyboard and selection model, copy, paging hook) and the full grid's pieces: the filter bar and its editor, the column chooser, facets, copying a whole view |
 | `src/keyboard` | Chords, the command registry, the app's commands, the palette and the `?` sheet |
 | `src/settings` | Preferences: schema, store (the shell's settings commands, or `localStorage`), appearance |
 | `src/feedback` | The loading rule, skeletons, toasts, error states, route errors, announcements |
 | `src/layout` | The shell's layout: sidebar, top bar, inspector slot, banners, the stopping overlay |
-| `src/screens` | One file per route, a screen's own pieces in a folder beside it (`screens/issues/`). Home, Overview, Issues and the URLs grid work; the rest are stubs for their slices |
+| `src/screens` | One file per route, a screen's own pieces in a folder beside it (`screens/issues/`). Home, Overview, Issues, Links and the URLs grid work; the rest are stubs for their slices |
 | `src/inspector` | The URL inspector: its sections, their pure logic, and the HTML source viewer (see The inspector) |
 | `src/app` | The router, the query client, overlays, sections, the root component |
 | `src/ui` | The component library: buttons, fields, menus, severity, figures, URLs and the rest (see Components) |
@@ -316,9 +316,18 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   every row's words for copying.
 - Columns are fixed widths: a grid in a panel (Issues') shares the panel's measured width (`grid/useElementWidth.ts`)
   among them. Keep focusable controls out of cells (`Url` with `openable={false}`), so the grid stays one Tab stop.
+- **Which column** (`onActivate`'s third argument, `onActiveColumnChange`): Enter says the id of the column the cursor
+  was in, and a double-click the cell's, for a grid whose rows hold more than one thing to open (a link's two ends);
+  the cursor's column is reported as it changes, for an action on that column (copy it).
+- **A header that doesn't sort says why** (`sortHint`): in a grid whose other columns sort, a column that can't is
+  no button, its reason is its header's tooltip, and Enter or Space on its header announces it. A key that does
+  nothing reads as broken.
+- **What a slow first load is doing** (`loadingNote`): a line of words over the first load's skeleton, shown with it
+  (after 150 ms, never over rows already there) and outside the grid's rows. The view announces the same words.
 
-The full grid (TanStack Table's column model, presets, chooser, filter bar, saved views) wraps this in the
-slices.
+The full grid's pieces (the filter bar and its editor, the column chooser, facets, copying a whole view) wrap this:
+see [The full grid's pieces](#the-full-grids-pieces). Column presets as TanStack Table would model them, and saved
+views, are still to come.
 
 ## Keyboard
 
@@ -417,7 +426,7 @@ screen, and one that a second screen needs moves here.
 | A hint | `Tooltip`: on hover after a rest, at once on keyboard focus, with the command's keys. Never the only place something is said. It describes its trigger by what the trigger's name lacks (`triggerName`: the hint, the keys), or not at all, so nothing is read twice; keycaps inside a control are `aria-hidden`, its keys given as `aria-keyshortcuts` |
 | Text input | `TextField` (label, description, inline error, read-only, disabled, `lg` for Home's URL field) and `SearchField` (clear and Esc, the key that focuses it). Errors are inline, never toasts |
 | A choice | `Checkbox` for a form's choice, `Switch` for one that applies at once, `SegmentedControl` for one of a few in view (counts and icon-only segments, a `description` per segment for what it means; the arrows choose), `Select` for one of a short list, `Tabs` for views of one thing |
-| More actions | `DropdownMenu` and `ContextMenu` share `MenuItem` (with `command`, its keys on the right and disabled when it can't run), `MenuCheckboxItem`, `MenuRadioItem`, `MenuSeparator`, `MenuLabel`. `Popover` for content from a button; `Dialog` for what can't wait, `ConfirmDialog` only for what can't be undone (a failed action keeps it open, saying why inside it) |
+| More actions | `DropdownMenu` and `ContextMenu` share `MenuItem` (with `command`, its keys on the right and disabled when it can't run), `MenuCheckboxItem`, `MenuRadioItem`, `MenuSeparator`, `MenuLabel`; a `MenuItem`'s `detail` is what it would give (a facet value's count), read with its name. `Popover` for content from a button, or from an `anchor` that something else opens (a filter chip's editor; focus goes back to the anchor); `Dialog` for what can't wait, `ConfirmDialog` only for what can't be undone (a failed action keeps it open, saying why inside it) |
 | Severity | `SeverityMark` (shape and colour, the word its name) in dense rows; `SeverityBadge` (with the word) wherever there's room; `SeverityCount(s)` for counts. Notices are the quietest |
 | Status | `StatusPill` for a crawl's status (the words of `crawl/status.ts`), `LiveBadge` and `LiveDot` for what updates live, `StatusCode` for a status code's class (only that meaning), `Badge` for a label without colour (`dashed`: what didn't happen) |
 | Filters | `FilterChip` reads as a sentence, opens its editor, goes with ✕ or Delete (focus moves on to the next chip, else the one before, else Add filter); `AddFilterChip`; the `preview` chip beside a number that opens its URLs |
@@ -478,16 +487,20 @@ are drawn for the app and are never swapped for Lucide's.
 
 ## Left for the slices
 
-- Every screen except Home, Overview and Issues: the full URL and Links grids, Sitemaps, robots.txt,
-  New crawl, the crawl's settings, the rest of Settings. The inspector is built (below).
+- Every screen except Home, Overview, Issues and Links: the full URL grid, Sitemaps, robots.txt,
+  New crawl, the crawl's settings, the rest of Settings. The inspector and Links are built (below).
 - The engine's E3b to E6: the links, sitemaps and robots grids, export, search, favicons. Analysis progress (E4) is in
   use on Issues and Overview (`crawl/analysis.ts` words its phases), as are E4's progress, alerts and history.
 - Export (E5) on Issues: this check, or every check with a summary sheet, and Ctrl+E. Until the engine has it, Issues
   offers Copy URLs and no Export button.
-- The URL grid's filter bar: it shows the route's filters as removable chips that read as sentences
-  (`grid/filterSentence.ts`), so a group's "Show all N pages in URLs" lands somewhere legible, but nothing edits them.
+- The URL grid's own filter bar, column chooser and facets. The pieces are built, for any grid (see
+  [The full grid's pieces](#the-full-grids-pieces)), and the URL grid takes its chips from them: it shows the route's
+  filters as removable chips that read as sentences (`grid/filterSentence.ts`), so a group's "Show all N pages in
+  URLs" lands somewhere legible, but edits none yet. Giving it the editor, the chooser and its facets is its slice.
+- On every grid: column resize, reorder and pin, saved views, the right-click menu (inspect, open, copy, filter by
+  this value, exclude it) and export (E5). None is built: a grid's columns are fixed widths in the order chosen.
 - A grid sorted by something other than crawl order keeps its selection by row index while a crawl adds rows, so a
-  live refresh can move rows under it: selecting by row id comes with the full grid.
+  live refresh can move rows under it: selecting by row id is still to come.
 - Each screen's own pieces, built from the components by its slice: the explanation band, charts. A piece two screens
   need joins `src/ui`.
 - Drag-and-drop of `.sicrawl` files (the shell already delivers drops through Tauri's drag-drop event).
@@ -532,7 +545,23 @@ are drawn for the app and are never swapped for Lucide's.
   Ctrl+Shift+C copies the check's (or the open group's) URLs, Ctrl+Shift+H hides or shows the check, and the palette
   has show passed, show hidden, Learn more and Cancel the analysis. Every check is in the palette by its title. J and
   K take focus in the list to the new check's option, and focus in the check (which goes with it) to the new check's
-  title; anywhere else focus stays, and the new check is announced ("Title too long, 3 URLs").
+  title; anywhere else focus stays, and the new check is announced ("Title too long, 3 pages"; "Internal URL returns
+  4xx, 9 URLs").
+- **A check's count is called what the check flags** (`crawl/checkSubject.ts`, the one place for it, so Issues, Fix
+  first and the inspector can't word a check two ways), by the catalog's `subject`. A `page` check flags only pages:
+  "Pages affected", "Share of pages, of the N pages crawled", "Affected pages", a "Pages" column, "Show all N pages in
+  URLs", and "3 pages" in its row and when J or K announces it. A `url` check can flag any URL: "URLs affected",
+  "Share of URLs, of the N URLs found", "Affected URLs", a "URLs" column, "Show all N in URLs". A check without a
+  `subject` (an engine from before E3b, the design fixtures) reads as a `url` check: a page is a URL, and every URL
+  it flags is one the crawl found, so that's true whatever it flags.
+- **The share is of the crawl's own count, never the analysis's.** The pages crawled are the library's `pageCount`,
+  as Overview's "pages read" is; `pagesAnalyzed` is the pages the analysis audited, one short wherever the site has
+  a Cloudflare `/cdn-cgi/` page (152 of 153 on the tests' crawl). The URLs found are the URL grid's `total`, read
+  with Overview's status breakdown (`statusFacetsQuery`, `foundCount`), so it's what that breakdown adds up to. Not
+  the URLs crawled: `sitemap-url-other-host` flags a URL a sitemap lists on another host whether or not it was
+  fetched. The share keeps its place with a dash until its count is read; there is none while the crawl runs, nor
+  when the count is past what it would be a part of. `e2e/issues-subject.spec.ts` walks every check of the catalog
+  on the tests' crawl: its words by its `subject`, its denominator against the API's own count, its count within it.
 
 ## Overview (the second slice)
 
@@ -546,7 +575,9 @@ answer. What it settled:
   severity, Fix first, categories, skipped checks by reason, indexability, depth, response times), `emptyCrawl.ts`
   (why a crawl read no pages) and `links.ts` (where every figure leads). All unit-tested, each figure with its link.
 - **It builds on Issues' list** (`issues/checkList.ts`): the answer sentence, the totals and the severity counts are
-  the same functions, and `rankChecksToFix` is the order both screens use (`firstCheckToFix` is its first).
+  the same functions, and `rankChecksToFix` is the order both screens use (`firstCheckToFix` is its first). Fix first
+  counts each check in what it flags ("3 pages", "4 URLs": `crawl/checkSubject.ts`), and says its order is "the most
+  severe first, then the most pages or URLs affected".
   Analysing from a screen is one hook, `issues/useAnalysisControl.ts`, and what the analysis's read says of a crawl is
   another, `issues/useAnalysisAnswer.ts`: "not analysed" is an answer that comes as an error, which the query forgets
   the moment it's asked again, so a screen that went by the query alone swapped itself for its loading frame whenever
@@ -685,7 +716,8 @@ is what it shows. What it settled:
 - **A hidden check is still the URL's**: wherever the URL's issues are listed, a check the user hid from the Issues
   list comes after the others, marked "Hidden" (`splitHidden` in `sections.ts`), and is left out of the summary's
   and the section's counts and the tab's, as the sidebar and Overview leave hidden checks out of theirs. Its link
-  lands on the check with the hidden checks shown.
+  lands on the check with the hidden checks shown. The issues on other URLs that name this one are counted in what
+  their check flags ("5 pages", "2 URLs").
 - **Issues lead to Issues**: each check's title is a link to it with the issue's group open (the engine's `group`,
   or `issueLinks.ts`'s fallback for an engine without it), leaving the inspector; back returns to the URL. The
   fallback names a group only when it's sure to be there with the URL in it, else the check alone: a duplicate's
@@ -737,3 +769,95 @@ is what it shows. What it settled:
   focus when it's there, and the request goes then, when another section is chosen and when the inspector shows
   another URL (each URL has a Source section of its own, which would otherwise take focus as it mounts).
 - **Targets.** Links stacked in lists (issues, a tree's rows) are at least `--target-min` (24 px) tall.
+
+## Links
+
+`screens/LinksScreen.tsx` and `screens/links/`: every link the crawl stored, in the one grid, over the links' own
+columns and each end's (`POST /links`, `POST /links/facets`, `GET /api/link-columns`). It is the first screen with the
+full grid's pieces, which are any grid's (below). What it settled:
+
+- **Pure first**, as the slices before it: `linkWords.ts` (every column's and value's words, and how a filter reads as
+  a sentence), `linkColumns.tsx` (what's shown, what the query asks for to draw it, how each cell reads),
+  `presets.ts`, `facets.ts`, `readCost.ts` (which reads pass over every link), `states.ts` (what each state says) and
+  `linkPlaces.ts` (where other screens land here). All unit-tested (`links.test.ts`).
+- **The route holds the view**: `filter`, `q`, `sort`, `cols` and `inspect`, checked by `validateLinksSearch`, which
+  takes the links' columns (`to.statusClass`, `from.depth`) and one sort key, as the engine sorts links. A filter, a
+  search, a preset and a facet's value are each a new place (back retraces them); a sort and the columns replace.
+- **The columns are the engine's** (`/api/link-columns`): their types say how a cell is drawn, which sort and which
+  need the analysis. Their names are the app's: a link's own, and each end's as the URL grid names that column under
+  "Source" or "Target" ("Target status", "Source H1": `grid/urlFilterWords.ts` now names every URL grid column). A
+  column a newer engine adds is worded from its id, never shown as one. The default set is the source and target
+  URLs, the anchor or alt text, the kind, the position, Follow and the target's status; the rest are in the chooser,
+  grouped (the link, its source page, its target). The first page never waits for the engine's list: the default
+  columns are asked for at once, and only columns a route names are checked against it first (one this engine
+  doesn't have is left out, not sent).
+- **Follow is one column** made of the engine's four (`followed`, `noFollow`, `sponsored`, `ugc`), in the words the
+  inspector's link grids use ("Followed", "nofollow, sponsored", "Not followed"). Filters are on the four.
+- **A target with no status says what happened**, from the crawl's own outcome, which the query asks for with the
+  status: "Blocked by robots.txt", "Timed out", "Not checked", and "Not fetched" only for a URL the crawl has no
+  outcome for. Never a guess, and never 0.
+- **Presets are only filters.** Broken links (`to.statusClass` in 4xx, 5xx), Links to redirects (3xx), Nofollow
+  links (`noFollow` is yes), No anchor text (hyperlinks whose `text` is empty) and External links (`to.isInternal`
+  is no) put their filters in the route, where they show as chips; a preset reads as chosen exactly while the
+  route's filters are its own. So a preset's count is the grid's, and nothing is filtered that the bar doesn't say.
+- **Facets are one read** of `/links/facets` under the view's own filters and search, so each facet's counts add up
+  to the links in view and are of one moment of a running crawl. Choosing a value puts the engine's own `filter` for
+  it in the route, in place of any filter on the same column (the values counted are the ones that filter left, so
+  the new one says all the old one did): the grid then holds exactly the value's count. The facets' key is among
+  the grids' (`['grid', 'linkFacets', …]`), so a running crawl's refresh moves them with the rows.
+- **Each end is a place.** A URL in a row opens the inspector on it; Enter opens the end the cursor's column is of
+  (the page the link is on from one of its columns, the target from anywhere else), a double-click likewise. While
+  the inspector is open it follows the cursor down the same end, in place, as it follows the URL grid's rows.
+- **From the inspector**: Inlinks and Outlinks have "All N in Links", the same links here: `to.id` (or `from.id`) is
+  the URL, the kind chosen stays, and `selfLink` is no, because the inspector's lists leave out a page's links to
+  itself and the links grid doesn't. N is the section's own count, and the grid's (the sweep checks it). The
+  summary's "N hyperlinks" is not a link here: it is the analysis's count, of the links on the pages it audited, and
+  differs from the links stored by one or two for a heavily linked page (24 of 200 URLs sampled on the 100k crawl).
+- **No "show these pages in URLs".** The source pages or the targets of a filtered set of links can't be asked of
+  the URL grid: it has no filter for "is an end of a link matching these filters", and the target's filters without
+  their prefix match URLs no link leads to as well. Nothing is offered that would land on another number; the screen
+  copies the set's source or target URLs instead. It needs the engine.
+- **Speed, said honestly.** Most views are found from the counts the analysis keeps and cost a page. A search, a
+  filter on what a link's text says or on its source page, and any filter or sort while the crawl runs or without a
+  current analysis, read every link once (`readCost.ts` has the engine's rule). A first page still on its way after
+  150 ms says what it's doing over the grid's skeleton ("Reading all 5,053,909 links: a search looks at each link's
+  text and both its URLs."), announced once; the rest of the screen stays usable, and changing the view gives the
+  read up (its request is aborted, as any page nobody waits for is).
+- **Another column keeps the grid's place.** The rows are asked for again with it, and the count of the same view
+  stands meanwhile, so the grid keeps its scroll, its cursor and its rows' places instead of a skeleton.
+- **States**, each a story under Screens/Links: first load, refreshing, live (links arrive, the count and the
+  facets move, nothing jumps, the cursor stays), never analysed, continued since its analysis, analysed by another
+  version (each says what still works here and what waits, with Analyse it or Analyse again), a filter that needs an
+  analysis there isn't, no links, none yet, none matching (the filters, and one press to clear them), a slow read, a
+  read error, the engine's list of columns unreadable (the links are still listed; sorting, Add filter and Columns
+  aren't offered, and a banner says so with Try again), a huge anchor text, a link to a URL never fetched, and five
+  million links.
+- **Its commands** are the registry's Links group: Ctrl+F searches the links, Ctrl+Shift+C copies the target URLs,
+  and the palette has the source URLs, the column the cursor is in, each preset ("Show broken links"), Add a filter,
+  Choose the columns and Clear. A copy reads the whole view by cursor, 1,000 rows at a time as far as 10,000
+  (`grid/copyAll.ts`), with progress and Cancel in a toast when it takes more than a moment.
+- **Tested** against the real sidecar (`e2e/links.spec.ts`, on the synthetic crawl's planted links) and swept
+  (`e2e/links-sweep.spec.ts`): the header's count under each view, every value of every facet under each view, and
+  "All N in Links" both ways, each against where it lands and against the sidecar's own count for that view. It runs
+  on the tests' crawl with the rest, and on a real crawl's file with `SI_E2E_CRAWL`.
+
+### The full grid's pieces
+
+In `src/grid`, for any grid; Links is the first to use them all, and the URL grid takes its chips from them.
+
+- **`FilterBar` and `FilterChips`**: a view's filters as chips that read as sentences, each removable (focus goes
+  to the next chip, else Add filter), its quick filters before them, "Add filter" and "Clear filters". Given what a
+  filter can be on (`FilterColumn`s in groups), a chip the editor can hold opens it; one it can't (a URL named by
+  its id, a check's group) is read and removed.
+- **`FilterEditor`** (`filterEditing.ts` has its rules): what it's on, how it compares, and with what, by the
+  column's type: a number or a range, text or a pattern, some of an enum's values, yes or no, empty or not. Nothing
+  is applied until Apply or Enter; what's wrong is said under the field it's wrong in. A column the analysis fills
+  is listed, and can't be chosen without one. It sits in a `Popover` that floats from the chip (`anchor`: something
+  else opens it, and focus goes back to the chip when it closes) or from Add filter.
+- **`ColumnChooser`**: every column the view can show, grouped, with a search; a tick applies at once and a column
+  ticked goes last. The last column shown can't be unticked.
+- **`FacetMenu`**: a facet as a menu of values with their counts (`MenuItem`'s `detail`), read with each value's
+  name; counting, failed (with Try again) and nothing to count each say so.
+- **`copyAll`**: what a whole view holds, read by cursor.
+- **`NeedsAnalysis`, `summaryWords.ts`, `useUrlWords`**: the URL grid's words for a column that waits for an
+  analysis, its state for a filter on one, and a URL's words by its id, moved here from the URL grid's screen.
