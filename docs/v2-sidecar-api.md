@@ -1822,8 +1822,9 @@ nothing kept, on a 32-core Windows machine that other work was sharing.
   which this work was told to leave alone.)
 
 **After E3c**, on the same machine: the benchmark crawled its 100,000 pages in 36 to 42 s over three runs (36 to 45 s
-before), peaked at 188 to 193 MB with no growth (188 to 196 MB), analysed in 11.8 to 18.1 s (10.6 to 14.8 s; the
-18.1 s was the one run of three made while the machine was busiest), and found every planted issue and nothing else;
+before), peaked at 188 to 193 MB with no growth (188 to 196 MB), analysed in 18.1, 12.2 and 11.8 s (10.6 to 14.8 s
+before; nothing changed between the three runs, and other work shares the machine), and found every planted issue
+and nothing else;
 `si readbench --gate --runs 20` passed every class, the two new ones included (`stats` 108 ms against 350,
 `stats-pass` 212 ms against 600), the links grid's slowest read from the link summary at 98 ms (107 ms before).
 Every number added or changed here was checked against SQL written for the check, through a running sidecar: on that
