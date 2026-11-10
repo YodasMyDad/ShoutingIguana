@@ -2,12 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { TEST_BLOCKED, TEST_FILE, TEST_FILE_LINES, blockedPage } from '../../test/sitemapsRobotsSidecar';
 import { blockedUrlsReader } from './copyBlocked';
 import {
-  accountedFor,
   blockedQueryOf,
-  blockedSomething,
   fileMarks,
   fileText,
-  hostOf,
   lineAt,
   lineOf,
   markedLine,
@@ -74,8 +71,12 @@ describe('the file as the viewer shows it', () => {
     expect(mark?.actionTitle).toBe('List the 12,345 URLs line 2,483 blocked');
   });
 
-  it('knows which lines can narrow the list', () => {
-    expect(TEST_FILE_LINES.filter(blockedSomething).map((line) => line.number)).toEqual([6]);
+  it('gives a link to the lines that blocked URLs, and to no other', () => {
+    expect(
+      fileMarks(TEST_FILE_LINES)
+        .filter((mark) => mark.action !== undefined)
+        .map((mark) => mark.line),
+    ).toEqual([6]);
   });
 });
 
@@ -120,13 +121,6 @@ describe('which lines the crawl obeyed', () => {
   });
 });
 
-describe('what the lines account for', () => {
-  it('adds the lines’ counts and the two cases no line accounts for up to the origin’s blocked URLs', () => {
-    expect(accountedFor(TEST_FILE)).toBe(TEST_FILE.blocked);
-    expect(accountedFor({ lines: [], unmatched: { unreachable: 2, unknown: 1 } })).toBe(3);
-  });
-});
-
 describe('a URL and its line, both ways', () => {
   it('narrows the list to a line or a reason from the route, a line first', () => {
     expect(narrowingOf({})).toEqual({ by: 'none' });
@@ -143,7 +137,7 @@ describe('a URL and its line, both ways', () => {
   });
 
   it('choosing a line lists exactly the URLs the file says it blocked', () => {
-    for (const line of TEST_FILE_LINES.filter(blockedSomething)) {
+    for (const line of TEST_FILE_LINES.filter((each) => (each.blocked ?? 0) > 0)) {
       const page = blockedPage({ ...blockedQueryOf(TEST_FILE.origin, { by: 'line', line: line.number }) });
       expect(page.matching).toBe(line.blocked);
       expect(page.rows.every((row) => lineOf(row) === line.number)).toBe(true);
@@ -198,11 +192,6 @@ describe('the origin in the route', () => {
     expect(originFromParam('http://127.0.0.1:50196')).toBe('http://127.0.0.1:50196');
     // Never tidied: the engine says when it has no origin like it.
     expect(originFromParam('not an origin')).toBe('not an origin');
-  });
-
-  it('names a host without its scheme', () => {
-    expect(hostOf('https://www.example.com')).toBe('www.example.com');
-    expect(hostOf('http://127.0.0.1:50196')).toBe('127.0.0.1:50196');
   });
 });
 

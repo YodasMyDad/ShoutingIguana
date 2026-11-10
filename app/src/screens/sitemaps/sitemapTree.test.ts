@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TEST_SITEMAPS, testSitemap } from '../../test/sitemapsRobotsSidecar';
-import { ancestorsOf, countsKnown, sitemapRows } from './sitemapTree';
+import { countsKnown, sitemapRows } from './sitemapTree';
 
 const NONE = new Set<number>();
 const shape = (rows: ReturnType<typeof sitemapRows>) =>
@@ -65,20 +65,6 @@ describe('the sitemaps as one treegrid', () => {
 
   it('is empty for a crawl with no sitemaps', () => {
     expect(sitemapRows([], NONE)).toEqual([]);
-  });
-});
-
-describe('ancestorsOf', () => {
-  it('names the indexes above a sitemap, nearest first', () => {
-    const nested = [testSitemap({ id: 1 }), testSitemap({ id: 2, parentId: 1 }), testSitemap({ id: 3, parentId: 2 })];
-    expect(ancestorsOf(nested, 3)).toEqual([2, 1]);
-    expect(ancestorsOf(nested, 1)).toEqual([]);
-    expect(ancestorsOf(nested, 99)).toEqual([]);
-  });
-
-  it('stops at a loop', () => {
-    const loop = [testSitemap({ id: 1, parentId: 2 }), testSitemap({ id: 2, parentId: 1 })];
-    expect(ancestorsOf(loop, 1)).toEqual([2]);
   });
 });
 

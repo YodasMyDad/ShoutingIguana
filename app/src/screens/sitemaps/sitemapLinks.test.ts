@@ -5,7 +5,7 @@ import {
   COUNT_FILTERS,
   QUICK_FILTERS,
   REDIRECTING_OR_BROKEN,
-  SITEMAP_COUNTS,
+  type SitemapCount,
   countOf,
   quickFilterCount,
   quickFilterFilters,
@@ -13,11 +13,12 @@ import {
 } from './sitemapLinks';
 
 const query = (sitemapId: number, filters: GridQuery['filters']) => ({ sitemapId, filters, sort: [], limit: 100 });
+const COUNTS = Object.keys(COUNT_FILTERS) as SitemapCount[];
 
 describe('a sitemap’s counts', () => {
   it('reads each count from what the engine counted, and “not crawled” as what’s listed less what was fetched', () => {
     const urls = { listed: 10, fetched: 7, indexable: 5, nonIndexable: 2 };
-    expect(SITEMAP_COUNTS.map((count) => countOf({ urls }, count))).toEqual([10, 7, 3, 5, 2]);
+    expect(COUNTS.map((count) => countOf({ urls }, count))).toEqual([10, 7, 3, 5, 2]);
   });
 
   it('never counts fewer than none not crawled, whatever a running crawl says of the two a moment apart', () => {
@@ -26,7 +27,7 @@ describe('a sitemap’s counts', () => {
 
   it('opens exactly the URLs each count counts: every count of every sitemap lands on itself', () => {
     for (const sitemap of TEST_SITEMAPS) {
-      for (const count of SITEMAP_COUNTS) {
+      for (const count of COUNTS) {
         const page = sitemapUrlsPage(query(sitemap.id, [...COUNT_FILTERS[count]]));
         expect(page.matching, `${sitemap.url} ${count}`).toBe(countOf(sitemap, count));
       }

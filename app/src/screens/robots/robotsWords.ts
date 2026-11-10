@@ -4,7 +4,6 @@
 // never share words. Pure, so every wording is unit-tested.
 import type {
   RobotsBlockedUrl,
-  RobotsLineKind,
   RobotsLineProblem,
   RobotsOrigin,
   RobotsOriginPage,
@@ -128,18 +127,6 @@ export const UNMATCHED_WORDS = {
   unknown: (count: number) =>
     `${formatCountOf(count, 'URL')} ${count === 1 ? 'is' : 'are'} stored as refused, though nothing kept here refuses ${count === 1 ? 'it' : 'them'}`,
 } as const;
-
-export const LINE_KIND_WORDS: Record<RobotsLineKind, string> = {
-  userAgent: 'User-agent',
-  allow: 'Allow',
-  disallow: 'Disallow',
-  sitemap: 'Sitemap',
-  crawlDelay: 'Crawl-delay',
-  comment: 'Comment',
-  blank: 'Blank line',
-  other: 'Another directive',
-  invalid: 'Not a directive',
-};
 
 /** Why the crawler made nothing of a line. */
 export const LINE_PROBLEM_WORDS: Record<RobotsLineProblem, string> = {

@@ -61,18 +61,6 @@ export function sitemapRows(sitemaps: readonly Sitemap[], collapsed: ReadonlySet
   return rows;
 }
 
-/** The indexes above a sitemap, nearest first: what must be open for its row to be in view. */
-export function ancestorsOf(sitemaps: readonly Sitemap[], id: number): number[] {
-  const byId = new Map(sitemaps.map((sitemap) => [sitemap.id, sitemap]));
-  const ancestors: number[] = [];
-  let parent = byId.get(id)?.parentId ?? null;
-  while (parent !== null && parent !== id && byId.has(parent) && !ancestors.includes(parent)) {
-    ancestors.push(parent);
-    parent = byId.get(parent)?.parentId ?? null;
-  }
-  return ancestors;
-}
-
 /**
  * Whether the crawl knows what a sitemap lists. One left unread, or not read yet, lists an unknown number of URLs,
  * and so does one that failed before a single entry was read: a dash, never 0. An index's counts are of the sitemaps

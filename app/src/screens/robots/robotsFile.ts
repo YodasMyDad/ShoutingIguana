@@ -12,11 +12,6 @@ export function fileText(lines: readonly Pick<RobotsLine, 'text'>[]): string {
   return lines.map((line) => line.text).join('\n');
 }
 
-/** Whether a line is one the list can be narrowed to: a rule of the obeyed group that refused at least one URL. */
-export function blockedSomething(line: Pick<RobotsLine, 'blocked'>): boolean {
-  return line.blocked !== null && line.blocked > 0;
-}
-
 /** Where a directive's name ends: before its colon. 0 when the line has none. */
 function nameEnd(text: string): number {
   const colon = text.indexOf(':');
@@ -90,12 +85,6 @@ export function obeyedWords(
   return `As ${userAgent}, the crawl obeyed ${listed}.`;
 }
 
-/** What the lines and the two cases no line accounts for add up to: the origin's blocked URLs, when all is well. */
-export function accountedFor(file: Pick<RobotsFile, 'lines' | 'unmatched'>): number {
-  const byLines = file.lines.reduce((sum, line) => sum + (line.blocked ?? 0), 0);
-  return byLines + file.unmatched.unreachable + file.unmatched.unknown;
-}
-
 /** What the blocked URLs are narrowed to: one line's, one reason's, or all of the origin's. */
 export type Narrowing = { by: 'line'; line: number } | { by: 'reason'; reason: RobotsReasonSearch } | { by: 'none' };
 
@@ -164,9 +153,4 @@ export function narrowingWords(
  */
 export function originFromParam(param: string | undefined): string | null {
   return param === undefined || param.trim() === '' ? null : param;
-}
-
-/** An origin without its scheme, where the scheme is said beside it or doesn't matter: "www.example.com". */
-export function hostOf(origin: string): string {
-  return origin.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
 }

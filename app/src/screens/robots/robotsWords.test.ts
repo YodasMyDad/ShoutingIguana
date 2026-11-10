@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { RobotsState } from '../../api/grids';
 import { TEST_ORIGINS, testOrigin } from '../../test/sitemapsRobotsSidecar';
 import {
-  LINE_KIND_WORDS,
   LINE_PROBLEM_WORDS,
   UNKNOWN_REASON,
   UNMATCHED_WORDS,
@@ -128,11 +127,8 @@ describe('why a URL was blocked', () => {
   });
 });
 
-describe('a line’s kind', () => {
-  it('has words for every kind and every problem the engine names', () => {
-    expect(Object.keys(LINE_KIND_WORDS).sort()).toEqual(
-      ['allow', 'blank', 'comment', 'crawlDelay', 'disallow', 'invalid', 'other', 'sitemap', 'userAgent'].sort(),
-    );
+describe('a line the crawler made nothing of', () => {
+  it('has words for every problem the engine names', () => {
     expect(Object.keys(LINE_PROBLEM_WORDS).sort()).toEqual(
       ['invalidValue', 'noUserAgent', 'notADirective', 'unknownDirective'].sort(),
     );

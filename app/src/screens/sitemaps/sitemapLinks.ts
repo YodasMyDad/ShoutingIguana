@@ -7,8 +7,6 @@ import type { GridFilter, Sitemap } from '../../api/grids';
 /** The counts a sitemap carries, or that follow from them: "not crawled" is what's listed less what was fetched. */
 export type SitemapCount = 'listed' | 'crawled' | 'notCrawled' | 'indexable' | 'nonIndexable';
 
-export const SITEMAP_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'notCrawled', 'indexable', 'nonIndexable'];
-
 /** The filter that selects exactly what each count counts, in a sitemap's own grid. */
 export const COUNT_FILTERS: Record<SitemapCount, readonly GridFilter[]> = {
   listed: [],
