@@ -692,4 +692,101 @@ describe('GridCore with columns that sort', () => {
     fireEvent.keyDown(grid, { key: 'ArrowUp' });
     expect(activeCell()).toHaveTextContent('https://example.com/0');
   });
+
+  describe('a grid whose rows hold more than one thing to open', () => {
+    it('says which column the cursor was in on Enter, and which cell was double-clicked', () => {
+      const { grid, onActivate } = setup();
+      act(() => grid.focus());
+      fireEvent.keyDown(grid, { key: 'ArrowDown' });
+      fireEvent.keyDown(grid, { key: 'ArrowRight' });
+      fireEvent.keyDown(grid, { key: 'Enter' });
+      expect(onActivate).toHaveBeenLastCalledWith(1, rows[1], 'status');
+      fireEvent.doubleClick(screen.getByText('https://example.com/3'));
+      expect(onActivate).toHaveBeenLastCalledWith(3, rows[3], 'url');
+      const status = screen.getByText('https://example.com/4').closest('[role="row"]')?.querySelector('[data-col="1"]');
+      if (!status) throw new Error('No status cell');
+      fireEvent.doubleClick(status);
+      expect(onActivate).toHaveBeenLastCalledWith(4, rows[4], 'status');
+    });
+
+    it('says the column the cursor moves to, and not again while it stays in it', () => {
+      const onActiveColumnChange = vi.fn();
+      const { grid } = setup({ onActiveColumnChange });
+      act(() => grid.focus());
+      fireEvent.keyDown(grid, { key: 'ArrowDown' });
+      fireEvent.keyDown(grid, { key: 'ArrowRight' });
+      expect(onActiveColumnChange).toHaveBeenLastCalledWith('status');
+      const calls = onActiveColumnChange.mock.calls.length;
+      fireEvent.keyDown(grid, { key: 'ArrowDown' });
+      expect(onActiveColumnChange).toHaveBeenCalledTimes(calls);
+      fireEvent.keyDown(grid, { key: 'ArrowLeft' });
+      expect(onActiveColumnChange).toHaveBeenLastCalledWith('url');
+    });
+  });
+
+  describe('a column that doesn’t sort, in a grid whose others do', () => {
+    const HINT = 'Rows can’t be sorted by their URL: they sort by status.';
+    const mixed: GridColumn<Row>[] = [
+      { ...columns[0]!, sortHint: HINT },
+      { ...columns[1]!, sortable: true },
+    ];
+
+    it('says why in its header’s tooltip, and has no button to press', () => {
+      setup({ columns: mixed, onSort: vi.fn() });
+      const [url, status] = screen.getAllByRole('columnheader');
+      expect(url).toHaveAttribute('title', HINT);
+      expect(url?.querySelector('button')).toBeNull();
+      expect(status).not.toHaveAttribute('title');
+      expect(status?.querySelector('button')).not.toBeNull();
+    });
+
+    it('says why when Enter or Space is pressed on its header, and sorts nothing', () => {
+      const onSort = vi.fn();
+      const { grid } = setup({ columns: mixed, onSort });
+      act(() => grid.focus());
+      fireEvent.keyDown(grid, { key: 'ArrowUp' });
+      fireEvent.keyDown(grid, { key: 'Enter' });
+      expect(announce).toHaveBeenLastCalledWith(HINT);
+      fireEvent.keyDown(grid, { key: ' ' });
+      expect(announce).toHaveBeenCalledTimes(2);
+      expect(onSort).not.toHaveBeenCalled();
+      // The next header sorts, and says nothing more.
+      fireEvent.keyDown(grid, { key: 'ArrowRight' });
+      fireEvent.keyDown(grid, { key: 'Enter' });
+      expect(onSort).toHaveBeenCalledWith('status', true);
+      expect(announce).toHaveBeenCalledTimes(2);
+    });
+
+    it('gives no tooltip in a grid that doesn’t sort at all', () => {
+      setup({ columns: mixed });
+      expect(screen.getAllByRole('columnheader')[0]).not.toHaveAttribute('title');
+    });
+  });
+
+  describe('a first load that takes a while', () => {
+    it('says what it is doing over its skeleton, once one shows, and no longer than the load lasts', () => {
+      vi.useFakeTimers();
+      try {
+        const props = {
+          label: 'URLs',
+          columns,
+          getRow: (index: number) => rows[index],
+          rowHeight: 32,
+          headerHeight: 32,
+        };
+        const note = 'Reading all 5,053,909 links: a search looks at every one.';
+        const { rerender } = render(<GridCore<Row> {...props} rowCount={null} loadingNote={note} />);
+        // A load that comes within 150 ms shows neither a skeleton nor the words.
+        expect(screen.queryByText(note)).toBeNull();
+        act(() => void vi.advanceTimersByTime(200));
+        expect(screen.getByText(note)).toBeVisible();
+        // It's for the eye: the view announces it, and it's no part of the grid's rows.
+        expect(screen.getByText(note).closest('[role="grid"]')).toBeNull();
+        rerender(<GridCore<Row> {...props} rowCount={rows.length} loadingNote={note} />);
+        expect(screen.queryByText(note)).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });
