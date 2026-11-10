@@ -159,6 +159,30 @@ describe('the summary', () => {
     );
   });
 
+  it('says a title of full-width characters in characters and in the width the limit counts', async () => {
+    const title = '庭の家具とパティオセットの専門店'.repeat(3);
+    const wide = testUrlDetail({
+      content: { ...testUrlDetail().content!, titles: [{ text: title, length: 96 }] },
+      issues: [
+        {
+          checkId: 'title-too-long',
+          severity: 'notice',
+          detail: '48 characters (96 counting full-width characters as two)',
+          related: null,
+        },
+      ],
+    });
+    const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: wide } });
+    const meter = await within(inspector).findByRole('meter', { name: 'Title length' });
+    // 48 characters to a reader, as the check's own detail says: never "96 characters".
+    expect(meter).toHaveAttribute(
+      'aria-valuetext',
+      '48 characters (96 counting full-width characters as two), 30 to 60 characters, over the limit',
+    );
+    expect(within(inspector).getByText('36 over the 60 limit')).toBeVisible();
+    expect(within(inspector).queryByText(/^96 characters/)).toBeNull();
+  });
+
   it('doesn’t name a check the analysis didn’t flag the URL with, only how far out the value is', async () => {
     const quiet = testUrlDetail({ issues: [] });
     const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: quiet } });

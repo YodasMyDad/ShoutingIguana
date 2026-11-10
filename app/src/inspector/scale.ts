@@ -85,15 +85,40 @@ function measure(spec: MeasureSpec, value: number): Measure {
 const characters = (value: number) => formatCountOf(value, 'character');
 const words = (value: number) => formatCountOf(value, 'word');
 
-/** A title's length against the range the analysis used. */
-export function titleMeasure(length: number, limits: ContentLimits): Measure {
+/**
+ * The characters a reader counts in a text, as the engine counts them: an emoji or an accented letter once, the
+ * ends trimmed.
+ */
+export function characterCount(text: string): number {
+  const trimmed = text.trim();
+  if (typeof Intl.Segmenter !== 'function') return Array.from(trimmed).length;
+  let count = 0;
+  for (const _ of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(trimmed)) count++;
+  return count;
+}
+
+/**
+ * A title's or description's length as it reads. The engine's `length` is the room the text takes in a search
+ * result: a full-width character (Chinese, Japanese, Korean, an emoji) counts as two. So it's "characters" only when
+ * it is the text's count of them; else it's said as the engine's own issue details say it: "48 characters (96
+ * counting full-width characters as two)". The limits, and how far out the value is, are in that same measure.
+ */
+function lengthWords(length: number, text: string | undefined): string {
+  const count = text === undefined ? length : characterCount(text);
+  return length > count
+    ? `${characters(count)} (${formatCount(length)} counting full-width characters as two)`
+    : characters(length);
+}
+
+/** A title's length against the range the analysis used. `text`: the title itself, for what its length counts. */
+export function titleMeasure(length: number, limits: ContentLimits, text?: string): Measure {
   return measure(
     {
       id: 'title',
       label: 'Title length',
       min: limits.titleMin,
       max: limits.titleMax,
-      format: characters,
+      format: (value) => lengthWords(value, text),
       formatAmount: formatCount,
       limitText: `${formatCount(limits.titleMin)} to ${formatCount(limits.titleMax)} characters`,
       over: 'title-too-long',
@@ -103,15 +128,15 @@ export function titleMeasure(length: number, limits: ContentLimits): Measure {
   );
 }
 
-/** A meta description's length against the range the analysis used. */
-export function descriptionMeasure(length: number, limits: ContentLimits): Measure {
+/** A meta description's length against the range the analysis used. `text`: as for a title. */
+export function descriptionMeasure(length: number, limits: ContentLimits, text?: string): Measure {
   return measure(
     {
       id: 'description',
       label: 'Meta description length',
       min: limits.descriptionMin,
       max: limits.descriptionMax,
-      format: characters,
+      format: (value) => lengthWords(value, text),
       formatAmount: formatCount,
       limitText: `${formatCount(limits.descriptionMin)} to ${formatCount(limits.descriptionMax)} characters`,
       over: 'description-too-long',
@@ -186,8 +211,10 @@ export function measuresOf(detail: Pick<UrlDetail, 'content' | 'response' | 'lim
   const responseMs = number(response?.responseMs);
   const bodyBytes = number(response?.bodyBytes);
   return {
-    titles: (content?.titles ?? []).map((title) => titleMeasure(title.length, limits)),
-    descriptions: (content?.descriptions ?? []).map((description) => descriptionMeasure(description.length, limits)),
+    titles: (content?.titles ?? []).map((title) => titleMeasure(title.length, limits, title.text)),
+    descriptions: (content?.descriptions ?? []).map((description) =>
+      descriptionMeasure(description.length, limits, description.text),
+    ),
     words: content ? wordsMeasure(content.wordCount, limits) : null,
     response: responseMs === null ? null : responseMeasure(responseMs, limits),
     htmlSize: bodyBytes === null || content === null ? null : htmlSizeMeasure(bodyBytes, limits),

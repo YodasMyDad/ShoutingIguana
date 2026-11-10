@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TEST_LIMITS, testResponse, testUrlDetail } from '../test/inspectorSidecar';
 import {
+  characterCount,
   descriptionMeasure,
   htmlSizeMeasure,
   measuresOf,
@@ -50,6 +51,25 @@ describe('the measures', () => {
     const measure = titleMeasure(12, TEST_LIMITS);
     expect(measure.note).toBe('18 under the 30 minimum');
     expect(measure.checkId).toBe('title-too-short');
+  });
+
+  it('calls a length characters only when it is the text’s count of them: wide characters count twice', () => {
+    // 48 Japanese characters: the engine's length is 96, the room they take in a search result.
+    const wide = '日本語のタイトルです'.repeat(5).slice(0, 48);
+    const measure = titleMeasure(96, TEST_LIMITS, wide);
+    expect(measure.valueText).toBe('48 characters (96 counting full-width characters as two)');
+    // The limit and how far past it are in the same measure as the value.
+    expect(measure).toMatchObject({ state: 'over', note: '36 over the 60 limit', checkId: 'title-too-long' });
+    expect(descriptionMeasure(40, TEST_LIMITS, '短い説明文です。'.repeat(3).slice(0, 20)).valueText).toBe(
+      '20 characters (40 counting full-width characters as two)',
+    );
+    // An emoji is one character to a reader, and wide.
+    expect(titleMeasure(8, TEST_LIMITS, 'Sale 🎉!').valueText).toBe(
+      '7 characters (8 counting full-width characters as two)',
+    );
+    // Latin text, accents and all, is its count: "characters" as before. The ends don't count.
+    expect(titleMeasure(4, TEST_LIMITS, ' Café ').valueText).toBe('4 characters');
+    expect(titleMeasure(61, TEST_LIMITS, 'x'.repeat(61)).valueText).toBe('61 characters');
   });
 
   it('stays quiet within the range', () => {
@@ -113,6 +133,16 @@ describe('the measures', () => {
     const limits = { ...TEST_LIMITS, titleMin: 10, titleMax: 20, slowResponseMs: 250 };
     expect(titleMeasure(25, limits).note).toBe('5 over the 20 limit');
     expect(responseMeasure(300, limits).note).toBe('50 ms over the 250 ms limit');
+  });
+});
+
+describe('characterCount', () => {
+  it('counts what a reader counts: a letter with its accent, an emoji with its parts, once', () => {
+    expect(characterCount('Garden')).toBe(6);
+    expect(characterCount('  Garden  ')).toBe(6);
+    expect(characterCount('Café')).toBe(4);
+    expect(characterCount('👩‍👩‍👧 family')).toBe(8);
+    expect(characterCount('日本語')).toBe(3);
   });
 });
 

@@ -509,7 +509,10 @@ is what it shows. What it settled:
 - **Values on their scales.** `Meter` draws the title's and description's length, the word count, the response time
   and the HTML's size against `limits`, which are the engine's (never hard-coded). A check is named beside a value
   only when the URL's `issues` have it: a value out of range that the analysis didn't flag says how far out it is,
-  and no more.
+  and no more. A title's or description's `length` is the engine's display width (a full-width character or an
+  emoji counts as two), so it's called "characters" only when it is the text's count of them (`characterCount`,
+  user-perceived characters as the engine counts them); otherwise it reads as the engine's own details do, "48
+  characters (96 counting full-width characters as two)".
 - **Issues lead to Issues**: each check's title is a link to it with the issue's group open (the engine's `group`,
   or `issueLinks.ts`'s fallback for an engine without it), leaving the inspector; back returns to the URL. The
   fallback names a group only when it's sure to be there with the URL in it, else the check alone: a duplicate's
