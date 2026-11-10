@@ -10,12 +10,14 @@ import { useGridMetrics } from '../grid/metrics';
 import type { GridColumn } from '../grid/types';
 import { useElementWidth } from '../grid/useElementWidth';
 import { usePagedRows } from '../grid/usePagedRows';
-import { formatCountOf } from '../lib/format';
+import { formatCount, formatCountOf } from '../lib/format';
+import { linksOfUrl } from '../screens/links/linkPlaces';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { LiveBadge } from '../ui/LiveBadge';
 import { Select, type SelectOption } from '../ui/Select';
 import { StatusCode } from '../ui/StatusCode';
+import { TextLink } from '../ui/TextLink';
 import { Url } from '../ui/Url';
 import { useInspectorContext } from './inspectorContext';
 import {
@@ -206,6 +208,18 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
           {rows.rowCount === null ? ' ' : formatCountOf(rows.rowCount, kindNoun)}
         </p>
         {crawling ? <LiveBadge /> : null}
+        {rows.rowCount !== null && rows.rowCount > 0 ? (
+          // The same links in the Links grid, to filter, sort and copy: the grid's count there is this one, as its
+          // filters are this list's own (the URL, the kind chosen, and no link from a page to itself).
+          <TextLink
+            to="/crawls/$crawl/links"
+            params={{ crawl: crawlId }}
+            search={{ filter: linksOfUrl(direction, urlId, kind) }}
+            className="text-13"
+          >
+            All {formatCount(rows.rowCount)} in Links
+          </TextLink>
+        ) : null}
         <Select
           label="Kind of link"
           options={KIND_OPTIONS}
