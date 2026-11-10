@@ -5,7 +5,10 @@ import {
   answerSentence,
   buildCheckList,
   checkEntries,
+  countedEntries,
   firstCheckToFix,
+  hiddenTotals,
+  hiddenWords,
   isInCategory,
   rankChecksToFix,
   type CheckListFilters,
@@ -82,6 +85,38 @@ describe('what each check came to', () => {
 
   it('counts for the answer: checks that found issues, the issues, and those that passed or were skipped', () => {
     expect(analysisTotals(checkEntries(CHECKS, ANALYSIS))).toEqual({ found: 4, issues: 365, passed: 2, skipped: 2 });
+  });
+});
+
+describe('hidden checks', () => {
+  it('are left out of what an answer counts, and what they came to is said apart', () => {
+    // An error with 9 issues and a notice with 265, hidden; a passed check hidden too.
+    const hidden = new Set(['internal-client-error', 'empty-anchor-text', 'title-duplicate']);
+    const entries = checkEntries(CHECKS, ANALYSIS, hidden);
+    expect(ids(countedEntries(entries))).toEqual([
+      'internal-server-error',
+      'broken-internal-links',
+      'orphan-page',
+      'title-too-long',
+      'future-check',
+    ]);
+    expect(analysisTotals(countedEntries(entries))).toEqual({ found: 2, issues: 91, passed: 1, skipped: 2 });
+    expect(hiddenTotals(entries)).toEqual({ checks: 3, found: 2, issues: 274 });
+    expect(hiddenTotals(checkEntries(CHECKS, ANALYSIS))).toBeNull();
+  });
+
+  it('are said after the answer, with what they found', () => {
+    const words = (totals: { checks: number; found: number; issues: number }) => {
+      const { count, rest } = hiddenWords(totals);
+      return `${count}${rest}`;
+    };
+    expect(words({ checks: 3, found: 2, issues: 274 })).toBe(
+      '3 hidden checks aren’t counted: 2 of them found 274 issues.',
+    );
+    expect(words({ checks: 1, found: 1, issues: 30 })).toBe('1 hidden check isn’t counted: it found 30 issues.');
+    expect(words({ checks: 1, found: 1, issues: 1 })).toBe('1 hidden check isn’t counted: it found 1 issue.');
+    expect(words({ checks: 2, found: 0, issues: 0 })).toBe('2 hidden checks aren’t counted.');
+    expect(words({ checks: 1, found: 0, issues: 0 })).toBe('1 hidden check isn’t counted.');
   });
 });
 

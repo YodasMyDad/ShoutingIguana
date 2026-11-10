@@ -464,6 +464,31 @@ export const NeverAnalysed: Story = {
   render: () => <OverviewApp />,
 };
 
+/**
+ * A check with issues is hidden (a preference, in every crawl): the answer is of the checks that aren't, sentence and
+ * figures alike, and the sentence ends with what the hidden one found, its count opening Issues.
+ */
+export const HiddenChecks: Story = {
+  loaders: [
+    () => {
+      own();
+      updateSettings({ hiddenChecks: ['internal-client-error'] });
+    },
+  ],
+  render: () => <OverviewApp />,
+};
+
+/** Every check that found issues is hidden: no figure counts them, Fix first lists none, and both say why. */
+export const EveryIssueHidden: Story = {
+  loaders: [
+    () => {
+      own();
+      updateSettings({ hiddenChecks: ['internal-client-error', 'empty-anchor-text', 'title-too-long'] });
+    },
+  ],
+  render: () => <OverviewApp />,
+};
+
 /** Stopped: how far it got and what was still queued, with Continue. A stopped crawl isn't analysed on its own. */
 export const Stopped: Story = {
   loaders: [

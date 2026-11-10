@@ -169,6 +169,38 @@ describe('the Overview of an analysed crawl', () => {
     expect(region('Fix first').queryByRole('link', { name: /Internal URL returns 4xx/ })).toBeNull();
   });
 
+  it('answers of the checks that aren’t hidden, sentence and figures alike, and says what the hidden ones found', async () => {
+    // The error with its 2 issues, hidden: the sentence said "3 checks found 11 issues" above figures of 2 and 9.
+    updateSettings({ hiddenChecks: ['internal-client-error'] });
+    sidecar();
+    await open();
+    const sentence = (await main().findByText(/checks found/)).closest('p');
+    expect(sentence).toHaveTextContent(
+      '2 checks found 9 issues on this crawl. 1 passed and 1 was skipped. 1 hidden check isn’t counted: it found 2 issues.',
+    );
+    const figures = region('Issues by severity');
+    expect(figures.getByRole('link', { name: /Notices/ })).toHaveTextContent('2 checks');
+    expect(figures.getByRole('link', { name: /Notices/ })).toHaveTextContent('9 issues between them');
+    // The count opens Issues, where hidden checks can be shown.
+    const hidden = within(sentence!).getByRole('link', { name: '1 hidden check' });
+    expect(pathOf(hidden)).toBe(`/crawls/${TEST_CRAWL_ID}/issues`);
+  });
+
+  it('says the only checks with issues are hidden, rather than list them beside figures that say none found any', async () => {
+    updateSettings({ hiddenChecks: ['internal-client-error', 'empty-anchor-text', 'title-too-long'] });
+    sidecar();
+    await open();
+    expect((await main().findByText(/No check found an issue/)).closest('p')).toHaveTextContent(
+      'No check found an issue on this crawl. 1 passed and 1 was skipped. 3 hidden checks aren’t counted: 3 of them found 11 issues.',
+    );
+    const fix = region('Fix first');
+    expect(fix.queryAllByRole('link')).toHaveLength(0);
+    expect(
+      fix.getByText('Nothing to fix among the checks shown: the only checks that found issues are hidden.'),
+    ).toBeVisible();
+    expect(region('Issues by severity').getByRole('link', { name: /Errors/ })).toHaveTextContent('None found an issue');
+  });
+
   it('lists the categories with issues, and the skipped checks with why', async () => {
     sidecar();
     await open();

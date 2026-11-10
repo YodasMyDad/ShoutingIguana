@@ -112,6 +112,54 @@ export function checkEntries(
   });
 }
 
+/**
+ * The checks an answer counts: the ones the user hasn't hidden. A hidden check is left out of every figure there is
+ * (the sentence, the severity counts, the categories, Fix first), on Issues, Overview and the sidebar alike, so they
+ * can't disagree with each other; `hiddenTotals` says what was left out, so nothing reads as clean because it's
+ * hidden.
+ */
+export function countedEntries(entries: readonly CheckEntry[]): CheckEntry[] {
+  return entries.filter((entry) => !entry.hidden);
+}
+
+/** What the hidden checks came to on this crawl. */
+export interface HiddenTotals {
+  /** Hidden checks, whatever they came to. */
+  checks: number;
+  /** Those that found issues, and their issues. */
+  found: number;
+  issues: number;
+}
+
+/** The hidden checks' totals, or null when none is hidden. */
+export function hiddenTotals(entries: readonly CheckEntry[]): HiddenTotals | null {
+  const hidden = entries.filter((entry) => entry.hidden);
+  if (hidden.length === 0) return null;
+  const found = hidden.filter((entry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped');
+  return {
+    checks: hidden.length,
+    found: found.length,
+    issues: found.reduce((sum, entry) => sum + (entry.count ?? 0), 0),
+  };
+}
+
+/**
+ * What the answer leaves out, after it: "1 hidden check" and " isn’t counted: it found 30 issues.", in two parts so
+ * the first can be the link to where hidden checks are shown.
+ */
+export function hiddenWords({ checks, found, issues }: HiddenTotals): { count: string; rest: string } {
+  const what =
+    found === 0
+      ? ''
+      : checks === 1
+        ? `: it found ${formatCountOf(issues, 'issue')}`
+        : `: ${formatCount(found)} of them found ${formatCountOf(issues, 'issue')}`;
+  return {
+    count: formatCountOf(checks, 'hidden check'),
+    rest: ` ${checks === 1 ? 'isn’t' : 'aren’t'} counted${what}.`,
+  };
+}
+
 export function analysisTotals(entries: readonly CheckEntry[]): AnalysisTotals {
   let found = 0;
   let issues = 0;

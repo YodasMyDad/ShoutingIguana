@@ -27,9 +27,13 @@ import {
   analysisTotals,
   answerSentence,
   checkEntries,
+  countedEntries,
   firstCheckToFix,
+  hiddenTotals,
+  hiddenWords,
   type AnalysisTotals,
   type CheckEntry,
+  type HiddenTotals,
 } from './issues/checkList';
 import { useAnalysisAnswer } from './issues/useAnalysisAnswer';
 import { useAnalysisControl } from './issues/useAnalysisControl';
@@ -93,7 +97,11 @@ export function OverviewScreen() {
     () => (checks.data && analysis.data ? checkEntries(checks.data, analysis.data, hidden) : null),
     [checks.data, analysis.data, hidden],
   );
-  const totals = entries ? analysisTotals(entries) : null;
+  // The answer is of the checks that aren't hidden, every figure of it (the sentence too), so they agree; what the
+  // hidden ones came to is said after the sentence, never left to read as clean.
+  const counted = useMemo(() => (entries ? countedEntries(entries) : null), [entries]);
+  const totals = counted ? analysisTotals(counted) : null;
+  const hiddenChecks = entries ? hiddenTotals(entries) : null;
   const first = entries ? firstCheckToFix(entries) : null;
   const firstId = first?.check.id;
   const empty =
@@ -141,7 +149,7 @@ export function OverviewScreen() {
     : empty
       ? undefined
       : totals
-        ? answerSentence(totals)
+        ? answer(crawlId, totals, hiddenChecks)
         : analysing
           ? 'The crawl is being analysed: the answer shows here as soon as it’s done.'
           : neverAnalysed
@@ -214,7 +222,7 @@ export function OverviewScreen() {
             cancelling={control.cancelling}
             cancelRef={control.cancelRef}
           />
-        ) : analysis.error || !entries || !totals || !checks.data ? (
+        ) : analysis.error || !counted || !totals || !checks.data ? (
           <Card>
             <ErrorState
               error={analysis.error}
@@ -223,7 +231,13 @@ export function OverviewScreen() {
             />
           </Card>
         ) : (
-          <Answer crawlId={crawlId} checks={checks.data} entries={entries} totals={totals} />
+          <Answer
+            crawlId={crawlId}
+            checks={checks.data}
+            entries={counted}
+            totals={totals}
+            hiddenFound={hiddenChecks?.found ?? 0}
+          />
         )}
 
         <section aria-labelledby="overview-crawl-title" className="flex flex-col gap-4 pt-2">
@@ -268,17 +282,39 @@ export function OverviewScreen() {
   );
 }
 
+/**
+ * The answer in a sentence, from the counts, then what it leaves out: the hidden checks, with what they found, the
+ * count opening Issues, where they can be shown.
+ */
+function answer(crawlId: string, totals: AnalysisTotals, hidden: HiddenTotals | null): ReactNode {
+  const sentence = answerSentence(totals);
+  if (!hidden) return sentence;
+  const words = hiddenWords(hidden);
+  return (
+    <>
+      {sentence}{' '}
+      <TextLink to="/crawls/$crawl/issues/{-$check}" params={{ crawl: crawlId }} variant="inline">
+        {words.count}
+      </TextLink>
+      {words.rest}
+    </>
+  );
+}
+
 /** The answer: issues by severity, then Fix first beside the categories and what was skipped. */
 function Answer({
   crawlId,
   checks,
   entries,
   totals,
+  hiddenFound,
 }: {
   crawlId: string;
   checks: Checks;
+  /** The checks that aren't hidden: what every figure here counts. */
   entries: readonly CheckEntry[];
   totals: AnalysisTotals;
+  hiddenFound: number;
 }) {
   const [widthRef, width] = useElementWidth();
   return (
@@ -290,7 +326,7 @@ function Answer({
         columns={width !== null && width > 0 && width < TWO_COLUMNS_BELOW ? 2 : 4}
       />
       <div className="grid grid-cols-(--overview-columns) gap-4 @max-split:grid-cols-1">
-        <FixFirst crawlId={crawlId} entries={entries} />
+        <FixFirst crawlId={crawlId} entries={entries} hiddenFound={hiddenFound} />
         <div className="flex min-w-0 flex-col gap-4">
           <SkippedChecks crawlId={crawlId} entries={entries} />
           <Categories crawlId={crawlId} checks={checks} entries={entries} />

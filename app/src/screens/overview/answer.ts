@@ -45,8 +45,13 @@ export interface FixFirst {
   more: number;
 }
 
+/**
+ * The checks to fix first among the ones that aren't hidden. With every check that found issues hidden there's none
+ * to list: Issues still opens on one of them (it has to open on something), but here they'd sit beside figures that
+ * say no check found an issue.
+ */
 export function fixFirst(entries: readonly CheckEntry[], limit: number = FIX_FIRST_LIMIT): FixFirst {
-  const ranked = rankChecksToFix(entries);
+  const ranked = rankChecksToFix(entries.filter((entry) => !entry.hidden));
   return {
     checks: ranked.slice(0, limit).map((entry) => ({ entry, link: { to: 'issues', check: entry.check.id } })),
     more: Math.max(0, ranked.length - limit),

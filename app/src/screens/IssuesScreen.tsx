@@ -39,7 +39,10 @@ import {
   buildCheckList,
   categoryTitle,
   checkEntries,
+  countedEntries,
   firstCheckToFix,
+  hiddenTotals,
+  hiddenWords,
   isInCategory,
   type CheckEntry,
 } from './issues/checkList';
@@ -127,7 +130,10 @@ export function IssuesScreen() {
         : null,
     [checks.data, entries, severity, q, category, showPassed, showHidden, hidden],
   );
-  const totals = entries ? analysisTotals(entries) : null;
+  // The answer counts the checks that aren't hidden, as the list, its severities and the Overview do, and says what
+  // it left out.
+  const totals = entries ? analysisTotals(countedEntries(entries)) : null;
+  const hiddenChecks = entries ? hiddenTotals(entries) : null;
   // The first to fix among the checks the filters keep: landing on Errors picks an error.
   const first = list ? firstCheckToFix(list.matching) : null;
   const selected = entries?.find((entry) => entry.check.id === checkId) ?? null;
@@ -404,7 +410,12 @@ export function IssuesScreen() {
   const loading = (checks.isPending || (analysis.isPending && !rereading)) && !checks.error && !analysis.error;
   const skeleton = useDelayedLoading(loading);
 
-  const subtitle = totals ? answerSentence(totals) : neverAnalysed ? 'No issues to show yet.' : undefined;
+  const hiddenNote = hiddenChecks ? hiddenWords(hiddenChecks) : null;
+  const subtitle = totals
+    ? `${answerSentence(totals)}${hiddenNote ? ` ${hiddenNote.count}${hiddenNote.rest}` : ''}`
+    : neverAnalysed
+      ? 'No issues to show yet.'
+      : undefined;
   let body;
   if (loading || skeleton) {
     body = <IssuesSkeleton visible={skeleton} />;

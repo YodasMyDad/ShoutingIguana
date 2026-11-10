@@ -75,7 +75,16 @@ const affected = (entry: CheckEntry) => <Num value={entry.count} noun="URL" />;
  * Fix first (docs/v2-ui-ia.md, flow 3): the checks that found issues, the most severe first, then the most pages
  * affected, each opening its check in Issues, where it says what's wrong, why it matters and how to fix it.
  */
-export function FixFirst({ crawlId, entries }: { crawlId: string; entries: readonly CheckEntry[] }) {
+export function FixFirst({
+  crawlId,
+  entries,
+  hiddenFound = 0,
+}: {
+  crawlId: string;
+  entries: readonly CheckEntry[];
+  /** Hidden checks that found issues: with nothing else to fix, the card says they're why it's empty. */
+  hiddenFound?: number;
+}) {
   const list = fixFirst(entries);
   return (
     <Card as="section" aria-labelledby="overview-fix-title">
@@ -86,7 +95,11 @@ export function FixFirst({ crawlId, entries }: { crawlId: string; entries: reado
       />
       <CardBody tight>
         {list.checks.length === 0 ? (
-          <p className="py-2 text-13 text-text-secondary">Nothing to fix: no check found an issue on this crawl.</p>
+          <p className="py-2 text-13 text-text-secondary">
+            {hiddenFound > 0
+              ? `Nothing to fix among the checks shown: the only ${hiddenFound === 1 ? 'check that found issues is' : 'checks that found issues are'} hidden.`
+              : 'Nothing to fix: no check found an issue on this crawl.'}
+          </p>
         ) : (
           <ol className="-mx-2.5 flex flex-col">
             {list.checks.map(({ entry, link }) => (

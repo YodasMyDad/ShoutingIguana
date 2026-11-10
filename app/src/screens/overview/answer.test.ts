@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FacetBucket, FacetsPage } from '../../api/grids';
 import type { Analysis, Check, Checks } from '../../api/types';
-import { buildCheckList, checkEntries } from '../issues/checkList';
+import { analysisTotals, answerSentence, buildCheckList, checkEntries, countedEntries } from '../issues/checkList';
 import {
   INDEXABILITY_FACETS,
   PAGE_FACETS,
@@ -110,6 +110,39 @@ describe('fix first', () => {
 
   it('is empty when nothing found an issue', () => {
     expect(fixFirst(checkEntries(CHECKS, { ...ANALYSIS, counts: [] }))).toEqual({ checks: [], more: 0 });
+  });
+});
+
+describe('with hidden checks', () => {
+  it('the sentence and the figures beneath it count the same checks and issues', () => {
+    // An error with 9 issues, hidden. The sentence said "5 checks found 371 issues" above figures of 4 and 362.
+    const all = entries(['internal-client-error']);
+    const counted = countedEntries(all);
+    const figures = severityFigures(counted);
+    const checks = figures.reduce((sum, figure) => sum + figure.checks, 0);
+    const issues = figures.reduce((sum, figure) => sum + figure.issues, 0);
+    expect([checks, issues]).toEqual([4, 362]);
+    expect(answerSentence(analysisTotals(counted))).toBe(
+      '4 checks found 362 issues on this crawl. 1 passed and 3 were skipped.',
+    );
+    const categories = categoryFigures(CHECKS, counted);
+    expect(categories.reduce((sum, figure) => sum + figure.issues, 0)).toBe(issues);
+  });
+
+  it('Fix first lists none of them, though every check that found issues is hidden', () => {
+    // "None found an issue" sat beside a Fix first that listed them: Issues opens on a hidden check when it has
+    // nothing else to open on, which is its rule, not this list's.
+    const hidden = [
+      'internal-client-error',
+      'broken-internal-links',
+      'empty-anchor-text',
+      'title-too-long',
+      'title-duplicate',
+    ];
+    const all = entries(hidden);
+    expect(severityFigures(all).reduce((sum, figure) => sum + figure.checks, 0)).toBe(0);
+    expect(fixFirst(all)).toEqual({ checks: [], more: 0 });
+    expect(fixFirst(countedEntries(all))).toEqual({ checks: [], more: 0 });
   });
 });
 

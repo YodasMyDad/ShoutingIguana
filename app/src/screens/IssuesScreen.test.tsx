@@ -574,6 +574,18 @@ describe('the Issues screen', () => {
     expect(await screen.findByRole('option', { name: /Internal URL returns 4xx/ })).toBeVisible();
   });
 
+  it('answers of the checks that aren’t hidden, as its list and the Overview do, and says what they found', async () => {
+    updateSettings({ hiddenChecks: ['internal-client-error'] });
+    sidecar();
+    await open(ISSUES);
+    expect(
+      await screen.findByText(
+        '2 checks found 9 issues on this crawl. 1 passed and 1 was skipped. 1 hidden check isn’t counted: it found 2 issues.',
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole('radio', { name: /All/ })).toHaveTextContent('2');
+  });
+
   it('hides the check with Ctrl+Shift+H from the list, focus moving to the next option', async () => {
     sidecar();
     const { router } = await open(`${ISSUES}/internal-client-error`);
