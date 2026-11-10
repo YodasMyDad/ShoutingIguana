@@ -34,8 +34,8 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     /// text or on the page it's on, a search, and any filter without the link summary) are over the budget at 100k
     /// already, by what they are: held to 2.5 s there, so they can't get slower.</item>
     /// <item>The crawl's headline numbers (<c>stats</c>) pass over the URLs once and the responses once: inside the 300 ms
-    /// budget at 100k on the desktop (165 ms at worst), and held to twice that for the runner. Without the link summary
-    /// (<c>stats-pass</c>) the links are counted and the pages a sitemap led to looked up among them (257 ms at worst).</item>
+    /// budget at 100k on the desktop (174 ms at worst), and held to twice that for the runner. Without the link summary
+    /// (<c>stats-pass</c>) the links are counted and the pages a sitemap led to looked up among them (322 ms at worst).</item>
     /// <item>The links grid's reads deep among the links of more targets than are listed for their index
     /// (<c>link-targets</c>) read an index entry for every matching link, once per filter set: inside the 300 ms budget
     /// at 100k on the desktop (265 ms at worst), which the runner's 550 ms is, and held to it so they can't get slower.

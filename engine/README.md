@@ -716,8 +716,8 @@ half way or just past it), on a 32-core Windows machine (20 runs at 100k, 5 at 1
 | The links grid, one pass over the links: text and search filters, and everything without the link summary (`link-pass`) | 1,232 | not measured | | 2,500 |
 | Sitemaps: the list, a sitemap's URLs (`sitemaps`) | 31 | not measured | | 200 |
 | robots.txt: origins, a file, its blocked URLs (`robots`) | 34 | not measured | | 200 |
-| The crawl's headline numbers: read, and read again from what was kept (`stats`) | 165 | not measured | | 350 |
-| The same without the link summary: the links counted, each sitemap page looked up among them (`stats-pass`) | 257 | not measured | | 600 |
+| The crawl's headline numbers: read, and read again from what was kept (`stats`) | 174 | not measured | | 350 |
+| The same without the link summary: the links counted, each sitemap page looked up among them (`stats-pass`) | 322 | not measured | | 600 |
 
 The facets of the pages without the summary take 1.35 s at 1M: they read and judge every row of the crawl's own tables.
 Every other read of 1M in the table is under 1 s apart from `links-kind`, which was measured before its index (below);
@@ -734,10 +734,11 @@ few thousand targets (27–47 ms); a page of any filter on what a link is, anywh
 
 `stats` and `stats-pass` (E3c) are `CrawlStatsReader.Read`, Overview's headline numbers. It reads the URLs once and the
 responses once, counting each row every way it's wanted as it's read (`si_tally(slot, value)`), where it ran a statement
-for each number (0.96 s, 1.16 s at p95): 100 ms, and 1 ms from what's kept once read. With the link summary no link is
-read: it has the number of links, and counts each URL's links from other pages apart from a page's links to itself,
-which says which pages a sitemap led to have none. Without it the links are counted and each of those pages is looked
-up among them (183 ms). The gates are twice the desktop's worst p95, for the runner. Both grow with the URLs: a first
+for each number (0.96 s, 1.16 s at p95): 98 to 126 ms (108 to 174 at p95, over seven runs), and 1 ms from what's kept
+once read. With the link summary no link is read: it has the number of links, and counts each URL's links from other
+pages apart from a page's links to itself, which says which pages a sitemap led to have none. Without it the links
+are counted and each of those pages is looked up among them (181 to 244 ms, 189 to 322 at p95). The gates are about
+twice the desktop's worst p95, for the runner. Both grow with the URLs: a first
 read of a million would take about a second, which wasn't measured.
 
 The E3b review added the links to a few targets with many links between them, a menu's, to `link-grid`: the twelve most
@@ -815,9 +816,9 @@ The rest is in the links and their two indexes, which E3b doesn't write, and mov
 the URLs were found in, as larger ids take more bytes.
 
 With E3c (the time spent crawling kept a stretch at a time, a second set of counters for the part of the counts that
-is the crawler's own probes) three runs on the same machine, still shared, measured a 36–42 s crawl (2,386–2,812
-pages/s), a 188–193 MB peak with no growth (−9 to 0 MB), an 11.8, 12.2 and 18.1 s analysis peaking at 253–327 MB,
-and a 478–495 MB file: all within the spread of the runs before it.
+is the crawler's own probes) four runs on the same machine, still shared, measured a 36–44 s crawl (2,294–2,812
+pages/s), a 188–194 MB peak with no growth (−9 to 0 MB), an 11.4, 11.8, 12.2 and 18.1 s analysis peaking at
+253–327 MB, and a 478–495 MB file: all within the spread of the runs before it.
 
 Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and
 unreachable URL make the crawler back off briefly, as it would on a real site. On real sites, speed is set by the

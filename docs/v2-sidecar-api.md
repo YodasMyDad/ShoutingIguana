@@ -1713,10 +1713,13 @@ nothing kept, on a 32-core Windows machine that other work was sharing.
 
   | Read | Before | Now |
   | --- | --- | --- |
-  | `/stats`, with the link summary | 0.76 to 0.96 s (0.95 to 1.16 at p95) | 100 ms (125 to 165 at p95) |
-  | `/stats`, without it: the links counted, each sitemap page looked up among them | the same read | 183 ms (189 to 257) |
+  | `/stats`, with the link summary | 0.76 to 0.96 s (0.95 to 1.16 at p95) | 98 to 126 ms (108 to 174 at p95, over seven runs of 20) |
+  | `/stats`, without it: the links counted, each sitemap page looked up among them | the same read | 181 to 244 ms (189 to 322) |
   | `/stats` again, the crawl unchanged | as the first | 1 ms |
 
+  With the link summary, which a crawl analysed and not continued since has, it's inside the 300 ms budget at p95,
+  first read included. Without it (a crawl running, never analysed or continued since) it was inside in six runs of
+  seven, and 322 ms at p95 in the other, on a machine other work was loading; a running crawl's is then kept for 2 s.
   It grows with the URLs, so the first read of a million URLs would take about a second, which wasn't measured; the
   reads after it are kept. `si readbench` times both (`stats`, `stats-pass`) and holds them to twice the desktop's
   worst, for CI's runner.
@@ -1821,13 +1824,12 @@ nothing kept, on a 32-core Windows machine that other work was sharing.
   cost a page; on a million pages, about ten times that. (This belongs under the rebuild doc's Known limitations,
   which this work was told to leave alone.)
 
-**After E3c**, on the same machine: the benchmark crawled its 100,000 pages in 36 to 42 s over three runs (36 to 45 s
-before), peaked at 188 to 193 MB with no growth (188 to 196 MB), analysed in 18.1, 12.2 and 11.8 s (10.6 to 14.8 s
-before; nothing changed between the three runs, and other work shares the machine), and found every planted issue
-and nothing else;
-`si readbench --gate --runs 20` passed every class, the two new ones included (`stats` 108 ms against 350,
-`stats-pass` 212 ms against 600), the links grid's slowest read from the link summary at 98 ms (107 ms before).
-Every number added or changed here was checked against SQL written for the check, through a running sidecar: on that
-crawl, on a copy of it with link ids missing, on the garden crawl analysed again, and on a crawl run through the
-sidecar that was paused, stopped and continued (5 of its 728 URLs not checked, 1 a probe, 21.6 s spent crawling of
-27.2 s on the clock). Nothing differed.
+**After E3c**, on the same machine: the benchmark crawled its 100,000 pages in 36 to 44 s over four runs (36 to 45 s
+before), peaked at 188 to 194 MB with no growth (188 to 196 MB), analysed in 18.1, 12.2, 11.8 and 11.4 s (10.6 to
+14.8 s before; nothing in the analysis changed between the runs, and other work shares the machine), and found every
+planted issue and nothing else each time. `si readbench --gate --runs 20` passed every class twice, the two new ones
+included (`stats` 108 and 174 ms against 350, `stats-pass` 212 and 322 ms against 600), the links grid's slowest read
+from the link summary at 98 and 90 ms (107 ms before). Every number added or changed here was checked against SQL
+written for the check, through a running sidecar: on that crawl, on a copy of it with link ids missing, on the garden
+crawl analysed again, and on a crawl run through the sidecar that was paused, stopped and continued (5 of its 728
+URLs not checked, 1 a probe, 20.7 s spent crawling of 26.3 s on the clock). Nothing differed.
