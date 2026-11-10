@@ -514,10 +514,18 @@ is what it shows. What it settled:
   (never hard-coded). A check is named beside a value only when the URL's `issues` have it: a value out of range
   that the analysis didn't flag says how far out it is, and no more. An image's check is on the pages that use it,
   so it's named when their issues name the image (`namedBy`), and its link opens their group. A value past its
-  limit whose rounded words are the limit's own (1,015 ms and "1 s") is written to its last unit. A title's or description's `length` is the engine's display width (a full-width character or an
-  emoji counts as two), so it's called "characters" only when it is the text's count of them (`characterCount`,
-  user-perceived characters as the engine counts them); otherwise it reads as the engine's own details do, "48
-  characters (96 counting full-width characters as two)".
+  limit whose rounded words are the limit's own (1,015 ms and "1 s") is written to its last unit. A title's or
+  description's `length` is the engine's display width (a full-width character or an emoji counts as two), so it's
+  called "characters" only when it is the text's count of them (`characterCount`, user-perceived characters as the
+  engine counts them); otherwise it reads as the engine's own details do, "48 characters (96 counting full-width
+  characters as two)".
+- **What the crawl did with a URL is said once, and no more than is known.** `fetchState.ts` takes whether the
+  crawl is running: a URL it hasn't reached is on its way while it runs, and "The crawl stopped before it reached
+  this URL" once it doesn't. Every section with nothing to show for the URL says that state's words, Redirects
+  included (a URL that never answered isn't said to answer for itself). Where only a status code comes with a URL (a
+  link's row, a canonical's or hreflang's target, a hop without an outcome), no code reads "No status": the crawl
+  may never have asked (robots.txt), so "No response" and "Not fetched" would be guesses. Depth 0 is "the start
+  URL" only for the URL the crawl started at; a probe of the site's other versions has depth 0 too.
 - **An analysis that no longer stands is said where the URL's issues are**, in the summary and in the Issues
   section, by the Issues screen's own banner and its "Analyse again" (`crawl/LastAnalysisBanner.tsx`, which both
   use): never a second wording. The verdict's note says why it's the crawl's own judgement by where the analysis
@@ -573,5 +581,7 @@ is what it shows. What it settled:
   (1280x720 at 200%) the view keeps its own and the sheet has what's left.
 - **Its commands** are the registry's Inspector group: open in the browser, copy the URL, dock at the bottom or on
   the right, show each section, search the HTML source. None has a key of its own: Esc closes, and the rest are in
-  the palette and on the sheet's buttons.
+  the palette and on the sheet's buttons. "Search the HTML source" is a request met once: the search field takes
+  focus when it's there, and the request goes then, when another section is chosen and when the inspector shows
+  another URL (each URL has a Source section of its own, which would otherwise take focus as it mounts).
 - **Targets.** Links stacked in lists (issues, a tree's rows) are at least `--target-min` (24 px) tall.
