@@ -433,6 +433,32 @@ export const LiveWithAlerts: Story = {
   render: () => <OverviewApp />,
 };
 
+/**
+ * A site of many hosts, each blocking the crawl: an alert for each. The newest twenty are drawn, with "Show all 150
+ * alerts" beneath, and the list isn't drawn again as the figures above it change twice a second.
+ */
+export const LiveManyAlerts: Story = {
+  loaders: [
+    () => {
+      running(1_346, POLITE);
+      for (let host = 1; host <= 150; host++) {
+        liveStore.ingest(
+          message(
+            'alert',
+            alert({
+              id: host,
+              code: 'blocked',
+              at: new Date(Date.parse('2026-11-01T10:16:00.000Z') + host * 7_000).toISOString(),
+              data: { host: `shop${host}.example.com`, reason: 'Cloudflare challenge', count: 1 },
+            }),
+          ),
+        );
+      }
+    },
+  ],
+  render: () => <OverviewApp stream={POLITE_STREAM} />,
+};
+
 // --------------------------------------------------------------------------------------- Between the two, and around
 
 const NEVER = { analyzedAt: null, issues: null } as const;

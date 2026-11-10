@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Layers, Play } from 'lucide-react';
-import { useMemo, type ReactNode } from 'react';
+import { useCallback, useMemo, type ReactNode } from 'react';
 import { alertsQuery, checksQuery, historyQuery } from '../../api/queries';
 import type { CrawlListItem, CrawlStatus } from '../../api/types';
 import { continueCrawl, pauseOrResume } from '../../crawl/actions';
@@ -103,6 +103,9 @@ export function LiveOverview({
   );
   const found = foundSplit(progress);
   const alerts = useMemo(() => alertEntries(liveAlerts, fileAlerts), [liveAlerts, fileAlerts]);
+  // The same from one draw to the next, as the alerts are: their list, which may be long, isn't drawn again with
+  // every figure.
+  const onContinue = useCallback(() => void continueCrawl(crawlId), [crawlId]);
   const waits = useMemo(
     () => waitEntries(progress?.waits ?? [], progress?.moreWaits ?? {}),
     [progress?.waits, progress?.moreWaits],
@@ -364,7 +367,7 @@ export function LiveOverview({
           <Card as="section" aria-labelledby="overview-alerts-title">
             <CardHeader title="Alerts" titleId="overview-alerts-title" />
             <CardBody>
-              <AlertList crawlId={crawlId} entries={alerts} live onContinue={() => void continueCrawl(crawlId)} />
+              <AlertList crawlId={crawlId} entries={alerts} live onContinue={onContinue} />
             </CardBody>
           </Card>
 

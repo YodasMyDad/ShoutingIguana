@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Play } from 'lucide-react';
-import { useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { alertsQuery, analysisQuery, checksQuery, crawlQuery, startUrlQuery, statsQuery } from '../api/queries';
 import { isCrawling, type Checks, type CrawlListItem, type CrawlStatus } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
@@ -520,17 +520,13 @@ function CrawlAlerts({ crawlId, canContinue }: { crawlId: string; canContinue: b
   const file = useQuery(alertsQuery(crawlId)).data;
   const heard = useLive((state) => state.crawls[crawlId]?.alerts);
   const entries = useMemo(() => alertEntries(heard, file), [heard, file]);
+  const onContinue = useCallback(() => void continueCrawl(crawlId), [crawlId]);
   if (entries.length === 0) return null;
   return (
     <Card as="section" aria-labelledby="overview-alerts-title">
       <CardHeader title="Alerts" titleId="overview-alerts-title" level={3} meta="From while it crawled" />
       <CardBody>
-        <AlertList
-          crawlId={crawlId}
-          entries={entries}
-          canContinue={canContinue}
-          onContinue={() => void continueCrawl(crawlId)}
-        />
+        <AlertList crawlId={crawlId} entries={entries} canContinue={canContinue} onContinue={onContinue} />
       </CardBody>
     </Card>
   );
