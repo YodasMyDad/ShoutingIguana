@@ -337,16 +337,24 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
         <div aria-busy="true" className="min-h-(--leading-13) px-6 pb-2 text-12" />
       )}
       <div className="flex flex-wrap items-center gap-2 px-6 pb-3">
-        <SegmentedControl<QuickFilter>
+        <SegmentedControl<QuickFilter | 'other'>
           label="Show"
-          // A filter that isn't one of these (a count's link, a chip removed) leaves none of them chosen.
-          value={(quick ?? '') as QuickFilter}
-          onValueChange={(next) => setFilters(quickFilterFilters(next))}
-          options={QUICK_FILTERS.map((option) => ({
-            value: option,
-            label: QUICK_FILTER_WORDS[option],
-            count: quickCount(option),
-          }))}
+          // Filters that aren't one of these (a count's link, a chip removed) are a segment of their own while they
+          // last: one is always chosen, so focus arriving on the control never chooses for the user.
+          value={quick ?? 'other'}
+          onValueChange={(next) => {
+            if (next !== 'other') setFilters(quickFilterFilters(next));
+          }}
+          options={[
+            ...QUICK_FILTERS.map((option) => ({
+              value: option,
+              label: QUICK_FILTER_WORDS[option],
+              count: quickCount(option),
+            })),
+            ...(quick === null
+              ? [{ value: 'other' as const, label: 'Other filters', count: q ? null : rows.rowCount }]
+              : []),
+          ]}
         />
         {filters.length > 0 && quick === null ? (
           <span role="group" aria-label="Filters" className="flex flex-wrap items-center gap-2">
