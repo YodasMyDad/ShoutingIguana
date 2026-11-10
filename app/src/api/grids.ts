@@ -423,8 +423,13 @@ export interface SitemapList {
 
 // ------------------------------------------------------------------------------------------------- robots.txt (E3b)
 
-/** What an origin's answer meant to the crawl: its rules applied, there were none, or nothing could be read. */
-export type RobotsState = 'read' | 'missing' | 'unreachable';
+/**
+ * What an origin's answer meant to the crawl. `read`: its rules applied. `missing`: there were none, so everything was
+ * allowed. `unreachable`: it couldn't be read (a 5xx, a 429, or no answer from the start URL's own origin), so the crawl
+ * refused the origin's URLs until it could. `unanswered`: another origin than the start URL's gave no answer at all, so
+ * the crawl gave no verdict and went ahead: its URLs show their own errors.
+ */
+export type RobotsState = 'read' | 'missing' | 'unreachable' | 'unanswered';
 
 export interface RobotsOrigin {
   /** Scheme, host and port unless it's the scheme's default: `https://www.example.com`. */
