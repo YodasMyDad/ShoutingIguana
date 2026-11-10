@@ -333,7 +333,7 @@ function FilePane({
     return <ErrorState error={viewer.error} title="The viewer couldn’t be loaded." onRetry={viewer.retry} compact />;
   }
   if (file.lines.length === 0) {
-    const words = stateWords(file, file.userAgent);
+    // What the answer meant is said above, once: here, only that there's no text to show, and why not.
     return (
       <EmptyState
         title={file.state === 'read' ? 'The file is empty' : 'No file to show'}
@@ -342,7 +342,9 @@ function FilePane({
         level={2}
         panel
       >
-        {words.sentence}
+        {file.state === 'read'
+          ? 'The crawl read it, and there was nothing in it.'
+          : 'The crawl kept no text of a robots.txt for this origin.'}
       </EmptyState>
     );
   }
@@ -484,7 +486,9 @@ function BlockedUrls({
         {chip ?? (
           <p className="text-12 text-text-muted">
             {(file?.blocked ?? 0) > 0
-              ? 'Every URL this origin’s robots.txt kept the crawl from. Choose a rule in the file for its URLs.'
+              ? file?.lines.some((line) => (line.blocked ?? 0) > 0)
+                ? 'Every URL this origin’s robots.txt kept the crawl from. Choose a rule in the file for its URLs.'
+                : 'Every URL on this origin that the crawl stored as refused by robots.txt.'
               : ' '}
           </p>
         )}

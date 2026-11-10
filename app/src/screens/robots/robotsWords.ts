@@ -2,12 +2,7 @@
 // Each state has its own true sentence, by the engine's values (docs/v2-sidecar-api.md, robots.txt): a file that
 // didn't answer is `unreachable` (the origin's URLs were refused) or `unanswered` (the crawl went ahead), and the two
 // never share words. Pure, so every wording is unit-tested.
-import type {
-  RobotsBlockedUrl,
-  RobotsLineProblem,
-  RobotsOrigin,
-  RobotsOriginPage,
-} from '../../api/grids';
+import type { RobotsBlockedUrl, RobotsLineProblem, RobotsOrigin, RobotsOriginPage } from '../../api/grids';
 import { formatCount, formatCountOf } from '../../lib/format';
 
 export type RobotsTone = 'read' | 'nothing' | 'refused' | 'unknown';

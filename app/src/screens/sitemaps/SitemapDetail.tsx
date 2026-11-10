@@ -301,24 +301,6 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
               disabled={!sitemap}
               onClick={() => (sitemap ? void openInBrowser(sitemap.url) : undefined)}
             />
-            <SearchField
-              ref={searchField}
-              key={q ?? ''}
-              label="Search this sitemap’s URLs and titles"
-              placeholder="Search URLs"
-              shortcut="mod+f"
-              defaultValue={q ?? ''}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter') return;
-                const value = event.currentTarget.value.trim();
-                void navigate({
-                  params: here,
-                  search: (previous) => ({ ...previous, q: value || undefined }),
-                });
-              }}
-              onClear={() => void navigate({ params: here, search: (previous) => ({ ...previous, q: undefined }) })}
-              className="w-(--search-width)"
-            />
           </>
         }
       />
@@ -367,6 +349,22 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
             {chips}
           </span>
         ) : null}
+        {/* Beside the filters, not the title: a sitemap's address needs the title's line to itself. */}
+        <SearchField
+          ref={searchField}
+          key={q ?? ''}
+          label="Search this sitemap’s URLs and titles"
+          placeholder="Search URLs"
+          shortcut="mod+f"
+          defaultValue={q ?? ''}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return;
+            const value = event.currentTarget.value.trim();
+            void navigate({ params: here, search: (previous) => ({ ...previous, q: value || undefined }) });
+          }}
+          onClear={() => void navigate({ params: here, search: (previous) => ({ ...previous, q: undefined }) })}
+          className="ml-auto w-(--search-width)"
+        />
       </div>
       {summary && !summary.available && unavailable.length > 0 ? (
         <Banner inset className="mx-6 mb-3">
