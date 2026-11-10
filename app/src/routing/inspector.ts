@@ -86,26 +86,46 @@ export function goToUrl(router: AppRouter, crawlId: string, urlId: number): Prom
   return router.navigate({ to: '/crawls/$crawl/urls', params: { crawl: crawlId }, search: { inspect: urlId } });
 }
 
-/** Goes back `steps` entries, resolving once the router has the location it went back to. */
+/**
+ * How long a step back is waited for. A browser's `history.go` past its oldest entry does nothing and says nothing,
+ * so a close never waits on it for longer than this.
+ */
+export const GO_BACK_TIMEOUT_MS = 1_000;
+
+/** Goes back `steps` entries, resolving once the router has the location it went back to, or history didn't move. */
 function goBack(router: AppRouter, steps: number): Promise<void> {
   return new Promise((resolve) => {
-    // The router hears the history first (it subscribed when it mounted), so its location is the new one here.
-    const stop = router.history.subscribe(() => {
+    const done = () => {
       stop();
+      clearTimeout(timer);
       resolve();
-    });
+    };
+    // The router hears the history first (it subscribed when it mounted), so its location is the new one here.
+    const stop = router.history.subscribe(done);
+    const timer = setTimeout(done, GO_BACK_TIMEOUT_MS);
     router.history.go(-steps);
   });
 }
 
 /**
+ * How far back history goes from this entry, as far as can be told: no further than the entries the router counted
+ * to it, nor than the entries history holds. A browser keeps only so many (Chromium 50), so after a long walk the
+ * first steps are gone, with the entry the inspector opened on.
+ */
+function entriesBehind(router: AppRouter): number {
+  const index = router.state.location.state.__TSR_index;
+  const counted = Number.isInteger(index) && index > 0 ? index : 0;
+  return Math.min(counted, Math.max(router.history.length - 1, 0));
+}
+
+/**
  * Esc or Close: back over the steps walked (never further back than history goes), then `inspect` dropped from the
- * entry it opened on, in place.
+ * entry it opened on, in place. After a walk longer than history keeps, that's the oldest entry left; and where
+ * history can't go back as far as asked (it doesn't say how far it can), the entry shown: the inspector always
+ * closes.
  */
 export async function closeInspector(router: AppRouter): Promise<void> {
-  const location = router.state.location;
-  const index = location.state.__TSR_index;
-  const steps = Math.min(walkedSteps(location.state), Number.isInteger(index) && index > 0 ? index : 0);
+  const steps = Math.min(walkedSteps(router.state.location.state), entriesBehind(router));
   if (steps > 0) await goBack(router, steps);
   await router.navigate({
     to: '.',

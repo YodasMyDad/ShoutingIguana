@@ -112,6 +112,40 @@ test('inspect a URL: walk an inlink, then an outlink; back and forward retrace i
   await expect(inspector).toBeHidden();
 });
 
+/** The steps the inspector has walked to this history entry, as the history model counts them. */
+const walkedSteps = (page: Page) =>
+  page.evaluate(() => (history.state as { inspectSteps?: number } | null)?.inspectSteps ?? 0);
+
+/**
+ * Walks `steps` inlinks with Enter on the Inlinks grid's first row: every page has a page linking to it, and the
+ * keyboard stays in the grid. Each URL's links are a grid of their own, so a step is done when a new grid has rows.
+ */
+async function walkInlinks(page: Page, inspector: Locator, steps: number) {
+  await showTab(inspector, /^Inlinks/);
+  const from = await walkedSteps(page);
+  for (let step = 1; step <= steps; step++) {
+    const grid = inspector.locator('[role="grid"]:not([data-walked-from])');
+    await expect(grid.getByRole('row').nth(1)).toBeVisible();
+    await grid.focus();
+    await grid.evaluate((element) => element.setAttribute('data-walked-from', ''));
+    await page.keyboard.press('Enter');
+    await expect.poll(() => walkedSteps(page)).toBe(from + step);
+  }
+  await expect(inspector.locator('[role="grid"]:not([data-walked-from])').getByRole('row').nth(1)).toBeVisible();
+}
+
+test('a walk longer than the browser keeps history for still closes with Esc', async ({ page }) => {
+  test.setTimeout(120_000);
+  const inspector = await inspectPlant(page, 'hreflang-en');
+  await walkInlinks(page, inspector, 60);
+  // Chromium keeps 50 entries: the one the inspector opened on is gone, and going back 60 would do nothing.
+  expect(await page.evaluate(() => history.length)).toBeLessThan(60);
+  await page.keyboard.press('Escape');
+  await expect(inspector).toBeHidden();
+  await expect(page).toHaveURL(/\/urls\?q=/);
+  expect(inspected(page)).toBeNull();
+});
+
 test('from a check’s pages: Enter inspects one, its issue leads back to the check, Esc and Alt+Left', async ({
   page,
 }) => {

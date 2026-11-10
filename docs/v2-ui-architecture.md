@@ -225,6 +225,9 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   from where it opened (`inspectSteps` in its history state), so back and forward retrace the walk; Esc or Close goes
   back over those steps to the entry it opened on, then drops `inspect` there in place. So Esc then Alt+Left leaves
   the screen, and from a walk A, B, C, Alt+Left shows B while Esc from C closes to the screen as it was before A. A
+  browser keeps only so many entries (Chromium 50) and `history.go` past the oldest does nothing, silently: a close
+  goes back no further than history holds, waits a second at most for it, and then closes on the entry it's on, so
+  the inspector always closes (after a walk of 60, on the oldest entry left). A
   screen's own replaces while it's open (Issues' filters and group) keep the history state (`state: true`). The
   palette's "Go to URL…" is `goToUrl`: a walk on a view that has the inspector (`viewInspects`), and from any other
   (Overview, the crawl's settings) the crawl's URLs with the inspector open, a place of its own that back leaves.

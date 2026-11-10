@@ -1,4 +1,4 @@
-import { createBrowserHistory, createMemoryHistory, type RouterHistory } from '@tanstack/react-router';
+import { createBrowserHistory, createHistory, createMemoryHistory, type RouterHistory } from '@tanstack/react-router';
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setTransport } from '../api/transport';
@@ -22,6 +22,50 @@ async function open(history: RouterHistory) {
 /** Overview, then URLs: the screen the inspector opens on, with a place before it to go back to. */
 const fromOverview = () =>
   createMemoryHistory({ initialEntries: [`${CRAWL}/overview`, `${CRAWL}/urls`], initialIndex: 1 });
+
+/**
+ * History as a browser keeps it: at most `cap` entries (the oldest goes when another is pushed, as Chromium does at
+ * 50), a `go` past either end does nothing and says nothing, and one in range lands a moment later.
+ */
+function browserLikeHistory(paths: readonly string[], cap = 50): RouterHistory {
+  let entries: { path: string; state: unknown }[] = paths.map((path, at) => ({ path, state: { __TSR_index: at } }));
+  let index = entries.length - 1;
+  const go = (by: number) => {
+    setTimeout(() => {
+      const to = index + by;
+      if (to < 0 || to >= entries.length) return;
+      index = to;
+      history.notify({ type: 'GO', index: by });
+    }, 0);
+  };
+  const history = createHistory({
+    getLocation: () => {
+      const entry = entries[index]!;
+      const url = new URL(entry.path, 'http://app');
+      return {
+        href: entry.path,
+        pathname: url.pathname,
+        search: url.search,
+        hash: url.hash,
+        state: entry.state as { __TSR_index: number },
+      };
+    },
+    getLength: () => entries.length,
+    pushState: (path, state: unknown) => {
+      entries = [...entries.slice(0, index + 1), { path, state }].slice(-cap);
+      index = entries.length - 1;
+    },
+    replaceState: (path, state: unknown) => {
+      entries[index] = { path, state };
+    },
+    go,
+    back: () => go(-1),
+    forward: () => go(1),
+    createHref: (path) => path,
+    notifyOnIndexChange: false,
+  });
+  return history;
+}
 
 const at = (router: AppRouter) => ({
   path: router.state.location.pathname,
@@ -101,6 +145,33 @@ describe('the inspector in history', () => {
       }),
     );
     await step(() => closeInspector(router));
+    expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
+  });
+
+  it('closes after a walk longer than history keeps: back as far as it goes, then closed there', async () => {
+    const history = browserLikeHistory([`${CRAWL}/urls`], 5);
+    const router = await open(history);
+    await step(() => inspectFromGrid(router, 1));
+    for (let urlId = 2; urlId <= 9; urlId++) await step(() => walkTo(router, urlId));
+    // Eight steps walked, and history holds the last five entries: the one the inspector opened on is gone.
+    expect(walkedSteps(router.state.location.state)).toBe(8);
+    expect(history.length).toBe(5);
+    await step(() => closeInspector(router));
+    expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
+    expect(walkedSteps(router.state.location.state)).toBe(0);
+  });
+
+  it('closes in place when history can’t go back as far as it was asked to', async () => {
+    const history = browserLikeHistory([`${CRAWL}/urls`], 5);
+    const router = await open(history);
+    await step(() => inspectFromGrid(router, 1));
+    for (let urlId = 2; urlId <= 9; urlId++) await step(() => walkTo(router, urlId));
+    // Two steps back along the walk: two entries are behind this one, and nothing says so.
+    history.go(-2);
+    await waitFor(() => expect(at(router).inspect).toBe(7));
+    await act(async () => {
+      await closeInspector(router);
+    });
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
   });
 
