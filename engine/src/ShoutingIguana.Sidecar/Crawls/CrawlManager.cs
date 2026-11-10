@@ -838,6 +838,7 @@ internal sealed class CrawlManager(
             FinishedAt = crawling ? null : summary?.FinishedAt?.UtcDateTime,
             UpdatedAt = summary?.UpdatedAt.UtcDateTime,
             FetchedUrlCount = (crawling ? live?.Progress?.Fetched : null) ?? summary?.FetchedUrlCount ?? 0,
+            CrawledUrlCount = (crawling ? live?.Progress?.Crawled : null) ?? summary?.CrawledUrlCount ?? 0,
             PageCount = (crawling ? live?.Progress?.HtmlPages : null) ?? summary?.PageCount ?? 0,
             Issues = summary?.FlaggedChecks is { } flagged
                 ? new IssueCountsDto(flagged.GetValueOrDefault(IssueSeverity.Error), flagged.GetValueOrDefault(IssueSeverity.Warning),

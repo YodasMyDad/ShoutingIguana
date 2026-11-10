@@ -20,8 +20,14 @@ internal sealed record CrawlListItem
     public DateTime? FinishedAt { get; init; }
     public DateTime? UpdatedAt { get; init; }
 
-    /// <summary>URLs with a stored outcome, as <c>si stats</c> and a crawl's progress count them; live, the crawl's progress.</summary>
+    /// <summary>
+    /// URLs with a stored outcome, as <c>si stats</c> and a crawl's progress count them; live, the crawl's progress. Those
+    /// that weren't checked are among them, which <see cref="CrawledUrlCount"/> leaves out.
+    /// </summary>
     public long FetchedUrlCount { get; init; }
+
+    /// <summary>The URLs crawled, as the URL grid counts them (fetched); live, the crawl's progress.</summary>
+    public long CrawledUrlCount { get; init; }
 
     /// <summary>Internal HTML pages fetched and parsed.</summary>
     public long PageCount { get; init; }

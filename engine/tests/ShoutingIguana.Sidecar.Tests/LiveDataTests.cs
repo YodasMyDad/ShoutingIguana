@@ -85,6 +85,21 @@ public sealed class LiveDataTests : IAsyncLifetime
         Assert.Equal(Count(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.is_internal = 1 AND u.source <> 3"),
             (long?)last["internalFetched"]);
 
+        // The URLs crawled, as the URL grid counts them, and the part of the figures that is the crawler's own probe of
+        // the site's https:// version, which doesn't answer: one network error, said apart, not the site's.
+        Assert.Equal(Count(path, "SELECT COUNT(*) FROM responses WHERE error IS NULL OR error NOT LIKE 'Not checked%'"), (long?)last["crawled"]);
+        var grid = await _sidecar.PostAsync($"api/crawls/{id}/urls", JsonNode.Parse("""{"filters":[{"column":"fetched","op":"is","value":true}],"limit":1}"""));
+        Assert.Equal((long?)last["crawled"], (long?)grid.Body!["matching"]);
+        var probes = last["siteVersions"]!;
+        Assert.Equal(1, (long?)probes["fetched"]);
+        Assert.Equal((1L, 1L), ((long)probes["statusClasses"]!["noResponse"]!, (long)probes["noResponse"]!["networkError"]!));
+        Assert.Empty(probes["statusCodes"]!.AsObject());
+        Assert.Equal(Count(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.source = 3 AND r.status_code IS NULL"),
+            (long?)probes["statusClasses"]!["noResponse"]);
+        var probeFree = await _sidecar.PostAsync($"api/crawls/{id}/urls", JsonNode.Parse(
+            """{"filters":[{"column":"statusClass","op":"in","values":["noResponse"]},{"column":"source","op":"notIn","values":["siteVersion"]}],"limit":1}"""));
+        Assert.Equal((long)last["statusClasses"]!["noResponse"]! - (long)last["noResponse"]!["notChecked"]! - 1, (long?)probeFree.Body!["matching"]);
+
         // The analysis, phase by phase in order, each to its end, all between "analyzing" and the crawl's return to "completed".
         var analyzing = seen.FindLastIndex(sent => sent.Name == "crawl" && (string?)sent.Data["crawlId"] == id && (string?)sent.Data["status"] == "analyzing");
         var analysed = seen.FindLastIndex(sent => sent.Name == "crawl" && (string?)sent.Data["crawlId"] == id && (string?)sent.Data["status"] == "completed");
@@ -328,6 +343,17 @@ public sealed class LiveDataTests : IAsyncLifetime
         Assert.Equal((long?)classes["noResponse"], noResponse.Sum(entry => (long)entry.Value!));
         Assert.Equal((long?)progress["robotsDisallowed"], (long?)noResponse["robotsDisallowed"]);
         Assert.InRange((long)progress["internalFetched"]!, 0, (long)progress["internalFound"]!);
+
+        // The URLs crawled are those fetched but for the ones never asked; the probes' part is within each figure, and adds up too.
+        Assert.Equal((long)progress["fetched"]! - (long)noResponse["notChecked"]!, (long?)progress["crawled"]);
+        var probes = progress["siteVersions"]!;
+        var probeClasses = probes["statusClasses"]!.AsObject();
+        Assert.Equal(classes.Select(entry => entry.Key), probeClasses.Select(entry => entry.Key));
+        Assert.Equal((long?)probes["fetched"], probeClasses.Sum(entry => (long)entry.Value!));
+        Assert.All(probeClasses, entry => Assert.InRange((long)entry.Value!, 0, (long)classes[entry.Key]!));
+        Assert.Equal(noResponse.Select(entry => entry.Key), probes["noResponse"]!.AsObject().Select(entry => entry.Key));
+        Assert.Equal((long?)probeClasses["noResponse"], probes["noResponse"]!.AsObject().Sum(entry => (long)entry.Value!));
+        Assert.All(probes["statusCodes"]!.AsObject(), entry => Assert.InRange((long)entry.Value!, 1, (long)progress["statusCodes"]![entry.Key]!));
     }
 
     private static void AssertRises(JsonArray points) =>
