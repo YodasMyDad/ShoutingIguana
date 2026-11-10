@@ -6,7 +6,7 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter, type AppRouter } from '../app/router';
 import { TEST_CRAWL_ID, fakeSidecar, standardRoutes } from '../test/fakeSidecar';
-import { closeInspector, inspectFromGrid, walkTo, walkedSteps } from './inspector';
+import { closeInspector, goToUrl, inspectFromGrid, viewInspects, walkTo, walkedSteps } from './inspector';
 
 const CRAWL = `/crawls/${TEST_CRAWL_ID}`;
 
@@ -117,5 +117,54 @@ describe('the inspector in history', () => {
     await step(() => history.back());
     await waitFor(() => expect(at(router).path).toBe(`${CRAWL}/overview`));
     history.destroy();
+  });
+});
+
+describe('“Go to URL…”', () => {
+  it('knows the views that open the inspector', () => {
+    for (const section of [
+      'issues',
+      'issues/title-too-long',
+      'urls',
+      'links',
+      'sitemaps',
+      'robots/https%3A%2F%2Fexample.com',
+    ]) {
+      expect(viewInspects(`${CRAWL}/${section}`, TEST_CRAWL_ID), section).toBe(true);
+    }
+    for (const path of [
+      `${CRAWL}/overview`,
+      `${CRAWL}/settings`,
+      CRAWL,
+      '/',
+      '/settings',
+      '/crawls/fedcba9876543210/urls',
+    ]) {
+      expect(viewInspects(path, TEST_CRAWL_ID), path).toBe(false);
+    }
+  });
+
+  it('is a step of the walk on a view that has the inspector, so back retraces it', async () => {
+    const history = fromOverview();
+    const router = await open(history);
+    await step(() => goToUrl(router, TEST_CRAWL_ID, 2));
+    expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: 2 });
+    expect(history.length).toBe(3);
+    await step(() => goToUrl(router, TEST_CRAWL_ID, 3));
+    expect(walkedSteps(router.state.location.state)).toBe(1);
+    await step(() => history.back());
+    expect(at(router).inspect).toBe(2);
+    // Esc from the first URL gone to: the screen as it was before.
+    await step(() => closeInspector(router));
+    expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
+  });
+
+  it('opens the crawl’s URLs with the inspector from a view that has none', async () => {
+    const history = createMemoryHistory({ initialEntries: [`${CRAWL}/overview`] });
+    const router = await open(history);
+    await step(() => goToUrl(router, TEST_CRAWL_ID, 2));
+    expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: 2 });
+    await step(() => history.back());
+    expect(at(router).path).toBe(`${CRAWL}/overview`);
   });
 });

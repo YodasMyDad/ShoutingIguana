@@ -7,7 +7,9 @@ import { restoreFocus, setOverlay, useOverlay } from '../app/overlays';
 import { crawlName } from '../crawl/status';
 import { formatCount, formatRelativeTime } from '../lib/format';
 import { Kbd } from '../ui/Kbd';
-import { searchPalette, type PaletteEntry } from './paletteSearch';
+import { GoToUrl } from './GoToUrl';
+import { setPaletteMode, usePaletteMode } from './paletteMode';
+import { looksLikeUrl, searchPalette, type PaletteEntry } from './paletteSearch';
 import { COMMAND_GROUPS, commands, useRegistryVersion } from './registry';
 
 const RECENT_CRAWLS = 8;
@@ -19,15 +21,23 @@ const GROUP_ORDER = [...COMMAND_GROUPS.filter((group) => group !== 'In grids'), 
 export interface PaletteItem extends PaletteEntry {
   hint?: ReactNode;
   run: () => unknown;
+  /** Runs with the palette still open: it changes what the palette shows ("Go to URL…"). */
+  stay?: boolean;
 }
+
+/** The command that turns the palette to "Go to URL…": chosen in the palette, it stays open. */
+const GO_TO_URL = 'go.url';
 
 /**
  * The command palette (Ctrl+K): every screen and action in the registry, the open crawl's checks and the recent
- * crawls. Searching any URL joins it with E6's search. An ARIA combobox over a listbox: the input keeps focus and
- * aria-activedescendant always names the highlighted option, so screen readers hear what Enter will run.
+ * crawls, and "Go to URL…", which looks a URL up in the open crawl and opens the inspector on it (typing a URL or a
+ * path offers it too). Searching any URL by its words joins it with E6's search. An ARIA combobox over a listbox: the
+ * input keeps focus and aria-activedescendant always names the highlighted option, so screen readers hear what Enter
+ * will run.
  */
 export function CommandPalette() {
   const open = useOverlay() === 'palette';
+  const mode = usePaletteMode();
   useRegistryVersion();
   const navigate = useNavigate();
   const { crawl: crawlId } = useParams({ strict: false });
@@ -44,6 +54,7 @@ export function CommandPalette() {
         title: command.title,
         keywords: command.keywords ?? [],
         ...(command.keys?.[0] ? { hint: <Kbd chord={command.keys[0]} size="sm" /> } : {}),
+        ...(command.id === GO_TO_URL ? { stay: true } : {}),
         run: () => commands.run(command.id),
       }));
     if (crawlId && checks) {
@@ -70,15 +81,22 @@ export function CommandPalette() {
     return list;
   }, [crawlId, checks, library, navigate]);
 
-  const close = () => setOverlay(null);
+  const close = () => {
+    setOverlay(null);
+    setPaletteMode({ kind: 'commands' });
+  };
   /** Closes first, so focus is back where it was before the command moves it. */
   const choose = (entry: PaletteItem) => {
+    if (entry.stay) {
+      void entry.run();
+      return;
+    }
     close();
     requestAnimationFrame(() => void entry.run());
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={(next) => setOverlay(next ? 'palette' : null)}>
+    <Dialog.Root open={open} onOpenChange={(next) => (next ? setOverlay('palette') : close())}>
       <Dialog.Portal>
         <Dialog.Overlay className="si-dialog-overlay" />
         <Dialog.Content
@@ -91,7 +109,21 @@ export function CommandPalette() {
           className="fixed top-(--palette-top) left-1/2 z-40 w-(--palette-width) max-w-full -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-surface-overlay shadow-4"
         >
           <Dialog.Title className="sr-only">Command palette</Dialog.Title>
-          <PaletteBody entries={entries} onChoose={choose} />
+          {mode.kind === 'url' && crawlId ? (
+            <GoToUrl
+              crawlId={crawlId}
+              initialText={mode.text}
+              onBack={() => setPaletteMode({ kind: 'commands' })}
+              onClose={close}
+            />
+          ) : (
+            <PaletteBody
+              entries={entries}
+              onChoose={choose}
+              // A URL or a path typed here is offered as somewhere to go, in the open crawl.
+              onUrl={crawlId ? (text) => setPaletteMode({ kind: 'url', text }) : undefined}
+            />
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -101,14 +133,30 @@ export function CommandPalette() {
 export function PaletteBody({
   entries,
   onChoose,
+  onUrl,
 }: {
   entries: readonly PaletteItem[];
   onChoose: (entry: PaletteItem) => void;
+  /** Given where there's a crawl to look a URL up in: text that reads as a URL is offered as "Go to URL". */
+  onUrl?: ((text: string) => void) | undefined;
 }) {
   const id = useId();
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
-  const results = useMemo(() => searchPalette(entries, query, GROUP_ORDER), [entries, query]);
+  const results = useMemo(() => {
+    const found = searchPalette(entries, query, GROUP_ORDER);
+    const text = query.trim();
+    if (!onUrl || !looksLikeUrl(text)) return found;
+    const go: PaletteItem = {
+      id: 'url:go',
+      group: 'Go to',
+      title: `Go to URL ${text}`,
+      stay: true,
+      run: () => onUrl(text),
+    };
+    // Unmistakably a URL (a scheme, or a path), it leads; a bare host could be a word with a dot, so it follows.
+    return /^(https?:)?\//i.test(text) ? [go, ...found] : [...found, go];
+  }, [entries, query, onUrl]);
   const active = results.length === 0 ? -1 : Math.min(highlight, results.length - 1);
   // By the entry, not its place: when typing changes what's highlighted, the attribute changes too, and screen
   // readers hear the new option.
@@ -156,8 +204,11 @@ export function PaletteBody({
   const startsGroup = results.map((entry, index) => index === 0 || results[index - 1]?.group !== entry.group);
   return (
     <div className="flex flex-col">
-      {/* Radix focuses the first focusable element on open: this input. */}
+      {/* Radix focuses the first focusable element on open: this input. Coming back from "Go to URL…", it takes
+          focus itself. */}
       <input
+        // eslint-disable-next-line jsx-a11y-x/no-autofocus
+        autoFocus
         role="combobox"
         aria-expanded="true"
         aria-controls={`${id}-list`}

@@ -63,6 +63,29 @@ export function walkTo(router: AppRouter, urlId: number): Promise<void> {
   });
 }
 
+/** Whether a path is a view of the crawl that opens the inspector: one with `inspect` in its search. */
+export function viewInspects(pathname: string, crawlId: string): boolean {
+  const [, crawls, crawl, section] = pathname.split('/');
+  return (
+    crawls === 'crawls' &&
+    crawl === encodeURIComponent(crawlId) &&
+    (section === 'issues' ||
+      section === 'urls' ||
+      section === 'links' ||
+      section === 'sitemaps' ||
+      section === 'robots')
+  );
+}
+
+/**
+ * The palette's "Go to URL…": a step of the walk on a view that has the inspector; from anywhere else (Overview, the
+ * crawl's settings), the crawl's URLs with the inspector open on it.
+ */
+export function goToUrl(router: AppRouter, crawlId: string, urlId: number): Promise<void> {
+  if (viewInspects(router.state.location.pathname, crawlId)) return walkTo(router, urlId);
+  return router.navigate({ to: '/crawls/$crawl/urls', params: { crawl: crawlId }, search: { inspect: urlId } });
+}
+
 /** Goes back `steps` entries, resolving once the router has the location it went back to. */
 function goBack(router: AppRouter, steps: number): Promise<void> {
   return new Promise((resolve) => {
@@ -102,6 +125,8 @@ export interface Inspector {
   walk: (urlId: number) => void;
   /** Esc or Close: back to the view as it was before the inspector opened. */
   close: () => void;
+  /** The palette's "Go to URL…": a walk where the view has the inspector, else the crawl's URLs with it open. */
+  goTo: (crawlId: string, urlId: number) => void;
 }
 
 /** The inspector's history model, for the screens and the inspector itself. */
@@ -112,6 +137,7 @@ export function useInspector(): Inspector {
       open: (urlId) => void inspectFromGrid(router, urlId),
       walk: (urlId) => void walkTo(router, urlId),
       close: () => void closeInspector(router),
+      goTo: (crawlId, urlId) => void goToUrl(router, crawlId, urlId),
     }),
     [router],
   );

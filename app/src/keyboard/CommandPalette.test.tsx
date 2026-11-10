@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PaletteBody, type PaletteItem } from './CommandPalette';
-import { searchPalette } from './paletteSearch';
+import { looksLikeUrl, searchPalette } from './paletteSearch';
 
 const item = (id: string, group: string, title: string, keywords: string[] = []): PaletteItem => ({
   id,
@@ -126,5 +126,50 @@ describe('the palette', () => {
     fireEvent.change(input, { target: { value: '' } });
     fireEvent.click(screen.getByRole('option', { name: /Theme: dark/ }));
     expect(onChoose).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'dark' }));
+  });
+});
+
+describe('a URL typed in the palette', () => {
+  it('tells a URL or a path from words', () => {
+    for (const text of [
+      'https://example.com/a?b=1',
+      'HTTP://example.com',
+      '/contact/',
+      '/',
+      '//example.com/a',
+      'www.example.com/a',
+      'example.com',
+      'example.co.uk:8080/x',
+    ]) {
+      expect(looksLikeUrl(text), text).toBe(true);
+    }
+    for (const text of ['', '  ', 'broken links', 'settings', 'theme: dark', 'https://', '/ a', 'title.']) {
+      expect(looksLikeUrl(text), text).toBe(false);
+    }
+  });
+
+  it('offers to go to it: first for a path or a scheme, after the commands for a bare host', () => {
+    const onChoose = vi.fn();
+    const onUrl = vi.fn();
+    render(<PaletteBody entries={entries} onChoose={onChoose} onUrl={onUrl} />);
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: '/contact/' } });
+    const options = screen.getAllByRole('option');
+    expect(options).toHaveLength(1);
+    expect(options[0]).toHaveTextContent('Go to URL /contact/');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    const chosen = onChoose.mock.calls[0]?.[0] as PaletteItem;
+    expect(chosen.stay).toBe(true);
+    void chosen.run();
+    expect(onUrl).toHaveBeenCalledWith('/contact/');
+  });
+
+  it('doesn’t offer it for words, or where there’s no crawl to look in', () => {
+    const { rerender } = render(<PaletteBody entries={entries} onChoose={vi.fn()} onUrl={vi.fn()} />);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'settings' } });
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Open settings, Go to']);
+    rerender(<PaletteBody entries={entries} onChoose={vi.fn()} />);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '/contact/' } });
+    expect(screen.queryByRole('option')).toBeNull();
   });
 });

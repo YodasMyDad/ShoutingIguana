@@ -74,7 +74,7 @@ export function HeadersSection({ detail }: { detail: UrlDetail }) {
           level={3}
         />
       ) : (
-        <dl aria-label="Response headers" className="flex flex-col">
+        <dl className="flex flex-col">
           {shown.map((row) => (
             <Header key={row.name} row={row} />
           ))}
@@ -114,8 +114,7 @@ function Header({ row }: { row: HeaderRow }) {
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
         >
-          {open ? 'Show less' : 'Show it all'}
-          <span className="sr-only"> of {row.name}</span>
+          {open ? 'Show less' : 'Show it all'} <span className="sr-only">of {row.name}</span>
         </button>
       ) : null}
     </div>
