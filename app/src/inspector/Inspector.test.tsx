@@ -1117,6 +1117,23 @@ describe('walking the site', () => {
     await waitFor(() => expect(within(inspector).getByRole('grid', { name: 'Inlinks' })).toHaveFocus());
   });
 
+  it('leaves focus on the kind’s control when a kind is chosen, whatever the view did before', async () => {
+    const { router, inspector, user } = await open(`${URLS}?inspect=2`);
+    await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
+    const grid = await within(inspector).findByRole('grid', { name: 'Inlinks' });
+    await within(grid).findByText('Patio set');
+    // The keyboard is in the grid while the view behind changes its own search: the URL inspected stays.
+    act(() => grid.focus());
+    await act(() => router.navigate({ to: '.', search: { inspect: 2, q: 'patio' } as never, replace: true }));
+    // Then a kind is chosen from its control: the grid that comes doesn't take the keyboard from it.
+    const kind = within(inspector).getByRole('button', { name: /Kind of link/ });
+    await user.click(kind);
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Hyperlink' }));
+    expect(await within(inspector).findByText('1 hyperlink inlink')).toBeVisible();
+    await waitFor(() => expect(kind).toHaveFocus());
+    expect(within(inspector).getByRole('grid', { name: 'Inlinks' })).not.toHaveFocus();
+  });
+
   it('says a link’s URL has no status when the crawl has an outcome for it without a code, and no more', async () => {
     const blocked = testLinkRow({ id: 3, url: OTHER.url, statusCode: null, fetched: true, indexable: null });
     const unfetched = testLinkRow({ id: 1, url: HOME.url, statusCode: null, fetched: false, indexable: null });

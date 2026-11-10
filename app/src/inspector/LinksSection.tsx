@@ -101,11 +101,13 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
   const router = useRouter();
   useEffect(
     () =>
-      router.subscribe('onBeforeNavigate', () => {
+      router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+        // Only a navigation to another URL brings another grid: any other leaves this one, and focus, where it is.
+        const next = (toLocation.search as { inspect?: unknown }).inspect;
         const grid = frame.current?.querySelector('[role="grid"]');
-        refocus.current = grid?.contains(document.activeElement) ?? false;
+        refocus.current = next !== undefined && next !== urlId && (grid?.contains(document.activeElement) ?? false);
       }),
-    [router],
+    [router, urlId],
   );
   useEffect(() => {
     if (!refocus.current) return;
