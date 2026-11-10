@@ -16,14 +16,12 @@ internal static class LinkSummaryBuilder
     private const string COUNT = "si_count_link";
 
     /// <summary>
-    /// Each link's place in the table: its target, kind, position and flags as stored, whether it leads to its own page,
-    /// has text, and sits on a page whose robots directives say nofollow (as the inspector judges a link followed).
+    /// Each link as it's counted: its id, both ends, its kind, position and flags as stored, and whether it has text. Whether
+    /// it leads to its own page, and sits on a page whose robots directives say nofollow (as the inspector judges a link
+    /// followed), the count works out from its ends.
     /// </summary>
     private const string COUNT_LINKS = $"""
-        SELECT COUNT({COUNT}(l.rowid, l.to_id, l.kind, l.position, l.flags,
-                   ((l.from_id = l.to_id) << 2) | ((l.text IS NOT NULL AND l.text <> '') << 1) |
-                   (l.from_id IN (SELECT url_id FROM responses WHERE is_nofollow <> 0)))),
-               COALESCE(MAX(l.rowid), 0)
+        SELECT COUNT({COUNT}(l.rowid, l.to_id, l.from_id, l.kind, l.position, l.flags, l.text IS NOT NULL AND l.text <> '')), COALESCE(MAX(l.rowid), 0)
         FROM links l
         """;
 
@@ -32,24 +30,61 @@ internal static class LinkSummaryBuilder
     private const int SMALL_BITS = 8;
     private const int TARGET_SHIFT = 3 + FLAG_BITS + SMALL_BITS + SMALL_BITS;
 
-    /// <param name="analyzedAt">The analysis's time, as its row stores it: what says the tables are that analysis's.</param>
+    /// <summary>
+    /// Builds the link summary unless the file has one of the crawl as it stands: the links don't change between a crawl's
+    /// runs, so analysing a crawl again (new thresholds, a newer engine's checks) leaves its link summary as it is.
+    /// </summary>
+    /// <returns>The rows written, or null when the summary stood.</returns>
+    public static long? BuildIfChanged(SqliteConnection connection, SqliteTransaction transaction) =>
+        IsCurrent(connection, transaction) ? null : Build(connection, transaction);
+
+    /// <summary>Whether the file's link summary is this engine's, and counts the crawl as it stands.</summary>
+    internal static bool IsCurrent(SqliteConnection connection, SqliteTransaction? transaction) => ReadCurrent(connection, transaction) is not null;
+
+    /// <summary>
+    /// The link summary's own counts (the links, and their highest id) when it counts the crawl as it stands: its tables
+    /// are this engine's, column for column, and carry the crawl row's stamp. Null otherwise: no summary, another shape's
+    /// (a later engine's, another program's), or one of the crawl before its last run.
+    /// </summary>
+    internal static (long Links, long MaxLinkId)? ReadCurrent(SqliteConnection connection, SqliteTransaction? transaction)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        foreach (var (table, columns) in CrawlSchema.LINK_SUMMARY_TABLES)
+        {
+            // Asked of each table before any is read: a statement naming a column a table lacks wouldn't compile.
+            command.CommandText = "SELECT group_concat(name, ',') FROM (SELECT name FROM pragma_table_info($table) ORDER BY cid)";
+            command.Parameters.Clear();
+            command.Parameters.AddWithValue("$table", table);
+            if (command.ExecuteScalar() as string != columns)
+            {
+                return null;
+            }
+        }
+
+        command.CommandText = """
+            SELECT s.links, s.max_link_id FROM link_summary_state s JOIN crawl c ON c.id = 1 AND c.updated_at = s.crawl_updated_at WHERE s.id = 1
+            """;
+        command.Parameters.Clear();
+        using var reader = command.ExecuteReader();
+        return reader.Read() && !reader.IsDBNull(0) && !reader.IsDBNull(1) ? (reader.GetInt64(0), reader.GetInt64(1)) : null;
+    }
+
     /// <returns>The rows written.</returns>
-    public static long Build(SqliteConnection connection, SqliteTransaction transaction, long analyzedAt)
+    public static long Build(SqliteConnection connection, SqliteTransaction transaction)
     {
         CrawlDatabase.Execute(connection, CrawlSchema.LINK_SUMMARY, transaction);
-        var counts = (ByTarget: new Counts(), ByBlock: new Counts());
+        var counts = new Counting(NofollowPages(connection, transaction));
 
         // Through SQLite's own interface, as the readers' per-row functions are: a third of the wrapper's cost a call.
         // Nothing may throw back into SQLite: a failure is the statement's error.
-        raw.sqlite3_create_function(connection.Handle!, COUNT, 6, raw.SQLITE_UTF8, counts, static (call, state, arguments) =>
+        raw.sqlite3_create_function(connection.Handle!, COUNT, 7, raw.SQLITE_UTF8, counts, static (call, state, arguments) =>
         {
             try
             {
-                var (byTarget, byBlock) = ((Counts, Counts))state;
-                var (kind, position, flags, bits) = (raw.sqlite3_value_int64(arguments[2]), raw.sqlite3_value_int64(arguments[3]),
-                    raw.sqlite3_value_int64(arguments[4]), raw.sqlite3_value_int64(arguments[5]));
-                byTarget.Add(raw.sqlite3_value_int64(arguments[1]), kind, position, flags, bits);
-                byBlock.Add(raw.sqlite3_value_int64(arguments[0]) >> CrawlSchema.LINK_BLOCK_SHIFT, kind, position, flags, bits);
+                ((Counting)state).Add(raw.sqlite3_value_int64(arguments[0]), raw.sqlite3_value_int64(arguments[1]), raw.sqlite3_value_int64(arguments[2]),
+                    raw.sqlite3_value_int64(arguments[3]), raw.sqlite3_value_int64(arguments[4]), raw.sqlite3_value_int64(arguments[5]),
+                    raw.sqlite3_value_int64(arguments[6]) != 0);
                 raw.sqlite3_result_int(call, 1);
             }
             catch (Exception exception)
@@ -68,8 +103,9 @@ internal static class LinkSummaryBuilder
 
         var written = Store(connection, transaction, "link_summary", "to_id", counts.ByTarget) + Store(connection, transaction, "link_blocks", "block", counts.ByBlock);
 
-        using var state = Command(connection, transaction, "INSERT INTO link_summary_state (id, analyzed_at, links, max_link_id) VALUES (1, $at, $links, $max)");
-        state.Parameters.AddWithValue("$at", analyzedAt);
+        // The crawl row's stamp as it stands: the analysis holds the crawl's lock, so no run can move it before this commits.
+        using var state = Command(connection, transaction,
+            "INSERT INTO link_summary_state (id, crawl_updated_at, links, max_link_id) VALUES (1, (SELECT updated_at FROM crawl WHERE id = 1), $links, $max)");
         state.Parameters.AddWithValue("$links", links);
         state.Parameters.AddWithValue("$max", maxLinkId);
         state.ExecuteNonQuery();
@@ -108,6 +144,46 @@ internal static class LinkSummaryBuilder
         command.Transaction = transaction;
         command.CommandText = sql;
         return command;
+    }
+
+    /// <summary>The pages whose robots directives say nofollow: few, on most sites none.</summary>
+    private static HashSet<long> NofollowPages(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        HashSet<long> pages = [];
+        using var command = Command(connection, transaction, "SELECT url_id FROM responses WHERE is_nofollow <> 0");
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            pages.Add(reader.GetInt64(0));
+        }
+
+        return pages;
+    }
+
+    /// <summary>
+    /// The pass's counts, by target and by block. A page's links are stored together, so whether the page says nofollow is
+    /// looked up once a page, not once a link.
+    /// </summary>
+    private sealed class Counting(HashSet<long> nofollowPages)
+    {
+        private long _page = long.MinValue;
+        private bool _pageNofollow;
+
+        public Counts ByTarget { get; } = new();
+
+        public Counts ByBlock { get; } = new();
+
+        public void Add(long id, long to, long from, long kind, long position, long flags, bool hasText)
+        {
+            if (from != _page)
+            {
+                (_page, _pageNofollow) = (from, nofollowPages.Count > 0 && nofollowPages.Contains(from));
+            }
+
+            var bits = (from == to ? 4L : 0) | (hasText ? 2L : 0) | (_pageNofollow ? 1L : 0);
+            ByTarget.Add(to, kind, position, flags, bits);
+            ByBlock.Add(id >> CrawlSchema.LINK_BLOCK_SHIFT, kind, position, flags, bits);
+        }
     }
 
     /// <param name="First">The target's URL id, or the block of link ids.</param>

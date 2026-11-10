@@ -270,17 +270,18 @@ internal static class CrawlSchema
     public const string LINK_KINDS_INDEX = "CREATE INDEX IF NOT EXISTS ix_links_to_kind ON links (to_id, kind)";
 
     /// <summary>
-    /// The links grid's table: the crawl's links counted by where they lead and what they are, rebuilt by every analysis
-    /// (dropped and created again). A crawl of a million pages stores 50 million links, which no read can count in time;
+    /// The links grid's table: the crawl's links counted by where they lead and what they are, built by the first analysis
+    /// of the crawl as it stands, and again once the crawl has changed. A crawl of a million pages stores 50 million links, which no read can count in time;
     /// this holds about 2 rows a URL, in target order, and answers what the grid counts: the links matching any filter on
     /// these columns and on the target, the facets, and each target's matching links (for a sort by the target). The
     /// columns hold what <c>links</c> does, as it is.
     /// <c>link_blocks</c> counts the same links by where they are in crawl order instead of by target: by block of
     /// <see cref="LINK_BLOCK"/> consecutive link ids, a few rows a block. A page anywhere in crawl order, under a filter on
     /// what a link is, is found by adding the blocks' counts up to it and reading the links of the block it starts in.
-    /// <c>link_summary_state</c> says which analysis they belong to, by that analysis's time: an engine from before these
-    /// tables leaves them behind when it analyses the file again, and they must not be read then. It also keeps the number
-    /// of links and the highest link id, which the grid would otherwise count.
+    /// <c>link_summary_state</c> says which state of the crawl they count: the crawl row's stamp (<c>updated_at</c>) as it
+    /// stood, which every run of the crawl moves on. They count nothing but the links and which pages say nofollow, which
+    /// only a crawl changes, so they stand until the stamp moves, whoever analyses the file meanwhile, and are passed over
+    /// once it has. It also keeps the number of links and the highest link id, which the grid would otherwise count.
     /// </summary>
     public const string LINK_SUMMARY = """
         DROP TABLE IF EXISTS link_summary;
@@ -314,11 +315,22 @@ internal static class CrawlSchema
         DROP TABLE IF EXISTS link_summary_state;
         CREATE TABLE link_summary_state (
             id INTEGER PRIMARY KEY CHECK (id = 1),
-            analyzed_at INTEGER NOT NULL,
+            crawl_updated_at INTEGER NOT NULL,
             links INTEGER NOT NULL,
             max_link_id INTEGER NOT NULL
         );
         """;
+
+    /// <summary>
+    /// The link summary's tables with their columns in order, as this engine builds and reads them: tables of another shape
+    /// (a later engine's, another program's) are built again by an analysis, and passed over by a read.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> LINK_SUMMARY_TABLES = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["link_summary"] = "to_id,kind,position,flags,self,has_text,source_nofollow,links",
+        ["link_blocks"] = "block,kind,position,flags,self,has_text,source_nofollow,links",
+        ["link_summary_state"] = "id,crawl_updated_at,links,max_link_id"
+    };
 
     /// <summary>
     /// How many consecutive link ids a row of <c>link_blocks</c> counts, as a shift: 16,384. A page of 100 links under a

@@ -347,16 +347,16 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
     }
 
     /// <summary>
-    /// The link summary is read only while it's the last analysis's and the crawl's: one an earlier engine left behind when
-    /// it analysed the file again, one of another shape, and any once the crawl has changed, are passed over, and the links
-    /// read instead, to the same answers.
+    /// The link summary is read only while it counts the crawl as it stands: once a run of the crawl has moved its stamp on,
+    /// or when its tables aren't this engine's, it's passed over and the links read instead, to the same answers. It
+    /// stands whoever analysed the crawl last: it counts the links, which no analysis changes.
     /// </summary>
     [Fact]
-    public void ALinkSummaryThatIsNotTheAnalysisIsNotRead()
+    public void ALinkSummaryIsReadOnlyWhileItCountsTheCrawlAsItStands()
     {
         var query = new UrlQuery { Filters = [Names("kind", FilterOperator.In, "image")], Limit = 50 };
         var expected = Reference.Matching(query.Filters).Select(link => link.Id).ToList();
-        void AssertReadFromTheLinks(string path, bool summarised = false)
+        void AssertRead(string path, bool fromTheSummary)
         {
             List<string> ran = [];
             LinkGridReader.Ran = ran.Add;
@@ -366,39 +366,40 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
             Assert.Equal((expected.Count, Reference.Links.Count), (page.Matching, page.Total));
             Assert.Equal(expected.Take(50), page.Rows.Select(row => row.Id));
             Assert.Equal(expected.Count, facets.Facets["kind"].Single().Count);
-            Assert.Equal(summarised, ran.Any(sql => sql.Contains("link_summary", StringComparison.Ordinal)));
+            Assert.Equal(fromTheSummary, ran.Any(sql => sql.Contains("link_summary", StringComparison.Ordinal)));
+            Assert.Equal(!fromTheSummary, ran.Any(sql => sql.Contains("si_link(", StringComparison.Ordinal)));
         }
 
-        AssertReadFromTheLinks(crawl.Path, summarised: true);
+        string With(string sql)
+        {
+            var copy = crawl.Copy();
+            Change(copy, sql);
+            return copy;
+        }
 
-        // An engine from before the summary analysed the file again: a new analysis, the old summary still there.
-        var analysedAgain = crawl.Copy();
-        Change(analysedAgain, "UPDATE analysis SET analyzed_at = analyzed_at + 60000");
-        Change(analysedAgain, "UPDATE link_summary SET links = links + 5");
-        AssertReadFromTheLinks(analysedAgain);
+        AssertRead(crawl.Path, fromTheSummary: true);
 
-        var missing = crawl.Copy();
-        Change(missing, "DROP TABLE link_summary");
-        AssertReadFromTheLinks(missing);
+        // Analysed since by an engine whose URL summary this one doesn't read: the links are the same links.
+        var otherEngine = With("UPDATE analysis SET analysis_version = 3");
+        Assert.Equal(SummaryUnavailableReason.EngineChanged, UrlGridReader.Query(otherEngine, new UrlQuery()).Summary.Reason);
+        AssertRead(otherEngine, fromTheSummary: true);
 
-        var noBlocks = crawl.Copy();
-        Change(noBlocks, "DROP TABLE link_blocks");
-        AssertReadFromTheLinks(noBlocks);
+        // The crawl was continued: its links may have changed, so the summary of what they were isn't read.
+        AssertRead(crawl.Changed, fromTheSummary: false);
 
-        var noState = crawl.Copy();
-        Change(noState, "DELETE FROM link_summary_state");
-        AssertReadFromTheLinks(noState);
-
-        var otherShape = crawl.Copy();
-        Change(otherShape, "ALTER TABLE link_summary RENAME COLUMN links TO how_many");
-        AssertReadFromTheLinks(otherShape);
-
-        AssertReadFromTheLinks(crawl.Changed);
+        // Tables that aren't there, or aren't this engine's.
+        AssertRead(With("DROP TABLE link_summary"), fromTheSummary: false);
+        AssertRead(With("DROP TABLE link_blocks"), fromTheSummary: false);
+        AssertRead(With("DELETE FROM link_summary_state"), fromTheSummary: false);
+        AssertRead(With("DROP TABLE link_summary_state"), fromTheSummary: false);
+        AssertRead(With("ALTER TABLE link_summary RENAME COLUMN links TO how_many"), fromTheSummary: false);
+        AssertRead(With("ALTER TABLE link_summary_state RENAME COLUMN crawl_updated_at TO analyzed_at"), fromTheSummary: false);
     }
 
     /// <summary>
-    /// Each analysis stores the links counted by target and what they are, as grouping them would, with how many there are
-    /// and their highest id, under its own time; analysing again replaces it.
+    /// The analysis of a crawl stores its links counted by target and by block, as grouping them would, with how many there
+    /// are and their highest id, under the crawl's stamp. Analysing the crawl again leaves them as they are; analysing it
+    /// once it has changed counts them afresh.
     /// </summary>
     [Fact]
     public async Task EachAnalysisStoresTheLinksCounted()
@@ -408,7 +409,7 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
             FROM links l LEFT JOIN responses src ON src.url_id = l.from_id GROUP BY 1, 2, 3, 4, 5, 6, 7
             """;
         const string STORED = "SELECT to_id, kind, position, flags, self, has_text, source_nofollow, links FROM link_summary";
-        const string STATE = "SELECT s.links, s.max_link_id, s.analyzed_at = a.analyzed_at FROM link_summary_state s, analysis a";
+        const string STATE = "SELECT s.links, s.max_link_id, s.crawl_updated_at = c.updated_at FROM link_summary_state s, crawl c";
         const string BLOCKED = """
             SELECT l.rowid >> 14, l.kind, l.position, l.flags, l.from_id = l.to_id, l.text IS NOT NULL AND l.text <> '', COALESCE(src.is_nofollow, 0) <> 0, COUNT(*)
             FROM links l LEFT JOIN responses src ON src.url_id = l.from_id GROUP BY 1, 2, 3, 4, 5, 6, 7
@@ -422,10 +423,25 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
         Assert.Contains(Reference.Links, link => link.SourceNofollow);
         Assert.Contains(Reference.Links, link => link.From == link.To);
 
-        // A crawl whose links have gaps in their ids (a page fetched again has its links stored again): analysed again, the
+        // Analysed again, the crawl as it was: the summary stands, and isn't counted again (a count changed by hand stays).
+        var again = crawl.Copy();
+        Change(again, "UPDATE link_summary SET links = links + 1000 WHERE to_id = (SELECT MIN(to_id) FROM link_summary)");
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(again);
+        Assert.NotEqual(TestCrawls.Rows(again, GROUPED), TestCrawls.Rows(again, STORED));
+        Assert.True(TestCrawls.Count(again, "SELECT SUM(links) FROM link_summary") >= Reference.Links.Count + 1_000);
+
+        // Once a run of the crawl has stamped it again, the next analysis counts the links afresh.
+        Stamp(again);
+        Assert.Equal([$"{Reference.Links.Count} | {Reference.Links[^1].Id} | 0"], TestCrawls.Rows(again, STATE));
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(again);
+        Assert.Equal(TestCrawls.Rows(again, GROUPED), TestCrawls.Rows(again, STORED));
+        Assert.Equal([$"{Reference.Links.Count} | {Reference.Links[^1].Id} | 1"], TestCrawls.Rows(again, STATE));
+
+        // A crawl whose links have gaps in their ids (a page fetched again has its links stored again): analysed, the
         // summary is the links as they now are, and the grid reads them at any place, in either direction, each way.
         var gaps = crawl.Copy();
         Change(gaps, "DELETE FROM links WHERE rowid % 5 = 0 OR rowid BETWEEN 2000 AND 2600");
+        Stamp(gaps);
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(gaps);
         Assert.Equal(TestCrawls.Rows(gaps, GROUPED), TestCrawls.Rows(gaps, STORED));
         Assert.Equal(TestCrawls.Rows(gaps, BLOCKED), TestCrawls.Rows(gaps, BLOCKS));
@@ -522,6 +538,7 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
             GridReadContext.ReadWithoutLinkSummary = !analysed;
             if (analysed)
             {
+                Stamp(copy);
                 await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(copy);
             }
 

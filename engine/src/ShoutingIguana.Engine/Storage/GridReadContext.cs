@@ -418,10 +418,10 @@ internal sealed class GridReadContext : IDisposable
     }
 
     /// <summary>
-    /// The link summary the last analysis stored, when it describes the crawl: the URL summary does (so the crawl hasn't
-    /// changed since, and this engine's kind of analysis made it), and the table carries that analysis's time, so it isn't
-    /// one an engine from before it left behind when it analysed the file again. With it, how many links the crawl has and
-    /// their highest id; null when the links grid must read the links themselves.
+    /// The link summary an analysis stored, when it counts the crawl as it stands: its tables are this engine's, and carry
+    /// the crawl row's stamp, which every run of the crawl moves on. It needs no URL summary beside it: it counts only the
+    /// links, which no analysis changes. With it, how many links the crawl has and their highest id; null when the links
+    /// grid must read the links themselves.
     /// </summary>
     public (long Links, long MaxLinkId)? LinkSummary
     {
@@ -503,26 +503,9 @@ internal sealed class GridReadContext : IDisposable
 
     private (long Links, long MaxLinkId)? ReadLinkSummary()
     {
-        if (ReadWithoutLinkSummary || !Summary.Available || Analysis is null ||
-            TableColumns("link_summary") != "to_id,kind,position,flags,self,has_text,source_nofollow,links" ||
-            TableColumns("link_blocks") != "block,kind,position,flags,self,has_text,source_nofollow,links" ||
-            TableColumns("link_summary_state") != "id,analyzed_at,links,max_link_id")
-        {
-            return null;
-        }
-
-        using var command = Command("SELECT analyzed_at, links, max_link_id FROM link_summary_state WHERE id = 1", []);
-        using var reader = command.ExecuteReader();
-        return reader.Read() && !reader.IsDBNull(0) && reader.GetInt64(0) == Analysis.AnalyzedAt.ToUnixTimeMilliseconds() && !reader.IsDBNull(1) && !reader.IsDBNull(2)
-            ? (reader.GetInt64(1), reader.GetInt64(2))
-            : null;
-    }
-
-    /// <summary>A table's columns in order, so one another program made its own way isn't taken for the engine's; empty when there's none.</summary>
-    private string TableColumns(string table)
-    {
-        using var command = Command("SELECT group_concat(name, ',') FROM (SELECT name FROM pragma_table_info($table) ORDER BY cid)", [new("$table", table)]);
-        return command.ExecuteScalar() as string ?? string.Empty;
+        // A crawl that's running has links its summary, if it has one, doesn't count yet: its stamp moved when the run began.
+        Token.ThrowIfCancellationRequested();
+        return ReadWithoutLinkSummary ? null : LinkSummaryBuilder.ReadCurrent(Connection, Transaction);
     }
 
     private CrawlOptions ReadOptions()
