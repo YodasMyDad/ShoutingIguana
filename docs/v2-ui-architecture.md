@@ -40,7 +40,7 @@ Webview (React, app/src) ──────────────────�
 | `src/styles` | `tokens.css` (every design value), `base.css`, `components.css` (the library's look), the Tailwind entry |
 | `src/crawl` | Crawl status words, the crawl actions, opening crawl files |
 | `src-tauri` | The shell (see below) |
-| `scripts` | Building the sidecar, `npm run dev`, synthetic crawls, the orphan check, the shell smoke test |
+| `scripts` | Building the sidecar, `npm run dev`, synthetic crawls, the orphan check, the shell smoke test and the shell smoke walk |
 | `e2e` | Playwright against the real sidecar |
 
 ## Data flow
@@ -127,7 +127,9 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
 - **Keys.** WebView2's browser keys are off, so the registry owns F5, Ctrl+F and the rest. Every reserved key was
   checked with real key presses (F7's caret browsing, Ctrl+S, Ctrl+J, Shift+Esc, Ctrl+P…) and none does anything in
   WebView2. F10, and a tap of Alt on its own, would put the window in Windows' menu mode and lose the next key, so the
-  shell keeps them from it. The context menu keeps only editing items.
+  shell keeps them from it. The context menu keeps only editing items. A key sent over DevTools tests none of this
+  (see The shell smoke walk): the browser's keys and the shell's handler are checked with keys put in the webview's
+  own queue.
 - **Permissions.** The page gets the events it listens to, `setTheme`, `setZoom`, open and save dialogs, http(s)
   links, and the shell's commands, none of which takes a path. Preferences go through `settings_read` and
   `settings_write`, bound to one file (`settings.json` in the app's config folder, a JSON object of at most 64 KB).
@@ -140,6 +142,45 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
 - **Test runs.** `SI_APP_PROFILE_DIR` gives a run of the built app a folder of its own for preferences, window state,
   the WebView2 profile, the engine's unpacked files and the log, and keeps it out of single instance. The smoke test
   and the orphan check use it, so they never touch the user's own copy, and run beside it.
+
+## The shell smoke walk
+
+Every other test of the UI runs in headless Chromium against a Vite build. `npm run smoke:shell`
+(`scripts/smoke-shell.mjs`) walks the five flows in the real thing: the built exe, its own WebView2, its own sidecar.
+It needs `npm run build:sidecar` and `npm run tauri build` (`-- --no-bundle` is enough) first, takes about a minute,
+and isn't run in CI: it needs a Windows desktop session (a disconnected one will do, which is where it was written).
+
+- **How the page is reached.** The app starts with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<n>`
+  and its own data, state and profile folders in a temp folder (`shellEnvironment` in `scripts/lib/shell.mjs`), and
+  Playwright's `connectOverCDP` attaches to that port. Three things differ from a page Playwright opened itself:
+  - Playwright emulates a light colour scheme on every context it attaches to: `page.emulateMedia({ colorScheme: null })`
+    gives the page the system's back.
+  - The app reopens where it was left, so loading `/` isn't Home: the walk clicks the sidebar's Home.
+  - A key sent over DevTools enters below WebView2's own key handling. It never raises `AcceleratorKeyPressed` (the
+    shell's F10 and Alt handling isn't run), and Chromium skips its browser accelerators for it when it has no native
+    key code (Playwright's `keyboard.press`) and runs them whatever `AreBrowserAcceleratorKeysEnabled` says when it
+    has one: with one, F5 reloads the app and F3 opens the find bar, in a build that turns the keys off as in one
+    that leaves them on. So Playwright's keys are used for the app's own commands only.
+- **What DevTools can't reach** goes through `scripts/shell-window.ps1`, from outside the app: keys put in the
+  webview's own message queue (its `Chrome_WidgetWin_1` window, given its thread's focus first), which WebView2 handles
+  as it does a real key press; a click on the tray icon (the callback message Windows posts the icon's window); a
+  button of a native dialog; closing the window; whether the window is shown, a native dialog is up, or the webview
+  has opened a window of its own (a find bar, downloads).
+- **What it walks** (14 steps, each recorded, a failed one not stopping the rest): the page answers on the DevTools
+  port at `http://tauri.localhost`; the shell handed it a ready engine and the library lists the crawl; a crawl's
+  answer; a status class to exactly its URLs; the inspector (Enter, a walked link, Alt+Left, Esc); the HTML source and
+  Ctrl+F; Issues; the palette, "Go to URL…" and the `?` sheet; F5 and F3 pressed in the webview do nothing while the
+  page still sees them; the engine killed and started again; a crawl of the engine's test site from Home, paused and
+  resumed with F7; the window closed to the tray with the crawl going on, and back through the tray icon; "Stop
+  crawling and quit?" (Cancel keeps both, Stop and quit ends both); nothing left running and no page error.
+  `--shots <folder>` keeps a picture of the page after each step, `--skip keys,live,tray,restart` leaves parts out.
+- **What the first walk by hand found** (10 Nov 2026, WebView2 157, Windows 11 at 150%): everything above works as in
+  Chromium, with these differences. Back from the tray after a crawl ended there, Overview failed (fixed: see
+  Overview's `useAnalysisAnswer`). Scrollbars show (headless Chromium hides them), in the colours `base.css` gives
+  them. The quit question and the tray's menu are Windows' own, so they don't follow the app's theme. With the browser
+  keys turned off, WebView2 still raises nothing of its own for F5, Ctrl+R, F3, Ctrl+G, Ctrl+J, Ctrl+P, Ctrl+S, Ctrl+U,
+  F12 or Shift+Esc, checked against a build that leaves them on, where each does its browser thing. F10 and a tap of
+  Alt are handled by the shell and leave the next key alone; Shift+F10 and Alt+Left get through.
 
 ## Packaging, signing and CI
 
@@ -552,7 +593,9 @@ answer. What it settled:
   the moment it's asked again, so a screen that went by the query alone swapped itself for its loading frame whenever
   a never-analysed crawl's analysis was refetched (as it ends, on a reconnect). The hook remembers it, so the screen
   keeps what it shows and treats the read as refreshing, and an analysis that has just ended stays "finishing" until
-  its result arrives.
+  its result arrives. It never lets the mark go while the crawl reads as crawling: back from the tray after a crawl
+  ended there (the page was suspended, so its item still said running for a moment while the analysis had arrived),
+  marking and letting go on every render was React's "too many re-renders", and Overview failed.
 - **Hidden checks are left out of every figure**, on Overview, Issues and the sidebar alike: the answer's sentence,
   the severity counts, the categories and Fix first are all built from `countedEntries`, so they agree, and the
   sentence ends with what was left out ("1 hidden check isn't counted: it found 30 issues."), its count opening
@@ -631,6 +674,18 @@ answer. What it settled:
   within 48 ms (62 at most over 7 opens) and every breakdown within 64 ms (78 at most); 136 ms the first time, before
   the sidecar has counted the crawl. A click on a status class shows URLs within 48 ms and its first rows within 63;
   Fix first shows its check in Issues within 52 ms; Tab moves focus within 18 ms.
+- **Measured in the shell** (10 Nov 2026, this machine, the release build in its own WebView2 157 at 1280x720 and 150%
+  display scale, the same marks taken in the page; 10 runs, done twice; see The shell smoke walk for how the page is
+  reached). The 100k crawl from a click in the library: the answer is in the page within 38 ms and painted within 61
+  (99 at most over 20 opens), every breakdown painted within 62 (99 at most). The first open after the engine starts
+  paints the answer within 39 ms too, but its status codes took 1.1 s once, the engine counting the crawl for the first
+  time. A click on a status class shows URLs within 30 ms (45 at most) and its first rows within 66 (104 at most). The
+  session's first Ctrl+K has the palette in the page within 37 ms (53 at most; 16 to 31 in Chromium) and painted within
+  61 (89 at most); a later one within 29. A live crawl at the Fast preset, three times (dark twice, light; 66,283 URLs
+  in 27 to 39 s, the machine being busier than for the Chromium run): no frame over 33 ms, and one over 16.8 ms (of
+  20.8 ms) in 31,827. WebView2's frame clock ran at 240 a second in that session (4.2 ms a frame), not Chromium's 60,
+  so "painted" comes sooner after "in the page" than it did there and the frames a second say nothing: the count of
+  long frames does. Nothing measured is slower in WebView2 by more than the runs differ among themselves.
 
 ## The inspector
 
@@ -737,3 +792,9 @@ is what it shows. What it settled:
   focus when it's there, and the request goes then, when another section is chosen and when the inspector shows
   another URL (each URL has a Source section of its own, which would otherwise take focus as it mounts).
 - **Targets.** Links stacked in lists (issues, a tree's rows) are at least `--target-min` (24 px) tall.
+- **Measured** (the 100k crawl, 1280x720, timed in the page from the key or click to the frame that shows it). In
+  headless Chromium, the production build (the inspector's slice): Enter on a row to the summary 46 ms (47 at most), a
+  tab's click to its section 13 to 15 ms, the grid's cursor to the next URL's summary 30 ms, a walked link 24 ms (49
+  at most). In the shell's WebView2 (10 Nov 2026, the release build, 10 runs, done twice): Enter to the summary 20 ms
+  (33 at most), a tab's click to its section 5 ms (9 at most). The shell's are the shorter only because its frame
+  clock ran four times as fast in that session (see Overview's measurements): both are a frame or two.
