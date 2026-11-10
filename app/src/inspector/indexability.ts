@@ -94,7 +94,8 @@ function rowFor(subject: Subject, test: IndexabilityTest, earlierFailed: boolean
         detail: test.unreachable ? 'robots.txt couldn’t be read, which blocks every URL' : 'robots.txt disallows it',
       };
     case 'noindex': {
-      if (test.outcome === 'pass') return { ...base, detail: 'No noindex in a robots meta tag or the X-Robots-Tag header' };
+      if (test.outcome === 'pass')
+        return { ...base, detail: 'No noindex in a robots meta tag or the X-Robots-Tag header' };
       const where =
         test.meta && test.header
           ? 'its robots meta tag and its X-Robots-Tag header'

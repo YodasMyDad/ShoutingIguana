@@ -1,7 +1,7 @@
 // The URL inspector's reads (E3a in docs/v2-sidecar-api.md, "The inspector"): one URL in full, its links both ways,
 // and its stored HTML. Each is a POST to one fixed URL per crawl, with the URL's id in the body. Optional members
 // (`?:`) are left out when they don't apply, never sent as null. A stored value this engine doesn't know is null.
-import type { IndexabilityReason, SummaryState, UrlOutcome, UrlRef, UrlSource, UrlType } from './grids';
+import type { CheckGroupRef, IndexabilityReason, SummaryState, UrlOutcome, UrlRef, UrlSource, UrlType } from './grids';
 import type { Severity } from './types';
 
 /** A URL of the crawl with its status there: a redirect's end, a canonical's target. */
@@ -193,6 +193,11 @@ export interface UrlIssue {
   severity: Severity | null;
   detail: string | null;
   related: UrlRef | null;
+  /**
+   * The group the issue is in on `POST /issues/{checkId}/groups`, to link to it: null for a check that doesn't group.
+   * Left out by an engine from before it gave this (E3b adds it).
+   */
+  group?: CheckGroupRef | null;
 }
 
 /** `POST /api/crawls/{id}/urls/inspect` with `{ urlId }`: one URL in full. */

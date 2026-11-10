@@ -16,6 +16,18 @@ export const TYPE_WORDS: Record<UrlType, string> = {
   other: 'File',
 };
 
+/** The same, in a sentence: "It’s an image". */
+export const TYPE_IN_A_SENTENCE: Record<UrlType, string> = {
+  page: 'a page',
+  image: 'an image',
+  script: 'a script',
+  stylesheet: 'a stylesheet',
+  font: 'a font',
+  media: 'a media file',
+  pdf: 'a PDF',
+  other: 'a file',
+};
+
 /** How the crawl first came to the URL. */
 export const SOURCE_WORDS: Record<UrlSource, string> = {
   seed: 'The start URL',
