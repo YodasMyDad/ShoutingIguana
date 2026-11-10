@@ -174,6 +174,31 @@ describe('structured data', () => {
     expect(depth).toBe(MAX_DEPTH);
   });
 
+  it('marks where a tree nested past its depth is cut: what’s there has properties, it isn’t empty', () => {
+    let json = '{"leaf":1}';
+    for (let depth = 0; depth < 40; depth++) json = `{"a":${json}}`;
+    let node = parseBlock({ valid: true, types: [], json, error: null, truncated: false }, 1).root;
+    const above: boolean[] = [];
+    while (node && node.children.length > 0) {
+      above.push(node.cut === true);
+      node = node.children[0] ?? null;
+    }
+    // The deepest node drawn says "1 property" and has none to show: the cut is said, on that node alone.
+    expect(node).toMatchObject({ kind: 'object', label: '1 property', children: [], cut: true });
+    expect(above).not.toContain(true);
+    // The same for a list; and an object or list that really is empty there isn't cut.
+    const nest = (inner: string) => {
+      let text = inner;
+      for (let depth = 0; depth < MAX_DEPTH; depth++) text = `{"a":${text}}`;
+      let at = parseBlock({ valid: true, types: [], json: text, error: null, truncated: false }, 1).root;
+      while (at && at.children.length > 0) at = at.children[0] ?? null;
+      return at;
+    };
+    expect(nest('[1,2,3]')).toMatchObject({ kind: 'array', label: '3 items', cut: true });
+    expect(nest('{}')?.cut).toBeUndefined();
+    expect(nest('[]')?.cut).toBeUndefined();
+  });
+
   it('answers the section in a sentence', () => {
     expect(structuredDataSummary([])).toBe('No structured data');
     const blocks = parseStructuredData([

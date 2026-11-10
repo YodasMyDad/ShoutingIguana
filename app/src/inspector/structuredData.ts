@@ -22,6 +22,8 @@ export interface DataNode {
   isUrl: boolean;
   /** An object's properties or a list's items, in the block's order. Empty for a value. */
   children: DataNode[];
+  /** It has properties or items the tree doesn't go down to: it's nested past MAX_DEPTH. Never set for an empty one. */
+  cut?: boolean | undefined;
 }
 
 export interface ParsedBlock {
@@ -42,7 +44,10 @@ export interface ParsedBlock {
 
 /** Children shown at first, and added by each "Show more". */
 export const CHILD_PAGE = 50;
-/** Deeper than this, a tree is cut: a crafted block can't nest the view to death. */
+/**
+ * Deeper than this, a tree is cut: a crafted block can't nest the view to death. The engine reads further (64
+ * levels), so a block can be valid and deeper: where the tree stops it says so (`cut`), never "Empty".
+ */
 export const MAX_DEPTH = 32;
 
 const isUrl = (text: string) => /^https?:\/\/\S+$/i.test(text);
@@ -69,6 +74,7 @@ function toNode(key: string | null, value: JsonValue, depth: number): DataNode {
       label: formatCountOf(value.length, 'item'),
       isUrl: false,
       children: depth >= MAX_DEPTH ? [] : value.map((item, index) => toNode(String(index + 1), item, depth + 1)),
+      ...(depth >= MAX_DEPTH && value.length > 0 ? { cut: true } : {}),
     };
   }
   const entries = Object.entries(value);
@@ -78,6 +84,7 @@ function toNode(key: string | null, value: JsonValue, depth: number): DataNode {
     label: typeOf(value) ?? formatCountOf(entries.length, 'property', 'properties'),
     isUrl: false,
     children: depth >= MAX_DEPTH ? [] : entries.map(([name, child]) => toNode(name, child, depth + 1)),
+    ...(depth >= MAX_DEPTH && entries.length > 0 ? { cut: true } : {}),
   };
 }
 

@@ -156,7 +156,9 @@ function Node({ node, depth, root = false }: { node: DataNode; depth: number; ro
               </button>
             </li>
           ) : null}
-          {node.children.length === 0 ? <li className="py-0.5 pl-5 font-sans text-text-muted">Empty</li> : null}
+          {node.children.length === 0 ? (
+            <li className="py-0.5 pl-5 font-sans text-text-muted">{node.cut ? 'Nested too deep to show' : 'Empty'}</li>
+          ) : null}
         </ul>
       ) : null}
     </li>

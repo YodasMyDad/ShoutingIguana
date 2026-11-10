@@ -677,6 +677,26 @@ describe('the sections', () => {
     expect(panel.querySelector('b')).toBeNull();
   });
 
+  it('says a block nested deeper than the tree goes is too deep to show, never that it’s empty', async () => {
+    let json = '{"leaf":1}';
+    for (let depth = 0; depth < 40; depth++) json = `{"a":${json}}`;
+    const deep = testUrlDetail({
+      structuredData: [{ valid: true, types: ['Thing'], json, error: null, truncated: false }],
+    });
+    const { user } = await open(`${URLS}?inspect=2`, { urls: { 2: deep } });
+    const panel = await showTab(user, /^Structured data/);
+    // Down the tree, a level at a time, as far as it goes.
+    for (let level = 0; level < 40; level++) {
+      const closed = within(panel)
+        .getAllByRole('button')
+        .filter((button) => button.getAttribute('aria-expanded') === 'false');
+      if (closed.length === 0) break;
+      await user.click(closed.at(-1)!);
+    }
+    expect(within(panel).getByText('Nested too deep to show')).toBeVisible();
+    expect(within(panel).queryByText('Empty')).toBeNull();
+  });
+
   it('says so when a page has no structured data or hreflang', async () => {
     const { user } = await open(`${URLS}?inspect=2`, {
       urls: { 2: testUrlDetail({ structuredData: [], hreflang: [] }) },
