@@ -77,6 +77,8 @@ describe('“Go to URL…” in the palette', () => {
     expect(history.length).toBe(before + 1);
     expect(sidecar.requests.find((request) => request.path.endsWith('/urls/lookup'))?.body).toEqual({ url: '/b' });
     expect(await screen.findByRole('heading', { level: 2, name: B.url })).toBeVisible();
+    // The URL was asked for by name: the keyboard goes where it shows, in the inspector.
+    await waitFor(() => expect(screen.getByRole('tabpanel', { name: /^Summary/ })).toHaveFocus());
   });
 
   it('says under the field when the crawl doesn’t have the URL, or the text isn’t one, and stays open', async () => {
@@ -104,6 +106,8 @@ describe('“Go to URL…” in the palette', () => {
     expect(inspected(router)).toBe(3);
     expect(await screen.findByText('Opened another version of that URL')).toBeVisible();
     expect(screen.getByText(`The crawl doesn’t have http://example.com/b. It has ${B.url}.`)).toBeVisible();
+    // From a view without a grid, focus would be left on the main area: it's in the inspector that opened.
+    await waitFor(() => expect(screen.getByRole('tabpanel', { name: /^Summary/ })).toHaveFocus());
   });
 
   it('takes a URL typed among the commands, and goes back to them with Backspace', async () => {

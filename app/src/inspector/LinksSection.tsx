@@ -92,9 +92,9 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
   );
   const rows = usePagedRows<LinkRow>({ queryKey, fetchPage, rowHeight });
 
-  // Each URL's links are a grid of their own, so a walk from the grid, and back or forward along it, takes away the
-  // grid that had focus: the keyboard stays in the grid that comes, never falls to the view behind (where the next
-  // arrow key would change the URL inspected). Each grid starts on the row its cursor was left on.
+  // Each URL's links of a kind are a grid of their own, so a walk from the grid, and back or forward along it, takes
+  // away the grid that had focus: the keyboard stays in the grid that comes (the inspector alone would give it to
+  // the section's panel). Each grid starts on the row its cursor was left on.
   const gridKey = JSON.stringify(queryKey);
   const frame = useRef<HTMLDivElement | null>(null);
   const refocus = useRef(false);
@@ -111,7 +111,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
     if (!refocus.current) return;
     refocus.current = false;
     frame.current?.querySelector<HTMLElement>('[role="grid"]')?.focus({ preventScroll: true });
-  }, [urlId]);
+  }, [gridKey]);
 
   // A double-click on a row walks once. The first click of one on a row's URL has walked already, and its second
   // may land on the grid that came (the next URL's links): a double-click counts for a grid only when both its
@@ -190,8 +190,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
   const failed = rows.error !== null && rows.error !== undefined && rows.rowCount === null;
   const kindNoun = kind === 'all' ? words.noun : `${KIND_WORDS[kind].toLowerCase()} ${words.noun}`;
   return (
-    // The grid keeps the keyboard itself from URL to URL (the inspector leaves focus in here alone).
-    <div ref={frame} data-keeps-focus="" className="flex min-h-0 flex-1 flex-col">
+    <div ref={frame} className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-(--control-height) flex-wrap items-center gap-2 px-5 py-2">
         <p className="figures text-13 text-text-secondary" aria-live="polite">
           {rows.rowCount === null ? ' ' : formatCountOf(rows.rowCount, kindNoun)}
@@ -248,7 +247,14 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
                   level={3}
                   panel
                   actions={
-                    <Button size="sm" onClick={() => chooseKind('all')}>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        // The button goes with the empty state it's in: the grid that comes takes the keyboard.
+                        refocus.current = true;
+                        chooseKind('all');
+                      }}
+                    >
                       Show every kind
                     </Button>
                   }

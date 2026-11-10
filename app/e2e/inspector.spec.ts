@@ -375,6 +375,12 @@ test('“Go to URL…” looks a path up and opens the inspector on it, from a v
   await expect(page).toHaveURL(/\/urls\?inspect=\d+/);
   const inspector = inspectorOf(page);
   await expect(inspector.getByRole('heading', { level: 2 })).toContainText('/plants/thin');
+  // The URL was asked for by name, so the keyboard is where it shows, not left on the page.
+  await expect(inspector.getByRole('tabpanel', { name: /^Summary/ })).toBeFocused();
+  // A button that replaces what it sits in hands its focus on: "Open Issues" to the section it opens.
+  await inspector.getByRole('button', { name: /^(Open Issues|All \d+ in Issues)$/ }).focus();
+  await page.keyboard.press('Enter');
+  await expect(inspector.getByRole('tabpanel', { name: /^Issues/ })).toBeFocused();
   // Back leaves the URL it went to: the view it was asked from.
   await page.keyboard.press('Alt+ArrowLeft');
   await expect(page).toHaveURL(/\/overview/);

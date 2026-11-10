@@ -228,6 +228,15 @@ describe('the summary', () => {
     expect(groupOf(link)).toEqual({ detail: null, relatedUrlId: 2 });
   });
 
+  it('gives the Issues section the focus “Open Issues” loses when it shows it', async () => {
+    const { inspector, user } = await open(`${URLS}?inspect=2`);
+    const button = await within(inspector).findByRole('button', { name: 'Open Issues' });
+    act(() => button.focus());
+    await user.keyboard('{Enter}');
+    const panel = await within(inspector).findByRole('tabpanel', { name: /^Issues/ });
+    await waitFor(() => expect(panel).toHaveFocus());
+  });
+
   it('uses the group the engine gives with an issue', async () => {
     const grouped = testUrlDetail({
       issues: [
@@ -761,13 +770,18 @@ describe('walking the site', () => {
     await user.click(within(inspector).getByRole('button', { name: /Kind of link/ }));
     await user.click(await screen.findByRole('menuitemradio', { name: 'Hyperlink' }));
     expect(await within(inspector).findByText('1 hyperlink inlink')).toBeVisible();
-    const kinds = sidecar.requests.filter((request) => request.path.endsWith('/urls/inlinks')).at(-1)?.body;
+    // The grid's own read, not the tab's count (one row of every kind).
+    const kinds = sidecar.requests
+      .filter((request) => request.path.endsWith('/urls/inlinks') && (request.body as { limit?: number }).limit !== 1)
+      .at(-1)?.body;
     expect(kinds).toMatchObject({ urlId: 2, kinds: ['hyperlink'] });
     await user.click(within(inspector).getByRole('button', { name: /Kind of link/ }));
     await user.click(await screen.findByRole('menuitemradio', { name: 'Script' }));
     expect(await within(inspector).findByText('No script inlinks')).toBeVisible();
     await user.click(within(inspector).getByRole('button', { name: 'Show every kind' }));
     expect(await within(inspector).findByText('2 inlinks')).toBeVisible();
+    // The button went with the empty state it was in: the grid that came has the keyboard.
+    await waitFor(() => expect(within(inspector).getByRole('grid', { name: 'Inlinks' })).toHaveFocus());
   });
 
   it('says so when a URL has no inlinks', async () => {
@@ -817,6 +831,8 @@ describe('loading, failing and not there', () => {
     fail = false;
     await user.click(await within(inspector).findByRole('button', { name: 'Try again' }));
     expect(await within(inspector).findByRole('heading', { name: 'Indexable' })).toBeVisible();
+    // "Try again" went with the error it was in: its section's panel has the focus, not the page.
+    await waitFor(() => expect(within(inspector).getByRole('tabpanel', { name: /^Summary/ })).toHaveFocus());
   });
 
   it('says the links couldn’t be read in their own section, the summary untouched', async () => {

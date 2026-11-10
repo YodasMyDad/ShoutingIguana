@@ -7,7 +7,7 @@
 // - Esc or Close goes back over the steps walked to the entry it opened on, then drops `inspect` from it in place: the
 //   screen is as it was before the inspector opened, and back from there leaves the screen.
 import { useRouter } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import type { AppRouter } from '../app/router';
 
 declare module '@tanstack/history' {
@@ -82,12 +82,42 @@ export function viewInspects(pathname: string, crawlId: string): boolean {
   );
 }
 
+/** The URL "Go to URL…" last went to, until the inspector has taken the keyboard for it. */
+let goneToByName: number | null = null;
+const byNameListeners = new Set<() => void>();
+function setGoneToByName(urlId: number | null): void {
+  goneToByName = urlId;
+  byNameListeners.forEach((listener) => listener());
+}
+const subscribeByName = (listener: () => void) => {
+  byNameListeners.add(listener);
+  return () => byNameListeners.delete(listener);
+};
+
+/**
+ * Whether the inspector should take the keyboard for this URL: it was gone to by name ("Go to URL…"), not found under
+ * a grid's cursor, so focus follows it into the inspector instead of staying on the view (or on nothing, from a view
+ * without a grid). The inspector says once it has (`arrivedByName`).
+ */
+export function useGoneToByName(urlId: number): boolean {
+  return useSyncExternalStore(
+    subscribeByName,
+    () => goneToByName === urlId,
+    () => false,
+  );
+}
+
+export function arrivedByName(): void {
+  setGoneToByName(null);
+}
+
 /**
  * The palette's "Go to URL…": on a view that has the inspector, a step of the walk, or the inspector opened in place
  * when it's closed; from anywhere else (Overview, the crawl's settings), the crawl's URLs with the inspector open on
  * it.
  */
 export function goToUrl(router: AppRouter, crawlId: string, urlId: number): Promise<void> {
+  setGoneToByName(urlId);
   if (viewInspects(router.state.location.pathname, crawlId)) return walkTo(router, urlId);
   return router.navigate({ to: '/crawls/$crawl/urls', params: { crawl: crawlId }, search: { inspect: urlId } });
 }

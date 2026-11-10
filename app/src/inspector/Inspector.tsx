@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { useRouter } from '@tanstack/react-router';
 import clsx from 'clsx';
 import {
   Check,
@@ -27,7 +26,7 @@ import { useDelayedLoading } from '../feedback/useDelayedLoading';
 import { useCommands, type Command } from '../keyboard/registry';
 import { copyText } from '../lib/clipboard';
 import { useLiveCrawl } from '../live/liveStore';
-import { useInspector } from '../routing/inspector';
+import { arrivedByName, useGoneToByName, useInspector } from '../routing/inspector';
 import { updateSettings, useSettings } from '../settings/settingsStore';
 import { openInBrowser } from '../shell/os';
 import { Button } from '../ui/Button';
@@ -158,24 +157,60 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
     if (tab && typeof tab.scrollIntoView === 'function') tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [section]);
 
-  // Another URL (a walk, back or forward) takes away what the section shows: each URL has its own content, link grid
-  // and source. Focus that was in the section moves to its panel first, so it stays in the inspector and never falls
-  // to the view behind, where the next arrow key would change the URL inspected. A part that keeps the keyboard
-  // itself from URL to URL (the links' grid) says so with `data-keeps-focus`.
-  const router = useRouter();
-  useEffect(
-    () =>
-      router.subscribe('onBeforeNavigate', ({ toLocation }) => {
-        const next = (toLocation.search as { inspect?: unknown }).inspect;
-        if (next === undefined || next === urlId) return;
-        // Every section has a panel in the page; the others are hidden and empty.
-        const panel = sheet.current?.querySelector<HTMLElement>('[role="tabpanel"][data-state="active"]');
-        const focused = document.activeElement;
-        if (!panel || !focused || focused === panel || !panel.contains(focused)) return;
-        if (!focused.closest('[data-keeps-focus]')) panel.focus({ preventScroll: true });
-      }),
-    [router, urlId],
-  );
+  // Focus that's in a section stays in the inspector when what has it goes: a link walked from, another URL's
+  // content (a walk, back or forward), a button that replaces what it sits in ("Open Issues", "Try again", "Show
+  // more"). It moves to the shown section's panel, never falls to the page, from where the next arrow key would go to
+  // the view behind and change the URL inspected. A part that has a better place for it (a link grid: the grid that
+  // comes) takes it itself, before or after.
+  useEffect(() => {
+    const root = sheet.current;
+    if (!root) return undefined;
+    /** What has focus in a section, or had it when it went. */
+    let held: Element | null = null;
+    const inSection = (node: EventTarget | null): node is Element =>
+      node instanceof Element && root.contains(node) && node.closest('[role="tabpanel"]') !== null;
+    /** Taken out of the page, or hidden with its section. (Every section has a panel; the others are hidden.) */
+    const gone = (element: Element) => !element.isConnected || element.closest('[hidden]') !== null;
+    const keep = () => {
+      if (held === null || !gone(held)) return;
+      const focused = document.activeElement;
+      if (focused !== null && focused !== document.body) return;
+      held = null;
+      root.querySelector<HTMLElement>('[role="tabpanel"][data-state="active"]')?.focus({ preventScroll: true });
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      held = inSection(event.target) ? event.target : null;
+    };
+    const onFocusOut = (event: FocusEvent) => {
+      const target = event.target;
+      if (target !== held || event.relatedTarget !== null) return;
+      // Focus went nowhere. Put down by the user (a click on nothing), it's theirs to put down; taken away with
+      // what it was on, it's kept. Chromium says the same for both, before the element has gone: look once it has.
+      queueMicrotask(() => {
+        if (held === null || target !== held) return;
+        if (gone(held)) keep();
+        // The window losing focus isn't the user putting it down: it comes back to the same place.
+        else if (document.hasFocus()) held = null;
+      });
+    };
+    // Where taking an element away says nothing (no `focusout`), the change to the page does.
+    const observer = new MutationObserver(keep);
+    observer.observe(root, { childList: true, subtree: true });
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('focusout', onFocusOut);
+    };
+  }, []);
+  // "Go to URL…" asked for this URL by name: the keyboard goes where it shows, as it stays with a grid's cursor.
+  const byName = useGoneToByName(urlId);
+  useEffect(() => {
+    if (!byName) return;
+    arrivedByName();
+    sheet.current?.querySelector<HTMLElement>('[role="tabpanel"][data-state="active"]')?.focus({ preventScroll: true });
+  }, [byName]);
   const walk = inspector.walk;
   const context = useMemo<InspectorContextValue>(
     () => ({ crawlId, urlId, siteOrigin, walk, crawling }),

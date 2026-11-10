@@ -513,12 +513,16 @@ is what it shows. What it settled:
   stop. A double-click is one step wherever it lands: the second click of one is no go of its own (`Url`), and a
   double-click counts for a link grid only when both its presses were on that grid, off the URL (the first click on
   a URL has walked, and the second may land on the next URL's grid).
-- **Focus stays in the inspector from URL to URL.** Another URL (a walk, back or forward) takes away what the
-  section shows, so before a navigation that changes `inspect`, focus inside the section moves to its panel
-  (`onBeforeNavigate`): it never falls to the view behind, where the next arrow key would change the URL inspected.
-  A link grid keeps the keyboard itself (`data-keeps-focus`): the new URL's grid takes focus, and starts on the row
-  its cursor was left on (`GridCore`'s `startRow`; `links.ts` remembers each grid's row for the session), so back
-  along a walk is where the walk left from.
+- **Focus stays in the inspector when what had it goes**: a link walked from, another URL's content (a walk, back
+  or forward), a button that replaces what it sits in ("Open Issues", "Try again", "Show more"). Focus that was in a
+  section and is taken away with its element moves to the shown section's panel (`Inspector.tsx` watches for it: a
+  `focusout` to nothing whose element has then gone, or, where taking an element away says nothing, the change to
+  the page). It never falls to the page, from where the next arrow key would go to the view behind and change the
+  URL inspected. Focus the user puts down themselves stays down. A link grid has a better place for it: the grid
+  that comes takes the keyboard (another URL's, or every kind's after "Show every kind"), and starts on the row its
+  cursor was left on (`GridCore`'s `startRow`; `links.ts` remembers each grid's row for the session), so back along
+  a walk is where the walk left from. "Go to URL…" asks for a URL by name, so the inspector's panel takes the
+  keyboard when it shows it (`useGoneToByName`), instead of leaving it on the view or, from Overview, on nothing.
 - **The source** (`SourceViewer.tsx`) is CodeMirror 6, read-only but focusable, with a caret, so the keyboard moves
   through it and selects. It's a chunk of its own (239 kB), loaded while the app is idle once an inspector is open
   (`sourceViewerLoader.ts`), and without `lazy` and Suspense: React holds back what follows a Suspense fallback for
