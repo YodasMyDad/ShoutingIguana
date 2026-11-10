@@ -206,6 +206,21 @@ test('a crawl started from Home is watched live to its answer: paused, resumed, 
   await expect(main(page).getByText('Live', { exact: true })).toBeHidden();
   await expect(main(page).getByText(/^\d+ checks found [\d,]+ issues on this crawl\./)).toBeVisible();
   await expect(main(page).getByRole('list', { name: 'Status codes by class' })).toBeVisible();
+  // "Pages" is one count everywhere: the test site has an iframe's target, which answers 2xx with HTML but was only
+  // status-checked, so it isn't one of the pages read, nor one of the pages by depth.
+  const pagesRead = count(
+    /([\d,]+) pages? read/.exec(
+      await main(page)
+        .getByText(/pages? read/)
+        .innerText(),
+    )?.[1] ?? null,
+  );
+  expect(pagesRead).toBeGreaterThan(0);
+  const depthCard = page.getByRole('region', { name: 'Pages by depth' });
+  await expect(depthCard.getByRole('list', { name: 'Pages by depth' })).toBeVisible();
+  await expect(depthCard.getByText(/^[\d,]+ pages?$/)).toHaveText(
+    new RegExp(`^${pagesRead.toLocaleString('en-GB')} pages?$`),
+  );
   // The "Crawl finished" toast has faded in: its colours are its own, not half way there.
   const toast = page.locator('.si-toast').filter({ hasText: 'Crawl finished' });
   await expect(toast).toBeVisible();

@@ -188,6 +188,21 @@ describe('the URL grid opened from a check’s group', () => {
     await waitFor(() => expect(router.state.location.search).toEqual({}));
   });
 
+  it('reads the filters Overview’s “Pages” links with as sentences, never as the engine’s ids', async () => {
+    sidecar({ summary: { available: true, reason: null } });
+    const filter = [
+      { column: 'isInternal', op: 'is', value: true },
+      { column: 'type', op: 'in', values: ['page'] },
+      { column: 'statusClass', op: 'in', values: ['2xx'] },
+      { column: 'wordCount', op: 'isNotEmpty' },
+    ];
+    await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}`);
+    const chips = await screen.findByRole('group', { name: 'Filters' });
+    expect(within(chips).getByRole('button', { name: 'Remove the filter HTML was read' })).toBeVisible();
+    expect(within(chips).getByRole('button', { name: 'Remove the filter Status class is 2xx' })).toBeVisible();
+    expect(within(chips).queryByText(/wordCount/)).toBeNull();
+  });
+
   it('shows a placeholder while the names are read, and plain words when they can’t be, never ids', async () => {
     const filter = [
       { column: 'check', op: 'in', values: ['empty-anchor-text'], group: { detail: null, relatedUrlId: 1 } },

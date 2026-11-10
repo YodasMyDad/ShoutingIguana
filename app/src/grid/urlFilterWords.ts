@@ -1,6 +1,7 @@
 // Words for the URL grid's columns and enum values that a view's own columns don't cover, so a filter another screen
 // links with (Overview's "Status class is 4xx", "Outcome is not blocked") reads as a sentence, never as engine ids.
 // The full filter bar, with every column's words, is the URLs slice's.
+import type { FilterSentence } from './filterSentence';
 
 const COLUMNS: Record<string, string> = {
   statusClass: 'Status class',
@@ -12,6 +13,7 @@ const COLUMNS: Record<string, string> = {
   indexability: 'Indexability',
   source: 'Found by',
   inSitemap: 'In a sitemap',
+  wordCount: 'Word count',
 };
 
 const VALUES: Record<string, Record<string, string>> = {
@@ -56,6 +58,23 @@ const VALUES: Record<string, Record<string, string>> = {
     siteVersion: 'a check of the site’s versions',
   },
 };
+
+/**
+ * What a column being empty or not means, where "is not empty" would hide it. Only a page whose HTML the crawl read
+ * has a word count, which is how the engine tells a page from a URL whose status alone was checked.
+ */
+const EMPTY: Record<string, { empty: FilterSentence; not: FilterSentence }> = {
+  wordCount: {
+    empty: { field: 'HTML', op: 'was', value: 'not read' },
+    not: { field: 'HTML', op: 'was', value: 'read' },
+  },
+};
+
+/** A column's "is empty" or "is not empty" in plainer words, or null when this list has none for it. */
+export function urlEmptyWords(column: string, empty: boolean): FilterSentence | null {
+  const words = EMPTY[column];
+  return words ? (empty ? words.empty : words.not) : null;
+}
 
 /** A column's name for a filter chip, or null when this list doesn't have it. */
 export function urlColumnWords(id: string): string | null {

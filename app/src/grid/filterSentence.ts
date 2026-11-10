@@ -15,6 +15,11 @@ export interface FilterWords {
   column: (id: string) => string;
   /** An enum value or a check, in words: a check's title, "Client error". The value itself by default. */
   value?: (column: string, value: string | number) => string;
+  /**
+   * A column being empty (`true`) or not, where that means something plainer than "is empty": a page with a word count
+   * is one whose HTML was read. Null for the default, "is empty" and "is not empty".
+   */
+  empty?: (column: string, empty: boolean) => FilterSentence | null;
 }
 
 const OPS: Record<string, string> = {
@@ -62,9 +67,9 @@ export function filterSentences(
   const valueWords = (value: string | number) => words.value?.(filter.column, value) ?? shown(value);
   switch (filter.op) {
     case 'isEmpty':
-      return [{ field, op: 'is', value: 'empty' }];
+      return [words.empty?.(filter.column, true) ?? { field, op: 'is', value: 'empty' }];
     case 'isNotEmpty':
-      return [{ field, op: 'is', value: 'not empty' }];
+      return [words.empty?.(filter.column, false) ?? { field, op: 'is', value: 'not empty' }];
     case 'is':
       return [{ field, op: 'is', value: filter.value ? 'yes' : 'no' }];
     case 'between':

@@ -18,7 +18,7 @@ import type { GridColumn } from '../grid/types';
 import { usePagedRows } from '../grid/usePagedRows';
 import { useInspector } from '../routing/inspector';
 import { MAX_COPY_ROWS } from '../grid/tsv';
-import { urlColumnWords, urlValueWords } from '../grid/urlFilterWords';
+import { urlColumnWords, urlEmptyWords, urlValueWords } from '../grid/urlFilterWords';
 import { formatBytes, formatCount, formatMilliseconds } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
 import { Banner } from '../ui/Banner';
@@ -359,6 +359,7 @@ function ActiveFilters({
       id === 'check' ? 'Check' : (COLUMNS.find((column) => column.id === id)?.header ?? urlColumnWords(id) ?? id),
     value: (column: string, value: string | number) =>
       column === 'check' ? checkWords(value) : (urlValueWords(column, value) ?? String(value)),
+    empty: urlEmptyWords,
   };
   return (
     <>

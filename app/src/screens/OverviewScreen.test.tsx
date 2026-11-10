@@ -88,7 +88,12 @@ const SITE_PAGES: GridFilter[] = [
   { column: 'isInternal', op: 'is', value: true },
   { column: 'type', op: 'in', values: ['page'] },
 ];
-const ANSWERED: GridFilter[] = [...SITE_PAGES, { column: 'statusClass', op: 'in', values: ['2xx'] }];
+// A page is HTML the crawl read (it has a word count): a URL whose status alone was checked isn't one.
+const ANSWERED: GridFilter[] = [
+  ...SITE_PAGES,
+  { column: 'statusClass', op: 'in', values: ['2xx'] },
+  { column: 'wordCount', op: 'isNotEmpty' },
+];
 
 let uninstall: () => void = () => undefined;
 beforeEach(() => {

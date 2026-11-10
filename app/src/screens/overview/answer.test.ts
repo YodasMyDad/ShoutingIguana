@@ -3,6 +3,7 @@ import type { FacetBucket, FacetsPage } from '../../api/grids';
 import type { Analysis, Check, Checks } from '../../api/types';
 import { buildCheckList, checkEntries } from '../issues/checkList';
 import {
+  PAGE_FACETS,
   categoryFigures,
   depthFigures,
   fixFirst,
@@ -298,6 +299,22 @@ describe('indexability', () => {
       count: 1,
       link: { to: 'urls', filters: [...CRAWLED_SITE_PAGES, { column: 'indexability', op: 'isEmpty' }] },
     });
+  });
+});
+
+describe('what counts as a page', () => {
+  it('is the site’s HTML the crawl read, as the engine counts pages: not a URL whose status alone was checked', () => {
+    // The engine's page is an internal URL that answered with HTML it parsed, which is what has a word count. An
+    // iframe's target answers 2xx with HTML too, but only its status was checked: without the word count the cards
+    // said one page more than the library's "pages read", and "Pages" opened one URL more than it said.
+    expect(ANSWERED_SITE_PAGES).toEqual([
+      { column: 'isInternal', op: 'is', value: true },
+      { column: 'type', op: 'in', values: ['page'] },
+      { column: 'statusClass', op: 'in', values: ['2xx'] },
+      { column: 'wordCount', op: 'isNotEmpty' },
+    ]);
+    // Depth and response times are read under the same filters their columns then add to.
+    expect(PAGE_FACETS.filters).toEqual(ANSWERED_SITE_PAGES);
   });
 });
 

@@ -498,10 +498,13 @@ answer. What it settled:
   it is a second facets read beside the status one (`statusFacetsQuery`, the two as one query), because the facets
   can't tell these URLs from the ones only found and `/stats` is too slow to wait for. "N URLs crawled" and a stopped
   crawl's "after N URLs" are the status breakdown's total, which is what their link opens.
-- **What the breakdowns count.** Status codes: every URL fetched, as the grid counts them. Indexability: the site's page URLs the crawl asked
-  for (`isInternal`, `type` page, `fetched`), errors and redirects included, as "why not" names them. Depth and response
-  times: the site's pages that answered 2xx. Each card says its own count (the facets' `matching`), which is why the
-  pages by depth can differ by one from the library's page count (a page whose HTML wasn't parsed).
+- **What the breakdowns count.** Status codes: every URL fetched, as the grid counts them. Indexability: the site's
+  page URLs the crawl asked for (`isInternal`, `type` page, `fetched`), errors and redirects included, as "why not"
+  names them. Depth and response times: the site's pages, which is one count everywhere. A page is the engine's
+  (`CrawlSchema.PAGE`): a URL of the site that answered 2xx with HTML the crawl read, so the filter ends with
+  `wordCount isNotEmpty` (only parsed HTML has a word count; a URL whose status alone was checked, an iframe's target,
+  has none). The cards' "N pages", the live "Pages" and its link, and the library's "pages read" are then the same
+  number. Each card says its own count (the facets' `matching`).
 - **The answer never waits for `/stats`**, which counts every link (1.1 to 1.4 s on the 100k crawl). It adds why URLs
   got no response to one row when it arrives, and a stopped crawl's queue to its banner. The answer is the analysis,
   the catalog and three facet reads, each card with its own skeleton and its own error.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NO_DETAIL, filterSentences } from './filterSentence';
+import { urlColumnWords, urlEmptyWords } from './urlFilterWords';
 
 const words = {
   column: (id: string) => ({ statusCode: 'Status', check: 'Check', depth: 'Depth', title: 'Title' })[id] ?? id,
@@ -23,6 +24,24 @@ describe('a filter as a sentence', () => {
     ]);
     expect(filterSentences({ column: 'statusCode', op: 'in', values: [301, 302, 308] }, words)).toEqual([
       { field: 'Status', op: 'is', value: '301, 302 or 308' },
+    ]);
+  });
+
+  it('says what a column being empty means, where the view has plainer words for it', () => {
+    const urlWords = { column: (id: string) => urlColumnWords(id) ?? id, empty: urlEmptyWords };
+    // Only a page whose HTML the crawl read has a word count: Overview's "Pages" filters on it.
+    expect(filterSentences({ column: 'wordCount', op: 'isNotEmpty' }, urlWords)).toEqual([
+      { field: 'HTML', op: 'was', value: 'read' },
+    ]);
+    expect(filterSentences({ column: 'wordCount', op: 'isEmpty' }, urlWords)).toEqual([
+      { field: 'HTML', op: 'was', value: 'not read' },
+    ]);
+    // Any other column keeps the plain words, under its own name.
+    expect(filterSentences({ column: 'statusClass', op: 'isEmpty' }, urlWords)).toEqual([
+      { field: 'Status class', op: 'is', value: 'empty' },
+    ]);
+    expect(filterSentences({ column: 'wordCount', op: 'gte', value: 300 }, urlWords)).toEqual([
+      { field: 'Word count', op: 'is at least', value: '300' },
     ]);
   });
 

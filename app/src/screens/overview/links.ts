@@ -44,8 +44,14 @@ export const SITE_PAGES: readonly GridFilter[] = [
 /** The site's page URLs the crawl asked for: what indexability is judged on, errors and redirects included. */
 export const CRAWLED_SITE_PAGES: readonly GridFilter[] = [...SITE_PAGES, { column: 'fetched', op: 'is', value: true }];
 
-/** The site's pages that answered 2xx: what depth and response times are about. */
+/**
+ * The site's pages: its URLs that answered 2xx with HTML the crawl read. What depth and response times are about, and
+ * what "pages" counts everywhere (the library's `pageCount`, a running crawl's `htmlPages`), by the engine's own
+ * definition, which goes by the word count: a URL whose status alone was checked (an iframe's target) has none, and
+ * isn't a page though it answered 2xx with HTML.
+ */
 export const ANSWERED_SITE_PAGES: readonly GridFilter[] = [
   ...SITE_PAGES,
   { column: 'statusClass', op: 'in', values: ['2xx'] },
+  { column: 'wordCount', op: 'isNotEmpty' },
 ];
