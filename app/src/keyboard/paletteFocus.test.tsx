@@ -13,7 +13,7 @@ import { createAppRouter } from '../app/router';
 import { resetRememberedSection } from '../inspector/sections';
 import { TEST_CRAWL_ID, fakeSidecar, standardRoutes } from '../test/fakeSidecar';
 import { inspectorRoutes, testUrlDetail } from '../test/inspectorSidecar';
-import { lateZeroTimers } from '../test/lateTimers';
+import { heldZeroTimers, lateZeroTimers } from '../test/lateTimers';
 import { setPaletteMode } from './paletteMode';
 import { installKeyboard } from './registry';
 
@@ -89,16 +89,19 @@ describe('a command chosen in the palette', () => {
   it('is never lost: it runs within the bound when the palette doesn’t say it closed, and keeps its focus', async () => {
     const { inspector, user } = await openWithSourceRead();
     const input = await paletteOnSearchSource(user);
-    // The close is said long after the bound has passed.
-    const late = lateZeroTimers(FOCUS_RETURN_TIMEOUT_MS * 2);
+    // The close isn't said until the test lets it be: held, not timed, so a busy machine changes nothing here.
+    const close = heldZeroTimers();
     fireEvent.keyDown(input, { key: 'Enter' });
-    late.stop();
+    close.stop();
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
-    expect(late.pending()).toBeGreaterThan(0);
-    await waitFor(() => expect(within(inspector).getByRole('searchbox', SEARCH)).toHaveFocus());
+    expect(close.pending()).toBeGreaterThan(0);
+    // The bound runs the command (a real quarter of a second, then the section's render).
+    await waitFor(() => expect(within(inspector).getByRole('searchbox', SEARCH)).toHaveFocus(), {
+      timeout: FOCUS_RETURN_TIMEOUT_MS + 3_000,
+    });
     // The bound ran it, not the close, which is still to come…
-    expect(late.pending()).toBeGreaterThan(0);
-    await late.over();
+    expect(close.pending()).toBeGreaterThan(0);
+    await close.over();
     // …and which takes nothing back when it does.
     expect(within(inspector).getByRole('searchbox', SEARCH)).toHaveFocus();
   });
