@@ -167,13 +167,21 @@ export function indexabilityVerdict(subject: Subject): IndexabilityVerdict {
   return { state: 'notJudged', title: 'Not judged', why, failed, note, rows };
 }
 
-/** What the page says its canonical is: none, itself, another URL, or not read (a URL whose content wasn't). */
+/**
+ * What the page says its canonical is: none, itself, another URL; or not known, because the test wasn't made though
+ * the content was read (`notChecked`: an earlier test failed, as for a page that moves on with an instant meta
+ * refresh), or because the content never was (`notRead`).
+ */
 export type CanonicalFact =
-  { kind: 'notRead' | 'none' | 'self' } | { kind: 'other'; target: NonNullable<IndexabilityRow['target']> };
+  | { kind: 'notRead' | 'notChecked' | 'none' | 'self' }
+  | { kind: 'other'; target: NonNullable<IndexabilityRow['target']> };
 
-export function canonicalFact(subject: Pick<UrlDetail, 'id' | 'url' | 'indexability'>): CanonicalFact {
+export function canonicalFact(subject: Pick<UrlDetail, 'id' | 'url' | 'indexability' | 'content'>): CanonicalFact {
   const test = subject.indexability.tests.find((candidate) => candidate.test === 'canonical');
   const target = test ? canonicalTarget(test) : undefined;
-  if (!target) return { kind: !test || test.outcome === 'notChecked' ? 'notRead' : 'none' };
+  if (!target) {
+    if (test && test.outcome !== 'notChecked') return { kind: 'none' };
+    return { kind: subject.content !== null ? 'notChecked' : 'notRead' };
+  }
   return target.id === subject.id || target.url === subject.url ? { kind: 'self' } : { kind: 'other', target };
 }

@@ -269,6 +269,34 @@ describe('the summary', () => {
     expect(canonical()).not.toHaveTextContent('Not fetched');
   });
 
+  it('says a page that moves on with an instant meta refresh has its canonical not checked, not unread', async () => {
+    const refreshing = testUrlDetail({
+      content: { ...testUrlDetail().content!, metaRefresh: { delaySeconds: 0, url: OTHER.url } },
+      indexability: {
+        indexable: false,
+        reason: 'redirected',
+        judgedBy: 'analysis',
+        tests: [
+          {
+            test: 'answered',
+            outcome: 'fail',
+            statusCode: 200,
+            metaRefresh: { id: 3, url: OTHER.url, statusCode: 200 },
+          },
+          { test: 'robotsTxt', outcome: 'pass' },
+          { test: 'noindex', outcome: 'notChecked' },
+          { test: 'canonical', outcome: 'notChecked' },
+        ],
+      },
+    });
+    const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: refreshing, 3: OTHER } });
+    // Its content was read: the words, the title, the headings are all there.
+    expect(await within(inspector).findByRole('meter', { name: 'Word count' })).toBeVisible();
+    const canonical = within(inspector).getByText('Canonical', { selector: 'dt' }).nextElementSibling;
+    expect(canonical).toHaveTextContent('Not checked');
+    expect(canonical).not.toHaveTextContent('Not read');
+  });
+
   it('links each issue to its check on Issues, with the group it’s in', async () => {
     const { inspector } = await open(`${URLS}?inspect=2`);
     const issues = await within(inspector).findByRole('list', { name: 'This URL’s issues' });

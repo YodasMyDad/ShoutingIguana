@@ -306,9 +306,10 @@ describe('canonicalFact', () => {
         }),
       ),
     ).toEqual({ kind: 'other', target: other });
-    expect(canonicalFact(testUrlDetail({ indexability: withTests({ canonical: { outcome: 'notChecked' } }) }))).toEqual(
-      { kind: 'notRead' },
-    );
+    // The test wasn't made: with the content read (an earlier test failed) it wasn't checked; without, not read.
+    const unchecked = withTests({ canonical: { outcome: 'notChecked' } });
+    expect(canonicalFact(testUrlDetail({ indexability: unchecked }))).toEqual({ kind: 'notChecked' });
+    expect(canonicalFact(testUrlDetail({ indexability: unchecked, content: null }))).toEqual({ kind: 'notRead' });
     // A canonical the crawl doesn't have is still the page's canonical.
     expect(
       canonicalFact(

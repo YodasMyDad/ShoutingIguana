@@ -397,6 +397,9 @@ function imageWords(images: number, missingAlt: number): string {
   return `${formatCount(images)}, ${formatCount(missingAlt)} without alt text`;
 }
 
+/** A canonical there's nothing to show for: the page has none, or the crawl didn't get as far as judging it. */
+const CANONICAL_WORDS = { none: 'None', notChecked: 'Not checked', notRead: 'Not read' } as const;
+
 function ContentFacts({ detail, wordsMeasure }: { detail: UrlDetail; wordsMeasure: Measure | null }) {
   const content = detail.content;
   if (!content) return null;
@@ -408,7 +411,7 @@ function ContentFacts({ detail, wordsMeasure }: { detail: UrlDetail; wordsMeasur
     ) : canonical.kind === 'self' ? (
       <Badge>Self-referencing</Badge>
     ) : (
-      <span className="text-text-secondary">{canonical.kind === 'none' ? 'None' : 'Not read'}</span>
+      <span className="text-text-secondary">{CANONICAL_WORDS[canonical.kind]}</span>
     );
   return (
     <Block title="Content">
