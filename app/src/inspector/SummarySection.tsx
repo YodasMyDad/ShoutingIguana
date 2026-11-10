@@ -566,7 +566,8 @@ function Discovery({ detail }: { detail: UrlDetail }) {
               Yes.{' '}
               <TextLink
                 to="/crawls/$crawl/sitemaps/{-$sitemap}"
-                params={{ crawl: crawlId }}
+                // The list, even from one sitemap's URLs: left out, the router keeps the sitemap the page is on.
+                params={{ crawl: crawlId, sitemap: undefined }}
                 search={{}}
                 variant="inline"
               >

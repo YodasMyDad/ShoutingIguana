@@ -157,7 +157,13 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
   );
 
   const back = (
-    <TextLink to={ROUTE} params={{ crawl: crawlId }} search={{}} className="inline-flex items-center gap-1 text-12">
+    <TextLink
+      to={ROUTE}
+      // Named as none: left out, the router keeps the origin this page is on, and the link leads nowhere.
+      params={{ crawl: crawlId, origin: undefined }}
+      search={{}}
+      className="inline-flex items-center gap-1 text-12"
+    >
       <Icon icon={ArrowLeft} size="sm" />
       All origins
     </TextLink>

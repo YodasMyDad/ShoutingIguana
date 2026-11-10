@@ -221,7 +221,13 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
   );
 
   const back = (
-    <TextLink to={ROUTE} params={{ crawl: crawlId }} search={{}} className="inline-flex items-center gap-1 text-12">
+    <TextLink
+      to={ROUTE}
+      // Named as none: left out, the router keeps the sitemap this page is on, and the link leads nowhere.
+      params={{ crawl: crawlId, sitemap: undefined }}
+      search={{}}
+      className="inline-flex items-center gap-1 text-12"
+    >
       <Icon icon={ArrowLeft} size="sm" />
       All sitemaps
     </TextLink>

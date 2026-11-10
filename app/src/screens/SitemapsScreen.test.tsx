@@ -8,6 +8,7 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { onAnnounce } from '../feedback/announce';
+import { installKeyboard } from '../keyboard/registry';
 import { TEST_CRAWL_ID, fakeSidecar, json, problem } from '../test/fakeSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import {
@@ -437,6 +438,22 @@ describe('Sitemaps: one sitemap', () => {
     expect(await screen.findByText('No URLs to show for this sitemap.')).toBeVisible();
     expect(screen.getByText('The crawl couldn’t read it: HTTP 404.')).toBeVisible();
     expect(screen.getByText('Not known')).toBeVisible();
+  });
+
+  it('leads back to the list from its own link, the sidebar’s and Ctrl+5: never to the sitemap it’s on', async () => {
+    const uninstall = installKeyboard();
+    sidecar();
+    const { router } = await open(`${SITEMAPS}/3`);
+    const back = await screen.findByRole('link', { name: 'All sitemaps' });
+    expect(back).toHaveAttribute('href', SITEMAPS);
+    const entry = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: /^Sitemaps/ });
+    expect(entry).toHaveAttribute('href', SITEMAPS);
+    // It's still the place the sidebar marks as current.
+    expect(entry).toHaveAttribute('aria-current', 'page');
+    fireEvent.keyDown(document.body, { key: '5', code: 'Digit5', ctrlKey: true });
+    await waitFor(() => expect(pathOf(router)).toBe(SITEMAPS));
+    expect(await screen.findByRole('treegrid', { name: 'Sitemaps' })).toBeVisible();
+    uninstall();
   });
 
   it('says a stale id names no sitemap of this crawl, and offers the list', async () => {

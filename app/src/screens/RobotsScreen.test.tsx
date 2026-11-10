@@ -268,6 +268,15 @@ describe('robots.txt: one origin’s file', () => {
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveFocus());
   });
 
+  it('leads back to the origins from its own link and the sidebar’s: never to the origin it’s on', async () => {
+    sidecar();
+    await open(FILE);
+    expect(await screen.findByRole('link', { name: 'All origins' })).toHaveAttribute('href', ROBOTS);
+    const entry = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: /^robots\.txt/ });
+    expect(entry).toHaveAttribute('href', ROBOTS);
+    expect(entry).toHaveAttribute('aria-current', 'page');
+  });
+
   it('opens the inspector on a blocked URL with Enter, in place', async () => {
     sidecar();
     const { router } = await open(FILE);
