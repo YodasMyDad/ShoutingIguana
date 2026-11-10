@@ -453,6 +453,11 @@ are drawn for the app and are never swapped for Lucide's.
   crawl isn't live here) gets none.
 - **Announcements**: `announce()` speaks through one polite and one assertive live region. Crawl status changes are
   announced by the live bridge, and by nothing else: a banner that states a crawl's status isn't a live region.
+  A figure that moves with a crawl is never a live region either: the URL grid's count (`GridHeader`) and an
+  inspector link grid's change about once a second while a crawl runs, and would be read out for as long as it
+  lasts. A count is said once when the user changes the view (a filter, a search, a kind of link), through
+  `useAnnounceResults`: when it's first known for the new view, in the words on screen (`formatShownOf`), and not on
+  arriving at a screen or another URL, where focus and what has it are read.
 
 ## Rules every slice follows
 

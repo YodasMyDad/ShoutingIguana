@@ -4,12 +4,13 @@ import { createMemoryHistory, type RouterHistory } from '@tanstack/react-router'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { UrlDetail } from '../api/inspector';
-import { queryKeys } from '../api/queries';
+import type { LinkRow, UrlDetail } from '../api/inspector';
+import { gridPagesOf, queryKeys } from '../api/queries';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
+import { onAnnounce } from '../feedback/announce';
 import { commands, installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { inspectFromGrid } from '../routing/inspector';
@@ -1115,6 +1116,44 @@ describe('walking the site', () => {
     expect(await within(inspector).findByText('2 inlinks')).toBeVisible();
     // The button went with the empty state it was in: the grid that came has the keyboard.
     await waitFor(() => expect(within(inspector).getByRole('grid', { name: 'Inlinks' })).toHaveFocus());
+  });
+
+  it('never reads the links’ count out as a running crawl moves it, and says it once for a kind chosen', async () => {
+    const heard: string[] = [];
+    const stop = onAnnounce((message) => heard.push(message));
+    const found = [...(SITE.inlinks?.[2] as LinkRow[])];
+    const { queryClient, inspector, user } = await open(
+      `${URLS}?inspect=2`,
+      {
+        ...SITE,
+        get inlinks() {
+          return { 2: found };
+        },
+      },
+      undefined,
+      { item: { status: 'running' } },
+    );
+    await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
+    const panel = await within(inspector).findByRole('tabpanel', { name: /^Inlinks/ });
+    const liveRegions = () => panel.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"]');
+    expect(await within(panel).findByText('2 inlinks')).toBeVisible();
+    expect(liveRegions()).toHaveLength(0);
+    // A tick of the crawl: another page links here.
+    found.push(testLinkRow({ id: 4, url: 'https://example.com/c', text: 'More' }));
+    await act(() => queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
+    expect(await within(panel).findByText('3 inlinks')).toBeVisible();
+    expect(liveRegions()).toHaveLength(0);
+    expect(heard).toEqual([]);
+    // A kind is the user's own choice: its count is said, once.
+    await user.click(within(panel).getByRole('button', { name: /Kind of link/ }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Hyperlink' }));
+    expect(await within(panel).findByText('2 hyperlink inlinks')).toBeVisible();
+    await waitFor(() => expect(heard).toEqual(['2 hyperlink inlinks']));
+    found.push(testLinkRow({ id: 5, url: 'https://example.com/d', text: 'And more' }));
+    await act(() => queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
+    expect(await within(panel).findByText('3 hyperlink inlinks')).toBeVisible();
+    expect(heard).toEqual(['2 hyperlink inlinks']);
+    stop();
   });
 
   it('leaves focus on the kind’s control when a kind is chosen, whatever the view did before', async () => {

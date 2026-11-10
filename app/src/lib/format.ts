@@ -34,6 +34,19 @@ export function formatCountOf(value: number, singular: string, plural = `${singu
   return `${formatCount(value)} ${value === 1 ? singular : plural}`;
 }
 
+/** A view's count in words: "264 of 4,521 URLs" when it's filtered, "4,521 URLs" when it isn't. */
+export function formatShownOf(
+  shown: number,
+  total: number | null | undefined,
+  singular: string,
+  plural = `${singular}s`,
+): string {
+  const filtered = total !== null && total !== undefined && total !== shown;
+  return filtered
+    ? `${formatCount(shown)} of ${formatCountOf(total, singular, plural)}`
+    : formatCountOf(shown, singular, plural);
+}
+
 /** 12.3 URLs/s. A missing value is an en dash. */
 export function formatRate(perSecond: number | null | undefined): string {
   return perSecond === null || perSecond === undefined || !Number.isFinite(perSecond)

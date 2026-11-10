@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import { api } from '../api/client';
 import { LINK_KINDS, type LinkKind, type LinkRow } from '../api/inspector';
 import { linksAsGridPage, queryKeys } from '../api/queries';
+import { useAnnounceResults } from '../feedback/useAnnounceResults';
 import { GridCore } from '../grid/GridCore';
 import { useGridMetrics } from '../grid/metrics';
 import type { GridColumn } from '../grid/types';
@@ -191,10 +192,17 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
 
   const failed = rows.error !== null && rows.error !== undefined && rows.rowCount === null;
   const kindNoun = kind === 'all' ? words.noun : `${KIND_WORDS[kind].toLowerCase()} ${words.noun}`;
+  // Choosing a kind is answered once, with the count it leaves. The count itself is no live region: the links of a
+  // URL are counted again on every tick of a running crawl. Another URL's links are somewhere else, not a choice.
+  useAnnounceResults(
+    `${crawlId}:${urlId}:${direction}`,
+    kind,
+    rows.rowCount === null ? null : formatCountOf(rows.rowCount, kindNoun),
+  );
   return (
     <div ref={frame} className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-(--control-height) flex-wrap items-center gap-2 px-5 py-2">
-        <p className="figures text-13 text-text-secondary" aria-live="polite">
+        <p className="figures text-13 text-text-secondary">
           {rows.rowCount === null ? ' ' : formatCountOf(rows.rowCount, kindNoun)}
         </p>
         {crawling ? <LiveBadge /> : null}
