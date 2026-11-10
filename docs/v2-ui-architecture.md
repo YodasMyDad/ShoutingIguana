@@ -841,6 +841,22 @@ full grid's pieces, which are any grid's (below). What it settled:
   "All N in Links" both ways, each against where it lands and against the sidecar's own count for that view. It runs
   on the tests' crawl with the rest, and on a real crawl's file with `SI_E2E_CRAWL`.
 
+- **Measured** (10 Nov 2026, this machine, the production build in headless Chromium at 1280x720 against the real
+  sidecar, on the 100k crawl's 5,053,909 links; each from the input to the frame after, five times). Links from the
+  sidebar shows within 52 ms and its first rows within 62; a preset's button and chip within 33 ms and its count and
+  rows within 57; a facet's menu within 31 ms and a value's rows within 50; a sort's header within 31 ms and its first
+  page within 49; Down moves the cursor within 33 ms, Enter opens the inspector within 33, and Ctrl+End draws the last
+  of five million rows within 59; the chooser opens within 31 ms and another column's rows fill within 47. The
+  sidecar's reads (the first call for a view, then the median of seven more): every view the analysis's counts answer
+  is inside the 300 ms budget (crawl order 3 to 5 ms at any depth; the presets 6 to 114 ms, then 3 to 24; the facets
+  126 ms, then 4; a sort by the target 24 to 51 ms). **Over budget, and said on screen**: a search not made before
+  (0.94 to 1.87 s; 1.24 to 1.32 s to its rows on screen, the grid saying what it's doing from 175 to 181 ms); a filter
+  on what a link's text says (0.53 s for a common word, 0.83 s for a pattern) or on its source page's depth (1.46 s);
+  half way down the links to one heavily linked page with its own links to itself left out (336 ms into 202,212, then
+  42); and, on a crawl with no link summary (one an earlier engine analysed), the first read of every filtered view
+  and of the facets (0.2 to 1.2 s), the unfiltered grid staying at 3 to 8 ms. Each is once per view: its pages after
+  cost 1 to 9 ms. The garden crawl's slowest read of all is 20 ms.
+
 ### The full grid's pieces
 
 In `src/grid`, for any grid; Links is the first to use them all, and the URL grid takes its chips from them.
