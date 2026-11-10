@@ -839,6 +839,22 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
 - `/robots/blocked` can't be asked for one URL, and `/urls/inspect` doesn't carry the line: arriving from the
   inspector, the file can't show that URL's line until the URL is found in the list.
 
+### Measured
+
+10 Nov 2026, this machine, the production build in headless Chromium at 1280x720, against the real sidecar: the
+100k crawl (112,577 URLs, 13 sitemaps listing 101,081 URLs) and the garden crawl (17 origins). Each is the median
+of 7, from the key or pointer event to the frame that shows it, with the worst in brackets (the first of each, the
+sidecar not having counted the crawl yet).
+
+- **The first page of a grid (300 ms)**: the list of sitemaps 32 ms (83); one sitemap of 101,081 URLs 31 ms (75),
+  its 2,348 non-indexable ones 32 ms (49); the origins 30 ms (64); an origin's file with its blocked URLs 33 ms
+  (70); the garden crawl's origins 31 ms (33) and a real 403-line file 30 ms (31).
+- **A sort or a filter (300 ms)**: a quick filter to its rows and count 33 ms (34); a sort from the header 30 ms
+  (32); a rule's link to its URLs listed 31 ms (32).
+- **A click or key to a visible response (100 ms)**: a quick filter chosen 13 ms (14); a rule's line marked 14 ms
+  (15); Left closing an index 12 ms (14); Enter opening a sitemap 9 ms (17); Down in the blocked URLs 9 ms (14);
+  Ctrl+F to the file's search 6 ms (14).
+
 ### The sweep
 
 `e2e/sitemaps-robots.sweep.spec.ts` reads every count off both screens and follows it: each sitemap's four counts
