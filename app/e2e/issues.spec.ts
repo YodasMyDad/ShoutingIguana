@@ -166,6 +166,27 @@ test('the checks list runs on the keyboard: arrows move the selection and the ro
   for (const name of await list.getByRole('option').allTextContents()) expect(name.toLowerCase()).toContain('sitemap');
 });
 
+test('a command chosen in the palette keeps the focus it takes: “Filter the checks” leaves the keyboard in its field', async ({
+  page,
+}) => {
+  await openIssues(page);
+  const list = page.getByRole('listbox', { name: 'Checks' });
+  await page.keyboard.press('Control+k');
+  const palette = page.getByRole('dialog', { name: 'Command palette' });
+  await palette.getByRole('combobox').fill('filter the checks');
+  await expect(palette.getByRole('option', { selected: true })).toContainText('Filter the checks');
+  await page.keyboard.press('Enter');
+  await expect(palette).toBeHidden();
+  // The palette gives focus back first, then the command takes it. Run a frame after the close, as it once was,
+  // the command had the field for a moment and the closing palette took the focus back to the page.
+  const field = page.getByRole('searchbox', { name: 'Filter checks' });
+  await expect(field).toBeFocused();
+  await page.keyboard.type('sitemap');
+  await expect(field).toHaveValue('sitemap');
+  await expect(field).toBeFocused();
+  for (const name of await list.getByRole('option').allTextContents()) expect(name.toLowerCase()).toContain('sitemap');
+});
+
 test('a check that doesn’t group lists its URLs flat, sortable by its detail', async ({ page }) => {
   await openIssues(page);
   await page.getByRole('option', { name: /Indexable page not in a sitemap/ }).click();
