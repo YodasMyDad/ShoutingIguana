@@ -47,7 +47,9 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         ["crawl"] = 185,
         ["crawl-facets"] = 245,
         ["link-grid"] = 200,
-        ["link-pass"] = 1_500
+        ["link-pass"] = 1_500,
+        ["sitemaps"] = 200,
+        ["robots"] = 200
     };
 
     /// <summary>The Overview columns, which every grid read fetches.</summary>
@@ -140,8 +142,33 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         }
 
         LinksGrid();
+        SitemapsAndRobots();
         WithoutSummary();
         return _cases;
+    }
+
+    /// <summary>
+    /// The Sitemaps and robots.txt screens: the list of sitemaps with what each lists, counted; the biggest sitemap's URLs
+    /// as a URL grid, sorted and filtered; the origins with their robots.txt; the start URL's file with what each line
+    /// blocked; and its blocked URLs.
+    /// </summary>
+    private void SitemapsAndRobots()
+    {
+        Timed("Sitemaps: the list, each with its URLs counted", "sitemaps", "sitemaps", null, () => SitemapListReader.Read(path));
+        if (Wanted("Sitemaps: ") && SitemapListReader.Read(path).Sitemaps.MaxBy(sitemap => sitemap.Urls.Listed) is { Urls.Listed: > 0 } biggest)
+        {
+            UrlPage Urls(UrlQuery query) => UrlGridReader.QuerySitemap(path, biggest.Id, query with { Columns = COLUMNS })!;
+            Paged("Sitemaps: the biggest sitemap's URLs, by URL", "grid", "sitemaps", biggest.Urls.Listed, offset => Urls(new UrlQuery { Sort = [new UrlSort("url")], Offset = offset }));
+            Paged("Sitemaps: its non-indexable URLs, by inlinks", "grid", "sitemaps", biggest.Urls.NonIndexable,
+                offset => Urls(new UrlQuery { Filters = [Boolean("indexable", false)], Sort = [new UrlSort("inlinks", true)], Offset = offset }));
+        }
+
+        Timed("robots.txt: the origins, with what each blocked", "robots", "robots", null, () => RobotsReader.ReadOrigins(path));
+        if (Wanted("robots.txt: ") && RobotsReader.ReadOrigins(path, limit: 1).Origins.FirstOrDefault() is { } site)
+        {
+            Timed("robots.txt: the site's file, with what each line blocked", "robots", "robots", site.Blocked, () => RobotsReader.ReadFile(path, site.Origin));
+            Paged("robots.txt: the site's blocked URLs", "robots", "robots", site.Blocked, offset => RobotsReader.ReadBlocked(path, site.Origin, offset: offset));
+        }
     }
 
     /// <summary>
