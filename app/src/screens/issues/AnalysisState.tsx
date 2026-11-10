@@ -32,8 +32,11 @@ export function AnalysisProgress({
   const step = event ? analysisStep(event.phase) : null;
   const valueText = event ? analysisProgressText(event) : null;
   return (
+    // Not a live region: the live bridge announces that the analysis started and that it finished, and as one this
+    // read out every phase and count as they changed. The progress bar says where it has got to, for who asks.
     <Banner
       inset={inset}
+      role="none"
       icon={<LiveDot />}
       actions={
         onCancel ? (
@@ -87,7 +90,7 @@ export function AnalysisNotes({
   return (
     <>
       {crawling ? (
-        <Banner inset icon={<LiveDot />}>
+        <Banner inset role="none" icon={<LiveDot />}>
           The crawl is running, so these are the issues its last analysis found,{' '}
           <span title={formatExactTime(analysis.analyzedAt)}>{when}</span>. It’s analysed again when it finishes.
         </Banner>

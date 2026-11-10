@@ -47,15 +47,17 @@ function sidecar(options: Omit<OverviewSidecarOptions, Heard> = {}) {
   return { requests: transport.requests, ...heard };
 }
 
-async function open(path = OVERVIEW) {
+async function openAndKeep(path = OVERVIEW) {
   const queryClient = createQueryClient();
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
-  render(<App router={router} queryClient={queryClient} />);
+  const { unmount } = render(<App router={router} queryClient={queryClient} />);
   await act(() => router.load());
   // The first load's skeleton has gone: the screen is in the state the test is about.
   await waitFor(() => expect(document.querySelector('[aria-label="Loading the overview"]')).toBeNull());
-  return { router, queryClient };
+  return { router, queryClient, unmount };
 }
+
+const open = (path = OVERVIEW) => openAndKeep(path);
 
 /** What the live layer does when the crawl's status changes. */
 function setStatus(queryClient: QueryClient, status: CrawlStatus, extra: Partial<CrawlListItem> = {}) {
@@ -316,7 +318,38 @@ describe('the Overview of an analysed crawl', () => {
   });
 });
 
+/** Whether the element with these words is in a live region: what a screen reader reads out as it changes. */
+const LIVE_REGION = '[role="status"], [role="alert"], [role="log"], [aria-live="polite"], [aria-live="assertive"]';
+const liveRegionOf = (element: HTMLElement) => element.closest(LIVE_REGION);
+
 describe('the Overview when there’s no answer yet, or something’s off', () => {
+  it('states the crawl’s status without announcing it: the live bridge does that, once', async () => {
+    // Each of these comes with a status change the bridge announces (and toasts, for a stop or a failure). A banner
+    // that was a live region too had the news read out two or three times.
+    const states: [CrawlStatus, RegExp][] = [
+      ['stopped', /This crawl was stopped after/],
+      ['interrupted', /This crawl was interrupted after/],
+      ['failed', /This crawl failed after/],
+      ['inUse', /This crawl is running in another Shouting Iguana window/],
+    ];
+    for (const [status, words] of states) {
+      sidecar({ analysis: null, item: { ...NEVER, status, finishedAt: null } });
+      const { unmount } = await openAndKeep();
+      const banner = await main().findByText(words);
+      expect([status, liveRegionOf(banner)]).toEqual([status, null]);
+      unmount();
+    }
+  });
+
+  it('shows the analysis’s progress without reading out every phase and count as it changes', async () => {
+    sidecar({ analysis: null, item: { ...NEVER, status: 'analyzing' } });
+    await open();
+    await heard(message('analysis', { crawlId: TEST_CRAWL_ID, phase: 'pageRules', done: 152, total: 265 }));
+    const progress = await main().findByRole('progressbar', { name: 'Checking each page' });
+    expect(liveRegionOf(progress)).toBeNull();
+    expect(liveRegionOf(main().getByText(/The crawl is being analysed\./))).toBeNull();
+  });
+
   it('says a crawl hasn’t been analysed, analyses it from here, and still shows the crawl', async () => {
     const { analyse } = sidecar({ analysis: null, item: NEVER });
     await open();
@@ -616,6 +649,18 @@ describe('the Overview while the crawl runs', () => {
     expect(main().getByText(/The crawl is paused\./)).toBeVisible();
     fireEvent.click(main().getByRole('button', { name: /Resume/ }));
     await waitFor(() => expect(resume).toHaveBeenCalledTimes(1));
+  });
+
+  it('states that it’s paused or stopping without announcing it: the live bridge does that, once', async () => {
+    sidecar({ analysis: null, item: LIVE_ITEM });
+    await open();
+    await heard(message('progress', progressAt(100, { ...POLITE, status: 'paused' })));
+    expect(liveRegionOf(main().getByText(/The crawl is paused\./))).toBeNull();
+    await heard(message('progress', progressAt(100.5, { ...POLITE, status: 'stopping' })));
+    expect(liveRegionOf(main().getByText(/Stopping: the requests on their way are finishing\./))).toBeNull();
+    // Nothing in the screen reads the status out: no live region in it has those words.
+    const regions = [...(document.getElementById('main')?.querySelectorAll(LIVE_REGION) ?? [])];
+    expect(regions.filter((region) => /paused|stopping/i.test(region.textContent)).length).toBe(0);
   });
 
   it('takes focus to its title when Resume has worked and its banner goes, rather than drop it', async () => {

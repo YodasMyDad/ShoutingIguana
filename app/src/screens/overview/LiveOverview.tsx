@@ -157,9 +157,11 @@ export function LiveOverview({
         ) : null}
       </p>
 
+      {/* The live bridge announces the status as it changes: these state it for the eye, and aren't live regions. */}
       {status === 'paused' ? (
         <Banner
           inset
+          role="none"
           actions={
             <Button
               size="sm"
@@ -176,7 +178,7 @@ export function LiveOverview({
           The crawl is paused. Nothing is fetched until you resume it; what it has so far is in URLs.
         </Banner>
       ) : status === 'stopping' ? (
-        <Banner inset icon={<LiveDot />}>
+        <Banner inset role="none" icon={<LiveDot />}>
           Stopping: the requests on their way are finishing. You can continue the crawl later from where it stops.
         </Banner>
       ) : null}

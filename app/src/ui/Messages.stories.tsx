@@ -34,7 +34,11 @@ export const Callouts: Story = {
   ),
 };
 
-/** Banners across a view: out of date with "Analyse again", the engine restarting, the engine lost. */
+/**
+ * Banners across a view: out of date with "Analyse again", the engine restarting, the engine lost. A banner is a live
+ * region (`status`, or `alert` for an error) unless it states what something else announces: a crawl's status, which
+ * the live bridge announces as it changes.
+ */
 export const Banners: Story = {
   render: () => (
     <StoryFrame>
@@ -57,6 +61,15 @@ export const Banners: Story = {
           <CardBody>
             <Banner inset actions={<Button size="sm">Analyse it</Button>}>
               Inlinks and Issues need an analysis: this crawl hasn’t been analysed yet.
+            </Banner>
+          </CardBody>
+        </Card>
+      </StorySection>
+      <StorySection title="Stating what was announced already (role none: not a live region)">
+        <Card className="max-w-(--content-max)">
+          <CardBody>
+            <Banner inset role="none" actions={<Button size="sm">Resume</Button>}>
+              The crawl is paused. Nothing is fetched until you resume it; what it has so far is in URLs.
             </Banner>
           </CardBody>
         </Card>

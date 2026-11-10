@@ -295,7 +295,9 @@ function Answer({
 
 /**
  * What the crawl's status asks of the user, when it isn't simply done: a stopped crawl says how far it got, with
- * Continue; an interrupted one says what happened; a failed one says why; one running elsewhere says so.
+ * Continue; an interrupted one says what happened; a failed one says why; one running elsewhere says so. None is a
+ * live region: the live bridge announces a crawl's status as it changes (and toasts a stop or a failure), so a banner
+ * that was one too had the same news read out twice, or three times.
  */
 function CrawlState({
   crawlId,
@@ -334,7 +336,7 @@ function CrawlState({
   switch (status) {
     case 'stopped':
       return (
-        <Banner inset actions={proceed}>
+        <Banner inset role="none" actions={proceed}>
           This crawl was stopped after {far}
           {left}. Continue it to carry on from where it stopped.
         </Banner>
@@ -344,6 +346,7 @@ function CrawlState({
         <Banner
           inset
           tone="warning"
+          role="none"
           actions={proceed}
           detail="Shouting Iguana closed, or its engine stopped, while the crawl was running."
         >
@@ -356,7 +359,7 @@ function CrawlState({
         <Banner
           inset
           tone="error"
-          role="status"
+          role="none"
           detail={failure ?? undefined}
           actions={
             item.startUrl ? (
@@ -373,7 +376,7 @@ function CrawlState({
       );
     case 'inUse':
       return (
-        <Banner inset>
+        <Banner inset role="none">
           This crawl is running in another Shouting Iguana window, which is where to watch and control it. What’s here
           is what its file holds now.
         </Banner>

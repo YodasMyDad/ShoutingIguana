@@ -648,6 +648,20 @@ describe('the Issues screen', () => {
     expect(await within(mainArea()).findByRole('button', { name: 'Cancel' })).toHaveFocus();
   });
 
+  it('shows the analysis’s progress, and that a crawl is running, without reading them out as live regions', async () => {
+    // The live bridge announces a crawl's status as it changes, the analysis starting and finishing among them.
+    sidecar({ item: { status: 'analyzing' } });
+    await open(`${ISSUES}/internal-client-error`);
+    const live = '[role="status"], [role="alert"], [aria-live="polite"], [aria-live="assertive"]';
+    expect((await within(mainArea()).findByRole('progressbar')).closest(live)).toBeNull();
+    cleanup();
+    sidecar({ item: { status: 'running' } });
+    await open(`${ISSUES}/internal-client-error`);
+    expect(
+      (await within(mainArea()).findByText(/The crawl is running, so these are the issues/)).closest(live),
+    ).toBeNull();
+  });
+
   it('says why a crawl never analysed can’t be, offering Continue for an interrupted one', async () => {
     const { resume } = sidecar({ analysis: null, item: { analyzedAt: null, issues: null, status: 'interrupted' } });
     await open(ISSUES);
