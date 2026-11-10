@@ -110,6 +110,19 @@ describe('“Go to URL…” in the palette', () => {
     await waitFor(() => expect(screen.getByRole('tabpanel', { name: /^Summary/ })).toHaveFocus());
   });
 
+  it('opens on the commands again after Ctrl+K closed it on “Go to URL…”', async () => {
+    const { user } = await open(`${CRAWL}/urls`);
+    await screen.findByRole('grid', { name: 'URLs' });
+    await goToUrlMode(user);
+    // The key that opens the palette closes it too.
+    await user.keyboard('{Control>}k{/Control}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull());
+    await user.keyboard('{Control>}k{/Control}');
+    const again = await screen.findByRole('dialog', { name: 'Command palette' });
+    expect(await within(again).findByRole('combobox')).toHaveFocus();
+    expect(within(again).queryByRole('textbox', { name: 'Go to URL' })).toBeNull();
+  });
+
   it('takes a URL typed among the commands, and goes back to them with Backspace', async () => {
     const { router, user } = await open(`${CRAWL}/urls`);
     await screen.findByRole('grid', { name: 'URLs' });

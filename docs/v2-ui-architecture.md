@@ -336,7 +336,8 @@ slices.
   command `go.url` opens it; so does a URL typed among the commands ("Go to URL /contact/": first for a scheme or a
   path, after the commands for a bare host, which could be a word with a dot). What's wrong is said under the field
   (`url-not-found`, `invalid-query`), never in a toast; a URL the crawl has only on another version of the site opens
-  with a toast naming the one asked for (`requested`). Backspace in the empty field goes back to the commands.
+  with a toast naming the one asked for (`requested`). Backspace in the empty field goes back to the commands, and
+  however the palette closes (Esc, Ctrl+K again, a click outside) it opens on the commands the next time.
 - The palette is an ARIA combobox over a listbox on a Radix dialog. cmdk was the brief's pick, but its last release
   (1.1.1) leaves `aria-activedescendant` naming a stale or removed option, so screen readers hear the wrong command.
   Option ids are the entries' own, so the attribute changes whenever the highlighted command does, and a live region

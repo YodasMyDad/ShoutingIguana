@@ -81,10 +81,10 @@ export function CommandPalette() {
     return list;
   }, [crawlId, checks, library, navigate]);
 
-  const close = () => {
-    setOverlay(null);
-    setPaletteMode({ kind: 'commands' });
-  };
+  // However it closes (Esc, a click outside, the key that opens it, a command's own doing), it opens on the commands
+  // next time: "Go to URL…" is asked for each time it's wanted.
+  useEffect(() => () => setPaletteMode({ kind: 'commands' }), []);
+  const close = () => setOverlay(null);
   /** Closes first, so focus is back where it was before the command moves it. */
   const choose = (entry: PaletteItem) => {
     if (entry.stay) {
