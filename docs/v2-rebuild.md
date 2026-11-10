@@ -61,6 +61,8 @@ designed or built yet: the owner asked only for the plan.
   Simple crawl ends in.
 - **The checks' words.** They were written for an SEO. Each check gets words a non-expert can act on. Whether that
   is a new line for each check or the existing texts rewritten is settled in the Simple design.
+- **A score.** The Simple summary carries one number, with how it is worked out one click away. The owner said yes
+  to it on 2026-11-10. What goes into it is settled in the Simple design.
 
 **What it doesn't change:**
 
@@ -98,8 +100,8 @@ The order, item by item, is "Left, in this order" under [Where step 3 stands](#w
 - The plan already holds the known gaps. Step 4: JavaScript rendering, include and exclude rules, logins, list mode
   and custom extraction. Step 5: Search Console and analytics. Later: crawl comparison, scheduled crawls and
   projects.
-- It reads the vendors' documentation. If the owner has a Screaming Frog licence, the same sites are crawled in
-  both and the results compared, which is also the best test of the checks.
+- It reads the vendors' own sites, documentation and screenshots. Neither tool is run: the owner has no Screaming
+  Frog licence and asked for no more than that (2026-11-10).
 
 **Step 3b, the check audit.** After step 3 and before step 4.
 
@@ -108,10 +110,12 @@ The order, item by item, is "Left, in this order" under [Where step 3 stands](#w
   fixed or documented). Most of the 86 have never met a real site. A wrong flag costs more in Simple, where the
   reader can't tell.
 - **How.**
-  - Real sites, crawled with their HTML kept, chosen so that every check fires on at least one: different
-    platforms, a multilingual site, structured data, a faulty sitemap.
-  - For each check: its flags sampled against the stored HTML, for wrong flags; a second tool's results for the
-    same site, where there are any, for misses; and its words read as a non-expert would read them.
+  - Three real sites, named by the owner on 2026-11-10 and crawled with their HTML kept:
+    `www.gardenfurnituresets.co.uk`, `www.aptitude.co.uk` and `jitsunami.com`.
+  - For each check: its flags sampled against the stored HTML, for wrong flags; a sample of the pages it didn't
+    flag, for misses; and its words read as a non-expert would read them.
+  - Three sites won't make every check fire. A check that fires on none is listed as not seen on a real site. It
+    stays proven on the synthetic site only, until the owner names a site that has the fault.
   - A verdict for each check in `docs/v2-check-audit.md`: right, fixed, reworded, severity changed or dropped. Each
     fix gets a planted case and a test seen failing without it, as before.
   - Then the checks in [the old app's backlog](v2-ui-discovery.md#backlog-checks-from-the-old-app), and those the
@@ -119,7 +123,9 @@ The order, item by item, is "Left, in this order" under [Where step 3 stands](#w
 - **When.** It is engine work and touches no screen, so it can run beside step 3's rounds if the owner wants it
   sooner. It costs usage, and that is theirs to call.
 
-What the owner still has to answer is under [Open items](#open-items-and-owner-decisions).
+The owner answered this plan's four questions on 2026-11-10, and nothing here waits on them: a score, yes; the app
+flags and explains, and doesn't draft or make fixes; the comparison reads the vendors' sites and screenshots; and
+the three audit sites above.
 
 ## Where step 3 stands (2026-11-10)
 
@@ -512,17 +518,6 @@ Everything below is public in `ShoutingIguana.Engine`.
 - **Decided this round under delegation, easy to revisit:**
   - stopping after 10 minutes without an answer;
   - the checks skipped on crawls that can't support them.
-- **Asked on 2026-11-10 with [the Simple plan](#simple-first-advanced-on-a-switch-2026-11-10). No work waits on
-  them yet:**
-  - A score on the Simple summary? Proposed: yes, one number, with how it is worked out one click away. If the
-    owner doesn't say, the Simple design decides and the mockups show it.
-  - The owner said the checks are for "flagging things and potentially changing things". Each check already says
-    how to fix what it flags. If "changing things" means more (the app drafting a new title, or making a fix),
-    that is new work and nothing is planned for it.
-  - Is there a Screaming Frog licence to crawl the same sites with? Without one, the comparison reads its
-    documentation only.
-  - Which real sites may be crawled for the check audit? The owner's and their clients' are best, as what is
-    really wrong with them is known. The audit doesn't start without an answer.
 
 ## Known limitations
 
