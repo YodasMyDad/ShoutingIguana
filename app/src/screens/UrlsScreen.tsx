@@ -399,3 +399,17 @@ function ActiveFilters({
     </>
   );
 }
+
+// The URL grid's pieces, for a view that is the URL grid narrowed to something (a sitemap's URLs): its columns, what its
+// query asks for, why the analysis's columns are empty, and its filter chips. They're exported from here, where they
+// are, rather than moved: the full URL grid's slice gives them their own files.
+/* eslint-disable react-refresh/only-export-components -- shared as they stand; see above */
+export {
+  COLUMNS as URL_GRID_COLUMNS,
+  QUERY_COLUMNS as URL_GRID_QUERY_COLUMNS,
+  UNAVAILABLE_BECAUSE as URL_COLUMNS_UNAVAILABLE_BECAUSE,
+  namesOf as urlColumnNames,
+  NeedsAnalysis as UrlGridNeedsAnalysis,
+  ActiveFilters as UrlGridFilters,
+};
+/* eslint-enable react-refresh/only-export-components */
