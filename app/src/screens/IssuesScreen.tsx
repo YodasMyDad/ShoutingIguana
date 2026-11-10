@@ -14,7 +14,7 @@ import {
 } from '../api/queries';
 import { GRID_PAGE_GC_MS } from '../app/queryClient';
 import { isCrawling, type Severity } from '../api/types';
-import { analyseCrawl, cancelAnalysis, continueCrawl } from '../crawl/actions';
+import { continueCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -45,6 +45,7 @@ import {
 } from './issues/checkList';
 import { checkUrlsReader, copyUrls } from './issues/copyUrls';
 import { groupRefOf } from './issues/groupTree';
+import { useAnalysisControl } from './issues/useAnalysisControl';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
@@ -282,45 +283,15 @@ export function IssuesScreen() {
     selectTakingFocus(next);
   };
 
-  // Analysing from here: the button pressed goes when the progress banner comes, so focus goes to its Cancel; when
-  // the banner goes, focus that was in it goes to the page's title. Starting and finishing are announced with the
-  // crawl's status (live/liveBridge.ts), and a cancel is announced here, as the status alone reads "finished".
-  const pageTitleRef = useRef<HTMLHeadingElement>(null);
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  const startedHere = useRef(false);
-  const cancelRequested = useRef(false);
-  const [cancelling, setCancelling] = useState(false);
-  if (cancelling && !analysing) setCancelling(false);
-  const analyse = () => {
-    startedHere.current = true;
-    void analyseCrawl(crawlId);
-  };
-  const cancelHere = () => {
-    cancelRequested.current = true;
-    setCancelling(true);
-    void cancelAnalysis(crawlId);
-  };
-  const cancel = analysing ? cancelHere : null;
-  const wasAnalysing = useRef(analysing);
-  useEffect(() => {
-    if (analysing === wasAnalysing.current) return;
-    wasAnalysing.current = analysing;
-    const focusLost = document.activeElement === null || document.activeElement === document.body;
-    if (analysing) {
-      if (startedHere.current && focusLost) cancelRef.current?.focus();
-      startedHere.current = false;
-      return;
-    }
-    if (cancelRequested.current) {
-      announce(
-        neverAnalysed
-          ? 'Analysis cancelled. This crawl still hasn’t been analysed.'
-          : 'Analysis cancelled. These are the issues from the last analysis.',
-      );
-    }
-    cancelRequested.current = false;
-    if (focusLost) pageTitleRef.current?.focus();
-  }, [analysing, neverAnalysed]);
+  // Analysing from here, with where focus goes as the progress banner comes and goes (useAnalysisControl).
+  const {
+    titleRef: pageTitleRef,
+    cancelRef,
+    analyse,
+    cancelHere,
+    cancel,
+    cancelling,
+  } = useAnalysisControl(crawlId, analysing, neverAnalysed);
 
   useCommands(
     () => [

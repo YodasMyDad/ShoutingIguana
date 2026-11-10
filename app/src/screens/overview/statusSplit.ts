@@ -12,8 +12,11 @@ export type SplitClass = keyof StatusClassCounts;
 /** In the order they're drawn and listed. */
 export const SPLIT_CLASSES: readonly SplitClass[] = ['2xx', '3xx', '4xx', '5xx', 'other', 'noResponse', 'blocked'];
 
-/** Listed even at 0, so the breakdown never changes shape as a crawl runs; the rest show only once they have URLs. */
-const ALWAYS_LISTED: readonly SplitClass[] = ['2xx', '3xx', '4xx', '5xx', 'noResponse'];
+/**
+ * Listed even at 0, so the breakdown doesn't change shape as a crawl runs, and "Blocked 0" says the crawl isn't being
+ * blocked. Codes outside 200 to 599 are rare enough to show only once there are some.
+ */
+const ALWAYS_LISTED: readonly SplitClass[] = ['2xx', '3xx', '4xx', '5xx', 'noResponse', 'blocked'];
 
 const LABELS: Record<SplitClass, string> = {
   '2xx': '2xx',

@@ -61,7 +61,7 @@ describe('the status breakdown', () => {
     expect(sum(split.segments.map((segment) => segment.count))).toBe(split.total);
   });
 
-  it('lists the classes in order, the main ones even at 0, and the rarer ones only once they have URLs', () => {
+  it('lists the classes in order, even at 0, and codes outside 200 to 599 only once there are some', () => {
     expect(split.segments.map((segment) => [segment.label, segment.count])).toEqual([
       ['2xx', 2693],
       ['3xx', 8],
@@ -78,6 +78,7 @@ describe('the status breakdown', () => {
       '5xx',
       'Other codes',
       'No response',
+      'Blocked',
     ]);
   });
 
