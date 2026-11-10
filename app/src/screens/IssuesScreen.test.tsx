@@ -13,6 +13,7 @@ import { updateSettings } from '../settings/settingsStore';
 import { LOCATE_GROUP_LIMIT, LOCATE_GROUP_PAGE, queryKeys } from '../api/queries';
 import type { CrawlListItem, CrawlStatus } from '../api/types';
 import { TEST_CRAWL_ID, fakeSidecar, problem, type FakeRoute } from '../test/fakeSidecar';
+import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import {
   ANCHOR_ROWS,
   ISSUES_ANALYSIS,
@@ -34,8 +35,7 @@ function sidecar(options: Omit<IssuesSidecarOptions, 'onAnalyse' | 'onCancelAnal
   return { requests: transport.requests, analyse, cancel, resume };
 }
 
-async function open(path: string) {
-  const queryClient = createQueryClient();
+async function open(path: string, queryClient = createQueryClient()) {
   const history = createMemoryHistory({ initialEntries: [path] });
   const router = createAppRouter(queryClient, history);
   render(<App router={router} queryClient={queryClient} />);
@@ -292,21 +292,29 @@ describe('the Issues screen', () => {
 
   it('says so when an open group’s pages can’t be read, with Try again, instead of placeholders that never fill', async () => {
     let fail = true;
+    let asked = 0;
     const routes = issuesRoutes();
     const rows = routes.find(([method, pattern]) => method === 'POST' && pattern.source.includes('rows'));
     if (!rows) throw new Error('No rows route');
     const failing: FakeRoute = [
       'POST',
       rows[1],
-      (request, match) =>
-        fail && (request.body as GridQuery).group
-          ? problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 })
-          : rows[2](request, match),
+      (request, match) => {
+        if (!fail || !(request.body as GridQuery).group) return rows[2](request, match);
+        asked += 1;
+        return problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 });
+      },
     ];
     setTransport(fakeSidecar([failing, ...routes]));
-    await open(`${ISSUES}/empty-anchor-text?group=${encodeURIComponent('{"detail":null,"relatedUrlId":1}')}`);
+    // The read is tried three times before the screen says it failed. Without the app's back-off between the tries
+    // (250 ms, then 500 ms): in real time it left a quarter of the second this waits, and none on a busy machine.
+    await open(
+      `${ISSUES}/empty-anchor-text?group=${encodeURIComponent('{"detail":null,"relatedUrlId":1}')}`,
+      createQueryClientWithoutBackoff(),
+    );
     const grid = await screen.findByRole('treegrid');
     const retry = await screen.findByRole('button', { name: 'Try again' });
+    expect(asked).toBe(3);
     expect(screen.getByText('The group’s pages couldn’t be read.')).toBeVisible();
     // The group stays open with its link to all its pages, and nothing waits for pages that won't come.
     expect(within(grid).getByRole('row', { expanded: true })).toBeVisible();

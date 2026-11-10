@@ -25,6 +25,7 @@ import {
   testUrlDetail,
   type InspectorSidecarOptions,
 } from '../test/inspectorSidecar';
+import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { resetLinkKinds, resetLinkRows } from './links';
 import { resetRememberedSection } from './sections';
 
@@ -106,16 +107,23 @@ async function open(
   options: InspectorSidecarOptions = SITE,
   history?: RouterHistory,
   issues: IssuesSidecarOptions = {},
+  queryClient = createQueryClient(),
 ) {
   sidecar = fakeSidecar([...inspectorRoutes(options), ...issuesRoutes(issues)]);
   setTransport(sidecar);
-  const queryClient = createQueryClient();
   const router = createAppRouter(queryClient, history ?? createMemoryHistory({ initialEntries: [path] }));
   render(<App router={router} queryClient={queryClient} />);
   await act(() => router.load());
   const inspector = await screen.findByRole('complementary', { name: 'Inspector' });
   return { router, queryClient, inspector, user: userEvent.setup() };
 }
+
+/**
+ * `open`, for a read that fails for good: its tries come at once, without the app's back-off between them (750 ms
+ * in real time, of the second a test waits for what the section says then).
+ */
+const openFailing = (path: string, options: InspectorSidecarOptions) =>
+  open(path, options, undefined, {}, createQueryClientWithoutBackoff());
 
 const inspected = (router: { state: { location: { search: unknown } } }) =>
   (router.state.location.search as { inspect?: number }).inspect;
@@ -932,7 +940,7 @@ describe('the source', () => {
   });
 
   it('says why there’s no HTML, and fails on its own', async () => {
-    const { user } = await open(`${URLS}?inspect=2`, {
+    const { user } = await openFailing(`${URLS}?inspect=2`, {
       urls: { 2: PAGE, 3: OTHER },
       source: { 2: { stored: false, reason: 'notStored' }, 3: 'error' },
       inlinks: { 2: [testLinkRow({ id: 3, url: OTHER.url })] },
@@ -1217,7 +1225,7 @@ describe('loading, failing and not there', () => {
 
   it('keeps the other sections working when the URL itself can’t be read, and tries again', async () => {
     let fail = true;
-    const { inspector, user } = await open(`${URLS}?inspect=2`, {
+    const { inspector, user } = await openFailing(`${URLS}?inspect=2`, {
       ...SITE,
       urls: (id) => (id === 2 ? (fail ? 'error' : PAGE) : id === 1 ? HOME : undefined),
     });
@@ -1236,7 +1244,10 @@ describe('loading, failing and not there', () => {
   });
 
   it('says the links couldn’t be read in their own section, the summary untouched', async () => {
-    const { inspector, user } = await open(`${URLS}?inspect=2`, { urls: { 2: PAGE }, inlinks: { 2: 'error' } });
+    const { inspector, user } = await openFailing(`${URLS}?inspect=2`, {
+      urls: { 2: PAGE },
+      inlinks: { 2: 'error' },
+    });
     await within(inspector).findByRole('heading', { name: 'Indexable' });
     await user.click(within(inspector).getByRole('tab', { name: /^Inlinks/ }));
     expect(await within(inspector).findByText('The inlinks couldn’t be read.')).toBeVisible();

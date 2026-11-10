@@ -14,6 +14,7 @@ import { PUBLISH_INTERVAL_MS, liveStore } from '../live/liveStore';
 import { updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, testCrawlItem } from '../test/fakeSidecar';
 import { ISSUES_ANALYSIS } from '../test/issuesSidecar';
+import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import {
   DEAD_TWIN,
   EMPTY_FACETS,
@@ -47,8 +48,7 @@ function sidecar(options: Omit<OverviewSidecarOptions, Heard> = {}) {
   return { requests: transport.requests, ...heard };
 }
 
-async function openAndKeep(path = OVERVIEW) {
-  const queryClient = createQueryClient();
+async function openAndKeep(path = OVERVIEW, queryClient = createQueryClient()) {
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
   const { unmount } = render(<App router={router} queryClient={queryClient} />);
   await act(() => router.load());
@@ -58,6 +58,11 @@ async function openAndKeep(path = OVERVIEW) {
 }
 
 const open = (path = OVERVIEW) => openAndKeep(path);
+/**
+ * `open`, for a read that fails for good: its tries come at once, without the app's back-off between them (750 ms
+ * in real time, of the second a test waits for what the screen says then).
+ */
+const openFailing = () => openAndKeep(OVERVIEW, createQueryClientWithoutBackoff());
 
 /** What the live layer does when the crawl's status changes. */
 function setStatus(queryClient: QueryClient, status: CrawlStatus, extra: Partial<CrawlListItem> = {}) {
@@ -530,7 +535,7 @@ describe('the Overview when there’s no answer yet, or something’s off', () =
 
   it('says so when the analysis can’t be read, and still shows the crawl', async () => {
     sidecar({ analysis: 'error' });
-    await open();
+    await openFailing();
     expect(await main().findByText('The analysis couldn’t be read.')).toBeVisible();
     expect(main().getByRole('button', { name: 'Try again' })).toBeVisible();
     expect(await region('Status codes').findByText('4,492')).toBeVisible();
@@ -538,7 +543,7 @@ describe('the Overview when there’s no answer yet, or something’s off', () =
 
   it('says so in each breakdown that can’t be read, and still shows the answer', async () => {
     sidecar({ facets: 'error' });
-    await open();
+    await openFailing();
     expect(await region('Status codes').findByText('Status codes couldn’t be read.')).toBeVisible();
     expect(await region('Indexability').findByText('Indexability couldn’t be read.')).toBeVisible();
     expect(region('Fix first').getByRole('link', { name: /Error:\s?Internal URL returns 4xx/ })).toBeVisible();

@@ -12,6 +12,7 @@ import { createAppRouter } from '../app/router';
 import { onAnnounce } from '../feedback/announce';
 import { installKeyboard } from '../keyboard/registry';
 import { ISSUES_CHECKS } from '../test/issuesSidecar';
+import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { wholeText } from '../test/text';
 import {
   TEST_CRAWL_ID,
@@ -77,8 +78,7 @@ function sidecar(options: {
   return { transport, analyse, state };
 }
 
-async function open(path: string) {
-  const queryClient = createQueryClient();
+async function open(path: string, queryClient = createQueryClient()) {
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
   render(<App router={router} queryClient={queryClient} />);
   await act(() => router.load());
@@ -273,7 +273,8 @@ describe('the URL grid opened from a check’s group', () => {
     expect(within(chips).queryByText('empty-anchor-text')).toBeNull();
     cleanup();
     sidecar({ summary: { available: true, reason: null }, checks: 'error', relatedFails: true });
-    await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}`);
+    // Reads that fail for good: their tries come at once, without the app's back-off between them.
+    await open(`${URLS}?filter=${encodeURIComponent(JSON.stringify(filter))}`, createQueryClientWithoutBackoff());
     const failed = await screen.findByRole('group', { name: 'Filters' });
     expect(await within(failed).findByText('a check whose name couldn’t be read')).toBeVisible();
     expect(await within(failed).findByText('a URL that couldn’t be read')).toBeVisible();
