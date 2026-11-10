@@ -416,9 +416,10 @@ runs, each with its stretches, and their total (`CrawlFileSummary.TimeCrawling`,
   when the crawl is continued. Nothing is written per response, and no stamp moves: a pause costs one small row.
 - **Known whole, or not known.** The total is given only when every run was timed. A file from before the table gets
   it when it's continued, with one row without a time standing for all its earlier runs; and since every run stamps
-  the crawl row (`updated_at`) whichever engine makes it, each run's last stretch keeps the stamp its run ended on: when
-  that isn't the crawl row's own, an engine that keeps no time ran the crawl since, and the next run here adds the row
-  without a time for it. With such a row, or such a stamp, the crawl's time reads as not known, for good: never a part
+  the crawl row (`updated_at`) whichever engine makes it, the last stretch stored takes the stamp with it whenever this
+  engine moves it (as a run opens the file, in the same commit, so the time stays known while a big crawl is read back
+  in; and as the run ends): when the last stretch's stamp isn't the crawl row's own, an engine that keeps no time ran
+  the crawl since, and the next run here adds the row without a time for it. With such a row, or such a stamp, the crawl's time reads as not known, for good: never a part
   of it given for the whole. A table of another shape (another program's) is neither written to nor read, and times
   that can't be true (negative, ten years long) read as not known.
 
