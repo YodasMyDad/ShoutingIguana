@@ -123,6 +123,13 @@ export function IssuesScreen() {
   const first = list ? firstCheckToFix(list.matching) : null;
   const selected = entries?.find((entry) => entry.check.id === checkId) ?? null;
   const found = selected !== null && selected.outcome !== 'passed' && selected.outcome !== 'skipped';
+  // Arriving on a check that's hidden (a link from the inspector, the palette) shows the hidden checks, so the
+  // check the page is on is in the list, marked "Hidden". Hiding the one already open doesn't: the list moves on.
+  const [arrivedAt, setArrivedAt] = useState<string | undefined>(undefined);
+  if (entries && arrivedAt !== checkId) {
+    setArrivedAt(checkId);
+    if (selected?.hidden && !showHidden) setShowHidden(true);
+  }
   // A severity that leaves the selected check out of the list (the sidebar's Warnings, the severity control, a link)
   // moves the selection to the first to fix among what it lists. The text filter doesn't: it narrows while typing.
   const outOfSeverity = selected !== null && severity !== 'all' && selected.check.severity !== severity;

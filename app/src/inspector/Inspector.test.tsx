@@ -562,6 +562,54 @@ describe('the sections', () => {
     expect(within(issues).getByRole('button', { name: 'Analyse again' })).toBeVisible();
   });
 
+  it('lists a hidden check after the others, marked and uncounted, and its link shows it on Issues', async () => {
+    // PAGE has two issues: "Title too long", which the user hid from the Issues list, and one that isn't hidden.
+    updateSettings({ hiddenChecks: ['title-too-long'] });
+    const { inspector, user } = await open(`${URLS}?inspect=2`);
+    // The tab and the summary count the one that isn't hidden.
+    expect(await within(inspector).findByRole('tab', { name: 'Issues 1' })).toBeVisible();
+    const summary = within(inspector).getByRole('tabpanel', { name: /^Summary/ });
+    expect(within(summary).getByRole('heading', { name: '1 issue' })).toBeVisible();
+    const brief = within(within(summary).getByRole('list', { name: 'This URL’s issues' })).getAllByRole('listitem');
+    expect(brief.map((item) => item.textContent)).toEqual([
+      expect.stringContaining('Internal links without anchor text'),
+    ]);
+
+    // The section lists it all the same, last, and says it's hidden and not counted.
+    const issues = await showTab(user, /^Issues/);
+    expect(within(issues).getByRole('heading', { name: '1 issue' })).toBeVisible();
+    expect(within(issues).getByText('1 notice, 1 hidden check not counted')).toBeVisible();
+    const rows = within(within(issues).getByRole('list', { name: 'This URL’s issues' })).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent('Internal links without anchor text');
+    expect(rows[0]).not.toHaveTextContent('Hidden');
+    expect(rows[1]).toHaveTextContent('Title too long');
+    expect(within(rows[1]!).getByText('Hidden')).toBeVisible();
+
+    // Its link lands on the check with the hidden checks shown, so it's in the list, selected and marked.
+    await user.click(within(rows[1]!).getByRole('link', { name: 'Title too long' }));
+    const checks = await screen.findByRole('listbox', { name: 'Checks' });
+    const selected = await within(checks).findByRole('option', { selected: true });
+    expect(selected).toHaveTextContent('Title too long');
+    expect(within(selected).getByText('Hidden')).toBeVisible();
+  });
+
+  it('says only hidden checks flagged the URL, and still leads to them', async () => {
+    updateSettings({ hiddenChecks: ['title-too-long', 'empty-anchor-text'] });
+    const { inspector, user } = await open(`${URLS}?inspect=2`);
+    await within(inspector).findByRole('heading', { level: 2, name: PAGE.url });
+    // No count on the tab: nothing is counted.
+    expect(within(inspector).getByRole('tab', { name: /^Issues/ })).toHaveTextContent(/^Issues$/);
+    const summary = within(inspector).getByRole('tabpanel', { name: /^Summary/ });
+    expect(
+      await within(summary).findByText('Only checks you’ve hidden flagged this URL in the last analysis.'),
+    ).toBeVisible();
+    await user.click(within(summary).getByRole('button', { name: 'Open Issues' }));
+    const issues = await within(inspector).findByRole('tabpanel', { name: /^Issues/ });
+    expect(within(issues).getByText('2 hidden checks not counted')).toBeVisible();
+    expect(within(issues).getAllByText('Hidden')).toHaveLength(2);
+  });
+
   it('says nothing about the analysis while it stands', async () => {
     const { inspector } = await open(`${URLS}?inspect=2`);
     await within(inspector).findByRole('list', { name: 'This URL’s issues' });

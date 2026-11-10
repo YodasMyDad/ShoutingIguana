@@ -117,6 +117,7 @@ function useLinkCount(crawlId: string, urlId: number, direction: 'inlinks' | 'ou
 export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
   const inspector = useInspector();
   const dock = useSettings((settings) => settings.inspectorDock);
+  const hiddenChecks = useSettings((settings) => settings.hiddenChecks);
   const item = useQuery(crawlQuery(crawlId)).data;
   const live = useLiveCrawl(crawlId);
   const status = effectiveStatus(item, live);
@@ -292,7 +293,8 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
   const outlinks = useLinkCount(crawlId, urlId, 'outlinks', settled);
 
   const tabs = useMemo<TabItem<SectionId>[]>(() => {
-    const counts: Partial<Record<SectionId, number>> = state.status === 'ready' ? sectionCounts(state.detail) : {};
+    const counts: Partial<Record<SectionId, number>> =
+      state.status === 'ready' ? sectionCounts(state.detail, hiddenChecks) : {};
     if (inlinks !== undefined && inlinks > 0) counts.inlinks = inlinks;
     else delete counts.inlinks;
     if (outlinks !== undefined && outlinks > 0) counts.outlinks = outlinks;
@@ -333,7 +335,7 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
       ),
     };
     return SECTION_IDS.map((id) => ({ value: id, label: SECTION_TITLES[id], count: counts[id], content: content[id] }));
-  }, [state, inlinks, outlinks, choose, urlId, searchRequest, searchFocused]);
+  }, [state, inlinks, outlinks, choose, urlId, searchRequest, searchFocused, hiddenChecks]);
 
   const refreshing = query.isFetching && !waiting && !crawling;
   const compact = dock === 'bottom';

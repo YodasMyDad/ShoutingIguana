@@ -12,6 +12,8 @@ import { crawlControls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { Skeleton } from '../feedback/Skeleton';
 import { useLiveCrawl } from '../live/liveStore';
+import { useSettings } from '../settings/settingsStore';
+import { Badge } from '../ui/Badge';
 import { SeverityMark } from '../ui/SeverityMark';
 import { StatusCode } from '../ui/StatusCode';
 import { TextLink } from '../ui/TextLink';
@@ -19,6 +21,7 @@ import { Url } from '../ui/Url';
 import { checkTitle, issuesAreStale, useChecks, useInspectorContext } from './inspectorContext';
 import { issueLink } from './issueLinks';
 import { NO_STATUS } from './links';
+import { splitHidden } from './sections';
 import { reasonPhrase } from './words';
 
 /** A block of a section, under a hairline, with its title. */
@@ -131,7 +134,16 @@ export function IssueCheckLink({
  * One check that flagged the URL: its severity, its title (a link to the check on Issues, its group open), the
  * detail, and the other URL the issue is about.
  */
-export function IssueRow({ issue, detail }: { issue: UrlIssue; detail: UrlDetail }) {
+export function IssueRow({
+  issue,
+  detail,
+  hidden = false,
+}: {
+  issue: UrlIssue;
+  detail: UrlDetail;
+  /** The user hid its check from the Issues list: it's still this URL's, and says so. */
+  hidden?: boolean | undefined;
+}) {
   const { byId, ready } = useChecks();
   const check = byId.get(issue.checkId);
   const link = issueLink(issue, check?.grouping, detail);
@@ -143,7 +155,7 @@ export function IssueRow({ issue, detail }: { issue: UrlIssue; detail: UrlDetail
       </span>
       <div className="min-w-0">
         {/* The detail sits beside the title while there's room; a long one (a parser's message) goes under it. */}
-        <div className="flex flex-wrap items-center justify-between gap-x-3">
+        <div className="flex flex-wrap items-center gap-x-3">
           <IssueCheckLink
             checkId={link.checkId}
             group={link.group}
@@ -151,8 +163,9 @@ export function IssueRow({ issue, detail }: { issue: UrlIssue; detail: UrlDetail
           >
             {checkTitle(check, ready)}
           </IssueCheckLink>
+          {hidden ? <Badge variant="outline">Hidden</Badge> : null}
           {issue.detail ? (
-            <span className="figures min-w-0 text-12 wrap-anywhere text-text-muted">{issue.detail}</span>
+            <span className="figures ml-auto min-w-0 text-12 wrap-anywhere text-text-muted">{issue.detail}</span>
           ) : null}
         </div>
         {issue.related ? <WalkUrl id={issue.related.id} url={issue.related.url} /> : null}
@@ -171,10 +184,18 @@ export function IssueList({
   /** The URL the issues are on: which group an issue is in can depend on it. */
   detail: UrlDetail;
 }) {
+  // The checks hidden from the Issues list come after the others, marked: they're the URL's all the same.
+  const { counted, hidden } = splitHidden(
+    issues,
+    useSettings((settings) => settings.hiddenChecks),
+  );
   return (
     <ul aria-label={label} className="flex flex-col">
-      {issues.map((issue, index) => (
+      {counted.map((issue, index) => (
         <IssueRow key={`${issue.checkId}-${index}`} issue={issue} detail={detail} />
+      ))}
+      {hidden.map((issue, index) => (
+        <IssueRow key={`hidden-${issue.checkId}-${index}`} issue={issue} detail={detail} hidden />
       ))}
     </ul>
   );

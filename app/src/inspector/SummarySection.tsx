@@ -2,6 +2,7 @@ import { CircleCheck, CircleDashed, CircleSlash, Check, Minus, X } from 'lucide-
 import type { ReactNode } from 'react';
 import type { MeasuredText, UrlDetail } from '../api/inspector';
 import { formatBytes, formatCount, formatCountOf, formatExactTime, formatMilliseconds } from '../lib/format';
+import { useSettings } from '../settings/settingsStore';
 import { Badge } from '../ui/Badge';
 import { Callout } from '../ui/Callout';
 import { Fact, Facts } from '../ui/Facts';
@@ -18,7 +19,7 @@ import { checkTitle, useChecks, useInspectorContext } from './inspectorContext';
 import { issueLink } from './issueLinks';
 import { Block, IssueCheckLink, IssueList, PageText, SectionBody, StaleIssues, WalkUrl } from './parts';
 import { measuresOf, scaleEnd, type Measure } from './scale';
-import type { SectionId } from './sections';
+import { splitHidden, type SectionId } from './sections';
 import { KIND_WORDS, SOURCE_WORDS, TYPE_WORDS, depthWords, protocolWords, reasonPhrase, wordFor } from './words';
 
 /** How many of the URL's issues the summary lists before sending the rest to the Issues section. */
@@ -455,7 +456,10 @@ function ContentFacts({ detail, wordsMeasure }: { detail: UrlDetail; wordsMeasur
 
 /** The URL's issues, in short: how many by severity, the first few, and the way to them all. */
 function IssuesSummary({ detail, onShowSection }: SummarySectionProps) {
-  const issues = detail.issues;
+  const hiddenChecks = useSettings((settings) => settings.hiddenChecks);
+  // Checks hidden from the Issues list aren't counted here either; the Issues section lists them, marked.
+  const issues = detail.issues === null ? null : splitHidden(detail.issues, hiddenChecks).counted;
+  const hidden = (detail.issues?.length ?? 0) - (issues?.length ?? 0);
   if (issues === null) {
     return (
       <Block title="Issues">
@@ -467,9 +471,22 @@ function IssuesSummary({ detail, onShowSection }: SummarySectionProps) {
   }
   if (issues.length === 0) {
     return (
-      <Block title="No issues">
+      <Block
+        title="No issues"
+        actions={
+          hidden > 0 ? (
+            <button type="button" className="si-link" onClick={() => onShowSection('issues')}>
+              Open Issues
+            </button>
+          ) : null
+        }
+      >
         <StaleIssues detail={detail} className="mb-3" />
-        <p className="text-13 text-text-secondary">No check flagged this URL in the last analysis.</p>
+        <p className="text-13 text-text-secondary">
+          {hidden > 0
+            ? `Only ${hidden === 1 ? 'a check' : 'checks'} you’ve hidden flagged this URL in the last analysis.`
+            : 'No check flagged this URL in the last analysis.'}
+        </p>
       </Block>
     );
   }

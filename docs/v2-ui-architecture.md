@@ -466,7 +466,9 @@ are drawn for the app and are never swapped for Lucide's.
 - **The analysis's grids don't refresh live**: a running crawl doesn't change a check's groups or rows, so the live
   bridge's once-a-second refresh leaves `issueGroups` and `issueRows` pages alone (`liveGridPagesOf`); the analysis
   that follows the crawl refreshes them.
-- **Hidden checks** are a preference (`hiddenChecks` in the settings store), in every crawl, with Undo.
+- **Hidden checks** are a preference (`hiddenChecks` in the settings store), in every crawl, with Undo. Arriving on
+  a check that's hidden (the inspector's link, the palette) shows the hidden checks, so the check the page is on is
+  in the list, marked "Hidden"; hiding the one already open doesn't, and the list moves on.
 - **Analysing from the screen**: "Analyse again" and "Analyse it" go when the progress banner comes, so focus goes to
   its Cancel; Cancel then says "Cancelling…" until the engine stops; when the banner goes, focus that was in it goes to
   the page's title. The start and the end are announced with the crawl's status (and the "Analysis finished" toast);
@@ -520,6 +522,10 @@ is what it shows. What it settled:
   section, by the Issues screen's own banner and its "Analyse again" (`crawl/LastAnalysisBanner.tsx`, which both
   use): never a second wording. The verdict's note says why it's the crawl's own judgement by where the analysis
   stands (out of date, not yet run, or running after the crawl).
+- **A hidden check is still the URL's**: wherever the URL's issues are listed, a check the user hid from the Issues
+  list comes after the others, marked "Hidden" (`splitHidden` in `sections.ts`), and is left out of the summary's
+  and the section's counts and the tab's, as the sidebar and Overview leave hidden checks out of theirs. Its link
+  lands on the check with the hidden checks shown.
 - **Issues lead to Issues**: each check's title is a link to it with the issue's group open (the engine's `group`,
   or `issueLinks.ts`'s fallback for an engine without it), leaving the inspector; back returns to the URL. The
   fallback names a group only when it's sure to be there with the URL in it, else the check alone: a duplicate's

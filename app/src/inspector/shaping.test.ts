@@ -15,6 +15,7 @@ import {
   rememberedSection,
   resetRememberedSection,
   sectionCounts,
+  splitHidden,
 } from './sections';
 import {
   CHILD_PAGE,
@@ -413,6 +414,34 @@ describe('the link grids’ words', () => {
     expect(chosenLinkKind('outlinks')).toBe('all');
     resetLinkKinds();
     expect(chosenLinkKind('inlinks')).toBe('all');
+  });
+});
+
+describe('hidden checks', () => {
+  const issues = [
+    { checkId: 'title-too-long', severity: 'notice' as const, detail: '61 characters', related: null },
+    { checkId: 'internal-client-error', severity: 'error' as const, detail: 'HTTP 404', related: null },
+    { checkId: 'low-word-count', severity: 'notice' as const, detail: '85 words', related: null },
+  ];
+
+  it('keeps a URL’s issues of hidden checks apart, in their order, to list last and leave uncounted', () => {
+    expect(splitHidden(issues, ['title-too-long', 'not-this-url’s'])).toEqual({
+      counted: [issues[1], issues[2]],
+      hidden: [issues[0]],
+    });
+    expect(splitHidden(issues, [])).toEqual({ counted: issues, hidden: [] });
+  });
+
+  it('leaves them out of the Issues tab’s count, and has no count when only hidden checks flagged the URL', () => {
+    const detail = testUrlDetail({ issues });
+    expect(sectionCounts(detail).issues).toBe(3);
+    expect(sectionCounts(detail, ['title-too-long']).issues).toBe(2);
+    expect(
+      sectionCounts(
+        detail,
+        issues.map((issue) => issue.checkId),
+      ).issues,
+    ).toBeUndefined();
   });
 });
 

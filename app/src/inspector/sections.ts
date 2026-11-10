@@ -37,14 +37,31 @@ export function isSectionId(value: unknown): value is SectionId {
  * The count each tab shows: what the section lists. Nothing for a section that lists nothing, or whose count isn't
  * known (no analysis: no issues, no link counts), so a tab never reads 0 for "not known".
  */
+/**
+ * A URL's issues as the inspector lists them: the checks the user hid from the Issues list come last (they're still
+ * the URL's, and say "Hidden"), and aren't counted, as the sidebar and Overview leave them out of theirs.
+ */
+export function splitHidden<Issue extends { checkId: string }>(
+  issues: readonly Issue[],
+  hiddenChecks: readonly string[],
+): { counted: Issue[]; hidden: Issue[] } {
+  const hidden = new Set(hiddenChecks);
+  return {
+    counted: issues.filter((issue) => !hidden.has(issue.checkId)),
+    hidden: issues.filter((issue) => hidden.has(issue.checkId)),
+  };
+}
+
+/** `hiddenChecks`: the checks hidden from the Issues list (settings), left out of the Issues tab's count. */
 export function sectionCounts(
   detail: Pick<UrlDetail, 'issues' | 'links' | 'redirects' | 'headers' | 'structuredData' | 'hreflang'>,
+  hiddenChecks: readonly string[] = [],
 ): Partial<Record<SectionId, number>> {
   const counts: Partial<Record<SectionId, number>> = {};
   const set = (id: SectionId, value: number | null | undefined) => {
     if (value !== null && value !== undefined && value > 0) counts[id] = value;
   };
-  set('issues', detail.issues?.length);
+  set('issues', detail.issues ? splitHidden(detail.issues, hiddenChecks).counted.length : null);
   set('inlinks', detail.links?.inlinks);
   set('outlinks', detail.links?.outlinks);
   set('redirects', detail.redirects.hops.length);
