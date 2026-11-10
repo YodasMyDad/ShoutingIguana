@@ -2,7 +2,17 @@
 // what to refresh. Freshness comes from events (`library`, `crawl`), not polling: reads stay fresh until told.
 import { queryOptions, type QueryFilters } from '@tanstack/react-query';
 import { api } from './client';
-import type { CheckGroupRef, GridPage, GridQuery, GridSort, IssueGroup, IssueGroupPage, IssueRow } from './grids';
+import type {
+  CheckGroupRef,
+  FacetsQuery,
+  GridPage,
+  GridQuery,
+  GridSort,
+  IssueGroup,
+  IssueGroupPage,
+  IssueRow,
+  UrlRow,
+} from './grids';
 
 export const queryKeys = {
   health: ['health'] as const,
@@ -17,6 +27,11 @@ export const queryKeys = {
   stats: (id: string) => ['crawl', id, 'stats'] as const,
   crawlOptions: (id: string) => ['crawl', id, 'options'] as const,
   alerts: (id: string) => ['crawl', id, 'alerts'] as const,
+  history: (id: string) => ['crawl', id, 'history'] as const,
+  /** Counts by value, for Overview's breakdowns: under the crawl, so whatever changes it refreshes them. */
+  urlFacets: (id: string, query: FacetsQuery) => ['crawl', id, 'facets', query] as const,
+  /** The URL the crawl started from, as the crawl found it. */
+  startUrlRow: (id: string) => ['crawl', id, 'start-url'] as const,
   issues: (id: string, checkId: string, offset: number, limit: number) =>
     ['crawl', id, 'issues', checkId, offset, limit] as const,
   /** A check's groups, as grid pages (`usePagedRows` adds the page size and number). */
@@ -103,6 +118,49 @@ export const alertsQuery = (id: string) =>
   queryOptions({
     queryKey: queryKeys.alerts(id),
     queryFn: ({ signal }) => api.alerts(id, signal),
+    staleTime: Infinity,
+  });
+
+/** E4: the crawl's progress since it started. A crawl running here carries it on from its progress events. */
+export const historyQuery = (id: string) =>
+  queryOptions({
+    queryKey: queryKeys.history(id),
+    queryFn: ({ signal }) => api.history(id, signal),
+    staleTime: Infinity,
+  });
+
+/** The crawl's URLs counted by value (docs/v2-sidecar-api.md, Facets), each count with the filter that opens it. */
+export const urlFacetsQuery = (id: string, query: FacetsQuery) =>
+  queryOptions({
+    queryKey: queryKeys.urlFacets(id, query),
+    queryFn: ({ signal }) => api.urlFacets(id, query, signal),
+    staleTime: Infinity,
+  });
+
+/** What the start URL asked for: its row columns. */
+export const START_URL_COLUMNS = ['url', 'statusCode', 'outcome', 'redirectTarget', 'contentType'] as const;
+
+/**
+ * The URL the crawl started from, with how it answered, or null when the crawl has none: what a crawl that found
+ * nothing has to say why (the start URL answered 403, redirected away, wasn't a page).
+ */
+export const startUrlQuery = (id: string) =>
+  queryOptions({
+    queryKey: queryKeys.startUrlRow(id),
+    queryFn: async ({ signal }): Promise<UrlRow | null> => {
+      const page = await api.urls(
+        id,
+        {
+          columns: [...START_URL_COLUMNS],
+          filters: [{ column: 'source', op: 'in', values: ['seed'] }],
+          sort: [],
+          offset: 0,
+          limit: 1,
+        },
+        signal,
+      );
+      return page.rows[0] ?? null;
+    },
     staleTime: Infinity,
   });
 

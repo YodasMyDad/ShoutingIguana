@@ -20,6 +20,7 @@ import type {
   Analysis,
   Checks,
   ContinueCrawlRequest,
+  CrawlHistory,
   CrawlListItem,
   CrawlOptionDefaults,
   CrawlOptions,
@@ -108,8 +109,10 @@ export const api = {
   /** Resumes from the file. `needs-secrets` names what must be given again. */
   continueCrawl: (id: string, request: ContinueCrawlRequest = {}) =>
     post<CrawlListItem>(`${crawl(id)}/continue`, request),
-  /** The alerts since the sidecar started, oldest first. */
+  /** The crawl's alerts from its file, oldest first, up to the last 1,000: every run's. */
   alerts: (id: string, signal?: Signal) => get<AlertEvent[]>(`${crawl(id)}/alerts`, signal),
+  /** E4: the crawl's progress since it started, for the "found and crawled" chart. */
+  history: (id: string, signal?: Signal) => get<CrawlHistory>(`${crawl(id)}/history`, signal),
 
   // Analysis
   analyze: (id: string) => post<undefined>(`${crawl(id)}/analyze`),

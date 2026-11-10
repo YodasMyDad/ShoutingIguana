@@ -4,8 +4,11 @@ import {
   LiveStore,
   MAX_ALERTS,
   PUBLISH_INTERVAL_MS,
+  EMPTY_TRAIL,
+  addTrailPoint,
   parseSidecarEvent,
   type LiveStoreClock,
+  type TrailPoint,
 } from './liveStore';
 
 /** A clock the test drives: time moves only when told, and the window can be hidden. */
@@ -213,6 +216,202 @@ describe('a new stream’s hello', () => {
     });
     store.ingest({ event: 'hello', id: '', data: '{"live":[]}' });
     expect(before).toEqual(['running']);
+  });
+});
+
+describe('E4’s progress, read at the boundary', () => {
+  const e4 = {
+    crawlId: 'a',
+    status: 'running',
+    fetched: 40,
+    at: '2026-11-01T14:13:02.500Z',
+    phase: 'crawling',
+    internalFound: 120,
+    internalFetched: 38,
+    maxUrls: 10_000,
+    statusClasses: { '2xx': 30, '3xx': 4, '4xx': 3, '5xx': 0, other: 0, noResponse: 2, blocked: 1 },
+    statusCodes: { '200': 30, '301': 4, '404': 3 },
+    noResponse: { robotsDisallowed: 2, timeout: 0, networkError: 0, notChecked: 0, processingError: 0 },
+    waits: [{ reason: 'crawlDelay', host: 'www.example.com', durationMs: 2000 }],
+    moreWaits: { crawlDelay: 3 },
+  };
+  const read = (data: Record<string, unknown>) => {
+    const event = parseSidecarEvent({ event: 'progress', id: '', data: JSON.stringify(data) });
+    if (event?.type !== 'progress') throw new Error('not a progress event');
+    return event.data;
+  };
+
+  it('keeps every E4 field the contract defines', () => {
+    const progress = read(e4);
+    expect(progress.at).toBe(Date.parse('2026-11-01T14:13:02.500Z'));
+    expect(progress.phase).toBe('crawling');
+    expect(progress.internalFound).toBe(120);
+    expect(progress.internalFetched).toBe(38);
+    expect(progress.maxUrls).toBe(10_000);
+    expect(progress.statusClasses).toEqual(e4.statusClasses);
+    expect(progress.statusCodes).toEqual(e4.statusCodes);
+    expect(progress.noResponse).toEqual(e4.noResponse);
+    expect(progress.waits).toEqual(e4.waits);
+    expect(progress.moreWaits).toEqual({ crawlDelay: 3 });
+  });
+
+  it('reads an engine from before E4 as unknown, never as nothing fetched', () => {
+    const progress = read({ crawlId: 'a', status: 'running', fetched: 40 });
+    expect(progress.at).toBeNull();
+    expect(progress.phase).toBeNull();
+    expect(progress.internalFound).toBeNull();
+    expect(progress.maxUrls).toBeUndefined();
+    expect(progress.statusClasses).toBeNull();
+    expect(progress.statusCodes).toBeNull();
+    expect(progress.noResponse).toBeNull();
+    expect(progress.waits).toEqual([]);
+    expect(progress.moreWaits).toEqual({});
+  });
+
+  it('tells no URL limit (null) from a limit the stream didn’t give', () => {
+    expect(read({ ...e4, maxUrls: null }).maxUrls).toBeNull();
+    expect(read({ ...e4, maxUrls: 'lots' }).maxUrls).toBeUndefined();
+  });
+
+  it('drops a breakdown with a class missing or malformed, as its parts wouldn’t add up', () => {
+    const { blocked: _blocked, ...withoutBlocked } = e4.statusClasses;
+    expect(read({ ...e4, statusClasses: withoutBlocked }).statusClasses).toBeNull();
+    expect(read({ ...e4, statusClasses: { ...e4.statusClasses, '4xx': -1 } }).statusClasses).toBeNull();
+    expect(read({ ...e4, noResponse: { ...e4.noResponse, timeout: 'some' } }).noResponse).toBeNull();
+  });
+
+  it('keeps only the waits, codes and phases the contract has', () => {
+    const progress = read({
+      ...e4,
+      phase: 'daydreaming',
+      statusCodes: { '200': 30, teapot: 1, '404': 'three' },
+      waits: [{ reason: 'siteDown', host: 'https://example.com', durationMs: 'long' }, { reason: 'bored' }, 7],
+      moreWaits: { backoff: 0, crawlDelay: 2, bored: 4 },
+    });
+    expect(progress.phase).toBeNull();
+    expect(progress.statusCodes).toEqual({ '200': 30 });
+    expect(progress.waits).toEqual([{ reason: 'siteDown', host: 'https://example.com' }]);
+    expect(progress.moreWaits).toEqual({ crawlDelay: 2 });
+  });
+
+  it('keeps the same empty waits from one event to the next', () => {
+    const first = read({ ...e4, waits: [], moreWaits: {} });
+    const second = read({ ...e4, waits: [], moreWaits: {} });
+    expect(second.waits).toBe(first.waits);
+    expect(second.moreWaits).toBe(first.moreWaits);
+  });
+});
+
+describe('E4’s alerts and hello', () => {
+  it('keeps an alert’s id and its facts, each of its own type', () => {
+    const event = parseSidecarEvent({
+      event: 'alert',
+      id: '',
+      data: JSON.stringify({
+        crawlId: 'a',
+        id: 7,
+        level: 'warning',
+        code: 'blocked',
+        message: 'Blocked',
+        at: '2026-11-01T10:00:00.250Z',
+        data: { host: 'www.example.com', reason: 'Cloudflare challenge', count: 1, sampled: 'twenty', extra: true },
+      }),
+    });
+    expect(event).toEqual({
+      type: 'alert',
+      data: {
+        crawlId: 'a',
+        id: 7,
+        level: 'warning',
+        code: 'blocked',
+        message: 'Blocked',
+        at: '2026-11-01T10:00:00.250Z',
+        data: { host: 'www.example.com', reason: 'Cloudflare challenge', count: 1 },
+      },
+    });
+  });
+
+  it('reads an alert without facts, or an id that isn’t a whole number, as having none', () => {
+    const event = parseSidecarEvent({
+      event: 'alert',
+      id: '',
+      data: '{"crawlId":"a","id":1.5,"level":"info","code":"sitemaps","message":"m","at":"2026-11-01T10:00:00Z"}',
+    });
+    if (event?.type !== 'alert') throw new Error('not an alert');
+    expect(event.data.id).toBeUndefined();
+    expect(event.data.data).toBeNull();
+  });
+
+  it('knows the crawls a hello says are being analysed, though it missed their status change', () => {
+    const { clock, advance } = manualClock();
+    const store = new LiveStore(clock);
+    store.ingest({ event: 'hello', id: '', data: '{"live":["a"],"analyzing":["b"]}' });
+    store.ingest({ event: 'analysis', id: '', data: '{"crawlId":"b","phase":"pageRules","done":1,"total":9}' });
+    advance(PUBLISH_INTERVAL_MS);
+    const { crawls, live } = store.getState();
+    expect(live).toEqual(['a', 'b']);
+    expect(crawls.b?.status).toBe('analyzing');
+    expect(crawls.b?.analysis?.phase).toBe('pageRules');
+    // The next hello doesn't list it: its status is the library's again.
+    store.ingest({ event: 'hello', id: '', data: '{"live":["a"]}' });
+    advance(PUBLISH_INTERVAL_MS);
+    expect(store.getState().crawls.b?.status).toBeNull();
+    expect(store.getState().live).toEqual(['a']);
+  });
+});
+
+describe('the found-and-crawled trail', () => {
+  const point = (at: number): TrailPoint => ({ at, fetched: at, internalFound: at * 2, internalFetched: at });
+
+  it('keeps a point per progress event at first', () => {
+    let trail = EMPTY_TRAIL;
+    for (let i = 0; i < 10; i++) trail = addTrailPoint(trail, point(i * 500));
+    expect(trail.points.map((entry) => entry.at)).toEqual([0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500]);
+    expect(trail.every).toBe(1);
+  });
+
+  it.each([16, 17])(
+    'stays within %i points however long the crawl runs, evenly spread, the first and the newest kept',
+    (capacity) => {
+      let trail = EMPTY_TRAIL;
+      for (let i = 0; i < 5_000; i++) {
+        trail = addTrailPoint(trail, point(i * 500), capacity);
+        expect(trail.points.length).toBeLessThanOrEqual(capacity);
+        expect(trail.points.at(-1)?.at).toBe(i * 500);
+        // Every gap but the last (the newest stands in until its turn comes) is one kept point's worth of events.
+        const gaps = trail.points.slice(1, -1).map((entry, index) => entry.at - (trail.points[index]?.at ?? 0));
+        expect([...new Set(gaps)]).toEqual(gaps.length > 0 ? [trail.every * 500] : []);
+      }
+      expect(trail.points[0]?.at).toBe(0);
+      expect(trail.points.length).toBeGreaterThan(capacity / 2);
+      expect(trail.every).toBeGreaterThan(1);
+    },
+  );
+
+  it('ignores a point no newer than its newest', () => {
+    const start = addTrailPoint(EMPTY_TRAIL, point(1_000));
+    expect(addTrailPoint(start, point(1_000))).toBe(start);
+    expect(addTrailPoint(start, point(500))).toBe(start);
+  });
+
+  it('grows from progress events that say when they were taken', () => {
+    const { clock, advance } = manualClock();
+    const store = new LiveStore(clock);
+    const at = (seconds: number) => new Date(Date.UTC(2026, 10, 1, 10, 0, seconds)).toISOString();
+    const event = (seconds: number, extra: Record<string, unknown>) => ({
+      event: 'progress',
+      id: '',
+      data: JSON.stringify({ crawlId: 'a', status: 'running', fetched: seconds * 10, at: at(seconds), ...extra }),
+    });
+    store.ingest(event(1, { internalFound: 50, internalFetched: 9 }));
+    store.ingest(event(2, { internalFound: 80, internalFetched: 19 }));
+    // An event that doesn't say what the site's own counts are adds nothing, rather than a false point.
+    store.ingest(event(3, {}));
+    advance(PUBLISH_INTERVAL_MS);
+    expect(store.getState().crawls.a?.trail.points).toEqual([
+      { at: Date.parse(at(1)), fetched: 10, internalFound: 50, internalFetched: 9 },
+      { at: Date.parse(at(2)), fetched: 20, internalFound: 80, internalFetched: 19 },
+    ]);
   });
 });
 

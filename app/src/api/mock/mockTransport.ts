@@ -19,10 +19,12 @@ import type { Transport, TransportRequest } from '../transport';
 import {
   isCrawling,
   type Analysis,
+  type CrawlHistory,
   type CrawlListItem,
   type CrawlOptionDefaults,
   type CrawlOptions,
   type CrawlStatus,
+  type HistoryPoint,
   type IssuePage,
   type ProgressEvent,
   type StartCrawlRequest,
@@ -62,6 +64,11 @@ const LATENCY_MS = 30;
 const PROGRESS_INTERVAL_MS = 500;
 const REPLAY_STEP = 15;
 const KEEP_ALIVE_MS = 15_000;
+/** A history has at most this many points, evenly spread, and the latest (docs/v2-sidecar-api.md, History). */
+const HISTORY_POINTS = 600;
+/** Each phase of an analysis here takes this long, so its progress can be seen. */
+const ANALYSIS_PHASE_MS = 300;
+const ANALYSIS_PHASES = ['reading', 'pageRules', 'siteRules', 'urlSummary', 'writing'] as const;
 
 type Json = unknown;
 type Handler = (match: RegExpMatchArray, request: TransportRequest) => Promise<Response>;
@@ -311,7 +318,10 @@ export function createMockTransport(): Transport {
   const simulations = new Map<string, Simulation>();
   const subscribers = new Set<(event: string, data: Json) => void>();
   let snapshots: LiveSnapshot[] | null = null;
+  let replayMaxUrls: number | null = null;
   let loaded: Promise<void> | null = null;
+  /** The analyses running, each with what cancels it. */
+  const analyses = new Map<string, () => void>();
 
   const emit = (event: string, data: Json) => subscribers.forEach((send) => send(event, data));
 
@@ -331,9 +341,13 @@ export function createMockTransport(): Transport {
   const folderOf = (id: string): FixtureCrawl => folders.get(id) ?? 'garden';
 
   const liveSnapshots = async () => {
-    snapshots ??= (await fixture<{ snapshots: Record<string, unknown>[] }>('garden/live.json')).snapshots.map(
-      adaptSnapshot,
-    );
+    if (!snapshots) {
+      const replay = await fixture<{ snapshots: Record<string, unknown>[]; options?: { maxUrls?: unknown } }>(
+        'garden/live.json',
+      );
+      snapshots = replay.snapshots.map(adaptSnapshot);
+      replayMaxUrls = typeof replay.options?.maxUrls === 'number' ? replay.options.maxUrls : null;
+    }
     return snapshots;
   };
 
@@ -344,24 +358,93 @@ export function createMockTransport(): Transport {
     emit('crawl', { crawlId: id, status });
   };
 
-  const progressOf = (simulation: Simulation, snapshot: LiveSnapshot): ProgressEvent => {
+  /**
+   * A progress event from the replay, with E4's part. The fixture doesn't tell the site's own URLs from the rest (40
+   * of the garden crawl's 4,521 are other sites'), so every URL the crawl means to fetch counts as the site's.
+   */
+  const progressOf = (simulation: Simulation, snapshot: LiveSnapshot, last: boolean): ProgressEvent => {
     const { pages: _pages, ...counts } = snapshot;
-    return { crawlId: simulation.crawlId, status: simulation.status, ...counts };
+    return {
+      crawlId: simulation.crawlId,
+      status: simulation.status,
+      ...counts,
+      at: new Date(Date.parse(simulation.startedAt) + snapshot.elapsedMs).toISOString(),
+      phase: last ? 'finishing' : snapshot.fetched === 0 ? 'starting' : 'crawling',
+      internalFound: snapshot.discovered - snapshot.skipped,
+      internalFetched: snapshot.fetched,
+      maxUrls: replayMaxUrls,
+      waits: [],
+      moreWaits: {},
+    };
+  };
+
+  const historyPoint = (startedAt: string, snapshot: LiveSnapshot): HistoryPoint => ({
+    at: new Date(Date.parse(startedAt) + snapshot.elapsedMs).toISOString(),
+    fetched: snapshot.fetched,
+    htmlPages: snapshot.htmlPages,
+    internalFetched: snapshot.fetched,
+    internalFound: snapshot.discovered - snapshot.skipped,
+    errors: snapshot.errors,
+    blocked: snapshot.blocked,
+  });
+
+  /** The replay as far as `end`, as a history: at most HISTORY_POINTS evenly spread, and the latest. */
+  const historyOf = (startedAt: string, all: readonly LiveSnapshot[], end: number): HistoryPoint[] => {
+    const stride = Math.max(1, Math.ceil((end + 1) / HISTORY_POINTS));
+    const points: HistoryPoint[] = [];
+    for (let index = 0; index <= end; index += stride) {
+      const snapshot = all[index];
+      if (snapshot) points.push(historyPoint(startedAt, snapshot));
+    }
+    const latest = all[end];
+    if (latest && end % stride !== 0) points.push(historyPoint(startedAt, latest));
+    return points;
+  };
+
+  /**
+   * An analysis: its phases as E4's `analysis` events, then `done`. Cancelled, nothing it did is kept and the crawl is
+   * what it was before.
+   */
+  const analyse = (id: string, done: () => void) => {
+    const before = items.get(id);
+    const pages = Math.max(1, before?.pageCount ?? 1);
+    let step = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    setStatus(id, 'analyzing');
+    const next = () => {
+      const phase = ANALYSIS_PHASES[Math.floor(step / 2)];
+      if (!phase) {
+        analyses.delete(id);
+        done();
+        emit('library', {});
+        return;
+      }
+      const total = phase === 'writing' ? 1 : phase === 'siteRules' ? 9 : pages;
+      const starting = step % 2 === 0;
+      emit('analysis', { crawlId: id, phase, done: starting ? 0 : total, total });
+      step++;
+      timer = setTimeout(next, starting ? ANALYSIS_PHASE_MS : 0);
+    };
+    timer = setTimeout(next, 0);
+    analyses.set(id, () => {
+      clearTimeout(timer);
+      analyses.delete(id);
+      if (before) setStatus(id, before.status);
+      emit('library', {});
+    });
   };
 
   const finish = (simulation: Simulation) => {
     if (simulation.timer) clearInterval(simulation.timer);
     simulation.timer = null;
     simulations.delete(simulation.crawlId);
-    setStatus(simulation.crawlId, 'analyzing');
-    setTimeout(() => {
+    setStatus(simulation.crawlId, 'completed', { finishedAt: new Date().toISOString() });
+    analyse(simulation.crawlId, () =>
       setStatus(simulation.crawlId, 'completed', {
-        finishedAt: new Date().toISOString(),
         analyzedAt: new Date().toISOString(),
         issues: { error: 2, warning: 6, notice: 11 },
-      });
-      emit('library', {});
-    }, 1_500);
+      }),
+    );
   };
 
   const tick = async (simulation: Simulation) => {
@@ -371,8 +454,9 @@ export function createMockTransport(): Transport {
     if (!snapshot) return;
     const item = items.get(simulation.crawlId);
     if (item) items.set(simulation.crawlId, { ...item, fetchedUrlCount: snapshot.fetched, pageCount: snapshot.pages });
-    emit('progress', progressOf(simulation, snapshot));
-    if (simulation.status === 'running' && simulation.index === all.length - 1) finish(simulation);
+    const last = simulation.status === 'running' && simulation.index === all.length - 1;
+    emit('progress', progressOf(simulation, snapshot, last));
+    if (last) finish(simulation);
   };
 
   const run = (simulation: Simulation) => {
@@ -566,6 +650,46 @@ export function createMockTransport(): Transport {
     ],
     ['GET', /^\/api\/crawls\/([0-9a-f]{16})\/alerts$/, () => Promise.resolve(json([]))],
     [
+      'GET',
+      /^\/api\/crawls\/([0-9a-f]{16})\/history$/,
+      async ([, id = '']) => {
+        await load();
+        const item = items.get(id);
+        if (!item) return problem(crawlNotFound(id));
+        const startedAt = item.startedAt ?? new Date().toISOString();
+        const simulation = live(id);
+        let points: HistoryPoint[];
+        if (simulation) {
+          points = historyOf(simulation.startedAt, await liveSnapshots(), simulation.index);
+        } else if (folderOf(id) === 'garden') {
+          // As far as the crawl got: one stopped here ends where its replay did.
+          const all = await liveSnapshots();
+          const reached = all.findIndex((snapshot) => snapshot.fetched >= item.fetchedUrlCount);
+          points = historyOf(startedAt, all, reached < 0 ? all.length - 1 : reached);
+        } else {
+          // No replay of this crawl was kept: where it started and where it ended.
+          points = [
+            { at: startedAt, fetched: 0, htmlPages: 0, internalFetched: 0, internalFound: 0, errors: 0, blocked: 0 },
+            {
+              at: item.finishedAt ?? item.updatedAt ?? startedAt,
+              fetched: item.fetchedUrlCount,
+              htmlPages: item.pageCount,
+              internalFetched: item.fetchedUrlCount,
+              internalFound: item.fetchedUrlCount,
+              errors: 0,
+              blocked: 0,
+            },
+          ];
+        }
+        return json({
+          crawlId: id,
+          startedAt: simulation?.startedAt ?? startedAt,
+          liveFrom: simulation?.startedAt ?? null,
+          points,
+        } satisfies CrawlHistory);
+      },
+    ],
+    [
       'POST',
       /^\/api\/crawls\/([0-9a-f]{16})\/analyze$/,
       async ([, id = '']) => {
@@ -574,15 +698,21 @@ export function createMockTransport(): Transport {
         if (!item) return problem(crawlNotFound(id));
         if (live(id))
           return problem({ type: 'not-analysable', title: 'A crawl can’t be analysed while it runs.', status: 409 });
-        setStatus(id, 'analyzing');
-        setTimeout(() => {
-          setStatus(id, 'completed', { analyzedAt: new Date().toISOString(), outOfDate: false });
-          emit('library', {});
-        }, 1_500);
+        if (analyses.has(id))
+          return problem({ type: 'crawl-busy', title: 'This crawl is being analysed.', status: 409 });
+        const status = item.status;
+        analyse(id, () => setStatus(id, status, { analyzedAt: new Date().toISOString(), outOfDate: false }));
         return empty(202);
       },
     ],
-    ['POST', /^\/api\/crawls\/([0-9a-f]{16})\/analyze\/cancel$/, () => Promise.resolve(empty(202))],
+    [
+      'POST',
+      /^\/api\/crawls\/([0-9a-f]{16})\/analyze\/cancel$/,
+      ([, id = '']) => {
+        analyses.get(id)?.();
+        return Promise.resolve(empty(202));
+      },
+    ],
     [
       'GET',
       /^\/api\/crawls\/([0-9a-f]{16})\/analysis$/,
@@ -886,7 +1016,7 @@ export function createMockTransport(): Transport {
       start(controller) {
         const send = (event: string, data: Json) =>
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
-        send('hello', { live: [...simulations.keys()] });
+        send('hello', { live: [...simulations.keys()], analyzing: [...analyses.keys()] });
         subscribers.add(send);
         const keepAlive = setInterval(() => controller.enqueue(encoder.encode(': keep-alive\n\n')), KEEP_ALIVE_MS);
         cleanup = () => {

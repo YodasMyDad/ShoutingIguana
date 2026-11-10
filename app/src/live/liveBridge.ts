@@ -60,7 +60,8 @@ export function startLiveBridge({ queryClient, openCrawl, store = liveStore }: L
         void queryClient.invalidateQueries({ queryKey: queryKeys.library, exact: true });
         break;
       case 'hello':
-        onHello(event.data.live, previous);
+        // A crawl being analysed here is still this sidecar's, as one being crawled is.
+        onHello([...event.data.live, ...(event.data.analyzing ?? [])], previous);
         break;
       case 'progress':
         if (isCrawling(event.data.status)) {

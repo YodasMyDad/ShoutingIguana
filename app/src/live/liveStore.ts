@@ -2,15 +2,21 @@
 // second, and not at all while the window is hidden (in the tray), so a 2,900 URLs/s crawl never re-renders the grid
 // and a hidden window stays idle. Only components that select live data subscribe.
 import { useSyncExternalStore } from 'react';
-import { isCrawlStatus, isLive } from '../api/types';
+import { CRAWL_PHASES, isCrawlStatus, isLive } from '../api/types';
 import type {
+  AlertData,
   AlertEvent,
   AlertLevel,
   AnalysisEvent,
   CrawlEvent,
+  CrawlPhase,
   CrawlStatus,
+  CrawlWait,
+  CrawlWaitReason,
+  NoResponseCounts,
   ProgressEvent,
   SidecarEvent,
+  StatusClassCounts,
 } from '../api/types';
 import type { SseMessage, StreamState } from './sse';
 
@@ -19,6 +25,8 @@ export const HISTORY_POINTS = 600;
 export const MAX_ALERTS = 200;
 /** At most 4 renders a second. */
 export const PUBLISH_INTERVAL_MS = 250;
+/** The found-and-crawled trail: at most this many points however long the crawl runs, as the sidecar's own history. */
+export const TRAIL_POINTS = 600;
 
 const PROGRESS_COUNTS = [
   'elapsedMs',
@@ -38,11 +46,63 @@ const PROGRESS_COUNTS = [
 
 type ProgressCount = (typeof PROGRESS_COUNTS)[number];
 
+/**
+ * E4's part of a progress event (docs/v2-sidecar-api.md, Progress), as the store keeps it. An engine from before E4
+ * sends none of it, and a part the stream sent malformed isn't guessed at: each is null (or empty) then, so the screen
+ * says "–" or leaves the figure out, never 0.
+ */
+export interface LiveProgressDetail {
+  /** When the numbers were taken, in ms since the epoch. */
+  at: number | null;
+  phase: CrawlPhase | null;
+  /** The site's own URLs the crawl means to fetch, and those it has fetched: what a URL limit counts. */
+  internalFound: number | null;
+  internalFetched: number | null;
+  /** The URL limit; null when the crawl has none; undefined when the stream didn't say. */
+  maxUrls: number | null | undefined;
+  /** Every URL fetched, once, by class. Null unless every class is a count. */
+  statusClasses: StatusClassCounts | null;
+  /** URLs with a status that weren't blocked, by code. */
+  statusCodes: Readonly<Record<string, number>> | null;
+  /** Why URLs got no response. Null unless every reason is a count. */
+  noResponse: NoResponseCounts | null;
+  /** What holds part of the crawl up now, the longest first; usually nothing. */
+  waits: readonly CrawlWait[];
+  /** How many more waits there are than `waits` lists, by reason. */
+  moreWaits: Readonly<Partial<Record<CrawlWaitReason, number>>>;
+}
+
 /** A progress event as the store keeps it: a count the stream sent malformed is null, shown as "–", never 0. */
-export type LiveProgress = Omit<ProgressEvent, ProgressCount> & Record<ProgressCount, number | null>;
+export type LiveProgress = Omit<ProgressEvent, ProgressCount | keyof LiveProgressDetail> &
+  Record<ProgressCount, number | null> &
+  LiveProgressDetail;
 
 /** A stream event as the store reads it at the boundary. */
 export type LiveEvent = Exclude<SidecarEvent, { type: 'progress' }> | { type: 'progress'; data: LiveProgress };
+
+/** One point of the found-and-crawled chart, taken from a progress event at its `at`. */
+export interface TrailPoint {
+  /** Ms since the epoch. */
+  at: number;
+  fetched: number | null;
+  internalFound: number;
+  internalFetched: number;
+}
+
+/**
+ * A crawl's progress since this page first heard of it: at most TRAIL_POINTS points however long it runs, evenly
+ * spread, as the sidecar keeps its own history. `GET /history` gives what came before; this carries the chart on.
+ */
+export interface LiveTrail {
+  /** Oldest first. The last is always the newest progress, so the chart ends where the headline figures are. */
+  points: readonly TrailPoint[];
+  /** One point is kept for every this many progress events: 1 at first, doubling each time the trail fills. */
+  every: number;
+  /** Progress events since the last kept point: above 0, the last point only stands in for the newest. */
+  since: number;
+}
+
+export const EMPTY_TRAIL: LiveTrail = { points: [], every: 1, since: 0 };
 
 export interface LiveCrawl {
   id: string;
@@ -51,6 +111,8 @@ export interface LiveCrawl {
   progress: LiveProgress | null;
   /** URLs per second, oldest first, for the sparkline. */
   history: readonly number[];
+  /** The crawl's progress since this page first heard of it, for the found-and-crawled chart. */
+  trail: LiveTrail;
   /** Newest last. */
   alerts: readonly AlertEvent[];
   analysis: AnalysisEvent | null;
@@ -201,7 +263,7 @@ export function parseSidecarEvent(message: SseMessage): LiveEvent | null {
   switch (message.event) {
     case 'hello':
       return Array.isArray(record.live)
-        ? { type: 'hello', data: { live: record.live.filter((id): id is string => typeof id === 'string') } }
+        ? { type: 'hello', data: { live: strings(record.live), analyzing: strings(record.analyzing) } }
         : null;
     case 'library':
       return { type: 'library', data: {} };
@@ -227,12 +289,14 @@ export function parseSidecarEvent(message: SseMessage): LiveEvent | null {
             type: 'alert',
             data: {
               crawlId: record.crawlId,
+              ...(isCount(record.id) && Number.isInteger(record.id) ? { id: record.id } : {}),
               level: (['info', 'warning', 'error'].includes(String(record.level))
                 ? record.level
                 : 'info') as AlertLevel,
               code: typeof record.code === 'string' ? record.code : '',
               message: record.message,
               at: typeof record.at === 'string' ? record.at : new Date().toISOString(),
+              data: alertData(record.data),
             },
           }
         : null;
@@ -253,11 +317,149 @@ function withCounts(crawlId: string, status: CrawlStatus, record: Record<string,
     const value = record[key];
     counts[key] = typeof value === 'number' && Number.isFinite(value) ? value : null;
   }
-  return { crawlId, status, ...counts };
+  return { crawlId, status, ...counts, ...progressDetail(record) };
+}
+
+/** A progress event as the stream sends it, read as the store keeps it: for tests and stories that make their own. */
+export function liveProgressOf(event: ProgressEvent): LiveProgress {
+  return withCounts(event.crawlId, event.status, event as unknown as Record<string, unknown>);
+}
+
+const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const strings = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+
+const STATUS_CLASS_KEYS = ['2xx', '3xx', '4xx', '5xx', 'other', 'noResponse', 'blocked'] as const;
+const NO_RESPONSE_KEYS = ['robotsDisallowed', 'timeout', 'networkError', 'notChecked', 'processingError'] as const;
+const WAIT_REASONS: readonly CrawlWaitReason[] = [
+  'robotsTxt',
+  'otherSitesRobotsTxt',
+  'crawlDelay',
+  'backoff',
+  'heldBack',
+  'siteDown',
+  'robotsTxtCoolDown',
+];
+/** Shared, so a progress event without waits (most of them) keeps the same value from one event to the next. */
+const NO_WAITS: readonly CrawlWait[] = [];
+const NO_MORE_WAITS: Readonly<Partial<Record<CrawlWaitReason, number>>> = {};
+
+/** A breakdown whose every part is a count, or null: a part missing would make the parts add up to less than all. */
+function countsOf<Key extends string>(value: unknown, keys: readonly Key[]): Record<Key, number> | null {
+  if (!isRecord(value)) return null;
+  const counts = {} as Record<Key, number>;
+  for (const key of keys) {
+    const count = value[key];
+    if (!isCount(count)) return null;
+    counts[key] = count;
+  }
+  return counts;
+}
+
+function statusCodesOf(value: unknown): Record<string, number> | null {
+  if (!isRecord(value)) return null;
+  const codes: Record<string, number> = {};
+  for (const [code, count] of Object.entries(value)) {
+    if (/^\d{1,3}$/.test(code) && isCount(count)) codes[code] = count;
+  }
+  return codes;
+}
+
+function waitsOf(value: unknown): readonly CrawlWait[] {
+  if (!Array.isArray(value) || value.length === 0) return NO_WAITS;
+  const waits: CrawlWait[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const reason = WAIT_REASONS.find((candidate) => candidate === entry.reason);
+    if (!reason) continue;
+    waits.push({
+      reason,
+      ...(typeof entry.host === 'string' ? { host: entry.host } : {}),
+      ...(isCount(entry.urls) ? { urls: entry.urls } : {}),
+      ...(isCount(entry.durationMs) ? { durationMs: entry.durationMs } : {}),
+    });
+  }
+  return waits.length > 0 ? waits : NO_WAITS;
+}
+
+function moreWaitsOf(value: unknown): Readonly<Partial<Record<CrawlWaitReason, number>>> {
+  if (!isRecord(value)) return NO_MORE_WAITS;
+  const more: Partial<Record<CrawlWaitReason, number>> = {};
+  for (const reason of WAIT_REASONS) {
+    const count = value[reason];
+    if (isCount(count) && count > 0) more[reason] = count;
+  }
+  return Object.keys(more).length > 0 ? more : NO_MORE_WAITS;
+}
+
+function progressDetail(record: Record<string, unknown>): LiveProgressDetail {
+  const at = typeof record.at === 'string' ? Date.parse(record.at) : Number.NaN;
+  return {
+    at: Number.isNaN(at) ? null : at,
+    phase: CRAWL_PHASES.find((phase) => phase === record.phase) ?? null,
+    internalFound: isCount(record.internalFound) ? record.internalFound : null,
+    internalFetched: isCount(record.internalFetched) ? record.internalFetched : null,
+    maxUrls: record.maxUrls === null ? null : isCount(record.maxUrls) ? record.maxUrls : undefined,
+    statusClasses: countsOf(record.statusClasses, STATUS_CLASS_KEYS),
+    statusCodes: statusCodesOf(record.statusCodes),
+    noResponse: countsOf(record.noResponse, NO_RESPONSE_KEYS),
+    waits: waitsOf(record.waits),
+    moreWaits: moreWaitsOf(record.moreWaits),
+  };
+}
+
+/** An alert's facts: only the contract's fields, each of its own type; null when it has none. */
+function alertData(value: unknown): AlertData | null {
+  if (!isRecord(value)) return null;
+  const data: AlertData = {};
+  for (const key of ['host', 'origin', 'url', 'reason'] as const) {
+    const text = value[key];
+    if (typeof text === 'string') data[key] = text;
+  }
+  for (const key of ['count', 'sampled', 'urlCount', 'durationMs'] as const) {
+    const count = value[key];
+    if (isCount(count)) data[key] = count;
+  }
+  return Object.keys(data).length > 0 ? data : null;
+}
+
+/**
+ * Adds a progress event's point to a crawl's trail, keeping it to `capacity` points however long the crawl runs: every
+ * event is a point at first; once full, every other point goes, and from then on every second event is kept, then
+ * every fourth, and so on. Between kept points the newest event stands in as the last, so the chart always ends at now.
+ */
+export function addTrailPoint(trail: LiveTrail, point: TrailPoint, capacity: number = TRAIL_POINTS): LiveTrail {
+  const newest = trail.points.at(-1);
+  // Out of order (a reconnect's replayed progress): what's kept is newer.
+  if (newest && point.at <= newest.at) return trail;
+  const points = trail.since > 0 ? [...trail.points.slice(0, -1), point] : [...trail.points, point];
+  if (points.length <= capacity) return { points, every: trail.every, since: (trail.since + 1) % trail.every };
+  // Full: the points at even places stay, a kept point for every `2 × every` events, and the one just added stands in.
+  const last = points.length - 1;
+  const every = trail.every * 2;
+  return {
+    points: points.filter((_, index) => index % 2 === 0 || index === last),
+    every,
+    since: (last % 2 === 0 ? trail.every + 1 : 1) % every,
+  };
 }
 
 function blankCrawl(id: string): LiveCrawl {
-  return { id, status: null, progress: null, history: [], alerts: [], analysis: null, error: null, errorType: null };
+  return {
+    id,
+    status: null,
+    progress: null,
+    history: [],
+    trail: EMPTY_TRAIL,
+    alerts: [],
+    analysis: null,
+    error: null,
+    errorType: null,
+  };
 }
 
 function withLive(live: readonly string[], id: string, status: CrawlStatus): readonly string[] {
@@ -277,30 +479,45 @@ export function applyEvent(state: LiveState, event: LiveEvent): LiveState {
       // A (re)connected stream, maybe to a new sidecar after a crash: exactly these are live now, and their latest
       // progress follows. Any other crawl stops looking live, so its status is the library's again (a crawl the old
       // sidecar was running reads `interrupted`, with Continue).
-      const live = [...new Set(event.data.live)];
+      // E4: the crawls being analysed here are live too, and their latest `analysis` event follows, though this
+      // stream missed their `analyzing` status.
+      const analyzing = (event.data.analyzing ?? []).filter((id) => !event.data.live.includes(id));
+      const live = [...new Set([...event.data.live, ...analyzing])];
       let crawls = state.crawls;
       for (const crawl of Object.values(state.crawls)) {
         if (crawl.status !== null && isLive(crawl.status) && !live.includes(crawl.id)) {
           crawls = { ...crawls, [crawl.id]: { ...crawl, status: null, analysis: null } };
         }
       }
+      for (const id of analyzing) {
+        const crawl = crawls[id] ?? blankCrawl(id);
+        if (crawl.status !== 'analyzing') crawls = { ...crawls, [id]: { ...crawl, status: 'analyzing' } };
+      }
       return { ...state, live, crawls };
     }
     case 'progress': {
       const progress = event.data;
       const rate = progress.urlsPerSecond;
-      const next = updateCrawl(state, progress.crawlId, (crawl) => ({
-        ...crawl,
-        status: progress.status,
-        progress,
-        // A rate the stream didn't give leaves a gap rather than a false 0 in the sparkline.
-        history:
-          rate === null
-            ? crawl.history
-            : crawl.history.length >= HISTORY_POINTS
-              ? [...crawl.history.slice(crawl.history.length - HISTORY_POINTS + 1), rate]
-              : [...crawl.history, rate],
-      }));
+      const next = updateCrawl(state, progress.crawlId, (crawl) => {
+        const { at, internalFound, internalFetched } = progress;
+        const trail =
+          at !== null && internalFound !== null && internalFetched !== null
+            ? addTrailPoint(crawl.trail, { at, fetched: progress.fetched, internalFound, internalFetched })
+            : crawl.trail;
+        return {
+          ...crawl,
+          status: progress.status,
+          progress,
+          // A rate the stream didn't give leaves a gap rather than a false 0 in the sparkline.
+          history:
+            rate === null
+              ? crawl.history
+              : crawl.history.length >= HISTORY_POINTS
+                ? [...crawl.history.slice(crawl.history.length - HISTORY_POINTS + 1), rate]
+                : [...crawl.history, rate],
+          trail,
+        };
+      });
       return { ...next, live: withLive(next.live, progress.crawlId, progress.status) };
     }
     case 'crawl': {
