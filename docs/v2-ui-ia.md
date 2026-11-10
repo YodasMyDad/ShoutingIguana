@@ -58,8 +58,8 @@ links and "reopen where I left off" all work.
 | `/crawls/:crawl/issues/:check?` | Issues, with a check selected (the first to fix when none is). Params: `severity`, `q`, `category` (one category's checks, by its id in the catalog: where Overview's category counts lead), `group` (the open group, as `{ detail, relatedUrlId }`), `sort` (a check that doesn't group), `inspect` |
 | `/crawls/:crawl/urls` | URLs. Params: `view`, `filter`, `sort`, `cols`, `q`, `inspect` |
 | `/crawls/:crawl/links` | Links. Same params as URLs |
-| `/crawls/:crawl/sitemaps/:sitemap?` | Sitemaps, and one sitemap's URLs |
-| `/crawls/:crawl/robots/:origin?` | robots.txt, with the blocked URLs and the rule that matched |
+| `/crawls/:crawl/sitemaps/:sitemap?` | Sitemaps: the list, and one sitemap's URLs (its id in the path). Params on one sitemap: `filter`, `sort`, `q`, `inspect`, as URLs. On the list: `url`, a sitemap's address, which goes on to that sitemap |
+| `/crawls/:crawl/robots/:origin?` | robots.txt: the origins, and one origin's file with the URLs it blocked (the origin in the path). Params on one origin: `line` (the line chosen), `reason` (`unreachable` or `unknown`: the blocked URLs no line accounts for), `inspect` |
 | `/crawls/:crawl/settings` | The settings this crawl used: Continue, or Crawl again with them |
 | `/settings/:section?` | App settings: general, crawl defaults, analysis, data, shortcuts, diagnostics, updates, about |
 
@@ -134,14 +134,25 @@ links and "reopen where I left off" all work.
 
 **Links.** All links, with anchor text, position, follow flags and the target's status, in the same grid.
 
-**Sitemaps.** The sitemap tree, with each file's status and URL count. Open a sitemap for its URLs, each marked
-crawled, not crawled or non-indexable.
+**Sitemaps.**
+
+- The answer in a sentence, then the sitemap tree: an index with the sitemaps it lists under it. Each says how the
+  crawl found it, what became of it, and its URLs counted: listed, crawled, not crawled, non-indexable. Every count
+  opens exactly those URLs.
+- What isn't there is said: no sitemap at all and where the crawl looked, a sitemap that couldn't be read and why,
+  and how many of the site's pages no sitemap lists (a link to them in URLs).
+- Open a sitemap for its URLs: the URL grid narrowed to it, each URL with what the crawl did with it, and quick
+  filters for not crawled, non-indexable, and redirecting or broken. "All sitemaps" leads back.
 
 **robots.txt.**
 
-- Each origin's file, with line numbers.
-- The blocked URLs, each with the rule that matched it.
-- Selecting a rule highlights it and lists what it blocked.
+- The origins the crawl asked, the site's own first, then the rest by the URLs they blocked. Each says what its
+  answer meant: read, missing (nothing refused), couldn't be read (its URLs refused), or no answer (crawled anyway).
+- Open an origin for its file, with line numbers, as text: the group the crawl obeyed is marked, the others are
+  quiet, and each rule says how many URLs it blocked.
+- Beside it, the blocked URLs, each with the line that decided it. Choosing a rule marks it and lists what it
+  blocked; moving through the URLs shows each one's line. A URL opens the inspector.
+- A crawl told to ignore robots.txt says so at the top.
 
 **URL inspector tabs.**
 
@@ -238,6 +249,22 @@ With focus in the HTML itself (Source's viewer, which has a caret and can't be t
 | Esc | The app's | Close the inspector, whatever is selected |
 | Ctrl+K, `?`, F7, F8, Ctrl+1 to Ctrl+7, Ctrl+N, Ctrl+O, Ctrl+, | The app's | As everywhere |
 | Letters and other typing keys | Nobody's | Nothing: a screen's single-letter keys (Issues' J and K) wait for focus outside the HTML |
+
+### In Sitemaps and robots.txt
+
+| Keys | Where | Action |
+| --- | --- | --- |
+| Arrows | The sitemap tree, the origins, a sitemap's URLs, the blocked URLs | Move, as in every grid; each is one Tab stop |
+| Right, Left | The tree, on a sitemap index | Open it, close it; Left on a sitemap under one goes up to it |
+| Enter | The tree | Open the sitemap, or the count the cursor is on |
+| Enter | The origins | Open the origin's file |
+| Enter | A sitemap's URLs, the blocked URLs | Inspect |
+| Ctrl+F | One sitemap | Search its URLs |
+| Ctrl+F | One origin's file | Search the file; Enter and Shift+Enter step through the matches |
+| Enter | The file, with the caret on a rule that blocked URLs | List the URLs it blocked |
+| Ctrl+Shift+C | One origin's file | Copy the blocked URLs listed |
+
+The file is the source viewer: with focus in it, the keys are those of the HTML source above.
 
 macOS uses Cmd where Windows uses Ctrl. One registry feeds the menus, tooltips, the `?` sheet and the palette.
 

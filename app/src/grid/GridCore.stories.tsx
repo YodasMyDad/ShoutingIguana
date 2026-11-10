@@ -206,3 +206,101 @@ export const Grouped: StoryObj<typeof GroupedDemo> = {
   render: (args) => <GroupedDemo {...args} />,
   args: { density: 'standard', sorted: 'ascending' },
 };
+
+interface NestedDemoRow {
+  id: number;
+  name: string;
+  level: number;
+  parent: number | null;
+  children: number;
+  listed: number;
+  broken: number;
+}
+
+/** Two indexes, one inside the other, each with files under it: a tree three deep. */
+const NESTED: NestedDemoRow[] = [
+  { id: 1, name: '/sitemap.xml', level: 1, parent: null, children: 3, listed: 1_234_567, broken: 412 },
+  { id: 2, name: '/sitemaps/pages.xml', level: 2, parent: 0, children: 0, listed: 48_211, broken: 12 },
+  { id: 3, name: '/sitemaps/shop.xml', level: 2, parent: 0, children: 2, listed: 1_186_356, broken: 400 },
+  { id: 4, name: '/sitemaps/shop/products-1.xml', level: 3, parent: 2, children: 0, listed: 50_000, broken: 0 },
+  { id: 5, name: '/sitemaps/shop/products-2.xml', level: 3, parent: 2, children: 0, listed: 50_000, broken: 400 },
+  { id: 6, name: '/sitemaps/news.xml', level: 2, parent: 0, children: 0, listed: 0, broken: 0 },
+  { id: 7, name: '/news-sitemap.xml', level: 1, parent: null, children: 0, listed: 96, broken: 0 },
+];
+
+function NestedDemo({ density }: { density: Density }) {
+  const metrics = DENSITY_METRICS[density];
+  const [opened, setOpened] = useState('Nothing opened yet');
+  const nestedColumns: GridColumn<NestedDemoRow>[] = [
+    {
+      id: 'name',
+      header: 'Sitemap',
+      width: 420,
+      mono: true,
+      cell: (row) => (
+        <span className="flex items-center">
+          {row.children > 0 ? (
+            <span data-tree-toggle aria-hidden="true" className="si-tree-toggle">
+              ›
+            </span>
+          ) : (
+            <span aria-hidden="true" className="si-tree-spacer" />
+          )}
+          {row.name}
+        </span>
+      ),
+      text: (row) => row.name,
+    },
+    {
+      id: 'listed',
+      header: 'Listed',
+      width: 120,
+      numeric: true,
+      cell: (row) => row.listed.toLocaleString('en-GB'),
+      text: (row) => String(row.listed),
+    },
+    {
+      id: 'broken',
+      header: 'Broken',
+      width: 120,
+      numeric: true,
+      cell: (row) => row.broken.toLocaleString('en-GB'),
+      text: (row) => String(row.broken),
+    },
+  ];
+  return (
+    <div className="flex h-screen flex-col gap-2 bg-canvas p-4">
+      <p role="status" className="text-13 text-text-secondary">
+        {opened}
+      </p>
+      <GridCore<NestedDemoRow>
+        label="Sitemaps"
+        columns={nestedColumns}
+        rowCount={NESTED.length}
+        getRow={(index) => NESTED[index]}
+        rowHeight={metrics.rowHeight}
+        headerHeight={metrics.headerHeight}
+        onActivateCell={(_index, row, column) => setOpened(`Opened ${row?.name ?? ''}, from its ${column} cell`)}
+        tree={{
+          level: (index) => NESTED[index]?.level ?? 1,
+          expanded: (index) => ((NESTED[index]?.children ?? 0) > 0 ? true : undefined),
+          parent: (index) => NESTED[index]?.parent ?? null,
+          onToggle: () => undefined,
+          activates: true,
+        }}
+        className="flex-1 rounded-lg border border-border"
+      />
+    </div>
+  );
+}
+
+/**
+ * A tree whose groups are rows of their own (`tree.activates`), in a grid whose cells lead to different places
+ * (`onActivateCell`): Enter or a double-click opens a row, a group's included, and says which cell it was on; Right,
+ * Left and the chevron open and close a group. Rows indent to four levels, and a row with nothing under it lines up
+ * with the rows that open.
+ */
+export const TreeOfRowsThatOpen: StoryObj<typeof NestedDemo> = {
+  render: (args) => <NestedDemo {...args} />,
+  args: { density: 'standard' },
+};

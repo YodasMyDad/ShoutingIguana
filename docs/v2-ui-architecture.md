@@ -33,7 +33,7 @@ Webview (React, app/src) ──────────────────�
 | `src/settings` | Preferences: schema, store (the shell's settings commands, or `localStorage`), appearance |
 | `src/feedback` | The loading rule, skeletons, toasts, error states, route errors, announcements |
 | `src/layout` | The shell's layout: sidebar, top bar, inspector slot, banners, the stopping overlay |
-| `src/screens` | One file per route, a screen's own pieces in a folder beside it (`screens/issues/`). Home, Overview, Issues and the URLs grid work; the rest are stubs for their slices |
+| `src/screens` | One file per route, a screen's own pieces in a folder beside it (`screens/issues/`). Home, Overview, Issues, the URLs grid, Sitemaps and robots.txt work; the rest are stubs for their slices |
 | `src/inspector` | The URL inspector: its sections, their pure logic, and the HTML source viewer (see The inspector) |
 | `src/app` | The router, the query client, overlays, sections, the root component |
 | `src/ui` | The component library: buttons, fields, menus, severity, figures, URLs and the rest (see Components) |
@@ -478,8 +478,8 @@ are drawn for the app and are never swapped for Lucide's.
 
 ## Left for the slices
 
-- Every screen except Home, Overview and Issues: the full URL and Links grids, Sitemaps, robots.txt,
-  New crawl, the crawl's settings, the rest of Settings. The inspector is built (below).
+- Every screen except Home, Overview, Issues, Sitemaps and robots.txt: the full URL and Links grids, New crawl, the
+  crawl's settings, the rest of Settings. The inspector is built (below), and so are Sitemaps and robots.txt.
 - The engine's E3b to E6: the links, sitemaps and robots grids, export, search, favicons. Analysis progress (E4) is in
   use on Issues and Overview (`crawl/analysis.ts` words its phases), as are E4's progress, alerts and history.
 - Export (E5) on Issues: this check, or every check with a summary sheet, and Ctrl+E. Until the engine has it, Issues
@@ -737,3 +737,111 @@ is what it shows. What it settled:
   focus when it's there, and the request goes then, when another section is chosen and when the inspector shows
   another URL (each URL has a Source section of its own, which would otherwise take focus as it mounts).
 - **Targets.** Links stacked in lists (issues, a tree's rows) are at least `--target-min` (24 px) tall.
+
+## Sitemaps and robots.txt (their slice)
+
+`screens/SitemapsScreen.tsx` with `screens/sitemaps/`, and `screens/RobotsScreen.tsx` with `screens/robots/`. Each
+is two views on one route: a list, and one thing from it, named in the path. What they settled:
+
+- **Pure first**, each unit-tested: `sitemapTree.ts` (the flat list as a tree's rows, what's open, each row's parent;
+  whether a sitemap's counts are known), `sitemapLinks.ts` (the filter behind every count, the quick filters),
+  `sitemapWords.ts` (how a sitemap was found, what became of it, the answer sentence, the pages no sitemap lists),
+  `urlOutcome.ts`, `robotsWords.ts` (the four states, why a URL was blocked, a line's kind) and `robotsFile.ts` (how
+  the viewer draws each line, which lines the crawl obeyed, what the list is narrowed to, the line of a URL).
+- **Their reads are keyed as grids** (`sitemapKeys`, `robotsKeys` in `api/queries.ts`:
+  `['grid', <grid>, <crawl id>, ...]`), the single reads too (the list of sitemaps, one origin's file). A running
+  crawl changes every one of them, so the live bridge's once-a-second refresh of a crawl's grids keeps them current
+  in place, with no skeleton and no progress line, and nothing was added to the bridge.
+- **A link to a route with an optional part must name the part**, as `undefined` for "none". Left out, the router
+  keeps the part the page is on: on one sitemap's page the sidebar's Sitemaps, Ctrl+5 and "All sitemaps" all led to
+  the sitemap itself. The sidebar's and the palette's Sitemaps and robots.txt name it now.
+- **A stale place is said, with the list a press away**: a sitemap's id or an origin the crawl doesn't have
+  (`sitemap-not-found`, `origin-not-found`, and a path that can't be an id) reads from `STALE_PLACE_WORDS` in
+  `api/errors.ts`.
+
+### Sitemaps
+
+- **The list is a treegrid** (`GridCore` with `tree`): an index, the sitemaps it lists under it, to any depth the
+  crawler reads. One Tab stop. Two things were added to the grid for it, both opt-in: `onActivateCell` (Enter or a
+  double-click, with the column the cursor was on: each count cell leads somewhere else) and `GridTree.activates`
+  (a group's row is a thing of its own, which Enter opens as it opens any row: an index has URLs of its own, those
+  of every sitemap under it; Right, Left and the chevron open and close it).
+- **Every count is a link to exactly its URLs**: that sitemap's page under the count's filter (`COUNT_FILTERS`:
+  `fetched` is true or false, `indexable` is true or false, as the API says each is judged). The links are in the
+  cells, out of the tab order, and Enter on a cell does what a click on its link does. A count of 0 is a plain 0
+  (nothing to open). A sitemap whose contents the crawl doesn't know (left unread, not read yet, or failed before an
+  entry was read) shows dashes, never 0. "Not crawled" is what's listed less what was fetched.
+- **What isn't there is said.** No sitemap at all: a sentence by how far the crawl got (`discovery`), and where the
+  crawl looks. None read: the same, under the list. How a sitemap was found, when the crawl can't say (`foundVia`
+  null): "Not known", with why. The site's pages no sitemap lists: one read of the URL grid's `inSitemap` facet over
+  the site's pages (`ANSWERED_SITE_PAGES`, as Overview counts pages), its count a link to exactly those pages. It
+  needs the analysis: without one the line says so, and the counts that need none still show.
+- **Without a URL summary** (never analysed, out of date, an earlier engine's, a crawl running) the list says which
+  counts are the crawl's own judgement (indexable, non-indexable) and offers the analysis where it can run.
+- **One sitemap is the URL grid narrowed to it** (`/sitemaps/urls`): the URL grid's columns and filter chips
+  (exported from `UrlsScreen.tsx` as they stand: the full grid's slice gives them files of their own), with an
+  Outcome column that goes by each URL's `outcome`, never `fetched` alone; quick search; sort from the headers, by
+  the columns the engine says it sorts (`GET /api/url-columns`); the inspector on Enter. Its view is in the route
+  (`filter`, `sort`, `q`, `inspect`), as the URL grid's.
+- **Quick filters** are a segmented control: All, Not crawled, Non-indexable, Redirecting or broken (by `outcome`:
+  a redirect, an error or no answer; not what robots.txt or a firewall kept the crawl from). Filters that aren't one
+  of them (a count's link from the list) are a segment of their own while they last, "Other filters": a radio group
+  chooses the segment focus lands on, so with none chosen, Tab onto the control replaced the filters.
+- **Counts that must agree are one read's.** A quick filter's count is the list's; the one chosen, and All, take the
+  grid's own count once it's known, so the header and the filter never disagree while a crawl runs.
+- **A link can name a sitemap by its address** (`?url=`): Overview's "A sitemap was left out" does, and the list
+  goes on to that sitemap's page, in place.
+- **Its commands** are the registry's Sitemaps group: search this sitemap's URLs (Ctrl+F), show every sitemap, copy
+  the sitemap's URL, open it in the browser, and each quick filter.
+
+### robots.txt
+
+- **The origins are a paged grid** (200 a page, as every grid): the site's own first, then the rest by the URLs they
+  blocked, which is the engine's order. Each says what its answer meant to the crawl in words of its own: read (an
+  empty file says so), missing (nothing refused), unreachable (its URLs refused) and unanswered (crawled anyway). A
+  crawl told to ignore robots.txt says so at the top of both views.
+- **The file is the inspector's source viewer.** The search field, its count, Wrap lines and the viewer were taken
+  out of the Source section as they stood, as `inspector/SourcePane.tsx`, which both use: Ctrl+F, Enter and
+  Shift+Enter, the 10,000-match limit and the caret are the same. The viewer gained a `language` (HTML, or plain),
+  marks for lines (`inspector/sourceLines.ts`: a tone, a name, a note, a link) and a chosen line. The engine says
+  what each line is and whether it's part of the group the crawl obeyed: nothing is parsed or matched in the app.
+- **What the marks mean**: the obeyed group carries the accent's rule at its left edge, the other groups are muted, a
+  directive's name is set apart, a line the crawler made nothing of says why after it, and a rule that blocked URLs
+  says how many, as a link. A rule that blocked none says nothing (a real file has hundreds). The file's line above
+  it says the same in words ("As ShoutingIguana, the crawl obeyed lines 5 to 9."). Under forced colours the rule is
+  CanvasText against an edge of the page's own colour, and the chosen line is outlined in Highlight; the mark's
+  class is on the editor's content, as a theme's rules inside a media query can't name the editor itself.
+- **Choosing either way.** A line is chosen with a press on its link, or Enter with the caret on it: the route takes
+  `line`, the list is that line's URLs, and the file marks it. Moving the list's cursor shows each URL's line in the
+  file, focus arriving on the list included. The two cases no line accounts for (`unreachable`, `unknown`) are links
+  over the list, with the route's `reason`. What narrows the list shows as a chip that removes it.
+- **A URL blocked without a line says which case it is**: robots.txt couldn't be read, or nothing kept refuses it
+  ("Only the last answer is kept, so what refused it is gone"), and no more than that.
+- **Copying**: the file as it is, and the blocked URLs the list is narrowed to (Ctrl+Shift+C), read 1,000 at a time
+  by the Issues screen's copy, with its progress toast.
+- **The layout**: the file and the list side by side, stacked below the `split` width (a narrow window, or the
+  inspector open beside them), each with a height of its own then.
+- **Its commands** are the registry's robots.txt group: show every origin, copy the file, copy the blocked URLs,
+  open the robots.txt in the browser, list every blocked URL.
+
+### From elsewhere
+
+- The inspector's "Blocked by robots.txt" leads to the file on that URL's own origin, and "In a sitemap" to
+  Sitemaps. `/urls/inspect` says neither which line nor which sitemaps, so neither link can be more exact.
+- The mock answers these endpoints from fixtures of their own (`api/mock/sitemapsRobots.ts`, saved by
+  `design/data/extract/sitemaps-robots.mjs`). It counts each sitemap's URLs over the rows its own grid has.
+
+### What the engine doesn't give
+
+- `POST /robots` takes only `offset` and `limit`: no search, no filter to the origins that blocked something, and
+  no count of them. The order puts them first after the site's own, and the screen says so.
+- Nothing counts a sitemap's redirecting or broken URLs, so that quick filter carries no number.
+- `/robots/blocked` can't be asked for one URL, and `/urls/inspect` doesn't carry the line: arriving from the
+  inspector, the file can't show that URL's line until the URL is found in the list.
+
+### The sweep
+
+`e2e/sitemaps-robots.sweep.spec.ts` reads every count off both screens and follows it: each sitemap's four counts
+(a 0 has no link, so the engine is asked what its link would open), each quick filter, the pages no sitemap lists,
+each origin's blocked URLs, each line's, and the two cases no line accounts for, which must add up to the origin's.
+It runs on the tests' own crawl of the synthetic site, and on a real one with `SI_E2E_CRAWL`.
