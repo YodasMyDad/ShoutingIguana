@@ -79,6 +79,17 @@ function canonicalTarget(test: IndexabilityTest): IndexabilityRow['target'] {
   return test.canonicalUrl ? { id: null, url: test.canonicalUrl, statusCode: null } : undefined;
 }
 
+/**
+ * A canonical to another URL that still passes: the engine passes one that leads back to the page (through the
+ * target's redirects) and one that leads nowhere (the target, or where it redirects, is broken). The target's own
+ * status says which, except for a redirect, which could be either: then no more is claimed than the engine's rule.
+ */
+function passedElsewhereWords(statusCode: number | null): string {
+  if (statusCode === null || statusCode >= 400) return 'Its canonical leads nowhere';
+  if (statusCode >= 300) return 'Its canonical redirects back to it, or nowhere';
+  return 'Its canonical leads back to it';
+}
+
 function rowFor(subject: Subject, test: IndexabilityTest, earlierFailed: boolean): IndexabilityRow {
   const base = { test: test.test, label: LABELS[test.test], state: test.outcome };
   if (test.outcome === 'notChecked') return { ...base, detail: notCheckedWords(subject, earlierFailed, test.test) };
@@ -112,9 +123,8 @@ function rowFor(subject: Subject, test: IndexabilityTest, earlierFailed: boolean
       if (test.outcome === 'fail') return { ...base, detail: 'Its canonical is another URL', target };
       if (!target) return { ...base, detail: 'It has no canonical' };
       const itself = target.id === subject.id || target.url === subject.url;
-      return itself
-        ? { ...base, detail: 'Its canonical is itself', plain: true }
-        : { ...base, detail: 'Its canonical leads back to it', target };
+      if (itself) return { ...base, detail: 'Its canonical is itself', plain: true };
+      return { ...base, detail: passedElsewhereWords(target.statusCode), target };
     }
   }
 }

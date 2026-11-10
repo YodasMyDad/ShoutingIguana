@@ -171,8 +171,43 @@ describe('indexabilityVerdict', () => {
         ),
       }),
     );
-    expect(row(verdict, 'canonical').detail).toBe('Its canonical leads back to it');
+    // A redirect could lead back or to somewhere broken: its status alone doesn't say which.
+    expect(row(verdict, 'canonical').detail).toBe('Its canonical redirects back to it, or nowhere');
     expect(row(verdict, 'canonical').target?.id).toBe(31);
+  });
+
+  it('says a canonical that passes leads nowhere when its target is broken, and back when it answers', () => {
+    const gone = 'https://example.com/gone/';
+    const passing = (statusCode: number | null) =>
+      row(
+        indexabilityVerdict(
+          testUrlDetail({
+            indexability: withTests(
+              { canonical: { outcome: 'pass', canonical: { id: 31, url: gone, statusCode }, canonicalUrl: gone } },
+              { indexable: true, reason: 'none' },
+            ),
+          }),
+        ),
+        'canonical',
+      );
+    expect(passing(404).detail).toBe('Its canonical leads nowhere');
+    expect(passing(503).detail).toBe('Its canonical leads nowhere');
+    // No status: never fetched, blocked or unreachable.
+    expect(passing(null).detail).toBe('Its canonical leads nowhere');
+    expect(passing(200).detail).toBe('Its canonical leads back to it');
+
+    // And a URL the crawl doesn't have at all.
+    const passed = withTests({}, { indexable: true, reason: 'none' });
+    const unknown = {
+      ...passed,
+      tests: passed.tests.map((test): IndexabilityTest =>
+        test.test === 'canonical' ? { test: 'canonical', outcome: 'pass', canonicalUrl: gone } : test,
+      ),
+    };
+    expect(row(indexabilityVerdict(testUrlDetail({ indexability: unknown })), 'canonical')).toMatchObject({
+      detail: 'Its canonical leads nowhere',
+      target: { id: null, url: gone },
+    });
   });
 
   it('keeps every failed test, the first being the reason', () => {

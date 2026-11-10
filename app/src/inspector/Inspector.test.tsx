@@ -234,6 +234,41 @@ describe('the summary', () => {
     expect(await within(inspector).findByRole('heading', { level: 2, name: HOME.url })).toBeVisible();
   });
 
+  it('says a canonical to a broken URL leads nowhere, with the status it has, or that it has none', async () => {
+    const canonicalTo = (statusCode: number | null) =>
+      testUrlDetail({
+        indexability: {
+          ...testUrlDetail().indexability,
+          tests: testUrlDetail().indexability.tests.map((test) =>
+            test.test === 'canonical'
+              ? { ...test, canonical: { id: 3, url: OTHER.url, statusCode }, canonicalUrl: OTHER.url }
+              : test,
+          ),
+        },
+      });
+    const { inspector, router } = await open(`${URLS}?inspect=2`, {
+      urls: {
+        2: canonicalTo(404),
+        3: OTHER,
+        4: testUrlDetail({ ...canonicalTo(null), id: 4, url: 'https://example.com/c' }),
+      },
+    });
+    await within(inspector).findByRole('list', { name: 'Indexability tests' });
+    // Each URL has a list of its own.
+    const canonical = () =>
+      within(within(inspector).getByRole('list', { name: 'Indexability tests' })).getAllByRole('listitem')[3]!;
+    expect(canonical()).toHaveTextContent('Canonical is itself: Passed.');
+    expect(canonical()).toHaveTextContent('Its canonical leads nowhere');
+    expect(canonical()).toHaveTextContent('404');
+    expect(canonical()).not.toHaveTextContent('leads back to it');
+    // A target with no status says only that: whether it was never fetched isn't known from here.
+    await act(() => inspectFromGrid(router, 4));
+    await within(inspector).findByRole('heading', { level: 2, name: 'https://example.com/c' });
+    await waitFor(() => expect(canonical()).toHaveTextContent('No status'));
+    expect(canonical()).toHaveTextContent('Its canonical leads nowhere');
+    expect(canonical()).not.toHaveTextContent('Not fetched');
+  });
+
   it('links each issue to its check on Issues, with the group it’s in', async () => {
     const { inspector } = await open(`${URLS}?inspect=2`);
     const issues = await within(inspector).findByRole('list', { name: 'This URL’s issues' });
