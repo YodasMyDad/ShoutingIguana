@@ -1417,7 +1417,8 @@ inspector's group keys are read on, which they're read without too; both come wh
   each by kind, position, flags, whether the link leads to its own page, has text, and sits on a nofollow page, built
   inside the analysis's transaction in one pass over the links, each counted by a function SQLite calls per row
   (`LinkSummaryBuilder`; grouping them in SQL took 18 s on the 100k crawl). `link_summary_state` keeps the crawl
-  row's stamp they were counted under, with the number of links and their highest id: they stand until a run of the
+  row's stamp they were counted under, with the number of links, their highest id and the size of a block (which a
+  read takes from the file): they stand until a run of the
   crawl moves the stamp on, so analysing a crawl again doesn't count them again, and an engine from before them
   analysing the file leaves them standing, and right. On the 100k benchmark crawl (5,054,060 links) the pass takes
   1.5 s of the first analysis, and the three tables with the new index 4.5 MB of a 493 MB file.

@@ -364,7 +364,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, whether it was partial, what it ran against (the crawl's `updated_at`, the analysis version, the checks' fingerprint), and what it couldn't do and why |
 | `skipped_checks` | Each check the last analysis skipped, with a reason code and a sentence |
 | `effective_indexability` | Indexability as analysed, for URLs where it differs from the crawl's (an instant meta refresh, a canonical leading back to the page) |
-| `link_summary`, `link_blocks`, `link_summary_state` | The links counted for the links grid, by the first analysis of the crawl as it stands: by target, and by block of 16,384 consecutive link ids, each by kind, position, flags, whether the link leads to its own page, has text, and sits on a nofollow page; and the crawl row's stamp they were counted under, with the number of links and their highest id |
+| `link_summary`, `link_blocks`, `link_summary_state` | The links counted for the links grid, by the first analysis of the crawl as it stands: by target, and by block of 16,384 consecutive link ids, each by kind, position, flags, whether the link leads to its own page, has text, and sits on a nofollow page; and the crawl row's stamp they were counted under, with the number of links, their highest id and the size of a block |
 | `url_summary` | One row per URL for the grids, rebuilt by each analysis: how it was found, indexable or not and why, where redirects end and the status there, the type (page, image, script, stylesheet, font, media, PDF, other), in a sitemap, inlinks (all, followed, nofollow, linking pages), outlinks, issues by severity, the room the title and meta description take as the checks measure it, and copies of the URL's depth, status, size, time and word count |
 
 URLs that only appear in sitemaps keep depth `1000000` (`CrawlDepth.UNLINKED`) in `urls`, which is how orphan pages
@@ -449,7 +449,9 @@ The analysis of a crawl therefore counts them once, in one pass, into two small 
   on what a link is and on its target, the facets, each target's matching links (which a sort by the target adds up
   to find a page), and the targets a filter's links lead to.
 - `link_blocks`, by block of 16,384 consecutive link ids: 3,400 rows, 70 KB. It says where in crawl order a filter's
-  links are, so a page anywhere is read from the blocks that hold it.
+  links are, so a page anywhere is read from the blocks that hold it. The size of a block is stored with the counts
+  (`link_summary_state.block_shift`) and a read goes by the file's, so the size can change without a file being read
+  wrongly.
 
 They're counted in hash tables by a function SQLite calls per link, then stored in key order: grouping the links in
 SQL sorts every one of them, 18 s on the 100k crawl. The pass takes 1.5 s there (5 million links), and its tables
