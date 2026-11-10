@@ -9,6 +9,15 @@ import type {
   GridQuery,
   IssueGroupPage,
   IssueRow,
+  LinkColumn,
+  LinkFacetsPage,
+  LinkFacetsQuery,
+  LinkRow,
+  RobotsBlockedPage,
+  RobotsBlockedQuery,
+  RobotsFile,
+  RobotsOriginPage,
+  SitemapList,
   UrlColumn,
   UrlLookup,
   UrlRow,
@@ -143,6 +152,25 @@ export const api = {
     post<IssueGroupPage>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/groups`, page, signal),
   issueRows: (id: string, checkId: string, query: GridQuery, signal?: Signal) =>
     post<GridPage<IssueRow>>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/rows`, query, signal),
+
+  // Links, sitemaps and robots.txt (E3b).
+  linkColumns: (signal?: Signal) => get<LinkColumn[]>('/api/link-columns', signal),
+  /** The links grid: one sort key, `id` or a column of the target. `group` isn't taken. */
+  links: (id: string, query: GridQuery, signal?: Signal) =>
+    post<GridPage<LinkRow>>(`${crawl(id)}/links`, query, signal),
+  linkFacets: (id: string, query: LinkFacetsQuery, signal?: Signal) =>
+    post<LinkFacetsPage>(`${crawl(id)}/links/facets`, query, signal),
+  sitemaps: (id: string, signal?: Signal) => get<SitemapList>(`${crawl(id)}/sitemaps`, signal),
+  /** The URL grid for one sitemap (an index: every sitemap under it). `sitemap-not-found` for an id the crawl lacks. */
+  sitemapUrls: (id: string, sitemapId: number, query: GridQuery, signal?: Signal) =>
+    post<GridPage<UrlRow>>(`${crawl(id)}/sitemaps/urls`, { sitemapId, ...query }, signal),
+  robotsOrigins: (id: string, page: { offset: number; limit: number }, signal?: Signal) =>
+    post<RobotsOriginPage>(`${crawl(id)}/robots`, page, signal),
+  /** One origin's robots.txt, line by line. `origin-not-found` for an origin the crawl has none for. */
+  robotsFile: (id: string, origin: string, signal?: Signal) =>
+    post<RobotsFile>(`${crawl(id)}/robots/file`, { origin }, signal),
+  robotsBlocked: (id: string, query: RobotsBlockedQuery, signal?: Signal) =>
+    post<RobotsBlockedPage>(`${crawl(id)}/robots/blocked`, query, signal),
 };
 
 export type Api = typeof api;

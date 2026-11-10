@@ -297,5 +297,223 @@ export interface IssueGroupPage {
   groups: IssueGroup[];
 }
 
+/**
+ * The group an inspected issue is in (E3b): the inspector's `issues[].group`, the key to pass as a check's rows' `group`
+ * or the check filter's. Null for a check that doesn't group. It's the group's key, not the issue's own detail and
+ * related URL: a `relatedUrl` check's has no detail, and a fault's has the fault.
+ */
+export type IssueGroupOfUrl = CheckGroupRef | null;
+
+// ------------------------------------------------------------------------------------------------------ Links (E3b)
+
+// The links grid (docs/v2-sidecar-api.md, "Links"): every stored link a row. It takes `GridQuery` and answers with
+// `GridPage<LinkRow>`, over its own columns: a link's own, and the URL grid's for either end as `from.<column>` and
+// `to.<column>`. It sorts by one key: `id`, or a column of the target that the URL grid sorts by (`to.url`...).
+
+export type LinkKind =
+  | 'hyperlink'
+  | 'image'
+  | 'script'
+  | 'stylesheet'
+  | 'iframe'
+  | 'media'
+  | 'icon'
+  | 'canonical'
+  | 'hreflang'
+  | 'pagination'
+  | 'metaRefresh'
+  | 'redirect';
+
+export type LinkPosition = 'content' | 'navigation' | 'header' | 'footer' | 'sidebar' | 'head';
+
+/**
+ * A row of the links grid. Only `id` is always there; the rest are the columns asked for. A value is null when unknown
+ * (a kind this engine has no name for, `followed` for anything but a hyperlink), never 0. Either end's URL grid columns
+ * are keyed `from.<column>` and `to.<column>`, with the URL grid's own types (`UrlRow`).
+ */
+export interface LinkRow {
+  /** The link's id: the order the crawl stored links in. */
+  id: number;
+  kind?: LinkKind | null;
+  /** The anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link. */
+  text?: string | null;
+  position?: LinkPosition | null;
+  noFollow?: boolean;
+  sponsored?: boolean;
+  ugc?: boolean;
+  /** A hyperlink around an image, whose text is the image's alt text. */
+  imageLink?: boolean;
+  /** The link leads to the page it's on. */
+  selfLink?: boolean;
+  /** Whether search engines follow a hyperlink: no nofollow on it, nor on its page. Null for anything else. */
+  followed?: boolean | null;
+  fragment?: string | null;
+  'from.id'?: number;
+  'from.url'?: string;
+  'to.id'?: number;
+  'to.url'?: string;
+  /** Any other column of either end: `to.statusCode`, `from.depth`... as the URL grid types it. */
+  [endColumn: `from.${string}` | `to.${string}`]: string | number | boolean | null | undefined;
+}
+
+/** `GET /api/link-columns`: a link's own columns, then each end's (`from.`, `to.`). Only `id` and the target's sort. */
+export type LinkColumn = Omit<UrlColumn, 'issueRowsOnly'>;
+
+export type LinkFacetId = 'kind' | 'position' | 'follow' | 'to.statusClass' | 'to.isInternal';
+
+export interface LinkFacetsQuery {
+  filters?: GridFilter[];
+  /** The link's text, or either end's URL, contains. */
+  search?: string;
+  /** Every facet when left out. */
+  facets?: LinkFacetId[];
+}
+
+/** The links a query matches, counted by value; each bucket's `filter` opens exactly its links. */
+export interface LinkFacetsPage {
+  matching: number;
+  total: number;
+  summary: SummaryState;
+  /** Always empty: no link facet needs the URL summary. */
+  unavailable: LinkFacetId[];
+  facets: Partial<Record<LinkFacetId, FacetBucket[]>>;
+}
+
+// --------------------------------------------------------------------------------------------------- Sitemaps (E3b)
+
+/** How far the crawl got with its sitemaps: `unfinished` means the list isn't all there is. */
+export type SitemapDiscovery = 'off' | 'running' | 'unfinished' | 'done';
+
+/** How the crawl came by a sitemap. */
+export type SitemapSource = 'robotsTxt' | 'options' | 'defaultLocation' | 'index';
+
+/** `failed`: `error` says why. `notRead`: left unread at the crawler's limits. `pending`: found, not read yet. */
+export type SitemapState = 'read' | 'failed' | 'notRead' | 'pending';
+
+export interface Sitemap {
+  id: number;
+  /** The URL it was found at; where that redirects to isn't stored. */
+  url: string;
+  /** The sitemap index that lists it, or null. */
+  parentId: number | null;
+  /** Null when neither the stored robots.txt nor the crawl's options name it any more. */
+  foundVia: SitemapSource | null;
+  state: SitemapState;
+  statusCode: number | null;
+  isIndex: boolean;
+  /** URL entries the crawl read in the file, repeats included. */
+  entries: number;
+  /** The sitemaps an index lists that the crawl has. */
+  sitemaps: number;
+  error: string | null;
+  /**
+   * The URLs it lists, each once (an index: those of every sitemap under it), as the URL grid's `fetched` and
+   * `indexable` columns judge them: each count opens its rows in `/sitemaps/urls` under that filter.
+   */
+  urls: { listed: number; fetched: number; indexable: number; nonIndexable: number };
+}
+
+/** `GET /crawls/{id}/sitemaps`: every sitemap the crawl looked for, in the order it found them. */
+export interface SitemapList {
+  discovery: SitemapDiscovery;
+  sitemaps: Sitemap[];
+  /** Whether the URL counts are the analysis's judgement or, without a URL summary, the crawl's own. */
+  summary: SummaryState;
+}
+
+// ------------------------------------------------------------------------------------------------- robots.txt (E3b)
+
+/** What an origin's answer meant to the crawl: its rules applied, there were none, or nothing could be read. */
+export type RobotsState = 'read' | 'missing' | 'unreachable';
+
+export interface RobotsOrigin {
+  /** Scheme, host and port unless it's the scheme's default: `https://www.example.com`. */
+  origin: string;
+  isInternal: boolean;
+  /** Null when the crawl kept no robots.txt for an origin it stored refused URLs on. */
+  state: RobotsState | null;
+  statusCode: number | null;
+  /** When it was last read; a crawl continued later reads each again and keeps the last. */
+  fetchedAt: string | null;
+  /** How it failed, when there was no status. */
+  error: string | null;
+  /** The size of the text kept, or null when none was. */
+  bytes: number | null;
+  /** The origin's URLs the crawl stored as refused by robots.txt. */
+  blocked: number;
+}
+
+/** `POST /crawls/{id}/robots`: the site's own origins first, then the rest by the URLs they blocked. */
+export interface RobotsOriginPage {
+  total: number;
+  offset: number;
+  /** False for a crawl told to ignore robots.txt, which blocks nothing. */
+  respected: boolean;
+  /** The name the crawl looked for its group by. */
+  userAgent: string;
+  /** Every URL the crawl stored as refused by robots.txt. */
+  blocked: number;
+  origins: RobotsOrigin[];
+}
+
+export type RobotsLineKind =
+  'userAgent' | 'allow' | 'disallow' | 'sitemap' | 'crawlDelay' | 'comment' | 'blank' | 'other' | 'invalid';
+
+export type RobotsLineProblem = 'noUserAgent' | 'invalidValue' | 'unknownDirective' | 'notADirective';
+
+export interface RobotsLine {
+  /** From 1. */
+  number: number;
+  text: string;
+  kind: RobotsLineKind;
+  /** Whether it's part of the group the crawl obeyed; a sitemap line applies to everyone. Null for other kinds. */
+  applies: boolean | null;
+  /** On a disallow line that applies: how many of the origin's blocked URLs it refused. Null on every other line. */
+  blocked: number | null;
+  /** Why the crawler made nothing of the line, or null. */
+  problem: RobotsLineProblem | null;
+}
+
+/** `POST /crawls/{id}/robots/file`: one origin's file, line by line; `lines` is empty unless `state` is `read`. */
+export interface RobotsFile extends RobotsOrigin {
+  userAgent: string;
+  lines: RobotsLine[];
+  /** Blocked URLs no line accounts for: with the lines' `blocked`, they add up to the origin's. */
+  unmatched: { unreachable: number; unknown: number };
+}
+
+/** `rule`: a line refused it. `unreachable`: robots.txt couldn't be read. `unknown`: the file kept doesn't refuse it. */
+export type RobotsBlockReason = 'rule' | 'unreachable' | 'unknown';
+
+export interface RobotsBlockedUrl extends UrlRef {
+  reason: RobotsBlockReason;
+  /** The line that refused it, and its text, for `rule`. */
+  line: number | null;
+  rule: string | null;
+  /** How robots.txt failed, for `unreachable`, when stored. */
+  error: string | null;
+}
+
+export interface RobotsBlockedQuery {
+  origin: string;
+  /** Only the URLs this line refused. */
+  line?: number;
+  reason?: RobotsBlockReason;
+  offset?: number;
+  /** 1 to 1,000. */
+  limit?: number;
+}
+
+/** `POST /crawls/{id}/robots/blocked`: an origin's blocked URLs, in crawl order. */
+export interface RobotsBlockedPage {
+  origin: string;
+  /** The origin's blocked URLs. */
+  total: number;
+  /** Those the line or reason narrows them to. */
+  matching: number;
+  offset: number;
+  rows: RobotsBlockedUrl[];
+}
+
 /** Rows a page of the grids asks for: two screenfuls of 1M-row scrolling per request, as the spike measured. */
 export const GRID_PAGE_SIZE = 200;
