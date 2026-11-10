@@ -189,6 +189,7 @@ internal sealed class CrawlSession
             StatusClasses = counts.StatusClasses,
             StatusCodes = counts.StatusCodes,
             NoResponse = counts.NoResponse,
+            SiteVersions = counts.SiteVersions,
             InternalFound = counts.InternalFound,
             InternalFetched = counts.InternalFetched,
             MaxUrls = _options.MaxUrls > 0 ? _options.MaxUrls : null,

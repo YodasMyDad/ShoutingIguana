@@ -600,11 +600,21 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
             string.Join(Environment.NewLine, twinErrors));
         Assert.Equal(7L, Scalar(path, $"SELECT COUNT(*) FROM responses WHERE error LIKE '{RetryingFetcher.NOT_CHECKED_ERROR}%'"));
 
+        // The seven never asked are done with, so they're among the URLs fetched, but they weren't crawled: the URLs
+        // crawled are the ones the URL grid has as fetched, in the crawl's last progress and in the library's summary.
+        Assert.Equal(summary.Progress.Fetched - 7, summary.Progress.Crawled);
+        var listed = CrawlSummaryReader.Read(path);
+        Assert.Equal(summary.Progress.Fetched, listed.FetchedUrlCount);
+        Assert.Equal(summary.Progress.Crawled, listed.CrawledUrlCount);
+        Assert.Equal(listed.CrawledUrlCount, UrlGridReader.Query(path, new UrlQuery { Filters = [GridQueries.Boolean("fetched", true)], Limit = 1 }).Matching);
+        Assert.Equal(7, UrlGridReader.Query(path, new UrlQuery { Filters = [GridQueries.Names("outcome", FilterOperator.In, "notChecked")], Limit = 1 }).Matching);
+
         await using var resumed = new CrawlEngine(NullLoggerFactory.Instance, time).Start(
             new CrawlRequest(Options() with { Concurrency = 1, RespectRobotsTxt = false }, path, Resume: true));
         var resumedSummary = await FakeClock.PumpAsync(time, resumed.Completion);
         Assert.Equal(CrawlStatus.Completed, resumedSummary.Status);
         Assert.Equal(7, resumedSummary.Progress.NoResponse.NotChecked);
+        Assert.Equal(summary.Progress.Crawled, resumedSummary.Progress.Crawled);
         ProgressAgreement.AssertMatchesTheFile(resumedSummary.Progress, path);
     }
 

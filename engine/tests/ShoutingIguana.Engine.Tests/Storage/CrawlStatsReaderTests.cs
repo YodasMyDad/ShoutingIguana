@@ -49,6 +49,11 @@ public sealed class CrawlStatsReaderTests(GridCrawl crawl) : IDisposable
         Assert.Equal(expected.SkipReasons, Groups(stats.SkipReasons.ToDictionary(group => (int)group.Key, group => group.Value)));
         Assert.Equal(expected.NonIndexableReasons, Groups(stats.NonIndexableReasons.ToDictionary(group => (int)group.Key, group => group.Value)));
 
+        // The part that is the crawler's probes of the site's other versions: here its https:// version, which doesn't answer.
+        Assert.Equal(Probes(path, "outcome"), Groups(stats.SiteVersions.Outcomes.ToDictionary(group => (int)group.Key, group => group.Value)));
+        Assert.Equal(Probes(path, "status_code"), Groups(stats.SiteVersions.StatusCodes));
+        Assert.Equal((1L, 1L), (stats.SiteVersions.Fetched, stats.SiteVersions.Outcomes.Values.Sum()));
+
         // The synthetic site plants what makes each number worth comparing: orphans whose only link is their own canonical,
         // pages only a sitemap led to that are linked, URLs that can't be indexed for every reason, and skipped URLs.
         Assert.Equal(crawl.Server.Site.GetExpectations().Orphans, stats.UnlinkedPageCount);
@@ -109,6 +114,9 @@ public sealed class CrawlStatsReaderTests(GridCrawl crawl) : IDisposable
             """);
         return path;
     }
+
+    private static List<string> Probes(string path, string column) =>
+        TestCrawls.Rows(path, $"SELECT r.{column}, COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.source = 3 AND r.{column} IS NOT NULL GROUP BY 1");
 
     private static List<string> Numbers(CrawlStats stats) =>
     [

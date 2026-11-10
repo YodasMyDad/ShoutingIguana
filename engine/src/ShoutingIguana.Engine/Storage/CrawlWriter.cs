@@ -416,7 +416,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
         // A probe the site has since found was adopted meanwhile, so the response is one of the site's.
         _counters.OnRecorded(new RecordedResponse(response.Outcome, response.StatusCode, IsPage(item.IsInternal, response),
-            IsSiteUrl: item.IsInternal && !entry.IsProbe, IsNotChecked(response), DownloadedBytes(response.SizeBytes, response.BodyBytes)));
+            IsSiteUrl: item.IsInternal && !entry.IsProbe, IsNotChecked(response), DownloadedBytes(response.SizeBytes, response.BodyBytes), entry.IsProbe));
         PropagateDepths();
     }
 
@@ -718,17 +718,18 @@ internal sealed class CrawlWriter : IAsyncDisposable
     /// </summary>
     private UrlEntry PromoteChecked(UrlEntry entry, bool isInternal) =>
         _statements.ReadOutcome(entry.Id) is { Outcome: FetchOutcome.Success } check
-            ? Refetch(entry, FetchMode.Crawl, isInternal, check, wasSiteUrl: isInternal)
+            ? Refetch(entry, FetchMode.Crawl, isInternal, check, wasSiteUrl: isInternal && !entry.IsProbe, wasProbe: entry.IsProbe)
             : SetMode(entry, FetchMode.Crawl);
 
     /// <summary>Drops what a recorded URL's fetch stored and queues it again, to be fetched in <paramref name="mode"/>.</summary>
     /// <param name="wasSiteUrl">The response was counted as one of the site's own URLs, rather than a probe's.</param>
-    private UrlEntry Refetch(UrlEntry entry, FetchMode mode, bool isInternal, StoredOutcome stored, bool wasSiteUrl)
+    /// <param name="wasProbe">The response was counted as a probe's, on the site or off it.</param>
+    private UrlEntry Refetch(UrlEntry entry, FetchMode mode, bool isInternal, StoredOutcome stored, bool wasSiteUrl, bool wasProbe)
     {
         _statements.DeleteResponse(entry.Id);
         _statements.RequeueUrl(entry.Id, mode, entry.Depth);
         _counters.OnResponseRemoved(new RecordedResponse(stored.Outcome, stored.StatusCode, isInternal && stored.IsPage, wasSiteUrl,
-            stored.IsNotChecked, stored.Bytes));
+            stored.IsNotChecked, stored.Bytes, wasProbe));
         NoteRefetch(entry.Id, isInternal);
         return entry with { State = UrlState.Queued, Mode = mode };
     }
@@ -755,6 +756,11 @@ internal sealed class CrawlWriter : IAsyncDisposable
             _counters.OnAdopted(found: entry.State != UrlState.Skipped, fetched: stored is not null && !refetch);
         }
 
+        if (stored is { } kept && !refetch)
+        {
+            _counters.OnProbeResponseAdopted(kept.Outcome, kept.StatusCode, kept.IsNotChecked);
+        }
+
         if (link.IsInternal && entry.State is UrlState.Fetching or UrlState.Done)
         {
             _claimedInternal++;
@@ -763,7 +769,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
         if (refetch)
         {
-            adopted = Refetch(adopted, adopted.Mode, link.IsInternal, stored!.Value, wasSiteUrl: false);
+            adopted = Refetch(adopted, adopted.Mode, link.IsInternal, stored!.Value, wasSiteUrl: false, wasProbe: true);
             _urls[link.Key] = adopted;
         }
 
@@ -932,7 +938,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
         _counters.RestoreUrls(_urls.Count, queued, skipped, siteUrlsFound);
         SkipQueuedIfAtUrlLimit();
 
-        // Grouped as the live counts are kept: by outcome and status code.
+        // Grouped as the live counts are kept: by outcome and status code, the probes of the site's other versions apart.
         using (var command = _connection.CreateCommand())
         {
             command.CommandText = $"""
@@ -940,15 +946,16 @@ internal sealed class CrawlWriter : IAsyncDisposable
                        SUM(CASE WHEN {CrawlSchema.PAGE} THEN 1 ELSE 0 END),
                        COALESCE(SUM(CASE WHEN r.body_bytes IS NOT NULL THEN r.size_bytes END), 0),
                        SUM(u.is_internal = 1 AND u.source <> {(int)DiscoverySource.SiteVersion}),
-                       SUM(r.outcome = {(int)FetchOutcome.NetworkError} AND {AnalysisReader.NOT_CHECKED})
+                       SUM(r.outcome = {(int)FetchOutcome.NetworkError} AND {AnalysisReader.NOT_CHECKED}),
+                       u.source = {(int)DiscoverySource.SiteVersion}
                 FROM responses r JOIN urls u ON u.id = r.url_id
-                GROUP BY r.outcome, r.status_code
+                GROUP BY r.outcome, r.status_code, u.source = {(int)DiscoverySource.SiteVersion}
                 """;
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
                 _counters.AddResponses((FetchOutcome)reader.GetInt32(0), reader.IsDBNull(1) ? null : reader.GetInt32(1), reader.GetInt64(2),
-                    reader.GetInt64(3), reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6));
+                    reader.GetInt64(3), reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6), reader.GetBoolean(7));
             }
         }
 

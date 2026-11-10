@@ -15,7 +15,7 @@ namespace ShoutingIguana.Engine.Storage;
 public static class CrawlStatsReader
 {
     /// <summary>The tallies the passes count into (<c>si_tally(slot, value)</c>).</summary>
-    private const int OUTCOMES = 0, STATUS_CODES = 1, NON_INDEXABLE = 2, SKIP_REASONS = 3;
+    private const int OUTCOMES = 0, STATUS_CODES = 1, NON_INDEXABLE = 2, SKIP_REASONS = 3, PROBE_OUTCOMES = 4, PROBE_STATUS_CODES = 5;
 
     public static CrawlStats Read(string databasePath) => Read(databasePath, cache: null);
 
@@ -62,8 +62,9 @@ public static class CrawlStatsReader
             largestId = reader.GetInt64(3);
         });
 
-        // One pass over the responses, each with its URL: the pages, every response by outcome and by status, the site's
-        // URLs that can't be indexed by reason, and the pages a sitemap led to, which may have no link to them. The limit
+        // One pass over the responses, each with its URL: the pages, every response by outcome and by status (and the
+        // probes of the site's other versions among them, apart), the site's URLs that can't be indexed by reason, and
+        // the pages a sitemap led to, which may have no link to them. The limit
         // that limits nothing keeps SQLite from folding the inner query into the outer, which would work out what a row
         // is (a page, its reason, not checked) once for each count that asks, not once a row.
         UrlIdSet sitemapPages = new(largestId);
@@ -77,7 +78,9 @@ public static class CrawlStatsReader
                    COUNT({ReaderFunctions.TALLY}({STATUS_CODES}, status_code)),
                    COUNT(CASE WHEN is_internal = 1 AND reason <> 0 AND source <> {(int)DiscoverySource.SiteVersion} AND NOT not_checked
                               THEN {ReaderFunctions.TALLY}({NON_INDEXABLE}, reason) END),
-                   COUNT(CASE WHEN page AND source = {(int)DiscoverySource.Sitemap} THEN {ReaderFunctions.ADD_TO_SET}({sitemapSlot}, url_id) END)
+                   COUNT(CASE WHEN page AND source = {(int)DiscoverySource.Sitemap} THEN {ReaderFunctions.ADD_TO_SET}({sitemapSlot}, url_id) END),
+                   COUNT(CASE WHEN source = {(int)DiscoverySource.SiteVersion}
+                              THEN {ReaderFunctions.TALLY}({PROBE_OUTCOMES}, outcome) + COALESCE({ReaderFunctions.TALLY}({PROBE_STATUS_CODES}, status_code), 0) END)
             FROM (SELECT r.url_id, r.outcome, r.status_code, r.response_ms, r.size_bytes, u.is_internal, u.source,
                          ({CrawlSchema.PAGE}) AS page, {context.Reason} AS reason, {AnalysisReader.NOT_CHECKED} AS not_checked
                   FROM responses r LEFT JOIN urls u ON u.id = r.url_id {join} LIMIT -1)
@@ -115,6 +118,8 @@ public static class CrawlStatsReader
             Outcomes = Grouped(context, OUTCOMES, value => (FetchOutcome)value),
             StatusCodes = Grouped(context, STATUS_CODES, value => value),
             SkipReasons = Grouped(context, SKIP_REASONS, value => (SkipReason)value),
+            SiteVersions = new SiteVersionStats(context.TalliesIn(PROBE_OUTCOMES).Values.Sum(), Grouped(context, PROBE_OUTCOMES, value => (FetchOutcome)value),
+                Grouped(context, PROBE_STATUS_CODES, value => value)),
             NotCheckedCount = notChecked,
 
             // The site's own URLs, as the checks judge them: a probe of the site's other versions isn't one (that the http://
