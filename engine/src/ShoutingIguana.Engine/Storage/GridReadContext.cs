@@ -69,7 +69,7 @@ internal sealed class GridReadContext : IDisposable
     private readonly List<UrlIdSet> _sets = [];
     private readonly Dictionary<string, object> _huge = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object> _large = new(StringComparer.Ordinal);
-    private (long Links, long MaxLinkId)? _linkSummary;
+    private (long Links, long MaxLinkId, int BlockShift)? _linkSummary;
     private bool _linkSummaryRead;
     private readonly Dictionary<string, Regex> _patterns = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _patternTicks = new(StringComparer.Ordinal);
@@ -420,10 +420,10 @@ internal sealed class GridReadContext : IDisposable
     /// <summary>
     /// The link summary an analysis stored, when it counts the crawl as it stands: its tables are this engine's, and carry
     /// the crawl row's stamp, which every run of the crawl moves on. It needs no URL summary beside it: it counts only the
-    /// links, which no analysis changes. With it, how many links the crawl has and their highest id; null when the links
-    /// grid must read the links themselves.
+    /// links, which no analysis changes. With it, how many links the crawl has, their highest id, and the size of the blocks
+    /// they're counted by; null when the links grid must read the links themselves.
     /// </summary>
-    public (long Links, long MaxLinkId)? LinkSummary
+    public (long Links, long MaxLinkId, int BlockShift)? LinkSummary
     {
         get
         {
@@ -501,7 +501,7 @@ internal sealed class GridReadContext : IDisposable
         throw new RegexTooComplexException(pattern);
     }
 
-    private (long Links, long MaxLinkId)? ReadLinkSummary()
+    private (long Links, long MaxLinkId, int BlockShift)? ReadLinkSummary()
     {
         // A crawl that's running has links its summary, if it has one, doesn't count yet: its stamp moved when the run began.
         Token.ThrowIfCancellationRequested();

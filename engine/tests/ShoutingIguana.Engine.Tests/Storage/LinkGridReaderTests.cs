@@ -352,7 +352,7 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
     /// stands whoever analysed the crawl last: it counts the links, which no analysis changes.
     /// </summary>
     [Fact]
-    public void ALinkSummaryIsReadOnlyWhileItCountsTheCrawlAsItStands()
+    public async Task ALinkSummaryIsReadOnlyWhileItCountsTheCrawlAsItStands()
     {
         var query = new UrlQuery { Filters = [Names("kind", FilterOperator.In, "image")], Limit = 50 };
         var expected = Reference.Matching(query.Filters).Select(link => link.Id).ToList();
@@ -394,6 +394,78 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
         AssertRead(With("DROP TABLE link_summary_state"), fromTheSummary: false);
         AssertRead(With("ALTER TABLE link_summary RENAME COLUMN links TO how_many"), fromTheSummary: false);
         AssertRead(With("ALTER TABLE link_summary_state RENAME COLUMN crawl_updated_at TO analyzed_at"), fromTheSummary: false);
+
+        // A summary that doesn't say how large its blocks are, or says what no build would: passed over, and counted again
+        // by the next analysis, though the crawl hasn't changed.
+        AssertRead(With("UPDATE link_summary_state SET block_shift = 0"), fromTheSummary: false);
+        AssertRead(With("UPDATE link_summary_state SET block_shift = 64"), fromTheSummary: false);
+        var withoutItsSize = With("ALTER TABLE link_summary_state DROP COLUMN block_shift");
+        AssertRead(withoutItsSize, fromTheSummary: false);
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(withoutItsSize);
+        AssertRead(withoutItsSize, fromTheSummary: true);
+    }
+
+    /// <summary>
+    /// A large crawl's links fill hundreds of blocks, this crawl's one. Counted here by blocks of 16 link ids, with ids
+    /// missing (one in seven, and a run that empties whole blocks), a filter on what a link is still reads each page from
+    /// the blocks that hold it: the reference's links at every place, by offset and by cursor, in either direction, in
+    /// pages smaller and larger than a block, whether the filter's links are in every block or in few. The size of a
+    /// block is the file's own: it's read as it was built, whatever size this engine builds by.
+    /// </summary>
+    [Fact]
+    public async Task APageIsReadFromItsBlocksHoweverManyTheLinksFill()
+    {
+        const int SHIFT = 4;
+        const string COUNTED = "SELECT c.block, SUM(c.links) FROM link_blocks c";
+        var copy = crawl.Copy();
+        Change(copy, "DELETE FROM links WHERE rowid % 7 = 0 OR rowid BETWEEN 3000 AND 3400");
+        Stamp(copy);
+        LinkSummaryBuilder.BlockShift = SHIFT;
+        try
+        {
+            await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(copy);
+        }
+        finally
+        {
+            LinkSummaryBuilder.BlockShift = CrawlSchema.LINK_BLOCK_SHIFT;
+        }
+
+        var links = LinkReference.Load(copy, GridReference.Load(copy));
+        Assert.Equal([$"{SHIFT}"], TestCrawls.Rows(copy, "SELECT block_shift FROM link_summary_state"));
+        Assert.Equal(TestCrawls.Rows(copy, $"SELECT rowid >> {SHIFT}, COUNT(*) FROM links GROUP BY 1"), TestCrawls.Rows(copy, "SELECT block, SUM(links) FROM link_blocks GROUP BY 1"));
+        Assert.True(TestCrawls.Count(copy, "SELECT COUNT(DISTINCT block) FROM link_blocks") > 300);
+        Assert.Equal(0, TestCrawls.Count(copy, $"SELECT COUNT(*) FROM link_blocks WHERE block BETWEEN (3000 >> {SHIFT}) + 1 AND (3400 >> {SHIFT}) - 1"));
+
+        List<string> ran = [];
+        LinkGridReader.Ran = ran.Add;
+        var sets = FilterSets();
+        foreach (var name in new[] { "hyperlinks", "not hyperlinks or images", "in the footer", "navigation and header", "nofollow", "not followed", "to their own page", "image links", "hyperlinks with text", "nothing" })
+        {
+            var filters = sets[name].Filters;
+            var expected = links.Matching(filters).Select(link => link.Id).ToList();
+            var query = new UrlQuery { Filters = filters };
+            var descending = query with { Sort = [new UrlSort("id", true)] };
+            var cache = new ReadCache();
+            ran.Clear();
+            Assert.Equal(expected, ByOffset(copy, query, cache));
+            Assert.Equal(Enumerable.Reverse(expected), ByOffset(copy, descending, cache));
+            Assert.Equal(expected, ByCursor(copy, query, cache, limit: 97));
+            Assert.Equal(Enumerable.Reverse(expected), ByCursor(copy, descending, cache, limit: 97));
+            foreach (var offset in new[] { 0, 1, 11, 12, 13, expected.Count / 3, expected.Count / 2, expected.Count - 20, expected.Count - 1 }.Where(offset => offset >= 0 && offset < expected.Count))
+            {
+                Assert.Equal(expected.Skip(offset).Take(5), LinkGridReader.Query(copy, query with { Offset = offset, Limit = 5 }).Rows.Select(row => row.Id));
+                Assert.Equal(Enumerable.Reverse(expected).Skip(offset).Take(5), LinkGridReader.Query(copy, descending with { Offset = offset, Limit = 5 }).Rows.Select(row => row.Id));
+            }
+
+            // All of it from the blocks: their counts, then only the links of the blocks a page is in.
+            Assert.Contains(ran, sql => sql.StartsWith(COUNTED, StringComparison.Ordinal));
+            Assert.All(ran, sql => Assert.True(
+                sql.StartsWith(COUNTED, StringComparison.Ordinal) || sql.Contains("l.rowid BETWEEN $low AND $high", StringComparison.Ordinal), $"{name}: {sql}"));
+        }
+
+        // The filters' links are spread as a large crawl's are: in every block, and in a few of them.
+        Assert.InRange(links.Matching(sets["hyperlinks"].Filters).Count, 4_000, int.MaxValue);
+        Assert.InRange(links.Matching(sets["nofollow"].Filters).Select(link => link.Id >> SHIFT).Distinct().Count(), 2, 100);
     }
 
     /// <summary>
@@ -409,7 +481,7 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
             FROM links l LEFT JOIN responses src ON src.url_id = l.from_id GROUP BY 1, 2, 3, 4, 5, 6, 7
             """;
         const string STORED = "SELECT to_id, kind, position, flags, self, has_text, source_nofollow, links FROM link_summary";
-        const string STATE = "SELECT s.links, s.max_link_id, s.crawl_updated_at = c.updated_at FROM link_summary_state s, crawl c";
+        const string STATE = "SELECT s.links, s.max_link_id, s.crawl_updated_at = c.updated_at, s.block_shift FROM link_summary_state s, crawl c";
         const string BLOCKED = """
             SELECT l.rowid >> 14, l.kind, l.position, l.flags, l.from_id = l.to_id, l.text IS NOT NULL AND l.text <> '', COALESCE(src.is_nofollow, 0) <> 0, COUNT(*)
             FROM links l LEFT JOIN responses src ON src.url_id = l.from_id GROUP BY 1, 2, 3, 4, 5, 6, 7
@@ -418,7 +490,7 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
         Assert.Equal(TestCrawls.Rows(crawl.Path, GROUPED), TestCrawls.Rows(crawl.Path, STORED));
         Assert.Equal(TestCrawls.Rows(crawl.Path, BLOCKED), TestCrawls.Rows(crawl.Path, BLOCKS));
         Assert.Equal(14, CrawlSchema.LINK_BLOCK_SHIFT);
-        Assert.Equal([$"{Reference.Links.Count} | {Reference.Links[^1].Id} | 1"], TestCrawls.Rows(crawl.Path, STATE));
+        Assert.Equal([$"{Reference.Links.Count} | {Reference.Links[^1].Id} | 1 | 14"], TestCrawls.Rows(crawl.Path, STATE));
         Assert.InRange(TestCrawls.Count(crawl.Path, "SELECT COUNT(*) FROM link_summary"), 1_000, Reference.Links.Count / 4);
         Assert.Contains(Reference.Links, link => link.SourceNofollow);
         Assert.Contains(Reference.Links, link => link.From == link.To);
@@ -432,10 +504,10 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
 
         // Once a run of the crawl has stamped it again, the next analysis counts the links afresh.
         Stamp(again);
-        Assert.Equal([$"{Reference.Links.Count} | {Reference.Links[^1].Id} | 0"], TestCrawls.Rows(again, STATE));
+        Assert.Equal([$"{Reference.Links.Count} | {Reference.Links[^1].Id} | 0 | 14"], TestCrawls.Rows(again, STATE));
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(again);
         Assert.Equal(TestCrawls.Rows(again, GROUPED), TestCrawls.Rows(again, STORED));
-        Assert.Equal([$"{Reference.Links.Count} | {Reference.Links[^1].Id} | 1"], TestCrawls.Rows(again, STATE));
+        Assert.Equal([$"{Reference.Links.Count} | {Reference.Links[^1].Id} | 1 | 14"], TestCrawls.Rows(again, STATE));
 
         // A crawl whose links have gaps in their ids (a page fetched again has its links stored again): analysed, the
         // summary is the links as they now are, and the grid reads them at any place, in either direction, each way.
@@ -446,7 +518,7 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
         Assert.Equal(TestCrawls.Rows(gaps, GROUPED), TestCrawls.Rows(gaps, STORED));
         Assert.Equal(TestCrawls.Rows(gaps, BLOCKED), TestCrawls.Rows(gaps, BLOCKS));
         var links = LinkReference.Load(gaps, GridReference.Load(gaps));
-        Assert.Equal([$"{links.Links.Count} | {links.Links[^1].Id} | 1"], TestCrawls.Rows(gaps, STATE));
+        Assert.Equal([$"{links.Links.Count} | {links.Links[^1].Id} | 1 | 14"], TestCrawls.Rows(gaps, STATE));
         Assert.True(links.Links[^1].Id > links.Links.Count);
         var filtered = links.Matching([Names("kind", FilterOperator.In, "hyperlink")]).Select(link => link.Id).ToList();
         foreach (var way in new[] { Way.Chosen, Way.Walked, Way.FromASet, Way.WithoutLinkSummary })

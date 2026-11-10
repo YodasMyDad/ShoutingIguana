@@ -15,6 +15,10 @@ internal static class LinkSummaryBuilder
 {
     private const string COUNT = "si_count_link";
 
+    /// <summary>The block sizes a read takes a file's word for, as shifts: anything else isn't this engine's summary.</summary>
+    private const int LEAST_BLOCK_SHIFT = 1;
+    private const int LARGEST_BLOCK_SHIFT = 40;
+
     /// <summary>
     /// Each link as it's counted: its id, both ends, its kind, position and flags as stored, and whether it has text. Whether
     /// it leads to its own page, and sits on a page whose robots directives say nofollow (as the inspector judges a link
@@ -42,11 +46,17 @@ internal static class LinkSummaryBuilder
     internal static bool IsCurrent(SqliteConnection connection, SqliteTransaction? transaction) => ReadCurrent(connection, transaction) is not null;
 
     /// <summary>
-    /// The link summary's own counts (the links, and their highest id) when it counts the crawl as it stands: its tables
-    /// are this engine's, column for column, and carry the crawl row's stamp. Null otherwise: no summary, another shape's
-    /// (a later engine's, another program's), or one of the crawl before its last run.
+    /// The size of the blocks a build counts by, as a shift. It's stored with the counts and read back from the file, so a
+    /// file is read by the size it was built with. Tests lower it, to spread a small crawl's links over many blocks.
     /// </summary>
-    internal static (long Links, long MaxLinkId)? ReadCurrent(SqliteConnection connection, SqliteTransaction? transaction)
+    internal static int BlockShift { get; set; } = CrawlSchema.LINK_BLOCK_SHIFT;
+
+    /// <summary>
+    /// The link summary's own facts (the links, their highest id, and the size of its blocks) when it counts the crawl as it
+    /// stands: its tables are this engine's, column for column, and carry the crawl row's stamp. Null otherwise: no
+    /// summary, another shape's (a later engine's, another program's), or one of the crawl before its last run.
+    /// </summary>
+    internal static (long Links, long MaxLinkId, int BlockShift)? ReadCurrent(SqliteConnection connection, SqliteTransaction? transaction)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -63,18 +73,22 @@ internal static class LinkSummaryBuilder
         }
 
         command.CommandText = """
-            SELECT s.links, s.max_link_id FROM link_summary_state s JOIN crawl c ON c.id = 1 AND c.updated_at = s.crawl_updated_at WHERE s.id = 1
+            SELECT s.links, s.max_link_id, s.block_shift FROM link_summary_state s JOIN crawl c ON c.id = 1 AND c.updated_at = s.crawl_updated_at
+            WHERE s.id = 1 AND s.block_shift BETWEEN $least AND $largest
             """;
         command.Parameters.Clear();
+        command.Parameters.AddWithValue("$least", LEAST_BLOCK_SHIFT);
+        command.Parameters.AddWithValue("$largest", LARGEST_BLOCK_SHIFT);
         using var reader = command.ExecuteReader();
-        return reader.Read() && !reader.IsDBNull(0) && !reader.IsDBNull(1) ? (reader.GetInt64(0), reader.GetInt64(1)) : null;
+        return reader.Read() && !reader.IsDBNull(0) && !reader.IsDBNull(1) ? (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt32(2)) : null;
     }
 
     /// <returns>The rows written.</returns>
     public static long Build(SqliteConnection connection, SqliteTransaction transaction)
     {
         CrawlDatabase.Execute(connection, CrawlSchema.LINK_SUMMARY, transaction);
-        var counts = new Counting(NofollowPages(connection, transaction));
+        var blockShift = BlockShift;
+        var counts = new Counting(NofollowPages(connection, transaction), blockShift);
 
         // Through SQLite's own interface, as the readers' per-row functions are: a third of the wrapper's cost a call.
         // Nothing may throw back into SQLite: a failure is the statement's error.
@@ -105,7 +119,8 @@ internal static class LinkSummaryBuilder
 
         // The crawl row's stamp as it stands: the analysis holds the crawl's lock, so no run can move it before this commits.
         using var state = Command(connection, transaction,
-            "INSERT INTO link_summary_state (id, crawl_updated_at, links, max_link_id) VALUES (1, (SELECT updated_at FROM crawl WHERE id = 1), $links, $max)");
+            "INSERT INTO link_summary_state (id, crawl_updated_at, links, max_link_id, block_shift) VALUES (1, (SELECT updated_at FROM crawl WHERE id = 1), $links, $max, $shift)");
+        state.Parameters.AddWithValue("$shift", blockShift);
         state.Parameters.AddWithValue("$links", links);
         state.Parameters.AddWithValue("$max", maxLinkId);
         state.ExecuteNonQuery();
@@ -164,7 +179,7 @@ internal static class LinkSummaryBuilder
     /// The pass's counts, by target and by block. A page's links are stored together, so whether the page says nofollow is
     /// looked up once a page, not once a link.
     /// </summary>
-    private sealed class Counting(HashSet<long> nofollowPages)
+    private sealed class Counting(HashSet<long> nofollowPages, int blockShift)
     {
         private long _page = long.MinValue;
         private bool _pageNofollow;
@@ -182,7 +197,7 @@ internal static class LinkSummaryBuilder
 
             var bits = (from == to ? 4L : 0) | (hasText ? 2L : 0) | (_pageNofollow ? 1L : 0);
             ByTarget.Add(to, kind, position, flags, bits);
-            ByBlock.Add(id >> CrawlSchema.LINK_BLOCK_SHIFT, kind, position, flags, bits);
+            ByBlock.Add(id >> blockShift, kind, position, flags, bits);
         }
     }
 

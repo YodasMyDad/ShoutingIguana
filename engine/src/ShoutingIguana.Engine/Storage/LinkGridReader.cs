@@ -816,12 +816,13 @@ public static class LinkGridReader
     private static long[] BlockWalk(GridReadContext context, Filters filters, bool descending, long? after, long skip, int take)
     {
         var blocks = BlocksOf(context, filters);
+        var shift = context.LinkSummary!.Value.BlockShift;
         var step = descending ? -1 : 1;
         int index;
         if (after is { } cursor)
         {
             // The block the cursor's link is in, or the nearest one past it in the walk's direction.
-            var found = Array.BinarySearch(blocks.Ids, cursor >> CrawlSchema.LINK_BLOCK_SHIFT);
+            var found = Array.BinarySearch(blocks.Ids, cursor >> shift);
             index = found >= 0 ? found : descending ? ~found - 1 : ~found;
             skip = 0;
         }
@@ -848,8 +849,7 @@ public static class LinkGridReader
                 held += Links(last);
             }
 
-            var (low, high) = (Math.Min(blocks.Ids[index], blocks.Ids[last]) << CrawlSchema.LINK_BLOCK_SHIFT,
-                ((Math.Max(blocks.Ids[index], blocks.Ids[last]) + 1) << CrawlSchema.LINK_BLOCK_SHIFT) - 1);
+            var (low, high) = (Math.Min(blocks.Ids[index], blocks.Ids[last]) << shift, ((Math.Max(blocks.Ids[index], blocks.Ids[last]) + 1) << shift) - 1);
             if (after is { } bound)
             {
                 (low, high) = descending ? (low, Math.Min(high, bound - 1)) : (Math.Max(low, bound + 1), high);

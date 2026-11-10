@@ -276,12 +276,13 @@ internal static class CrawlSchema
     /// these columns and on the target, the facets, and each target's matching links (for a sort by the target). The
     /// columns hold what <c>links</c> does, as it is.
     /// <c>link_blocks</c> counts the same links by where they are in crawl order instead of by target: by block of
-    /// <see cref="LINK_BLOCK"/> consecutive link ids, a few rows a block. A page anywhere in crawl order, under a filter on
+    /// consecutive link ids (<see cref="LINK_BLOCK_SHIFT"/>), a few rows a block. A page anywhere in crawl order, under a filter on
     /// what a link is, is found by adding the blocks' counts up to it and reading the links of the block it starts in.
     /// <c>link_summary_state</c> says which state of the crawl they count: the crawl row's stamp (<c>updated_at</c>) as it
     /// stood, which every run of the crawl moves on. They count nothing but the links and which pages say nofollow, which
     /// only a crawl changes, so they stand until the stamp moves, whoever analyses the file meanwhile, and are passed over
-    /// once it has. It also keeps the number of links and the highest link id, which the grid would otherwise count.
+    /// once it has. It also keeps the number of links and the highest link id, which the grid would otherwise count, and
+    /// the size of a block, which a read takes from the file.
     /// </summary>
     public const string LINK_SUMMARY = """
         DROP TABLE IF EXISTS link_summary;
@@ -317,7 +318,9 @@ internal static class CrawlSchema
             id INTEGER PRIMARY KEY CHECK (id = 1),
             crawl_updated_at INTEGER NOT NULL,
             links INTEGER NOT NULL,
-            max_link_id INTEGER NOT NULL
+            max_link_id INTEGER NOT NULL,
+            -- A block of link_blocks counts 2 to this power consecutive link ids.
+            block_shift INTEGER NOT NULL
         );
         """;
 
@@ -329,19 +332,17 @@ internal static class CrawlSchema
     {
         ["link_summary"] = "to_id,kind,position,flags,self,has_text,source_nofollow,links",
         ["link_blocks"] = "block,kind,position,flags,self,has_text,source_nofollow,links",
-        ["link_summary_state"] = "id,crawl_updated_at,links,max_link_id"
+        ["link_summary_state"] = "id,crawl_updated_at,links,max_link_id,block_shift"
     };
 
     /// <summary>
     /// How many consecutive link ids a row of <c>link_blocks</c> counts, as a shift: 16,384. A page of 100 links under a
     /// filter is read from the blocks that hold them, so at most 100 blocks' links are passed over to fill it (1.6 million
     /// rows), however large the crawl and however few links match; the table holds 300 blocks for the 100k benchmark's 5
-    /// million links, some 15 rows each.
+    /// million links, some 15 rows each. A build stores the size it counted by (<c>link_summary_state.block_shift</c>), and
+    /// a read goes by the file's.
     /// </summary>
     public const int LINK_BLOCK_SHIFT = 14;
-
-    /// <summary>The links in a block of <c>link_blocks</c>.</summary>
-    public const long LINK_BLOCK = 1L << LINK_BLOCK_SHIFT;
 
     /// <summary>The <c>analysis</c> columns added since the table was first created, which files analysed earlier lack.</summary>
     public static readonly (string Name, string Type)[] ANALYSIS_COLUMNS =
