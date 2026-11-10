@@ -813,6 +813,11 @@ to +1 MB), an 11 s analysis peaking at 276, 313 and 315 MB (283 MB in the one ru
 The rest is in the links and their two indexes, which E3b doesn't write, and moves from run to run: probably the order
 the URLs were found in, as larger ids take more bytes.
 
+With E3c (the time spent crawling kept a stretch at a time, a second set of counters for the part of the counts that
+is the crawler's own probes) three runs on the same machine, still shared, measured a 36–42 s crawl (2,386–2,812
+pages/s), a 188–193 MB peak with no growth (−9 to 0 MB), an 11.8, 12.2 and 18.1 s analysis peaking at 253–327 MB,
+and a 478–495 MB file: all within the spread of the runs before it.
+
 Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and
 unreachable URL make the crawler back off briefly, as it would on a real site. On real sites, speed is set by the
 network and your rate settings, not by the crawler.

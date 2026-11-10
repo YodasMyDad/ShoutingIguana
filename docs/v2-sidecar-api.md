@@ -28,6 +28,11 @@ Built in stages:
 - **E3b, E5 and E6** add the links grid, sitemaps and robots.txt, export, search and the favicon. They come from the
   brief's [engine work the UI needs](v2-ui-brief.md#engine-work-the-ui-needs) and the handoff's
   [what's missing](v2-rebuild.md#whats-missing).
+- **E3c** is marked below where it adds to an answer, each addition a new field and nothing taken away: what the
+  Overview and inspector screens found missing once they were built on the real thing. `/stats` read fast and kept;
+  the crawler's own probes said apart in the counts; the URLs crawled counted as the grid counts them; the time spent
+  crawling; the inspector's totals of every kind of link, the URL's length, and what became of each link's other end.
+  [Engine changes E3c made](#engine-changes-e3c-made) has what changed and what was measured.
 
 ## Process (E1)
 
@@ -1815,3 +1820,13 @@ nothing kept, on a 32-core Windows machine that other work was sharing.
   read and a search 0.85 s, once per filter set (a running crawl's, at most every 2 s), and their pages after that
   cost a page; on a million pages, about ten times that. (This belongs under the rebuild doc's Known limitations,
   which this work was told to leave alone.)
+
+**After E3c**, on the same machine: the benchmark crawled its 100,000 pages in 36 to 42 s over three runs (36 to 45 s
+before), peaked at 188 to 193 MB with no growth (188 to 196 MB), analysed in 11.8 to 18.1 s (10.6 to 14.8 s; the
+18.1 s was the one run of three made while the machine was busiest), and found every planted issue and nothing else;
+`si readbench --gate --runs 20` passed every class, the two new ones included (`stats` 108 ms against 350,
+`stats-pass` 212 ms against 600), the links grid's slowest read from the link summary at 98 ms (107 ms before).
+Every number added or changed here was checked against SQL written for the check, through a running sidecar: on that
+crawl, on a copy of it with link ids missing, on the garden crawl analysed again, and on a crawl run through the
+sidecar that was paused, stopped and continued (5 of its 728 URLs not checked, 1 a probe, 21.6 s spent crawling of
+27.2 s on the clock). Nothing differed.
