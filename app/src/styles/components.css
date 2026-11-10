@@ -932,6 +932,12 @@
     font-size: var(--text-12);
   }
 
+  /* What an item would give (a count): figures that line up down the menu. */
+  .si-menu-item__detail {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: var(--type-features-figures);
+  }
+
   .si-menu-item__check {
     color: var(--color-accent-text);
   }

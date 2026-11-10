@@ -15,6 +15,38 @@ const COLUMNS: Record<string, string> = {
   source: 'Found by',
   inSitemap: 'In a sitemap',
   wordCount: 'Word count',
+  // The rest of the URL grid's columns (docs/v2-sidecar-api.md, URLs), for a grid whose filter bar takes any of them.
+  url: 'URL',
+  depth: 'Depth',
+  statusCode: 'Status',
+  redirectTarget: 'Redirects to',
+  redirectTargetStatusCode: 'Redirect’s status',
+  noindex: 'Noindex',
+  nofollow: 'Nofollow',
+  metaRobots: 'Meta robots',
+  xRobotsTag: 'X-Robots-Tag',
+  canonicalUrl: 'Canonical',
+  contentType: 'Content type',
+  title: 'Title',
+  description: 'Description',
+  h1: 'H1',
+  h1Count: 'H1s',
+  outlinks: 'Outlinks',
+  sizeBytes: 'Size',
+  responseMs: 'Response time',
+  ttfbMs: 'Time to first byte',
+  titleLength: 'Title length',
+  descriptionLength: 'Description length',
+  finalUrl: 'Final URL',
+  finalStatusCode: 'Final status',
+  inlinks: 'Inlinks',
+  followedInlinks: 'Followed inlinks',
+  nofollowInlinks: 'Nofollow inlinks',
+  linkingPages: 'Linking pages',
+  issues: 'Issues',
+  errors: 'Errors',
+  warnings: 'Warnings',
+  notices: 'Notices',
 };
 
 const VALUES: Record<string, Record<string, string>> = {
@@ -80,6 +112,14 @@ export function urlEmptyWords(column: string, empty: boolean): FilterSentence | 
 /** A column's name for a filter chip, or null when this list doesn't have it. */
 export function urlColumnWords(id: string): string | null {
   return COLUMNS[id] ?? null;
+}
+
+/**
+ * A column's name inside a longer one ("Target status", "Source H1"): its first letter lowered, unless it starts an
+ * abbreviation or a header's name (URL, H1, X-Robots-Tag).
+ */
+export function midPhrase(name: string): string {
+  return /^.[A-Z0-9-]/.test(name) ? name : name.charAt(0).toLowerCase() + name.slice(1);
 }
 
 /** Columns that hold a time in milliseconds: a filter's value on one is nothing without its unit. */

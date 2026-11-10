@@ -61,11 +61,11 @@ describe('a filter as a sentence', () => {
       { field: 'Response', op: 'is at least', value: '2,000 ms' },
     ]);
     expect(filterSentences({ column: 'ttfbMs', op: 'lt', value: 200 }, urlWords)).toEqual([
-      { field: 'ttfbMs', op: 'is under', value: '200 ms' },
+      { field: 'Time to first byte', op: 'is under', value: '200 ms' },
     ]);
     // A count keeps no unit, and has its thousands separators whether or not the view words its values.
     expect(filterSentences({ column: 'depth', op: 'gte', value: 10 }, urlWords)).toEqual([
-      { field: 'depth', op: 'is at least', value: '10' },
+      { field: 'Depth', op: 'is at least', value: '10' },
     ]);
     expect(filterSentences({ column: 'wordCount', op: 'gte', value: 1500 }, urlWords)).toEqual([
       { field: 'Word count', op: 'is at least', value: '1,500' },

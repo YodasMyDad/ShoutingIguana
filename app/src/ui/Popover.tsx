@@ -10,8 +10,16 @@ const POPOVER_OFFSET = 6;
 const COLLISION_PADDING = 8;
 
 export interface PopoverProps {
-  /** The button that opens it. */
-  trigger: ReactElement;
+  /** The button that opens it. Either this or `anchor`. */
+  trigger?: ReactElement | undefined;
+  /**
+   * What it floats from when something else opens it (a filter's chip, whose own button opens its editor): the
+   * popover is then the caller's to open and close (`open`, `onOpenChange`), and the anchor is given a `ref` to the
+   * element to float from. When it closes, focus goes back to that element, or to `focusOnClose()` when it has gone.
+   */
+  anchor?: ReactElement | undefined;
+  /** Where focus goes when an anchored popover closes and its anchor is no longer there. */
+  focusOnClose?: (() => HTMLElement | null | undefined) | undefined;
   /** A heading, which names the popover, with a close button beside it. */
   title?: string | undefined;
   /** The popover's name when it has no title. */
@@ -31,6 +39,8 @@ export interface PopoverProps {
  */
 export function Popover({
   trigger,
+  anchor,
+  focusOnClose,
   title,
   label,
   children,
@@ -42,11 +52,23 @@ export function Popover({
 }: PopoverProps) {
   const titleId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  /** The trigger; for an anchored popover, the anchor while it's still there, else the caller's choice. */
+  const returnFocusTo = () => {
+    if (!anchor) return triggerRef.current;
+    return anchorRef.current?.isConnected ? anchorRef.current : (focusOnClose?.() ?? null);
+  };
   return (
     <PopoverPrimitive.Root {...(open === undefined ? {} : { open })} {...(onOpenChange ? { onOpenChange } : {})}>
-      <PopoverPrimitive.Trigger asChild ref={triggerRef}>
-        {trigger}
-      </PopoverPrimitive.Trigger>
+      {anchor ? (
+        <PopoverPrimitive.Anchor asChild ref={anchorRef}>
+          {anchor}
+        </PopoverPrimitive.Anchor>
+      ) : (
+        <PopoverPrimitive.Trigger asChild ref={triggerRef}>
+          {trigger}
+        </PopoverPrimitive.Trigger>
+      )}
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
           align={align}
@@ -54,8 +76,15 @@ export function Popover({
           sideOffset={POPOVER_OFFSET}
           collisionPadding={COLLISION_PADDING}
           onEscapeKeyDown={keepEscapeForField}
-          // Focus goes back to the button without its tooltip popping up, which would take the next Esc.
-          onCloseAutoFocus={() => quietNextFocus(triggerRef.current)}
+          // Focus goes back to the button without its tooltip popping up, which would take the next Esc. An anchor
+          // is no trigger, so Radix has nowhere to send focus: it's sent here.
+          onCloseAutoFocus={(event) => {
+            const target = returnFocusTo();
+            quietNextFocus(target);
+            if (!anchor) return;
+            event.preventDefault();
+            target?.focus();
+          }}
           className={clsx('si-popover', className)}
           {...(title ? { 'aria-labelledby': titleId } : label ? { 'aria-label': label } : {})}
         >
