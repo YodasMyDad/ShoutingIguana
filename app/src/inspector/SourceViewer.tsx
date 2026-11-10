@@ -9,6 +9,14 @@ import { EditorView, highlightSpecialChars, keymap, lineNumbers, type KeyBinding
 import { tags } from '@lezer/highlight';
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { commands } from '../keyboard/registry';
+import {
+  LINE_ACTION_ATTRIBUTE,
+  hasLineAction,
+  setSourceChosenLine,
+  setSourceLineMarks,
+  sourceLines,
+  type SourceLineMark,
+} from './sourceLines';
 import { setSourceMatch, setSourceQuery, sourceSearch, sourceSearchOf } from './sourceSearch';
 
 export interface SourceViewerProps {
@@ -25,6 +33,14 @@ export interface SourceViewerProps {
   onMatches: (count: number, capped: boolean) => void;
   /** The lines are laid out as `wrap` says: called once the editor has drawn them, after each change of it. */
   onWrapped?: (() => void) | undefined;
+  /** `plain` shows the text as it is, without HTML's highlighting (a robots.txt file). HTML when left out. */
+  language?: 'html' | 'plain' | undefined;
+  /** How particular lines are drawn (sourceLines.ts): a robots.txt file's groups, rules and what each blocked. */
+  lineMarks?: readonly SourceLineMark[] | undefined;
+  /** The line marked as chosen, from 1: it comes into view when it changes. */
+  chosenLine?: number | null | undefined;
+  /** A line's link was chosen: a press on it, or Enter with the caret on its line. */
+  onLineAction?: ((line: number) => void) | undefined;
 }
 
 const highlightStyle = HighlightStyle.define([
@@ -82,6 +98,34 @@ const theme = EditorView.theme({
     boxShadow: '0 0 0 var(--rule-width) var(--color-accent)',
     borderRadius: 'var(--radius-xs)',
   },
+  // Marked lines (sourceLines.ts). Every line keeps room for the rule at its left edge, so the text never shifts:
+  // what applies carries the accent's rule there, what doesn't is quiet, and the chosen line is the selected tint
+  // with the rule, in the text's own colour so it stays readable on it.
+  '&.cm-si-marked .cm-line': { borderLeft: 'var(--rule-width) solid transparent' },
+  '&.cm-si-marked .cm-si-line-strong': { borderLeftColor: 'var(--color-accent)' },
+  '&.cm-si-marked .cm-si-line-quiet': { color: 'var(--color-text-muted)' },
+  '&.cm-si-marked .cm-si-comment': { color: 'var(--color-code-comment)', fontStyle: 'italic' },
+  '&.cm-si-marked .cm-si-name': { color: 'var(--color-code-keyword)' },
+  '&.cm-si-marked .cm-si-line-quiet .cm-si-name': { color: 'inherit' },
+  '&.cm-si-marked .cm-si-line-chosen': {
+    backgroundColor: 'var(--color-surface-selected)',
+    borderLeftColor: 'var(--color-accent)',
+    color: 'var(--color-text)',
+  },
+  '.cm-si-note': {
+    marginLeft: 'var(--space-4)',
+    color: 'var(--color-text-muted)',
+    fontFamily: 'var(--font-sans)',
+    fontStyle: 'normal',
+  },
+  '.cm-si-action': {
+    marginLeft: 'var(--space-4)',
+    color: 'var(--color-accent-text)',
+    fontFamily: 'var(--font-sans)',
+    fontStyle: 'normal',
+    textDecoration: 'underline',
+    cursor: 'pointer',
+  },
   // Forced colours drop backgrounds and shadows: a match is outlined, the current one is the system's highlight.
   '@media (forced-colors: active)': {
     '.cm-si-match': { outline: 'var(--hairline) solid Highlight' },
@@ -90,6 +134,16 @@ const theme = EditorView.theme({
       backgroundColor: 'Highlight',
       color: 'HighlightText',
     },
+    // A transparent edge would show: the page's own colour hides it, the text's marks what applies, and the chosen
+    // line is outlined in the system's highlight.
+    '&.cm-si-marked .cm-line': { borderLeftColor: 'Canvas' },
+    '&.cm-si-marked .cm-si-line-strong': { borderLeftColor: 'CanvasText' },
+    '&.cm-si-marked .cm-si-line-chosen': {
+      borderLeftColor: 'Highlight',
+      outline: 'var(--rule-width) solid Highlight',
+      outlineOffset: 'calc(var(--rule-width) * -1)',
+    },
+    '.cm-si-action': { color: 'LinkText' },
   },
 });
 
@@ -112,6 +166,17 @@ const appKeys: readonly KeyBinding[] = [
  */
 const viewerKeys: readonly KeyBinding[] = [...appKeys, ...standardKeymap];
 
+/** A line brought into view keeps a couple of lines of what's around it in view too. */
+const REVEAL_MARGIN_PX = 40;
+
+/** Brings a line into view, moving no further than it takes. A line the text doesn't have is passed over. */
+function revealLine(editor: EditorView, line: number | null): void {
+  if (line === null || !Number.isInteger(line) || line < 1 || line > editor.state.doc.lines) return;
+  editor.dispatch({
+    effects: EditorView.scrollIntoView(editor.state.doc.line(line).from, { y: 'nearest', yMargin: REVEAL_MARGIN_PX }),
+  });
+}
+
 export default function SourceViewer({
   html: source,
   label,
@@ -120,17 +185,24 @@ export default function SourceViewer({
   current,
   onMatches,
   onWrapped,
+  language = 'html',
+  lineMarks,
+  chosenLine = null,
+  onLineAction,
 }: SourceViewerProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const wrapping = useRef(new Compartment());
   const reportMatches = useEffectEvent(onMatches);
   const reportWrapped = useEffectEvent(() => onWrapped?.());
+  const chooseLine = useEffectEvent((line: number) => onLineAction?.(line));
+  /** Lines are marked: the editor keeps room for the marks, and takes Enter and a press on a line's link. */
+  const marked = lineMarks !== undefined;
 
   // One editor per document. The search and the wrapping it starts with are the current ones.
-  const initial = useRef({ wrap, query, current, label });
+  const initial = useRef({ wrap, query, current, label, lineMarks, chosenLine });
   useEffect(() => {
-    initial.current = { wrap, query, current, label };
+    initial.current = { wrap, query, current, label, lineMarks, chosenLine };
   });
   useEffect(() => {
     if (!host.current) return undefined;
@@ -151,9 +223,42 @@ export default function SourceViewer({
           }),
           lineNumbers(),
           highlightSpecialChars(),
-          html({ autoCloseTags: false, matchClosingTags: false }),
-          syntaxHighlighting(highlightStyle),
+          ...(language === 'html'
+            ? [html({ autoCloseTags: false, matchClosingTags: false }), syntaxHighlighting(highlightStyle)]
+            : []),
           wrapping.current.of(start.wrap ? EditorView.lineWrapping : []),
+          ...(marked
+            ? [
+                sourceLines,
+                EditorView.editorAttributes.of({ class: 'cm-si-marked' }),
+                // Enter chooses the caret's line when it has a link, as a press on the link does. The text can't be
+                // typed in, so Enter has no other use.
+                keymap.of([
+                  {
+                    key: 'Enter',
+                    run: (target) => {
+                      const line = target.state.doc.lineAt(target.state.selection.main.head).number;
+                      if (!hasLineAction(target.state, line)) return false;
+                      chooseLine(line);
+                      return true;
+                    },
+                  },
+                ]),
+                EditorView.domEventHandlers({
+                  mousedown: (event) => {
+                    const link =
+                      event.button === 0 && event.target instanceof Element
+                        ? event.target.closest(`[${LINE_ACTION_ATTRIBUTE}]`)
+                        : null;
+                    const line = Number(link?.getAttribute(LINE_ACTION_ATTRIBUTE));
+                    if (!link || !Number.isInteger(line)) return false;
+                    event.preventDefault();
+                    chooseLine(line);
+                    return true;
+                  },
+                }),
+              ]
+            : []),
           keymap.of(viewerKeys),
           sourceSearch,
           theme,
@@ -161,6 +266,12 @@ export default function SourceViewer({
       }),
     });
     view.current = editor;
+    if (marked) {
+      editor.dispatch({
+        effects: [setSourceLineMarks.of(start.lineMarks ?? []), setSourceChosenLine.of(start.chosenLine)],
+      });
+      revealLine(editor, start.chosenLine);
+    }
     if (start.query !== '') {
       editor.dispatch({ effects: [setSourceQuery.of(start.query), setSourceMatch.of(start.current)] });
       const found = sourceSearchOf(editor.state);
@@ -170,7 +281,18 @@ export default function SourceViewer({
       view.current = null;
       editor.destroy();
     };
-  }, [source]);
+  }, [source, language, marked]);
+
+  useEffect(() => {
+    if (lineMarks !== undefined) view.current?.dispatch({ effects: setSourceLineMarks.of(lineMarks) });
+  }, [lineMarks]);
+
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor || !marked) return;
+    editor.dispatch({ effects: setSourceChosenLine.of(chosenLine) });
+    revealLine(editor, chosenLine);
+  }, [marked, chosenLine]);
 
   useEffect(() => {
     view.current?.dispatch({ effects: wrapping.current.reconfigure(wrap ? EditorView.lineWrapping : []) });
