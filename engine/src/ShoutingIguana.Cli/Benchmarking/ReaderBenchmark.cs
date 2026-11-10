@@ -33,6 +33,9 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     /// <item>The links grid's reads that pass over every link once per filter set (<c>link-pass</c>: a filter on a link's
     /// text or on the page it's on, a search, and any filter without the link summary) are over the budget at 100k
     /// already, by what they are: held to 2.5 s there, so they can't get slower.</item>
+    /// <item>The crawl's headline numbers (<c>stats</c>) pass over the URLs once and the responses once: inside the 300 ms
+    /// budget at 100k on the desktop (165 ms at worst), and held to twice that for the runner. Without the link summary
+    /// (<c>stats-pass</c>) the links are counted and the pages a sitemap led to looked up among them (257 ms at worst).</item>
     /// <item>The links grid's reads deep among the links of more targets than are listed for their index, or of most of
     /// the crawl's links of one kind (<c>link-targets</c>), read an index entry for every matching link, or for every
     /// other one, once per filter set: inside the 300 ms budget at 100k on the desktop (265 ms at worst), which the
@@ -57,7 +60,9 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         ["link-targets"] = 550,
         ["link-pass"] = 2_500,
         ["sitemaps"] = 200,
-        ["robots"] = 200
+        ["robots"] = 200,
+        ["stats"] = 350,
+        ["stats-pass"] = 600
     };
 
     /// <summary>The Overview columns, which every grid read fetches.</summary>
@@ -152,6 +157,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         LinksGrid();
         SitemapsAndRobots();
         WithoutSummary();
+        Stats();
         return _cases;
     }
 
@@ -251,6 +257,27 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             Linked("Without the link summary: nofollow", "link-pass", new UrlQuery { Filters = [Boolean("noFollow", true)] });
             Linked("Without the link summary: by target URL", "link-pass", new UrlQuery { Sort = [new UrlSort("to.url")] });
             Timed("Without the link summary: facets of every link", "facets", "link-pass", null, () => LinkGridReader.Facets(path, new UrlFacetQuery()));
+        }
+        finally
+        {
+            GridReadContext.ReadWithoutLinkSummary = false;
+        }
+    }
+
+    /// <summary>
+    /// Overview's headline numbers: read for the first time, read again from what was kept, and as a crawl running or never
+    /// analysed has them, without the link summary (<c>stats-pass</c>: the links are counted, and each page a sitemap led to
+    /// looked up among them).
+    /// </summary>
+    private void Stats()
+    {
+        Timed("Stats: the crawl's headline numbers", "stats", "stats", null, () => CrawlStatsReader.Read(path));
+        ReadCache kept = new();
+        Timed("Stats: again, kept", "stats", "stats", null, () => CrawlStatsReader.Read(path, kept));
+        GridReadContext.ReadWithoutLinkSummary = true;
+        try
+        {
+            Timed("Stats: without the link summary", "stats", "stats-pass", null, () => CrawlStatsReader.Read(path));
         }
         finally
         {
