@@ -141,7 +141,7 @@ links and "reopen where I left off" all work.
 - Views for what a link audit looks for: Broken links, Links to redirects, Nofollow links, No anchor text, External
   links. Each is its filters, shown as chips.
 - Quick filters with counts (kind, position, follow, the target's status, the target's site), each count opening
-  exactly that many links; a filter bar over any column of the link or of either end; search over the link's text and
+  exactly that many links; a filter bar over any column of the link or of either end; search over the anchor text and
   both URLs.
 - Either end opens the inspector on that URL. The inspector's Inlinks and Outlinks open here: "All N in Links".
 - Copy: the selected rows, the column the cursor is in, the view's source or target URLs. Export comes with the

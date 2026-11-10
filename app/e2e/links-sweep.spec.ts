@@ -165,7 +165,7 @@ test('every count on Links lands on itself: the header, each preset, and every f
   // A search, which the engine counts by reading every link: its counts land too.
   await page.goto(`/crawls/${crawl}/links`);
   await expectShown(page, total, 'All links');
-  const search = main(page).getByRole('searchbox', { name: 'Search link text and URLs' });
+  const search = main(page).getByRole('searchbox', { name: 'Search anchor text and URLs' });
   await search.fill('about');
   await search.press('Enter');
   const found = await counted([], 'about');

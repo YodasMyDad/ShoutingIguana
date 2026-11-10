@@ -272,7 +272,7 @@ describe('searching the links', () => {
     const { transport } = sidecar();
     const { router, user } = await open(LINKS);
     await counted('13 links');
-    const field = screen.getByRole('searchbox', { name: 'Search link text and URLs' });
+    const field = screen.getByRole('searchbox', { name: 'Search anchor text and URLs' });
     await user.type(field, 'gone{Enter}');
     await counted('2 of 13 links');
     expect(router.state.location.search).toMatchObject({ q: 'gone' });
@@ -292,7 +292,7 @@ describe('searching the links', () => {
     await counted('13 links');
     expect(commands.get('links.search')?.keys).toEqual(['mod+f']);
     act(() => void commands.run('links.search'));
-    expect(screen.getByRole('searchbox', { name: 'Search link text and URLs' })).toHaveFocus();
+    expect(screen.getByRole('searchbox', { name: 'Search anchor text and URLs' })).toHaveFocus();
   });
 });
 
@@ -646,9 +646,9 @@ describe('a read of the links that takes a while', () => {
     let release: () => void = () => undefined;
     state.hold = new Promise<void>((resolve) => (release = resolve));
     state.holds = (query) => query.search === 'gone';
-    await user.type(screen.getByRole('searchbox', { name: 'Search link text and URLs' }), 'gone{Enter}');
+    await user.type(screen.getByRole('searchbox', { name: 'Search anchor text and URLs' }), 'gone{Enter}');
     // Nothing for a moment, then what it's doing, over the grid's skeleton.
-    const words = 'Reading all 13 links: a search looks at each link’s text and both its URLs.';
+    const words = 'Reading all 13 links: a search looks at each link’s anchor text and both its URLs.';
     expect(screen.queryByText(words)).toBeNull();
     expect(await screen.findByText(words, undefined, { timeout: 2_000 })).toBeVisible();
     expect(said).toContain(words);

@@ -254,7 +254,7 @@ describe('which reads of the links are slow', () => {
     expect(passReason(view(), { crawling: false, summaryReason: 'notAnalyzed' })).toBeNull();
   });
 
-  it('pass over every link for a search, a filter on a link’s text, or one on its source page', () => {
+  it('pass over every link for a search, a filter on the anchor text, or one on its source page', () => {
     expect(passReason(view([], 'rattan'), quick)).toBe('search');
     expect(passReason(view([{ column: 'text', op: 'contains', value: 'buy' }]), quick)).toBe('text');
     expect(passReason(view([{ column: 'fragment', op: 'isNotEmpty' }]), quick)).toBe('text');
@@ -278,10 +278,10 @@ describe('which reads of the links are slow', () => {
 
   it('say what they are doing, with the number of links when it is known', () => {
     expect(slowReadWords('search', 5_053_909)).toBe(
-      'Reading all 5,053,909 links: a search looks at each link’s text and both its URLs.',
+      'Reading all 5,053,909 links: a search looks at each link’s anchor text and both its URLs.',
     );
     expect(slowReadWords('text', null)).toBe(
-      'Reading every link: a filter on what a link’s text says looks at each one.',
+      'Reading every link: a filter on what the anchor text says looks at each link.',
     );
     expect(slowReadWords(null, 5_053_909)).toBe('Reading the links…');
   });

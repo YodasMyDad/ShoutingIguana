@@ -24,7 +24,7 @@ const narrows = (filter: GridFilter) => filter.op !== 'isEmpty' && filter.op !==
 
 /**
  * Why this view's first read passes over every link, if it does. The first that applies, in the order a user would
- * recognise their own doing: a search, a filter on a link's text, one on its source page; then the crawl's state.
+ * recognise their own doing: a search, a filter on the anchor text, one on its source page; then the crawl's state.
  */
 export function passReason(
   view: { filters: readonly GridFilter[]; search?: string | undefined; sort: readonly GridSort[] },
@@ -50,8 +50,8 @@ export function passReason(
 }
 
 const BECAUSE: Record<PassReason, string> = {
-  search: 'a search looks at each link’s text and both its URLs',
-  text: 'a filter on what a link’s text says looks at each one',
+  search: 'a search looks at each link’s anchor text and both its URLs',
+  text: 'a filter on what the anchor text says looks at each link',
   source: 'a filter on the source page looks at each of its links',
   crawling: 'while the crawl runs, a filter or sort looks at each one',
   noSummary: 'without a current analysis, a filter or sort looks at each one',
@@ -59,7 +59,7 @@ const BECAUSE: Record<PassReason, string> = {
 
 /**
  * What the grid says while a view's first read is still on its way after 150 ms: "Reading all 5,053,909 links: a
- * search looks at each link’s text and both its URLs." With no reason the engine names, only that it's reading.
+ * search looks at each link’s anchor text and both its URLs." With no reason the engine names, only that it's reading.
  * `total` is the crawl's links when a read has said so, else null.
  */
 export function slowReadWords(reason: PassReason | null, total: number | null): string {

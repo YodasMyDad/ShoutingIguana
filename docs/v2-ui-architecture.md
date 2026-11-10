@@ -818,10 +818,10 @@ full grid's pieces, which are any grid's (below). What it settled:
   their prefix match URLs no link leads to as well. Nothing is offered that would land on another number; the screen
   copies the set's source or target URLs instead. It needs the engine.
 - **Speed, said honestly.** Most views are found from the counts the analysis keeps and cost a page. A search, a
-  filter on what a link's text says or on its source page, and any filter or sort while the crawl runs or without a
+  filter on what the anchor text says or on its source page, and any filter or sort while the crawl runs or without a
   current analysis, read every link once (`readCost.ts` has the engine's rule). A first page still on its way after
   150 ms says what it's doing over the grid's skeleton ("Reading all 5,053,909 links: a search looks at each link's
-  text and both its URLs."), announced once; the rest of the screen stays usable, and changing the view gives the
+  anchor text and both its URLs."), announced once; the rest of the screen stays usable, and changing the view gives the
   read up (its request is aborted, as any page nobody waits for is).
 - **Another column keeps the grid's place.** The rows are asked for again with it, and the count of the same view
   stands meanwhile, so the grid keeps its scroll, its cursor and its rows' places instead of a skeleton.
@@ -851,7 +851,7 @@ full grid's pieces, which are any grid's (below). What it settled:
   is inside the 300 ms budget (crawl order 3 to 5 ms at any depth; the presets 6 to 114 ms, then 3 to 24; the facets
   126 ms, then 4; a sort by the target 24 to 51 ms). **Over budget, and said on screen**: a search not made before
   (0.94 to 1.87 s; 1.24 to 1.32 s to its rows on screen, the grid saying what it's doing from 175 to 181 ms); a filter
-  on what a link's text says (0.53 s for a common word, 0.83 s for a pattern) or on its source page's depth (1.46 s);
+  on what the anchor text says (0.53 s for a common word, 0.83 s for a pattern) or on its source page's depth (1.46 s);
   half way down the links to one heavily linked page with its own links to itself left out (336 ms into 202,212, then
   42); and, on a crawl with no link summary (one an earlier engine analysed), the first read of every filtered view
   and of the facets (0.2 to 1.2 s), the unfiltered grid staying at 3 to 8 ms. Each is once per view: its pages after

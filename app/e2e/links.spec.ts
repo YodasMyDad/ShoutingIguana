@@ -420,7 +420,7 @@ test('searches with Ctrl+F, shows more columns from the chooser, and its presets
 }) => {
   await openLinks(page);
   await page.keyboard.press('Control+f');
-  const search = main(page).getByRole('searchbox', { name: 'Search link text and URLs' });
+  const search = main(page).getByRole('searchbox', { name: 'Search anchor text and URLs' });
   await expect(search).toBeFocused();
   await search.fill('chain-a');
   await search.press('Enter');

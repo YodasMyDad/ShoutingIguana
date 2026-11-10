@@ -397,7 +397,7 @@ export function LinksScreen() {
         actions={
           <SearchField
             ref={searchRef}
-            label="Search link text and URLs"
+            label="Search anchor text and URLs"
             placeholder="Search links"
             value={draft}
             shortcut="mod+f"
