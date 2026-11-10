@@ -45,7 +45,9 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         ["links"] = 200,
         ["links-kind"] = 240,
         ["crawl"] = 185,
-        ["crawl-facets"] = 245
+        ["crawl-facets"] = 245,
+        ["link-grid"] = 200,
+        ["link-pass"] = 1_500
     };
 
     /// <summary>The Overview columns, which every grid read fetches.</summary>
@@ -137,8 +139,87 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             Links("Stylesheet links to the stylesheet", stylesheet, [LinkKind.Stylesheet]);
         }
 
+        LinksGrid();
         WithoutSummary();
         return _cases;
+    }
+
+    /// <summary>
+    /// The links grid: its pages in crawl order and sorted by the target, unfiltered and under filters common and rare on
+    /// what a link is and on its target, and its facets, which the link summary answers (<c>link-grid</c>); then the reads
+    /// that pass over every link once per filter set (<c>link-pass</c>): a filter on the link's text or on the page it's on,
+    /// a search, and everything without the link summary.
+    /// </summary>
+    private void LinksGrid()
+    {
+        Linked("Links grid: crawl order", "link-grid", new UrlQuery());
+        Linked("Links grid: crawl order, last first", "link-grid", new UrlQuery { Sort = [new UrlSort("id", true)] });
+        Linked("Links grid: hyperlinks (a common filter)", "link-grid", new UrlQuery { Filters = [In("kind", "hyperlink")] });
+        Linked("Links grid: in the footer", "link-grid", new UrlQuery { Filters = [In("position", "footer")] });
+        Linked("Links grid: nofollow (a rare filter)", "link-grid", new UrlQuery { Filters = [Boolean("noFollow", true)] });
+        Linked("Links grid: not followed", "link-grid", new UrlQuery { Filters = [Boolean("followed", false)] });
+        Linked("Links grid: to 4xx URLs", "link-grid", new UrlQuery { Filters = [In("to.statusClass", "4xx")] });
+        Linked("Links grid: hyperlinks to 404s in the content (three filters)", "link-grid",
+            new UrlQuery { Filters = [In("kind", "hyperlink"), In("position", "content"), Number("to.statusCode", FilterOperator.Eq, 404)] });
+        Linked("Links grid: to other sites", "link-grid", new UrlQuery { Filters = [Boolean("to.isInternal", false)] });
+        Linked("Links grid: to URLs containing text", "link-grid", new UrlQuery { Filters = [Text("to.url", FilterOperator.Contains, "/p/12")] });
+        Linked("Links grid: to non-indexable pages, hyperlinks", "link-grid", new UrlQuery { Filters = [In("kind", "hyperlink"), Boolean("to.indexable", false)] });
+        Linked("Links grid: images without alt text", "link-grid", new UrlQuery { Filters = [In("kind", "image"), new UrlFilter("text", FilterOperator.IsEmpty)] });
+        Linked("Links grid: by target URL", "link-grid", new UrlQuery { Sort = [new UrlSort("to.url")] });
+        Linked("Links grid: by target status, highest first", "link-grid", new UrlQuery { Sort = [new UrlSort("to.statusCode", true)] });
+        Linked("Links grid: hyperlinks by the target's inlinks", "link-grid", new UrlQuery { Filters = [In("kind", "hyperlink")], Sort = [new UrlSort("to.inlinks", true)] });
+        Linked("Links grid: to 4xx URLs by target URL", "link-grid", new UrlQuery { Filters = [In("to.statusClass", "4xx")], Sort = [new UrlSort("to.url")] });
+        Timed("Links grid: facets of every link", "facets", "link-grid", null, () => LinkGridReader.Facets(path, new UrlFacetQuery()));
+        Timed("Links grid: facets of the hyperlinks", "facets", "link-grid", null, () => LinkGridReader.Facets(path, new UrlFacetQuery { Filters = [In("kind", "hyperlink")] }));
+        Timed("Links grid: facets of links to other sites", "facets", "link-grid", null, () => LinkGridReader.Facets(path, new UrlFacetQuery { Filters = [Boolean("to.isInternal", false)] }));
+
+        var start = UrlGridReader.Query(path, new UrlQuery { Limit = 1 }).Rows.Select(row => row.Id).FirstOrDefault(1);
+        Linked("Links grid: from one page", "link-grid", new UrlQuery { Filters = [Number("from.id", FilterOperator.Eq, start)] });
+        Linked("Links grid: to one page (the start URL's inlinks)", "link-grid", new UrlQuery { Filters = [Number("to.id", FilterOperator.Eq, start)] });
+
+        Linked("Links grid: text contains a common word (every link read)", "link-pass", new UrlQuery { Filters = [Text("text", FilterOperator.Contains, "product")] });
+        Linked("Links grid: text contains rare text (every link read)", "link-pass", new UrlQuery { Filters = [Text("text", FilterOperator.Contains, "Product 12345")] });
+        Linked("Links grid: from pages at depth 2 (every link read)", "link-pass", new UrlQuery { Filters = [Number("from.depth", FilterOperator.Eq, 2)] });
+        Linked("Links grid: search (every link read)", "link-pass", new UrlQuery { Search = "/p/123" });
+        Timed("Links grid: facets of a text filter (every link read)", "facets", "link-pass", null,
+            () => LinkGridReader.Facets(path, new UrlFacetQuery { Filters = [Text("text", FilterOperator.Contains, "product")] }));
+
+        GridReadContext.ReadWithoutLinkSummary = true;
+        try
+        {
+            Linked("Without the link summary: crawl order", "link-grid", new UrlQuery());
+            Linked("Without the link summary: hyperlinks", "link-pass", new UrlQuery { Filters = [In("kind", "hyperlink")] });
+            Linked("Without the link summary: nofollow", "link-pass", new UrlQuery { Filters = [Boolean("noFollow", true)] });
+            Linked("Without the link summary: by target URL", "link-pass", new UrlQuery { Sort = [new UrlSort("to.url")] });
+            Timed("Without the link summary: facets of every link", "facets", "link-pass", null, () => LinkGridReader.Facets(path, new UrlFacetQuery()));
+        }
+        finally
+        {
+            GridReadContext.ReadWithoutLinkSummary = false;
+        }
+    }
+
+    /// <summary>A links grid read: its first page, and the page half way down and the one just past it.</summary>
+    private void Linked(string name, string readClass, UrlQuery query)
+    {
+        if (!Wanted(name))
+        {
+            return;
+        }
+
+        var shown = query with { Columns = ["from.url", "to.url", "kind", "text", "position", "followed", "to.statusCode"] };
+        long matching;
+        try
+        {
+            matching = LinkGridReader.Query(path, shown with { Limit = 1 }).Matching;
+        }
+        catch (NeedsAnalysisException)
+        {
+            progress($"  skipped    {name}: it needs the URL summary");
+            return;
+        }
+
+        Paged(name, "links-grid", readClass, matching, offset => LinkGridReader.Query(path, shown with { Offset = offset }));
     }
 
     /// <summary>
