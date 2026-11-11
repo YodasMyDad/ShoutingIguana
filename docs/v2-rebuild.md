@@ -135,11 +135,49 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `o
 
 **Resumed on 2026-11-11.** The owner said: "Ok finish step 3". The work goes through "Left, in this order" below to
 its end, without reports in between. Pausing is theirs to call. Merging to `master` or releasing still needs an
-explicit yes. Launched that day, from the state the table below describes: the E3c fixer, a review of Links, a
-review of Sitemaps and robots.txt, and the comparison (item 3). Their briefs, and the checkpoint a new session
-resumes from, are in the 2026-11-11 scratchpad folder that the owner's memory file names (`checkpoint.md`,
-`brief-*.md`). If this paragraph is the newest news here, those four were still running: read that checkpoint,
-then each branch's log, and relaunch what hadn't reported.
+explicit yes. The checkpoint a new session resumes from, and every brief, are in the 2026-11-11 scratchpad folder
+that the owner's memory file names (`checkpoint.md`, `brief-*.md`).
+
+Done that day so far, and on this branch:
+
+- [The comparison](v2-comparison.md) (item 3).
+- **The Simple design (item 4)**: [`v2-ui-simple.md`](v2-ui-simple.md), with small edits to the IA, the design doc
+  and the glossary, and 18 mockups on the garden crawl in `app/design/simple/` (merged `ui/simple-design`). It ends
+  in three lists the build rounds are briefed from: what round 3 builds, what round 4 builds, what the engine
+  needs. The owner's gallery of the mockups is published, private: https://claude.ai/artifact/R53PTE7wZb7rPZHX6Z3GfN
+  (built by `gallery-simple\build.cjs` in that scratchpad, published from
+  `C:\Projects\ShoutingIguana\.claude\worktrees\_gallery\simple\`: republish from that path to keep the URL).
+  Decided there, and the owner's to overturn: notices cost the score nothing; a fault of the whole site costs 60
+  points; the switch is at the right of the top bar. The design adds one check, `site-hidden-from-search`, so the
+  catalog becomes 87.
+- **The two reviews of round 2**: Links has 14 findings (1 high) and Sitemaps and robots.txt has 17 (2 high). Each
+  list is saved as `<name>-review\findings.md` in the scratchpad.
+
+Running, each on its own local branch, unmerged (if this is the newest news here, read the checkpoint, then each
+branch's log, and relaunch what hadn't reported):
+
+| Work | Branch and worktree | Brief |
+| --- | --- | --- |
+| E3c fixer: the review's 7 findings, and two counts for each sitemap (`GET /sitemaps`) | `ui/e3c`, `e3c` | `brief-e3c-fixes.md` |
+| Links fixer: 14 findings. A page check's share is over `pagesAnalyzed` | `ui/links`, `links` | `brief-links-fixes.md` |
+| Sitemaps and robots.txt fixer: 17 findings. "Crawled" means requested, and URLs robots.txt refused get their own column | `ui/sitemaps-robots`, `sitemaps-robots` | `brief-sitemaps-fixes.md` |
+| Round 3, engine: the score, `siteWide`, the new check, the plain-text fields, a code's name in details | `ui/score`, `score` | `brief-score.md` |
+| Round 3, engine: export (E5), the workbook and the report | `ui/e5`, `e5` | `brief-e5.md` |
+
+The order they merge in: E3c; Links (its fixer merges `ui/step-3` in first); Sitemaps (the same); the score; export
+(it merges the score in before it builds the report's last part). Each merge gets the full checks, run again.
+
+Queued behind the Links and Sitemaps merges, because they touch the shell both of those change:
+
+- **The URL grid to the IA**: Ctrl+F, header sort, a row menu for every grid, the filter bar with Add, edit and
+  Clear, facets, the column chooser and presets, "Show full URLs" and a whole-view copy. The Links review listed
+  what URLs lacks, and the comparison names this as where Screaming Frog is plainly better for an expert.
+- **The UI takes up E3c's fields**, with the shell pass's open findings (item 2).
+- **Round 3's UI**: the mode setting and the switch, the top bar's order of giving way, Settings, New crawl in both
+  modes, and export on every grid.
+- **Round 3's second engine piece (E6 and the gaps round 2 found)**: full-text search, favicons, `POST /robots`
+  search, `/urls/inspect` naming its sitemaps and robots.txt line, the URL grid filtered to the ends of links, a
+  view's distinct ends, the `inlinks` gap, the parallel link pass.
 
 It had been paused in round 2 on the evening of 2026-11-10, to preserve usage.
 
@@ -352,10 +390,8 @@ Left, in this order. Items 3, 4 and 6 were added on 2026-11-10, and items 5 and 
    we already fetch (about 50 worth adding in the check audit), and 113 need a browser (step 4). For step 3 it
    asks for export on every grid, and for the URL grid to hold more: columns, header sort, a filter builder and
    compact rows. Its "For Simple mode" section is input to item 4.
-4. The Simple design. The IA, the design doc and the glossary say what Simple shows, where the switch is, what the
-   report holds and how it is made, and what New crawl and Settings look like in each mode. Mockups are published
-   for the owner as a private artifact. The work then goes on under the standing delegation unless the owner
-   steers it. Round 3 doesn't start before this.
+4. Done on 2026-11-11: the Simple design, [`v2-ui-simple.md`](v2-ui-simple.md), with its mockups published for
+   the owner (above). The work goes on under the standing delegation unless the owner steers it.
 5. Round 3: New crawl settings, the crawl's settings and the rest of Settings (the Overview's alert actions then get
    their real targets); export (E5, engine and UI); full-text search and favicons (E6, engine and UI). All of it is
    built to the Simple design: the switch's home in Settings, New crawl in both modes, and an export that can carry
