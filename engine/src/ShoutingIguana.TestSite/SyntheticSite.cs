@@ -399,7 +399,7 @@ public sealed partial class SyntheticSite
             BrokenUrls: broken.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: false }),
             ServerErrorUrls: errors.Count,
             Redirects: redirects.Count + _plants.Count(plant => plant.Status is >= 300 and < 400),
-            RobotsDisallowed: disallowed.Count,
+            RobotsDisallowed: disallowed.Count + _plants.Count(plant => plant.Status == Plant.REFUSED),
             NofollowOnly: hidden.Count + NOFOLLOW_ONLY_FILES.Length,
             ExternalOk: externalOk.Count,
             ExternalMissing: externalMissing.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: true }),

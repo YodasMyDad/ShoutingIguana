@@ -25,11 +25,26 @@ public sealed record CrawlFileSummary
     public required string EngineVersion { get; init; }
 
     /// <summary>
+    /// The time the crawl has spent crawling, over every run of it, less the time paused: neither a pause nor the time
+    /// between a stop and a continue is in it. Null when it isn't known (<see cref="CrawlRunReader"/>): an engine from
+    /// before the time was kept made the crawl, or a run of it.
+    /// </summary>
+    public TimeSpan? TimeCrawling { get; init; }
+
+    /// <summary>
     /// URLs with a stored outcome, whatever it was, as <see cref="Crawling.Models.CrawlProgress.Fetched"/> counts them:
-    /// those the crawl requested, and those robots.txt kept it from requesting, which are stored as disallowed. URLs it
-    /// only found (a nofollow link, past a limit) aren't among them. Null when read without counts.
+    /// those the crawl requested, those robots.txt kept it from requesting, which are stored as disallowed, and those it
+    /// never asked because their host had stopped answering, which <see cref="CrawledUrlCount"/> leaves out. URLs it only
+    /// found (a nofollow link, past a limit) aren't among them. Null when read without counts.
     /// </summary>
     public long? FetchedUrlCount { get; init; }
+
+    /// <summary>
+    /// The URLs crawled, as <see cref="Crawling.Models.CrawlProgress.Crawled"/> counts them and the URL grid has them
+    /// (fetched): <see cref="FetchedUrlCount"/> less the URLs that weren't checked, which have an outcome though nothing
+    /// was asked, their host having stopped answering. Null when read without counts.
+    /// </summary>
+    public long? CrawledUrlCount { get; init; }
 
     /// <summary>
     /// Internal HTML pages fetched and parsed, as <see cref="CrawlStats.HtmlPageCount"/> and a crawl's live progress count

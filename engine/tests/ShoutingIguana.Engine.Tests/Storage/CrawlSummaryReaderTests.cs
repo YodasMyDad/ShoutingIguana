@@ -46,6 +46,10 @@ public sealed class CrawlSummaryReaderTests : IAsyncLifetime
         // The URLs requested, as the crawl's progress counted them: not those it only found (a nofollow link).
         Assert.Equal(crawl.Progress.Fetched, crawled.FetchedUrlCount);
         Assert.Equal(stats.Outcomes.Values.Sum(), crawled.FetchedUrlCount);
+
+        // Every one of them was asked for (nothing here stopped answering), so they're the URLs crawled too.
+        Assert.Equal(crawl.Progress.Crawled, crawled.CrawledUrlCount);
+        Assert.Equal(crawled.FetchedUrlCount, crawled.CrawledUrlCount);
         Assert.True(crawled.PageCount is > 60 && crawled.FetchedUrlCount > crawled.PageCount && crawled.FetchedUrlCount < stats.UrlCount,
             $"{crawled.FetchedUrlCount} of {stats.UrlCount} URLs fetched, {crawled.PageCount} pages");
 

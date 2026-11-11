@@ -1,9 +1,12 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 using ShoutingIguana.Cli.Benchmarking;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Configuration.Models;
+using ShoutingIguana.Engine.Crawling;
+using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
@@ -239,8 +242,14 @@ public sealed class CliTests : IAsyncLifetime
         Assert.True((bool?)result["summaryAvailable"]);
         Assert.Equal(2, (int?)result["runs"]);
         Assert.Empty(result["failures"]!.AsArray());
-        Assert.Equal(["facets", "grid", "groups", "inspector", "links", "links-grid", "lookup", "robots", "rows", "sitemaps"],
+        Assert.Equal(["facets", "grid", "groups", "inspector", "links", "links-grid", "lookup", "robots", "rows", "sitemaps", "stats"],
             result["cases"]!.AsArray().Select(read => (string)read!["kind"]!).Distinct().Order(StringComparer.Ordinal));
+
+        // The crawl's headline numbers: read, read again from what was kept, and without the link summary, each held to
+        // a gate of its own: the kept read to a few milliseconds, which numbers read all over again would miss.
+        Assert.Equal(["stats", "stats-kept", "stats-pass"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "stats").Select(read => (string)read!["class"]!));
+        Assert.InRange(ReaderBenchmark.GATE_MS["stats-kept"], 1, 20);
+        Assert.InRange(ReaderBenchmark.GATE_MS["stats-pass"], ReaderBenchmark.GATE_MS["stats"], 500);
 
         // The links grid is timed with its link summary and without, and so are the sitemaps and robots.txt.
         Assert.All(new[] { "Links grid: ", "Without the link summary: ", "Sitemaps: ", "robots.txt: " }, name =>
@@ -294,6 +303,40 @@ public sealed class CliTests : IAsyncLifetime
         Assert.Equal(2, result.ExitCode);
         Assert.Contains("There's already a file at", result.Error);
         Assert.Equal("a crawl", await File.ReadAllTextAsync(existing));
+    }
+
+    /// <summary>
+    /// The benchmark's reads of the links grid, which it holds the crawl's write-ahead log to a size under: two readers in
+    /// relay through a crawl as it runs, every read answered and timed, and the log's size sampled.
+    /// </summary>
+    [Fact]
+    public async Task BenchReadsTheLinksGridAllThroughACrawl()
+    {
+        var crawl = Path.Combine(_folder, "read.sicrawl");
+        LinkReads reads;
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(
+                         new CrawlRequest(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 2, MaxRequestsPerSecond = 60 }, crawl)))
+        {
+            reads = new LinkReads(crawl);
+            try
+            {
+                Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TimeSpan.FromMinutes(2))).Status);
+            }
+            finally
+            {
+                await reads.DisposeAsync();
+            }
+        }
+
+        Assert.Empty(reads.Errors);
+        Assert.True(reads.Reads > 10, $"{reads.Reads} reads");
+        Assert.True(reads.Slowest > TimeSpan.Zero);
+        Assert.True(reads.PeakLogBytes > 0);
+
+        // The limit on the log is for a crawl whose links are read: alone, it would hold the benchmark to nothing.
+        var alone = await RunAsync("bench", "--pages", "10", "--max-log-mb", "64");
+        Assert.Equal(2, alone.ExitCode);
+        Assert.Contains("--read-links", alone.Error);
     }
 
     private async Task<string> CrawlAsync()

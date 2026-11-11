@@ -22,9 +22,10 @@ internal sealed class CrawlSummaryCache
     /// <summary>
     /// What a kept summary holds. Bump it whenever <see cref="Engine.Storage.Models.CrawlFileSummary"/> gains or changes
     /// what it carries, since builds of one engine version share the state folder: 1 added the analysis, with what it was
-    /// run against, which the out-of-date rule needs (a summary kept without it would say an old analysis still stands).
+    /// run against, which the out-of-date rule needs (a summary kept without it would say an old analysis still stands);
+    /// 2 added the URLs crawled (a summary kept without the count would say none were), and 3 the time spent crawling.
     /// </summary>
-    private const int FORMAT = 1;
+    private const int FORMAT = 3;
 
     private readonly ConcurrentDictionary<string, CachedSummary> _summaries = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _paths = new(StringComparer.Ordinal);

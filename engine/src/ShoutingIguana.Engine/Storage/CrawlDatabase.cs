@@ -28,6 +28,39 @@ public static class CrawlDatabase
 
     private const int WRITE_TIMEOUT_SECONDS = 30;
 
+    /// <summary>
+    /// How large a file's write-ahead log gets before its writer folds it into the file and starts it again
+    /// (<see cref="FoldLog"/>). With nobody reading, SQLite starts the log again by itself every few megabytes (a crawl of
+    /// the 100,000-page benchmark site peaks at about 23 MB), so this is never reached. With grid reads following one
+    /// another closely, as the links grid's do while a crawl runs, it never can: the log then grew by all the crawl wrote.
+    /// </summary>
+    internal const long LOG_LIMIT_BYTES = 64L * 1024 * 1024;
+
+    /// <summary>
+    /// How long folding the log waits for the grid reads in flight to end by themselves, new ones held meanwhile, before
+    /// it leaves the log for later: the writer waits with it, so the crawl stores nothing for as long. The links grid's
+    /// slowest reads of a crawl of 100,000 pages take under two seconds.
+    /// </summary>
+    private static readonly TimeSpan FOLD_PATIENCE = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// How long it then waits for a reader the read gate doesn't see (a short read of the crawl's summary or its alerts
+    /// here, or another program) before it leaves the log for later.
+    /// </summary>
+    private const int FOLD_BUSY_TIMEOUT_MS = 250;
+
+    private static readonly AsyncLocal<long?> LOG_LIMIT = new();
+
+    /// <summary>
+    /// <see cref="LOG_LIMIT_BYTES"/>, unless a test lowered it for the writers opened in its flow (this thread and what it
+    /// awaits), so that their logs are folded often.
+    /// </summary>
+    internal static long LogLimitBytes
+    {
+        get => LOG_LIMIT.Value ?? LOG_LIMIT_BYTES;
+        set => LOG_LIMIT.Value = value;
+    }
+
     /// <summary>Why a writer couldn't open a file someone is reading: the reader's lock outlasted the open timeout.</summary>
     private const string BEING_READ =
         "This crawl is being read (by an export, or another program), so it can't be written to until that finishes. Try again in a moment.";
@@ -182,6 +215,55 @@ public static class CrawlDatabase
         {
             connection.Dispose();
             throw;
+        }
+    }
+
+    /// <summary>The size of the file's write-ahead log as it is now; 0 when it has none.</summary>
+    internal static long LogBytes(string path)
+    {
+        var log = new FileInfo(path + "-wal");
+        return log.Exists ? log.Length : 0;
+    }
+
+    /// <summary>
+    /// Folds a writer's write-ahead log into the file and empties it, while the file stays open and in WAL mode: for a
+    /// writer between two of its transactions, once the log has passed <see cref="LogLimitBytes"/>. SQLite starts a log
+    /// again only when no reader is part-way through it, so the grids' new reads here wait while those in flight end by
+    /// themselves, and read on once the log is folded (<see cref="CrawlReadGate.ExclusiveOnceIdle"/>): no read is stopped,
+    /// fails or answers differently, it only waits. The writer waits too, so nothing is added to the log meanwhile. When
+    /// the reads in flight don't end in time, or a reader the gate doesn't see outlasts its own shorter wait (another
+    /// program reading the file), the log is left to be emptied later; whatever of it such a reader lets go of is still
+    /// folded in. Never throws for what SQLite refuses: a writer whose commits succeed goes on.
+    /// </summary>
+    /// <returns>Whether the log was emptied.</returns>
+    internal static bool FoldLog(SqliteConnection connection, ILogger logger)
+    {
+        using var exclusive = CrawlReadGate.ExclusiveOnceIdle(connection.DataSource, FOLD_PATIENCE);
+        if (exclusive is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            Execute(connection, $"PRAGMA busy_timeout = {FOLD_BUSY_TIMEOUT_MS};");
+            try
+            {
+                // One row: whether a reader kept it from finishing, the log's frames, and how many of them were folded in.
+                using var command = connection.CreateCommand();
+                command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+                using var reader = command.ExecuteReader();
+                return reader.Read() && reader.GetInt64(0) == 0;
+            }
+            finally
+            {
+                Execute(connection, $"PRAGMA busy_timeout = {WRITE_BUSY_TIMEOUT_MS};");
+            }
+        }
+        catch (SqliteException exception)
+        {
+            logger.LogWarning(exception, "Could not fold the write-ahead log into the crawl database; it is left to grow until this works");
+            return false;
         }
     }
 

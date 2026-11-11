@@ -22,7 +22,8 @@ internal static class AnalysisEndpoints
 
         api.MapGet("/api/crawls/{id}/analysis", (string id, CrawlData data) => TypedResults.Json(data.Analysis(id), SidecarJsonContext.Default.AnalysisDto));
 
-        api.MapGet("/api/crawls/{id}/stats", (string id, CrawlData data) => TypedResults.Json(data.Stats(id), SidecarJsonContext.Default.CrawlStatsDto));
+        api.MapGet("/api/crawls/{id}/stats", async (string id, GridData data, CancellationToken cancellationToken) =>
+            TypedResults.Json(await data.StatsAsync(id, cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.CrawlStatsDto));
 
         api.MapGet("/api/crawls/{id}/issues/{checkId}", (string id, string checkId, HttpRequest request, CrawlData data) =>
             TypedResults.Json(data.Issues(id, checkId, request.Query), SidecarJsonContext.Default.IssuesPageDto));

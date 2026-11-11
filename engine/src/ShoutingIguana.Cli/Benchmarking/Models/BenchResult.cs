@@ -9,6 +9,9 @@ namespace ShoutingIguana.Cli.Benchmarking.Models;
 /// </param>
 /// <param name="Correct">Every planted page and issue was found, and nothing else was flagged.</param>
 /// <param name="AnalysisPeakWorkingSetMb">Peak working set while the analysis ran.</param>
+/// <param name="LinkReads">With --read-links: the reads of the links grid answered while the crawl ran; null without.</param>
+/// <param name="SlowestLinkReadMs">The longest one of them took to answer, a fold of the log it waited out included.</param>
+/// <param name="PeakLogMb">The largest the crawl's write-ahead log was seen under those reads.</param>
 internal sealed record BenchResult(
     int SyntheticPages,
     int Concurrency,
@@ -30,6 +33,9 @@ internal sealed record BenchResult(
     double AnalysisSeconds,
     long IssuesFound,
     double AnalysisPeakWorkingSetMb,
+    long? LinkReads,
+    double? SlowestLinkReadMs,
+    double? PeakLogMb,
     string Machine,
     string Runtime,
     IReadOnlyList<string> Mismatches,

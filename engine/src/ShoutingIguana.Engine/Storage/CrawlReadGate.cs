@@ -11,6 +11,12 @@ namespace ShoutingIguana.Engine.Storage;
 /// the file, stops those in flight (they read again once it's done), and waits for them to let go, which takes
 /// milliseconds; in WAL mode, reads and the writer don't wait for each other. Other programs reading the file aren't
 /// seen here: they can still keep a writer out.
+/// <para>
+/// A running crawl's writer also needs the file to itself for a moment, to start its write-ahead log again once it has
+/// grown large (<see cref="CrawlDatabase.FoldLog"/>): SQLite can only do that while no read is part-way through the
+/// log, and with reads following one another closely that moment never comes by itself. Nothing forces that one, so
+/// it stops no read: new reads wait while those in flight end by themselves (<see cref="ExclusiveOnceIdle"/>).
+/// </para>
 /// </summary>
 internal static class CrawlReadGate
 {
@@ -37,6 +43,17 @@ internal static class CrawlReadGate
         var gate = FILES.GetOrAdd(Key(path), _ => new FileGate());
         gate.BeginWrite(PATIENCE);
         return new WriteLease(gate);
+    }
+
+    /// <summary>
+    /// A writer has the file to itself once the reads in flight have ended by themselves: none is stopped, and new reads
+    /// wait meanwhile, then read as ever. Null when they haven't ended within <paramref name="patience"/>: the reads that
+    /// waited go on at once, and the writer does without the file this time.
+    /// </summary>
+    public static IDisposable? ExclusiveOnceIdle(string path, TimeSpan patience)
+    {
+        var gate = FILES.GetOrAdd(Key(path), _ => new FileGate());
+        return gate.BeginWriteOnceIdle(patience) ? new WriteLease(gate) : null;
     }
 
     private static string Key(string path) => Path.GetFullPath(path);
@@ -118,6 +135,29 @@ internal static class CrawlReadGate
                 {
                     Monitor.Wait(_sync, TimeSpan.FromMilliseconds(10));
                 }
+            }
+        }
+
+        /// <summary>Holds new reads and waits for those in flight to end by themselves; false, letting the reads go on, when they don't in time.</summary>
+        public bool BeginWriteOnceIdle(TimeSpan patience)
+        {
+            var started = Stopwatch.GetTimestamp();
+            lock (_sync)
+            {
+                _writers++;
+                while (_reads.Count > 0 && Stopwatch.GetElapsedTime(started) < patience)
+                {
+                    Monitor.Wait(_sync, TimeSpan.FromMilliseconds(10));
+                }
+
+                if (_reads.Count == 0)
+                {
+                    return true;
+                }
+
+                _writers--;
+                Monitor.PulseAll(_sync);
+                return false;
             }
         }
 

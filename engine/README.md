@@ -136,6 +136,16 @@ the site's host gates:
 
 - every URL fetched by status class (2xx to 5xx, another status, no response, blocked) and by status code, a block
   page's status being the firewall's rather than the site's, and why the URLs without a status have none;
+- the part of each of those that is the crawler's own probes of the site's other versions (`SiteVersions`): they are
+  counted in every figure, as the crawl file has them, and said apart, so the https probe of a site served over http
+  only reads as the crawler's question and not as the site failing to answer. A probe the site turns out to lead to
+  becomes one of the site's URLs and leaves that part, and a crawl continued has the part it had;
+- the time spent crawling over every run of the crawl (`TimeCrawling`): the earlier runs' as the file has it, and this
+  run's without its pauses, where `Elapsed` is this run's with them; null when an earlier run wasn't timed
+  ([Time spent crawling](#time-spent-crawling));
+- the URLs crawled (`Crawled`): those fetched but for the URLs never asked, their host having stopped answering, which
+  have an outcome and are done with, but weren't crawled. It's the URL grid's count of fetched URLs, and
+  `CrawlFileSummary.CrawledUrlCount` for a crawl at rest;
 - the site's own URLs (internal, not the probes of its other versions) found and fetched, which a URL limit counts and
   they never pass, and the limit itself;
 - the phase: starting, reading robots.txt (nothing else can be fetched), crawling, reading sitemaps (nothing else is
@@ -341,6 +351,19 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
   crawl (a single file, in rollback-journal mode, so it can be copied and read from anywhere), a writer can't switch
   it to WAL: it gives up as readers do, after a couple of seconds, with a `CrawlFileInUseException` saying the file is
   being read, rather than after Microsoft.Data.Sqlite's 30 s.
+- **The write-ahead log stays small while a crawl runs.** A running crawl's file is in WAL mode, and SQLite starts
+  the log again from its beginning only at a moment when no reader is part-way through it. With nobody reading that
+  is every batch (the log peaks at the largest batch: 38 MB on the 100,000-page benchmark). With the links grid read
+  all the while, each read a pass over the links, that moment never came, and the log grew by everything the crawl
+  wrote, to more than the file. So once the log passes 64 MB (`CrawlDatabase.LOG_LIMIT_BYTES`) the writer folds it
+  into the file between two batches and empties it (`CrawlDatabase.FoldLog`, a `TRUNCATE` checkpoint): the grids' new
+  reads of that file wait while those in flight end by themselves, for two seconds at most, the log is folded, and
+  they read on (`CrawlReadGate.ExclusiveOnceIdle`). No read is stopped, fails or answers differently; a read can wait.
+  The writer waits with them and stores nothing meanwhile, so the log is held to the limit and the batch that took it
+  past. A fold that couldn't be done (a read that outlasted the two seconds, or another program part-way through the
+  file, which is waited for a quarter of a second) is tried again a second later, then twice as long after each one
+  that fails, to half a minute: only then can the log grow past its bound, and it's folded when the crawl closes as
+  ever. The writer says once, as it closes, how often it folded the log and how long the crawl waited for it.
 - **Read back with today's defaults.** Options and thresholds are stored as JSON. One that the engine which stored
   them didn't have reads as its default (`StoredJson`), never 0 or false, so a new option can't change how a resumed
   crawl runs or what an analysis checks.
@@ -357,6 +380,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `links` | Every link: source, target, kind (link/image/script/canonical/hreflang/redirect...), rel flags, page region, anchor text |
 | `robots`, `sitemaps`, `sitemap_urls` | robots.txt per origin, sitemaps read (under the URL they were found at, which may redirect elsewhere; `is_probe` marks a guess at `/sitemap.xml` when nothing declared one; the first one left unread, past 1,000 sitemaps or nested more than 3 deep, has an error starting "Not read"), and which URLs each listed |
 | `notices` | What the crawl told the person running it, every run's, in order: an id numbered across runs, when, the level as text, a stable code, the message, and JSON of the facts it's about (host, origin, URL, reason, counts, a duration) |
+| `run_time` | The time the crawl spent crawling: a row for each stretch of it, from a run's start (or its resuming after a pause) to its next pause or its end, with the run it belongs to, when it began, how long it went on, whether it has ended, and the crawl row's stamp it was stored under |
 | `issues` | One row per flagged URL and issue: a short detail, and the other URL involved (broken target, duplicate, canonical): the first, where there are several |
 | `issue_targets` | Every other URL each issue is about (each broken target of a page's links, the canonical, a duplicate cluster's first page), which the Issues screen groups by and the inspector's "named by" counts; `0` stands for no other URL |
 | `issue_faults` | The fault an issue of `canonical-relative`, `canonical-invalid` or `structured-data-invalid` is an instance of, which its groups are by |
@@ -382,13 +406,51 @@ The analysis's tables carry on growing the same way: `link_summary` and `link_bl
 issue is in. A file analysed before them reads without them, and gets them when it's analysed again.
 
 `notices` is created whenever the crawl writer opens a file,
-so an earlier engine's crawl gets it when it's continued, and reads as having none until then. The writer adds the
+so an earlier engine's crawl gets it when it's continued, and reads as having none until then. `run_time` is created
+the same way ([below](#time-spent-crawling)). The writer adds the
 fingerprint's `responses.simhash_1` to `_3` the same way: pages fetched before then, and any an earlier engine fetches
 into a newer file, have none. The crawl's own schema version doesn't change, so either engine reads and continues
 either file. Files are shared, so a notice another program wrote oddly is read as well as it can be (one
 without a code or a message is left out, a missing level reads as a warning and a missing time as the crawl's start),
 and a `notices` table of another shape reads as none; the writer won't continue a crawl whose table it couldn't store
 a notice in, and says so.
+
+### Time spent crawling
+
+How long a crawl took isn't its end less its start: it may have been paused, or stopped and continued a day later.
+`run_time` keeps the time it spent crawling, a stretch at a time, and `CrawlRunReader` reads it back as the crawl's
+runs, each with its stretches, and their total (`CrawlFileSummary.TimeCrawling`, `CrawlHistory.Runs`; live,
+`CrawlProgress.TimeCrawling`, which a run ends on to the millisecond the file has).
+
+- **A stretch** begins when a run starts or resumes after a pause, and ends when it's paused or the run ends, so paused
+  time and the time between runs are in none. The session times each by a clock that only runs forward (`RunClock`)
+  and hands it to the writer as it begins, as it ends, and every five seconds between, so a run cut short (the process
+  died) loses at most those: its last stretch is left going, read as ending where it was last stored, and ended there
+  when the crawl is continued. Nothing is written per response, and no stamp moves: a pause costs one small row.
+- **Known whole, or not known.** The total is given only when every run was timed. A file from before the table gets
+  it when it's continued, with one row without a time standing for all its earlier runs; and since every run stamps
+  the crawl row (`updated_at`) whichever engine makes it, the last stretch stored takes the stamp with it whenever this
+  engine moves it (as a run opens the file, in the same commit, so the time stays known while a big crawl is read back
+  in; and as the run ends): when the last stretch's stamp isn't the crawl row's own, an engine that keeps no time ran
+  the crawl since, and the next run here adds the row without a time for it. With such a row, or such a stamp, the crawl's time reads as not known, for good: never a part
+  of it given for the whole. A table of another shape (another program's) is neither written to nor read, and times
+  that can't be true (negative, ten years long) read as not known.
+- **A crawl that hasn't crawled has spent no time.** A run can end without a stretch (paused before it began and
+  then stopped, or its process died before its first batch was stored). A stretch is stored with the first batch that
+  stores a response, so a file with no stretch and no response has been crawled by nobody: continuing it adds no row
+  without a time, and its time is known from zero. A file with responses and no stretch was crawled by an engine
+  that keeps no time, and gets the row.
+- **In order.** A stretch begins by the wall clock and lasts by the clock that only runs forward, so a wall clock set
+  back between two (a time sync) would have the later begin before the earlier ended. `CrawlRunReader` gives each as
+  beginning no earlier than the one before it ended, in one run or across two, each with its length: none overlaps,
+  no run ends before it started, and the total is as stored.
+- **Time asleep isn't crawling.** The clock that only runs forward is `Stopwatch`'s. On Windows it's
+  `QueryPerformanceCounter`, which counts the time a machine spends in standby or hibernation; on Linux
+  (`CLOCK_MONOTONIC`) and macOS (`CLOCK_UPTIME_RAW`) it stops while the machine sleeps (dotnet/runtime#77945). The
+  session reads the run's clock twice a second while it crawls, so `RunClock` takes a gap of more than five minutes
+  between two readings for the machine asleep (or the process held still) and leaves it out of the stretch, on any
+  system. A sleep shorter than that still counts on Windows, and the stretch it's left out of then spans more wall
+  time than its length says: it isn't split in two.
 
 ### URL summary
 
@@ -490,7 +552,9 @@ method takes a `CancellationToken`, which stops the read within milliseconds.
   (`ReadRows`).
 
 Three more read what the Links, Sitemaps and robots.txt screens show (see [below](#links-sitemaps-and-robotstxt)):
-`LinkGridReader`, `SitemapListReader` (with `UrlGridReader.QuerySitemap`) and `RobotsReader`.
+`LinkGridReader`, `SitemapListReader` (with `UrlGridReader.QuerySitemap`) and `RobotsReader`. `CrawlStatsReader.Read`,
+the crawl's headline numbers (`si stats`, the API's `/stats`), reads the same way: one snapshot, stopped by its token,
+and kept in the `ReadCache` it's given while the crawl stands still.
 
 A query (`UrlQuery`) has typed filters per column, up to three sort keys with unknown values last, a quick search of
 the URL and title, the columns to read, and `offset` plus `limit` (up to 1,000) to reach any row, or the `after` cursor
@@ -530,6 +594,12 @@ a page gives to read on. The API, with every column and operator, is in
   process about to switch (an analysis, a continue, a crawl closing back to one file) stops new grid reads of that
   file, stops those in flight, switches, and lets them read again (`CrawlReadGate`): it waits milliseconds. Another
   program reading the file isn't seen, and can still keep it out.
+- **A running crawl's writer waits on them once in a while, and they on it.** To fold its write-ahead log
+  ([above](#crawl-file-sicrawl)) it needs a moment with no read part-way through the file, and nothing forces that
+  one: it holds new reads of the file, lets those in flight end by themselves, folds, and lets the held ones go.
+  Stopping the reads instead and reading them again was measured against it and dropped: it threw work away (with
+  six clients on the links grid of a 40,000-page crawl the slowest read took up to 1.95 s, where it takes 1.1 s
+  this way or with no fold at all), and it needed a rule for leaving reads alone long enough to end.
 - **Cursors** carry the last row's URL id and a hash of its sort values, with a hash of the query: under 100
   characters, whatever the row holds. Reading on reads the row's sort values again in the new snapshot, and a row
   that has gone or changed since is refused (start from an offset again) rather than read on from a place that has
@@ -555,6 +625,11 @@ a page gives to read on. The API, with every column and operator, is in
   `issues (issue, detail, related_url_id)`. A crawl analysed by an earlier engine is grouped as it was.
 - **"Named by"**, the issues on other URLs naming one, is read on `issue_targets`' index by the URL named, so it costs
   what that URL is named by, not every issue in the crawl.
+- **A URL's links in all** (`UrlDetail.LinkTotals`: every kind, to it and from it, its links to itself left out) are
+  counted once and kept, for the inspector and for its lists of links alike: the links to it from the link summary
+  where that counts the crawl as it stands, else on the links' index by target. Each link row, and each URL the
+  inspector names, carries what became of the request for it (`UrlOutcome`) beside its status, which is null for a
+  URL never fetched and for one that gave no HTTP answer alike.
 - **Links of some kinds to a URL** (the hyperlinks to a nav target, a stylesheet's links) are counted on the analysis's
   index of the links by target and kind, and a page of them anywhere is found there too: each kind's in crawl order,
   merged as they're read, so no link is read to be skipped. Links from a page are few, and read as they are.
@@ -584,15 +659,23 @@ a page gives to read on. The API, with every column and operator, is in
       (first where an even spread would put it, then by halves) and the page read from the ids after it. No link is
       read to be passed over, at any depth, and nothing is kept;
     - more targets than that: a walk from the nearer end when the page is near one; deeper in, their links' ids read
-      through them once, on the index, a bit per link (`LinkIdSet`), and kept; a filter most links pass, on a crawl
-      with no link id missing, as every id but the others' (the links to the other targets and, for one kind, the
-      other kinds to these).
+      through them once, on the index, a bit per link (`LinkIdSet`), and kept.
 
-    One target named outright is walked on the index at any depth, whatever else is asked. A filter on the target
-    with something the index doesn't hold (a link's position, its flags, more than one kind): through the targets
-    when they have few links in all; otherwise a walk of the links from the nearer end when the page is near one,
-    remembered when it ran long (a filter on deep targets has its links bunched on the pages crawled last);
-    otherwise a set of the matching ids read once in one pass over the links, and kept.
+    One target named outright is walked on the index at any depth, whatever else is asked.
+  - **A filter on the target that most of the links it could match pass** (the links to the site's own URLs, the
+    navigation links to the pages a click from the start) is read from the blocks too, deep in. `link_blocks` counts
+    links by what they are, so it counts the links the rest of the filters match; the others among those lead to the
+    targets that fail, are the fewer, and are read once through those targets (an index entry each when a kind is all
+    that's asked of a link, else the rows of the links to those targets, when the summary says they're at most an
+    eighth of the crawl's). A block's matching links are the difference (`ButTheOthers`), and the page is read from
+    the blocks that hold it: nothing per matching link, nothing kept but the blocks' counts, and link ids missing
+    change nothing, where keeping every id but the others' (`AllBut`, which is what's left when the others are too
+    many) needs a crawl with none missing.
+  - **A filter on the target with something the index doesn't hold** (a link's position, its flags, more than one
+    kind) that the fewer links pass: through the targets when they have few links in all; otherwise a walk of the
+    links from the nearer end when the page is near one, remembered when it ran long (a filter on deep targets has
+    its links bunched on the pages crawled last); otherwise a set of the matching ids read once in one pass over the
+    links, and kept.
   - **A sort by the target** puts the targets with matching links in order (every URL's sort value is read once), adds
     up their counts to find the page's first target, and reads each target's links in crawl order on the index, from
     the nearer end of a target with many.
@@ -668,6 +751,8 @@ half way or just past it), on a 32-core Windows machine (20 runs at 100k, 5 at 1
 | The links grid, one pass over the links: text and search filters, and everything without the link summary (`link-pass`) | 1,232 | not measured | | 2,500 |
 | Sitemaps: the list, a sitemap's URLs (`sitemaps`) | 31 | not measured | | 200 |
 | robots.txt: origins, a file, its blocked URLs (`robots`) | 34 | not measured | | 200 |
+| The crawl's headline numbers: read, and read again from what was kept (`stats`) | 174 | not measured | | 350 |
+| The same without the link summary: the links counted, each sitemap page looked up among them (`stats-pass`) | 322 | not measured | | 600 |
 
 The facets of the pages without the summary take 1.35 s at 1M: they read and judge every row of the crawl's own tables.
 Every other read of 1M in the table is under 1 s apart from `links-kind`, which was measured before its index (below);
@@ -682,6 +767,15 @@ that say nofollow are read first), the facets (49–51 ms), a sort by the target
 few thousand targets (27–47 ms); a page of any filter on what a link is, anywhere in 4.4 million hyperlinks, takes
 3 ms.
 
+`stats` and `stats-pass` (E3c) are `CrawlStatsReader.Read`, Overview's headline numbers. It reads the URLs once and the
+responses once, counting each row every way it's wanted as it's read (`si_tally(slot, value)`), where it ran a statement
+for each number (0.96 s, 1.16 s at p95): 98 to 126 ms (108 to 174 at p95, over six runs), and 1 ms from what's kept
+once read. With the link summary no link is read: it has the number of links, and counts each URL's links from other
+pages apart from a page's links to itself, which says which pages a sitemap led to have none. Without it the links
+are counted and each of those pages is looked up among them (181 to 244 ms, 189 to 322 at p95). The gates are about
+twice the desktop's worst p95, for the runner. Both grow with the URLs: a first
+read of a million would take about a second, which wasn't measured.
+
 The E3b review added the links to a few targets with many links between them, a menu's, to `link-grid`: the twelve most
 linked pages, URLs under `/c/`, URLs with over 50,000 inlinks, pages a click from the start (1.3 to 2.7 million links,
 to 12 to 77 targets), and the hyperlinks among the last. A page of them is found on the links' index by target: 6 to
@@ -693,6 +787,15 @@ from the start (1.4 million links to 74,000 targets, 237 ms half way down) and t
 (4.4 million, kept as every link but the rest, 158 ms). They're inside the 100k budget and grow with the links, so
 they'd miss at 1M; the gate is twice the desktop's worst, for the runner, so they can't get slower. `link-pass` gained
 the read the index can't place: a filter on the target with one on a link's position, deep among many links (0.57 s).
+
+E3c took the filters most links pass out of both: deep in, they're read from the blocks but for the others
+(`ButTheOthers`), so the hyperlinks to the site's own URLs moved from `link-targets` to `link-grid` (107 ms half way
+down, from 249), and the navigation links to pages a click from the start from `link-pass` (16 ms, from 565). On a
+copy of the crawl with one link id in eleven missing, which no read was timed on before, the links to the site's own
+URLs took 407 to 459 ms half way down and take 97 to 132. `link-pass` keeps a filter on the target with a position
+that the fewer links pass (the content links to pages four clicks from the start, 455 ms), and the text filters and
+searches: a table of the distinct link texts was measured for those and not built
+([the API doc](../docs/v2-sidecar-api.md#engine-changes-e3c-made) has the numbers).
 
 The `links-kind` cell, and the inspector's, were measured before `ix_links_to_kind` and `issue_targets`. With those, on
 the same 1M crawl, links of one kind half way down take 94–241 ms (they were 1.7–3.1 s) and "named by" is 2 ms, 8 ms for
@@ -746,6 +849,19 @@ to +1 MB), an 11 s analysis peaking at 276, 313 and 315 MB (283 MB in the one ru
 1.5 s of it by its own clock), and a 487–494 MB file (474 MB before), the link summary and the new index 4.5 MB of it.
 The rest is in the links and their two indexes, which E3b doesn't write, and moves from run to run: probably the order
 the URLs were found in, as larger ids take more bytes.
+
+With E3c (the time spent crawling kept a stretch at a time, a second set of counters for the part of the counts that
+is the crawler's own probes) four runs on the same machine, still shared, measured a 36–44 s crawl (2,294–2,812
+pages/s), a 188–194 MB peak with no growth (−9 to 0 MB), an 11.4, 11.8, 12.2 and 18.1 s analysis peaking at
+253–327 MB, and a 478–495 MB file: all within the spread of the runs before it.
+
+After the E3c review (the write-ahead log folded once it passes 64 MB, which a crawl nobody reads never reaches: its
+log peaks at 36 to 38 MB; one more planted URL, listed in a sitemap and refused by robots.txt, with its two issues)
+one run measured a 45 s crawl (2,237 pages/s), a 198 MB peak with no growth, a 15.3 s analysis peaking at 276 MB, and
+a 494 MB file. `si bench --read-links` crawls with the links grid read all the while, a read always part-way through
+the file, and `--max-log-mb` fails the run if the write-ahead log passes a size: 100,000 pages in 46 s (2,180
+pages/s) with the log at 89 MB at most, 40,000 pages with it at 76 MB, where without the fold it reached 580 MB. CI
+runs the 40,000-page one with a limit of 128 MB.
 
 Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and
 unreachable URL make the crawler back off briefly, as it would on a real site. On real sites, speed is set by the

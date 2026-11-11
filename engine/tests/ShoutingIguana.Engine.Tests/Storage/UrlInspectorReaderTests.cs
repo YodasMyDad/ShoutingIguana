@@ -1,3 +1,4 @@
+using System.Globalization;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Analysis.Rules;
@@ -23,6 +24,9 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
     [Fact]
     public void EveryUrlReadsAsTheGridShowsIt()
     {
+        var inlinks = Counted("to_id");
+        var outlinks = Counted("from_id");
+        var named = 0;
         foreach (var (id, row) in crawl.Reference.Rows)
         {
             var url = Read(crawl.Path, id);
@@ -46,10 +50,73 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
             Assert.Equal(new[] { row["inlinks"], row["followedInlinks"], row["nofollowInlinks"], row["linkingPages"], row["outlinks"], row["inSitemap"] },
                 new object?[] { (long)links.Inlinks, (long)links.FollowedInlinks, (long)links.NofollowInlinks, (long)links.LinkingPages, (long?)links.Outlinks, links.InSitemap });
             Assert.Equal(SummaryState.Present, url.Summary);
+
+            // Every link of every kind, the page's links to itself left out: what its lists of links hold in all.
+            Assert.Equal(new UrlLinkTotals(inlinks.GetValueOrDefault(id), outlinks.GetValueOrDefault(id)), url.LinkTotals);
+
+            // Each URL it names has its status and what became of the request for it, as the grid shows that URL.
+            UrlTarget?[] targets =
+            [
+                url.Redirects.Final, .. url.Indexability.Tests.Select(test => test.Canonical), .. url.Indexability.Tests.Select(test => test.MetaRefresh),
+                .. url.Hreflang.Select(entry => entry.Target)
+            ];
+            foreach (var target in targets.OfType<UrlTarget>())
+            {
+                var shown = crawl.Reference.Rows[target.Id];
+                Assert.True(Equals(shown["outcome"], target.Outcome is { } became ? Name(became) : null) && Equals(shown["statusCode"], (long?)target.StatusCode),
+                    $"{what} names {target.Url}: {target.StatusCode}, {target.Outcome}");
+                named += target.Id == id ? 0 : 1;
+            }
+
+            // The synthetic site's URLs are plain ASCII without escapes: as long as they're written.
+            Assert.Equal(url.Url.Length, url.UrlLength);
         }
 
+        Assert.True(named > 50, $"Only {named} URLs were named by another");
         Assert.Null(UrlInspectorReader.Read(crawl.Path, crawl.Reference.Rows.Keys.Max() + 1));
+
+        // The link list's total is the inspector's, every kind: for the home page, which every page links to.
+        var home = Id("/");
+        Assert.Equal(Read(crawl.Path, home).LinkTotals, new UrlLinkTotals(
+            UrlInspectorReader.ReadLinks(crawl.Path, home, LinkDirection.Inlinks, new LinkQuery { Limit = 1 })!.Total,
+            UrlInspectorReader.ReadLinks(crawl.Path, home, LinkDirection.Outlinks, new LinkQuery { Limit = 1 })!.Total));
+        var image = Read(crawl.Path, Id("/img/1.jpg"));
+        Assert.True(image.LinkTotals.Inlinks > image.Links!.Inlinks, "An image's links aren't hyperlinks: only the totals count them.");
+
+        // Without the link summary (continued since its analysis) they're counted on the links' own index: the same.
+        Assert.Null(Read(crawl.Changed, home).Links);
+        Assert.All(new[] { home, Id("/p/7"), Id("/plants/"), Id("/img/1.jpg") }, id =>
+            Assert.Equal(new UrlLinkTotals(inlinks.GetValueOrDefault(id), outlinks.GetValueOrDefault(id)), Read(crawl.Changed, id).LinkTotals));
     }
+
+    /// <summary>
+    /// The URL's length is the check's own measure: the number the check's detail gives for each URL it flags, and the URL
+    /// as people read it, with its escapes decoded and its host in its own script. A stored URL that isn't one has none.
+    /// </summary>
+    [Fact]
+    public void TheUrlsLengthIsAsTheCheckMeasuresIt()
+    {
+        var flagged = crawl.Reference.Issues.SelectMany(url => url.Value.Where(issue => issue.Issue == "url-too-long").Select(issue => (Id: url.Key, issue.Detail))).ToList();
+        Assert.NotEmpty(flagged);
+        Assert.All(flagged, issue =>
+        {
+            var url = Read(crawl.Path, issue.Id);
+            Assert.Equal(issue.Detail, $"{url.UrlLength} characters");
+            Assert.True(url.UrlLength > url.Limits.MaxUrlLength);
+        });
+
+        var copy = crawl.Copy();
+        var page = Id("/p/7");
+        GridQueries.Change(copy, "UPDATE urls SET url = 'https://xn--e1afmkfd.example/%D0%BA%D0%B0%D1%82%D0%B0%D0%BB%D0%BE%D0%B3/?q=%F0%9F%8C%B5' WHERE id = $id", ("$id", page));
+        Assert.Equal("https://пример.example/каталог/?q=🌵".EnumerateRunes().Count(), Read(copy, page).UrlLength);
+        Assert.Equal(35, Read(copy, page).UrlLength);
+        GridQueries.Change(copy, "UPDATE urls SET url = 'not a URL at all' WHERE id = $id", ("$id", page));
+        Assert.Null(Read(copy, page).UrlLength);
+    }
+
+    private Dictionary<int, long> Counted(string end) =>
+        TestCrawls.Rows(crawl.Path, $"SELECT {end}, COUNT(*) FROM links WHERE from_id <> to_id GROUP BY 1").Select(row => row.Split(" | "))
+            .ToDictionary(parts => int.Parse(parts[0], CultureInfo.InvariantCulture), parts => long.Parse(parts[1], CultureInfo.InvariantCulture));
 
     /// <summary>
     /// "Indexable, and why", for every URL: an indexable one (or one whose verdict is unknown) fails no test, and one that
@@ -91,7 +158,7 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
         Assert.Equal(IndexabilityReason.None, product.Indexability.Reason);
         Assert.All(product.Indexability.Tests, test => Assert.Equal(TestOutcome.Pass, test.Outcome));
         Assert.Equal(200, Test(product, Answered).StatusCode);
-        Assert.Equal(new UrlTarget(product.Id, product.Url, 200), Test(product, Canonical).Canonical);
+        Assert.Equal(new UrlTarget(product.Id, product.Url, 200, UrlOutcome.Success), Test(product, Canonical).Canonical);
         Assert.False(Test(product, Noindex).Meta);
         Assert.False(Test(product, Noindex).Header);
 
@@ -144,7 +211,7 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
         var nowhere = Inspect("/plants/canonical-broken");
         Assert.True(nowhere.Indexability.Indexable);
         Assert.Equal(TestOutcome.Pass, Test(nowhere, Canonical).Outcome);
-        Assert.Equal(new UrlTarget(Id("/plants/gone"), Url("/plants/gone"), 404), Test(nowhere, Canonical).Canonical);
+        Assert.Equal(new UrlTarget(Id("/plants/gone"), Url("/plants/gone"), 404, UrlOutcome.ClientError), Test(nowhere, Canonical).Canonical);
 
         // A page only status-checked: its HTML wasn't read, so neither its directives nor its verdict are known.
         var embedded = Inspect("/plants/embedded");
@@ -169,7 +236,7 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
         Assert.Equal([301, 301, 200], chain.Hops.Select(hop => hop.StatusCode));
         Assert.All(chain.Hops, hop => Assert.Equal(RedirectVia.Http, hop.Via));
         Assert.Equal([UrlOutcome.Redirect, UrlOutcome.Redirect, UrlOutcome.Success], chain.Hops.Select(hop => hop.Outcome));
-        Assert.Equal(new UrlTarget(Id("/plants/thin"), Url("/plants/thin"), 200), chain.Final);
+        Assert.Equal(new UrlTarget(Id("/plants/thin"), Url("/plants/thin"), 200, UrlOutcome.Success), chain.Final);
         Assert.False(chain.Loop);
         Assert.False(chain.TooLong);
 
@@ -192,7 +259,7 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
         // Not moving on: no hops, and the URL itself is where it ends.
         var product = Inspect("/p/7");
         Assert.Empty(product.Redirects.Hops);
-        Assert.Equal(new UrlTarget(product.Id, product.Url, 200), product.Redirects.Final);
+        Assert.Equal(new UrlTarget(product.Id, product.Url, 200, UrlOutcome.Success), product.Redirects.Final);
     }
 
     [Fact]
