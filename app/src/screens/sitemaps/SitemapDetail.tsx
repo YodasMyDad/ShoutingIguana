@@ -19,6 +19,7 @@ import { nextSort, useHeaderHandoff } from '../../grid/sort';
 import { MAX_COPY_ROWS } from '../../grid/tsv';
 import type { GridColumn } from '../../grid/types';
 import { usePagedRows } from '../../grid/usePagedRows';
+import { useSearchText } from '../../grid/useSearchText';
 import { useCommands } from '../../keyboard/registry';
 import { copyText } from '../../lib/clipboard';
 import { withRecorded } from '../../lib/failure';
@@ -83,6 +84,7 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
   const container = useRef<HTMLDivElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
   const searchField = useRef<HTMLInputElement>(null);
+  const [searchText, setSearchText] = useSearchText(q);
   // A chip removed, a banner's button gone once its action worked: focus goes to the view's title.
   useFocusRescue(container, () => title.current);
 
@@ -358,11 +360,12 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
         {/* Beside the filters, not the title: a sitemap's address needs the title's line to itself. */}
         <SearchField
           ref={searchField}
-          key={q ?? ''}
           label="Search this sitemap’s URLs and titles"
           placeholder="Search URLs"
           shortcut="mod+f"
-          defaultValue={q ?? ''}
+          // The same field whatever is searched for: Enter applies its text and focus stays in it.
+          value={searchText}
+          onChange={(event) => setSearchText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key !== 'Enter') return;
             const value = event.currentTarget.value.trim();

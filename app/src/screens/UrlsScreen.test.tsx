@@ -205,6 +205,27 @@ describe('the URL grid’s count', () => {
   });
 });
 
+describe('the URL grid’s search', () => {
+  it('keeps focus in the search field when Enter applies it: the field isn’t made anew', async () => {
+    sidecar({ summary: { available: true, reason: null } });
+    const { router } = await open(URLS);
+    const field = await screen.findByRole('searchbox', { name: 'Search URLs and titles' });
+    act(() => field.focus());
+    fireEvent.change(field, { target: { value: 'example.com/a' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await waitFor(() => expect((router.state.location.search as { q?: string }).q).toBe('example.com/a'));
+    expect(field).toBeInTheDocument();
+    expect(field).toHaveFocus();
+    expect(screen.getByRole('searchbox', { name: 'Search URLs and titles' })).toBe(field);
+    expect(field).toHaveValue('example.com/a');
+    // Back takes the search away again, and the field shows that.
+    act(() => {
+      router.history.back();
+    });
+    await waitFor(() => expect(field).toHaveValue(''));
+  });
+});
+
 describe('the URL grid opened from a check’s group', () => {
   it('shows its filters as chips that read as sentences, the check and its group each removable', async () => {
     sidecar({ summary: { available: true, reason: null } });

@@ -493,6 +493,44 @@ describe('Sitemaps: one sitemap', () => {
     expect(await screen.findByText('of 6 URLs')).toBeVisible();
   });
 
+  it('keeps focus in the search field when Enter applies it: the field isn’t made anew', async () => {
+    sidecar();
+    const { router } = await open(`${SITEMAPS}/1`);
+    const field = await screen.findByRole('searchbox', { name: 'Search this sitemap’s URLs and titles' });
+    act(() => field.focus());
+    fireEvent.change(field, { target: { value: 'contact' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await waitFor(() => expect(searchOf(router).q).toBe('contact'));
+    expect(await screen.findByText('of 6 URLs')).toBeVisible();
+    // The very field that was typed in, still there and still focused: not the page's title, not nothing.
+    expect(field).toBeInTheDocument();
+    expect(field).toHaveFocus();
+    expect(screen.getByRole('searchbox', { name: 'Search this sitemap’s URLs and titles' })).toBe(field);
+    expect(field).toHaveValue('contact');
+    // Another search from the same field, without going back to it.
+    fireEvent.change(field, { target: { value: 'about' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await waitFor(() => expect(searchOf(router).q).toBe('about'));
+    expect(field).toHaveFocus();
+  });
+
+  it('shows in the search field the search the route holds, when it changes from elsewhere', async () => {
+    sidecar();
+    const { router } = await open(`${SITEMAPS}/1?q=nothing-like-it`);
+    const field = await screen.findByRole('searchbox', { name: 'Search this sitemap’s URLs and titles' });
+    expect(field).toHaveValue('nothing-like-it');
+    // The empty state's way out clears the search: the field follows.
+    fireEvent.click(await screen.findByRole('button', { name: /Clear/ }));
+    await waitFor(() => expect(searchOf(router).q).toBeUndefined());
+    await waitFor(() => expect(field).toHaveValue(''));
+    // Back brings the search back, and the field with it.
+    act(() => {
+      router.history.back();
+    });
+    await waitFor(() => expect(searchOf(router).q).toBe('nothing-like-it'));
+    await waitFor(() => expect(field).toHaveValue('nothing-like-it'));
+  });
+
   it('opens the inspector on a URL with Enter, in place', async () => {
     sidecar();
     const { router } = await open(`${SITEMAPS}/5`);

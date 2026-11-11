@@ -17,6 +17,7 @@ import { GridCore, type GridCopyResult } from '../grid/GridCore';
 import { useGridMetrics } from '../grid/metrics';
 import type { GridColumn } from '../grid/types';
 import { usePagedRows } from '../grid/usePagedRows';
+import { useSearchText } from '../grid/useSearchText';
 import { useInspector } from '../routing/inspector';
 import { MAX_COPY_ROWS } from '../grid/tsv';
 import { urlColumnWords, urlEmptyWords, urlValueWords } from '../grid/urlFilterWords';
@@ -138,6 +139,7 @@ export function UrlsScreen() {
   const sort = useMemo(() => search.sort ?? [], [search.sort]);
   const filters = useMemo(() => search.filter ?? [], [search.filter]);
   const q = search.q;
+  const [searchText, setSearchText] = useSearchText(q);
 
   const item = useQuery(crawlQuery(crawlId)).data;
   const live = useLiveCrawl(crawlId);
@@ -218,10 +220,11 @@ export function UrlsScreen() {
         className="px-6 pt-2 pb-1"
         actions={
           <SearchField
-            key={q ?? ''}
             label="Search URLs and titles"
             placeholder="Search URLs and titles"
-            defaultValue={q ?? ''}
+            // The same field whatever is searched for: Enter applies its text and focus stays in it.
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
             onKeyDown={(event) => {
               if (event.key !== 'Enter') return;
               const value = event.currentTarget.value.trim();
