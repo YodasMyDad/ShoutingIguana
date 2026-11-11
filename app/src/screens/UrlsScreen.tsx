@@ -14,6 +14,7 @@ import { notifyResult } from '../feedback/notify';
 import { useAnnounceResults } from '../feedback/useAnnounceResults';
 import { FilterChips } from '../grid/FilterBar';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
+import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../grid/GridScreen';
 import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
 import { UNAVAILABLE_BECAUSE, UNAVAILABLE_WHILE_ANALYSING, analyseWords, listOfNames } from '../grid/summaryWords';
@@ -211,7 +212,7 @@ export function UrlsScreen() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <GridScreen>
       <GridHeader
         title="URLs"
         count={count}
@@ -262,40 +263,44 @@ export function UrlsScreen() {
           <ErrorState error={rows.error} onRetry={rows.refetch} />
         )
       ) : (
-        <GridCore
-          key={JSON.stringify(queryKey)}
-          label="URLs"
-          columns={columns}
-          rowCount={rows.rowCount}
-          getRow={rows.getRow}
-          rowHeight={rowHeight}
-          headerHeight={headerHeight}
-          onRangeChange={rows.onRangeChange}
-          onScrollOffset={rows.onScrollOffset}
-          fetchRows={rows.fetchRows}
-          onCopy={onCopy}
-          onActivate={(_index, row) => {
-            if (row) inspector.open(row.id);
-          }}
-          // While it's open, the inspector follows the cursor, in place.
-          onActiveRowChange={(index) => {
-            const row = inspecting && index !== null ? rows.getRow(index) : undefined;
-            if (row) inspector.open(row.id);
-          }}
-          // Live refreshes update in place: the progress line is for a refresh the user asked for.
-          busy={rows.isRefreshing && !crawling}
-          emptyState={
-            <FilteredEmptyState
-              title="No URLs match these filters."
-              level="none"
-              filters={filters.length > 0 ? chips : undefined}
-              onClear={clearView}
-            />
-          }
-          className="mx-6 mb-4 flex-1 rounded-lg border border-border shadow-1"
-        />
+        <GridScreenBody className="mx-6 pb-4">
+          <GridCore
+            key={JSON.stringify(queryKey)}
+            label="URLs"
+            // Never fewer than five rows' room, nor less than its empty state needs: a short window scrolls the screen.
+            minRows={GRID_SCREEN_MIN_ROWS}
+            columns={columns}
+            rowCount={rows.rowCount}
+            getRow={rows.getRow}
+            rowHeight={rowHeight}
+            headerHeight={headerHeight}
+            onRangeChange={rows.onRangeChange}
+            onScrollOffset={rows.onScrollOffset}
+            fetchRows={rows.fetchRows}
+            onCopy={onCopy}
+            onActivate={(_index, row) => {
+              if (row) inspector.open(row.id);
+            }}
+            // While it's open, the inspector follows the cursor, in place.
+            onActiveRowChange={(index) => {
+              const row = inspecting && index !== null ? rows.getRow(index) : undefined;
+              if (row) inspector.open(row.id);
+            }}
+            // Live refreshes update in place: the progress line is for a refresh the user asked for.
+            busy={rows.isRefreshing && !crawling}
+            emptyState={
+              <FilteredEmptyState
+                title="No URLs match these filters."
+                level="none"
+                filters={filters.length > 0 ? chips : undefined}
+                onClear={clearView}
+              />
+            }
+            className="flex-1 rounded-lg border border-border shadow-1"
+          />
+        </GridScreenBody>
       )}
-    </div>
+    </GridScreen>
   );
 }
 

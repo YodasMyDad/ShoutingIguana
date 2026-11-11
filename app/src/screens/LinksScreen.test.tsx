@@ -86,6 +86,23 @@ describe('the Links grid', () => {
     expect(linkRequests(transport)[0]).toMatchObject({ sort: [], filters: [], offset: 0 });
   });
 
+  it('keeps its grid room for five rows under whatever its toolbars take, in the frame every grid screen shares', async () => {
+    sidecar();
+    await open(LINKS);
+    await counted('13 links');
+    const table = await grid();
+    // The grid's own least height: its header, five rows, and its border and scrollbar. A window too short for the
+    // toolbars and that scrolls the screen (e2e/grid-zoom.spec.ts measures it at 640x360).
+    expect(table.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    // The toolbars and the grid's place are the shared frame's own children: the frame gives the toolbars their
+    // height and the grid the rest.
+    const frame = table.closest('.si-grid-screen')!;
+    expect(frame).not.toBeNull();
+    expect(table.closest('.si-grid-screen__body')?.parentElement).toBe(frame);
+    expect(screen.getByRole('group', { name: 'Filters' }).parentElement).toBe(frame);
+    expect(screen.getByRole('group', { name: 'Views' }).parentElement?.parentElement).toBe(frame);
+  });
+
   it('says what happened to a target with no status, by how the crawl left it', async () => {
     sidecar();
     await open(LINKS);

@@ -87,6 +87,20 @@ async function open(path: string, queryClient = createQueryClient()) {
 
 afterEach(() => setTransport(fakeSidecar([])));
 
+describe('the URL grid in a short window', () => {
+  it('keeps its grid room for five rows under whatever its toolbars take, in the frame every grid screen shares', async () => {
+    sidecar({ summary: { available: true, reason: null } });
+    const filter = JSON.stringify([{ column: 'statusClass', op: 'in', values: ['2xx'] }]);
+    await open(`${URLS}?filter=${encodeURIComponent(filter)}`);
+    const table = await screen.findByRole('grid', { name: 'URLs' });
+    expect(table.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    const frame = table.closest('.si-grid-screen')!;
+    expect(frame).not.toBeNull();
+    expect(table.closest('.si-grid-screen__body')?.parentElement).toBe(frame);
+    expect(screen.getByRole('group', { name: 'Filters' }).parentElement).toBe(frame);
+  });
+});
+
 describe('the URL grid without the URL summary', () => {
   it('says why the analysis’s columns are empty, and offers to analyse the crawl', async () => {
     const { analyse } = sidecar({ analyzedAt: null, summary: { available: false, reason: 'notAnalyzed' } });

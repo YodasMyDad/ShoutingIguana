@@ -2301,6 +2301,34 @@
     font-size: var(--text-13);
   }
 
+  /* ---------------------------------------------------------- Grid screens */
+  /*
+    A screen that is one grid under its toolbars (GridScreen: URLs, Links). The height of the main region, which
+    scrolls: the toolbars keep their own height, and the grid takes what they leave, never less than its own least
+    (GridCore's minRows, a min-height on its frame). In a window too short for both, the grid runs past the screen's
+    foot and the main region scrolls to it; with room to spare the grid fills it. The height is the region's own, not
+    a least height: the grid inside is a scroller of millions of pixels, which would otherwise be its size.
+  */
+  .si-grid-screen {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .si-grid-screen > :not(.si-grid-screen__body) {
+    flex: none;
+  }
+
+  .si-grid-screen__body {
+    display: flex;
+    flex: 1 1 0%;
+    flex-direction: column;
+  }
+
+  .si-grid-screen__body > * {
+    flex: 1 1 0%;
+  }
+
   /* ------------------------------------------------------ Navigation items */
   .si-nav-item {
     display: flex;

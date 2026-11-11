@@ -87,6 +87,13 @@ export interface GridCoreProps<Row> {
    * 5,053,909 links: a search looks at every one."). The view announces it; here it's for the eye.
    */
   loadingNote?: ReactNode;
+  /**
+   * The fewest rows the grid keeps room for, however little its container has: a screen's own grid asks for 5, so a
+   * window too short for its toolbars and its grid (200% zoom of 1280x720) scrolls the screen rather than squeeze the
+   * grid to no rows. With it the grid also keeps the room its empty state needs, so "nothing matches" and its Clear
+   * are never cut off. Left out, the grid is as tall as it's given (a grid with a height of its own).
+   */
+  minRows?: number | undefined;
   className?: string;
   /** Tests and stories: the virtualiser's model, to drive scrolling. */
   modelRef?: (model: RowWindowModel) => void;
@@ -121,6 +128,8 @@ export interface GridCoreProps<Row> {
 }
 
 const SKELETON_ROWS = 12;
+/** What a grid's frame takes besides its header and rows: its border, and the scrollbar under columns too wide for it. */
+const FRAME_ROOM = 12;
 
 /** The width the custom vertical scrollbar covers at the right of a windowed grid (tokens.css `--scrollbar-size`). */
 function coveredWidth(element: HTMLElement, windowed: boolean): number {
@@ -148,6 +157,7 @@ function GridCoreInner<Row>({
   emptyState,
   busy = false,
   loadingNote,
+  minRows,
   className,
   modelRef,
   tree,
@@ -158,6 +168,8 @@ function GridCoreInner<Row>({
 }: GridCoreProps<Row>) {
   const id = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** How tall the empty state's own content is, for a grid that keeps room for it (`minRows`). */
+  const [emptyHeight, setEmptyHeight] = useState(0);
   const [nav, setNav] = useState<GridNavState>(() =>
     startRow === undefined || startRow < 0 ? INITIAL_NAV : { ...INITIAL_NAV, active: { row: startRow, col: 0 } },
   );
@@ -531,8 +543,18 @@ function GridCoreInner<Row>({
   };
 
   const style = { '--grid-template': template } as CSSProperties;
+  const showsEmpty = !loading && rowCount === 0 && emptyState !== undefined && emptyState !== null;
+  const leastHeight =
+    minRows === undefined
+      ? undefined
+      : headerHeight + Math.max(minRows * rowHeight, showsEmpty ? emptyHeight : 0) + FRAME_ROOM;
   return (
-    <div className={clsx('si-grid-frame relative flex min-h-0 flex-col overflow-hidden', className)}>
+    <div
+      className={clsx('si-grid-frame relative flex min-h-0 flex-col overflow-hidden', className)}
+      // With a least height the frame's size is its container's to give and never its rows' (a scroller of millions
+      // of pixels): `contain: size` says so, so a container that sizes to its content takes the least height from it.
+      style={leastHeight === undefined ? undefined : { minHeight: leastHeight, contain: 'size' }}
+    >
       {busy ? <RefreshLine /> : null}
       <div
         ref={scrollRef}
@@ -696,7 +718,7 @@ function GridCoreInner<Row>({
         </p>
       ) : null}
       {!loading && rowCount === 0 && emptyState ? (
-        <EmptyRegion label={label} top={headerHeight}>
+        <EmptyRegion label={label} top={headerHeight} onHeight={minRows === undefined ? undefined : setEmptyHeight}>
           {emptyState}
         </EmptyRegion>
       ) : null}
@@ -707,21 +729,35 @@ function GridCoreInner<Row>({
 /**
  * Why there are no rows, under the header. In a short grid (a small window, the inspector docked at the bottom) it
  * can be taller than its room and scroll: then, and only then, it's a Tab stop with a name, so the keyboard can
- * scroll it (WCAG 2.1.1). With room for it, the grid stays the one stop.
+ * scroll it (WCAG 2.1.1). With room for it, the grid stays the one stop. `onHeight` hears how tall what it says is
+ * (its own height, whatever room it has), for a grid that keeps room for it (`minRows`).
  */
-function EmptyRegion({ label, top, children }: { label: string; top: number; children: ReactNode }) {
+function EmptyRegion({
+  label,
+  top,
+  onHeight,
+  children,
+}: {
+  label: string;
+  top: number;
+  onHeight?: ((height: number) => void) | undefined;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [scrolls, setScrolls] = useState(false);
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return undefined;
-    const measure = () => setScrolls(element.scrollHeight > element.clientHeight + 1);
+    const measure = () => {
+      setScrolls(element.scrollHeight > element.clientHeight + 1);
+      onHeight?.([...element.children].reduce((sum, child) => sum + (child as HTMLElement).offsetHeight, 0));
+    };
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     observer?.observe(element);
     if (element.firstElementChild) observer?.observe(element.firstElementChild);
     return () => observer?.disconnect();
-  }, []);
+  }, [onHeight]);
   return (
     <div
       ref={ref}

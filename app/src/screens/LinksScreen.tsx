@@ -22,6 +22,7 @@ import { FilterBar, FilterChips } from '../grid/FilterBar';
 import { canEditFilter, refusedFilter, tooManyFiltersWords } from '../grid/filterEditing';
 import { filterSentences } from '../grid/filterSentence';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
+import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../grid/GridScreen';
 import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
 import { RefusedFilter } from '../grid/RefusedFilter';
@@ -435,7 +436,7 @@ export function LinksScreen() {
   const noLinks = noLinksWords(crawling);
 
   return (
-    <div ref={frame} className="flex h-full min-h-0 flex-col">
+    <GridScreen ref={frame}>
       <GridHeader
         title="Links"
         count={rowCount !== null && total !== null ? <ResultCount shown={rowCount} total={total} noun="link" /> : null}
@@ -588,10 +589,12 @@ export function LinksScreen() {
           <ErrorState error={rows.error} onRetry={rows.refetch} />
         )
       ) : (
-        <div ref={measure} className="mx-6 mb-4 flex min-h-0 flex-1 flex-col">
+        <GridScreenBody ref={measure} className="mx-6 pb-4">
           <GridCore<LinkRow>
             key={view}
             label="Links"
+            // Never fewer than five rows' room, nor less than its empty state needs: a short window scrolls the screen.
+            minRows={GRID_SCREEN_MIN_ROWS}
             columns={columns}
             rowCount={rowCount}
             getRow={rows.getRow}
@@ -643,8 +646,8 @@ export function LinksScreen() {
             }
             className="flex-1 rounded-lg border border-border shadow-1"
           />
-        </div>
+        </GridScreenBody>
       )}
-    </div>
+    </GridScreen>
   );
 }

@@ -95,6 +95,22 @@ function setup(props: Partial<Parameters<typeof GridCore<Row>>[0]> = {}) {
   return { grid, activeCell, onActivate, onCopy, writeText };
 }
 
+/** A grid of its own, to be taken away again: several in one test. */
+function setupUnmountable(props: Partial<Parameters<typeof GridCore<Row>>[0]> = {}) {
+  const { unmount } = render(
+    <GridCore<Row>
+      label="URLs"
+      columns={columns}
+      rowCount={rows.length}
+      getRow={(index) => rows[index]}
+      rowHeight={32}
+      headerHeight={32}
+      {...props}
+    />,
+  );
+  return { grid: screen.getByRole('grid', { name: 'URLs' }), unmount };
+}
+
 describe('GridCore', () => {
   it('follows the ARIA grid pattern: counts include the header row', () => {
     const { grid } = setup();
@@ -253,6 +269,44 @@ describe('GridCore', () => {
     const region = screen.getByRole('group', { name: 'Empty: no rows' });
     expect(region).toHaveAttribute('tabindex', '0');
     expect(region).toHaveTextContent('No URLs match these filters.');
+  });
+
+  it('keeps room for the fewest rows it’s asked to, however little its container has', () => {
+    // A screen's own grid: five rows under its header, and the room its border and scrollbar take.
+    const { grid, unmount } = setupUnmountable({ minRows: 5 });
+    const frame = grid.parentElement!;
+    expect(frame.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    // Its size is its container's to give, never its rows': a scroller of millions of pixels has no say in it.
+    expect(frame.style.contain).toBe('size');
+    unmount();
+    // By the density's own row and header heights.
+    const compact = setupUnmountable({ minRows: 5, rowHeight: 28, headerHeight: 30 });
+    expect(compact.grid.parentElement!.style.minHeight).toBe(`${30 + 5 * 28 + 12}px`);
+    compact.unmount();
+    // A grid with a height of its own asks for none, and is given none.
+    const own = setupUnmountable();
+    expect(own.grid.parentElement!.style.minHeight).toBe('');
+    expect(own.grid.parentElement!.style.contain).toBe('');
+    own.unmount();
+  });
+
+  it('keeps room for all its empty state says, where that’s more than its fewest rows', () => {
+    // "No links match these filters", three chips wrapped onto three lines, and Clear: 240 px of it.
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.dataset.why === 'tall' ? 240 : this.dataset.why === 'short' ? 96 : 0;
+    });
+    const tall = setupUnmountable({ minRows: 5, rowCount: 0, emptyState: <p data-why="tall">No links match.</p> });
+    expect(tall.grid.parentElement!.style.minHeight).toBe(`${32 + 240 + 12}px`);
+    tall.unmount();
+    // Less than five rows' worth leaves the five rows' room as it is.
+    const short = setupUnmountable({ minRows: 5, rowCount: 0, emptyState: <p data-why="short">No links match.</p> });
+    expect(short.grid.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    short.unmount();
+    // And only while it's shown: the same grid with rows keeps five rows' room.
+    const rowsAgain = setupUnmountable({ minRows: 5, emptyState: <p data-why="tall">No links match.</p> });
+    expect(rowsAgain.grid.parentElement!.style.minHeight).toBe(`${32 + 5 * 32 + 12}px`);
+    rowsAgain.unmount();
+    vi.restoreAllMocks();
   });
 
   it('is busy, with no row count, until the first page arrives', () => {
