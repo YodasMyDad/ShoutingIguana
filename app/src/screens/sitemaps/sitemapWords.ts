@@ -42,6 +42,23 @@ export function foundViaWords(foundVia: SitemapSource | null): Words {
     : FOUND_VIA[foundVia];
 }
 
+/** No sitemap was declared, and the default location has none: said in place of "a sitemap couldn't be read". */
+export const NOTHING_AT_DEFAULT_LOCATION = 'Nothing declared a sitemap, and there’s none at /sitemap.xml.';
+
+/**
+ * The crawl's own try of /sitemap.xml, answered "not here" (404, 410): there's no sitemap, which isn't a sitemap that
+ * failed. Any other answer there (a 403, a 503, no answer) leaves it unknown whether there's one.
+ */
+export function nothingAtDefaultLocation(
+  sitemap: Partial<Pick<Sitemap, 'foundVia' | 'state' | 'statusCode'>>,
+): boolean {
+  return (
+    sitemap.foundVia === 'defaultLocation' &&
+    sitemap.state === 'failed' &&
+    (sitemap.statusCode === 404 || sitemap.statusCode === 410)
+  );
+}
+
 export type SitemapTone = 'read' | 'failed' | 'waiting';
 
 export interface StateWords extends Words {
@@ -53,7 +70,8 @@ export interface StateWords extends Words {
  * that stopped it never was read.
  */
 export function stateWords(
-  sitemap: Pick<Sitemap, 'state' | 'error' | 'entries' | 'urls' | 'isIndex'>,
+  sitemap: Pick<Sitemap, 'state' | 'error' | 'entries' | 'urls' | 'isIndex'> &
+    Partial<Pick<Sitemap, 'foundVia' | 'statusCode'>>,
   crawling: boolean,
 ): StateWords {
   const why = sitemap.error ? `: ${sitemap.error}` : '';
@@ -65,6 +83,14 @@ export function stateWords(
         sentence: sitemap.isIndex ? 'The crawl read this index and the sitemaps it lists.' : 'The crawl read it.',
       };
     case 'failed':
+      // The crawl's own try of the default location, and nothing was there: no sitemap was found, so none failed.
+      if (nothingAtDefaultLocation(sitemap)) {
+        return {
+          tone: 'waiting',
+          short: `None there${why}`,
+          sentence: `${NOTHING_AT_DEFAULT_LOCATION}${sitemap.error ? ` It answered ${sitemap.error}.` : ''}`,
+        };
+      }
       // What was read before the failure is still listed.
       return sitemap.entries > 0 || sitemap.urls.listed > 0
         ? {
@@ -141,6 +167,13 @@ export function answerSentence(list: Pick<SitemapList, 'discovery' | 'sitemaps'>
   if (tally.read === tally.total) return `The crawl read ${formatCountOf(tally.total, 'sitemap')}.${more}`;
   if (tally.total === 1) {
     const [only] = list.sitemaps;
+    // The default location is only tried when nothing declares a sitemap, so it's the one row there is. Nothing there
+    // is no sitemap found; another failure there is a file the crawl couldn't read, which it didn't "find" either.
+    if (only?.foundVia === 'defaultLocation' && only.state === 'failed') {
+      return nothingAtDefaultLocation(only)
+        ? `${NOTHING_AT_DEFAULT_LOCATION}${more}`
+        : `Nothing declared a sitemap, and /sitemap.xml couldn’t be read${only.error ? `: ${only.error}` : ''}.${more}`;
+    }
     const what = !only
       ? ''
       : only.state === 'failed'

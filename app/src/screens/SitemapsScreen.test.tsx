@@ -294,9 +294,12 @@ describe('Sitemaps: what isn’t there', () => {
     });
     sidecar({ sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: [only] } });
     await open(SITEMAPS);
-    expect(await screen.findByText('The crawl found 1 sitemap, which couldn’t be read: HTTP 404.')).toBeVisible();
+    // The crawl's own try of the default location: no sitemap was found, so none is said to have failed.
+    expect(await screen.findByText('Nothing declared a sitemap, and there’s none at /sitemap.xml.')).toBeVisible();
+    expect(screen.queryByText(/found 1 sitemap/)).toBeNull();
     expect(await screen.findByText('No sitemap was read')).toBeVisible();
     expect(within(rowOf(only.url)).getByText('Default location')).toBeVisible();
+    expect(within(rowOf(only.url)).getByText('None there: HTTP 404')).toBeVisible();
     // No sitemap was read, so there's no count of the pages none lists to make.
     expect(screen.queryByText(/in any sitemap/)).toBeNull();
   });
