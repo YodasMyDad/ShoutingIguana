@@ -53,6 +53,12 @@ export interface CopyAllOptions<Row> {
   noun: readonly [singular: string, plural: string];
   /** What a failure says: "The target URLs couldn’t be copied." */
   failed: string;
+  /**
+   * What the copy says when the view had more rows than it read, in place of "Copied N things, from the first 10,000
+   * of M rows": for a copy whose count isn't a count of rows (the distinct URLs among them), where that would read as
+   * the whole view's.
+   */
+  truncated?: ((read: number, matching: number, count: number) => { title: string; description: string }) | undefined;
   /** Tests: the clipboard and the clock. */
   copy?: (text: string) => Promise<boolean>;
   progressDelayMs?: number;
@@ -79,6 +85,7 @@ export async function copyAll<Row>({
   text,
   noun,
   failed,
+  truncated: truncatedWords,
   copy = copyText,
   progressDelayMs = COPY_ALL_PROGRESS_DELAY_MS,
 }: CopyAllOptions<Row>): Promise<number | null> {
@@ -100,10 +107,13 @@ export async function copyAll<Row>({
     const made = text(rows);
     if (!(await copy(made.text))) throw new ClipboardRefused();
     const truncated = matching !== null && matching > rows.length;
-    const result = `Copied ${counted(made.count, noun)}`;
-    const description = truncated
-      ? `From the first ${formatCount(rows.length)} of ${formatCount(matching)} rows: a copy takes no more.`
-      : undefined;
+    const own = truncated && truncatedWords ? truncatedWords(rows.length, matching, made.count) : null;
+    const result = own?.title ?? `Copied ${counted(made.count, noun)}`;
+    const description =
+      own?.description ??
+      (truncated
+        ? `From the first ${formatCount(rows.length)} of ${formatCount(matching)} rows: a copy takes no more.`
+        : undefined);
     // One toast says it: the progress toast when there was one, unless there's more to say than it has room for.
     const toast = shown();
     if (toast && !description) toast.done(result);

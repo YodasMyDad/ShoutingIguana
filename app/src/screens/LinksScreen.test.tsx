@@ -518,6 +518,55 @@ describe('copying from the links', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://example.com/gone\nhttps://example.com/error'));
     await waitFor(() => expect(said).toContain('Copied 2 target URLs.'));
   });
+
+  it('says which links a copy is of when the view has more than it reads, in the command and when it’s done', async () => {
+    // 10,003 links: the first 10,000 all lead to /about, as a view sorted by its target's status begins with one
+    // target's links; the last three lead elsewhere.
+    const facts = [
+      ...Array.from({ length: 10_000 }, () => ({ ...LINKS_FACTS[1]! })),
+      { ...LINKS_FACTS[2]! },
+      { ...LINKS_FACTS[3]! },
+      { ...LINKS_FACTS[9]! },
+    ];
+    sidecar({ links: testLinkRows(facts, LINKS_URLS) });
+    const { user } = await open(LINKS);
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    await counted('10,003 links');
+    // The commands say they are of the first 10,000 links: in the menu, and in the palette by the same title.
+    await user.click(screen.getByRole('button', { name: 'Copy' }));
+    const menu = await screen.findByRole('menu');
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent.replace(/Ctrl.*$/, '')),
+    ).toEqual([
+      'Copy the first 10,000 links’ target URLs',
+      'Copy the first 10,000 links’ source URLs',
+      'Copy the Source URL column of the first 10,000 links',
+    ]);
+    expect(commands.get('links.copyTargets')?.title).toBe('Copy the first 10,000 links’ target URLs');
+    await user.click(within(menu).getByRole('menuitem', { name: /target URLs/ }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://example.com/about'));
+    // One URL was copied, and it isn't said as the view's: the view's other targets weren't read.
+    await waitFor(() =>
+      expect(said).toContain(
+        'Copied the first 10,000 links’ target URLs. 1 URL, each once. The view has 10,003 links: a copy takes no more than 10,000.',
+      ),
+    );
+    expect(await screen.findByText('Copied the first 10,000 links’ target URLs')).toBeVisible();
+    expect(said.join(' ')).not.toMatch(/Copied 1 target URL/);
+  });
+
+  it('names the copies plainly on a view a copy reads whole', async () => {
+    sidecar();
+    const { user } = await open(LINKS);
+    await counted('13 links');
+    await user.click(screen.getByRole('button', { name: 'Copy' }));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: /^Copy the target URLs/ })).toBeVisible();
+    expect(within(menu).getByRole('menuitem', { name: /^Copy the source URLs/ })).toBeVisible();
+    expect(within(menu).queryByText(/first 10,000/)).toBeNull();
+  });
 });
 
 describe('the Links grid’s states', () => {

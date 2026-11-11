@@ -60,6 +60,7 @@ import { endColumn, linkColumnName, linkFilterWords, urlIdsNamed } from './links
 import { LINK_PRESETS, activePreset } from './links/presets';
 import { passReason, slowReadWords } from './links/readCost';
 import { analysisNote, noLinksWords, noMatchWords } from './links/states';
+import { copiedPartOfEnds, copiesPart, copyColumnTitle, copyEndsTitle } from './links/copyWords';
 
 const ROUTE = '/crawls/$crawl/links';
 
@@ -288,6 +289,8 @@ export function LinksScreen() {
       text: (read) => endUrls(read, end),
       noun: [`${noun} URL`, `${noun} URLs`],
       failed: `The ${noun} URLs couldn’t be copied.`,
+      // Of a view with more links than a copy reads, the URLs are those links', not the view's: it says so.
+      truncated: (read, matching, count) => copiedPartOfEnds(end, read, matching, count),
     });
     setCopying(false);
   };
@@ -312,7 +315,11 @@ export function LinksScreen() {
 
   const hasRows = rowCount !== null && rowCount > 0;
   const preset = activePreset(filters, q);
-  const copyColumnTitle = copyColumn ? `Copy the ${linkColumnName(copyColumn)} column` : 'Copy a column';
+  // A copy reads the view's first 10,000 links: on a bigger view each copy's name says which links it is of.
+  const copyPart = copiesPart(rowCount);
+  const copyTargetsTitle = copyEndsTitle('to', copyPart);
+  const copySourcesTitle = copyEndsTitle('from', copyPart);
+  const copyOneColumnTitle = copyColumnTitle(copyColumn ? linkColumnName(copyColumn) : undefined, copyPart);
   useCommands(
     (): Command[] => [
       {
@@ -360,7 +367,7 @@ export function LinksScreen() {
       })),
       {
         id: 'links.copyTargets',
-        title: 'Copy the target URLs',
+        title: copyTargetsTitle,
         group: 'Links',
         keys: ['mod+shift+c'],
         keywords: ['copy', 'urls', 'clipboard'],
@@ -369,7 +376,7 @@ export function LinksScreen() {
       },
       {
         id: 'links.copySources',
-        title: 'Copy the source URLs',
+        title: copySourcesTitle,
         group: 'Links',
         keywords: ['copy', 'urls', 'clipboard', 'pages'],
         enabled: () => hasRows && !copying,
@@ -377,14 +384,14 @@ export function LinksScreen() {
       },
       {
         id: 'links.copyColumn',
-        title: copyColumnTitle,
+        title: copyOneColumnTitle,
         group: 'Links',
         keywords: ['copy', 'column', 'clipboard'],
         enabled: () => hasRows && !copying,
         run: () => void copyOneColumn(),
       },
     ],
-    [view, columns, editor, chooserGroups, hasRows, copying, copyColumnTitle, clearView, navigate],
+    [view, columns, editor, chooserGroups, hasRows, copying, copyPart, copyOneColumnTitle, clearView, navigate],
   );
 
   // A button that goes with the state it was in, without a navigation (Try again, once the read works), leaves the
@@ -476,9 +483,9 @@ export function LinksScreen() {
               </Button>
             }
           >
-            <MenuItem command="links.copyTargets">Copy the target URLs</MenuItem>
-            <MenuItem command="links.copySources">Copy the source URLs</MenuItem>
-            <MenuItem command="links.copyColumn">{copyColumnTitle}</MenuItem>
+            <MenuItem command="links.copyTargets">{copyTargetsTitle}</MenuItem>
+            <MenuItem command="links.copySources">{copySourcesTitle}</MenuItem>
+            <MenuItem command="links.copyColumn">{copyOneColumnTitle}</MenuItem>
           </DropdownMenu>
         </div>
       </div>

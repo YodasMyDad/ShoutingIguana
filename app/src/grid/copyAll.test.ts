@@ -92,6 +92,30 @@ describe('copying a whole view', () => {
     expect(said).toEqual(['Copied 1 target URL. From the first 10,000 of 10,005 rows: a copy takes no more.']);
   });
 
+  it('says a part of the view in the copy’s own words, where its count isn’t a count of rows', async () => {
+    const copy = vi.fn(() => Promise.resolve(true));
+    const truncated = vi.fn((read: number, matching: number, count: number) => ({
+      title: `Copied the first ${read} links’ target URLs`,
+      description: `${count} URL, each once. The view has ${matching} links.`,
+    }));
+    const options = {
+      text: () => ({ text: 'x', count: 1 }),
+      noun: ['target URL', 'target URLs'] as const,
+      failed: 'The target URLs couldn’t be copied.',
+      truncated,
+      copy,
+    };
+    await copyAll({ ...options, read: view(MAX_COPY_ROWS + 5) });
+    expect(truncated).toHaveBeenCalledWith(MAX_COPY_ROWS, MAX_COPY_ROWS + 5, 1);
+    expect(said).toEqual(['Copied the first 10000 links’ target URLs. 1 URL, each once. The view has 10005 links.']);
+    // A view read whole says the plain count: nothing was left out.
+    said = [];
+    truncated.mockClear();
+    await copyAll({ ...options, read: view(MAX_COPY_ROWS) });
+    expect(truncated).not.toHaveBeenCalled();
+    expect(said).toEqual(['Copied 1 target URL.']);
+  });
+
   it('says so, and copies nothing, when the clipboard refuses or a read fails', async () => {
     const refused = await copyAll({
       read: view(3),
