@@ -328,6 +328,28 @@ public sealed class CrawlTimeTests : IDisposable
     }
 
     /// <summary>
+    /// The clock's readings of a stretch reach the writer from several threads, so one taken earlier can be heard after
+    /// the stretch's end was: the longest time heard of a stretch stands, and one that has ended stays ended.
+    /// </summary>
+    [Fact]
+    public async Task AReadingOfAStretchHeardLateChangesNothing()
+    {
+        var path = _files.NewPath();
+        await using (var writer = CrawlWriter.Open(path, new CrawlOptions { StartUrl = "https://example.com/" }, resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+            writer.RecordRunTime(new RunStretch(0, START, 4_000, Ended: false));
+            writer.RecordRunTime(new RunStretch(0, START, 5_000, Ended: true));
+            writer.RecordRunTime(new RunStretch(0, START, 4_500, Ended: false));
+            await writer.UpdateStatusAsync(CrawlStatus.Stopped, isFinished: false, CancellationToken.None);
+        }
+
+        Assert.Equal(["5000 | 1"], TestCrawls.Rows(path, "SELECT crawled_ms, ended FROM run_time"));
+        var runs = CrawlRunReader.Read(path)!;
+        Assert.Equal(TimeSpan.FromSeconds(5), runs.TimeCrawling);
+        Assert.Equal(START.AddSeconds(5), Assert.Single(runs.Runs!).EndedAt);
+    }
+
+    /// <summary>
     /// A run cut short leaves its last stretch going, as long as it was last stored: read so, with the run not ended, and
     /// ended there once the crawl is continued, whose time is then the whole of it.
     /// </summary>

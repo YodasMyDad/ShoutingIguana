@@ -714,6 +714,102 @@ public sealed class LinkGridReaderTests(GridCrawl crawl) : IDisposable
     }
 
     /// <summary>
+    /// The blocks but for the others serve a filter only while the others are few, an index entry being read for each:
+    /// up to an eighth of the crawl's links. Either side of that eighth, by one target's links, the rows are the right
+    /// rows, and they're read the way each side should be: the others through their targets and the pages from the
+    /// blocks, or every link passed over. And where the blocks' counts less the others read don't come to the links the
+    /// summary says match (a file whose counts another program changed), the blocks aren't used, so no page is placed
+    /// by counts that are wrong.
+    /// </summary>
+    [Fact]
+    public async Task TheOthersAreReadThroughTheirTargetsOnlyUpToAnEighthOfTheLinks()
+    {
+        const int SHIFT = 4;
+        var copy = crawl.Copy();
+        Stamp(copy);
+        LinkSummaryBuilder.BlockShift = SHIFT;
+        try
+        {
+            await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(copy);
+        }
+        finally
+        {
+            LinkSummaryBuilder.BlockShift = CrawlSchema.LINK_BLOCK_SHIFT;
+        }
+
+        var links = LinkReference.Load(copy, GridReference.Load(copy));
+        var eighth = links.Links.Count / 8;
+
+        // Targets whose links come to an eighth of the links or just under, taking the most linked that still fit; and
+        // one more target, which takes them past it.
+        List<(int To, int Links)> targets = [.. links.Links.GroupBy(link => link.To).Select(group => (group.Key, group.Count())).OrderByDescending(target => target.Item2)];
+        List<int> under = [];
+        var others = 0;
+        foreach (var (to, count) in targets.Where(target => target.Links > 1))
+        {
+            if (others + count <= eighth)
+            {
+                under.Add(to);
+                others += count;
+            }
+        }
+
+        var extra = targets.First(target => !under.Contains(target.To));
+        Assert.InRange(others, eighth / 2, eighth);
+        Assert.True(others + extra.Links > eighth);
+        UrlFilter[] within = [Numbers("to.id", FilterOperator.NotIn, [.. under.Select(id => (double)id)])];
+        UrlFilter[] past = [Numbers("to.id", FilterOperator.NotIn, [.. under.Append(extra.To).Select(id => (double)id)])];
+
+        List<string> ran = [];
+        LinkGridReader.Ran = ran.Add;
+        bool EveryLink(string sql) => sql.Contains("si_link(", StringComparison.Ordinal) || sql.Contains("si_link_id(", StringComparison.Ordinal);
+        bool Blocks(string sql) => sql.Contains("l.rowid BETWEEN $low AND $high", StringComparison.Ordinal);
+        bool Others(string sql) => sql.StartsWith("SELECT l.rowid FROM links l INDEXED BY ix_links_to", StringComparison.Ordinal) && sql.Contains("$others", StringComparison.Ordinal);
+        (LinkGridReader.DriveRows, LinkGridReader.DriveCap, LinkGridReader.WalkRows) = (-1, 0, -1);
+
+        void Reads(string file, UrlFilter[] filters, bool fromBlocks, string name)
+        {
+            var expected = links.Matching(filters).Select(link => link.Id).ToList();
+            Assert.Equal(links.Links.Count - others - (filters == past ? extra.Links : 0), expected.Count);
+            var cache = new ReadCache();
+            ran.Clear();
+            foreach (var offset in new[] { 0, 17, expected.Count / 3, expected.Count / 2, expected.Count - 20, expected.Count - 1 })
+            {
+                var page = LinkGridReader.Query(file, new UrlQuery { Filters = filters, Offset = offset, Limit = 5 }, cache);
+                Assert.True(expected.Skip(offset).Take(5).SequenceEqual(page.Rows.Select(row => row.Id)), $"{name}: the page from {offset}");
+            }
+
+            // The others read once, through their targets, and every page from its blocks; or no page from the blocks.
+            Assert.True(fromBlocks ? ran.Count(Others) == 1 && ran.Count(Blocks) >= 6 && !ran.Any(EveryLink) : !ran.Any(Blocks),
+                $"{name}: {ran.Count(Others)} reads of the others, {ran.Count(Blocks)} of blocks, {ran.Count(EveryLink)} of every link");
+        }
+
+        Reads(copy, within, fromBlocks: true, "an eighth of the links to the others");
+        Reads(copy, past, fromBlocks: false, "over an eighth of the links to the others");
+
+        // A file whose counts by block another program changed: the first block says three links more than it has, so
+        // every page past it would be placed three links early. The others are read (they're still under an eighth),
+        // the blocks less the others don't come to the links the summary says match, and the pages are read from the
+        // links themselves instead, which are as they were.
+        var tampered = crawl.Copy();
+        File.Copy(copy, tampered, overwrite: true);
+        Change(tampered, """
+            UPDATE link_blocks SET links = links + 3
+            WHERE (block, kind, position, flags, self, has_text, source_nofollow) = (SELECT block, kind, position, flags, self, has_text, source_nofollow FROM link_blocks ORDER BY block LIMIT 1)
+            """);
+        var expectedStill = links.Matching(within).Select(link => link.Id).ToList();
+        var tamperedCache = new ReadCache();
+        ran.Clear();
+        foreach (var offset in new[] { expectedStill.Count / 2, expectedStill.Count - 20, expectedStill.Count - 1 })
+        {
+            var page = LinkGridReader.Query(tampered, new UrlQuery { Filters = within, Offset = offset, Limit = 5 }, tamperedCache);
+            Assert.True(expectedStill.Skip(offset).Take(5).SequenceEqual(page.Rows.Select(row => row.Id)), $"Links gone behind the summary's back: the page from {offset}");
+        }
+
+        Assert.True(ran.Count(Others) == 1 && !ran.Any(Blocks), $"{ran.Count(Others)} reads of the others, {ran.Count(Blocks)} of blocks, {ran.Count(EveryLink)} of every link");
+    }
+
+    /// <summary>
     /// A page of the links to a filter's targets is found on the links' index by target wherever it is: the place is
     /// closed in on to the link, by counting between ids, in a crawl whose ids have gaps (one in five, and a run of them),
     /// for targets with links from every page and for targets whose links are all in one part of the crawl, for one kind

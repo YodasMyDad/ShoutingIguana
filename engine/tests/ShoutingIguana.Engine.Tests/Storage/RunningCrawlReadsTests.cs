@@ -232,6 +232,33 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
     }
 
     /// <summary>
+    /// The read that takes a moment may not get as far as counting anything (here its filter needs the analysis, and is
+    /// refused): the moment is kept all the same, with the links it had. The total the next read gives is the moment's,
+    /// not the links of its own later snapshot counted because nobody had yet: every link still matches no filter.
+    /// </summary>
+    [Fact]
+    public void TheTotalIsTheMomentsWhenTheReadThatTookItNeverAnswered()
+    {
+        var (running, held) = Running();
+        using (held)
+        {
+            var cache = new ReadCache();
+            var links = TestCrawls.Count(running, "SELECT COUNT(*) FROM links");
+
+            // A read that takes the moment and is then refused: a running crawl has no URL summary to filter on.
+            Assert.Throws<NeedsAnalysisException>(() => LinkGridReader.Query(running, new UrlQuery { Filters = [Number("to.inlinks", FilterOperator.Gt, 5)], Limit = LIMIT }, cache));
+
+            // The crawl goes on: 500 more links.
+            Change(running, "INSERT INTO links (from_id, to_id, kind, flags, position, text, fragment) SELECT from_id, to_id, kind, flags, position, text, fragment FROM links ORDER BY rowid LIMIT 500");
+            var page = LinkGridReader.Query(running, new UrlQuery { Limit = LIMIT }, cache);
+            Assert.Equal((links, links, LIMIT), (page.Matching, page.Total, page.Rows.Count));
+            var filtered = LinkGridReader.Query(running, new UrlQuery { Filters = [Names("kind", FilterOperator.In, "hyperlink")], Limit = LIMIT }, cache);
+            Assert.Equal(links, filtered.Total);
+            Assert.Equal(links, LinkGridReader.Facets(running, new UrlFacetQuery(), cache).Total);
+        }
+    }
+
+    /// <summary>
     /// A read keeps to its own snapshot. One that began before the read that took the moment can't see all of the moment's
     /// links: it answers for the crawl as its own snapshot has it, and the moment kept stays the later read's.
     /// </summary>
