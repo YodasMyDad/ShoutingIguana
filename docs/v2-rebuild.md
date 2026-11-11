@@ -133,10 +133,15 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`, pushed to `o
 `v2` and `master` were not moved. The temp checkpoint under
 `%LOCALAPPDATA%\Temp\claude\...\c67f90ea-...\scratchpad\checkpoint.md` is history. This section is the place to resume.
 
-**Paused in round 2 (2026-11-10, evening).** The owner paused to preserve usage: "let whatever is running finish,
-log it and we'll pick everything up at the weekend wherever you leave things". Nothing was launched after that.
-Before it, the owner had asked for step 3 to be finished without reports in between, round by round. Pausing is
-theirs to call. Merging to `master` or releasing still needs an explicit yes.
+**Resumed on 2026-11-11.** The owner said: "Ok finish step 3". The work goes through "Left, in this order" below to
+its end, without reports in between. Pausing is theirs to call. Merging to `master` or releasing still needs an
+explicit yes. Launched that day, from the state the table below describes: the E3c fixer, a review of Links, a
+review of Sitemaps and robots.txt, and the comparison (item 3). Their briefs, and the checkpoint a new session
+resumes from, are in the 2026-11-11 scratchpad folder that the owner's memory file names (`checkpoint.md`,
+`brief-*.md`). If this paragraph is the newest news here, those four were still running: read that checkpoint,
+then each branch's log, and relaunch what hadn't reported.
+
+It had been paused in round 2 on the evening of 2026-11-10, to preserve usage.
 
 Overview, the URL inspector, engine E3b and the real shell pass are merged, verified and pushed (below). Three
 pieces from `17b340d` are built, each on its own local branch. None is pushed, merged or through its review and
