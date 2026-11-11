@@ -40,6 +40,9 @@ const MIN_URL_WIDTH = 180;
 /** The grid's edges, and the room its scrollbar takes. */
 const FRAME_SLACK = 18;
 
+/** A sitemap's row is its sitemap, wherever a running crawl moves it in the tree. */
+const sitemapOf = (row: SitemapRow) => row.sitemap.id;
+
 export interface SitemapTreeProps {
   crawlId: string;
   sitemaps: readonly Sitemap[];
@@ -226,6 +229,8 @@ export function SitemapTree({
         headerHeight={headerHeight}
         tree={tree}
         startRow={startRow}
+        // A running crawl finds sitemaps under an index above the cursor's row: the cursor stays on its sitemap.
+        rowKey={sitemapOf}
         onActivateCell={(_index, row, column) => {
           if (!row) return;
           rememberPlace(place, row.sitemap.id);

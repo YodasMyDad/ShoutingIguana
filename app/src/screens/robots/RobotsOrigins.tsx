@@ -22,7 +22,7 @@ import { PageHeader } from '../../ui/PageHeader';
 import { RelativeTime } from '../../ui/RelativeTime';
 import { TextLink } from '../../ui/TextLink';
 import { CountSentence } from '../SentenceWithCounts';
-import { pressedRow, rememberPlace, rememberedPlace } from '../listPlace';
+import { pressedRow, rememberPlace, rememberedKey, rememberedPlace } from '../listPlace';
 import { IGNORED, answerParts, stateWords } from './robotsWords';
 
 const ROUTE = '/crawls/$crawl/robots/{-$origin}';
@@ -34,6 +34,9 @@ const SIZE_WIDTH = 96;
 const MIN_ORIGIN_WIDTH = 260;
 /** The grid's edges, and the room its scrollbar takes. */
 const FRAME_SLACK = 18;
+
+/** An origin's row is its origin, wherever a running crawl moves it in the list. */
+const originOf = (row: RobotsOrigin) => row.origin;
 
 export interface RobotsOriginsProps {
   crawlId: string;
@@ -73,9 +76,11 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
   // Coming back from an origin's file, the list starts on the row it was opened from.
   const place = `origins:${crawlId}`;
   const [startRow] = useState(() => rememberedPlace(place));
+  // By the origin too: while a crawl runs the list grows, and the row it was left on may be further down by now.
+  const [startKey] = useState(() => rememberedKey(place));
   const open = useCallback(
     (origin: string, row: number) => {
-      rememberPlace(place, row);
+      rememberPlace(place, row, origin);
       void navigate({ params: { crawl: crawlId, origin }, search: {} });
     },
     [navigate, crawlId, place],
@@ -178,7 +183,7 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
         // A count's link is followed by the router, not the grid: the row it was in is where the list was left.
         onClickCapture={(event) => {
           const row = event.target instanceof Element && event.target.closest('a') ? pressedRow(event.target) : null;
-          if (row !== null) rememberPlace(place, row);
+          if (row !== null) rememberPlace(place, row, rows.getRow(row)?.origin);
         }}
       >
         <GridCore<RobotsOrigin>
@@ -192,6 +197,9 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
           onScrollOffset={rows.onScrollOffset}
           fetchRows={rows.fetchRows}
           startRow={startRow}
+          startKey={startKey}
+          // A running crawl asks new origins, which sort in among these: the cursor stays on its origin.
+          rowKey={originOf}
           onActivate={(index, row) => {
             if (row) open(row.origin, index);
           }}

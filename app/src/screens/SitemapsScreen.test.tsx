@@ -619,6 +619,35 @@ describe('Sitemaps: live and refreshing', () => {
     expect(screen.queryByText(/the crawl’s own judgement/)).toBeNull();
   });
 
+  it('keeps the cursor on its sitemap when a running crawl finds one under an index above it: Enter opens that sitemap', async () => {
+    const running = { status: 'running', finishedAt: null } as const;
+    const list = (sitemaps: SitemapList['sitemaps']): SitemapList => ({
+      discovery: 'running',
+      summary: { available: false, reason: 'crawling' },
+      sitemaps,
+    });
+    // The index and one of its sitemaps so far, then the sitemap given in the crawl's settings.
+    const sofar = TEST_SITEMAPS.filter((sitemap) => [1, 2, 5].includes(sitemap.id));
+    sidecar({ sitemaps: list(sofar), item: running });
+    const { router, queryClient } = await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    await screen.findByText(`${SITE}/news-sitemap.xml`);
+    act(() => tree.focus());
+    fireEvent.keyDown(tree, { key: 'ArrowDown' });
+    fireEvent.keyDown(tree, { key: 'ArrowDown' });
+    const cursorRow = () =>
+      document.getElementById(tree.getAttribute('aria-activedescendant') ?? '')?.closest('[role="row"]')?.textContent ??
+      '';
+    expect(cursorRow()).toContain(`${SITE}/news-sitemap.xml`);
+    // The crawl takes up two more of the index's sitemaps: they go under the index, above the cursor's row.
+    sidecar({ sitemaps: list(TEST_SITEMAPS.filter((sitemap) => sitemap.id !== 6)), item: running });
+    act(() => void queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
+    await screen.findByText(`${SITE}/sitemaps/products.xml`);
+    expect(cursorRow()).toContain(`${SITE}/news-sitemap.xml`);
+    fireEvent.keyDown(tree, { key: 'Enter' });
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/5`));
+  });
+
   it('keeps the list on screen while it’s read again, and never puts the loading frame over it', async () => {
     let hold: (() => void) | null = null;
     let calls = 0;

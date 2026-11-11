@@ -155,6 +155,63 @@ describe('robots.txt: the origins', () => {
     expect(cursor?.closest('[role="row"]')).toHaveTextContent('https://partner.example.org');
   });
 
+  it('keeps the cursor on its origin when a running crawl asks one that sorts ahead of it: Enter opens that origin’s file', async () => {
+    const running = { status: 'running', finishedAt: null } as const;
+    const site = testOrigin({ origin: SITE, isInternal: true });
+    const zebra = testOrigin({ origin: 'https://zebra.example' });
+    const apple = testOrigin({ origin: 'https://apple.example' });
+    sidecar({ item: running, origins: [site, zebra] });
+    const { router, queryClient } = await open(ROBOTS);
+    const grid = await screen.findByRole('grid', { name: 'Origins' });
+    await screen.findByText('https://zebra.example');
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    const cursorRow = () =>
+      document.getElementById(grid.getAttribute('aria-activedescendant') ?? '')?.closest('[role="row"]')?.textContent ??
+      '';
+    expect(cursorRow()).toContain('https://zebra.example');
+    // The crawl asks another origin: by the engine's order (by name, among those that blocked nothing) it comes
+    // first, and takes the row the cursor's origin was on.
+    sidecar({ item: running, origins: [site, apple, zebra] });
+    act(() => void queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
+    await screen.findByText('https://apple.example');
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '4'));
+    expect(cursorRow()).toContain('https://zebra.example');
+    expect(cursorRow()).not.toContain('https://apple.example');
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    await waitFor(() => expect(pathOf(router)).toBe(`${ROBOTS}/${encodeURIComponent('https://zebra.example')}`));
+  });
+
+  it('comes back from an origin’s file to that origin’s row, though the list grew above it meanwhile', async () => {
+    const running = { status: 'running', finishedAt: null } as const;
+    const site = testOrigin({ origin: SITE, isInternal: true });
+    const zebra = testOrigin({ origin: 'https://zebra.example' });
+    const apple = testOrigin({ origin: 'https://apple.example' });
+    sidecar({ item: running, origins: [site, zebra], files: { [zebra.origin]: { ...TEST_FILE, ...zebra } } });
+    const { router, queryClient } = await open(ROBOTS);
+    const grid = await screen.findByRole('grid', { name: 'Origins' });
+    await screen.findByText('https://zebra.example');
+    act(() => grid.focus());
+    fireEvent.keyDown(grid, { key: 'ArrowDown' });
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    await waitFor(() => expect(pathOf(router)).toBe(`${ROBOTS}/${encodeURIComponent('https://zebra.example')}`));
+    // While the file is open, the crawl asks an origin that sorts ahead of it.
+    sidecar({ item: running, origins: [site, apple, zebra], files: { [zebra.origin]: { ...TEST_FILE, ...zebra } } });
+    // The list is read afresh on the way back (its pages are kept only a few seconds once nothing shows them).
+    queryClient.removeQueries(gridPagesOf(TEST_CRAWL_ID));
+    act(() => {
+      router.history.back();
+    });
+    const back = await screen.findByRole('grid', { name: 'Origins' });
+    await screen.findByText('https://apple.example');
+    act(() => back.focus());
+    await waitFor(() =>
+      expect(
+        document.getElementById(back.getAttribute('aria-activedescendant') ?? '')?.closest('[role="row"]')?.textContent,
+      ).toContain('https://zebra.example'),
+    );
+  });
+
   it('pages: an origin far down the list is read when it comes into view, never all at once', async () => {
     const origins = Array.from({ length: 2_400 }, (_, index) =>
       testOrigin({ origin: `https://site-${index}.example` }),

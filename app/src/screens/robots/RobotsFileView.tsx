@@ -60,6 +60,9 @@ const MIN_URL_WIDTH = 140;
 /** The grid's edges and the card's around it, and the room its scrollbar takes. */
 const FRAME_SLACK = 36;
 
+/** A blocked URL's row is its URL, wherever a running crawl moves it in the list. */
+const blockedUrlOf = (row: RobotsBlockedUrl) => row.id;
+
 export interface RobotsFileViewProps {
   crawlId: string;
   /** The origin the route names, as the engine spells it. */
@@ -576,6 +579,8 @@ function BlockedUrls({
           columns={columns}
           rowCount={rows.rowCount}
           getRow={rows.getRow}
+          // The cursor stays on its URL should the list change above it while a crawl runs.
+          rowKey={blockedUrlOf}
           rowHeight={rowHeight}
           headerHeight={headerHeight}
           onRangeChange={rows.onRangeChange}

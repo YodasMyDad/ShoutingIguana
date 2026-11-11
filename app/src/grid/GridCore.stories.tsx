@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import type { Density } from '../settings/schema';
+import { Button } from '../ui/Button';
 import { GridCore } from './GridCore';
 import { DENSITY_METRICS } from './metrics';
 import type { GridColumn } from './types';
@@ -302,5 +303,62 @@ function NestedDemo({ density }: { density: Density }) {
  */
 export const TreeOfRowsThatOpen: StoryObj<typeof NestedDemo> = {
   render: (args) => <NestedDemo {...args} />,
+  args: { density: 'standard' },
+};
+
+interface MovingRow {
+  origin: string;
+}
+
+const MOVING_COLUMNS: GridColumn<MovingRow>[] = [
+  { id: 'origin', header: 'Origin', width: 420, mono: true, cell: (row) => row.origin, text: (row) => row.origin },
+];
+
+const MOVING_START: MovingRow[] = ['https://www.example.com', 'https://shop.example', 'https://zebra.example'].map(
+  (origin) => ({ origin }),
+);
+
+function MovingDemo({ density }: { density: Density }) {
+  const metrics = DENSITY_METRICS[density];
+  const [rows, setRows] = useState(MOVING_START);
+  const [opened, setOpened] = useState('Nothing opened yet');
+  return (
+    <div className="flex h-screen flex-col gap-2 bg-canvas p-4">
+      <p className="flex items-center gap-3 text-13 text-text-secondary">
+        <Button
+          size="sm"
+          onClick={() =>
+            setRows((current) => [
+              ...current.slice(0, 1),
+              { origin: `https://apple-${current.length}.example` },
+              ...current.slice(1),
+            ])
+          }
+        >
+          Add an origin above
+        </Button>
+        <span role="status">{opened}</span>
+      </p>
+      <GridCore<MovingRow>
+        label="Origins"
+        columns={MOVING_COLUMNS}
+        rowCount={rows.length}
+        getRow={(index) => rows[index]}
+        rowHeight={metrics.rowHeight}
+        headerHeight={metrics.headerHeight}
+        rowKey={(row) => row.origin}
+        onActivate={(_index, row) => setOpened(`Opened ${row?.origin ?? ''}`)}
+        className="flex-1 rounded-lg border border-border"
+      />
+    </div>
+  );
+}
+
+/**
+ * A list whose rows move under the cursor, as a running crawl's do (`rowKey`): put the cursor on a row, add an origin
+ * above it, and the cursor is still on that row, which Enter opens. Without a key the cursor is a row number.
+ */
+export const RowsThatMove: StoryObj<typeof MovingDemo> = {
+  render: (args) => <MovingDemo {...args} />,
   args: { density: 'standard' },
 };

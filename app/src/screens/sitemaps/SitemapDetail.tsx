@@ -62,6 +62,9 @@ const ROUTE = '/crawls/$crawl/sitemaps/{-$sitemap}';
 /** What the query asks for beyond the URL grid's own: what the crawl did with each URL, for its Outcome column. */
 const QUERY_COLUMNS = [...URL_GRID_QUERY_COLUMNS, 'fetched', 'outcome'];
 
+/** A URL's row is its URL, wherever a running crawl moves it in the grid. */
+const urlOf = (row: UrlRow) => row.id;
+
 export interface SitemapDetailProps {
   crawlId: string;
   /** The sitemap the route names, or null when what it names can't be a sitemap's id. */
@@ -432,6 +435,8 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
           columns={columns}
           rowCount={enabled ? rows.rowCount : null}
           getRow={rows.getRow}
+          // Under a sort, a running crawl's new URLs come in among these: the cursor stays on its URL.
+          rowKey={urlOf}
           rowHeight={rowHeight}
           headerHeight={headerHeight}
           onRangeChange={rows.onRangeChange}

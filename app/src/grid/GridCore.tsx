@@ -113,9 +113,19 @@ export interface GridCoreProps<Row> {
    * grid shown again where it was left (a URL's links, back along a walk).
    */
   startRow?: number | undefined;
+  /**
+   * A row's identity, for a list whose rows move under the cursor (a running crawl puts a new one above it): the
+   * cursor stays on the row it was on, wherever that row is once the rows have changed, and Enter opens that row.
+   * Without it the cursor is a row number, and the row under it is whichever is there now.
+   */
+  rowKey?: ((row: Row) => string | number) | undefined;
+  /** With `startRow` and `rowKey`: the row the grid was left on, so it starts there even if the row has moved. */
+  startKey?: string | number | undefined;
 }
 
 const SKELETON_ROWS = 12;
+/** How many rows either side of where the cursor's row was it's looked for, once another row is in its place. */
+const REANCHOR_REACH = 500;
 
 /** The width the custom vertical scrollbar covers at the right of a windowed grid (tokens.css `--scrollbar-size`). */
 function coveredWidth(element: HTMLElement, windowed: boolean): number {
@@ -149,6 +159,8 @@ function GridCoreInner<Row>({
   onSort,
   focusHeader,
   startRow,
+  rowKey,
+  startKey,
 }: GridCoreProps<Row>) {
   const id = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -208,6 +220,46 @@ function GridCoreInner<Row>({
     if (nav.active) model.scrollToIndex(Math.min(nav.active.row, count - 1));
   });
   useEffect(() => revealStart(), [count]);
+
+  // With `rowKey`, the cursor is on a row, not at a number. `anchor` is the row it was last seen on. When the rows
+  // change and another row is at that number, the cursor goes to where its own row went (looked for among the loaded
+  // rows either side). The row hasn't changed, so no move is told (`onActiveRowChange`). A row that isn't found (it's
+  // gone, or far off) leaves the cursor at its number, as a grid without a key does.
+  const anchor = useRef<{ key: string | number; row: number; start: boolean } | null>(
+    startKey === undefined || startRow === undefined ? null : { key: startKey, row: startRow, start: true },
+  );
+  const reanchor = useEffectEvent(() => {
+    if (!rowKey || !nav.active || count === 0) return;
+    const at = Math.min(nav.active.row, count - 1);
+    const here = getRow(at);
+    if (here === undefined) return;
+    const held = anchor.current;
+    // The cursor hasn't been moved since its row was seen (it's at the same number, as it was given: a list that
+    // shrank shows it on its last row), and that row isn't the one there now.
+    if (held && (held.row === nav.active.row || held.start) && rowKey(here) !== held.key) {
+      for (let step = 1; step <= REANCHOR_REACH; step++) {
+        for (const row of [at + step, at - step]) {
+          const candidate = row >= 0 && row < count ? getRow(row) : undefined;
+          if (candidate === undefined || rowKey(candidate) !== held.key) continue;
+          anchor.current = { key: held.key, row, start: false };
+          setNav((current) =>
+            current.active
+              ? {
+                  ...current,
+                  active: { ...current.active, row },
+                  selection: current.follow ? selectOnly(row) : current.selection,
+                }
+              : current,
+          );
+          // A grid that starts on a row it was left on shows that row, wherever it is now.
+          if (held.start) model.scrollToIndex(row);
+          return;
+        }
+      }
+    }
+    anchor.current = { key: rowKey(here), row: nav.active.row, start: false };
+  });
+  useLayoutEffect(() => reanchor(), [getRow, count, nav.active?.row]);
 
   const template = columns.map((column) => `${column.width}px`).join(' ');
   const width = columns.reduce((sum, column) => sum + column.width, 0);
