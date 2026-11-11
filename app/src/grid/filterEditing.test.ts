@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { GridFilter } from '../api/grids';
 import {
+  canEditFilter,
   draftOf,
   filterOf,
   inputFor,
   newDraft,
   opWords,
   opsFor,
+  refusedFilter,
+  tooManyFiltersWords,
   withColumn,
   type FilterColumn,
   type FilterDraft,
@@ -135,12 +138,60 @@ describe('editing a grid filter', () => {
     expect(wrong(STATUS, { op: 'between', min: 'x', max: '400' }).field).toBe('min');
     expect(wrong(TEXT, { op: 'contains', text: '' })).toEqual({ field: 'text', error: 'Give some text to match.' });
     expect(wrong(TEXT, { op: 'contains', text: 'a'.repeat(1_001) }).error).toBe('Give at most 1,000 characters.');
-    expect(wrong(TEXT, { op: 'regex', text: '(unclosed' }).error).toBe(
-      'This isn’t a pattern that can be run: check its brackets and escapes.',
-    );
     expect(wrong(KIND, { op: 'in', values: [] })).toEqual({ field: 'values', error: 'Choose at least one.' });
     // A value the column doesn't have isn't sent.
     expect(wrong(KIND, { op: 'in', values: ['nope'] }).field).toBe('values');
+  });
+
+  it('leaves a pattern to the engine: it runs .NET’s patterns, which the browser’s rules don’t judge', () => {
+    // Each of the first four the engine ran on the garden crawl (1,899, 126, 1,131 and 51 links), and the browser
+    // can't compile any of them: inline options aren't its syntax.
+    const engineRuns = ['(?m)^Garden', '(?s)a.b', 'a(?i)b', '(?x) gar den', '(?i)garden'];
+    for (const pattern of engineRuns) {
+      expect(filterOf(draft(TEXT, { op: 'regex', text: pattern }), TEXT), pattern).toEqual({
+        filter: { column: 'text', op: 'regex', value: pattern },
+      });
+      expect(made(TEXT, { op: 'notRegex', text: pattern })).toEqual({ column: 'text', op: 'notRegex', value: pattern });
+    }
+    // One the browser takes and the engine refuses, and one neither takes: the engine says so, in its own words.
+    expect(made(TEXT, { op: 'regex', text: '(?=x)y' })).toEqual({ column: 'text', op: 'regex', value: '(?=x)y' });
+    expect(made(TEXT, { op: 'regex', text: '(unclosed' })).toEqual({ column: 'text', op: 'regex', value: '(unclosed' });
+    // What the editor can tell without the engine is still said before it's asked.
+    expect(wrong(TEXT, { op: 'regex', text: '' })).toEqual({ field: 'text', error: 'Give some text to match.' });
+    expect(wrong(TEXT, { op: 'regex', text: 'a'.repeat(1_001) }).error).toBe('Give at most 1,000 characters.');
+  });
+
+  it('finds the filter an answer refused, with the engine’s sentence for it', () => {
+    const filters: GridFilter[] = [
+      { column: 'kind', op: 'in', values: ['hyperlink'] },
+      { column: 'text', op: 'regex', value: '(?=x)y' },
+    ];
+    const sentence = 'This pattern needs backtracking, which isn’t supported: rewrite it without.';
+    expect(refusedFilter({ 'filters[1].value': [sentence] }, filters)).toEqual({ index: 1, message: sentence });
+    // The first filter named, when the engine names more than one thing.
+    expect(
+      refusedFilter(
+        { 'sort[0].column': ['No such column.'], 'filters[0].values': ['Give 1 to 100.', 'More.'] },
+        filters,
+      ),
+    ).toEqual({ index: 0, message: 'Give 1 to 100.' });
+    // Not a filter: a sort, a column, a cursor, or the filters as a whole.
+    expect(refusedFilter({ 'sort[0].column': ['No such column.'] }, filters)).toBeNull();
+    expect(refusedFilter({ after: ['Start from an offset again.'] }, filters)).toBeNull();
+    expect(refusedFilter({ filters: ['A view can have at most 20 filters.'] }, filters)).toBeNull();
+    expect(refusedFilter({}, filters)).toBeNull();
+    // A place the view has no filter in (an answer to another query), or a message that isn't there.
+    expect(refusedFilter({ 'filters[2].value': [sentence] }, filters)).toBeNull();
+    expect(refusedFilter({ 'filters[1].value': [] }, filters)).toBeNull();
+  });
+
+  it('says which filters the editor has fields for, and why a view takes no more', () => {
+    expect(canEditFilter({ column: 'text', op: 'regex', value: 'x' }, [TEXT, KIND])).toBe(true);
+    // A column the editor doesn't list, an operator its type doesn't take, or no editor at all.
+    expect(canEditFilter({ column: 'to.id', op: 'eq', value: 4 }, [TEXT, KIND])).toBe(false);
+    expect(canEditFilter({ column: 'kind', op: 'eq', value: 'image' }, [TEXT, KIND])).toBe(false);
+    expect(canEditFilter({ column: 'text', op: 'regex', value: 'x' }, undefined)).toBe(false);
+    expect(tooManyFiltersWords(20)).toBe('A view takes at most 20 filters. Remove one to add another.');
   });
 
   it('takes a filter back into its fields, and makes the same filter of them again', () => {

@@ -138,6 +138,22 @@ export function draftOf(filter: GridFilter, column: FilterColumn | undefined): F
   }
 }
 
+/** Whether the editor has fields for a filter: its chip opens it, and so can the view. */
+export function canEditFilter(filter: GridFilter, columns: readonly FilterColumn[] | undefined): boolean {
+  return (
+    columns !== undefined &&
+    draftOf(
+      filter,
+      columns.find((column) => column.id === filter.column),
+    ) !== null
+  );
+}
+
+/** Why another filter can't be added: the view has as many as a query takes. */
+export function tooManyFiltersWords(max: number): string {
+  return `A view takes at most ${max} filters. Remove one to add another.`;
+}
+
 /** The contract's limits: text of at most 1,000 characters, and 100 values in a list. */
 export const MAX_FILTER_TEXT = 1_000;
 export const MAX_FILTER_VALUES = 100;
@@ -201,10 +217,9 @@ export function filterOf(draft: FilterDraft, column: FilterColumn): DraftResult 
       if (draft.text.length > MAX_FILTER_TEXT) {
         return { field: 'text', error: `Give at most ${formatCount(MAX_FILTER_TEXT)} characters.` };
       }
-      if (draft.op === 'regex' || draft.op === 'notRegex') {
-        const problem = patternProblem(draft.text);
-        if (problem) return { field: 'text', error: problem };
-      }
+      // A pattern is the engine's to judge, never the browser's: it runs .NET's regular expressions, which take what
+      // the browser's don't (inline options such as `(?m)`, `(?s)`, `(?x)` and `a(?i)b`) and refuse some of what the
+      // browser's take (lookarounds, backreferences). One it refuses comes back with its own sentence (`refusedFilter`).
       return {
         filter: {
           column: id,
@@ -216,17 +231,29 @@ export function filterOf(draft: FilterDraft, column: FilterColumn): DraftResult 
   }
 }
 
+/** A filter the engine wouldn't run, and why, in the engine's own words. */
+export interface FilterRefusal {
+  /** Which of the view's filters, by its place among them. */
+  index: number;
+  /** The engine's sentence: "This pattern needs backtracking (…), which isn't supported: rewrite it without." */
+  message: string;
+}
+
 /**
- * What's wrong with a pattern that the editor can tell before the engine is asked: one that doesn't compile. The
- * engine's own rules (no backreferences or lookarounds, nothing too complex for the crawl) are the engine's to say,
- * as it runs .NET's patterns, not the browser's.
+ * The filter an `invalid-query` answer is about, when it's about one: the engine keys its messages by the field's path
+ * (`filters[1].value`, docs/v2-sidecar-api.md, Errors). Null for a query refused for anything else (a column, a sort,
+ * a cursor), or for a path that names no filter the view has.
  */
-function patternProblem(pattern: string): string | null {
-  try {
-    // The engine's inline flag for "ignore case" isn't the browser's: it's taken off for this check only.
-    new RegExp(pattern.replace(/^\(\?i\)/, ''));
-    return null;
-  } catch {
-    return 'This isn’t a pattern that can be run: check its brackets and escapes.';
+export function refusedFilter(
+  errors: Readonly<Record<string, readonly string[]>>,
+  filters: readonly GridFilter[],
+): FilterRefusal | null {
+  for (const [path, messages] of Object.entries(errors)) {
+    const match = /^filters\[(\d+)\]/.exec(path);
+    const message = messages[0];
+    if (!match || message === undefined) continue;
+    const index = Number(match[1]);
+    if (index < filters.length) return { index, message };
   }
+  return null;
 }

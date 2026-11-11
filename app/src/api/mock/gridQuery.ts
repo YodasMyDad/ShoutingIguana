@@ -138,8 +138,7 @@ function patternProblem(pattern: string): string | null {
     if (low >= 1_000 || high >= 1_000) return TOO_LARGE;
   }
   try {
-    const source = pattern.startsWith('(?i)') ? pattern.slice(4) : pattern;
-    const flags = pattern.startsWith('(?i)') ? 'i' : '';
+    const { source, flags } = browserPattern(pattern);
     RegExp(source, flags);
     return null;
   } catch (error) {
@@ -148,10 +147,26 @@ function patternProblem(pattern: string): string | null {
   }
 }
 
+/**
+ * A .NET pattern as the browser runs it, as far as the mock goes: the options a pattern starts with (`(?i)`, `(?m)`,
+ * `(?s)`, `(?x)`, or several, `(?im)`) become the browser's flags, and `x` takes the pattern's white space out. An
+ * option part-way through a pattern (`a(?i)b`), which the engine also runs, the mock can't.
+ */
+function browserPattern(pattern: string): { source: string; flags: string } {
+  const start = /^\(\?([imsx]+)\)/.exec(pattern);
+  if (!start) return { source: pattern, flags: '' };
+  const options = new Set(start[1]);
+  const rest = pattern.slice(start[0].length);
+  return {
+    source: options.has('x') ? rest.replace(/\s+/g, '') : rest,
+    flags: ['i', 'm', 's'].filter((flag) => options.has(flag)).join(''),
+  };
+}
+
 function regex(pattern: string): RegExp | null {
   if (patternProblem(pattern) !== null) return null;
-  const source = pattern.startsWith('(?i)') ? pattern.slice(4) : pattern;
-  return new RegExp(source, pattern.startsWith('(?i)') ? 'i' : '');
+  const { source, flags } = browserPattern(pattern);
+  return new RegExp(source, flags);
 }
 
 function matches(value: Value, filter: GridFilter): boolean {
