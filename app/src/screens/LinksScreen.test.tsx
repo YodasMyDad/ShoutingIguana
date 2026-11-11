@@ -279,6 +279,25 @@ describe('the Links filter bar', () => {
     );
   });
 
+  it('closes a filter’s editor with the view it was opened in: back opens no other filter’s editor', async () => {
+    sidecar();
+    const { router, user } = await open(LINKS);
+    await counted('13 links');
+    await user.click(screen.getByRole('button', { name: 'Broken links' }));
+    await counted('3 of 13 links');
+    await user.click(screen.getByRole('button', { name: 'External links' }));
+    await counted('1 of 13 links');
+    const bar = screen.getByRole('group', { name: 'Filters' });
+    await user.click(within(bar).getByRole('button', { name: 'Target is on another site' }));
+    expect(await screen.findByRole('dialog', { name: 'Change the filter' })).toBeVisible();
+    // Back, with the editor open: the view is "Broken links" again, whose one filter is in the same place.
+    act(() => router.history.back());
+    await counted('3 of 13 links');
+    expect(within(bar).getByRole('button', { name: 'Target status class is 4xx or 5xx' })).toBeVisible();
+    // Its editor isn't open: nobody asked to change that filter.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
   it('filters by some of an enum’s values, and clears every filter at once', async () => {
     sidecar();
     const { router, user } = await open(LINKS);

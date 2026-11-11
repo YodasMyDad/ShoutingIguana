@@ -63,10 +63,16 @@ export function FilterChips({
   onEditingChange,
   refused,
 }: FilterChipsProps) {
-  const [editingHere, setEditingHere] = useState<number | null>(null);
-  const editing = editingGiven === undefined ? editingHere : editingGiven;
+  // The editor that's open is of the filter it was opened on, not only of its place: when the view's filters change
+  // under it (back, forward, a link), the place may be another filter's, whose editor nobody asked for.
+  const [editingHere, setEditingHere] = useState<{ index: number; filter: string } | null>(null);
+  const stillThere =
+    editingHere !== null && JSON.stringify(filters[editingHere.index]) === editingHere.filter
+      ? editingHere.index
+      : null;
+  const editing = editingGiven === undefined ? stillThere : editingGiven;
   const setEditing = (index: number | null) => {
-    setEditingHere(index);
+    setEditingHere(index === null ? null : { index, filter: JSON.stringify(filters[index]) });
     onEditingChange?.(index);
   };
   return (

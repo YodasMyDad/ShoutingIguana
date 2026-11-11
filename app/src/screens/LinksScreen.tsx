@@ -280,8 +280,12 @@ export function LinksScreen() {
 
   const [adding, setAdding] = useState(false);
   const [choosing, setChoosing] = useState(false);
-  /** The filter whose editor is open, by its place: a chip opens its own, and so does "Change the filter". */
-  const [editingFilter, setEditingFilter] = useState<number | null>(null);
+  // The filter whose editor is open, by its place: a chip opens its own, and so does "Change the filter". It's of
+  // the view it was opened in: after back, forward or a link, the place may be another filter's, whose editor nobody
+  // asked for.
+  const [editingIn, setEditingIn] = useState<{ view: string; index: number } | null>(null);
+  const editingFilter = editingIn?.view === view ? editingIn.index : null;
+  const setEditingFilter = (index: number | null) => setEditingIn(index === null ? null : { view, index });
   // A filter the engine won't run (a pattern it refuses): which one, and the engine's sentence for why.
   const refused = failed && isProblem(rows.error, 'invalid-query') ? refusedFilter(rows.error.errors, filters) : null;
   const refusedOne = refused ? filters[refused.index] : undefined;
