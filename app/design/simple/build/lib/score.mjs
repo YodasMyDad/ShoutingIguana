@@ -40,6 +40,24 @@ export const URL_SUBJECT = new Set(['internal-client-error', 'internal-server-er
   'robots-txt-unreachable', 'robots-txt-unreachable-other-origin', 'robots-txt-missing', 'sitemap-non-indexable',
   'sitemap-error', 'sitemap-missing', 'sitemap-url-other-host', 'duplicate-site-version']);
 
+// "Fix first": the checks that found something, in the order to fix them. The most severe first; within a severity a
+// fault of the whole site leads, however small its count (among themselves, in the order given); then the most
+// affected. Ties keep the order given: the catalog's, in the engine (FixFirstOrder) and the app.
+const SEVERITY_RANK = { error: 0, warning: 1, notice: 2 };
+export const FIX_FIRST = 5;
+export function fixFirstOrder(checks) {
+  return checks.filter(c => c.count > 0)
+    .map((c, index) => ({ c, index, siteWide: SITE_WIDE.has(c.id) }))
+    .sort((a, b) => SEVERITY_RANK[a.c.severity] - SEVERITY_RANK[b.c.severity]
+      || Number(b.siteWide) - Number(a.siteWide)
+      || (a.siteWide ? 0 : b.c.count - a.c.count)
+      || a.index - b.index)
+    .map(entry => entry.c);
+}
+
+// The first problems to fix: up to five, Serious and Worth fixing only, in "Fix first" order.
+export const firstToFix = checks => fixFirstOrder(checks).filter(c => c.severity !== 'notice').slice(0, FIX_FIRST);
+
 export function extentOf(share) {
   let found = EXTENTS[0];
   for (const e of EXTENTS) if (share >= e.from) found = e;
