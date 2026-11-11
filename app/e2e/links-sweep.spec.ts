@@ -211,8 +211,10 @@ test('the inspector’s “All N in Links” lands on its count, both ways, for 
       const count = inspector.getByText(/^[\d,]+ (in|out)links?$/);
       await expect(count).toBeVisible({ timeout: 30_000 });
       if (number(await count.innerText()) === 0) continue;
-      const all = inspector.getByRole('link', { name: /^All [\d,]+ in Links$/ });
-      const said = number(await all.innerText());
+      const all = inspector.getByRole('link', { name: /^(All [\d,]+|Show it) in Links$/ });
+      const text = await all.innerText();
+      // One link reads "Show it in Links": never "All 1".
+      const said = text.startsWith('Show it') ? 1 : number(text);
       expect(said, `URL ${id}: the link says the section's count`).toBe(number(await count.innerText()));
       await all.click();
       await expectShown(page, said, `URL ${id}: ${column}`);

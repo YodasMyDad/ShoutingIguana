@@ -19,7 +19,7 @@ import {
   sharedUrlWidth,
   shownLinkColumns,
 } from './linkColumns';
-import { linksOfUrl } from './linkPlaces';
+import { allInLinksWords, linksOfUrl } from './linkPlaces';
 import {
   FOLLOW_COLUMN,
   linkColumnGroup,
@@ -596,5 +596,12 @@ describe('where other screens land in Links', () => {
     expect(count(linksOfUrl('inlinks', 2, 'all'))).toBe(2);
     expect(count(linksOfUrl('outlinks', 2, 'all'))).toBe(4);
     expect(count(linksOfUrl('outlinks', 2, 'image'))).toBe(1);
+  });
+
+  it('words the inspector’s link to them by how many there are: one is “it”, never “All 1”', () => {
+    expect(allInLinksWords(1)).toBe('Show it in Links');
+    expect(allInLinksWords(2)).toBe('All 2 in Links');
+    expect(allInLinksWords(792)).toBe('All 792 in Links');
+    expect(allInLinksWords(5_053_909)).toBe('All 5,053,909 in Links');
   });
 });

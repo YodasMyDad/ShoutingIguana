@@ -529,6 +529,24 @@ describe('a link’s two ends', () => {
     expect(await within(bar).findByText('/about')).toBeVisible();
     expect(within(bar).getByText('doesn’t lead to')).toBeVisible();
   });
+
+  it('says “Show it in Links” of a URL’s one link, never “All 1”, and lands on that link', async () => {
+    const inlinks = [testLinkRow({ id: 1, url: 'https://example.com/' })];
+    sidecar({}, inspectorRoutes({ urls: () => testUrlDetail(), inlinks: { 3: inlinks } }));
+    const { router, user } = await open(`${LINKS}?inspect=3`);
+    await counted('13 links');
+    await user.click(await screen.findByRole('tab', { name: /^Inlinks/ }));
+    const one = await screen.findByRole('link', { name: 'Show it in Links' });
+    expect(screen.queryByRole('link', { name: /^All 1 / })).toBeNull();
+    await user.click(one);
+    await counted('1 of 13 links');
+    expect(router.state.location.search).toEqual({
+      filter: [
+        { column: 'to.id', op: 'eq', value: 3 },
+        { column: 'selfLink', op: 'is', value: false },
+      ],
+    });
+  });
 });
 
 describe('the links’ columns', () => {

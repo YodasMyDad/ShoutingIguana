@@ -107,6 +107,9 @@ const main = (page: Page) => page.getByRole('main');
 const grid = (page: Page) => page.getByRole('grid', { name: 'Links' });
 const inspectorOf = (page: Page) => page.getByRole('complementary', { name: 'Inspector' });
 const number = (text: string | null) => Number((text ?? '').replace(/[^\d]/g, ''));
+/** The inspector's link to a URL's links in Links: "All 792 in Links", and "Show it in Links" for one. */
+const IN_LINKS = /^(All [\d,]+|Show it) in Links$/;
+const inLinksCount = (text: string) => (text.startsWith('Show it') ? 1 : number(text));
 /** The header's count: the "31" of "31 of 5,410 links". */
 const shown = async (page: Page) => number(await main(page).locator('.si-result-count__n').innerText());
 const expectShown = (page: Page, expected: number) => expect.poll(() => shown(page)).toBe(expected);
@@ -361,14 +364,14 @@ test('“All N in Links” from the inspector lists exactly the links its sectio
     // The section says how many links it has once it has counted them: only then is there a link, or none.
     const said = inspector.getByText(new RegExp(`^[\\d,]+ ${section.toLowerCase().slice(0, -1)}s?$`));
     await expect(said).toBeVisible();
-    const all = inspector.getByRole('link', { name: /^All [\d,]+ in Links$/ });
+    const all = inspector.getByRole('link', { name: IN_LINKS });
     // A URL with no links one way has nothing to list in Links: its section says so instead.
     if (number(await said.innerText()) === 0) {
       await expect(inspector.getByText(`No ${section.toLowerCase()}`)).toBeVisible();
       await expect(all).toHaveCount(0);
       continue;
     }
-    const counted = number(await all.innerText());
+    const counted = inLinksCount(await all.innerText());
     expect(counted).toBe(number(await said.innerText()));
     await all.click();
     await expect(inspectorOf(page)).toBeHidden();
@@ -399,8 +402,8 @@ test('“All N in Links” keeps the kind chosen, and leaves out a page’s link
   await inspector.getByRole('tab', { name: /^Inlinks/ }).click();
   await inspector.getByRole('button', { name: /^Kind of link/ }).click();
   await page.getByRole('menuitemradio', { name: 'Hyperlink' }).click();
-  const all = inspector.getByRole('link', { name: /^All [\d,]+ in Links$/ });
-  const counted = number(await all.innerText());
+  const all = inspector.getByRole('link', { name: IN_LINKS });
+  const counted = inLinksCount(await all.innerText());
   const withSelf = await links([
     { column: 'to.id', op: 'eq', value: id },
     { column: 'kind', op: 'in', values: ['hyperlink'] },

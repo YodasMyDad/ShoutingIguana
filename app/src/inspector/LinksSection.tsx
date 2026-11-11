@@ -10,8 +10,8 @@ import { useGridMetrics } from '../grid/metrics';
 import type { GridColumn } from '../grid/types';
 import { useElementWidth } from '../grid/useElementWidth';
 import { usePagedRows } from '../grid/usePagedRows';
-import { formatCount, formatCountOf } from '../lib/format';
-import { linksOfUrl } from '../screens/links/linkPlaces';
+import { formatCountOf } from '../lib/format';
+import { allInLinksWords, linksOfUrl } from '../screens/links/linkPlaces';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { LiveBadge } from '../ui/LiveBadge';
@@ -217,7 +217,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
             search={{ filter: linksOfUrl(direction, urlId, kind) }}
             className="text-13"
           >
-            All {formatCount(rows.rowCount)} in Links
+            {allInLinksWords(rows.rowCount)}
           </TextLink>
         ) : null}
         <Select

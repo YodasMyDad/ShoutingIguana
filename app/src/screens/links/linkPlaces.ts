@@ -2,6 +2,7 @@
 // opens exactly that many links here. The inspector's "All N in Links" is the links to a URL or from it.
 import type { GridFilter } from '../../api/grids';
 import type { LinkKind } from '../../api/inspector';
+import { formatCount } from '../../lib/format';
 
 /**
  * The links to a URL (its inlinks) or from it (its outlinks), of one kind or of every kind: what the inspector's link
@@ -15,4 +16,12 @@ export function linksOfUrl(direction: 'inlinks' | 'outlinks', urlId: number, kin
     { column: 'selfLink', op: 'is', value: false },
   ];
   return kind === 'all' ? filters : [...filters, { column: 'kind', op: 'in', values: [kind] }];
+}
+
+/**
+ * The inspector's link from a URL's links to the same links in the Links grid, by how many there are: "All 792 in
+ * Links", and for one, "Show it in Links": never "All 1".
+ */
+export function allInLinksWords(count: number): string {
+  return count === 1 ? 'Show it in Links' : `All ${formatCount(count)} in Links`;
 }
