@@ -319,6 +319,9 @@ internal sealed class GridReadContext : IDisposable
     /// <summary>Whether an earlier read noted this of the crawl as it stands.</summary>
     public bool Noted(string key) => Stamp is { } stamp && _cache?.Has($"{stamp}|{key}", MaxAge(stamp)) == true;
 
+    /// <summary>Whether a value is kept under the key for the crawl as it stands (<see cref="Cached{T}"/> would give it without reading).</summary>
+    public bool Keeps(string key) => Noted(key);
+
     /// <summary>Whether something large is kept already, read by an earlier read.</summary>
     public bool HasLarge(string key) => Stamp is { } stamp && _cache is { } cache && cache.HasLarge($"{stamp}|{key}", MaxAge(stamp));
 

@@ -17,6 +17,9 @@ public static class CrawlStatsReader
     /// <summary>The tallies the passes count into (<c>si_tally(slot, value)</c>).</summary>
     private const int OUTCOMES = 0, STATUS_CODES = 1, NON_INDEXABLE = 2, SKIP_REASONS = 3, PROBE_OUTCOMES = 4, PROBE_STATUS_CODES = 5;
 
+    /// <summary>What the numbers are kept under.</summary>
+    private const string KEPT = "stats";
+
     public static CrawlStats Read(string databasePath) => Read(databasePath, cache: null);
 
     /// <summary>
@@ -29,7 +32,17 @@ public static class CrawlStatsReader
     /// <exception cref="InvalidOperationException">The file isn't a crawl, or was written with another schema.</exception>
     /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
     public static CrawlStats Read(string databasePath, ReadCache? cache, CancellationToken cancellationToken = default) =>
-        GridReadContext.Read(databasePath, cache, cancellationToken, context => context.Cached("stats", () => Read(context)));
+        GridReadContext.Read(databasePath, cache, cancellationToken, context => context.Cached(KEPT, () => Read(context)));
+
+    /// <summary>
+    /// The crawl's headline numbers where they're kept for the crawl as it stands, and null where they'd have to be read:
+    /// it opens the file and reads its stamp, a millisecond or two, and passes over nothing. For a host that queues its
+    /// reads, which needn't queue for this.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The file isn't a crawl, or was written with another schema.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
+    public static CrawlStats? ReadKept(string databasePath, ReadCache cache, CancellationToken cancellationToken = default) =>
+        GridReadContext.Read(databasePath, cache, cancellationToken, context => context.Keeps(KEPT) ? context.Cached(KEPT, () => Read(context)) : null);
 
     private static CrawlStats Read(GridReadContext context)
     {
