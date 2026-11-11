@@ -29,7 +29,7 @@ import {
   linkValueName,
   urlIdsNamed,
 } from './linkWords';
-import { ALL_LINKS, LINK_PRESETS, activePreset, sameFilters } from './presets';
+import { ALL_LINKS, LINK_PRESETS, activePreset, sameFilters, sortShown } from './presets';
 import { passReason, slowReadWords } from './readCost';
 import { analysisNote, noLinksWords, noMatchWords } from './states';
 
@@ -143,6 +143,16 @@ describe('the links’ presets', () => {
       activePreset([...noText.filters, { column: 'position', op: 'in', values: ['footer'] }], undefined),
     ).toBeNull();
     expect(activePreset([], 'rattan')).toBeNull();
+  });
+
+  it('keeps a sort only while its column is shown', () => {
+    const byStatus = [{ column: 'to.statusCode', desc: true }];
+    expect(sortShown(byStatus, ['from.url', 'to.url', 'to.statusCode'])).toEqual(byStatus);
+    // Hidden, the sort goes: the route's "no sort" is undefined, never an empty list.
+    expect(sortShown(byStatus, ['from.url', 'to.url'])).toBeUndefined();
+    expect(sortShown([{ column: 'id', desc: true }], ['from.url', 'to.url'])).toBeUndefined();
+    expect(sortShown([], ['from.url'])).toBeUndefined();
+    expect(sortShown(undefined, ['from.url'])).toBeUndefined();
   });
 
   it('tells the same filters whatever order their fields came in', () => {

@@ -2,7 +2,7 @@
 // its filters: choosing one puts them in the route, where they show as chips that can be read, changed and removed, and
 // the preset reads as chosen exactly while the route's filters are its own. So a preset's count is the grid's count,
 // and nothing is filtered that the filter bar doesn't say.
-import type { GridFilter } from '../../api/grids';
+import type { GridFilter, GridSort } from '../../api/grids';
 
 export interface LinkPreset {
   id: string;
@@ -80,4 +80,14 @@ export function sameFilters(a: readonly GridFilter[], b: readonly GridFilter[]):
 export function activePreset(filters: readonly GridFilter[], search: string | undefined): LinkPreset | null {
   if (search) return null;
   return LINK_PRESETS.find((preset) => sameFilters(preset.filters, filters)) ?? null;
+}
+
+/**
+ * A view's sort while its column is shown, and no sort (undefined, as the route has it) once it isn't. A sort is seen
+ * and changed at its column's header: by a hidden column the rows would be in an order nothing on the screen
+ * explains, under a view that reads as "All links".
+ */
+export function sortShown(sort: readonly GridSort[] | undefined, shown: readonly string[]): GridSort[] | undefined {
+  const kept = (sort ?? []).filter((key) => shown.includes(key.column));
+  return kept.length > 0 && kept.length === (sort ?? []).length ? kept : undefined;
 }

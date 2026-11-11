@@ -35,10 +35,11 @@ function sidecar(options: LinksSidecarOptions = {}, first: Parameters<typeof fak
 }
 
 async function open(path: string, queryClient = createQueryClient()) {
-  const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
+  const history = createMemoryHistory({ initialEntries: [path] });
+  const router = createAppRouter(queryClient, history);
   render(<App router={router} queryClient={queryClient} />);
   await act(() => router.load());
-  return { router, queryClient, user: userEvent.setup() };
+  return { router, history, queryClient, user: userEvent.setup() };
 }
 
 const header = async () => (await screen.findByRole('heading', { level: 1, name: 'Links' })).parentElement!;
@@ -328,6 +329,53 @@ describe('sorting the links', () => {
       'title',
       'Links can’t be sorted by anchor or alt text: they sort by crawl order, or by a column of the target.',
     );
+  });
+
+  it('drops the sort with its column when the column is hidden: no order is left that no header shows', async () => {
+    const { transport } = sidecar();
+    const { router, user } = await open(LINKS);
+    await counted('13 links');
+    const status = within(await grid()).getByRole('columnheader', { name: /Target status/ });
+    await user.click(within(status).getByRole('button'));
+    await waitFor(() =>
+      expect(linkRequests(transport).at(-1)?.sort).toEqual([{ column: 'to.statusCode', desc: false }]),
+    );
+    // Hiding another column leaves the sort alone.
+    await user.click(screen.getByRole('button', { name: 'Columns' }));
+    const chooser = await screen.findByRole('dialog', { name: 'Columns' });
+    await user.click(within(chooser).getByRole('checkbox', { name: 'Kind' }));
+    await waitFor(() => expect((router.state.location.search as { cols?: string[] }).cols).not.toContain('kind'));
+    expect(router.state.location.search).toMatchObject({ sort: [{ column: 'to.statusCode', desc: false }] });
+    // Hiding the sorted column takes the sort with it, in the same step: the links are in crawl order again.
+    await user.click(
+      within(within(chooser).getByRole('group', { name: 'Its target' })).getByRole('checkbox', { name: 'Status' }),
+    );
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ cols: ['from.url', 'to.url', 'text', 'position', 'follow'] }),
+    );
+    await waitFor(() => expect(linkRequests(transport).at(-1)?.sort).toEqual([]));
+    expect(
+      within(await grid())
+        .getAllByRole('columnheader')
+        .filter((header) => header.hasAttribute('aria-sort') && header.getAttribute('aria-sort') !== 'none'),
+    ).toEqual([]);
+    // Shown again, the column comes back unsorted: the sort was dropped, not kept out of sight.
+    await user.click(
+      within(within(chooser).getByRole('group', { name: 'Its target' })).getByRole('checkbox', { name: 'Status' }),
+    );
+    await waitFor(() => expect((router.state.location.search as { cols?: string[] }).cols).toContain('to.statusCode'));
+    expect((router.state.location.search as { sort?: unknown }).sort).toBeUndefined();
+  });
+
+  it('drops a sort the view arrives with by a column it doesn’t show, in place, and never reads by it', async () => {
+    const { transport } = sidecar();
+    const cols = encodeURIComponent(JSON.stringify(['from.url', 'to.url', 'text']));
+    const { router, history } = await open(`${LINKS}?sort=-to.statusCode&cols=${cols}`);
+    await counted('13 links');
+    await waitFor(() => expect(router.state.location.search).toEqual({ cols: ['from.url', 'to.url', 'text'] }));
+    // In place: back doesn't return to the sorted address.
+    expect(history.length).toBe(1);
+    expect(linkRequests(transport).every((request) => request.sort.length === 0)).toBe(true);
   });
 
   it('says why on Enter, for the keyboard, on a header that doesn’t sort', async () => {
@@ -708,7 +756,7 @@ describe('a filter the engine won’t run', () => {
       { column: 'kind', op: 'in', values: ['hyperlink'] },
       { column: 'text', op: 'regex', value: pattern },
     ]);
-    const cols = JSON.stringify(['from.url', 'to.url', 'text']);
+    const cols = JSON.stringify(['from.url', 'to.url', 'text', 'to.statusCode']);
     return `${LINKS}?filter=${encodeURIComponent(filter)}&cols=${encodeURIComponent(cols)}&sort=to.statusCode`;
   };
   /** The state in the rows' place, by its headline. */
@@ -746,7 +794,7 @@ describe('a filter the engine won’t run', () => {
         { column: 'kind', op: 'in', values: ['hyperlink'] },
         { column: 'text', op: 'regex', value: '(?im)^ABOUT' },
       ],
-      cols: ['from.url', 'to.url', 'text'],
+      cols: ['from.url', 'to.url', 'text', 'to.statusCode'],
       sort: [{ column: 'to.statusCode', desc: false }],
     });
     expect(screen.queryByText(/^This filter can’t be run/)).toBeNull();
@@ -763,14 +811,14 @@ describe('a filter the engine won’t run', () => {
     await counted('9 of 13 links');
     expect(router.state.location.search).toEqual({
       filter: [{ column: 'kind', op: 'in', values: ['hyperlink'] }],
-      cols: ['from.url', 'to.url', 'text'],
+      cols: ['from.url', 'to.url', 'text', 'to.statusCode'],
       sort: [{ column: 'to.statusCode', desc: false }],
     });
     expect(
       within(await grid())
         .getAllByRole('columnheader')
         .map((cell) => cell.textContent),
-    ).toEqual(['Source URL', 'Target URL', 'Anchor or alt text']);
+    ).toEqual(['Source URL', 'Target URL', 'Anchor or alt text', 'Target status']);
     // The button went with the state it was in: the keyboard isn't left on the page.
     await waitFor(() => expect(document.body).not.toHaveFocus());
   });

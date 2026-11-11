@@ -57,7 +57,7 @@ import {
   shownLinkColumns,
 } from './links/linkColumns';
 import { endColumn, linkColumnName, linkFilterWords, urlIdsNamed } from './links/linkWords';
-import { LINK_PRESETS, activePreset } from './links/presets';
+import { LINK_PRESETS, activePreset, sortShown } from './links/presets';
 import { passReason, slowReadWords } from './links/readCost';
 import { analysisNote, noLinksWords, noMatchWords } from './links/states';
 import { copiedPartOfEnds, copiesPart, copyColumnTitle, copyEndsTitle } from './links/copyWords';
@@ -122,7 +122,10 @@ export function LinksScreen() {
     fetchPage,
     rowHeight,
     // Without the list (it couldn't be read), the route's columns are asked for as they are: the engine checks them.
-    enabled: search.cols === undefined || catalogue.data !== undefined || catalogue.isError,
+    // A sort by a column that isn't shown is on its way out of the route: nothing is read by it.
+    enabled:
+      (search.cols === undefined || catalogue.data !== undefined || catalogue.isError) &&
+      sort.every((key) => shown.includes(key.column)),
   });
 
   // Another column asks for the rows again, with it: the count of the same view stands meanwhile, so the grid keeps
@@ -192,8 +195,22 @@ export function LinksScreen() {
   const setColumns = (next: readonly string[]) => {
     const isDefault =
       next.length === DEFAULT_LINK_COLUMNS.length && next.every((id, index) => id === DEFAULT_LINK_COLUMNS[index]);
-    void navigate({ search: (previous) => ({ ...previous, cols: isDefault ? undefined : [...next] }), replace: true });
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        cols: isDefault ? undefined : [...next],
+        // A sort goes with its column: hidden, its header is no longer there to show the sort, or to change it.
+        sort: sortShown(previous.sort, next),
+      }),
+      replace: true,
+    });
   };
+  // The same of a view that arrives sorted by a column it doesn't show (a link made by hand, or by a version with
+  // other columns): the sort is dropped from the route, in place, and never read for.
+  const hiddenSort = sortShown(sort, shown) === undefined && sort.length > 0;
+  useEffect(() => {
+    if (hiddenSort) void navigate({ search: (previous) => ({ ...previous, sort: undefined }), replace: true });
+  }, [hiddenSort, navigate]);
 
   const handoff = useHeaderHandoff(sort);
   const [measure, width] = useElementWidth();
