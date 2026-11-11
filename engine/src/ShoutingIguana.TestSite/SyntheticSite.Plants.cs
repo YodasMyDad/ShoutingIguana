@@ -214,6 +214,14 @@ public sealed partial class SyntheticSite
         plants.Add(new Plant("/ext-moved", 301, Linked: false, InSitemap: true, ["sitemap-url-other-host"], () => Redirect(301, "/ext-gone"), OnPartnerSite: true));
         plants.Add(new Plant("/ext-gone", 404, Linked: false, InSitemap: true, ["sitemap-url-other-host"], () => NotFound("/ext-gone"), OnPartnerSite: true));
 
+        // And a URL robots.txt disallows, which only the sitemap leads to: listed, and never asked for. A crawl told to
+        // ignore robots.txt finds a page there, as it does at every URL of the private area.
+        if (_options.Sitemaps)
+        {
+            plants.Add(new Plant("/private/listed", Plant.REFUSED, Linked: false, InSitemap: true, ["blocked-by-robots", "sitemap-non-indexable"],
+                () => Html(RenderSimple("Private listed", "robots.txt disallows this area.", "/private/listed")), IsPage: false));
+        }
+
         Page("empty-anchor", "Link without text", ["empty-anchor-text"], page => page with
         {
             Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\"></a></p>"
