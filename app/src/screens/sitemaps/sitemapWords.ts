@@ -66,6 +66,16 @@ export interface StateWords extends Words {
 }
 
 /**
+ * Which of its limits kept the crawl from a sitemap, as the engine says it. It stores the reason behind its own
+ * "Not read: " ("Not read: the crawler reads at most 1,000 sitemaps"), which the sentence around it already says, and
+ * a shared crawl file can hold the prefix with nothing after it: null then.
+ */
+export function notReadReason(error: string | null): string | null {
+  const reason = (error ?? '').replace(/^not read\b\s*:?\s*/i, '').trim();
+  return reason === '' ? null : reason;
+}
+
+/**
  * What became of a sitemap. `crawling`: the crawl is running, so one it hasn't read is still on its way; in a crawl
  * that stopped it never was read.
  */
@@ -103,12 +113,14 @@ export function stateWords(
             short: `Couldn’t be read${why}`,
             sentence: `The crawl couldn’t read it${why}.`,
           };
-    case 'notRead':
+    case 'notRead': {
+      const limit = notReadReason(sitemap.error);
       return {
         tone: 'waiting',
         short: 'Left unread',
-        sentence: `The crawl left it unread at its limits${why}. There may be more like it.`,
+        sentence: `The crawl left it unread at its limits${limit ? `: ${limit}` : ''}. There may be more like it.`,
       };
+    }
     case 'pending':
       return crawling
         ? { tone: 'waiting', short: 'Not read yet', sentence: 'The crawl has found it and hasn’t read it yet.' }

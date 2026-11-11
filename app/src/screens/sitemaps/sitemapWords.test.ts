@@ -10,6 +10,7 @@ import {
   coverageSkippedWords,
   coverageWords,
   foundViaWords,
+  notReadReason,
   nothingAtDefaultLocation,
   stateWords,
   tallyOf,
@@ -54,9 +55,21 @@ describe('what became of a sitemap', () => {
   });
 
   it('says one left unread at the crawler’s limits may not be the only one', () => {
-    const words = stateWords(testSitemap({ id: 1, state: 'notRead', error: 'more than 1,000 sitemaps' }), false);
-    expect(words.sentence).toBe(
-      'The crawl left it unread at its limits: more than 1,000 sitemaps. There may be more like it.',
+    // The engine's own string (SitemapDiscoverer): its "Not read: " isn't said a second time.
+    const left = (error: string | null) =>
+      stateWords(testSitemap({ id: 1, state: 'notRead', statusCode: null, error }), false).sentence;
+    expect(left('Not read: the crawler reads at most 1,000 sitemaps')).toBe(
+      'The crawl left it unread at its limits: the crawler reads at most 1,000 sitemaps. There may be more like it.',
+    );
+    expect(left('Not read: sitemap indexes nested more than 3 deep aren’t followed')).toBe(
+      'The crawl left it unread at its limits: sitemap indexes nested more than 3 deep aren’t followed. There may be more like it.',
+    );
+    // A shared crawl file can hold the prefix with no reason after it, or no error at all.
+    for (const bare of ['Not read', 'Not read: ', null]) {
+      expect(left(bare)).toBe('The crawl left it unread at its limits. There may be more like it.');
+    }
+    expect(notReadReason('Not read: the crawler reads at most 1,000 sitemaps')).toBe(
+      'the crawler reads at most 1,000 sitemaps',
     );
   });
 

@@ -294,7 +294,8 @@ export const LongAndMany: Story = {
               parentId: 3,
               state: 'notRead',
               statusCode: null,
-              error: 'more than 1,000 sitemaps',
+              // As the engine words it (SitemapDiscoverer).
+              error: 'Not read: the crawler reads at most 1,000 sitemaps',
             }),
           ],
         },
