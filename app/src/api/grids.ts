@@ -417,12 +417,14 @@ export interface Sitemap {
     indexable: number;
     nonIndexable: number;
     /**
-     * The listed URLs robots.txt refused (`outcome` `robotsDisallowed`), which `fetched` counts in. Left out by an
-     * engine from before it: not known then, never 0. (The engine's name for it is being settled: it's read in
-     * screens/sitemaps/sitemapLinks.ts only.)
+     * The listed URLs robots.txt refused (`outcome` `robotsDisallowed`), which `fetched` counts in (the E3c
+     * review). Left out by a sidecar from before it: not known then, never 0.
      */
     robotsDisallowed?: number;
-    /** The listed URLs that redirect, answer with an error or don't answer. Left out by an engine from before it. */
+    /**
+     * The listed URLs that answered with a redirect or an error, or didn't answer (`outcome` `redirect`,
+     * `clientError`, `serverError`, `timeout` or `networkError`). Left out by a sidecar from before it.
+     */
     redirectingOrBroken?: number;
   };
 }

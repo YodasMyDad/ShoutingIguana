@@ -810,9 +810,9 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   refused (`fetched` is true and `outcome` is not `robotsDisallowed`): a URL that was requested and didn't
   answer is crawled, and its Outcome says what happened. Blocked by robots.txt is `outcome` `robotsDisallowed`.
   Not crawled is what's listed and not `fetched`.
-- **The list reads two counts the engine is adding to `GET /sitemaps`**: the listed URLs robots.txt refused, and
-  those that redirect or are broken (`urls.robotsDisallowed`, `urls.redirectingOrBroken`: working names, read in
-  `sitemapLinks.ts` only, typed in `api/grids.ts`, sent by the mock). From an engine without them the list shows
+- **The list reads the two counts the E3c review added to `GET /sitemaps`**: the listed URLs robots.txt refused,
+  and those that redirect or are broken (`urls.robotsDisallowed`, `urls.redirectingOrBroken`, read in
+  `sitemapLinks.ts` only, typed in `api/grids.ts`, sent by the mock). From a sidecar without them the list shows
   a dash for Crawled and for Blocked by robots.txt, with a tooltip that says why, never `fetched` under the name
   "Crawled"; and one sitemap's page counts the two itself, each by a read of its grid under that filter for the
   count alone (`sitemapCountQuery`), refreshed with the crawl as the grid is. With the counts in the list, the
@@ -927,14 +927,15 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
 
 - `POST /robots` takes only `offset` and `limit`: no search, no filter to the origins that blocked something, and
   no count of them. The order puts them first after the site's own, and the screen says so.
-- `GET /sitemaps` doesn't yet count, for each sitemap, the URLs robots.txt refused or those that redirect or are
-  broken (it's being added): until it does the list's Crawled and Blocked by robots.txt are dashes, one sitemap's
-  page counts the two itself, and Redirecting or broken carries no number.
+- A sidecar from before the E3c review doesn't count, for each sitemap, the URLs robots.txt refused or those that
+  redirect or are broken: under one, the list's Crawled and Blocked by robots.txt are dashes, one sitemap's page
+  counts the two itself, and Redirecting or broken carries no number. (This branch's own sidecar is one, until
+  `ui/step-3` is merged in.)
 - It doesn't say how many sitemaps an index's file lists, only how many of them the crawl has: "the crawl has 1 of
   its sitemaps" can't say of how many.
-- An origin with no status, no file kept and URLs stored as refused without an error reads `unanswered` (an old
-  crawl's, from before no answer stopped meaning a refusal): the UI says the URLs were refused earlier; the engine
-  could call it `unreachable`.
+- An origin can read `unanswered` and still have blocked URLs (a crawl continued after a run that read a file
+  which refused them, or a file from the first engine, when no answer meant a refusal): the contract says so now,
+  and the UI says the URLs were refused earlier.
 - `/robots/blocked` can't be asked for one URL, and `/urls/inspect` doesn't carry the line: arriving from the
   inspector, the file can't show that URL's line until the URL is found in the list.
 

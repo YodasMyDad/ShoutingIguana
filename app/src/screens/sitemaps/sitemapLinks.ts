@@ -43,12 +43,12 @@ export const COUNT_WORDS: Record<SitemapCount, string> = {
   nonIndexable: 'Non-indexable',
 };
 
-// --------------------------------------------------------------------- The two counts the list is being given
+// ------------------------------------------------------------------------- The two counts the E3c review added
 //
-// `GET /sitemaps` is gaining, for each sitemap, the listed URLs robots.txt refused and those that redirect or are
-// broken. They're read here and nowhere else (the type is in api/grids.ts, the mock's in api/mock/sitemapsRobots.ts),
-// so the engine's names for them change in one place. An engine from before them leaves them out: that's "not
-// known", never 0.
+// `GET /sitemaps` counts, for each sitemap, the listed URLs robots.txt refused (`urls.robotsDisallowed`) and those
+// that redirect or are broken (`urls.redirectingOrBroken`), each landing on itself under the filter of the same
+// name below (docs/v2-sidecar-api.md, Sitemaps). They're read here and nowhere else. A sidecar from before the
+// review sends neither: that's "not known", never 0.
 
 /** The listed URLs robots.txt refused, or null from an engine that doesn't count them for the list. */
 function refusedOf(sitemap: Pick<Sitemap, 'urls'>): number | null {
