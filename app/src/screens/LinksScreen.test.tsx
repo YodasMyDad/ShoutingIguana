@@ -367,6 +367,52 @@ describe('a link’s two ends', () => {
     await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 4 }));
   });
 
+  it('keeps the end the inspector is on in the route: the source by name, the target by default', async () => {
+    sidecar({}, inspectorRoutes({ urls: () => testUrlDetail() }));
+    const { router } = await open(LINKS);
+    await counted('13 links');
+    const table = await grid();
+    await within(table).findByText('About us');
+    act(() => table.focus());
+    fireEvent.keyDown(table, { key: 'ArrowDown' });
+    fireEvent.keyDown(table, { key: 'Enter' });
+    await waitFor(() => expect(router.state.location.search).toEqual({ inspect: 1, end: 'from' }));
+    fireEvent.keyDown(table, { key: 'ArrowRight' });
+    fireEvent.keyDown(table, { key: 'Enter' });
+    await waitFor(() => expect(router.state.location.search).toEqual({ inspect: 2 }));
+  });
+
+  it('goes on following the sources after a reload, back, forward or a link to the view', async () => {
+    sidecar({}, inspectorRoutes({ urls: () => testUrlDetail() }));
+    // The view as its address gives it, on a screen mounted afresh: the inspector on the home page, as the page the
+    // first links are on.
+    const { router } = await open(`${LINKS}?inspect=1&end=from`);
+    await counted('13 links');
+    const table = await grid();
+    await within(table).findByText('About us');
+    act(() => table.focus());
+    // Seven rows down is the first link on another page: /about's link home. Its source is /about, its target the
+    // home page the inspector is already on.
+    for (let row = 0; row < 7; row++) fireEvent.keyDown(table, { key: 'ArrowDown' });
+    await waitFor(() => expect(router.state.location.search).toEqual({ inspect: 2, end: 'from' }));
+    // And a row back up, the home page again, as the page that row's link is on.
+    fireEvent.keyDown(table, { key: 'ArrowUp' });
+    await waitFor(() => expect(router.state.location.search).toEqual({ inspect: 1, end: 'from' }));
+  });
+
+  it('follows the targets from an address that names no end', async () => {
+    sidecar({}, inspectorRoutes({ urls: () => testUrlDetail() }));
+    const { router } = await open(`${LINKS}?inspect=1`);
+    await counted('13 links');
+    const table = await grid();
+    await within(table).findByText('About us');
+    act(() => table.focus());
+    fireEvent.keyDown(table, { key: 'ArrowDown' });
+    await waitFor(() => expect(router.state.location.search).toEqual({ inspect: 2 }));
+    fireEvent.keyDown(table, { key: 'ArrowDown' });
+    await waitFor(() => expect(router.state.location.search).toEqual({ inspect: 3 }));
+  });
+
   it('opens either end from its URL, and the target from a double-click anywhere else on the row', async () => {
     sidecar({}, inspectorRoutes({ urls: () => testUrlDetail() }));
     const { router, user } = await open(LINKS);

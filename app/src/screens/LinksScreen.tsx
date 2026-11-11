@@ -159,13 +159,12 @@ export function LinksScreen() {
 
   const inspector = useInspector();
   const inspecting = search.inspect !== undefined;
-  /** Which end of the row the inspector is on, so it follows the cursor down the same end. */
-  const [inspectedEnd, setInspectedEnd] = useState<'from' | 'to'>('to');
+  // Which end of the row the inspector is on, so it follows the cursor down the same end. In the route with the URL
+  // it's on (the page a link is on is `end=from`; its target needs no word), so a reload, back, forward and a link to
+  // the view keep following the end they were on.
+  const inspectedEnd: 'from' | 'to' = search.end ?? 'to';
   const openEnd = useCallback(
-    (urlId: number, end: 'from' | 'to') => {
-      setInspectedEnd(end);
-      inspector.open(urlId);
-    },
+    (urlId: number, end: 'from' | 'to') => inspector.open(urlId, { end: end === 'from' ? 'from' : undefined }),
     [inspector],
   );
   const openRow = (row: LinkRow | undefined, end: 'from' | 'to') => {

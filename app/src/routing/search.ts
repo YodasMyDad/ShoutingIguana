@@ -227,18 +227,30 @@ function linkColumnName(value: unknown): string | undefined {
 }
 
 /**
+ * The Links view's search: the grid's, and which end of its rows the inspector is on. A link has two URLs, so the
+ * inspected URL alone doesn't say which the inspector follows as the cursor moves: the page the link is on (`from`),
+ * or its target (left out, the default). In the route, so a reload, back, forward and a link all keep it.
+ */
+export interface LinksSearch extends GridSearch {
+  end?: 'from' | undefined;
+}
+
+/**
  * The links grid's search (docs/v2-sidecar-api.md, Links): the URL grid's, over the links' columns, either end's
  * included (`to.statusClass`), and sorted by one key, as that grid sorts. A filter by a check's group is the URL
  * grid's only, so it's dropped here as anywhere it isn't `check`.
  */
-export function validateLinksSearch(search: Record<string, unknown>): GridSearch {
+export function validateLinksSearch(search: Record<string, unknown>): LinksSearch {
+  const inspect = positiveInteger(search.inspect);
   return strictSearch(search, {
     view: text(search.view)?.match(/^[a-z0-9-]{1,64}$/)?.[0],
     filter: parseFilters(search.filter, linkColumnName),
     sort: parseSort(search.sort, linkColumnName)?.slice(0, 1),
     cols: list<string>(search.cols, linkColumnName)?.filter((name, index, all) => all.indexOf(name) === index),
     q: text(search.q),
-    inspect: positiveInteger(search.inspect),
+    inspect,
+    // Only with a URL inspected, and only the end that isn't the default: a target needs no word in the address.
+    end: inspect !== undefined && search.end === 'from' ? 'from' : undefined,
   });
 }
 

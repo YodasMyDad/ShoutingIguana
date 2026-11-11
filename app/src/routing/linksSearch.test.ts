@@ -66,6 +66,17 @@ describe('the Links route’s search', () => {
     ).toBeUndefined();
   });
 
+  it('keeps which end of its rows the inspector is on, with the URL it’s on', () => {
+    expect(validateLinksSearch({ inspect: 7, end: 'from' })).toMatchObject({ inspect: 7, end: 'from' });
+    // The target is the default: it has no word in the address.
+    expect(asRouted({ inspect: 7, end: 'to' }, validateLinksSearch)).toEqual({ inspect: 7 });
+    expect(validateLinksSearch({ inspect: 7 }).end).toBeUndefined();
+    // Nothing inspected, nothing to be an end of; and nothing raw gets through.
+    expect(asRouted({ end: 'from' }, validateLinksSearch)).toEqual({});
+    expect(asRouted({ inspect: 'x', end: 'from' }, validateLinksSearch)).toEqual({});
+    expect(asRouted({ inspect: 7, end: ['from'] }, validateLinksSearch)).toEqual({ inspect: 7 });
+  });
+
   it('lets nothing raw through', () => {
     const raw = { filter: 'kind', cols: [{ a: 1 }], inspect: 'x', other: '1' };
     expect(asRouted(raw, validateLinksSearch)).toEqual({});
