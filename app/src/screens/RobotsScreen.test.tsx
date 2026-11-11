@@ -176,6 +176,13 @@ describe('robots.txt: the origins', () => {
     await open(ROBOTS);
     expect(await screen.findByText(/told to ignore robots\.txt, so nothing was blocked/)).toBeVisible();
     expect(screen.getByText('The crawl asked 1 origin for robots.txt, as ShoutingIguana.')).toBeVisible();
+    // Its row doesn't say the crawl obeyed the file it read.
+    const state = (await waitFor(() => rowOf(SITE))).querySelector('[aria-colindex="2"]');
+    expect(state).toHaveTextContent('Read: rules ignored');
+    expect(within(rowOf(SITE)).getByText('Read: rules ignored')).toHaveAttribute(
+      'title',
+      'The crawl read this file, and was told to ignore its rules.',
+    );
   });
 
   it('says so when the crawl asked no origin', async () => {
@@ -456,6 +463,77 @@ describe('robots.txt: an origin without a file to show', () => {
     sidecar({ respected: false });
     await open(FILE);
     expect(await screen.findByText(/told to ignore robots\.txt, so nothing was blocked/)).toBeVisible();
+  });
+
+  it('never says a crawl told to ignore robots.txt obeyed the file: not above it, in it, or of its empty list', async () => {
+    sidecar({ respected: false, files: { [SITE]: { ...TEST_FILE, blocked: 0 } }, blocked: {} });
+    await open(FILE);
+    expect(await screen.findByText(/told to ignore robots\.txt, so nothing was blocked/)).toBeVisible();
+    await screen.findByTestId('source-viewer');
+    const page = screen.getByRole('main');
+    expect(page).toHaveTextContent('The crawl read this file, and was told to ignore its rules.');
+    expect(page).toHaveTextContent(
+      'The crawl was told to ignore robots.txt. As ShoutingIguana, it would have obeyed lines 5 to 9.',
+    );
+    expect(await screen.findByText('This crawl was told to ignore robots.txt, so nothing was refused.')).toBeVisible();
+    expect(page).not.toHaveTextContent(/obeyed its rules/);
+    expect(page).not.toHaveTextContent(/the crawl obeyed/);
+    expect(page).not.toHaveTextContent(/rules it obeyed/);
+  });
+
+  it('holds what the file meant to the crawl until it’s known whether the crawl obeyed robots.txt at all', async () => {
+    // The file answers at once; whether the crawl obeyed robots.txt (the origins' read) takes longer.
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const routes = sitemapsRobotsRoutes({ respected: false });
+    setTransport(
+      fakeSidecar([
+        [
+          'POST',
+          /^\/api\/crawls\/[0-9a-f]{16}\/robots$/,
+          async (request) => {
+            await held;
+            const route = routes.find(([method, path]) => method === 'POST' && path.test(request.path));
+            return route ? route[2](request, [] as unknown as RegExpMatchArray) : json({});
+          },
+        ],
+        ...routes,
+      ]),
+    );
+    await open(FILE);
+    await screen.findByText(`${SITE}/admin/users`);
+    // Nothing said yet of what the file meant: neither "obeyed" nor "ignored".
+    expect(screen.getByRole('main')).not.toHaveTextContent(/obeyed|ignore/);
+    expect(screen.queryByTestId('source-viewer')).toBeNull();
+    await act(async () => {
+      release();
+      await held;
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('main')).toHaveTextContent('The crawl read this file, and was told to ignore its rules.'),
+    );
+    expect(await screen.findByTestId('source-viewer')).toBeVisible();
+    expect(screen.getByRole('main')).not.toHaveTextContent(/obeyed its rules/);
+  });
+
+  it('says no more than holds either way when whether the crawl obeyed robots.txt can’t be read', async () => {
+    const routes = sitemapsRobotsRoutes();
+    setTransport(
+      fakeSidecar([
+        [
+          'POST',
+          /^\/api\/crawls\/[0-9a-f]{16}\/robots$/,
+          () => problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 }),
+        ],
+        ...routes,
+      ]),
+    );
+    await open(FILE, createQueryClientWithoutBackoff());
+    await screen.findByTestId('source-viewer');
+    const page = screen.getByRole('main');
+    await waitFor(() => expect(page).toHaveTextContent('The crawl read this file. Read'));
+    expect(page).toHaveTextContent('The rules for ShoutingIguana are lines 5 to 9.');
+    expect(page).not.toHaveTextContent(/obeyed|ignore/);
   });
 });
 

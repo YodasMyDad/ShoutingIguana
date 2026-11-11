@@ -49,7 +49,7 @@ import {
   obeyedWords,
   type Narrowing,
 } from './robotsFile';
-import { IGNORED, UNMATCHED_WORDS, blockedWhy, stateWords } from './robotsWords';
+import { IGNORED, UNMATCHED_WORDS, blockedWhy, nothingBlockedWords, stateWords, type Obeyed } from './robotsWords';
 
 const ROUTE = '/crawls/$crawl/robots/{-$origin}';
 
@@ -80,6 +80,16 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
   useFocusRescue(container, () => title.current);
 
   const file = useQuery(robotsFileQuery(crawlId, origin));
+  // Whether the crawl obeyed robots.txt at all is the list of origins' to say (its first page), which this reads from
+  // the cache or asks for. Undefined while it's read: what the file meant to the crawl isn't said until it's known,
+  // so a crawl told to ignore robots.txt is never told it obeyed. Null when it can't be read: the words then say no
+  // more than holds either way.
+  const respectedRead = useQuery({
+    queryKey: robotsKeys.respected(crawlId),
+    queryFn: async ({ signal }) => (await api.robotsOrigins(crawlId, { offset: 0, limit: 1 }, signal)).respected,
+    staleTime: Infinity,
+  });
+  const obeyed: Obeyed | undefined = respectedRead.data ?? (respectedRead.isError ? null : undefined);
   // By the two params alone: the inspector moving (the route's `inspect`) narrows nothing anew.
   const { line, reason } = search;
   const narrowing = useMemo(() => narrowingOf({ line, reason }), [line, reason]);
@@ -192,7 +202,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
     );
   }
 
-  const state = data ? stateWords(data, data.userAgent) : null;
+  const state = data && obeyed !== undefined ? stateWords(data, data.userAgent, obeyed) : null;
   return (
     <div ref={container} className="@container h-full">
       <div className="flex h-full min-h-0 flex-col @max-split:h-auto">
@@ -231,16 +241,23 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
           }
         />
         {/* What the answer meant to the crawl, in a sentence; the line's room is kept while it's read. */}
-        <p className="min-h-(--leading-13) px-6 pb-2 text-13 text-text-secondary" aria-busy={file.isPending}>
+        <p
+          className="min-h-(--leading-13) px-6 pb-2 text-13 text-text-secondary"
+          aria-busy={file.isPending || obeyed === undefined}
+        >
           {state ? state.sentence : null}
-          {data?.fetchedAt ? (
+          {state && data?.fetchedAt ? (
             <>
               {' '}
               Read <RelativeTime iso={data.fetchedAt} />.
             </>
           ) : null}
         </p>
-        <IgnoredNote crawlId={crawlId} />
+        {obeyed === false ? (
+          <Banner inset role="none" className="mx-6 mb-3">
+            {IGNORED}
+          </Banner>
+        ) : null}
         <div className="grid min-h-0 flex-1 grid-cols-(--robots-columns) gap-4 px-6 pb-4 @max-split:flex-none @max-split:grid-cols-1">
           <Card
             as="section"
@@ -252,7 +269,9 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
             <FilePane
               file={file.data}
               error={file.error}
-              loading={file.isPending}
+              // The file's line says which rules the crawl obeyed: it waits until it's known whether it obeyed any.
+              loading={file.isPending || obeyed === undefined}
+              obeyed={obeyed ?? null}
               onRetry={() => void file.refetch()}
               text={text}
               chosenLine={markedLine(narrowing, cursor)}
@@ -271,6 +290,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
               file={file.data}
               narrowing={narrowing}
               crawl={crawl}
+              obeyed={obeyed ?? null}
               inspecting={search.inspect !== undefined}
               onNarrow={narrow}
               onCursor={setCursor}
@@ -284,28 +304,11 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
   );
 }
 
-/**
- * A crawl told to ignore robots.txt says so at the top: whether it did is the list of origins' to say (its first
- * page), which this reads from the cache or asks for.
- */
-function IgnoredNote({ crawlId }: { crawlId: string }) {
-  const respected = useQuery({
-    queryKey: robotsKeys.respected(crawlId),
-    queryFn: async ({ signal }) => (await api.robotsOrigins(crawlId, { offset: 0, limit: 1 }, signal)).respected,
-    staleTime: Infinity,
-  }).data;
-  if (respected !== false) return null;
-  return (
-    <Banner inset role="none" className="mx-6 mb-3">
-      {IGNORED}
-    </Banner>
-  );
-}
-
 function FilePane({
   file,
   error,
   loading,
+  obeyed,
   onRetry,
   text,
   chosenLine,
@@ -314,6 +317,7 @@ function FilePane({
   file: RobotsFile | undefined;
   error: unknown;
   loading: boolean;
+  obeyed: Obeyed;
   onRetry: () => void;
   text: string;
   chosenLine: number | null;
@@ -364,7 +368,7 @@ function FilePane({
       meta={
         <>
           <span className="figures">{formatCountOf(file.lines.length, 'line')}</span>
-          {file.bytes === null ? '' : `, ${formatBytes(file.bytes)}`}. {obeyedWords(file.lines, file.userAgent)}
+          {file.bytes === null ? '' : `, ${formatBytes(file.bytes)}`}. {obeyedWords(file.lines, file.userAgent, obeyed)}
         </>
       }
     />
@@ -377,6 +381,7 @@ function BlockedUrls({
   file,
   narrowing,
   crawl,
+  obeyed,
   inspecting,
   onNarrow,
   onCursor,
@@ -388,6 +393,7 @@ function BlockedUrls({
   file: RobotsFile | undefined;
   narrowing: Narrowing;
   crawl: CrawlState;
+  obeyed: Obeyed;
   inspecting: boolean;
   onNarrow: (narrowing: Narrowing) => void;
   onCursor: (row: RobotsBlockedUrl | undefined) => void;
@@ -542,7 +548,7 @@ function BlockedUrls({
           emptyState={
             narrowing.by === 'none' ? (
               <EmptyState title="No URLs blocked" level="none" panel>
-                {file ? nothingBlockedWords(file) : 'This origin’s robots.txt kept the crawl from no URL.'}
+                {file ? nothingBlockedWords(file, obeyed) : 'This origin’s robots.txt kept the crawl from no URL.'}
               </EmptyState>
             ) : (
               <FilteredEmptyState
@@ -564,22 +570,4 @@ function BlockedUrls({
       {file?.fetchedAt ? <span className="sr-only">Read {formatExactTime(file.fetchedAt)}</span> : null}
     </div>
   );
-}
-
-/** Why an origin's list of blocked URLs is empty, by what its robots.txt meant to the crawl. */
-function nothingBlockedWords(file: RobotsFile): string {
-  switch (file.state) {
-    case 'read':
-      return file.lines.length === 0
-        ? 'The file is empty, so it refuses nothing.'
-        : 'None of the URLs the crawl came to on this origin is refused by the rules it obeyed.';
-    case 'missing':
-      return 'There’s no robots.txt here, so nothing is refused.';
-    case 'unanswered':
-      return 'robots.txt didn’t answer, and the crawl went ahead: nothing was refused.';
-    case 'unreachable':
-      return 'The crawl came to no URL on this origin while its robots.txt couldn’t be read.';
-    default:
-      return 'The crawl stored no URL on this origin as refused.';
-  }
 }

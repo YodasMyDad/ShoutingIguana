@@ -5,7 +5,7 @@ import type { RobotsBlockedQuery, RobotsBlockedUrl, RobotsFile, RobotsLine } fro
 import type { SourceLineMark } from '../../inspector/sourceLines';
 import { formatCount, formatCountOf } from '../../lib/format';
 import type { RobotsReasonSearch, RobotsSearch } from '../../routing/search';
-import { lineProblemWords } from './robotsWords';
+import { lineProblemWords, type Obeyed } from './robotsWords';
 
 /** The file's text as the crawl kept it: its lines, joined as they were split. */
 export function fileText(lines: readonly Pick<RobotsLine, 'text'>[]): string {
@@ -70,20 +70,28 @@ export function obeyedLines(lines: readonly Pick<RobotsLine, 'number' | 'kind' |
   return runs;
 }
 
-/** Which of the file's lines the crawl obeyed, in a sentence: the marks in the file say the same by their rule. */
+/**
+ * Which of the file's lines the crawl obeyed, in a sentence: the marks in the file say the same by their rule. A crawl
+ * told to ignore robots.txt (`obeyed` false) obeyed none: the lines marked are the ones it would have. When that isn't
+ * known (null), the sentence says whose group they are, and not what the crawl did with them.
+ */
 export function obeyedWords(
   lines: readonly Pick<RobotsLine, 'number' | 'kind' | 'applies'>[],
   userAgent: string,
+  obeyed: Obeyed = true,
 ): string {
   const runs = obeyedLines(lines);
   if (runs.length === 0) {
-    return lines.some((line) => line.kind === 'userAgent')
-      ? `No group here is for ${userAgent} or for every crawler (*), so none of its rules applied.`
-      : 'It has no group of rules, so nothing is refused.';
+    if (!lines.some((line) => line.kind === 'userAgent')) return 'It has no group of rules, so nothing is refused.';
+    const none = `No group here is for ${userAgent} or for every crawler (*)`;
+    return obeyed === true ? `${none}, so none of its rules applied.` : `${none}, so none of its rules applies.`;
   }
   const words = runs.map(run);
   const listed = words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words.at(-1) ?? ''}` : (words[0] ?? '');
-  return `As ${userAgent}, the crawl obeyed ${listed}.`;
+  if (obeyed === false) {
+    return `The crawl was told to ignore robots.txt. As ${userAgent}, it would have obeyed ${listed}.`;
+  }
+  return obeyed === null ? `The rules for ${userAgent} are ${listed}.` : `As ${userAgent}, the crawl obeyed ${listed}.`;
 }
 
 /** What the blocked URLs are narrowed to: one line's, one reason's, or all of the origin's. */

@@ -126,6 +126,21 @@ describe('which lines the crawl obeyed', () => {
       'It has no group of rules, so nothing is refused.',
     );
   });
+
+  it('never says a crawl told to ignore robots.txt obeyed the lines: they’re the ones it would have', () => {
+    expect(obeyedWords(TEST_FILE_LINES, 'ShoutingIguana', false)).toBe(
+      'The crawl was told to ignore robots.txt. As ShoutingIguana, it would have obeyed lines 5 to 9.',
+    );
+    const others = [
+      { number: 1, kind: 'userAgent', applies: false },
+      { number: 2, kind: 'disallow', applies: false },
+    ] as const;
+    expect(obeyedWords(others, 'ShoutingIguana', false)).toBe(
+      'No group here is for ShoutingIguana or for every crawler (*), so none of its rules applies.',
+    );
+    // Not known whether it obeyed any: whose rules they are, and nothing of what the crawl did.
+    expect(obeyedWords(TEST_FILE_LINES, 'ShoutingIguana', null)).toBe('The rules for ShoutingIguana are lines 5 to 9.');
+  });
 });
 
 describe('a URL and its line, both ways', () => {

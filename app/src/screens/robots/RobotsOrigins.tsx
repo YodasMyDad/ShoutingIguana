@@ -1,6 +1,7 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Bot } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import type { RobotsOrigin } from '../../api/grids';
 import { originsAsGridPage, robotsKeys, type OriginsGridPage } from '../../api/queries';
@@ -59,6 +60,14 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
   // The first page says what's true of the whole list: how the crawl treated robots.txt, and what it blocked in all.
   const first = rows.firstPage as OriginsGridPage | undefined;
   const userAgent = first?.userAgent ?? '';
+  const respected = first?.respected ?? true;
+  // An origin's file says the same of the crawl (whether it obeyed robots.txt at all): it's told what this read
+  // found, so it has no read of its own to wait for, and nothing moves when it opens.
+  const queryClient = useQueryClient();
+  const known = first?.respected;
+  useEffect(() => {
+    if (known !== undefined) queryClient.setQueryData(robotsKeys.respected(crawlId), known);
+  }, [queryClient, crawlId, known]);
 
   // Coming back from an origin's file, the list starts on the row it was opened from.
   const place = `origins:${crawlId}`;
@@ -99,10 +108,10 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
         header: 'robots.txt',
         width: STATE_WIDTH,
         cell: (row) => {
-          const words = stateWords(row, userAgent);
+          const words = stateWords(row, userAgent, respected);
           return <span title={words.sentence}>{words.short}</span>;
         },
-        text: (row) => stateWords(row, userAgent).short,
+        text: (row) => stateWords(row, userAgent, respected).short,
       },
       {
         id: 'blocked',
@@ -143,7 +152,7 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
         text: (row) => (row.bytes === null ? '' : String(row.bytes)),
       },
     ],
-    [crawlId, originWidth, userAgent],
+    [crawlId, originWidth, userAgent, respected],
   );
 
   let body;

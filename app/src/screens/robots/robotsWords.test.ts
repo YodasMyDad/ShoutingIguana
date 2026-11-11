@@ -9,6 +9,7 @@ import {
   answerSentence,
   blockedWhy,
   lineProblemWords,
+  nothingBlockedWords,
   stateWords,
 } from './robotsWords';
 
@@ -57,6 +58,59 @@ describe('what an origin’s robots.txt meant to the crawl', () => {
     expect(silent.sentence).toBe(
       'robots.txt didn’t answer. The crawl gave no verdict and went ahead: this origin’s URLs show their own errors.',
     );
+  });
+
+  it('never says a crawl told to ignore robots.txt obeyed a file or refused a URL', () => {
+    const sentences = TEST_ORIGINS.map((origin) => stateWords(origin, UA, false));
+    expect(sentences.map((words) => words.sentence)).toEqual([
+      'The crawl read this file, and was told to ignore its rules.',
+      'robots.txt couldn’t be read (HTTP 503). The crawl was told to ignore robots.txt, so it refused nothing.',
+      'There’s no robots.txt here (HTTP 404), so nothing on this origin is refused.',
+      'robots.txt didn’t answer (Timed out). The crawl was told to ignore robots.txt, so it went ahead.',
+    ]);
+    expect(sentences.map((words) => words.short)).toEqual([
+      'Read: rules ignored',
+      'Couldn’t be read: ignored',
+      'Missing: nothing refused',
+      'No answer: ignored',
+    ]);
+    for (const words of sentences) {
+      expect(words.sentence).not.toMatch(/obeyed|refused this origin/);
+      expect(words.tone).not.toBe('refused');
+    }
+  });
+
+  it('says no more than holds either way when it isn’t known whether the crawl obeyed robots.txt', () => {
+    const [read, unreachable] = TEST_ORIGINS.map((origin) => stateWords(origin, UA, null));
+    expect(read).toMatchObject({ short: 'Read', sentence: 'The crawl read this file.' });
+    expect(unreachable).toMatchObject({
+      short: 'Couldn’t be read',
+      sentence: 'robots.txt couldn’t be read (HTTP 503).',
+    });
+  });
+
+  it('says why nothing is blocked by what the file meant, and of an ignored robots.txt that it was ignored', () => {
+    const file = (state: RobotsState, lines = 0) => ({
+      state,
+      lines: Array.from({ length: lines }, (_, index) => ({
+        number: index + 1,
+        text: 'Disallow: /',
+        kind: 'disallow' as const,
+        applies: true,
+        blocked: 0,
+        problem: null,
+      })),
+    });
+    expect(nothingBlockedWords(file('read', 2))).toBe(
+      'None of the URLs the crawl came to on this origin is refused by the rules it obeyed.',
+    );
+    expect(nothingBlockedWords(file('unreachable'))).toMatch(/while its robots\.txt couldn’t be read/);
+    for (const state of ['read', 'missing', 'unreachable', 'unanswered'] as const) {
+      expect(nothingBlockedWords(file(state, 2), false)).toBe(
+        'This crawl was told to ignore robots.txt, so nothing was refused.',
+      );
+      expect(nothingBlockedWords(file(state, 2), null)).not.toMatch(/obeyed/);
+    }
   });
 
   it('says so when the crawl kept no robots.txt for an origin (a state it doesn’t know reads the same)', () => {

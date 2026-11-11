@@ -5,6 +5,7 @@
 import type {
   GridFilter,
   RobotsBlockedUrl,
+  RobotsFile,
   RobotsLine,
   RobotsLineKind,
   RobotsLineProblem,
@@ -33,25 +34,43 @@ function answerOf({ statusCode, error }: Pick<RobotsOrigin, 'statusCode' | 'erro
 }
 
 /**
- * What an origin's robots.txt meant to the crawl. Four states, four sentences: read (its rules applied), missing
- * (nothing is refused), unreachable (the crawl refused the origin's URLs) and unanswered (the crawl went ahead).
+ * Whether the crawl obeyed robots.txt: true unless it was told to ignore it (`respected` of the list of origins), and
+ * null when that couldn't be read, where the words say no more than holds either way.
  */
-export function stateWords(origin: Answer, userAgent: string): StateWords {
+export type Obeyed = boolean | null;
+
+/**
+ * What an origin's robots.txt meant to the crawl. Four states, four sentences: read (its rules applied), missing
+ * (nothing is refused), unreachable (the crawl refused the origin's URLs) and unanswered (the crawl went ahead). A
+ * crawl told to ignore robots.txt obeyed no rule and refused nothing, whatever the file answered: its words say so.
+ */
+export function stateWords(origin: Answer, userAgent: string, obeyed: Obeyed = true): StateWords {
   const answer = answerOf(origin);
   const how = answer ? ` (${answer})` : '';
   switch (origin.state) {
     case 'read':
-      return origin.bytes === 0
-        ? {
-            tone: 'nothing',
-            short: 'Read: empty',
-            sentence: 'The crawl read this file, and it’s empty, so nothing on this origin is refused.',
-          }
-        : {
-            tone: 'read',
-            short: 'Read',
-            sentence: `The crawl read this file and obeyed its rules for ${userAgent}.`,
-          };
+      if (origin.bytes === 0) {
+        return {
+          tone: 'nothing',
+          short: 'Read: empty',
+          sentence: 'The crawl read this file, and it’s empty, so nothing on this origin is refused.',
+        };
+      }
+      if (obeyed === false) {
+        return {
+          tone: 'nothing',
+          short: 'Read: rules ignored',
+          sentence: 'The crawl read this file, and was told to ignore its rules.',
+        };
+      }
+      return {
+        tone: 'read',
+        short: 'Read',
+        sentence:
+          obeyed === null
+            ? 'The crawl read this file.'
+            : `The crawl read this file and obeyed its rules for ${userAgent}.`,
+      };
     case 'missing':
       return {
         tone: 'nothing',
@@ -59,17 +78,32 @@ export function stateWords(origin: Answer, userAgent: string): StateWords {
         sentence: `There’s no robots.txt here${how}, so nothing on this origin is refused.`,
       };
     case 'unreachable':
-      return {
-        tone: 'refused',
-        short: 'Couldn’t be read: URLs refused',
-        sentence: `robots.txt couldn’t be read${how}, so the crawl refused this origin’s URLs until it could.`,
-      };
+      if (obeyed === false) {
+        return {
+          tone: 'nothing',
+          short: 'Couldn’t be read: ignored',
+          sentence: `robots.txt couldn’t be read${how}. The crawl was told to ignore robots.txt, so it refused nothing.`,
+        };
+      }
+      return obeyed === null
+        ? { tone: 'unknown', short: 'Couldn’t be read', sentence: `robots.txt couldn’t be read${how}.` }
+        : {
+            tone: 'refused',
+            short: 'Couldn’t be read: URLs refused',
+            sentence: `robots.txt couldn’t be read${how}, so the crawl refused this origin’s URLs until it could.`,
+          };
     case 'unanswered':
-      return {
-        tone: 'unknown',
-        short: 'No answer: crawled anyway',
-        sentence: `robots.txt didn’t answer${how}. The crawl gave no verdict and went ahead: this origin’s URLs show their own errors.`,
-      };
+      return obeyed === false
+        ? {
+            tone: 'unknown',
+            short: 'No answer: ignored',
+            sentence: `robots.txt didn’t answer${how}. The crawl was told to ignore robots.txt, so it went ahead.`,
+          }
+        : {
+            tone: 'unknown',
+            short: 'No answer: crawled anyway',
+            sentence: `robots.txt didn’t answer${how}. The crawl gave no verdict and went ahead: this origin’s URLs show their own errors.`,
+          };
     default:
       return {
         tone: 'unknown',
@@ -102,6 +136,28 @@ export function answerSentence(page: Pick<RobotsOriginPage, 'total' | 'blocked' 
 
 /** The URL grid's filter for the URLs robots.txt kept the crawl from: the engine's own word for them. */
 export const REFUSED_BY_ROBOTS: readonly GridFilter[] = [{ column: 'outcome', op: 'in', values: ['robotsDisallowed'] }];
+
+/** Why an origin's list of blocked URLs is empty, by what its robots.txt meant to the crawl. */
+export function nothingBlockedWords(file: Pick<RobotsFile, 'state' | 'lines'>, obeyed: Obeyed = true): string {
+  // Told to ignore robots.txt, the crawl refused nothing, whatever the file says: no rule was "obeyed".
+  if (obeyed === false) return 'This crawl was told to ignore robots.txt, so nothing was refused.';
+  const none = 'The crawl stored no URL on this origin as refused.';
+  switch (file.state) {
+    case 'read':
+      if (file.lines.length === 0) return 'The file is empty, so it refuses nothing.';
+      return obeyed === null
+        ? none
+        : 'None of the URLs the crawl came to on this origin is refused by the rules it obeyed.';
+    case 'missing':
+      return 'There’s no robots.txt here, so nothing is refused.';
+    case 'unanswered':
+      return 'robots.txt didn’t answer, and the crawl went ahead: nothing was refused.';
+    case 'unreachable':
+      return obeyed === null ? none : 'The crawl came to no URL on this origin while its robots.txt couldn’t be read.';
+    default:
+      return none;
+  }
+}
 
 /** A crawl told to ignore robots.txt: said at the top, so an empty list of blocked URLs isn't read as "allowed". */
 export const IGNORED =
