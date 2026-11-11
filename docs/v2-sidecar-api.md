@@ -241,17 +241,18 @@ Built in stages:
   | --- | --- |
   | `plainTitle` | The problem as its owner would say it: sentence case, no count, 60 characters at most |
   | `plainWhat` | What's wrong and why it matters, as 2 to 4 sentences, **a sentence a string**. The first stands alone, in 120 characters at most: lists show only it |
-  | `plainFix` | How to fix it, as 1 to 4 steps, **a step a string**: each one sentence that starts with a verb |
+  | `plainFix` | How to fix it, as 1 to 4 steps, **a step a string**: each one sentence, which starts with a verb or with "If …," |
   | `fixer` | Who usually makes the fix: `you`, `developer` or `either` |
   | `plainPassed` | The good news when the check finds nothing, as a fact: "Every page has a title" |
   | `plainOneFix` | Optional. What a fault in the site's template usually is, in one sentence |
   | `plainLooksFor` | Optional. What the check looks for, as a noun phrase of 60 characters at most ("A missing sitemap"): for a list of checks that couldn't run, where a title that is a sentence would read as a finding |
 
-  - **All or none.** A check has every one of `plainTitle`, `plainWhat`, `plainFix`, `fixer` and `plainPassed`, or
-    none of them. **A check with no plain words yet says null in every plain field**, the two optional ones included:
-    never an empty string, never the technical text. Today ten checks have theirs (the ten the design writes out);
-    the rest arrive without a change to this contract. The two optional fields may be null for a check that has the
-    rest.
+  - **Every check has them.** All 87 checks have `plainTitle`, `plainWhat`, `plainFix`, `fixer` and `plainPassed`.
+    `plainOneFix` is filled for 26 of them and `plainLooksFor` for 12, and each is null for the rest.
+  - **All or none, still.** A check has every one of the five, or none of them, and **a check with no plain words
+    says null in every plain field**, the two optional ones included: never an empty string, never the technical
+    text. No check of this catalog is without (a test holds that), and a UI should take null all the same: a check
+    added to the catalog before its words are written would say it.
   - **Limits are filled in.** A plain text names a threshold as a token (`{limit:titleMaxLength}`), and the API serves
     it filled, with the value and its unit as a sentence says them: "60 characters", "200 words", "200 KB", "1 MB",
     "1 second", "1.5 seconds". No served text holds a token. **`GET /api/checks` fills them from the thresholds an
@@ -259,6 +260,13 @@ Built in stages:
     a crawl's words say the limits it was judged by. A crawl never analysed, or whose stored settings can't be read,
     takes the current ones. `crawl` is one crawl's id: `crawl-not-found` when no crawl has it, `bad-request` when it
     is empty or given twice. Everything else in the answer is the same for every crawl.
+
+    Ten checks name a limit (`title-too-long`, `title-too-short`, `description-too-long`, `description-too-short`,
+    `low-word-count`, `image-alt-too-long`, `image-too-large`, `url-too-long`, `slow-response`, `large-page`). For a
+    crawl analysed with titles to 70 characters and 2.5 seconds to answer, `title-too-long`'s first sentence is
+    "These pages have a title of more than 70 characters." and `slow-response`'s "These pages took more than 2.5
+    seconds to arrive when the check asked for them."; without `crawl`, at the defaults, they say "60 characters" and
+    "1 second".
   - A category's `plainTitle` is filled for all 17. Like every plain word it is words, not results: none of them is
     stored with an analysis, and writing one makes no analysis out of date.
 
@@ -634,8 +642,8 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 {"analyzedAt":"…","engineVersion":"…","pagesAnalyzed":265,"durationMs":7012,"isPartial":true,"outOfDate":false,
  "outOfDateReasons":[],"notes":["…"],"counts":[{"checkId":"title-too-long","count":12}],
  "skipped":[{"checkId":"orphan-page","reason":{"code":"no-sitemap","text":"No sitemap could be read.",
-   "plainText":"Your site has no sitemap, the list of its pages for search engines, to compare with.",
-   "plainAction":"Add a sitemap, then check the site again."}}],
+   "plainText":"No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
+   "plainAction":"Add a sitemap, or fix the one that can't be read, then check the site again."}}],
  "crawledUrlCount":4521,"fixFirst":["internal-client-error","broken-internal-links","image-too-large","…"],
  "score":{"version":1,"value":85,"band":"good","lost":15,"beforeCeiling":85,"heldBySerious":false,"partial":false,
    "covers":{"pages":265,"urls":4521,"checksRun":83,"checksSkipped":4,"complete":true,"reason":null,"blockedByRobots":0},
@@ -649,8 +657,9 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 - **`skipped`** is every catalog check missing from the counts. Its `reason` (E2) has a stable `code` to key on, and
   a `text` to show beside the check ("No sitemap could be read."). A check skipped for several reasons gets the
   first; the notes give them all. **`plainText` and `plainAction`** (the score) are the reason in plain words, by its
-  code: why the check couldn't run, and what would let it, a sentence each. **Null, both, for a code that has none
-  yet** (today `no-sitemap` and `site-versions-unchecked` have theirs), never the engine's sentence in their place.
+  code: why the check couldn't run, and what would let it, a sentence each. Every code this engine gives (the 15
+  under **Skip reason**, below) has both. **Null, both, for a code it has no words for** (a later engine's, in a
+  file that engine analysed), never the engine's sentence in their place.
   A limit in them is filled from the settings this analysis ran with.
 - **`crawledUrlCount`** (the score) is the URLs crawled **as they stood when the analysis ran**: the library item's
   `crawledUrlCount`, as it was then. A check whose `subject` is `url` flagged a share of these, as a `page` check
@@ -2087,19 +2096,46 @@ a new field; nothing is taken away. Each has its own tests.
   never flagged on the site without it, the benchmark's included. The catalog has **87 checks**, so the checks'
   fingerprint has changed and every earlier analysis is out of date (`engineChanged`).
 - **Plain words.** A check's, a category's and a skip reason's, in files of their own beside the catalog
-  (`IssuePlainTexts`, by check id; `PlainWords`), so the rest can be written without touching the catalog or a rule.
-  In now, word for word from the design document: the ten checks it writes out, the 17 category titles, and the two
-  skip reasons it gives. Everything else says null. Tests hold every entry to the template's limits and to the words
-  the rules ban (a technical term only where the check's words first give it in quotation marks, never in a title),
-  and the test that demands words for all 87 checks and every skip reason is written and skipped, one line to turn on.
-  - **`plainLooksFor`** is in the structure for the words that are coming; none of the ten has one.
+  (`IssuePlainTexts`, by check id; `PlainWords`), so words change without touching the catalog or a rule. **All 87
+  checks, the 17 categories and the 15 skip reasons have theirs.**
+  - **One data file, and a generator.** The words are written in
+    `engine/tests/ShoutingIguana.Engine.Tests/Analysis/PlainWords/plain-words.json`, in the API's own shapes
+    (`plainTitle`, `plainWhat` and `plainFix` as lists, `fixer`, `plainPassed`, `plainOneFix`, `plainLooksFor`; a
+    category by its API id; a skip reason by its code, with `plainText` and `plainAction`), and `generate.mjs` beside
+    it writes the two C# files from it. A text change is an edit to the data file and
+    `node engine/tests/ShoutingIguana.Engine.Tests/Analysis/PlainWords/generate.mjs` from the repo root (`--check`
+    writes nothing and says whether the files are current). It refuses a check, category or reason the engine
+    doesn't have, one the data file leaves out, a field it doesn't know, and a brace that isn't a limit's. Nothing
+    needed mapping: the data file's `fixer` values and field shapes were the API's already.
+  - **Tests.** The compiled words are the data file's, field for field, so neither is changed without the other.
+    Every check, category and skip reason has its words (the test that was written and skipped is on). Every text
+    keeps to the template: a title of 60 characters with no number in it; 2 to 4 sentences of 30 words at most and
+    70 in all, the first of 120 characters once its limits are filled; 1 to 4 steps of 25 words, a sentence each;
+    good news of 60 characters; a noun phrase of 60. Sentences average 20 words or fewer. No text holds a word the
+    rules ban (a technical term only where the check's words first give it in quotation marks, never in a title).
+    The ten checks the design writes out are served as the document writes them, word for word, read from the
+    document itself, with their category, severity and fixer; the six Notices it names say when they can wait; its
+    examples of a category's title and a skip reason's words are the ones served.
+  - **All 87 passed the template's tests as they stood.** One test of the engine's own didn't, and was changed: it
+    held a category's title to three words, a shape the design never gave, and "Extras in search results" is four.
+    It allows four. One rule of the design has no test, as nothing mechanical can judge it: "each step starts with a
+    verb". 68 of the 263 steps start "If …,", as eleven steps of the design's own ten do.
+  - **`site-hidden-from-search`'s words** were written when the check counted canonicals too. Two sentences were
+    brought to the rule as it is, by taking words out and adding none: sentence 1 lost ", or to show another page
+    instead" ("More than half of your pages tell search engines to keep them out of search results."), and step 3
+    lost ", and to point each page's main address (its "canonical" link) at itself" ("Ask them to remove the
+    "noindex" setting."). The rest of the data file is its writer's, byte for byte.
+  - **`plainLooksFor`**: 12 checks have one, the ones whose title is a sentence about the site
+    (`robots-txt-unreachable`: "A rules file that search engines can't read").
   - **Limits follow the settings.** A text names a threshold as `{limit:name}`, the name an analysis setting's as its
     JSON has it; `PlainLimits.Fill` puts the value there with its unit. All 12 numeric thresholds have a name
     (`titleMinLength`, `titleMaxLength`, `descriptionMinLength`, `descriptionMaxLength`, `minWordCount`,
     `duplicateMinWordCount`, `nearDuplicateMaxBits`, `imageAltMaxLength`, `largeImageBytes`, `largePageBytes`,
     `slowResponseMs`, `maxUrlLength`), a test holds the names to the settings, and a name no setting has is an error
-    that a test looks for in every plain text the engine has. None of the ten texts holds a token yet: they say their
-    limits in words, as the design wrote them.
+    that a test looks for in every plain text the engine has. Ten checks name a limit, eleven times in all (ten of
+    the twelve names; no text names `duplicateMinWordCount` or `nearDuplicateMaxBits`), and no text types a number a
+    setting holds. A number that is a fixed rule stays a number: Google's 2 MB and 10 steps, the sitemap protocol's
+    50,000.
   - Plain words are no part of the checks' fingerprint, nor of what an analysis stores.
 - **A status code's name in details.** Where a detail said "HTTP 404" it says "404 Not Found": the standard reason
   phrase (RFC 9110), in every rule that writes a status (the response-code, redirect, robots.txt, sitemap and

@@ -203,11 +203,19 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   `Analysis/IssuePlainTexts.cs`, by check id (a title, what's wrong as sentences, how to fix it as steps, who fixes
   it, the good news when nothing is found, and optionally what a template fault usually is and what the check looks
   for), and `Analysis/PlainWords.cs` (a plain title for each category; a sentence and what would let the check run for
-  a skip reason, by its code). `IssueDefinition.Plain` reads a check's. Ten checks have theirs today, word for word
-  from [the Simple design](../docs/v2-ui-simple.md#ten-checks-written-out); the rest say null until they are written,
-  and the test that demands all 87 is there, skipped. To write one, add its entry: nothing else changes, and no
-  analysis goes out of date, as the words are no part of the fingerprint. Tests hold every entry to the design's
-  template and banned words.
+  a skip reason, by its code). `IssueDefinition.Plain` reads a check's. All 87 checks, the 17 categories and the 15
+  skip reasons have theirs. No analysis goes out of date when one changes, as the words are no part of the
+  fingerprint.
+  - **Both files are generated: don't edit them.** The words are written in
+    `tests/ShoutingIguana.Engine.Tests/Analysis/PlainWords/plain-words.json`, in the API's shapes. To change a text,
+    or to give a new check, category or skip reason its words, edit that file and run
+    `node engine/tests/ShoutingIguana.Engine.Tests/Analysis/PlainWords/generate.mjs` from the repo root, then commit
+    the data file and the two C# files together (`--check` writes nothing and says whether they are current). The
+    generator refuses an id the engine doesn't have, one the data file leaves out, and a field it doesn't know.
+  - Tests hold the compiled words to the data file, every text to the design's template and banned words, and the
+    ten checks [the Simple design](../docs/v2-ui-simple.md#ten-checks-written-out) writes out to the document, word
+    for word: change one of those ten in both places. A check with no entry would say null, never the technical
+    text: a test demands an entry for every check and every skip reason.
   - A text names a threshold as `{limit:name}` (`{limit:titleMaxLength}`, `{limit:largeImageBytes}`), never as a
     number. `PlainLimits.Fill` fills it from an `AnalysisSettings` with the value and its unit ("60 characters", "200
     KB", "1 second"): the settings a crawl's analysis ran with (`AnalysisInfo.Settings`) for that crawl's words, the

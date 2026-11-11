@@ -109,10 +109,11 @@ export interface Check {
    */
   reportedOnce?: boolean;
   /**
-   * The score: the check in plain words, beside the technical texts. A check has all of `plainTitle`, `plainWhat`,
-   * `plainFix`, `fixer` and `plainPassed`, or none: null in every plain field means it has no plain words yet, and the
-   * technical text is never sent in their place. Limits in them come filled in ("60 characters"), from the current
-   * analysis settings, or from a crawl's analysis's with `GET /api/checks?crawl={id}`.
+   * The score: the check in plain words, beside the technical texts. Every check of the catalog has them. A check has
+   * all of `plainTitle`, `plainWhat`, `plainFix`, `fixer` and `plainPassed`, or none: null in every plain field means
+   * it has no plain words (a check newer than its words), and the technical text is never sent in their place. Limits
+   * in them come filled in ("60 characters"), from the current analysis settings, or from a crawl's analysis's with
+   * `GET /api/checks?crawl={id}`.
    */
   plainTitle?: string | null;
   /** What's wrong and why it matters, a sentence a string. The first stands alone: lists show only it. */
@@ -123,9 +124,12 @@ export interface Check {
   fixer?: CheckFixer | null;
   /** The good news when the check finds nothing, as a fact: "Every page has a title". */
   plainPassed?: string | null;
-  /** What a fault in the site's template usually is, in one sentence. Null for most checks, plain words or not. */
+  /** What a fault in the site's template usually is, in one sentence. Null for most checks: 26 have one. */
   plainOneFix?: string | null;
-  /** What the check looks for, as a short noun phrase ("A missing sitemap"). Optional, as `plainOneFix` is. */
+  /**
+   * What the check looks for, as a short noun phrase ("A rules file that search engines can't read"), for a check whose
+   * title is a sentence about the site. Null for most checks: 12 have one.
+   */
   plainLooksFor?: string | null;
 }
 
@@ -306,8 +310,9 @@ export interface SkipReason {
   /** A plain sentence to show beside the check. */
   text: string;
   /**
-   * The score: why the check couldn't run, in Simple's words, by the code. Null while the code has none (never the
-   * engine's `text` in its place). Optional here, as a sidecar from before the score doesn't send it.
+   * The score: why the check couldn't run, in Simple's words, by the code. Every code the engine gives has them; null
+   * for a code it has no words for (never the engine's `text` in its place). Optional here, as a sidecar from before
+   * the score doesn't send it.
    */
   plainText?: string | null;
   /** The score: what would let the check run, in Simple's words. Null with `plainText`. */
