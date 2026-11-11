@@ -5,7 +5,7 @@ import type { RobotsBlockedQuery, RobotsBlockedUrl, RobotsFile, RobotsLine } fro
 import type { SourceLineMark } from '../../inspector/sourceLines';
 import { formatCount, formatCountOf } from '../../lib/format';
 import type { RobotsReasonSearch, RobotsSearch } from '../../routing/search';
-import { LINE_PROBLEM_WORDS } from './robotsWords';
+import { lineProblemWords } from './robotsWords';
 
 /** The file's text as the crawl kept it: its lines, joined as they were split. */
 export function fileText(lines: readonly Pick<RobotsLine, 'text'>[]): string {
@@ -36,7 +36,8 @@ export function fileMarks(lines: readonly RobotsLine[]): SourceLineMark[] {
       if (line.applies === true) mark.tone = 'strong';
       else if (line.applies === false) mark.tone = 'quiet';
     }
-    if (line.problem !== null) mark.note = LINE_PROBLEM_WORDS[line.problem];
+    const problem = lineProblemWords(line);
+    if (problem !== null) mark.note = problem;
     // A rule that blocked nothing says nothing: a real file has hundreds, and a note on each would bury the few
     // that did. The list beside the file says so when none did.
     if (line.blocked !== null && line.blocked > 0) {

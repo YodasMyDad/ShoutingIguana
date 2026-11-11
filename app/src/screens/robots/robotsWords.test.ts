@@ -8,6 +8,7 @@ import {
   answerParts,
   answerSentence,
   blockedWhy,
+  lineProblemWords,
   stateWords,
 } from './robotsWords';
 
@@ -147,5 +148,18 @@ describe('a line the crawler made nothing of', () => {
     expect(Object.keys(LINE_PROBLEM_WORDS).sort()).toEqual(
       ['invalidValue', 'noUserAgent', 'notADirective', 'unknownDirective'].sort(),
     );
+  });
+
+  it('says what’s wrong with a value by what the line is for: only a crawl delay is “not a number”', () => {
+    // RobotsTxtParser: a `Sitemap:` line with nothing after it, and a `Crawl-delay` that isn't a number or is
+    // below 0, are both `invalidValue`.
+    expect(lineProblemWords({ kind: 'sitemap', problem: 'invalidValue' })).toBe('Ignored: it names no sitemap');
+    expect(lineProblemWords({ kind: 'crawlDelay', problem: 'invalidValue' })).toBe(
+      'Ignored: its value isn’t a number of seconds, 0 or more',
+    );
+    // A kind this app doesn't expect it on says no more than is known.
+    expect(lineProblemWords({ kind: 'allow', problem: 'invalidValue' })).toBe('Ignored: its value can’t be used');
+    expect(lineProblemWords({ kind: 'disallow', problem: 'noUserAgent' })).toBe(LINE_PROBLEM_WORDS.noUserAgent);
+    expect(lineProblemWords({ kind: 'disallow', problem: null })).toBeNull();
   });
 });

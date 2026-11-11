@@ -38,7 +38,7 @@ const MARKS: SourceLineMark[] = [
   },
   { line: 7, tone: 'strong', nameEnd: 8 },
   { line: 8, tone: 'strong', nameEnd: 8, action: 'Blocked 3 URLs', actionTitle: 'List the 3 URLs line 8 blocked' },
-  { line: 9, tone: 'strong', nameEnd: 11, note: 'Ignored: its value isn’t a number' },
+  { line: 9, tone: 'strong', nameEnd: 11, note: 'Ignored: its value isn’t a number of seconds, 0 or more' },
   { line: 10, nameEnd: 4, note: 'Not used by the crawl' },
   { line: 11, nameEnd: 7 },
 ];

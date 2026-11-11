@@ -2,7 +2,15 @@
 // Each state has its own true sentence, by the engine's values (docs/v2-sidecar-api.md, robots.txt): a file that
 // didn't answer is `unreachable` (the origin's URLs were refused) or `unanswered` (the crawl went ahead), and the two
 // never share words. Pure, so every wording is unit-tested.
-import type { GridFilter, RobotsBlockedUrl, RobotsLineProblem, RobotsOrigin, RobotsOriginPage } from '../../api/grids';
+import type {
+  GridFilter,
+  RobotsBlockedUrl,
+  RobotsLine,
+  RobotsLineKind,
+  RobotsLineProblem,
+  RobotsOrigin,
+  RobotsOriginPage,
+} from '../../api/grids';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { sentenceText, type SentencePart } from '../countSentence';
 
@@ -138,10 +146,28 @@ export const UNMATCHED_WORDS = {
     `${formatCountOf(count, 'URL')} ${count === 1 ? 'is' : 'are'} stored as refused, though nothing kept here refuses ${count === 1 ? 'it' : 'them'}`,
 } as const;
 
-/** Why the crawler made nothing of a line. */
+/** Why the crawler made nothing of a line, whatever the line is. `lineProblemWords` says it by the line's kind. */
 export const LINE_PROBLEM_WORDS: Record<RobotsLineProblem, string> = {
   noUserAgent: 'Ignored: it comes before any User-agent line, so it belongs to no group',
-  invalidValue: 'Ignored: its value isn’t a number',
+  invalidValue: 'Ignored: its value can’t be used',
   unknownDirective: 'Not used by the crawl',
   notADirective: 'Ignored: not a “name: value” line',
 };
+
+/**
+ * What's wrong with a value depends on what the line is for: the crawler refuses a `Crawl-delay` that isn't a number
+ * or is below 0, and a `Sitemap:` line with nothing after it (RobotsTxtParser).
+ */
+const INVALID_VALUE_WORDS: Partial<Record<RobotsLineKind, string>> = {
+  crawlDelay: 'Ignored: its value isn’t a number of seconds, 0 or more',
+  sitemap: 'Ignored: it names no sitemap',
+};
+
+/** Why the crawler made nothing of a line, by the line's kind. */
+export function lineProblemWords(line: Pick<RobotsLine, 'kind' | 'problem'>): string | null {
+  if (line.problem === null) return null;
+  if (line.problem === 'invalidValue') return INVALID_VALUE_WORDS[line.kind] ?? LINE_PROBLEM_WORDS.invalidValue;
+  // A problem a newer engine names has no words here: none are guessed at.
+  const words: Partial<Record<string, string>> = LINE_PROBLEM_WORDS;
+  return words[line.problem] ?? null;
+}

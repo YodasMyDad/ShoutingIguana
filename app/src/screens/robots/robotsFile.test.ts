@@ -60,9 +60,16 @@ describe('the file as the viewer shows it', () => {
 
   it('says why the crawler made nothing of a line', () => {
     const note = new Map(fileMarks(TEST_FILE_LINES).map((mark) => [mark.line, mark.note]));
-    expect(note.get(9)).toBe('Ignored: its value isn’t a number');
+    expect(note.get(9)).toBe('Ignored: its value isn’t a number of seconds, 0 or more');
     expect(note.get(10)).toBe('Not used by the crawl');
     expect(note.get(11)).toBe('Ignored: not a “name: value” line');
+  });
+
+  it('never tells an empty Sitemap line that its value isn’t a number', () => {
+    const [mark] = fileMarks([
+      { number: 4, text: 'Sitemap:', kind: 'sitemap', applies: false, blocked: null, problem: 'invalidValue' },
+    ]);
+    expect(mark?.note).toBe('Ignored: it names no sitemap');
   });
 
   it('uses thousands separators in a rule’s count', () => {
