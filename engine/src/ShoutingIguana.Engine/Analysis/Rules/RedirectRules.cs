@@ -43,13 +43,13 @@ internal sealed class RedirectRules(UrlTable urls) : ISiteRule
 
             if (url.RedirectTargetId == 0)
             {
-                yield return new IssueHit(IssueCatalog.REDIRECT_BROKEN, id, $"HTTP {url.StatusCode} without a usable Location header");
+                yield return new IssueHit(IssueCatalog.REDIRECT_BROKEN, id, $"{HttpStatusNames.Describe(url.StatusCode)} without a usable Location header");
                 continue;
             }
 
             if (url.StatusCode is 302 or 303 or 307)
             {
-                yield return new IssueHit(IssueCatalog.REDIRECT_TEMPORARY, id, $"HTTP {url.StatusCode}", url.RedirectTargetId);
+                yield return new IssueHit(IssueCatalog.REDIRECT_TEMPORARY, id, HttpStatusNames.Describe(url.StatusCode), url.RedirectTargetId);
             }
 
             if (url.IsHttps && !urls[url.RedirectTargetId].IsHttps)

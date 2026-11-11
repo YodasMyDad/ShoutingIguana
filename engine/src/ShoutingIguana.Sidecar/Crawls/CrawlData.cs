@@ -1,5 +1,6 @@
 using System.Globalization;
 using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Errors;
@@ -20,9 +21,33 @@ internal sealed class CrawlData(CrawlManager crawls)
     }
 
     /// <summary>
-    /// The last analysis, whether it still stands, and every check's count or why it was skipped, all from one snapshot of
-    /// the file, even if another analysis finishes or the crawl is resumed meanwhile. An analysis by an engine from before
-    /// the summary is out of date (the engine changed), with no reasons for its skips: its notes say.
+    /// The thresholds plain words say their limits by (<see cref="PlainLimits"/>): those the named crawl's last analysis
+    /// ran with, so its words say what that crawl was judged by; or, when no crawl is named, the crawl was never analysed
+    /// or its settings can't be read, the ones an analysis would run with now.
+    /// </summary>
+    /// <param name="query">May name a crawl, once, as <c>crawl</c>.</param>
+    public AnalysisSettings LimitsFor(IQueryCollection query)
+    {
+        var named = query["crawl"];
+        if (named.Count == 0)
+        {
+            return crawls.AnalysisSettings;
+        }
+
+        if (named.Count > 1 || string.IsNullOrEmpty(named[0]))
+        {
+            throw Problems.BadRequest("crawl must be one crawl's id.");
+        }
+
+        var path = crawls.PathOf(named[0]!);
+        return EngineErrors.Read(() => IssueReader.ReadAnalysis(path))?.Settings ?? crawls.AnalysisSettings;
+    }
+
+    /// <summary>
+    /// The last analysis, whether it still stands, every check's count or why it was skipped, and its score, all from one
+    /// snapshot of the file, even if another analysis finishes or the crawl is resumed meanwhile. An analysis by an engine
+    /// from before the summary is out of date (the engine changed), with no reasons for its skips: its notes say. The
+    /// score and the totals it goes by are the analysis's own, as stored: nothing here is counted from the crawl as it is now.
     /// </summary>
     public AnalysisDto Analysis(string id)
     {
@@ -49,14 +74,22 @@ internal sealed class CrawlData(CrawlManager crawls)
             ran,
             [
                 .. IssueCatalog.All.Where(check => !counts.ContainsKey(check.Id)).Select(check => new SkippedCheckDto(check.Id,
-                    reasons.TryGetValue(check.Id, out var skip) ? new SkipReasonDto(skip.Reason, skip.Text) : null))
-            ]);
+                    reasons.TryGetValue(check.Id, out var skip) ? Reason(skip, analysis.Settings ?? crawls.AnalysisSettings) : null))
+            ],
+            analysis.CrawledUrlCount,
+            results.FixFirst,
+            results.Score,
+            results.NoScoreReason);
     }
 
-    public CrawlStatsDto Stats(string id)
+    /// <summary>
+    /// Why a check was skipped: the analysis's code and sentence, with the code's plain words where it has them, their
+    /// limits filled from the settings the analysis ran with.
+    /// </summary>
+    private static SkipReasonDto Reason(SkippedCheck skip, AnalysisSettings settings)
     {
-        var path = crawls.PathOf(id);
-        return CrawlStatsDto.From(EngineErrors.Read(() => CrawlStatsReader.Read(path)));
+        var plain = PlainLimits.Fill(PlainWords.SkipReason(skip.Reason), settings);
+        return new SkipReasonDto(skip.Reason, skip.Text, plain?.Text, plain?.Action);
     }
 
     /// <summary>One page of the URLs a check flagged, in crawl order. A check the analysis skipped has no total, not 0.</summary>

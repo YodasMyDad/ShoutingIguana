@@ -84,6 +84,7 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         var stats = CrawlStatsReader.Read(path);
         Assert.Equal("completed", (string?)item["status"]);
         Assert.Equal(stats.Outcomes.Values.Sum(), (long?)item["fetchedUrlCount"]);
+        Assert.Equal(stats.Outcomes.Values.Sum() - stats.NotCheckedCount, (long?)item["crawledUrlCount"]);
         Assert.Equal(stats.HtmlPageCount, (long?)item["pageCount"]);
         Assert.NotNull(item["issues"]);
         Assert.False((bool?)item["outOfDate"]);
@@ -93,6 +94,10 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         Assert.Equal(stats.LinkCount, (long?)crawlStats["linkCount"]);
         Assert.Equal(stats.Outcomes[Engine.Fetching.Models.FetchOutcome.Success], (long?)crawlStats["outcomes"]!["success"]);
         Assert.Equal(stats.StatusCodes[200], (long?)crawlStats["statusCodes"]!["200"]);
+
+        // The crawler's probe of the site's https:// version, which doesn't answer, is among the outcomes, and said apart.
+        Assert.Equal("""{"fetched":1,"outcomes":{"networkError":1},"statusCodes":{}}""", crawlStats["siteVersions"]!.ToJsonString());
+        Assert.True((long)crawlStats["outcomes"]!["networkError"]! >= 1);
 
         // One check's URLs, a page at a time, in crawl order.
         var busiest = counts.MaxBy(count => count.Value).Key;

@@ -95,3 +95,4 @@ engine/bench.json
 app/design/data/fixtures/
 app/design/assets/logo.png
 app/design/directions/*/screens/
+app/design/simple/screens/

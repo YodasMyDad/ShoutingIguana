@@ -8,6 +8,7 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 internal sealed record UrlDetailDto(
     int Id,
     string Url,
+    int? UrlLength,
     bool IsInternal,
     ResourceType Type,
     UrlDiscovery Discovery,
@@ -17,6 +18,7 @@ internal sealed record UrlDetailDto(
     PageContent? Content,
     ContentLimits Limits,
     UrlLinkCounts? Links,
+    UrlLinkTotals LinkTotals,
     IReadOnlyList<ResponseHeader> Headers,
     IReadOnlyList<StructuredDataBlock> StructuredData,
     IReadOnlyList<HreflangEntry> Hreflang,

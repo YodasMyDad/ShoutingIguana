@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Robots.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
@@ -15,6 +18,9 @@ namespace ShoutingIguana.Engine.Tests.Storage;
 [Collection(GridCrawlCollection.NAME)]
 public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
 {
+    /// <summary>The outcomes of a URL that redirects or is broken, as the Sitemaps screen's quick filter has them.</summary>
+    private static readonly string[] BROKEN = ["redirect", "clientError", "serverError", "timeout", "networkError"];
+
     private string Site => crawl.Server.BaseUri.GetLeftPart(UriPartial.Authority);
 
     private SyntheticSite Planted => crawl.Server.Site;
@@ -44,8 +50,14 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
         {
             var listed = Listed(crawl.Path, sitemap.Id == index.Id ? null : sitemap.Id);
             Assert.Equal(new SitemapUrlCounts(listed.Count, listed.Count(id => Row(id, "fetched") is true), listed.Count(id => Row(id, "indexable") is true),
-                listed.Count(id => Row(id, "indexable") is false)), sitemap.Urls);
+                listed.Count(id => Row(id, "indexable") is false), listed.Count(id => Row(id, "outcome") is "robotsDisallowed"),
+                listed.Count(id => Row(id, "outcome") is string outcome && BROKEN.Contains(outcome))), sitemap.Urls);
         }
+
+        // The extra sitemap lists a URL robots.txt disallows, and two on another site that redirect and are gone: the
+        // sitemap they're in says so, and so does the index over it. The pages' sitemap has none of either.
+        Assert.Equal((1, 2, 0, 0), (extra.Urls.RobotsDisallowed, extra.Urls.RedirectingOrBroken, pages.Urls.RobotsDisallowed, pages.Urls.RedirectingOrBroken));
+        Assert.Equal((1, 2), (index.Urls.RobotsDisallowed, index.Urls.RedirectingOrBroken));
 
         Assert.Equal(pages.Urls.Listed + extra.Urls.Listed, index.Urls.Listed);
         Assert.True(pages.Urls.NonIndexable > 0 && pages.Urls.Indexable > pages.Urls.NonIndexable && extra.Urls.Fetched == extra.Urls.Listed);
@@ -58,10 +70,56 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
             foreach (var sitemap in read.Sitemaps)
             {
                 long Opens(params UrlFilter[] filters) => UrlGridReader.QuerySitemap(path, sitemap.Id, new UrlQuery { Filters = filters, Limit = 1 })!.Matching;
-                Assert.Equal(sitemap.Urls, new SitemapUrlCounts(Opens(), Opens(Boolean("fetched", true)), Opens(Boolean("indexable", true)), Opens(Boolean("indexable", false))));
+                Assert.Equal(sitemap.Urls, new SitemapUrlCounts(Opens(), Opens(Boolean("fetched", true)), Opens(Boolean("indexable", true)), Opens(Boolean("indexable", false)),
+                    Opens(Names("outcome", FilterOperator.In, "robotsDisallowed")), Opens(Names("outcome", FilterOperator.In, BROKEN))));
             }
 
             Assert.Equal(list.Sitemaps.Select(sitemap => sitemap.Urls.Listed), read.Sitemaps.Select(sitemap => sitemap.Urls.Listed));
+        }
+    }
+
+    /// <summary>
+    /// Redirecting or broken is a URL that answered with a redirect or an error, or didn't answer: of six of a sitemap's
+    /// pages given other ends, the server error, the timeout and the network error count, and the firewall's block, the
+    /// one robots.txt refused and the one never asked don't, since none of those is known to be broken. The one
+    /// robots.txt refused has its own count. Each count is its rows in the sitemap's grid, with the URL summary (the
+    /// crawl analysed again, once the pages have their new ends) and without (continued since).
+    /// </summary>
+    [Fact]
+    public async Task ASitemapsBrokenUrlsAreThoseThatRedirectErrorOrDontAnswer()
+    {
+        var copy = crawl.Copy();
+        var before = SitemapListReader.Read(copy).Sitemaps[1].Urls;
+        var pages = TestCrawls.Rows(copy, "SELECT printf('%09d', m.url_id) FROM sitemap_urls m JOIN responses r ON r.url_id = m.url_id WHERE m.sitemap_id = 2 AND r.outcome = 0 ORDER BY m.url_id LIMIT 6")
+            .Select(int.Parse).ToList();
+        (FetchOutcome Outcome, int? Status, string? Error)[] ends =
+        [
+            (FetchOutcome.ServerError, 500, null), (FetchOutcome.Timeout, null, "Timed out"), (FetchOutcome.NetworkError, null, "Connection refused"),
+            (FetchOutcome.Blocked, 403, null), (FetchOutcome.RobotsDisallowed, null, null), (FetchOutcome.NetworkError, null, "Not checked: https://dead.example stopped answering")
+        ];
+        foreach (var (page, end) in pages.Zip(ends))
+        {
+            Change(copy, "UPDATE responses SET outcome = $outcome, status_code = $status, error = $error WHERE url_id = $id",
+                ("$outcome", (int)end.Outcome), ("$status", (object?)end.Status ?? DBNull.Value), ("$error", (object?)end.Error ?? DBNull.Value), ("$id", page));
+        }
+
+        var continued = crawl.Copy();
+        File.Copy(copy, continued, overwrite: true);
+        Stamp(continued);
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(copy);
+        foreach (var path in new[] { copy, continued })
+        {
+            var read = SitemapListReader.Read(path);
+            Assert.Equal(path == copy, read.Summary.Available);
+            var urls = read.Sitemaps[1].Urls;
+            Assert.Equal((before.RobotsDisallowed + 1, before.RedirectingOrBroken + 3), (urls.RobotsDisallowed, urls.RedirectingOrBroken));
+            long Opens(params string[] outcomes) =>
+                UrlGridReader.QuerySitemap(path, read.Sitemaps[1].Id, new UrlQuery { Filters = [Names("outcome", FilterOperator.In, outcomes)], Limit = 1 })!.Matching;
+            Assert.Equal((urls.RobotsDisallowed, urls.RedirectingOrBroken), (Opens("robotsDisallowed"), Opens(BROKEN)));
+
+            // The index over it counts them too.
+            Assert.Equal(urls.RedirectingOrBroken + read.Sitemaps[2].Urls.RedirectingOrBroken, read.Sitemaps[0].Urls.RedirectingOrBroken);
+            Assert.Equal(urls.RobotsDisallowed + read.Sitemaps[2].Urls.RobotsDisallowed, read.Sitemaps[0].Urls.RobotsDisallowed);
         }
     }
 
@@ -76,9 +134,14 @@ public sealed class RobotsAndSitemapsReaderTests(GridCrawl crawl)
             return SitemapListReader.Read(copy);
         }
 
-        // A URL two sitemaps list counts once under their index.
-        var twice = After("INSERT INTO sitemap_urls SELECT 3, url_id FROM sitemap_urls WHERE sitemap_id = 2 ORDER BY url_id LIMIT 7");
+        // A URL two sitemaps list counts once under their index: here the URL robots.txt refused and the two that redirect
+        // or are gone, listed by the pages' sitemap too, and seven of its pages by the extra one.
+        var twice = After("""
+            INSERT INTO sitemap_urls SELECT 3, url_id FROM sitemap_urls WHERE sitemap_id = 2 ORDER BY url_id LIMIT 7;
+            INSERT INTO sitemap_urls SELECT 2, m.url_id FROM sitemap_urls m JOIN responses r ON r.url_id = m.url_id WHERE m.sitemap_id = 3 AND r.outcome <> 0
+            """);
         Assert.Equal(index.Urls, twice.Sitemaps[0].Urls);
+        Assert.Equal((1, 2), (twice.Sitemaps[1].Urls.RobotsDisallowed, twice.Sitemaps[1].Urls.RedirectingOrBroken));
         Assert.Equal(SitemapListReader.Read(crawl.Path).Sitemaps[2].Urls.Listed + 7, twice.Sitemaps[2].Urls.Listed);
 
         // How it was found is read from the stored robots.txt and the crawl's options, as the crawler's discovery reads them.

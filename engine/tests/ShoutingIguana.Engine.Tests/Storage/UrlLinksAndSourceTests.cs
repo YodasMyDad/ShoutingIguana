@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
@@ -133,6 +134,55 @@ public sealed class UrlLinksAndSourceTests(GridCrawl crawl)
             link => Assert.Null(link.Followed));
     }
 
+    /// <summary>
+    /// A link's other end has no status when it was never fetched, and none when it was asked for and gave no HTTP answer:
+    /// its outcome tells them apart, with the URL summary and without it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ALinkSaysWhatBecameOfItsOtherEnd(bool continuedSinceItsAnalysis)
+    {
+        var path = continuedSinceItsAnalysis ? crawl.Changed : crawl.Path;
+        LinkRow To(string sql)
+        {
+            var ends = TestCrawls.Rows(crawl.Path, $"SELECT l.from_id, l.to_id FROM links l {sql} ORDER BY l.rowid LIMIT 1").Single().Split(" | ").Select(int.Parse).ToList();
+            return UrlInspectorReader.ReadLinks(path, ends[0], LinkDirection.Outlinks, new LinkQuery { Limit = 1_000 })!.Rows.First(link => link.Id == ends[1]);
+        }
+
+        var refused = To("JOIN responses r ON r.url_id = l.to_id WHERE r.outcome = 5 AND l.from_id <> l.to_id");
+        Assert.Equal(((int?)null, (UrlOutcome?)UrlOutcome.RobotsDisallowed, true), (refused.StatusCode, refused.Outcome, refused.Fetched));
+
+        var missing = To("JOIN responses r ON r.url_id = l.to_id WHERE r.status_code = 404 AND l.from_id <> l.to_id");
+        Assert.Equal(((int?)404, (UrlOutcome?)UrlOutcome.ClientError, true), (missing.StatusCode, missing.Outcome, missing.Fetched));
+
+        var neverFetched = To("LEFT JOIN responses r ON r.url_id = l.to_id WHERE r.url_id IS NULL AND l.from_id <> l.to_id");
+        Assert.Equal(((int?)null, (UrlOutcome?)null, false), (neverFetched.StatusCode, neverFetched.Outcome, neverFetched.Fetched));
+
+        // A URL never asked, its host having stopped answering, is stored as a network error that says so: not checked,
+        // as the URL grid's outcome has it, and not fetched where the crawl's own tables say.
+        var planted = crawl.Copy();
+        if (continuedSinceItsAnalysis)
+        {
+            Stamp(planted);
+        }
+
+        Change(planted, $"UPDATE responses SET outcome = {(int)FetchOutcome.NetworkError}, status_code = NULL, error = 'Not checked: https://dead.example stopped answering' WHERE url_id = {missing.Id}");
+        var from = (int)TestCrawls.Count(crawl.Path, $"SELECT from_id FROM links WHERE to_id = {missing.Id} AND from_id <> to_id ORDER BY rowid LIMIT 1");
+        var notChecked = UrlInspectorReader.ReadLinks(planted, from, LinkDirection.Outlinks, new LinkQuery { Limit = 1_000 })!.Rows.First(link => link.Id == missing.Id);
+        Assert.Equal(UrlOutcome.NotChecked, notChecked.Outcome);
+        if (continuedSinceItsAnalysis)
+        {
+            Assert.Equal(((int?)null, false), (notChecked.StatusCode, notChecked.Fetched));
+        }
+
+        // A value no engine writes reads as unknown, as everywhere.
+        var odd = crawl.Copy();
+        Change(odd, $"UPDATE responses SET outcome = 77 WHERE url_id = {refused.Id}");
+        Assert.Null(UrlInspectorReader.ReadLinks(odd, (int)TestCrawls.Count(crawl.Path, $"SELECT from_id FROM links WHERE to_id = {refused.Id} LIMIT 1"),
+            LinkDirection.Outlinks, new LinkQuery { Limit = 1_000 })!.Rows.First(link => link.Id == refused.Id).Outcome);
+    }
+
     [Fact]
     public void WithoutASummaryTheOtherEndReadsTheCrawlsOwnTables()
     {
@@ -243,7 +293,8 @@ public sealed class UrlLinksAndSourceTests(GridCrawl crawl)
                 reader.IsDBNull(6) ? null : reader.GetString(6),
                 (int?)(long?)other["statusCode"],
                 (bool?)other["indexable"],
-                (bool)other["fetched"]!));
+                (bool)other["fetched"]!,
+                other["outcome"] is string outcome ? Enum.Parse<UrlOutcome>(outcome, ignoreCase: true) : null));
         }
 
         return links;

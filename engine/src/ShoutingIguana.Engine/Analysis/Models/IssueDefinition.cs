@@ -36,6 +36,32 @@ public sealed record IssueDefinition(
     public required IssueSubject Subject { get; init; }
 
     /// <summary>
+    /// The check finds one fault of the whole site, not a fault of pages: robots.txt that search engines can't read, a
+    /// site not on HTTPS. However many URLs it is reported on (one, or each other version of the site that answers), the
+    /// score counts it as the whole site (<see cref="ScoreCalculator"/>). It isn't part of
+    /// <see cref="AnalysisFreshness.ChecksFingerprint"/>: a change to it, or to <see cref="Subject"/>, changes what a
+    /// score is worked out from, so it comes with a new <see cref="ScoreCalculator.VERSION"/>.
+    /// </summary>
+    public bool SiteWide { get; init; }
+
+    /// <summary>
+    /// The check's rule reports one issue for the whole site, on the URL that stands for it (the home page, or the start
+    /// URL without one), or one for each other version of the site: never one for each page or URL at fault. So a host
+    /// can say "checked once, for the whole site" where "1 of 265 pages" would misread. Only how its count is worded: it
+    /// isn't stored with an analysis, nor part of <see cref="AnalysisFreshness.ChecksFingerprint"/>, and the score never
+    /// reads it. Every <see cref="SiteWide"/> check is reported once; not every check reported once is a fault of the
+    /// whole site (a sitemap that can't be read, a missing security header).
+    /// </summary>
+    public bool ReportedOnce { get; init; }
+
+    /// <summary>
+    /// The check in plain words (<see cref="IssuePlainTexts"/>), or null while it has none, as written: a limit in them
+    /// is still its token, which <see cref="PlainLimits"/> fills from an analysis's settings. Not part of
+    /// <see cref="AnalysisFreshness.ChecksFingerprint"/>, nor of what an analysis stores.
+    /// </summary>
+    public IssuePlainText? Plain => IssuePlainTexts.Find(Id);
+
+    /// <summary>
     /// For a check grouped by detail whose detail is each page's own instance of a fault (the href of its relative canonical,
     /// a JSON parser's message saying where in the block it failed): the fault the detail shows, which its groups are by
     /// instead, so a fault in the site's template is one group. The analysis stores it beside each issue, and the issue keeps

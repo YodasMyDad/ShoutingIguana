@@ -10,6 +10,10 @@ namespace ShoutingIguana.Engine.Storage.Models;
 /// <param name="Text">The anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link.</param>
 /// <param name="Followed">For a hyperlink, whether search engines follow it: no nofollow on it or on its page.</param>
 /// <param name="Fetched">The other end was fetched.</param>
+/// <param name="Outcome">
+/// What became of the request for the other end, as the URL grid's outcome column has it: a link to a URL robots.txt
+/// refused, or that timed out, has no status, and this says which. Null when it wasn't fetched.
+/// </param>
 public sealed record LinkRow(
     int Id,
     string Url,
@@ -21,4 +25,5 @@ public sealed record LinkRow(
     string? Fragment,
     int? StatusCode,
     bool? Indexable,
-    bool Fetched);
+    bool Fetched,
+    UrlOutcome? Outcome = null);

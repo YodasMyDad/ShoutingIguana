@@ -103,6 +103,20 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         return Facets(await ReadAsync(token => LinkGridReader.Facets(path, query, cache, token), cancellationToken).ConfigureAwait(false));
     }
 
+    /// <summary>
+    /// The crawl's headline numbers, read as a grid is: in one of the read slots, stopped when its request is given up, and
+    /// kept with the grids' counts, so they're read once while the crawl stands still (a running crawl's, every 2 s).
+    /// Kept, they cost a look at the file's stamp, and that takes no slot: Overview's numbers of one crawl don't queue
+    /// behind the link passes of another, on a machine with as few slots as two.
+    /// </summary>
+    public async Task<CrawlStatsDto> StatsAsync(string id, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        var stats = await RunAsync(token => CrawlStatsReader.ReadKept(path, cache, token), cancellationToken).ConfigureAwait(false)
+                    ?? await ReadAsync(token => CrawlStatsReader.Read(path, cache, token), cancellationToken).ConfigureAwait(false);
+        return CrawlStatsDto.From(stats);
+    }
+
     public async Task<UrlLookup> LookupAsync(string id, UrlLookupRequest request, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
@@ -123,11 +137,11 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
                   ?? throw Problems.UrlNotFound();
         var indexability = url.Indexability;
         return new UrlDetailDto(
-            url.Id, url.Url, url.IsInternal, url.Type, url.Discovery,
+            url.Id, url.Url, url.UrlLength, url.IsInternal, url.Type, url.Discovery,
             url.Response is { } response ? UrlResponseDto.From(response) : null,
             url.Redirects,
             new IndexabilityDto(indexability.Indexable, indexability.Reason, indexability.JudgedBy, [.. indexability.Tests.Select(IndexabilityTestDto.From)]),
-            url.Content, url.Limits, url.Links, url.Headers, url.StructuredData, url.Hreflang, url.Issues, url.NamedBy, url.Summary,
+            url.Content, url.Limits, url.Links, url.LinkTotals, url.Headers, url.StructuredData, url.Hreflang, url.Issues, url.NamedBy, url.Summary,
             new SourceStateDto(url.SourceStored));
     }
 
@@ -293,17 +307,21 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         await _reads.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await Task.Factory.StartNew(() =>
+            return await RunAsync(token =>
             {
-                ReadStarting?.Invoke(cancellationToken);
-                return Read(() => read(cancellationToken));
-            }, cancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default).ConfigureAwait(false);
+                ReadStarting?.Invoke(token);
+                return read(token);
+            }, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             _reads.Release();
         }
     }
+
+    /// <summary>A read on a thread of its own, holding no slot: for one that passes over nothing. Its refusals as <see cref="ReadAsync"/>'s.</summary>
+    private static Task<T> RunAsync<T>(Func<CancellationToken, T> read, CancellationToken cancellationToken) =>
+        Task.Factory.StartNew(() => Read(() => read(cancellationToken)), cancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
     /// <summary>A read, its refusals as the problems the UI keys on.</summary>
     private static T Read<T>(Func<T> read)

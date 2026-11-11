@@ -68,6 +68,11 @@ export interface CheckCategory {
   id: string;
   /** A plain name such as "Meta descriptions", shown as it is. */
   title: string;
+  /**
+   * The score: the category in Simple's words, such as "Search descriptions". Null while it has none. Optional here, as
+   * a sidecar from before the score doesn't send it.
+   */
+  plainTitle?: string | null;
 }
 
 export interface Check {
@@ -91,10 +96,48 @@ export interface Check {
    * count is of URLs and can pass the pages crawled. Every sidecar from E3b sends it; fixtures captured before don't.
    */
   subject?: CheckSubject;
+  /**
+   * The score: the check finds one fault of the whole site, not a page's (robots.txt search engines can't read, no
+   * HTTPS), which the score counts as the whole site whatever its count. Optional here, as every field from here on
+   * is: a sidecar from before the score doesn't send them.
+   */
+  siteWide?: boolean;
+  /**
+   * The score: the check reports one issue for the whole site (or one for each other version of it), so its count isn't
+   * a share of the pages: say "checked once, for the whole site", not "1 of 265 pages". For wording only. Every
+   * `siteWide` check is reported once.
+   */
+  reportedOnce?: boolean;
+  /**
+   * The score: the check in plain words, beside the technical texts. Every check of the catalog has them. A check has
+   * all of `plainTitle`, `plainWhat`, `plainFix`, `fixer` and `plainPassed`, or none: null in every plain field means
+   * it has no plain words (a check newer than its words), and the technical text is never sent in their place. Limits
+   * in them come filled in ("60 characters"), from the current analysis settings, or from a crawl's analysis's with
+   * `GET /api/checks?crawl={id}`.
+   */
+  plainTitle?: string | null;
+  /** What's wrong and why it matters, a sentence a string. The first stands alone: lists show only it. */
+  plainWhat?: string[] | null;
+  /** How to fix it, a step a string. */
+  plainFix?: string[] | null;
+  /** Who usually makes the fix. */
+  fixer?: CheckFixer | null;
+  /** The good news when the check finds nothing, as a fact: "Every page has a title". */
+  plainPassed?: string | null;
+  /** What a fault in the site's template usually is, in one sentence. Null for most checks: 26 have one. */
+  plainOneFix?: string | null;
+  /**
+   * What the check looks for, as a short noun phrase ("A rules file that search engines can't read"), for a check whose
+   * title is a sentence about the site. Null for most checks: 12 have one.
+   */
+  plainLooksFor?: string | null;
 }
 
 /** What a check's flagged URLs are: `GET /api/checks` gives it as each check's `subject` (E3b). */
 export type CheckSubject = 'page' | 'url';
+
+/** Who usually makes a check's fix: the site's owner in its editor, a developer or the hosting company, or either. */
+export type CheckFixer = 'you' | 'developer' | 'either';
 
 export interface Checks {
   categories: CheckCategory[];
@@ -193,13 +236,36 @@ export interface CrawlListItem {
   startedAt: string | null;
   finishedAt: string | null;
   updatedAt: string | null;
-  /** URLs with a stored outcome, as a running crawl's `fetched` counts them. The library's "URLs". */
+  /**
+   * E3c: the time the crawl has spent crawling, over every run of it, in ms: each run from its start to its end, less
+   * the time it was paused, so neither a pause nor the time between a stop and a continue is in it. A running crawl's
+   * is the progress event's `crawlingMs`. Null when it isn't known: an engine from before E3c made the crawl, or a run
+   * of it. Optional here, as such an engine's sidecar doesn't send it.
+   */
+  crawlingMs?: number | null;
+  /**
+   * URLs with a stored outcome, as a running crawl's `fetched` counts them: the URLs crawled and those that weren't
+   * checked (never asked, their host having stopped answering), which the URL grid has as not fetched. No grid filter
+   * gives this count: `crawledUrlCount` is the grid's.
+   */
   fetchedUrlCount: number;
+  /**
+   * E3c: the URLs crawled, as the URL grid counts them (`fetched` is true): `fetchedUrlCount` less the URLs that
+   * weren't checked. The count to show as "N URLs"; a running crawl's is the progress event's `crawled`. Optional here,
+   * as an engine from before E3c doesn't send it.
+   */
+  crawledUrlCount?: number;
   /** Internal URLs that returned HTML the crawler parsed. */
   pageCount: number;
   /** Null before the first analysis. */
   issues: IssueCounts | null;
   analyzedAt: string | null;
+  /**
+   * The score: the last analysis's score in brief. Null when there is none: never analysed, no page read, or analysed
+   * by an engine from before the score. The whole of it is the analysis's `score`. Optional here, as a sidecar from
+   * before the score doesn't send it.
+   */
+  score?: ScoreSummary | null;
   /** The last analysis no longer stands. False before the first one. */
   outOfDate: boolean;
   sizeBytes: number;
@@ -243,6 +309,14 @@ export interface SkipReason {
   code: string;
   /** A plain sentence to show beside the check. */
   text: string;
+  /**
+   * The score: why the check couldn't run, in Simple's words, by the code. Every code the engine gives has them; null
+   * for a code it has no words for (never the engine's `text` in its place). Optional here, as a sidecar from before
+   * the score doesn't send it.
+   */
+  plainText?: string | null;
+  /** The score: what would let the check run, in Simple's words. Null with `plainText`. */
+  plainAction?: string | null;
 }
 
 export interface SkippedCheck {
@@ -267,6 +341,109 @@ export interface Analysis {
   counts: CheckCount[];
   /** Every catalog check missing from the counts: skipped, never 0. */
   skipped: SkippedCheck[];
+  /**
+   * The score: the URLs crawled as they stood when the analysis ran. A check whose `subject` is `url` flagged a share of
+   * these, as a `page` check flagged a share of `pagesAnalyzed`: use these two beside a check's count, never the
+   * library's counts, which are the crawl's as it is now. Null when an engine from before the score ran the analysis;
+   * optional here, as such an engine's sidecar doesn't send it.
+   */
+  crawledUrlCount?: number | null;
+  /**
+   * The score: the ids of the checks that found something, in the order to fix them: the most severe; within a
+   * severity a `siteWide` check before any other, however small its count; then the most URLs flagged; then catalog
+   * order. Take the order from here rather than sorting by count. Checks the user has hidden are in it: hiding is
+   * the app's.
+   */
+  fixFirst?: string[];
+  /** The score: the site's score as the analysis stored it, or null when there is none (`noScoreReason` says why). */
+  score?: Score | null;
+  /** The score: why there is no score; null when there is one. */
+  noScoreReason?: NoScoreReason | null;
+}
+
+/** The score as a word: 90 and over, 70 and over, 50 and over, under 50. */
+export type ScoreBand = 'veryGood' | 'good' | 'needsWork' | 'poor';
+
+/**
+ * How much of the site a check's count is: under 1 in 100, 1 in 100 or more, 1 in 10 or more, half or more; or the whole
+ * site, for a site-wide fault whatever its count.
+ */
+export type ScoreExtent = 'few' | 'some' | 'many' | 'most' | 'site';
+
+/** What a score line's count is a share of: the pages read, the URLs crawled, or nothing (a site-wide fault). */
+export type ScoreUnit = 'pages' | 'urls' | 'site';
+
+/** Why a score covers only part of the site: the crawl was stopped or failed, or a limit kept internal URLs out. */
+export type ScoreIncompleteReason = 'stopped' | 'failed' | 'urlLimit' | 'depthLimit';
+
+/**
+ * Why an analysis has no score: it read no page, or it stored none this engine reads (an engine from before the score
+ * ran it). A crawl never analysed has no analysis to ask (`not-analyzed`).
+ */
+export type NoScoreReason = 'noPages' | 'notScored';
+
+/** A score's headline, on a library item. */
+export interface ScoreSummary {
+  /** 0 to 100. */
+  value: number;
+  band: ScoreBand;
+  /** The crawl didn't read all of the site, so the score is of what it read so far. */
+  partial: boolean;
+}
+
+/** One check that found something, and what it takes off the score. */
+export interface ScoreLine {
+  checkId: string;
+  /** The check's severity when the analysis ran. */
+  severity: Severity;
+  /** The URLs it flagged. */
+  count: number;
+  /** What the count is a share of, as `unit` says. For a `site` line it isn't for showing: say "the whole site". */
+  of: number;
+  unit: ScoreUnit;
+  extent: ScoreExtent;
+  /** Points off the score. 0 for a notice. */
+  points: number;
+}
+
+/** What a score was worked out from: "covers all 265 pages and 82 of 86 checks". */
+export interface ScoreCoverage {
+  /** The pages the analysis read: its `pagesAnalyzed`. */
+  pages: number;
+  /** The URLs crawled when the analysis ran: its `crawledUrlCount`. */
+  urls: number;
+  checksRun: number;
+  checksSkipped: number;
+  /** The crawl read all it set out to: it finished, and no limit kept internal URLs out. */
+  complete: boolean;
+  /** Why not; null when it is complete. */
+  reason: ScoreIncompleteReason | null;
+  /** The site's URLs robots.txt kept the crawler out of, which weren't read and so aren't covered. */
+  blockedByRobots: number;
+}
+
+/**
+ * The site's score, 0 to 100, as the analysis worked it out and stored it (docs/v2-sidecar-api.md, "The score"): every
+ * number in it is the analysis's own, so nothing here is to be recounted from the crawl as it is now.
+ */
+export interface Score {
+  /** The formula's version. */
+  version: number;
+  value: number;
+  band: ScoreBand;
+  /** The points every line takes off, added up. It can pass 100. */
+  lost: number;
+  /** The score before the ceiling of 89 that holds while an error check has issues. */
+  beforeCeiling: number;
+  /** The ceiling is what holds the score: it would be `beforeCeiling` otherwise. */
+  heldBySerious: boolean;
+  /** The crawl didn't read all of the site: always `!covers.complete`. */
+  partial: boolean;
+  covers: ScoreCoverage;
+  /** Every check that found something, in `fixFirst` order, a notice among them at 0 points. */
+  lines: ScoreLine[];
+  /** The score with the first five errors and warnings in `fixFirst` order gone: "from 85 to 98". */
+  ifFixed: { checkIds: string[]; value: number };
 }
 
 // ------------------------------------------------------------------------------------------------------------ Data
@@ -298,6 +475,20 @@ export interface CrawlStats {
   statusCodes: Record<string, number>;
   skipReasons: Record<string, number>;
   nonIndexableReasons: Record<string, number>;
+  /**
+   * E3c: the part of `outcomes` and `statusCodes` that is the crawler's own probes of the site's other versions (the
+   * URL grid's `source` `siteVersion`), keyed as those are. `outcomes` and `statusCodes` count them among the rest;
+   * the site's own are each less its part here. Optional here, as an engine from before E3c doesn't send it.
+   */
+  siteVersions?: SiteVersionStats;
+}
+
+/** E3c: the crawler's probes of the site's other versions with a stored outcome, by outcome and by status code. */
+export interface SiteVersionStats {
+  fetched: number;
+  outcomes: Record<string, number>;
+  /** Keyed by the status code as a string. */
+  statusCodes: Record<string, number>;
 }
 
 export interface IssueRow {
@@ -356,6 +547,28 @@ export interface NoResponseCounts {
   processingError: number;
 }
 
+/**
+ * E3c: the part of a progress event's figures that is the crawler's own probes of the site's other versions (http or
+ * https, www or not: the URL grid's `source` `siteVersion`), which nothing on the site leads to. Each is shaped as the
+ * event's own and counted within it, so a figure less its part here is the URLs the site itself led to: the grid's
+ * count with `{ column: 'source', op: 'notIn', values: ['siteVersion'] }` added to the figure's filter.
+ *
+ * The figure's own filter isn't always its class's name (docs/v2-sidecar-api.md, Progress, has the table): the event
+ * counts block pages as `blocked` and the URLs not checked under `noResponse`, where the grid's `statusClass` files a
+ * block page by its status and has a URL not checked in no class. So a class or a status code takes
+ * `{ column: 'outcome', op: 'notIn', values: ['blocked'] }` beside it, `blocked` is `outcome` in `['blocked']`,
+ * `noResponse` is `outcome` in `['robotsDisallowed', 'timeout', 'networkError', 'processingError', 'notChecked']`, and
+ * each `noResponse` reason is `outcome` in that one.
+ */
+export interface SiteVersionCounts {
+  /** The probes with an outcome: among the event's `fetched`. Its classes add up to it. */
+  fetched: number;
+  statusClasses: StatusClassCounts;
+  /** By code as a string: among the event's `statusCodes`. */
+  statusCodes: Record<string, number>;
+  noResponse: NoResponseCounts;
+}
+
 /** E4: `robotsTxt`, `otherSitesRobotsTxt`, `crawlDelay`, `backoff`, `heldBack`, `siteDown` or `robotsTxtCoolDown`. */
 export type CrawlWaitReason =
   'robotsTxt' | 'otherSitesRobotsTxt' | 'crawlDelay' | 'backoff' | 'heldBack' | 'siteDown' | 'robotsTxtCoolDown';
@@ -403,6 +616,20 @@ export interface ProgressEvent {
   waits?: CrawlWait[];
   /** How many more waits there are, by reason, beyond those listed. */
   moreWaits?: Partial<Record<CrawlWaitReason, number>>;
+  // E3c. Optional here, as an engine from before E3c doesn't send them.
+  /**
+   * The URLs crawled so far, as the URL grid counts them (`fetched` is true): `fetched` less `noResponse.notChecked`.
+   * It ends at the library item's `crawledUrlCount`.
+   */
+  crawled?: number;
+  /** The part of the figures above that is the crawler's own probes of the site's other versions. */
+  siteVersions?: SiteVersionCounts;
+  /**
+   * The time spent crawling so far, over every run of the crawl: the earlier runs' time, and this run's without its
+   * pauses, so it stands still while the crawl is paused, where `elapsedMs` (this run's alone) runs on. Null when an
+   * earlier run's time wasn't kept.
+   */
+  crawlingMs?: number | null;
 }
 
 export type AlertLevel = 'info' | 'warning' | 'error';
@@ -457,6 +684,37 @@ export interface CrawlHistory {
   liveFrom: string | null;
   /** Oldest first, at most about 600, ending at the latest. */
   points: HistoryPoint[];
+  /**
+   * E3c: the time spent crawling over every run, in ms: the runs' added up, as the crawl file has it. That's the library
+   * item's for a crawl at rest; while a crawl runs the item's is the progress event's, up to about five seconds ahead
+   * of this one. Null when it isn't known (an engine from before E3c made the crawl, or a run of it). Optional here, as
+   * such an engine doesn't send it.
+   */
+  crawlingMs?: number | null;
+  /**
+   * E3c: when the crawl was crawling: each run, oldest first, with the stretches it spent crawling in. A moment's
+   * place on an axis of time spent crawling is the stretches' time up to it, so the time between runs and the time
+   * paused close up. Null when the crawl's time isn't known, or it was paused too often to list (over 1,000 stretches).
+   */
+  runs?: CrawlRun[] | null;
+}
+
+/** E3c: one run of a crawl, from its start or its being continued to its being stopped or its end. */
+export interface CrawlRun {
+  startedAt: string;
+  /** Null for a run that hasn't ended: the one going now, or one cut short when its process died. */
+  endedAt: string | null;
+  /** The time it spent crawling: its stretches added up. */
+  crawlingMs: number;
+  /** The stretches it was crawling in, oldest first: one for a run never paused, and a pause is the gap between two. */
+  crawling: CrawlingStretch[];
+}
+
+/** E3c: a stretch of time spent crawling, unbroken by a pause or a stop. */
+export interface CrawlingStretch {
+  from: string;
+  /** When it ended; for the one going now, when the engine last stored it, at most about five seconds ago. */
+  to: string;
 }
 
 export interface CrawlEvent {

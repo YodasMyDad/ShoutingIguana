@@ -10,6 +10,12 @@ Stage 1 of [the UI brief](v2-ui-brief.md#how-to-work). It records:
 Signed off on 2026-11-01. The owner delegated the stage sign-offs: "you don't really need my input ... just
 continue".
 
+**Changed on 2026-11-10.** The owner now wants the app to open in Simple, for anyone, with Advanced one switch away.
+The answers below describe Advanced, and the report moves into step 3. The plan is
+[Simple first](v2-rebuild.md#simple-first-advanced-on-a-switch-2026-11-10). This doc is amended at the Simple
+design: on 2026-11-11 the glossary gained [Simple and Advanced](#simple-and-advanced), and the design itself is
+[Simple mode](v2-ui-simple.md).
+
 ## The owner's answers (2026-11-01)
 
 | Question | Answer | What it means for the design |
@@ -221,6 +227,49 @@ The app's text uses these words, in UK English. A new term is agreed before it's
 | Speed preset | Polite, Standard or Fast, with the rate spelled out | profile, mode |
 | View | A grid with its columns, sort and filters. A saved view has a name | report, tab |
 | Inspector | The panel with everything about the selected URL | details pane |
+
+### Simple and Advanced
+
+Added on 2026-11-11 with [the Simple design](v2-ui-simple.md). The app has two modes, and one switch between them.
+
+| Term | Meaning | Not |
+| --- | --- | --- |
+| Simple | The mode the app opens in: a score, what to fix and a report, in plain words | basic, easy, beginner, lite |
+| Advanced | The mode with every URL, link, filter and setting, in the terms above | expert, pro, technical |
+| Mode | Simple or Advanced. An app setting, remembered, switched at the top right of every screen | view (a view is a grid), profile |
+| Score | One number from 0 to 100 for a crawl, worked out by the engine from the checks that ran. It says what it covers and carries a version | health, grade, rating |
+| Very good, Good, Needs work, Poor | The score's word: 90 and over, 70 and over, 50 and over, under 50 | A, B, C; pass, fail |
+| Report | The one document a crawl ends in: a self-contained HTML file from the engine, printed to make a PDF | export (an export is a grid's rows), audit |
+| Workbook | The Excel file beside the report: a summary sheet and a sheet for each check. Buttons call it "the spreadsheet" | export, dump |
+| Summary | Simple's Overview: the score, one sentence and the fixes to make first | dashboard |
+| What to fix | Simple's Issues: the problems, in plain words | to-do, tasks |
+
+Simple has its own word wherever a term above is technical. Each maps to one term, one to one, and is used only in
+Simple and in the report.
+
+| Simple says | For | Not |
+| --- | --- | --- |
+| Check a site, a site check | Crawl | scan, audit, test |
+| Address, web address | URL | link (a link points to an address) |
+| Your sites | Library | projects, history |
+| Problem | A check that found issues, when it is an Error or a Warning | issue (an issue is one check on one URL), error |
+| Thing worth a look | A check that found issues, when it is a Notice | problem, warning |
+| Serious | Error. The same red octagon | critical, high |
+| Worth fixing | Warning. The same amber triangle | medium, important |
+| Worth a look | Notice. The same quiet circle | low, minor, info |
+| Nothing wrong | Passed | OK, clean |
+| Couldn't check | Skipped | failed, not applicable |
+| Working out the results | Analysis | processing, scanning |
+| One fix | A group the engine marks as a likely template fault | |
+| Can appear in search results | Indexable | |
+| Forwards to, a forwarding address | Redirects, a redirect | |
+| Main address | Canonical | |
+| Rules file | robots.txt | |
+| Search description | Meta description | |
+| Main heading | H1 | |
+
+The last six are how a check's plain text names a thing before giving its term once in brackets. The rules for
+those texts are in [Simple mode](v2-ui-simple.md#plain-words).
 
 ## Backlog: checks from the old app
 

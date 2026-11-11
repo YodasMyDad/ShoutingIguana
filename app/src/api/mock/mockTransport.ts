@@ -285,8 +285,9 @@ export function issueGroups(
   const all = [...groups.values()]
     .map((group) => {
       const share = total > 0 ? group.pages / total : 0;
-      // A detail that says how the URL answered ("HTTP 404") is no evidence of a template.
-      const evidence = group.relatedUrlId !== null || !(group.detail ?? '').startsWith('HTTP ');
+      // A detail that says how the URL answered is no evidence of a template: "404 Not Found", or "HTTP 404" as an
+      // analysis from before the score wrote it (and as a code with no standard name still reads).
+      const evidence = group.relatedUrlId !== null || !/^(HTTP )?\d{3}\b/.test(group.detail ?? '');
       return {
         ...group,
         share,

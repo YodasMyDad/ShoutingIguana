@@ -34,6 +34,9 @@ internal sealed record CrawlStatsDto
     public long NotCheckedCount { get; init; }
     public required IReadOnlyDictionary<string, long> NonIndexableReasons { get; init; }
 
+    /// <summary>The part of <see cref="Outcomes"/> and <see cref="StatusCodes"/> that is the crawler's probes of the site's other versions.</summary>
+    public required SiteVersionStatsDto SiteVersions { get; init; }
+
     public static CrawlStatsDto From(CrawlStats stats) => new()
     {
         StartUrl = stats.StartUrl,
@@ -57,7 +60,9 @@ internal sealed record CrawlStatsDto
         StatusCodes = stats.StatusCodes.ToDictionary(group => group.Key.ToString(CultureInfo.InvariantCulture), group => group.Value),
         SkipReasons = ByName(stats.SkipReasons),
         NotCheckedCount = stats.NotCheckedCount,
-        NonIndexableReasons = ByName(stats.NonIndexableReasons)
+        NonIndexableReasons = ByName(stats.NonIndexableReasons),
+        SiteVersions = new SiteVersionStatsDto(stats.SiteVersions.Fetched, ByName(stats.SiteVersions.Outcomes),
+            stats.SiteVersions.StatusCodes.ToDictionary(group => group.Key.ToString(CultureInfo.InvariantCulture), group => group.Value))
     };
 
     private static Dictionary<string, long> ByName<TEnum>(IReadOnlyDictionary<TEnum, long> groups) where TEnum : struct, Enum =>

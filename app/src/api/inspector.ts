@@ -15,6 +15,12 @@ import type { Severity } from './types';
 /** A URL of the crawl with its status there: a redirect's end, a canonical's target. */
 export interface UrlTarget extends UrlRef {
   statusCode: number | null;
+  /**
+   * E3c: what became of the request for it, as the URL grid's `outcome`. A status is null both for a URL never fetched
+   * and for one that gave no HTTP answer (robots.txt refused it, it timed out): this tells them apart. Null when it
+   * wasn't fetched, or the stored value is one this engine doesn't know. Left out by an engine from before E3c.
+   */
+  outcome?: UrlOutcome | null;
 }
 
 export type LinkKind =
@@ -179,6 +185,16 @@ export interface UrlLinkCounts {
   inSitemap: boolean | null;
 }
 
+/**
+ * E3c: every link to the URL and from it, of every kind, a page's links to itself left out: the `total` that
+ * `/urls/inlinks` and `/urls/outlinks` give with no `kinds`. Counted from the links themselves, so it's there with or
+ * without a URL summary, where `UrlLinkCounts` (hyperlinks, on the pages audited) is null.
+ */
+export interface UrlLinkTotals {
+  inlinks: number;
+  outlinks: number;
+}
+
 export interface StructuredDataBlock {
   valid: boolean;
   types: string[];
@@ -210,6 +226,12 @@ export interface UrlIssue {
 
 /** `POST /api/crawls/{id}/urls/inspect` with `{ urlId }`: one URL in full. */
 export interface UrlDetail extends UrlRef {
+  /**
+   * E3c: the URL's length as the check `url-too-long` measures it, to set against `limits.maxUrlLength`: the URL as
+   * people read it (escapes decoded, the host in its own script), in characters as a reader counts them. Null for a
+   * stored URL that isn't one. Left out by an engine from before E3c.
+   */
+  urlLength?: number | null;
   isInternal: boolean;
   type: UrlType;
   discovery: UrlDiscovery;
@@ -221,6 +243,8 @@ export interface UrlDetail extends UrlRef {
   limits: ContentLimits;
   /** From the URL summary: null without one (`summary` says why). */
   links: UrlLinkCounts | null;
+  /** E3c: the Inlinks and Outlinks tabs' counts, every kind of link. Left out by an engine from before E3c. */
+  linkTotals?: UrlLinkTotals;
   /** As stored, names lowercased; internal URLs only. */
   headers: { name: string; value: string }[];
   structuredData: StructuredDataBlock[];
@@ -259,6 +283,12 @@ export interface LinkRow extends UrlRef {
   statusCode: number | null;
   indexable: boolean | null;
   fetched: boolean;
+  /**
+   * E3c: what became of the request for the other end, as the URL grid's `outcome`: a link to a URL robots.txt
+   * refused, or that timed out, has no status, and this says which. Null when it wasn't fetched. Left out by an engine
+   * from before E3c.
+   */
+  outcome?: UrlOutcome | null;
 }
 
 export interface LinkPage {

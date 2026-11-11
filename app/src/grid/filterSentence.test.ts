@@ -93,13 +93,13 @@ describe('a filter as a sentence', () => {
           column: 'check',
           op: 'in',
           values: ['internal-client-error'],
-          group: { detail: 'HTTP 404', relatedUrlId: null },
+          group: { detail: '404 Not Found', relatedUrlId: null },
         },
         words,
       ),
     ).toEqual([
       { field: 'Check', op: 'is', value: 'internal-client-error' },
-      { field: 'Detail', op: 'is', value: 'HTTP 404' },
+      { field: 'Detail', op: 'is', value: '404 Not Found' },
     ]);
   });
 
