@@ -251,8 +251,10 @@ export function UrlsScreen() {
         isProblem(rows.error, 'needs-analysis') ? (
           <NeedsAnalysis error={rows.error} action={analyse} onClear={clearView} />
         ) : isProblem(rows.error, 'invalid-query') ? (
+          // With what the engine said of it, in place: its sentence is written for the user, not for Details.
           <ErrorState
             error={rows.error}
+            description={rows.error.detail}
             actions={
               <Button size="sm" onClick={clearView}>
                 Reset the view
