@@ -153,12 +153,27 @@ Done that day so far, and on this branch:
 - **The two reviews of round 2**: Links has 14 findings (1 high) and Sitemaps and robots.txt has 17 (2 high). Each
   list is saved as `<name>-review\findings.md` in the scratchpad.
 
+- **Engine E3c is merged** (`ui/e3c`, with its review's 7 fixes, each with a test seen failing without it):
+  - A running crawl's log is folded past 64 MB while a links grid reads it: 75 to 87 MB at its peak on a
+    40,000-page crawl with one reader, against 106 to 160 MB before, and the crawl is no slower. A read may wait
+    for a fold; none fails. `si bench --read-links --max-log-mb` gates it, and CI runs it. **Known limit:** on a
+    crawl of several hundred thousand pages a link pass takes over 2 s, the fold gives up, and the log grows as
+    before. Nothing at that size was measured.
+  - The time spent crawling survives a first run that stored nothing, a clock set back and a machine that slept.
+  - `GET /sitemaps` gives each sitemap's `urls.robotsDisallowed` and `urls.redirectingOrBroken`.
+  - A kept `/stats` takes no read slot. `stats-pass` is gated at 450 ms and its miss of the 300 ms budget is a
+    known limitation in the API doc.
+  - Verified on the merge by the orchestrator: 1,004 engine, 166 sidecar and 17 CLI tests; the 100k bench (every
+    planted issue, 32,410 issues on 110,264 URLs, flat at 199 MB); the app's typecheck, lint and 876 unit tests.
+    `readbench --gate` failed twice on a machine running four other agents, each time in a different links class
+    (1,139 ms and 2,078 ms against gates of 200 and 550), and both classes passed when run again (151 and 364 ms).
+    The app's stories and e2e were not run on this merge alone: they run on the Links merge, which holds it.
+
 Running, each on its own local branch, unmerged (if this is the newest news here, read the checkpoint, then each
 branch's log, and relaunch what hadn't reported):
 
 | Work | Branch and worktree | Brief |
 | --- | --- | --- |
-| E3c fixer: the review's 7 findings, and two counts for each sitemap (`GET /sitemaps`) | `ui/e3c`, `e3c` | `brief-e3c-fixes.md` |
 | Links fixer: 14 findings. A page check's share is over `pagesAnalyzed` | `ui/links`, `links` | `brief-links-fixes.md` |
 | Sitemaps and robots.txt fixer: 17 findings. "Crawled" means requested, and URLs robots.txt refused get their own column | `ui/sitemaps-robots`, `sitemaps-robots` | `brief-sitemaps-fixes.md` |
 | Round 3, engine: the score, `siteWide`, the new check, the plain-text fields, a code's name in details | `ui/score`, `score` | `brief-score.md` |
