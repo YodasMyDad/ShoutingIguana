@@ -556,7 +556,7 @@ export function LinksScreen() {
       ) : null}
       {failed ? (
         isProblem(rows.error, 'needs-analysis') ? (
-          <NeedsAnalysis error={rows.error} action={analyse('Analyse it')} onClear={clearView} />
+          <NeedsAnalysis error={rows.error} action={analyse} onClear={clearView} />
         ) : isProblem(rows.error, 'invalid-query') ? (
           refused && refusedOne ? (
             // The engine is the judge of a filter (a pattern most of all): its own sentence, and the filter changed

@@ -3,13 +3,13 @@
 // analysis adds is the link summary (which makes filters quick) and the URL summary (which fills some of each end's
 // columns). Pure, so each state's words are tested.
 import type { SummaryReason, SummaryState } from '../../api/grids';
-import { UNAVAILABLE_BECAUSE, listOfNames } from '../../grid/summaryWords';
+import { UNAVAILABLE_BECAUSE, analyseWords, listOfNames, type AnalyseWords } from '../../grid/summaryWords';
 
 export interface AnalysisNote {
   /** What's true of the crawl now, and what that means here. */
   text: string;
   /** What would mend it, when something would: the button's words. Null while the crawl runs. */
-  action: 'Analyse it' | 'Analyse again' | null;
+  action: AnalyseWords | null;
 }
 
 const STATE: Record<Exclude<SummaryReason, 'crawling'>, string> = {
@@ -38,7 +38,7 @@ export function analysisNote(summary: SummaryState | undefined, emptyColumns: re
     emptyColumns.length > 0
       ? `, and ${listOfNames(emptyColumns)} ${emptyColumns.length === 1 ? 'is' : 'are'} empty until it’s analysed${reason === 'notAnalyzed' ? '' : ' again'}.`
       : `. The columns an analysis fills (inlinks, issues, where redirects end) are empty until it’s analysed${reason === 'notAnalyzed' ? '' : ' again'}.`;
-  return { text: `${STATE[reason]}${columns}`, action: reason === 'notAnalyzed' ? 'Analyse it' : 'Analyse again' };
+  return { text: `${STATE[reason]}${columns}`, action: analyseWords(reason) };
 }
 
 /** Why the grid has no rows at all, in a title and a sentence, by whether the crawl is still running. */

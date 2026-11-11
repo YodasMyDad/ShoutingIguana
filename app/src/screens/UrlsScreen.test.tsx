@@ -122,6 +122,17 @@ describe('the URL grid without the URL summary', () => {
     expect(await screen.findByRole('grid', { name: 'URLs' })).toBeVisible();
   });
 
+  it('offers to analyse again, in those words, a crawl that was analysed before: never "Analyse it"', async () => {
+    const { analyse } = sidecar({ summary: { available: false, reason: 'crawlChanged' } });
+    await open(`${URLS}?sort=-issues`);
+    await screen.findByText(/^Filtering or sorting by these columns needs an analysis, and /);
+    const main = screen.getByRole('main');
+    const again = within(main).getByRole('button', { name: 'Analyse again' });
+    expect(within(main).queryByRole('button', { name: 'Analyse it' })).toBeNull();
+    fireEvent.click(again);
+    await waitFor(() => expect(analyse).toHaveBeenCalledOnce());
+  });
+
   it('turns a query the engine can’t run into a plain sentence, with a way back', async () => {
     sidecar({ summary: { available: true, reason: null } });
     // `outcome` filters, but doesn't sort.

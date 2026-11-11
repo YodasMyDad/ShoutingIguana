@@ -17,7 +17,7 @@ import { LOOKING_UP } from '../grid/filterSentence';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
 import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
-import { UNAVAILABLE_BECAUSE, listOfNames } from '../grid/summaryWords';
+import { analyseWords, UNAVAILABLE_BECAUSE, listOfNames } from '../grid/summaryWords';
 import type { GridColumn } from '../grid/types';
 import { usePagedRows } from '../grid/usePagedRows';
 import { useUrlWords } from '../grid/useUrlWords';
@@ -235,15 +235,13 @@ export function UrlsScreen() {
         <Banner inset className="mx-6 mb-3">
           <span className="inline-flex flex-wrap items-center gap-3">
             {namesOf(unavailable)} {UNAVAILABLE_BECAUSE[summary.reason ?? 'notAnalyzed']}.
-            {summary.reason === 'crawling'
-              ? null
-              : analyse(summary.reason === 'notAnalyzed' ? 'Analyse it' : 'Analyse again')}
+            {summary.reason === 'crawling' ? null : analyse(analyseWords(summary.reason))}
           </span>
         </Banner>
       ) : null}
       {rows.error && rows.rowCount === null ? (
         isProblem(rows.error, 'needs-analysis') ? (
-          <NeedsAnalysis error={rows.error} action={analyse('Analyse it')} onClear={clearView} />
+          <NeedsAnalysis error={rows.error} action={analyse} onClear={clearView} />
         ) : isProblem(rows.error, 'invalid-query') ? (
           <ErrorState
             error={rows.error}

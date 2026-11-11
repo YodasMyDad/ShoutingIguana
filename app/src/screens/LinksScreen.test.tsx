@@ -671,6 +671,32 @@ describe('the Links grid’s states', () => {
     await waitFor(() => expect(screen.getByRole('grid', { name: 'Links' })).toHaveFocus());
   });
 
+  it.each(['crawlChanged', 'engineChanged'] as const)(
+    'offers to analyse again, in those words, a crawl that was analysed before (%s): never "Analyse it"',
+    async (reason) => {
+      const { analyse } = sidecar({ item: { outOfDate: true }, summary: { available: false, reason } });
+      const filter = JSON.stringify([{ column: 'to.inlinks', op: 'gte', value: 2 }]);
+      const { user } = await open(`${LINKS}?filter=${encodeURIComponent(filter)}`, createQueryClientWithoutBackoff());
+      await screen.findByText(/^Filtering or sorting by these columns needs an analysis, and /);
+      // One button for it in the view, worded as the crawl's own control words it.
+      const main = screen.getByRole('main');
+      const again = within(main).getByRole('button', { name: 'Analyse again' });
+      expect(within(main).queryByRole('button', { name: 'Analyse it' })).toBeNull();
+      await user.click(again);
+      await waitFor(() => expect(analyse).toHaveBeenCalledOnce());
+    },
+  );
+
+  it('offers to analyse a crawl that never was, in those words', async () => {
+    sidecar({ item: { analyzedAt: null }, summary: { available: false, reason: 'notAnalyzed' } });
+    const filter = JSON.stringify([{ column: 'to.inlinks', op: 'gte', value: 2 }]);
+    await open(`${LINKS}?filter=${encodeURIComponent(filter)}`, createQueryClientWithoutBackoff());
+    await screen.findByText(/^Filtering or sorting by these columns needs an analysis, and /);
+    const main = screen.getByRole('main');
+    expect(within(main).getByRole('button', { name: 'Analyse it' })).toBeVisible();
+    expect(within(main).queryByRole('button', { name: 'Analyse again' })).toBeNull();
+  });
+
   it('still lists the links when the engine’s list of columns can’t be read, and says what isn’t there', async () => {
     sidecar({ columnsFail: true });
     const { user } = await open(LINKS, createQueryClientWithoutBackoff());
