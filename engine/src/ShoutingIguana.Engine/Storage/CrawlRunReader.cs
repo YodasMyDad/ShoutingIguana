@@ -75,11 +75,15 @@ public static class CrawlRunReader
             return new CrawlRuns(time, null);
         }
 
+        // Each stretch begins by the wall clock and lasts by one that only runs forward, so a wall clock set back between
+        // two (a time sync) would have the later begin before the earlier ended. A stretch begins no earlier than the one
+        // before it ended, whichever run that was in: they're listed in order, none overlapping, and add up as stored.
         List<CrawlRun> runs = [];
         List<CrawlingStretch> crawling = [];
         long? run = null;
         long runMs = 0;
         var ended = false;
+        var earliest = DateTimeOffset.MinValue;
         using (var command = connection.CreateCommand())
         {
             command.Transaction = transaction;
@@ -94,8 +98,10 @@ public static class CrawlRunReader
                 }
 
                 var from = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(1));
+                from = from < earliest ? earliest : from;
                 var crawledMs = reader.GetInt64(2);
-                crawling.Add(new CrawlingStretch(from, from.AddMilliseconds(crawledMs)));
+                earliest = from.AddMilliseconds(crawledMs);
+                crawling.Add(new CrawlingStretch(from, earliest));
                 (run, runMs, ended) = (reader.GetInt64(0), runMs + crawledMs, reader.GetBoolean(3));
             }
         }

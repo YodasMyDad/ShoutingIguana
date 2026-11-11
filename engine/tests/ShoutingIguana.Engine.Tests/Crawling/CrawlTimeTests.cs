@@ -244,6 +244,90 @@ public sealed class CrawlTimeTests : IDisposable
     }
 
     /// <summary>
+    /// A stretch begins by the wall clock and lasts by one that only runs forward. The wall clock set back between two
+    /// stretches (a time sync), in one run or between two, would have the later begin before the earlier ended, and a
+    /// chart placing moments by them count that time twice: read back, each begins no earlier than the one before it
+    /// ended, no run ends before it started, and the time spent is as it was.
+    /// </summary>
+    [Fact]
+    public async Task AClockSetBackBetweenStretchesLeavesThemInOrder()
+    {
+        await using var site = await StartSiteAsync();
+        site.Hold("/held");
+        var time = new FakeTimeProvider(START);
+        var path = _files.NewPath();
+        var options = new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 2, DiscoverSitemaps = false };
+        var engine = new CrawlEngine(NullLoggerFactory.Instance, time);
+        await using (var job = engine.Start(new CrawlRequest(options, path)))
+        {
+            await TestCrawls.WaitUntilAsync(path, "SELECT COUNT(*) FROM run_time");
+            time.Advance(TimeSpan.FromSeconds(10));
+            job.Pause();
+            time.AdjustTime(time.GetUtcNow().AddMinutes(-30));
+            job.Resume();
+            time.Advance(TimeSpan.FromSeconds(5));
+            job.Pause();
+            await FakeClock.PumpAsync(time, job.StopAsync());
+        }
+
+        // And set back again, an hour, before the crawl is continued: its second run begins before its first did.
+        time.AdjustTime(time.GetUtcNow().AddHours(-1));
+        await using (var job = engine.Start(new CrawlRequest(options, path, Resume: true)))
+        {
+            await TestCrawls.WaitUntilAsync(path, "SELECT COUNT(*) FROM run_time WHERE run = 2");
+            time.Advance(TimeSpan.FromSeconds(7));
+            job.Pause();
+            await FakeClock.PumpAsync(time, job.StopAsync());
+        }
+
+        // As stored, the second and the third each begin before the one before it ended.
+        Assert.Equal(2, TestCrawls.Count(path, "SELECT COUNT(*) FROM (SELECT started_at < LAG(started_at + crawled_ms) OVER (ORDER BY id) AS early FROM run_time) WHERE early"));
+        var runs = CrawlRunReader.Read(path)!;
+        Assert.Equal(TimeSpan.FromSeconds(22), runs.TimeCrawling);
+        Assert.Equal([TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(7)], runs.Runs!.Select(run => run.TimeCrawling));
+        var stretches = runs.Runs!.SelectMany(run => run.Crawling).ToList();
+        Assert.Equal([TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(7)], stretches.Select(stretch => stretch.To - stretch.From));
+        Assert.Equal(START, stretches[0].From);
+        Assert.All(stretches.Zip(stretches.Skip(1)), pair => Assert.True(pair.Second.From >= pair.First.To, $"A stretch begins at {pair.Second.From:O}, before the one before it ended at {pair.First.To:O}."));
+        Assert.All(runs.Runs!, run => Assert.True(run.EndedAt >= run.StartedAt, $"A run ends at {run.EndedAt:O}, before it started at {run.StartedAt:O}."));
+        Assert.True(runs.Runs![1].StartedAt >= runs.Runs[0].EndedAt);
+    }
+
+    /// <summary>
+    /// The clock a stretch is timed by runs on through the machine's sleep on Windows, and stops on Linux and macOS. The
+    /// session reads it twice a second, so a gap between two readings of minutes is the machine asleep, and isn't time
+    /// spent crawling on any of them; a reading that only came late still counts.
+    /// </summary>
+    [Fact]
+    public void TimeAsleepIsNotTimeSpentCrawling()
+    {
+        var time = new FakeTimeProvider(START);
+        var clock = new RunClock(time);
+        Assert.NotNull(clock.Begin());
+        time.Advance(TimeSpan.FromSeconds(10));
+        Assert.Equal(10_000, clock.ElapsedMs);
+
+        // Asleep for two hours, then five seconds more of crawling.
+        time.Advance(TimeSpan.FromHours(2));
+        Assert.Equal(10_000, clock.ElapsedMs);
+        time.Advance(TimeSpan.FromSeconds(5));
+        Assert.Equal(15_000, clock.Current!.Value.CrawledMs);
+
+        // A reading that came late, by less than the gap that means asleep, is time spent crawling.
+        time.Advance(RunClock.ASLEEP);
+        Assert.Equal(15_000 + (long)RunClock.ASLEEP.TotalMilliseconds, clock.ElapsedMs);
+        time.Advance(TimeSpan.FromSeconds(1));
+        var ended = clock.End()!.Value;
+        Assert.Equal((16_000 + (long)RunClock.ASLEEP.TotalMilliseconds, true), (ended.CrawledMs, ended.Ended));
+
+        // The next stretch starts clean, however long the pause between them.
+        time.Advance(TimeSpan.FromHours(3));
+        clock.Begin();
+        time.Advance(TimeSpan.FromSeconds(2));
+        Assert.Equal(18_000 + (long)RunClock.ASLEEP.TotalMilliseconds, clock.ElapsedMs);
+    }
+
+    /// <summary>
     /// A run cut short leaves its last stretch going, as long as it was last stored: read so, with the run not ended, and
     /// ended there once the crawl is continued, whose time is then the whole of it.
     /// </summary>
