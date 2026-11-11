@@ -1092,7 +1092,13 @@ internal sealed class CrawlWriter : IAsyncDisposable
         RunTime("UPDATE run_time SET ended = 1 WHERE ended = 0", transaction);
         var lastRun = RunTime("SELECT MAX(run) FROM run_time WHERE typeof(run) = 'integer'", transaction) as long? ?? 0;
         var untimed = RunTime("SELECT 1 FROM run_time WHERE crawled_ms IS NULL LIMIT 1", transaction) is not null;
-        if (earlier is null && !untimed)
+
+        // No stretch kept and nothing fetched: no run has crawled yet, whichever engine made the file (one paused before
+        // it began and then stopped, or whose process died before its first batch was stored), so none went untimed.
+        // A stretch is stored with the first batch that stores a response, so a file with responses and no stretch was
+        // crawled by an engine that keeps no time.
+        var neverCrawled = lastRun == 0 && !untimed && RunTime("SELECT 1 FROM responses LIMIT 1", transaction) is null;
+        if (earlier is null && !untimed && !neverCrawled)
         {
             // From the crawl's start when nothing was ever timed, else from where the last stretch known ended.
             RunTime("""
@@ -1102,7 +1108,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
                 """, transaction, ("$run", ++lastRun));
         }
 
-        TimeCrawledBefore = earlier?.TimeCrawling;
+        TimeCrawledBefore = earlier?.TimeCrawling ?? (neverCrawled ? TimeSpan.Zero : null);
         _run = lastRun + 1;
         transaction.Commit();
     }

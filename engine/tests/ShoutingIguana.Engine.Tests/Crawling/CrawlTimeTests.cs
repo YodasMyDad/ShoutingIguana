@@ -210,6 +210,40 @@ public sealed class CrawlTimeTests : IDisposable
     }
 
     /// <summary>
+    /// A new crawl whose first run stored no stretch (paused before it began and then stopped, or its process died before
+    /// its first batch was stored) has crawled nothing: no run went untimed, so once it's continued its time is known,
+    /// from zero, and no row stands for a run without one.
+    /// </summary>
+    [Fact]
+    public async Task AFirstRunThatStoredNoStretchLeavesTheTimeKnown()
+    {
+        await using var site = await StartSiteAsync();
+        var path = _files.NewPath();
+        var options = new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, DiscoverSitemaps = false };
+        await using (var writer = CrawlWriter.Open(path, options, resume: false, new CrawlCounters(), NullLogger.Instance))
+        {
+            await writer.UpdateStatusAsync(CrawlStatus.Stopped, isFinished: false, CancellationToken.None);
+        }
+
+        Assert.Equal(0, TestCrawls.Count(path, "SELECT COUNT(*) FROM run_time"));
+
+        // As the next run opens it, before anything is crawled: nothing so far, and known to be nothing.
+        await using (var writer = CrawlWriter.Open(path, options, resume: true, new CrawlCounters(), NullLogger.Instance))
+        {
+            Assert.Equal(TimeSpan.Zero, writer.TimeCrawledBefore);
+            await writer.UpdateStatusAsync(CrawlStatus.Stopped, isFinished: false, CancellationToken.None);
+        }
+
+        var continued = await TestCrawls.RunAsync(options, path, resume: true);
+        Assert.Equal(CrawlStatus.Completed, continued.Status);
+        Assert.Equal(0, TestCrawls.Count(path, "SELECT COUNT(*) FROM run_time WHERE crawled_ms IS NULL"));
+        var runs = CrawlRunReader.Read(path)!;
+        Assert.True(runs.TimeCrawling > TimeSpan.Zero);
+        Assert.Equal(runs.TimeCrawling, continued.Progress.TimeCrawling);
+        Assert.Equal(runs.TimeCrawling, Assert.Single(runs.Runs!).TimeCrawling);
+    }
+
+    /// <summary>
     /// A run cut short leaves its last stretch going, as long as it was last stored: read so, with the run not ended, and
     /// ended there once the crawl is continued, whose time is then the whole of it.
     /// </summary>
