@@ -242,8 +242,16 @@ public sealed class CliTests : IAsyncLifetime
         Assert.True((bool?)result["summaryAvailable"]);
         Assert.Equal(2, (int?)result["runs"]);
         Assert.Empty(result["failures"]!.AsArray());
-        Assert.Equal(["facets", "grid", "groups", "inspector", "links", "links-grid", "lookup", "robots", "rows", "sitemaps", "stats"],
+        Assert.Equal(["facets", "grid", "groups", "inspector", "links", "links-grid", "lookup", "robots", "rows", "search", "sitemaps", "stats"],
             result["cases"]!.AsArray().Select(read => (string)read!["kind"]!).Distinct().Order(StringComparer.Ordinal));
+
+        // Search as it's typed: a keystroke with the crawl's text kept, held to the palette's budget, and the first one,
+        // which reads the text and has a gate of its own; and the grid's search, for one letter and for text nothing holds.
+        Assert.Equal(["search", "search-first"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "search").Select(read => (string)read!["class"]!).Distinct());
+        Assert.InRange(ReaderBenchmark.GATE_MS["search"], 1, 50);
+        Assert.InRange(ReaderBenchmark.GATE_MS["search-first"], ReaderBenchmark.GATE_MS["search"], 300);
+        Assert.All(new[] { "Search for one letter", "Search that matches nothing", "Search as typed: 'p'", "Search as typed: the first keystroke" }, name =>
+            Assert.Contains(result["cases"]!.AsArray(), read => ((string)read!["name"]!).StartsWith(name, StringComparison.Ordinal)));
 
         // The crawl's headline numbers: read, read again from what was kept, and without the link summary, each held to
         // a gate of its own: the kept read to a few milliseconds, which numbers read all over again would miss.

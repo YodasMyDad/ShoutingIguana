@@ -45,6 +45,12 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     /// at 100k on the desktop (265 ms at worst), which the runner's 550 ms is, and held to it so they can't get slower.
     /// They grow with the links, so they'd miss at 1M. A filter most links pass isn't one of them any more: it's read
     /// from the blocks but for the others (<c>link-grid</c>).</item>
+    /// <item>Search as it's typed (<c>search</c>) passes over the crawl's URLs and titles in memory: 1.5 to 2.8 ms at 100k
+    /// on the desktop whatever is typed, against the palette's 50 ms, and held to 25 ms: a search that read the file
+    /// again (the text no longer kept) takes 50 to 70 ms on the desktop and would fail it, where a gate of 50 might not.
+    /// The first search of a crawl reads that text from the file (<c>search-first</c>: 61 to 72 ms at p95 on the
+    /// desktop, <b>over the palette's 50 ms</b>, which is why the palette asks an empty search as it opens): held to
+    /// 200 ms for the runner, so it can't get slower unseen.</item>
     /// </list>
     /// engine/README.md has the measurements.
     /// </summary>
@@ -68,7 +74,9 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         ["robots"] = 200,
         ["stats"] = 350,
         ["stats-kept"] = 10,
-        ["stats-pass"] = 450
+        ["stats-pass"] = 450,
+        ["search"] = 25,
+        ["search-first"] = 200
     };
 
     /// <summary>The Overview columns, which every grid read fetches.</summary>
@@ -118,6 +126,10 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
             Query([Text("title", FilterOperator.Contains, "product"), Text("url", FilterOperator.Contains, "/p/"), Number("h1Count", FilterOperator.Eq, 1)], "depth", descending: false));
         Grid("Search, by URL (rare)", "text", new UrlQuery { Search = "kestrel", Sort = [new UrlSort("url")] });
         Grid("Search for a common word, by URL", "text", new UrlQuery { Search = "product", Sort = [new UrlSort("url")] });
+        Grid("Search for one letter, by issues", "text", new UrlQuery { Search = "p", Sort = [new UrlSort("issues", true)] });
+        Grid("Search for two letters, in crawl order", "text", new UrlQuery { Search = "pr" });
+        Grid("Search that matches nothing", "text", new UrlQuery { Search = "zzzqqq" });
+        Grid("Search for forty characters, by URL", "text", new UrlQuery { Search = FORTY_CHARACTERS, Sort = [new UrlSort("url")] });
 
         var checks = IssueReader.ReadCounts(path).Where(check => check.Value > 0).OrderByDescending(check => check.Value).ToList();
         if (checks.Count > 0)
@@ -164,7 +176,28 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         SitemapsAndRobots();
         WithoutSummary();
         Stats();
+        Search();
         return _cases;
+    }
+
+    /// <summary>A search no URL or title of the benchmark site matches, forty characters long.</summary>
+    private const string FORTY_CHARACTERS = "this text is forty characters long, no m";
+
+    /// <summary>
+    /// Search as it's typed, for the palette: a keystroke with the crawl's text kept, as every keystroke but the first has
+    /// it (<c>search</c>: one letter, which every URL matches, to forty characters that none does), and the first, which
+    /// reads the crawl's URLs and titles into memory (<c>search-first</c>).
+    /// </summary>
+    private void Search()
+    {
+        ReadCache kept = new();
+        foreach (var text in new[] { "p", "pr", "pro", "product", "/p/123", "kestrel", "Product 12345", "zzzqqq", FORTY_CHARACTERS })
+        {
+            Timed($"Search as typed: '{text}'", "search", "search", UrlSearchReader.Search(path, text, cache: kept).Matching, () => UrlSearchReader.Search(path, text, cache: kept));
+        }
+
+        Timed("Search as typed: the first keystroke, the crawl's text read", "search", "search-first", null, () => UrlSearchReader.Search(path, "p"));
+        Timed("Search as typed: the first keystroke, a text nothing matches", "search", "search-first", null, () => UrlSearchReader.Search(path, "zzzqqq"));
     }
 
     /// <summary>
