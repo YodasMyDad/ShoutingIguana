@@ -28,6 +28,9 @@ Built in stages:
 - **E3b, E5 and E6** add the links grid, sitemaps and robots.txt, export, search and the favicon. They come from the
   brief's [engine work the UI needs](v2-ui-brief.md#engine-work-the-ui-needs) and the handoff's
   [what's missing](v2-rebuild.md#whats-missing).
+- **E5** is marked below: [export](#export-e5) of what a grid shows as CSV or Excel, the workbook of everything, and
+  [the report](#report-e5), with each column's title and its values' words on the column lists.
+  [Engine changes E5 made](#engine-changes-e5-made) has what was built and what was measured.
 - **E3c** is marked below where it adds to an answer, each addition a new field and nothing taken away: what the
   Overview and inspector screens found missing once they were built on the real thing. `/stats` read fast and kept;
   the crawler's own probes said apart in the counts; the URLs crawled counted as the grid counts them; the time spent
@@ -170,6 +173,15 @@ Built in stages:
     | `url-not-found` | 404 | No URL of the crawl has this id or text (E3a) |
     | `sitemap-not-found`, `origin-not-found` | 404 | The crawl has no sitemap with this id, or no robots.txt for this origin (E3b) |
     | `not-found`, `check-not-found` | 404 | No such route, or no check with this id |
+    | `invalid-export` | 422 | An export or a report that can't be made as asked: an unknown kind or format, a kind in a format it isn't written in, a field of another kind, a path that isn't a file of the format on this computer, examples out of range. `errors` is keyed by the field (E5) |
+    | `export-not-found` | 404 | No export has this id: nobody started it, or it ended more than 64 exports ago (E5) |
+    | `export-busy` | 409 | 4 exports are running already, another is writing the same file, or the sidecar is shutting down (E5) |
+    | `export-not-writable` | 400 | The file can't be written there: the folder isn't there, the user may not write to it, or the file is read-only (E5) |
+    | `export-file-in-use` | 409 | A file of that name is open in another program, as Excel holds a workbook it's showing (E5) |
+    | `export-disk-full` | 507 | The disk filled up while the file was written; nothing is left behind (E5) |
+    | `export-crawl-changed` | 409 | The crawl changed under the export: analysed again, continued, paused, resumed or finished (E5) |
+    | `export-too-large` | 422 | More rows than an Excel file holds here (16 sheets of 1,048,575); CSV has no limit (E5) |
+    | `check-skipped` | 409 | The last analysis didn't run the check, so it has no rows to export (E5) |
     | `bad-request` | 400 | Malformed JSON, or a property the API doesn't know |
     | `unauthorized` | 401 | The token is missing or wrong |
     | `origin-not-allowed` | 403 | An `Origin` not on the allowlist |
@@ -352,10 +364,12 @@ use, as `si crawl --resume` allows. It's analysed when it completes.
 
 `GET /api/events` is a `text/event-stream`. The UI reads it with `fetch`, since `EventSource` can't send the token.
 
-- **First.** A `hello` event, `{ live: [crawlIds], analyzing: [crawlIds] }`, followed by the latest `progress` for each
-  live crawl, then the latest `analysis` of each crawl being analysed. A reconnecting UI is up to date at once.
+- **First.** A `hello` event, `{ live: [crawlIds], analyzing: [crawlIds], exports: [exportIds] }`, followed by the
+  latest `progress` for each live crawl, then the latest `analysis` of each crawl being analysed, then the latest
+  `export` of each export running. A reconnecting UI is up to date at once.
   `analyzing` (E4) lists the crawls being analysed here, so the `analysis` events that follow are for crawls the UI
-  knows to be analysing, though it missed their `analyzing` event.
+  knows to be analysing, though it missed their `analyzing` event. `exports` (E5) lists the exports running here, by
+  id, for the same reason.
 - **Replay.** None. Events carry no ids, and `Last-Event-ID` is ignored. Alerts can be fetched with
   `GET /api/crawls/{id}/alerts`, which reads them from the crawl file; an alert's `id` and `at` together tell the UI one
   it already has (see **Alerts**).
@@ -373,6 +387,7 @@ use, as `si crawl --resume` allows. It's analysed when it completes.
 | `crawl` | `{ crawlId, status, error?, errorType? }` | Every status change, with the library's statuses. An analysis shows as `analyzing`, then back to `completed` or `stopped` with a `library` event, and `error` if it failed. `errorType` is the problem type when the UI can act on it: `crawl-busy` when the analysis found the file busy (someone reading it, another program writing to it), within seconds, so trying again can work |
 | `library` | `{}` | The library changed. The UI fetches `/api/crawls` again |
 | `analysis` | `{ crawlId, phase, done, total }` | E4. While an analysis runs: each phase as it starts (`done` 0) and as it ends (`done` equal to `total`), and at most every 250 ms between, the phases in the order under **Analysis progress** below. All of them come after the crawl's `analyzing` event and before the one that ends it |
+| `export` | The export, whole: `{ exportId, crawlId, kind, format, path, status, rowsWritten, rowsExpected, startedAt, finishedAt, result, error }` | E5. As an export starts, at most every 250 ms while it writes rows, and as it ends (`done`, `cancelled` or `failed`). Never merged or dropped. See [Export](#export-e5) |
 
 #### Progress (E4)
 
@@ -761,8 +776,12 @@ of the file and holds it for that one page only.
   scrolled grid count at most that often.
 
 `GET /api/url-columns` lists the columns, for the column chooser and the filter bar:
-`[{ id, type, needsAnalysis, sortable, filterable, values, issueRowsOnly }]`, where `values` lists an enum's values
-and `issueRowsOnly` marks a check's own columns, which only its rows have (see Issue groups).
+`[{ id, type, needsAnalysis, sortable, filterable, values, issueRowsOnly, title, unit, valueTitles }]`, where `values`
+lists an enum's values and `issueRowsOnly` marks a check's own columns, which only its rows have (see Issue groups).
+**`title`**, **`unit`** and **`valueTitles`** (E5) are the column in words: its name as a header shows it ("Status",
+"Response time"), the unit of its numbers (`ms`, `bytes`, or null), and an enum's values as a cell shows them, by
+value (`{"clientError":"Client error"}`; empty for other types). They are the engine's, and an [export](#export-e5)
+writes them, so a grid that shows them and the file exported from it can't name a column or a value two ways.
 
 | Column | Type | Needs analysis | Is |
 | --- | --- | --- | --- |
@@ -1138,7 +1157,9 @@ snapshot per call, a request given up stops its read, reads queue, and an analys
   is refused with `invalid-query` on `after`.
 
 `GET /api/link-columns` lists the columns as `/api/url-columns` does, `from.` and `to.` columns included:
-`[{ id, type, needsAnalysis, sortable, filterable, values }]`.
+`[{ id, type, needsAnalysis, sortable, filterable, values, title, unit, valueTitles }]`. The last three (E5) are the
+column in words, as the URL grid's are: a link's own ("Kind", "Anchor or alt text"), and either end's as the URL
+grid's under "Source" or "Target" (`from.url` is "Source URL", `to.statusCode` "Target status").
 
 #### Link facets
 
@@ -1353,6 +1374,196 @@ in crawl order; `line` narrows them to one line's and `reason` to one reason's, 
 - An origin's answer, its lines and its blocked URLs are read and kept as one, so while a crawl runs the file's
   `blocked` is the URLs its lines and `unmatched` account for, and `/robots/blocked` lists that many. The list of
   origins is kept apart (for 2 s while a crawl runs): an origin's `blocked` there can be a moment behind its file's.
+
+### Export (E5)
+
+What a grid shows as CSV or as an Excel workbook, the workbook of everything, and the report, each written **by the
+sidecar** to a path the user chose in the shell's native save dialog. An export is a job, as an analysis is: a call
+starts it and is answered at once, `export` events tell how far it has got and how it ended, and it can be cancelled.
+An export only reads the crawl.
+
+`POST /api/crawls/{id}/export` starts one and answers **201** with the export:
+
+```json
+{"kind":"urls","format":"xlsx","path":"C:\\Users\\me\\Documents\\example.com 2026-10-31 URLs.xlsx",
+ "columns":["url","statusCode","indexability","title","inlinks"],
+ "filters":[{"column":"type","op":"in","values":["page"]}],"search":"rattan","sort":[{"column":"inlinks","desc":true}]}
+```
+
+```json
+{"exportId":"3f9a61c2d0b4e87a","crawlId":"…","kind":"urls","format":"xlsx",
+ "path":"C:\\Users\\me\\Documents\\example.com 2026-10-31 URLs.xlsx","status":"running","rowsWritten":0,
+ "rowsExpected":null,"startedAt":"2026-11-01T17:42:00.118Z","finishedAt":null,"result":null,"error":null}
+```
+
+- **These filters, these columns.** A grid's export is the grid's own read: its `columns`, `filters`, `search` and
+  `sort`, as the grid's call takes them, with no `offset`, `limit` or `after` (an export writes every row; one of
+  those in the body is a `bad-request`, as any property the API doesn't know is). The engine reads the rows with the
+  code the grid reads them with, a page at a time by the grid's own cursor, so the file holds exactly what the grid
+  shows, in its order.
+- **`kind`** says what is exported, and which other fields the body takes. A field that belongs to another kind is
+  refused (`invalid-export`, against that field), not ignored:
+
+  | `kind` | Writes | `format` | Takes |
+  | --- | --- | --- | --- |
+  | `urls` | The URL grid | `csv`, `xlsx` | `columns`, `filters`, `search`, `sort` |
+  | `links` | The links grid | `csv`, `xlsx` | The same, over the links grid's columns; one sort key |
+  | `sitemapUrls` | One sitemap's URLs | `csv`, `xlsx` | `sitemapId`, and the URL grid's four |
+  | `issueRows` | A check's rows, or one group's | `csv`, `xlsx` | `checkId`, `group` (as `/rows` takes it), and the URL grid's four, the check's own columns among them |
+  | `robotsBlocked` | An origin's blocked URLs | `csv`, `xlsx` | `origin`, and `line` and `reason` to narrow them, as `/robots/blocked` takes them |
+  | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId` |
+  | `workbook` | The spreadsheet of everything | `xlsx` | Nothing |
+  | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples` |
+
+- **`columns`** are the file's columns, in the order given; without any, the grid's own (`url`; for `issueRows`,
+  `url`, `detail` and `relatedUrl`; for `links`, `from.url`, `to.url`, `kind` and `text`). The id is a column only
+  when asked for (`id`: "Crawl order"). A column that needs the URL summary, on a crawl that has none, is in the file
+  with no values, and the result names it in `unavailableColumns`, as the grid lists it in `unavailable`.
+- **`path`** is the file to write: a full path on this computer, whose name ends in the format's extension (`.csv`,
+  `.xlsx`, `.html` or `.htm`), so an export can't be made to write a program or a script. A path to another computer
+  (`\\server\share\…`, a device path) is refused, as a crawl's is; a mapped drive letter stays allowed. The crawl's own
+  file is never one. A file already there is replaced, once the new one is whole.
+
+**The words are the engine's.** A file's header row is each column's `title`, with its `unit` in brackets where it has
+one ("Response time (ms)", "Size (bytes)"), and an enum's value is written as its `valueTitles` say it ("Client
+error"); true and false are "Yes" and "No"; an unknown value is an empty cell. `GET /api/url-columns` and
+`GET /api/link-columns` give all three for every column, so a grid that shows the engine's titles and words shows what
+its export writes:
+
+```json
+{"id":"responseMs","type":"number","needsAnalysis":false,"sortable":true,"filterable":true,"values":[],
+ "issueRowsOnly":false,"title":"Response time","unit":"ms","valueTitles":{}}
+```
+
+A link's own columns have their titles ("Kind", "Anchor or alt text", "Links to its own page"), and either end's is
+the URL grid's under "Source" or "Target": `from.url` is "Source URL", `to.statusCode` "Target status". The fixed
+kinds have fixed headers: `robotsBlocked` writes "Blocked URL", "Blocked by" ("A rule", "robots.txt couldn’t be read"
+or "No rule kept"), "Line", "Rule" and "Error"; `check` and the workbook's sheets write "Address", "Page title", "What
+was found" and "Other address".
+
+#### The files
+
+- **CSV** is RFC 4180 as Excel reads it: UTF-8 with a byte-order mark, rows ended CRLF, a field holding a comma, a
+  quote or a line break in quotes with its quotes doubled. Numbers are written as their digits.
+- **Excel** (`.xlsx`) is written a row at a time, never held in memory. Numbers are numbers and dates are dates; the
+  header row is bold, stays in view and filters; a column is as wide as its first 200 rows need, within 9 to 80
+  characters. A sheet holds 1,048,576 rows, so **an export of more rows goes on to further sheets** ("Links", "Links
+  (2)"…), each under the same header, and the result's `sheets` says how many. A table may fill **16 sheets
+  (16,777,200 rows)**: one with more is refused before anything is written (`export-too-large`: "export it as CSV,
+  which has no limit, or narrow it with a filter"), never cut short. A cell holds 32,767 characters: longer text is
+  cut to that, and the result counts the cells (`truncatedCells`).
+- **Text from the site can't run.** A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is what a
+  spreadsheet runs as a formula. In CSV such text gets an apostrophe before it (`'=HYPERLINK(…)`), which a spreadsheet
+  shows as text; a number in a numeric column is written as the number it is, negative or not. In a workbook every
+  text is a text cell, which nothing runs whatever it holds, and one that looks like a formula is also marked as Excel
+  marks text typed after an apostrophe, so that editing the cell doesn't turn it into one. Control characters and text
+  shaped like the format's own escapes come back as they went in.
+- **The workbook** (`workbook`) is a "Summary" sheet, then a sheet for each check that found something:
+  - *Summary*: the site, when it was checked and when its results were worked out, the pages read and the addresses
+    checked, the checks run, the score with its word and version, and the five counts; then a row for **every check**:
+    its number, its sheet, whether it found something, found nothing or couldn't run (with why), its severity as the
+    report says it and as the checks call it, its plain title and its technical one, its id and category, its count,
+    what that's a count out of, its share, and the points it takes off the score.
+  - *A check's sheet* is named by the check's number in the report and the start of its title, in the 31 characters a
+    sheet's name holds ("3 Large images that slow pag…"), and holds every URL the check flagged, in crawl order: the
+    address, the page's title, what was found, and the other address involved.
+  - `check` writes one of those sheets as a file of its own (a check that found nothing: its header alone).
+
+#### The job
+
+- **`status`** is `running`, then `done`, `cancelled` or `failed`. Only `done` leaves a file: the file is written
+  beside its target under another name and moved into place once whole, so a cancelled or failed export leaves
+  nothing, and a file it was to replace is as it was.
+- **`rowsWritten`** of **`rowsExpected`** is how far it has got: rows of data, headers apart. `rowsExpected` is null
+  until the first page is read, and for the report; the workbook's is its checks' rows.
+- **`result`**, once done: `{ rows, bytes, sheets, unavailableColumns, truncatedCells, crawlWasRunning }`.
+- **`error`**, once failed, is the problem a call would have been answered with: `{ type, title, status, detail?,
+  errors? }`. Its `title` is a plain sentence to show as it is.
+- **Events.** An `export` event carries the export, whole, as above: when it starts, at most every 250 ms while rows
+  are written, and when it ends. A stream that connects meanwhile is told the running exports in `hello` (`exports`,
+  their ids) and gets each one's latest event after it. An export that has ended is no longer in `hello`.
+
+| Method and path | Does |
+| --- | --- |
+| `GET /api/exports/{exportId}` | The export, as above: one that's running, or one of the last 64 that ended. `export-not-found` (404) otherwise |
+| `POST /api/exports/{exportId}/cancel` | 202. A running export stops within a page of rows and leaves no file; one that has ended stays as it ended. `export-not-found` for an id nobody started |
+
+- **Refused at once**, before anything is read or written, with the answer a problem and no export started: a body
+  that isn't an export (`invalid-export`, with `errors` by field: `kind`, `format`, `path`, a field of another kind,
+  `examples`…); a query the grid would refuse (`invalid-query`, as the grid's own call gives it); an unknown check
+  (`check-not-found`); a folder that isn't there or can't be written to (`export-not-writable`); a file of that name
+  open in another program, as Excel holds a workbook it's showing (`export-file-in-use`); too many exports, or one
+  already writing that file (`export-busy`).
+- **Said by the export as it fails**, in its `error`, as only the crawl can tell: `not-analyzed`, `needs-analysis`
+  (with `reason` and `columns`), `check-skipped` (the last analysis didn't run the check: it has no rows, which isn't
+  none), `sitemap-not-found`, `origin-not-found`, `export-too-large`, `export-crawl-changed`, and what can go wrong
+  with the file once it's being written: `export-disk-full`, `export-not-writable`, `export-file-in-use`.
+- **At most 4 exports run at once**, each on a thread of its own; a fifth is `export-busy`. They don't take the
+  grids' read slots.
+- **Shutdown** cancels every export as it begins, with the crawls and analyses, and nothing new starts.
+
+**While a crawl runs**, an export is of the crawl **as it stood when the export began**: nothing the crawl finds
+after that is written, and `crawlWasRunning` says so. Each row is read, and tested against the filters, as its page is
+read, so a URL shows the status it had then (as the links grid's pages do). Its rows are in crawl order, or by URL: a
+`sort` by anything a running crawl changes (a status, a count) is refused with `invalid-query` on `sort`, as rows
+would change places between two pages. `rowsExpected` is the count when the export began, so `rowsWritten` can end a
+little short of it.
+
+**An export never holds the file.** Each page is a read of its own, on a snapshot it lets go of before the next, as a
+grid's page is: an analysis or a continue starting here is kept waiting no longer than by a grid, and a running
+crawl's write-ahead log is never held open across two pages, so the log can be folded into the file and started again
+however long the export takes. In return, **a crawl that changes under an export ends it** (`export-crawl-changed`):
+analysed again, continued, paused, resumed or finished, its pages would be of two different crawls. The export says
+so and leaves no file; exporting again exports the crawl as it now is.
+
+### Report (E5)
+
+The report is the one document a crawl ends in: a single self-contained HTML file, to
+[the design](v2-ui-simple.md#the-report). Inline CSS, inline SVG, no script, no web font, light only; it prints to A4
+and Letter from the print dialog, which is also how it becomes a PDF.
+
+`GET /api/crawls/{id}/report?cut=full|summary&examples=5&lookExamples=3` returns the document, as `text/html` in
+UTF-8. `not-analyzed` (404) for a crawl never analysed: it has no report. The export job saves the same document to a
+path (`kind` `report`), and `si report` writes it from the command line.
+
+- **`cut`** is `full` (the default), or `summary`: the report's first page alone (its head, the summary, what to fix
+  first, how the score is worked out, and the foot). The summary is the full report's own opening, so the two can't
+  differ.
+- **`examples`** and **`lookExamples`** are how many of its first pages, in crawl order, each problem to fix and each
+  thing worth a look lists: 5 and 3 by default, 0 to 50. The rest are in the workbook, on the sheet with the problem's
+  number. A value out of range, another `cut` or another parameter is `invalid-export`, by field.
+- **Its outline** is the design's: the head; the summary (the score as a ring, its word, what it covers, the five
+  counts); "Fix these first" (up to five, by their numbers); "How the score is worked out"; then, from a new page,
+  "What to fix" (every check that found something, in three groups, numbered in the order to fix them: its plain title
+  with its technical title and severity beside it, its count and share, its points, who usually fixes it, what's wrong,
+  how to fix it, a "One fix" line where one cause is behind most of its pages, and its first pages); "What couldn't be
+  checked", with why; "What was checked and found nothing wrong"; and "About this check".
+- **Its length follows the checks that found something, never the site's size**: what it reads is counts, and a few
+  rows a check.
+- **Every state is the document's own to say.** A crawl stopped early, or at its URL limit, says so under the site
+  ("This check was stopped early: 312 pages read, 1,380 addresses still to check. This report covers only what was
+  read."), marks its score "so far" with a dashed ring, and says how to finish under "Finished?". A site with nothing
+  to fix has "Nothing to fix" in place of the first list, and no "What to fix". A crawl that read no page has no
+  score, and says why in the score's place. Results that no longer stand (the crawl went on, or the checks changed)
+  are said to be out of date under the site, with their date.
+- **The score and the words.** The score, its breakdown, the order problems are numbered in and each check's plain
+  words are the analysis's and the catalog's. Where a check has no plain words yet, its technical texts stand in, and
+  its technical title is beside either.
+
+**What a site sends can't become markup.** Every string from the crawl is escaped where it's written, as text and
+inside an attribute alike; control characters, and the marks that reverse the text after them, are left out. A URL is
+a link only when it is `http` or `https` (a `javascript:` or `data:` URL a site wrote is shown as text), and a link
+opens apart from the document (`target="_blank" rel="noopener noreferrer nofollow"`). The document carries
+`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-…'; base-uri 'none';
+form-action 'none'">`: nothing may be loaded or run, and the only style is its own one sheet, named by its hash. There
+isn't a script, a style attribute, an image or a form in it.
+
+**Showing it.** The answer carries the API's own headers like every other, so its address is nothing a browser could
+open as a page: the UI reads the document as text and gives it to a sandboxed frame (`srcdoc`, scripts off). A frame's
+document also answers to the policy of the page that holds it, so **the app's own Content-Security-Policy must allow
+the report's inline style sheet** (its hash is in the document's policy and is the same for every report an engine
+makes, or `'unsafe-inline'` for styles in that frame); with `sandbox` and no `allow-popups`, the report's links do
+nothing in the app, and work in the saved file.
 
 ## Engine changes E1 needs
 
@@ -1833,3 +2044,97 @@ from the link summary at 98 and 90 ms (107 ms before). Every number added or cha
 written for the check, through a running sidecar: on that crawl, on a copy of it with link ids missing, on the garden
 crawl analysed again, and on a crawl run through the sidecar that was paused, stopped and continued (5 of its 728
 URLs not checked, 1 a probe, 20.7 s spent crawling of 26.3 s on the clock). Nothing differed.
+
+## Engine changes E5 made
+
+Export, the workbook and the report. Each has its own tests. Measured on a copy of the 100k benchmark crawl (112,577
+URLs, 5,053,909 links, an 879 MB file) and of the garden crawl (6,286 URLs found, 4,521 checked, 21,914 links), each
+analysed by this engine, with `si export` on a 32-core Windows machine that other work was sharing; times are two
+runs, memory is the process's peak working set, with its private bytes beside it.
+
+- **An export is the grid's own read, a page at a time** (`Export/CrawlExporter`, `Storage/GridExportReader`). It asks
+  the grid's reader for a page, writes it, and reads on by the grid's own cursor: the same query, compiled and run by
+  the same code, so a file can't differ from the grid. Each page is a read of its own (`GridReadContext.Read`), on a
+  snapshot let go of before the next, so an export's memory is a page of rows (5,000 URLs, 1,000 links), a writer here
+  never waits on one for longer than on a grid's read, and nothing is held open for the export's length. What the
+  grid's reads count is kept between the pages, in the sidecar's `ReadCache` or one of the export's own: without it,
+  an export of the links by their target took over five minutes (each page ordering the targets again), and takes 39 s
+  with it.
+- **What it costs.**
+
+  | Export | Rows | Time | Peak memory (private) | File |
+  | --- | ---: | --- | --- | ---: |
+  | 100k: URLs, 9 columns, CSV | 112,577 | 0.7 to 1.7 s | 70 to 75 MB (42 to 45) | 10.9 MB |
+  | 100k: URLs, 9 columns, Excel | 112,577 | 1.0 to 1.1 s | 88 to 92 MB (59 to 63) | 8.3 MB |
+  | 100k: URLs sorted by inlinks (no index), Excel | 112,471 | 1.4 s | 111 MB (57) | 4.0 MB |
+  | 100k: every link, CSV | 5,053,909 | 28.6 to 32.8 s | 75 to 76 MB (42) | 402 MB |
+  | 100k: every link, Excel (5 sheets) | 5,053,909 | 30.3 to 37.1 s | 91 to 92 MB (55 to 57) | 159 MB |
+  | 100k: every link by its target's URL, CSV | 5,053,909 | 39.2 s | 88 MB (52) | 402 MB |
+  | 100k: links whose text contains a word, CSV | 2,200,717 | 22.0 s | 243 MB (48) | 184 MB |
+  | 100k: the workbook (76 sheets) | 32,402 | 1.1 s | 97 to 98 MB (44 to 46) | 1.3 MB |
+  | 100k: the report | | 0.5 to 0.6 s | 96 MB (32) | 203 KB |
+  | Garden: URLs, CSV and Excel | 6,286 | 0.3 s | 41 and 44 MB | 0.72 and 0.37 MB |
+  | Garden: every link, CSV and Excel | 21,914 | 0.4 s | 58 MB | 3.6 and 0.63 MB |
+  | Garden: the workbook (20 sheets) | 933 | 0.4 s | 49 MB | 60 KB |
+  | Garden: the report | | 0.3 s | 42 MB | 92 KB |
+
+  **Memory is flat**: five million links are exported in the memory 112,577 URLs are, and the working set sampled
+  through the links export read 70, 63, 64 and 64 MB at a quarter, half, three quarters and the end. The 243 MB is the
+  one pass over the links a text filter makes, as it makes it for the grid: the crawl file's own pages, mapped and
+  read once, not memory the export holds (its private bytes stay at 48 MB).
+- **Excel files are written by the engine, with no package** (`Export/Xlsx/`, some 550 lines over the
+  framework's `ZipArchive`): a row at a time, straight into the ZIP. The alternatives hold the workbook (ClosedXML, in
+  the old app) or write text inline in each cell, which the format allows and not every reader of it reads
+  well. This writes what Excel itself writes: **shared strings**, every row and cell named by its
+  place, numbers as numbers. The shared strings are a part of their own, after the sheets, so their items go to a
+  file beside the workbook as the sheets are written and are copied in at the end; a text seen lately (the last
+  65,536, in 4 MB) names the item it has, which takes the 5 million links' 19.9 million text cells to 3.45 million
+  items. `DocumentFormat.OpenXml` 3.1.1 (MIT, published 2024-10-16) is in **the tests only**: it reads the workbooks
+  back, and its validator holds every one to the format's schema.
+- **Past a sheet's 1,048,576 rows** a table goes on to further sheets under the same header, and the export's result
+  says how many; a table has 16 sheets (16,777,200 rows), and one with more is refused before anything is written
+  (`export-too-large`), so no workbook is ever short of its rows. A million pages' 50 million links are for CSV.
+- **Text a spreadsheet would run stays text** (`Export/SpreadsheetText`, `Tables/CsvTableWriter`, `XlsxCell.Text`),
+  and a number in a numeric column is never touched: the guard is on text cells only. The tests write a site's worst
+  through both files and through a whole export (titles and URLs changed in a copy of a crawl): formulas, DDE, a
+  leading tab and carriage return, quotes, commas, line breaks, control characters, emoji, a surrogate with no
+  partner, and text shaped like the workbook format's own escapes.
+- **The file is whole or not there** (`Export/ExportTarget`): written beside its target, flushed, and moved into
+  place. What can go wrong with it is told apart: the path, a place that can't be written to, a full disk, and a file
+  open in another program, which is found before anything is read. The tests cancel and fail exports part-way (a
+  disk that fills up is a stream that fails as Windows and Linux fail one; a real full disk wasn't used) and hold
+  that the folder is as it was.
+- **A crawl that's running** is exported as it stood when the export began: its highest URL and link ids are the
+  bounds, and rows past them are left out. The tests export a crawl while a writer adds to it between every two
+  pages, and hold the file to the grid as it stood at the start; a real crawl is exported over and over as it runs,
+  and each file is held to the finished crawl's links up to its last.
+- **What an export does to a running crawl's log.** Nothing lasting: between any two pages it has no read open, so
+  the log can be folded into the file and emptied. The test folds it (`PRAGMA wal_checkpoint(TRUNCATE)`) after every
+  page of an export and holds that it's emptied each time, having shown first that one reader part-way through the
+  file is enough to keep it from being. Each page goes through the read gate as a grid's read does, so it also waits
+  out a writer that wants the file for a moment; the fold a crawl's writer makes for itself when its log grows (on
+  `ui/e3c`, not on this branch) holds new reads while those in flight end, which an export's pages are.
+- **A crawl that changes under an export ends it** (`export-crawl-changed`): each page says what state of the crawl
+  it read (the crawl row's stamp, the last analysis, how the grid reads), and a page that finds another isn't read.
+- **The report** (`Reporting/`): `ReportReader` reads what it says through the engine's readers (the analysis's
+  counts and skipped checks, the crawl's headline numbers and options, and each problem's first rows and largest
+  group), `ReportDocument` writes the HTML, and the workbook's summary sheet is written from the same model. The
+  score, the order problems are numbered in and each check's words reach both through one seam (`ReportSources`).
+  - Its size follows the checks that found something: the garden crawl's 19 make a 92 KB document of 13 pages on A4
+    (14 on Letter) with the checks' technical texts standing in for plain words; the 100k crawl's 75 make 203 KB and
+    34 pages (38 on Letter). The summary cut is 18 KB and one page of A4 for the garden crawl (two of Letter, which
+    is 18 mm shorter), and 37 KB and 3 pages for the 100k crawl, whose score has 45 lines.
+  - It takes 0.3 s for the garden crawl and 0.5 to 0.6 s for the 100k crawl, most of it the crawl's headline numbers
+    (`/stats`'s one pass), which the sidecar keeps.
+- **Each column has its words** (`Storage/ColumnWords`): a title, a unit, and its values' words, on `UrlColumnInfo`
+  and on the two column lists. They are the words the app's screens already use, the unmerged Links and
+  Sitemaps screens among them, wherever those had one; an export's header and a grid's can't differ once the grids
+  read them from here.
+- **Opened in Excel** (Microsoft 365, 16.0 build 20527, by automation, each file read-only): the garden and 100k URL
+  and link workbooks, both workbooks of everything (20 and 76 sheets), one check's sheet, a workbook just past one
+  sheet (1,100,000 rows: "Links" with 1,048,576 rows and "Links (2)" with the rest) and the CSVs all opened with no
+  repair, the header frozen, bold and filtering; a workbook broken on purpose (a cell naming a string that isn't
+  there) was refused, so the check can tell. Hostile titles came through as text in both files, no cell a formula:
+  the workbook's formula-like ones with Excel's own text mark, the CSV's with their apostrophe. The 5-million-row
+  workbook (159 MB) was not opened in Excel, for the memory that takes; it was read part by part instead (every part
+  reads back, 5 sheets, 5,053,909 rows). **Not opened in LibreOffice or Numbers**: neither is on this machine.

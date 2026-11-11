@@ -9,7 +9,7 @@ Analytics / Ads integrations later.
 | Project | What it is |
 | --- | --- |
 | `src/ShoutingIguana.Engine` | Crawler library: fetching, robots.txt, sitemaps, parsing, storage, SEO analysis |
-| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `stats`, `testsite`, `bench`, `readbench` |
+| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `export`, `report`, `stats`, `testsite`, `bench`, `readbench` |
 | `src/ShoutingIguana.Sidecar` | `si-sidecar`: the engine as a localhost HTTP API for the desktop app (see [Sidecar](#sidecar)) |
 | `src/ShoutingIguana.TestSite` | Deterministic synthetic shop with planted SEO issues, for tests and benchmarks |
 | `tests/ShoutingIguana.Engine.Tests` | xUnit: unit tests plus end-to-end crawls and analyses of the synthetic site |
@@ -26,6 +26,9 @@ dotnet run --project src/ShoutingIguana.Cli -- crawl https://example.com --db ex
 dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl                           # what was found
 dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl title-too-long            # the URLs for one issue
 dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl --csv issues.csv          # everything, for Excel
+dotnet run --project src/ShoutingIguana.Cli -- export example.sicrawl --kind urls --out urls.xlsx   # any grid, as CSV or Excel
+dotnet run --project src/ShoutingIguana.Cli -- export example.sicrawl --kind workbook --out all.xlsx # a sheet for each check
+dotnet run --project src/ShoutingIguana.Cli -- report example.sicrawl --out report.html           # the report
 dotnet run --project src/ShoutingIguana.Cli -- analyze example.sicrawl                          # re-run the checks
 dotnet run --project src/ShoutingIguana.Cli -- stats example.sicrawl
 dotnet run --project src/ShoutingIguana.Cli -- crawl --resume --db example.sicrawl              # after Ctrl+C
@@ -766,6 +769,74 @@ The `links-kind` cell, and the inspector's, were measured before `ix_links_to_ki
 the same 1M crawl, links of one kind half way down take 94–241 ms (they were 1.7–3.1 s) and "named by" is 2 ms, 8 ms for
 a URL 112,000 issues name (it was 35 ms, reading every issue; 100 ms with 3.5M issues). On 4 cores those link rows take
 109, 60 and 139 ms. The gates are unchanged.
+
+## Export and the report
+
+`si export` and `si report` write what the app's Export writes, by the same code (`Export/CrawlExporter`); the
+sidecar runs the same as a job ([the API doc](../docs/v2-sidecar-api.md#export-e5)).
+
+```bash
+si export example.sicrawl --kind urls --out pages.csv --columns url,statusCode,title,inlinks \
+    --filter type:in:page --filter statusCode:between:200..299 --sort inlinks:desc
+si export example.sicrawl --kind links --out broken-links.xlsx --filter to.statusClass:in:4xx,5xx
+si export example.sicrawl --kind issueRows --check title-too-long --out long-titles.csv
+si export example.sicrawl --kind workbook --out everything.xlsx     # a summary sheet, and a sheet for each check
+si report example.sicrawl --out report.html                         # the report; --cut summary for its first page
+```
+
+| `--kind` | Writes | As |
+| --- | --- | --- |
+| `urls`, `links` | The URL grid, the links grid | `.csv`, `.xlsx` |
+| `sitemapUrls` (`--sitemap <id>`) | One sitemap's URLs | `.csv`, `.xlsx` |
+| `robotsBlocked` (`--origin`, with `--line` or `--reason` to narrow) | The URLs robots.txt kept the crawl from on an origin | `.csv`, `.xlsx` |
+| `issueRows` (`--check <id>`) | A check's rows, with any of the grid's columns | `.csv`, `.xlsx` |
+| `check` (`--check <id>`) | One check's sheet of the workbook, as a file of its own | `.xlsx`, `.csv` |
+| `workbook` | The spreadsheet of everything | `.xlsx` |
+| `report` | The report (also `si report`) | `.html` |
+
+The format comes from the file's name unless `--format` gives it. A grid takes the grid's own query: `--columns` (by
+id; the grid's own when left out), `--filter column:operator[:value]` any number of times (`in` and `notIn` take
+`a,b,c`, `between` takes `min..max`, `isEmpty` takes nothing), `--search`, and `--sort column[:desc]`.
+
+**How an export reads.** A page of rows at a time, each page the grid's own read (`Storage/GridExportReader` calls
+the readers the grids call, with the grid's cursor), on a snapshot it lets go of before the next:
+
+- the file holds exactly what the grid shows, in its order, whatever the filters and the sort;
+- memory is a page of rows, whatever the crawl's size: the 100k benchmark crawl's 5 million links are exported in
+  76 MB (CSV) and 91 MB (Excel), as its 112,577 URLs are in 70 and 88;
+- nothing is held between two pages: a writer here (an analysis, a continue) waits no longer than for a grid's read,
+  and a running crawl's write-ahead log can be folded into the file between any two pages;
+- a crawl that changes under it (analysed again, continued, paused, finished) ends the export, which says so
+  (`ExportFailure.CrawlChanged`) rather than write the rows of two crawls into one file;
+- a crawl that's running is exported as it stood when the export began (its highest URL and link ids are the bounds),
+  in crawl order or by URL only;
+- what the grid's reads count is kept between the pages (the sidecar's own `ReadCache`, or the export's): without it
+  a filtered or sorted export would count its rows, and order its targets, once a page.
+
+**The file** is written beside its target under another name and moved into place once whole (`Export/ExportTarget`),
+so an export that's cancelled or fails leaves nothing, and a file it was to replace is as it was. Its name must end in
+the format's extension. A place that can't be written to, a disk that fills up and a file open in another program (as
+Excel holds a workbook it's showing: found out before anything is read) are each told apart.
+
+**CSV** is RFC 4180: UTF-8 with a byte-order mark, CRLF rows, quotes doubled. **Excel** files are written by the
+engine itself (`Export/Xlsx/XlsxWriter`), a row at a time into the ZIP, with no package: shared strings (streamed to a
+file beside the workbook as the sheets are written, a repeat naming the item it already has), every cell named by its
+place, numbers as numbers, a bold header row that stays in view and filters, and column widths from the first 200
+rows. That is the plain form of the format, as Excel writes it, for Excel, LibreOffice and Numbers alike. A sheet holds
+1,048,576 rows, so a longer table goes on to further sheets ("Links (2)"…), up to 16 of them (16,777,200 rows); more is
+refused before anything is written, never cut short.
+
+**Text from a site can't run.** A CSV field that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets an
+apostrophe before it; a number is written as its digits, so a negative one stays a number. In a workbook every text is
+a text cell, and one that looks like a formula is also marked as Excel marks text typed after an apostrophe, so
+editing the cell leaves it text. In the report every string is escaped where it's written, a URL is a link only when
+it's http or https, and the document's own Content-Security-Policy allows no script, no network and no style but its
+one sheet.
+
+**The report** (`Reporting/`) is one self-contained HTML document to [the design](../docs/v2-ui-simple.md#the-report):
+`ReportReader` reads what it says (counts, and a few rows a check, so its size follows the checks that found
+something, never the site's), `ReportDocument` writes it, and the workbook's summary sheet is written from the same
+model, so the two can't differ. The score and each check's words reach both through `ReportSources`.
 
 ## Synthetic site and benchmark
 
