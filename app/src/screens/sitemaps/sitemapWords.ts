@@ -10,6 +10,7 @@ import type {
   SitemapSource,
   SummaryReason,
 } from '../../api/grids';
+import { failureOf, type Failure } from '../../lib/failure';
 import { formatCount, formatCountOf } from '../../lib/format';
 import type { SentencePart } from '../countSentence';
 import { ANSWERED_SITE_PAGES } from '../overview/links';
@@ -63,6 +64,23 @@ export type SitemapTone = 'read' | 'failed' | 'waiting';
 
 export interface StateWords extends Words {
   tone: SitemapTone;
+  /**
+   * Why it failed, as the crawl recorded it, when that says more than the plain words do (an XML parser's message, a
+   * network error's): for the tooltip and the accessible description, never the sentence. Null otherwise.
+   */
+  recorded: string | null;
+}
+
+/**
+ * Why a sitemap couldn't be read, in plain words: a status as it is, a failed request by its kind, and a file whose
+ * XML is broken by the line the parser stopped at ("... Line 17, position 5."). Anything else has no plain words of its
+ * own (`words` is empty): what the crawl recorded goes behind "couldn't be read".
+ */
+export function sitemapFailure(error: string | null): Failure | null {
+  const failure = failureOf(error);
+  if (failure?.kind !== 'other') return failure;
+  const line = /\bLine (\d+), position \d+/i.exec(error ?? '');
+  return { ...failure, words: line ? `its XML is broken at line ${formatCount(Number(line[1]))}` : '' };
 }
 
 /**
@@ -84,7 +102,19 @@ export function stateWords(
     Partial<Pick<Sitemap, 'foundVia' | 'statusCode'>>,
   crawling: boolean,
 ): StateWords {
-  const why = sitemap.error ? `: ${sitemap.error}` : '';
+  // Only a failure's words carry what the crawl recorded behind them: "Not read: ..." is a limit, said in the open.
+  const failure = sitemap.state === 'failed' ? sitemapFailure(sitemap.error) : null;
+  return { ...wordsOf(sitemap, crawling, failure), recorded: failure?.recorded ?? null };
+}
+
+/** The words of `stateWords`. `failure`: why a failed sitemap failed, or null. */
+function wordsOf(
+  sitemap: Pick<Sitemap, 'state' | 'error' | 'entries' | 'urls' | 'isIndex'> &
+    Partial<Pick<Sitemap, 'foundVia' | 'statusCode'>>,
+  crawling: boolean,
+  failure: Failure | null,
+): Omit<StateWords, 'recorded'> {
+  const why = failure && failure.words !== '' ? `: ${failure.words}` : '';
   switch (sitemap.state) {
     case 'read':
       return {
@@ -98,7 +128,7 @@ export function stateWords(
         return {
           tone: 'waiting',
           short: `None there${why}`,
-          sentence: `${NOTHING_AT_DEFAULT_LOCATION}${sitemap.error ? ` It answered ${sitemap.error}.` : ''}`,
+          sentence: `${NOTHING_AT_DEFAULT_LOCATION}${failure?.kind === 'status' ? ` It answered ${failure.words}.` : ''}`,
         };
       }
       // What was read before the failure is still listed.
@@ -181,15 +211,18 @@ export function answerSentence(list: Pick<SitemapList, 'discovery' | 'sitemaps'>
     const [only] = list.sitemaps;
     // The default location is only tried when nothing declares a sitemap, so it's the one row there is. Nothing there
     // is no sitemap found; another failure there is a file the crawl couldn't read, which it didn't "find" either.
+    // Why a failed one failed, in plain words: what the crawl recorded is a hover away, on its row.
+    const failure = only?.state === 'failed' ? sitemapFailure(only.error) : null;
+    const why = failure && failure.words !== '' ? `: ${failure.words}` : '';
     if (only?.foundVia === 'defaultLocation' && only.state === 'failed') {
       return nothingAtDefaultLocation(only)
         ? `${NOTHING_AT_DEFAULT_LOCATION}${more}`
-        : `Nothing declared a sitemap, and /sitemap.xml couldn’t be read${only.error ? `: ${only.error}` : ''}.${more}`;
+        : `Nothing declared a sitemap, and /sitemap.xml couldn’t be read${why}.${more}`;
     }
     const what = !only
       ? ''
       : only.state === 'failed'
-        ? `, which couldn’t be read${only.error ? `: ${only.error}` : ''}`
+        ? `, which couldn’t be read${why}`
         : only.state === 'notRead'
           ? ', which it left unread'
           : crawling

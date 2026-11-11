@@ -5,6 +5,7 @@ import { GridCore } from '../../grid/GridCore';
 import { useGridMetrics } from '../../grid/metrics';
 import type { GridColumn, GridTree } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
+import { withRecorded } from '../../lib/failure';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
 import { Icon } from '../../ui/Icon';
@@ -156,7 +157,8 @@ export function SitemapTree({ crawlId, sitemaps, siteOrigin, crawling, busy, onO
         width: STATE_WIDTH,
         cell: (row) => {
           const words = stateWords(row.sitemap, crawling);
-          return <span title={words.sentence}>{words.short}</span>;
+          // The whole of it is a hover away, with how the crawl recorded a failure behind the plain words.
+          return <span title={withRecorded(words.sentence, words.recorded)}>{words.short}</span>;
         },
         text: (row) => stateWords(row.sitemap, crawling).short,
       },

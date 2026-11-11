@@ -21,6 +21,7 @@ import type { GridColumn } from '../../grid/types';
 import { usePagedRows } from '../../grid/usePagedRows';
 import { useCommands } from '../../keyboard/registry';
 import { copyText } from '../../lib/clipboard';
+import { withRecorded } from '../../lib/failure';
 import { formatCount, formatCountOf, formatShownOf } from '../../lib/format';
 import { useInspector } from '../../routing/inspector';
 import { openInBrowser } from '../../shell/os';
@@ -460,7 +461,7 @@ function NothingListed({ sitemap, crawling }: { sitemap: Sitemap | undefined; cr
   }
   return (
     <EmptyState title="No URLs to show for this sitemap." level="none" panel>
-      {state.sentence}
+      <span title={state.recorded ?? undefined}>{state.sentence}</span>
     </EmptyState>
   );
 }
@@ -511,7 +512,7 @@ function SitemapFacts({
           )}
         </Fact>
         <Fact label="Status">
-          <span title={state.sentence}>
+          <span title={withRecorded(state.sentence, state.recorded)}>
             {state.short}
             {sitemap.statusCode !== null && sitemap.state === 'read' ? ` (HTTP ${sitemap.statusCode})` : ''}
           </span>

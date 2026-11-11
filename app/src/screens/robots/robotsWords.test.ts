@@ -23,7 +23,7 @@ describe('what an origin’s robots.txt meant to the crawl', () => {
       'The crawl read this file and obeyed its rules for ShoutingIguana.',
       'robots.txt couldn’t be read (HTTP 503), so the crawl refused this origin’s URLs until it could.',
       'There’s no robots.txt here (HTTP 404), so nothing on this origin is refused.',
-      'robots.txt didn’t answer (Timed out). The crawl gave no verdict and went ahead: this origin’s URLs show their own errors.',
+      'robots.txt didn’t answer (it timed out). The crawl gave no verdict and went ahead: this origin’s URLs show their own errors.',
     ]);
     expect(new Set(sentences).size).toBe(4);
   });
@@ -51,6 +51,44 @@ describe('what an origin’s robots.txt meant to the crawl', () => {
     expect(empty.sentence).toMatch(/it’s empty, so nothing on this origin is refused/);
   });
 
+  it('says how the answer failed in plain words, by its kind, and keeps the crawl’s own text out of the sentence', () => {
+    const unanswered = (error: string) =>
+      stateWords(testOrigin({ origin: 'https://a.example', state: 'unanswered', statusCode: null, error }), UA);
+    // As the engine recorded a real one (HttpFetcher.Describe).
+    const tls = unanswered('TLS handshake failed: Cannot determine the frame size or a corrupted frame was received.');
+    expect(tls.sentence).toBe(
+      'robots.txt didn’t answer (a secure connection couldn’t be made). The crawl gave no verdict and went ahead: this origin’s URLs show their own errors.',
+    );
+    expect(tls.recorded).toBe(
+      'TLS handshake failed: Cannot determine the frame size or a corrupted frame was received.',
+    );
+    expect(unanswered('DNS lookup failed').sentence).toMatch(
+      /^robots\.txt didn’t answer \(the DNS name wasn’t found\)\./,
+    );
+    expect(
+      unanswered('Could not connect: No connection could be made because the target machine actively refused it.')
+        .sentence,
+    ).toMatch(/^robots\.txt didn’t answer \(the connection was refused\)\./);
+    expect(unanswered('No response within 30 seconds').sentence).toMatch(
+      /^robots\.txt didn’t answer \(it timed out\)\./,
+    );
+    expect(unanswered('An unexpected error occurred.').sentence).toMatch(
+      /^robots\.txt didn’t answer \(the request failed\)\./,
+    );
+    // A status is an answer, said as it is, with nothing behind it.
+    const refusing = stateWords(TEST_ORIGINS[1]!, UA);
+    expect(refusing.sentence).toMatch(/^robots\.txt couldn’t be read \(HTTP 503\)/);
+    expect(refusing.recorded).toBeNull();
+    // And the same of the other state that carries a failure.
+    const unreachable = stateWords(
+      testOrigin({ origin: 'https://a.example', state: 'unreachable', statusCode: null, error: 'DNS lookup failed' }),
+      UA,
+    );
+    expect(unreachable.sentence).toBe(
+      'robots.txt couldn’t be read (the DNS name wasn’t found), so the crawl refused this origin’s URLs until it could.',
+    );
+  });
+
   it('says how the answer failed only when the crawl stored it', () => {
     const silent = stateWords(
       testOrigin({ origin: 'https://a.example', state: 'unanswered', statusCode: null, error: null }),
@@ -67,7 +105,7 @@ describe('what an origin’s robots.txt meant to the crawl', () => {
       'The crawl read this file, and was told to ignore its rules.',
       'robots.txt couldn’t be read (HTTP 503). The crawl was told to ignore robots.txt, so it refused nothing.',
       'There’s no robots.txt here (HTTP 404), so nothing on this origin is refused.',
-      'robots.txt didn’t answer (Timed out). The crawl was told to ignore robots.txt, so it went ahead.',
+      'robots.txt didn’t answer (it timed out). The crawl was told to ignore robots.txt, so it went ahead.',
     ]);
     expect(sentences.map((words) => words.short)).toEqual([
       'Read: rules ignored',
@@ -208,6 +246,7 @@ describe('why a URL was blocked', () => {
     expect(blockedWhy({ reason: 'rule', line: 6, rule: 'Disallow: /admin/', error: null })).toEqual({
       short: 'Line 6: Disallow: /admin/',
       sentence: 'Line 6 refused it: Disallow: /admin/',
+      recorded: null,
     });
   });
 
@@ -225,9 +264,22 @@ describe('why a URL was blocked', () => {
     );
   });
 
+  it('says how robots.txt failed for a blocked URL in plain words, with the crawl’s own text behind them', () => {
+    const why = blockedWhy({
+      reason: 'unreachable',
+      line: null,
+      rule: null,
+      error: 'TLS handshake failed: The remote certificate is invalid.',
+    });
+    expect(why.sentence).toBe(
+      'robots.txt couldn’t be read when the crawl came to this URL (a secure connection couldn’t be made), which refuses everything.',
+    );
+    expect(why.recorded).toBe('TLS handshake failed: The remote certificate is invalid.');
+  });
+
   it('says in words that nothing kept refuses it, and no more than is known', () => {
     const why = blockedWhy({ reason: 'unknown', line: null, rule: null, error: null });
-    expect(why).toEqual({ short: 'No rule kept', sentence: UNKNOWN_REASON });
+    expect(why).toEqual({ short: 'No rule kept', sentence: UNKNOWN_REASON, recorded: null });
     expect(UNKNOWN_REASON).toMatch(/doesn’t refuse it/);
   });
 

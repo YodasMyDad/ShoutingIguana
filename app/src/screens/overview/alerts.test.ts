@@ -206,3 +206,35 @@ describe('a crawl that read no pages', () => {
     expect(emptyCrawl(done, null).action).toBe('crawlAgain');
   });
 });
+
+describe('how an alert words a failure', () => {
+  const raised = (code: string, reason: string): AlertEvent =>
+    alert({ code, data: { origin: 'https://example.com', reason } });
+
+  it('says it by its kind, in plain words, and keeps the crawl’s own text for behind them', () => {
+    const recorded = 'TLS handshake failed: Cannot determine the frame size or a corrupted frame was received.';
+    const [robots] = alertEntries([raised('robots-unreachable', recorded)]);
+    expect(robots?.detail).toBe(
+      'https://example.com didn’t give its robots.txt: a secure connection couldn’t be made. Its URLs aren’t fetched until it can be read; they get one more try after that.',
+    );
+    expect(robots?.recorded).toBe(recorded);
+    const [site] = alertEntries([
+      raised(
+        'site-unreachable',
+        'Could not connect: No connection could be made because the target machine actively refused it.',
+      ),
+    ]);
+    expect(site?.detail).toBe('https://example.com: the connection was refused.');
+    expect(site?.recorded).toMatch(/^Could not connect/);
+    for (const entry of [robots, site]) expect(entry?.detail).not.toMatch(/handshake|frame|target machine/);
+  });
+
+  it('says a status as the answer it is, with nothing behind it', () => {
+    const [robots] = alertEntries([raised('robots-unreachable', 'HTTP 503')]);
+    expect(robots?.detail).toMatch(/^https:\/\/example\.com answered HTTP 503\./);
+    expect(robots?.recorded).toBeUndefined();
+    const [site] = alertEntries([raised('site-unreachable', 'Timed out')]);
+    expect(site?.detail).toBe('https://example.com: it timed out.');
+    expect(site?.recorded).toBeUndefined();
+  });
+});

@@ -12,6 +12,7 @@ import type {
   RobotsOrigin,
   RobotsOriginPage,
 } from '../../api/grids';
+import { failureOf, type Failure } from '../../lib/failure';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { sentenceText, type SentencePart } from '../countSentence';
 
@@ -23,14 +24,22 @@ export interface StateWords {
   /** The whole of it, as a sentence. */
   sentence: string;
   tone: RobotsTone;
+  /**
+   * How the file failed, as the crawl recorded it, when that says more than the sentence's plain words: for the
+   * tooltip and the accessible description, never the sentence. Null otherwise.
+   */
+  recorded: string | null;
 }
 
 type Answer = Pick<RobotsOrigin, 'state' | 'statusCode' | 'error' | 'bytes'> & Partial<Pick<RobotsOrigin, 'blocked'>>;
 
-/** How the file answered, in the engine's own terms: its status, else how it failed. Null when neither is stored. */
-function answerOf({ statusCode, error }: Pick<RobotsOrigin, 'statusCode' | 'error'>): string | null {
-  if (statusCode !== null) return `HTTP ${statusCode}`;
-  return error && error.trim() !== '' ? error : null;
+/**
+ * How the file answered: its status, else how it failed, by kind and in plain words (the engine's own text for the
+ * failure is kept apart, for behind the words). Null when neither is stored.
+ */
+function answerOf({ statusCode, error }: Pick<RobotsOrigin, 'statusCode' | 'error'>): Failure | null {
+  if (statusCode !== null) return { kind: 'status', words: `HTTP ${statusCode}`, recorded: null };
+  return failureOf(error);
 }
 
 /**
@@ -60,7 +69,14 @@ export function refusedEarlierWords(blocked: number): string {
  */
 export function stateWords(origin: Answer, userAgent: string, obeyed: Obeyed = true): StateWords {
   const answer = answerOf(origin);
-  const how = answer ? ` (${answer})` : '';
+  return {
+    ...wordsOf(origin, userAgent, obeyed, answer ? ` (${answer.words})` : ''),
+    recorded: answer?.recorded ?? null,
+  };
+}
+
+/** The words of `stateWords`. `how`: the answer in plain words, in brackets, or nothing. */
+function wordsOf(origin: Answer, userAgent: string, obeyed: Obeyed, how: string): Omit<StateWords, 'recorded'> {
   const blocked = origin.blocked ?? 0;
   const earlier = blocked > 0 ? refusedEarlierWords(blocked) : null;
   switch (origin.state) {
@@ -203,6 +219,8 @@ export interface BlockedWhy {
   short: string;
   /** In full, for the tooltip and the note over the list. */
   sentence: string;
+  /** How robots.txt failed, as the crawl recorded it, when that says more than the sentence: for the tooltip. */
+  recorded: string | null;
 }
 
 /** Why a URL was blocked: the line that decided it, or which of the two cases no line accounts for. */
@@ -213,15 +231,19 @@ export function blockedWhy(row: Pick<RobotsBlockedUrl, 'reason' | 'line' | 'rule
       return {
         short: row.rule === null ? line : `${line}: ${row.rule}`,
         sentence: row.rule === null ? `${line} of this file refused it.` : `${line} refused it: ${row.rule}`,
+        recorded: null,
       };
     }
-    case 'unreachable':
+    case 'unreachable': {
+      const failure = failureOf(row.error);
       return {
         short: 'robots.txt couldn’t be read',
-        sentence: `robots.txt couldn’t be read when the crawl came to this URL${row.error ? ` (${row.error})` : ''}, which refuses everything.`,
+        sentence: `robots.txt couldn’t be read when the crawl came to this URL${failure ? ` (${failure.words})` : ''}, which refuses everything.`,
+        recorded: failure?.recorded ?? null,
       };
+    }
     default:
-      return { short: 'No rule kept', sentence: UNKNOWN_REASON };
+      return { short: 'No rule kept', sentence: UNKNOWN_REASON, recorded: null };
   }
 }
 

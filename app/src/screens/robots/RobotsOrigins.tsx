@@ -12,6 +12,7 @@ import { useGridMetrics } from '../../grid/metrics';
 import type { GridColumn } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
+import { withRecorded } from '../../lib/failure';
 import { formatBytes, formatCount, formatCountOf, formatExactTime } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
 import { Banner } from '../../ui/Banner';
@@ -109,7 +110,8 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
         width: STATE_WIDTH,
         cell: (row) => {
           const words = stateWords(row, userAgent, respected);
-          return <span title={words.sentence}>{words.short}</span>;
+          // The whole of it is a hover away, with how the crawl recorded a failure behind the plain words.
+          return <span title={withRecorded(words.sentence, words.recorded)}>{words.short}</span>;
         },
         text: (row) => stateWords(row, userAgent, respected).short,
       },

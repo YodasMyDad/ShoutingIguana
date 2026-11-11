@@ -22,6 +22,7 @@ import { SourceSkeleton } from '../../inspector/SourceSection';
 import { useSourceViewer } from '../../inspector/sourceViewerLoader';
 import { useCommands } from '../../keyboard/registry';
 import { copyText } from '../../lib/clipboard';
+import { withRecorded } from '../../lib/failure';
 import { formatBytes, formatCount, formatCountOf, formatExactTime, formatShownOf } from '../../lib/format';
 import { useInspector } from '../../routing/inspector';
 import { openInBrowser } from '../../shell/os';
@@ -245,7 +246,8 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
           className="min-h-(--leading-13) px-6 pb-2 text-13 text-text-secondary"
           aria-busy={file.isPending || obeyed === undefined}
         >
-          {state ? state.sentence : null}
+          {/* How a failure was recorded is behind the plain words: the tooltip, and the sentence's description. */}
+          {state ? <span title={state.recorded ?? undefined}>{state.sentence}</span> : null}
           {state && data?.fetchedAt ? (
             <>
               {' '}
@@ -429,7 +431,7 @@ function BlockedUrls({
         width: WHY_WIDTH,
         cell: (row) => {
           const why = blockedWhy(row);
-          return <span title={why.sentence}>{why.short}</span>;
+          return <span title={withRecorded(why.sentence, why.recorded)}>{why.short}</span>;
         },
         text: (row) => blockedWhy(row).short,
       },

@@ -12,6 +12,7 @@ import {
   foundViaWords,
   notReadReason,
   nothingAtDefaultLocation,
+  sitemapFailure,
   stateWords,
   tallyOf,
 } from './sitemapWords';
@@ -40,10 +41,46 @@ describe('what became of a sitemap', () => {
     expect(words).toMatchObject({ tone: 'failed', short: 'Couldn’t be read: HTTP 404' });
   });
 
+  it('says why one failed in plain words, by its kind, and keeps the crawl’s own text out of the sentence', () => {
+    const failed = (error: string) =>
+      stateWords(testSitemap({ id: 1, state: 'failed', statusCode: null, error }), false);
+    // An XML parser's message: the line it stopped at is what a person can use.
+    expect(failed('Unexpected end of file has occurred. Line 17, position 5.')).toMatchObject({
+      short: 'Couldn’t be read: its XML is broken at line 17',
+      sentence: 'The crawl couldn’t read it: its XML is broken at line 17.',
+      recorded: 'Unexpected end of file has occurred. Line 17, position 5.',
+    });
+    // The line the parser stopped at is the one it names last, far down a long file.
+    const mismatch =
+      "The 'url' start tag on line 16 position 4 does not match the end tag of 'urlset'. Line 1217, position 3.";
+    expect(failed(mismatch).short).toBe('Couldn’t be read: its XML is broken at line 1,217');
+    expect(failed('No such host is known. (www.example.com:443)')).toMatchObject({
+      short: 'Couldn’t be read: the DNS name wasn’t found',
+      recorded: 'No such host is known. (www.example.com:443)',
+    });
+    expect(failed('The SSL connection could not be established, see inner exception.').short).toBe(
+      'Couldn’t be read: a secure connection couldn’t be made',
+    );
+    // Words it has none for: no reason is made up, and what the crawl recorded is kept for behind the words.
+    expect(failed('The archive entry was compressed using an unsupported compression method.')).toMatchObject({
+      short: 'Couldn’t be read',
+      sentence: 'The crawl couldn’t read it.',
+      recorded: 'The archive entry was compressed using an unsupported compression method.',
+    });
+    // A status is said as it is, with nothing behind it.
+    expect(failed('HTTP 503')).toMatchObject({ short: 'Couldn’t be read: HTTP 503', recorded: null });
+    expect(sitemapFailure('Timed out')).toEqual({ kind: 'timeout', words: 'it timed out', recorded: null });
+    // The answer over the list takes the same plain words.
+    const only = testSitemap({ id: 1, state: 'failed', statusCode: null, error: 'No response within 30 seconds' });
+    expect(answerSentence(list([only]), false)).toBe(
+      'The crawl found 1 sitemap, which couldn’t be read: it timed out.',
+    );
+  });
+
   it('says a sitemap that failed part-way was read in part, and that what was read is listed', () => {
     const partial = testSitemap({ id: 1, state: 'failed', error: 'Timed out', entries: 40 });
     const words = stateWords(partial, false);
-    expect(words.short).toBe('Read in part: Timed out');
+    expect(words.short).toBe('Read in part: it timed out');
     expect(words.sentence).toContain('The URLs it read before that are listed');
   });
 

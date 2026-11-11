@@ -411,8 +411,11 @@ describe('robots.txt: an origin without a file to show', () => {
     sidecar(options);
     await open(at('https://slow.example.io'));
     expect(
-      (await screen.findAllByText(/robots\.txt didn’t answer \(Timed out\)\. The crawl gave no verdict and went ahead/))
-        .length,
+      (
+        await screen.findAllByText(
+          /robots\.txt didn’t answer \(it timed out\)\. The crawl gave no verdict and went ahead/,
+        )
+      ).length,
     ).toBeGreaterThan(0);
     expect(
       await screen.findByText('robots.txt didn’t answer, and the crawl went ahead: nothing was refused.'),
@@ -455,6 +458,31 @@ describe('robots.txt: an origin without a file to show', () => {
       await screen.findByRole('link', { name: '1 URL is stored as refused, though nothing kept here refuses it' }),
     ).toBeVisible();
     expect(page).not.toHaveTextContent(/this origin’s URLs show their own errors/);
+  });
+
+  it('says how robots.txt failed in plain words, with the crawl’s own text in the tooltip and the description only', async () => {
+    const recorded = 'TLS handshake failed: Cannot determine the frame size or a corrupted frame was received.';
+    const origin = testOrigin({
+      origin: 'https://slow.example.io',
+      state: 'unanswered',
+      statusCode: null,
+      error: recorded,
+      bytes: null,
+    });
+    sidecar({ origins: [TEST_ORIGINS[0]!, origin], files: { [origin.origin]: file(origin) }, blocked: {} });
+    const { router } = await open(ROBOTS);
+    // The list's cell: its tooltip is the sentence in plain words, then what the crawl recorded.
+    const cell = within(await waitFor(() => rowOf(origin.origin))).getByText('No answer: crawled anyway');
+    expect(cell).toHaveAttribute(
+      'title',
+      `robots.txt didn’t answer (a secure connection couldn’t be made). The crawl gave no verdict and went ahead: this origin’s URLs show their own errors. As the crawl recorded it: ${recorded}`,
+    );
+    // The file's page: the sentence in plain words, the crawl's own text behind it.
+    await act(() => router.navigate({ to: at(origin.origin) }));
+    const sentence = await screen.findByText(/^robots\.txt didn’t answer \(a secure connection couldn’t be made\)\./);
+    expect(sentence).toHaveAttribute('title', recorded);
+    expect(sentence).toHaveAccessibleDescription(recorded);
+    expect(screen.getByRole('main')).not.toHaveTextContent(/TLS handshake|frame size/);
   });
 
   it('says a missing robots.txt refuses nothing', async () => {
