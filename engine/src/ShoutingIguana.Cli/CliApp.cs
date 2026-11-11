@@ -11,6 +11,8 @@ internal static class CliApp
         CrawlCommand.Create(),
         AnalyzeCommand.Create(),
         IssuesCommand.Create(),
+        ExportCommand.Create(),
+        ExportCommand.CreateReport(),
         StatsCommand.Create(),
         TestSiteCommand.Create(),
         BenchCommand.Create(),
