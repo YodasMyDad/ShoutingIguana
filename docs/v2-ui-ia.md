@@ -137,22 +137,32 @@ links and "reopen where I left off" all work.
 **Sitemaps.**
 
 - The answer in a sentence, then the sitemap tree: an index with the sitemaps it lists under it. Each says how the
-  crawl found it, what became of it, and its URLs counted: listed, crawled, not crawled, non-indexable. Every count
-  opens exactly those URLs.
-- What isn't there is said: no sitemap at all and where the crawl looked, a sitemap that couldn't be read and why,
-  and how many of the site's pages no sitemap lists (a link to them in URLs).
+  crawl found it, what became of it, and its URLs counted: listed, crawled, blocked by robots.txt, not crawled,
+  non-indexable. Every count opens exactly those URLs.
+- "Crawled" means the crawl requested the URL. A URL robots.txt refused was never requested: it's counted as
+  blocked, not as crawled. Listed is crawled, blocked and not crawled added up.
+- An index's counts are those of the sitemaps under it, shown once the crawl has read every one of them: until
+  then dashes, and how many of them it read.
+- What isn't there is said: no sitemap at all and where the crawl looked (nothing at the default location is no
+  sitemap, not one that failed), a sitemap that couldn't be read and why, and how many of the site's pages no
+  sitemap lists (a link to them in URLs), or that the analysis didn't count them and why.
 - Open a sitemap for its URLs: the URL grid narrowed to it, each URL with what the crawl did with it, and quick
-  filters for not crawled, non-indexable, and redirecting or broken. "All sitemaps" leads back.
+  filters for each of its counts and for redirecting or broken. "All sitemaps" leads back.
 
 **robots.txt.**
 
 - The origins the crawl asked, the site's own first, then the rest by the URLs they blocked. Each says what its
   answer meant: read, missing (nothing refused), couldn't be read (its URLs refused), or no answer (crawled anyway).
+  How a request failed is said by its kind, in plain words, with what the crawl recorded a hover away.
+- Only the last answer is kept: an origin whose last answer refuses nothing, with URLs stored as refused, says
+  they were refused earlier.
 - Open an origin for its file, with line numbers, as text: the group the crawl obeyed is marked, the others are
   quiet, and each rule says how many URLs it blocked.
 - Beside it, the blocked URLs, each with the line that decided it. Choosing a rule marks it and lists what it
   blocked; moving through the URLs shows each one's line. A URL opens the inspector.
-- A crawl told to ignore robots.txt says so at the top.
+- A crawl told to ignore robots.txt says so at the top, and is never said to have obeyed a file, a line or a rule.
+- A sitemap or an origin the crawl doesn't have: "not so far" while the crawl hasn't ended (the page fills in if it
+  gets there), a stale link once it has.
 
 **URL inspector tabs.**
 
@@ -260,7 +270,7 @@ With focus in the HTML itself (Source's viewer, which has a caret and can't be t
 | Enter | The origins | Open the origin's file |
 | Enter | A sitemap's URLs, the blocked URLs | Inspect |
 | Ctrl+F | One sitemap | Search its URLs |
-| Ctrl+F | One origin's file | Search the file; Enter and Shift+Enter step through the matches |
+| Ctrl+F | One origin's page: the file, the blocked URLs, the title | Search the file; Enter and Shift+Enter step through the matches |
 | Enter | The file, with the caret on a rule that blocked URLs | List the URLs it blocked |
 | Ctrl+Shift+C | One origin's file | Copy the blocked URLs listed |
 

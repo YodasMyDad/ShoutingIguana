@@ -311,6 +311,14 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   cursor stays on it. Rows carry `aria-level` and `aria-expanded`; placeholders keep their level.
 - **A place to start** (`startRow`): read when the grid mounts, the cursor starts on that row, which comes into view
   once the rows are there. For a grid shown again where it was left (the inspector's links).
+- **Rows with an identity** (`rowKey`, opt in): the cursor is on a row, not at a number. When the rows change and
+  another row is at the cursor's number (a running crawl put one above it), the cursor goes to where its own row
+  went, looked for among the loaded rows up to 500 either side; a selection that follows the cursor goes with it,
+  and no move is told, as the row is the same. A row that isn't found leaves the cursor at its number. With
+  `startKey` beside `startRow`, a grid starts on the row it was left on wherever that row is by then. Without a
+  key the cursor is a row number, as before. A list a running crawl changes should give one.
+- **A header of two lines** (`si-grid-frame--two-line-head` on the grid's `className`, with a `headerHeight` 12 px
+  taller): a long column name wraps over a narrow count column, and the rows' cells stay on one line.
 - **Span rows** (`spanRow`): a row drawn as one cell across every column (`aria-colspan`), such as a group's pages and
   its "Show all N pages in URLs"; it is the cursor's cell whatever the cursor's column. Columns' `text` still gives
   every row's words for copying.
@@ -751,21 +759,38 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
 - **Their reads are keyed as grids** (`sitemapKeys`, `robotsKeys` in `api/queries.ts`:
   `['grid', <grid>, <crawl id>, ...]`), the single reads too (the list of sitemaps, one origin's file). A running
   crawl changes every one of them, so the live bridge's once-a-second refresh of a crawl's grids keeps them current
-  in place, with no skeleton and no progress line, and nothing was added to the bridge.
+  in place, with no skeleton and no progress line. One read is left out of it (`SELF_REFRESHED_GRIDS`): an
+  origin's file, which is read whole (a robots.txt of 500 KB is 1.4 MB as lines). Its view reads it again when the
+  list beside it counts another number of blocked URLs than the file does, and every 10 s for its answer; an origin
+  the crawl hasn't come to yet is looked for every 2 s. Measured on a crawl of 25 s: 4 reads of the file, where the
+  once-a-second refresh made 25.
 - **A link to a route with an optional part must name the part**, as `undefined` for "none". Left out, the router
   keeps the part the page is on: on one sitemap's page the sidebar's Sitemaps, Ctrl+5 and "All sitemaps" all led to
   the sitemap itself. The sidebar's and the palette's Sitemaps and robots.txt name it now.
 - **A list is come back to where it was left** (`screens/listPlace.ts`): the row a sitemap or an origin was opened
   from is remembered for the session and handed to the grid as `startRow`, so Back, "All sitemaps" and the sidebar
-  land on that row, not at the top of a thousand. The list of sitemaps is as tall as its rows, the ones under a
-  closed index not counted, and never taller than the room there is.
+  land on that row, not at the top of a thousand. The origins are paged and a running crawl sorts new ones in among
+  them, so their place is remembered by the origin too (`startKey`). The list of sitemaps is as tall as its rows,
+  the ones under a closed index not counted, and never taller than the room there is.
+- **The cursor stays on its row while a crawl runs**: all four grids give `GridCore` a `rowKey` (the origin, the
+  sitemap's id, the URL's id). Without one, an origin the crawl asked that sorted ahead of the cursor's, or a
+  sitemap it took up under an index above it, left the cursor on another row, and Enter opened the wrong one.
 - **A count of URLs in a sentence is a link too** (`screens/countSentence.ts`, drawn by `SentenceWithCounts.tsx`):
   a sentence is built as words and counts, each count with the URL grid's filters for what it counts, so the
   words and every landing are unit-tested. The robots.txt answer's "kept it from 1,204 URLs" opens the URLs whose
   `outcome` is `robotsDisallowed`, which is what the origins' counts add up to.
-- **A stale place is said, with the list a press away**: a sitemap's id or an origin the crawl doesn't have
-  (`sitemap-not-found`, `origin-not-found`, and a path that can't be an id) reads from `STALE_PLACE_WORDS` in
-  `api/errors.ts`.
+- **A place the crawl doesn't have is said, with the list a press away** (`missingPlaceWords` in
+  `api/errors.ts`): a sitemap's id or an origin the crawl has none of (`sitemap-not-found`, `origin-not-found`,
+  and a path that can't be an id). Once the crawl has ended the link is stale ("It may be from before the site was
+  crawled again"). While it hasn't, the crawl may yet find the sitemap or come to a URL on the origin: the words
+  are "not so far", and the page fills in when it does. There, only the way back to the list can run: the other
+  commands of the place are disabled, so the palette greys them and their keys do nothing.
+- **A failure is said by its kind** (`lib/failure.ts`, shared with Overview's alerts): the engine records how a
+  request failed in its own text ("TLS handshake failed: Cannot determine the frame size or a corrupted frame was
+  received."). A sentence takes the kind's plain words (the DNS name wasn't found, the connection was refused, it
+  timed out, a secure connection couldn't be made, the request failed; a status is said as it is), and the engine's
+  text is the tooltip and the accessible description (`title`), never the sentence. A sitemap whose XML is broken
+  says at which line.
 
 ### Sitemaps
 
@@ -774,28 +799,67 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   double-click, with the column the cursor was on: each count cell leads somewhere else) and `GridTree.activates`
   (a group's row is a thing of its own, which Enter opens as it opens any row: an index has URLs of its own, those
   of every sitemap under it; Right, Left and the chevron open and close it).
-- **Every count is a link to exactly its URLs**: that sitemap's page under the count's filter (`COUNT_FILTERS`:
-  `fetched` is true or false, `indexable` is true or false, as the API says each is judged). The links are in the
-  cells, out of the tab order, and Enter on a cell does what a click on its link does. A count of 0 is a plain 0
-  (nothing to open). A sitemap whose contents the crawl doesn't know (left unread, not read yet, or failed before an
-  entry was read) shows dashes, never 0. "Not crawled" is what's listed less what was fetched.
+- **Every count is a link to exactly its URLs**: that sitemap's page under the count's filter (`COUNT_FILTERS`).
+  The links are in the cells, out of the tab order, and Enter on a cell does what a click on its link does. A count
+  of 0 is a plain 0 (nothing to open). A sitemap whose contents the crawl doesn't know (left unread, not read yet,
+  or failed before an entry was read) shows dashes, never 0.
+- **"Crawled" means the crawl requested the URL**, which is what a person takes it to mean here. The engine's
+  `fetched` is wider: every URL the crawl is done with, the ones robots.txt refused included, which were never
+  requested. So the list's counts are Listed, Crawled, Blocked by robots.txt, Not crawled and Non-indexable, and
+  **Listed = Crawled + Blocked by robots.txt + Not crawled**. Crawled is `fetched` less the URLs robots.txt
+  refused (`fetched` is true and `outcome` is not `robotsDisallowed`): a URL that was requested and didn't
+  answer is crawled, and its Outcome says what happened. Blocked by robots.txt is `outcome` `robotsDisallowed`.
+  Not crawled is what's listed and not `fetched`.
+- **The list reads two counts the engine is adding to `GET /sitemaps`**: the listed URLs robots.txt refused, and
+  those that redirect or are broken (`urls.robotsDisallowed`, `urls.redirectingOrBroken`: working names, read in
+  `sitemapLinks.ts` only, typed in `api/grids.ts`, sent by the mock). From an engine without them the list shows
+  a dash for Crawled and for Blocked by robots.txt, with a tooltip that says why, never `fetched` under the name
+  "Crawled"; and one sitemap's page counts the two itself, each by a read of its grid under that filter for the
+  count alone (`sitemapCountQuery`), refreshed with the crawl as the grid is. With the counts in the list, the
+  page reads nothing more.
+- **An index's counts are its sitemaps'**, so they're known only once the crawl has every sitemap under it and has
+  read each (`subtreeOf`, `wholeSubtree`, `countsKnown` in `sitemapTree.ts`). The crawl takes an index's
+  sitemaps up one at a time, so while it's still reading sitemaps (`discovery` isn't `done`), or when it stopped
+  first, it may not have them all; one left unread at its limits stands for more like it; and one it couldn't read
+  lists an unknown number. Until then the index's own row shows dashes, never 0, and its status says how far the
+  crawl got ("Read, 11 of its 12 sitemaps", "Read, has 1 of its sitemaps", "Read, 4 sitemaps so far"); each sitemap
+  under it keeps its own counts, and the index's page still lists the URLs of those that were read. How many
+  sitemaps an index's file lists isn't given by the API (only how many the crawl has), so its badge counts them
+  only once the crawl has them all.
+- **Five counts fit a 1280 px window**: "Blocked by robots.txt" takes two lines over its count, the other columns
+  are as wide as their names and a count in the millions need, and an index's badge leaves its count out where the
+  address would have no room (below 260 px).
 - **What isn't there is said.** No sitemap at all: a sentence by how far the crawl got (`discovery`), and where the
-  crawl looks. None read: the same, under the list. How a sitemap was found, when the crawl can't say (`foundVia`
-  null): "Not known", with why. The site's pages no sitemap lists: one read of the URL grid's `inSitemap` facet over
-  the site's pages (`ANSWERED_SITE_PAGES`, as Overview counts pages). Both of its counts are links: the pages no
-  sitemap lists, and the site's pages they're of. It needs the analysis: without one the line says so, and the
-  counts that need none still show.
+  crawl looks. None read: the same, under the list. Nothing declared one and the default location has none (a 404
+  or a 410 at `/sitemap.xml`): "Nothing declared a sitemap, and there's none at /sitemap.xml.", and its row "None
+  there", never a sitemap that was found and couldn't be read. How a sitemap was found, when the crawl can't say
+  (`foundVia` null): "Not known", with why. One left unread at the crawl's limits says which limit, once (the
+  engine's "Not read: " is dropped). The site's pages no sitemap lists: one read of the URL grid's `inSitemap`
+  facet over the site's pages (`ANSWERED_SITE_PAGES`, as Overview counts pages). Both of its counts are links: the
+  pages no sitemap lists, and the site's pages they're of. It needs the analysis: without one the line says so, and
+  the counts that need none still show. And it needs the analysis to have made the comparison: when it skipped the
+  check (the crawl didn't finish, a sitemap wasn't read), the engine answers null for a page, never false, and the
+  line says the analysis didn't count them, with the analysis's own reason for skipping `not-in-sitemap`. A page
+  the engine can't place is never told it's in a sitemap.
 - **Without a URL summary** (never analysed, out of date, an earlier engine's, a crawl running) the list says which
-  counts are the crawl's own judgement (indexable, non-indexable) and offers the analysis where it can run.
+  counts are the crawl's own judgement (indexable, non-indexable) and offers the analysis where it can run. The note
+  isn't a live region, and while a crawl runs it's there with the list from the start: it used to mount when the
+  first sitemap was read, which pushed the tree down 52 px and read the banner out mid-crawl.
 - **One sitemap is the URL grid narrowed to it** (`/sitemaps/urls`): the URL grid's columns and filter chips
   (exported from `UrlsScreen.tsx` as they stand: the full grid's slice gives them files of their own), with an
-  Outcome column that goes by each URL's `outcome`, never `fetched` alone; quick search; sort from the headers, by
-  the columns the engine says it sorts (`GET /api/url-columns`); the inspector on Enter. Its view is in the route
-  (`filter`, `sort`, `q`, `inspect`), as the URL grid's.
-- **Quick filters** are a segmented control: All, Not crawled, Non-indexable, Redirecting or broken (by `outcome`:
-  a redirect, an error or no answer; not what robots.txt or a firewall kept the crawl from). Filters that aren't one
-  of them (a count's link from the list) are a segment of their own while they last, "Other filters": a radio group
-  chooses the segment focus lands on, so with none chosen, Tab onto the control replaced the filters.
+  Outcome column that goes by each URL's `outcome`, never `fetched` alone, in the inspector's words (a URL that
+  answered says "Answered": "Crawled" is no outcome); quick search; sort from the headers, by the columns the engine
+  says it sorts (`GET /api/url-columns`); the inspector on Enter. Its view is in the route (`filter`, `sort`,
+  `q`, `inspect`), as the URL grid's.
+- **Its search field is the same field whatever is searched for** (`grid/useSearchText.ts`, which the URL grid uses
+  too): controlled by its own text, which follows the route's `q` when that changes from elsewhere. Keyed on `q`,
+  as it was, Enter made a new field and the one with focus was gone.
+- **Quick filters** are a segmented control: every count of the list's row, so each lands on a filter with a name
+  and its count (All, Crawled, Blocked by robots.txt, Not crawled, Non-indexable), and Redirecting or broken (by
+  `outcome`: a redirect, an error or no answer; not what robots.txt or a firewall kept the crawl from). Filters
+  that aren't one of them are a segment of their own while they last, "Other filters": a radio group chooses the
+  segment focus lands on, so with none chosen, Tab onto the control replaced the filters. The search shares the
+  filters' line, taking what's left of it down to 144 px.
 - **Counts that must agree are one read's.** A quick filter's count is the list's; the one chosen, and All, take the
   grid's own count once it's known, so the header and the filter never disagree while a crawl runs.
 - **A link can name a sitemap by its address** (`?url=`): Overview's "A sitemap was left out" does, and the list
@@ -809,6 +873,18 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   blocked, which is the engine's order. Each says what its answer meant to the crawl in words of its own: read (an
   empty file says so), missing (nothing refused), unreachable (its URLs refused) and unanswered (crawled anyway). A
   crawl told to ignore robots.txt says so at the top of both views.
+- **Whether the crawl obeyed robots.txt goes into every sentence that says what a file meant to it** (`Obeyed`:
+  true, false, or null when it couldn't be read): a crawl told to ignore robots.txt is never told it obeyed a file
+  ("Read: rules ignored"), a line ("it would have obeyed lines 5 to 9") or a rule. One origin's page holds those
+  words until it knows (the list of origins hands it what it found, so there's usually nothing to wait for), and
+  says no more than holds either way when it can't find out.
+- **Only the last answer is kept**, so an answer that refuses nothing (missing, empty, no answer, ignored) on an
+  origin with URLs stored as refused is said as the last answer only ("No answer when last asked"), with where
+  those URLs come from: refused earlier in the crawl, or by an earlier version of the engine, which took no answer
+  for a refusal. That was the garden crawl's contradiction ("crawled anyway" beside 1 blocked URL).
+- **An origin in the route is read as a URL** and its own origin is what the engine is asked for: the engine keeps
+  one spelling (scheme and host in lower case, the host as punycode, no default port), so capitals, a slash after
+  it or an international name as it's written all open the origin the crawl has.
 - **The file is the inspector's source viewer.** The search field, its count, Wrap lines and the viewer were taken
   out of the Source section as they stood, as `inspector/SourcePane.tsx`, which both use: Ctrl+F, Enter and
   Shift+Enter, the 10,000-match limit and the caret are the same. The viewer gained a `language` (HTML, or plain),
@@ -823,15 +899,22 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
 - **Choosing either way.** A line is chosen with a press on its link, or Enter with the caret on it: the route takes
   `line`, the list is that line's URLs, and the file marks it. Moving the list's cursor shows each URL's line in the
   file, focus arriving on the list included. The two cases no line accounts for (`unreachable`, `unknown`) are links
-  over the list, with the route's `reason`. What narrows the list shows as a chip that removes it.
+  over the list, with the route's `reason`. What narrows the list shows as a chip that removes it: "Line is 2:
+  Disallow: /private/", which holds of any line a link can name. With nothing listed the words go by the line: the
+  file has no such line, the line isn't a rule, or it's a rule that blocked no URLs. The note over the list has two
+  lines' room whatever it holds, so the list stays put when the note wraps or first comes.
+- **A line the crawler made nothing of says why by what the line is for**: an empty `Sitemap:` names no sitemap;
+  only a `Crawl-delay` that isn't a number, or is below 0, is told so.
 - **A URL blocked without a line says which case it is**: robots.txt couldn't be read, or nothing kept refuses it
   ("Only the last answer is kept, so what refused it is gone"), and no more than that.
 - **Copying**: the file as it is, and the blocked URLs the list is narrowed to (Ctrl+Shift+C), read 1,000 at a time
   by the Issues screen's copy, with its progress toast.
 - **The layout**: the file and the list side by side, stacked below the `split` width (a narrow window, or the
   inspector open beside them), each with a height of its own then.
-- **Its commands** are the registry's robots.txt group: show every origin, copy the file, copy the blocked URLs,
-  open the robots.txt in the browser, list every blocked URL.
+- **Its commands** are the registry's robots.txt group: search the file (Ctrl+F from anywhere on an origin's page:
+  the pane's search field is asked to take focus, as the inspector's Source is by its command; with focus in the
+  file the pane takes the key itself), show every origin, copy the file, copy the blocked URLs, open the robots.txt
+  in the browser, list every blocked URL.
 
 ### From elsewhere
 
@@ -844,7 +927,14 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
 
 - `POST /robots` takes only `offset` and `limit`: no search, no filter to the origins that blocked something, and
   no count of them. The order puts them first after the site's own, and the screen says so.
-- Nothing counts a sitemap's redirecting or broken URLs, so that quick filter carries no number.
+- `GET /sitemaps` doesn't yet count, for each sitemap, the URLs robots.txt refused or those that redirect or are
+  broken (it's being added): until it does the list's Crawled and Blocked by robots.txt are dashes, one sitemap's
+  page counts the two itself, and Redirecting or broken carries no number.
+- It doesn't say how many sitemaps an index's file lists, only how many of them the crawl has: "the crawl has 1 of
+  its sitemaps" can't say of how many.
+- An origin with no status, no file kept and URLs stored as refused without an error reads `unanswered` (an old
+  crawl's, from before no answer stopped meaning a refusal): the UI says the URLs were refused earlier; the engine
+  could call it `unreachable`.
 - `/robots/blocked` can't be asked for one URL, and `/urls/inspect` doesn't carry the line: arriving from the
   inspector, the file can't show that URL's line until the URL is found in the list.
 
@@ -871,8 +961,11 @@ sitemaps kept its height, and the loading frame never came back.
 
 ### The sweep
 
-`e2e/sitemaps-robots.sweep.spec.ts` reads every count off both screens and follows it: each sitemap's four counts
-(a 0 has no link, so the engine is asked what its link would open), each quick filter, the pages no sitemap lists
+`e2e/sitemaps-robots.sweep.spec.ts` reads every count off both screens and follows it: each sitemap's five counts
+(a 0 has no link, so the engine is asked what its link would open; what each must be is restated there from the
+API's numbers, not taken from the app: a dash where an index isn't read whole, or where the engine doesn't count
+what robots.txt refused), that crawled, blocked and not crawled add up to listed, each quick filter and that the
+three add up to All on one sitemap's page, the pages no sitemap lists (or that the analysis didn't count them)
 and the site's pages they're of (the engine is asked for both first, so the sweep waits for the sentence it knows
 is coming and never passes for want of one), every URL robots.txt kept the crawl from,
 each origin's blocked URLs, each line's, and the two cases no line accounts for, which must add up to the origin's.
