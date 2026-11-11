@@ -153,8 +153,8 @@ public sealed class ScoreCalculatorTests
 
     /// <summary>
     /// The reference code's own cases: the design's named sites, the mockups', the band edges and 120 random sites, each
-    /// scored by score.mjs and then by the engine, line for line, with the app's fix-first order and what fixing the first
-    /// five leaves.
+    /// scored by score.mjs and then by the engine, line for line, with the reference's fix-first order and what fixing
+    /// the first five leaves.
     /// </summary>
     [Fact]
     public void EveryCaseTheReferenceCodeScoresComesOutTheSame()
@@ -291,11 +291,12 @@ public sealed class ScoreCalculatorTests
     {
         var score = Score(10_000, 50_000, ("no-https", 1), ("duplicate-site-version", 3), ("robots-txt-unreachable-other-origin", 1));
 
+        // In the order to fix them: site-wide faults of one severity in catalog order, whatever their counts.
         Assert.Equal(
         [
             new ScoreLine("no-https", IssueSeverity.Error, 1, 50_000, ScoreUnit.Site, ScoreExtent.Site, 60),
-            new ScoreLine("duplicate-site-version", IssueSeverity.Warning, 3, 50_000, ScoreUnit.Site, ScoreExtent.Site, 4),
-            new ScoreLine("robots-txt-unreachable-other-origin", IssueSeverity.Warning, 1, 50_000, ScoreUnit.Site, ScoreExtent.Site, 4)
+            new ScoreLine("robots-txt-unreachable-other-origin", IssueSeverity.Warning, 1, 50_000, ScoreUnit.Site, ScoreExtent.Site, 4),
+            new ScoreLine("duplicate-site-version", IssueSeverity.Warning, 3, 50_000, ScoreUnit.Site, ScoreExtent.Site, 4)
         ], score.Lines);
         Assert.Equal((32, 68), (score.Value, score.Lost));
 

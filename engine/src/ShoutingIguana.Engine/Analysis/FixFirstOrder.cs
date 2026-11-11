@@ -3,10 +3,12 @@ using ShoutingIguana.Engine.Analysis.Models;
 namespace ShoutingIguana.Engine.Analysis;
 
 /// <summary>
-/// The checks that found something, in the order to fix them: the most severe first, then the most URLs flagged, then
-/// catalog order. The one order for every host: the score's lines follow it, and what "fixing the first five" would
-/// leave is worked out from it. A check the user has hidden in the app is still in it: hiding is the app's own
-/// preference, which the engine doesn't know.
+/// The checks that found something, in the order to fix them: the most severe first; within a severity, a fault of the
+/// whole site (<see cref="IssueDefinition.SiteWide"/>) before any other, those in catalog order among themselves; then
+/// the most URLs flagged; then catalog order. A site-wide fault is one issue, so by its count it would come after every
+/// check that flagged more, and it is the first thing to fix: it leads however small its count. The one order for
+/// every host: the score's lines follow it, and what "fixing the first five" would leave is worked out from it. A check
+/// the user has hidden in the app is still in it: hiding is the app's own preference, which the engine doesn't know.
 /// </summary>
 public static class FixFirstOrder
 {
@@ -18,7 +20,8 @@ public static class FixFirstOrder
     [
         .. checks.Where(check => check.Count > 0)
             .OrderBy(check => check.Issue.Severity)
-            .ThenByDescending(check => check.Count)
+            .ThenByDescending(check => check.Issue.SiteWide)
+            .ThenByDescending(check => check.Issue.SiteWide ? 0 : check.Count)
             .ThenBy(check => CATALOG_ORDER.GetValueOrDefault(check.Issue.Id, int.MaxValue))
             .ThenBy(check => check.Issue.Id, StringComparer.Ordinal)
     ];

@@ -31,8 +31,9 @@ public sealed record AnalysisResults(
     public NoScoreReason? NoScoreReason => Score is not null ? null : Analysis.NoScoreReason ?? NoScore.NotScored;
 
     /// <summary>
-    /// The checks that found something, in the order to fix them (<see cref="FixFirstOrder"/>): the most severe, then the
-    /// most URLs flagged, then catalog order. Checks the user has hidden in the app are in it.
+    /// The checks that found something, in the order to fix them (<see cref="FixFirstOrder"/>): the most severe, a fault
+    /// of the whole site leading its severity, then the most URLs flagged, then catalog order. Checks the user has hidden
+    /// in the app are in it.
     /// </summary>
     public IReadOnlyList<string> FixFirst => FixFirstOrder.Of(Counts);
 

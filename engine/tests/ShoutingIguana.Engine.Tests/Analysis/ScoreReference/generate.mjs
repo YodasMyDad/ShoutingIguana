@@ -1,15 +1,15 @@
 // Writes cases.json: sites scored by the design's reference code (app/design/simple/build/lib/score.mjs), which the
 // engine's ScoreCalculator is held to (ScoreCalculatorTests). The named cases are the design document's own
 // (docs/v2-ui-simple.md, "Worked examples" and "What each mix gives") and the mockups'; the rest are random, from a fixed
-// seed, with the band edges among them. "Fix first" is the app's order (app/src/screens/issues/checkList.ts,
-// rankChecksToFix): the most severe, then the most flagged, then catalog order.
+// seed, with the band edges among them. "Fix first" is the reference's too (fixFirstOrder: the most severe, a fault of
+// the whole site leading its severity, then the most flagged), given the checks in catalog order, which ties keep.
 //
 // Usage, from the repo root, whenever the reference or the catalog's checks change:
 //   node engine/tests/ShoutingIguana.Engine.Tests/Analysis/ScoreReference/generate.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { score, scoreWithout, SCORE_VERSION, SERIOUS_CEILING } from '../../../../../app/design/simple/build/lib/score.mjs';
+import { score, scoreWithout, fixFirstOrder, firstToFix, SCORE_VERSION, SERIOUS_CEILING } from '../../../../../app/design/simple/build/lib/score.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const catalogSource = readFileSync(join(here, '..', '..', '..', '..', 'src', 'ShoutingIguana.Engine', 'Analysis', 'IssueCatalog.cs'), 'utf8');
@@ -23,17 +23,13 @@ if (CATALOG.length !== declared.size || CATALOG.some(check => !check)) throw new
 const severityOf = id => CATALOG.find(check => check.id === id).severity;
 const order = new Map(CATALOG.map((check, index) => [check.id, index]));
 
-const RANK = { error: 0, warning: 1, notice: 2 };
-const FIX_FIRST = 5;
-
 function expected({ pages, urls, checks }) {
   const result = score({ checks, pages, urls });
   if (!result) return null;
-  // A stable sort over catalog order, as the app sorts its checks list.
-  const fixFirst = [...checks].filter(check => check.count > 0)
-    .sort((a, b) => order.get(a.id) - order.get(b.id))
-    .sort((a, b) => RANK[a.severity] - RANK[b.severity] || b.count - a.count);
-  const first = fixFirst.filter(check => check.severity !== 'notice').slice(0, FIX_FIRST).map(check => check.id);
+  // The reference's order keeps the order it is given where checks are level: the catalog's.
+  const inCatalogOrder = [...checks].sort((a, b) => order.get(a.id) - order.get(b.id));
+  const fixFirst = fixFirstOrder(inCatalogOrder);
+  const first = firstToFix(inCatalogOrder).map(check => check.id);
   return {
     value: result.value,
     band: result.band.id,
@@ -94,6 +90,16 @@ add('A site whose every page is noindex', 265, 4521, [check('noindex-page', 265)
 add('robots.txt unreadable', 265, 4521, [check('robots-txt-unreachable', 1)]);
 add('A 5-page site with one missing description', 5, 61, [check('description-missing', 1)]);
 add('Two serious problems on a few pages can\'t read Very good', 10000, 50000, [check('broken-internal-links', 1), check('internal-client-error', 1)]);
+
+// A fault of the whole site leads its severity, however small its count, so it is among the first five to fix.
+add('A site-wide serious fault among six serious checks that flagged more', 1000, 5000, [
+  check('broken-internal-links', 700), check('title-missing', 600), check('image-broken', 500), check('mixed-content', 400),
+  check('redirect-loop', 300), check('internal-client-error', 200), check('no-https', 1), check('title-duplicate', 100),
+]);
+add('Three site-wide serious faults lead in catalog order, and a site-wide warning leads the warnings', 1000, 5000, [
+  check('no-https', 1), check('site-hidden-from-search', 1), check('robots-txt-unreachable', 1), check('broken-internal-links', 900),
+  check('duplicate-site-version', 2), check('robots-txt-unreachable-other-origin', 1), check('title-duplicate', 800), check('noindex-page', 600),
+]);
 
 // The mockups' other sites (app/design/simple/build/lib/data.mjs and pages/simple.mjs).
 add('The mockups\' perfect site', 1208, 9412, []);
