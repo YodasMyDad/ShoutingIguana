@@ -266,7 +266,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec#http-status-codes",
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.None,
-        SiteWide = true
+        SiteWide = true,
+        ReportedOnce = true
     };
 
     public static readonly IssueDefinition ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN = new("robots-txt-unreachable-other-origin", IssueCategory.Indexability, IssueSeverity.Warning,
@@ -278,7 +279,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec#file-location-and-range-of-validity",
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.None,
-        SiteWide = true
+        SiteWide = true,
+        ReportedOnce = true
     };
 
     public static readonly IssueDefinition ROBOTS_TXT_MISSING = new("robots-txt-missing", IssueCategory.Indexability, IssueSeverity.Notice,
@@ -289,7 +291,8 @@ public static class IssueCatalog
         Why = """Crawling isn't affected: Google treats a missing robots.txt as having no restrictions, so everything can be crawled. What's missing is a Sitemap: line, which Google, Bing and other search engines read to find your sitemaps, and a way to keep crawlers out of URLs with no search value should you need one. A 401 or 403 meant to keep crawlers out has the opposite effect.""",
         LearnMore = "https://developers.google.com/crawling/docs/robots-txt/create-robots-txt",
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
     };
 
     public static readonly IssueDefinition SITE_HIDDEN_FROM_SEARCH = new("site-hidden-from-search", IssueCategory.Indexability, IssueSeverity.Error,
@@ -301,7 +304,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.None,
-        SiteWide = true
+        SiteWide = true,
+        ReportedOnce = true
     };
 
 
@@ -448,7 +452,8 @@ public static class IssueCatalog
         Why = """Search engines get no URLs from a sitemap they can't fetch or parse: Google keeps retrying for a few days, then stops trying that URL. Well-linked pages are still found, but what the sitemap adds, such as quicker discovery of new and deep pages, is lost. A referenced sitemap that returns 404 is usually stale and only needs removing.""",
         LearnMore = "https://support.google.com/webmasters/answer/7451001",
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
     };
 
     public static readonly IssueDefinition SITEMAP_MISSING = new("sitemap-missing", IssueCategory.Sitemaps, IssueSeverity.Notice,
@@ -459,7 +464,8 @@ public static class IssueCatalog
         Why = """A sitemap isn't required: Google finds pages through links, and a small, well-linked site may not need one. It helps most on large sites, new sites with few links from elsewhere, and sites with pages that links don't reach. A sitemap at another path that's only submitted in Search Console isn't visible to this crawl, so this may not be a real gap.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview#do-i-need-a-sitemap",
         Subject = IssueSubject.Url,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
     };
 
     public static readonly IssueDefinition SITEMAP_URL_OTHER_HOST = new("sitemap-url-other-host", IssueCategory.Sitemaps, IssueSeverity.Warning,
@@ -666,7 +672,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#reasons-to-specify-a-canonical-url",
         Subject = IssueSubject.Url,
         Grouping = IssueGrouping.ResponseDetail,
-        SiteWide = true
+        SiteWide = true,
+        ReportedOnce = true
     };
 
 
@@ -851,7 +858,8 @@ public static class IssueCatalog
         LearnMore = "https://web.dev/articles/enable-https",
         Subject = IssueSubject.Page,
         Grouping = IssueGrouping.None,
-        SiteWide = true
+        SiteWide = true,
+        ReportedOnce = true
     };
 
     public static readonly IssueDefinition HTTP_PAGE = new("http-page", IssueCategory.Security, IssueSeverity.Warning,
@@ -884,7 +892,8 @@ public static class IssueCatalog
         Why = """These headers protect visitors: HSTS keeps browsers on HTTPS, CSP limits what injected scripts can do, X-Frame-Options or frame-ancestors stops clickjacking, X-Content-Type-Options stops MIME sniffing, and Referrer-Policy limits which URLs leak to other sites. Google doesn't document them as a ranking factor. Only the home page is checked, as they're normally set site-wide.""",
         LearnMore = "https://web.dev/articles/security-headers",
         Subject = IssueSubject.Page,
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        ReportedOnce = true
     };
 
 

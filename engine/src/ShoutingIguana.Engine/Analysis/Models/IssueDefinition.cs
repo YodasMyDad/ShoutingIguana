@@ -45,6 +45,16 @@ public sealed record IssueDefinition(
     public bool SiteWide { get; init; }
 
     /// <summary>
+    /// The check's rule reports one issue for the whole site, on the URL that stands for it (the home page, or the start
+    /// URL without one), or one for each other version of the site: never one for each page or URL at fault. So a host
+    /// can say "checked once, for the whole site" where "1 of 265 pages" would misread. Only how its count is worded: it
+    /// isn't stored with an analysis, nor part of <see cref="AnalysisFreshness.ChecksFingerprint"/>, and the score never
+    /// reads it. Every <see cref="SiteWide"/> check is reported once; not every check reported once is a fault of the
+    /// whole site (a sitemap that can't be read, a missing security header).
+    /// </summary>
+    public bool ReportedOnce { get; init; }
+
+    /// <summary>
     /// The check in plain words (<see cref="IssuePlainTexts"/>), or null while it has none. Not part of
     /// <see cref="AnalysisFreshness.ChecksFingerprint"/>, nor of what an analysis stores.
     /// </summary>

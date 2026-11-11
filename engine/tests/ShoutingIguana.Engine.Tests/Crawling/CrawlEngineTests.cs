@@ -173,6 +173,11 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         Assert.Equal(ran.Select(issue => issue.Id).Order(StringComparer.Ordinal), counts.Keys.Order(StringComparer.Ordinal));
         Assert.All(ran, issue => Assert.Equal((issue.Id, flaggedPerIssue.GetValueOrDefault(issue.Id)), (issue.Id, counts.GetValueOrDefault(issue.Id))));
 
+        // A check that says it is reported once has one issue at most, whatever the site: one for each other version of
+        // the site, for the duplicate site version.
+        Assert.All(ran.Where(issue => issue.ReportedOnce), issue =>
+            Assert.True(counts.GetValueOrDefault(issue.Id) <= (issue == IssueCatalog.DUPLICATE_SITE_VERSION ? 3 : 1), $"{issue.Id} was reported {counts.GetValueOrDefault(issue.Id)} times"));
+
         // The analysis's own state is stored with it: partial or not, and why each skipped check was skipped.
         var stored = IssueReader.ReadAnalysis(path)!;
         Assert.Equal(analysis.IsPartial, stored.IsPartial);
