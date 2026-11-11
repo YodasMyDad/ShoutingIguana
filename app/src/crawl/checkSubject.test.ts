@@ -15,16 +15,11 @@ const URL_CHECK = { subject: 'url' } as const;
 /** A check as an engine from before E3b, or the design fixtures, gives it. */
 const UNSAID = {};
 
-/** A crawl as its analysis saw it: the analysis ran on 152 pages, and the crawl has 301 URLs. */
-const counts = (pagesAnalyzed: number, urlsFound: number | null, more: Partial<CrawlCounts> = {}): CrawlCounts => ({
-  analysis: { pagesAnalyzed, outOfDateReasons: [] },
-  crawling: false,
-  urlsFound,
-  ...more,
-});
+/** An analysis's own totals: the pages it ran on, and the URLs the crawl had crawled when it ran. */
+const counts = (pagesAnalyzed: number, crawledUrlCount: number): CrawlCounts => ({ pagesAnalyzed, crawledUrlCount });
 const CRAWL = counts(152, 301);
-/** The review's crawl: analysed at 1,661 pages and 40,826 URLs, then continued to 9,206 pages and 41,629 URLs. */
-const CONTINUED = counts(1_661, 41_629, { analysis: { pagesAnalyzed: 1_661, outOfDateReasons: ['crawlChanged'] } });
+/** The review's crawl as its analysis saw it: 1,661 pages and 9,464 URLs crawled. It was continued afterwards. */
+const CONTINUED = counts(1_661, 9_464);
 
 describe('what a check’s count is called', () => {
   it('is pages only where the engine says every URL the check flags is one', () => {
@@ -100,72 +95,70 @@ describe('what a check’s count is a share of', () => {
     });
   });
 
-  it('is the URLs found for a URL check, which can flag a URL that was never crawled', () => {
+  it('is the URLs crawled when the analysis ran for a URL check', () => {
     expect(checkShare(URL_CHECK, 4, CRAWL)).toEqual({
       label: 'Share of URLs',
       value: '1.3%',
-      context: 'of the 301 URLs found',
+      context: 'of the 301 URLs crawled',
     });
   });
 
-  it('is the URLs found for a check that doesn’t say what it flags: true whatever that is', () => {
+  it('is the URLs crawled for a check that doesn’t say what it flags: true whatever that is', () => {
     expect(checkShare(UNSAID, 20, CRAWL)).toEqual({
       label: 'Share of URLs',
       value: '6.6%',
-      context: 'of the 301 URLs found',
+      context: 'of the 301 URLs crawled',
     });
-    expect(checkShare(undefined, 20, CRAWL)?.context).toBe('of the 301 URLs found');
+    expect(checkShare(undefined, 20, CRAWL)?.context).toBe('of the 301 URLs crawled');
   });
 
   it('never takes a URL check’s count as a share of the pages, however few pages there are', () => {
     // 9 broken images and redirects on a crawl of 2 pages.
     const share = checkShare(URL_CHECK, 9, counts(2, 40));
-    expect(share).toEqual({ label: 'Share of URLs', value: '23%', context: 'of the 40 URLs found' });
+    expect(share).toEqual({ label: 'Share of URLs', value: '23%', context: 'of the 40 URLs crawled' });
   });
 
-  it('is of the analysis’s own pages after the crawl was continued, never of the pages the file has now', () => {
-    // Title duplicated on 52 of the 1,661 pages analysed: 3.1%, whatever the crawl has read since (9,206 pages now).
+  it('is of the analysis’s own totals, whatever the crawl has done since: both are stored with the counts', () => {
+    // The review's crawl: analysed at 1,661 pages and 9,464 URLs crawled, then continued to 9,206 pages. A title
+    // duplicated on 52 of the 1,661 pages analysed is 3.1%, and 209 URLs of the 9,464 crawled then are 2.2%. Nothing
+    // here is asked of the crawl as it is now: there is no such number to give this.
     expect(checkShare(PAGE, 52, CONTINUED)).toEqual({
       label: 'Share of pages',
       value: '3.1%',
       context: 'of the 1,661 pages analysed',
     });
-    // An analysis another engine made, or other settings: the same pages, the same share.
-    const older = counts(1_661, 40_826, {
-      analysis: { pagesAnalyzed: 1_661, outOfDateReasons: ['engineChanged', 'settingsChanged'] },
+    expect(checkShare(URL_CHECK, 209, CONTINUED)).toEqual({
+      label: 'Share of URLs',
+      value: '2.2%',
+      context: 'of the 9,464 URLs crawled',
     });
-    expect(checkShare(PAGE, 52, older)?.context).toBe('of the 1,661 pages analysed');
-    // And while it is being continued: both numbers are the analysis's.
-    expect(checkShare(PAGE, 52, { ...CONTINUED, crawling: true })?.value).toBe('3.1%');
+    expect(checkShare(UNSAID, 209, CONTINUED)?.context).toBe('of the 9,464 URLs crawled');
   });
 
-  it('says no share of the URLs found once the crawl has moved on from its analysis', () => {
-    // 3,451 of the 40,826 URLs the analysis saw; the file has 41,629 now, and nothing stored the 40,826.
-    expect(checkShare(URL_CHECK, 3_451, CONTINUED)).toBeNull();
-    expect(checkShare(UNSAID, 3_451, CONTINUED)).toBeNull();
-    // Nor while the crawl runs, before the analysis is known to be out of date: its URLs are moving.
-    expect(checkShare(URL_CHECK, 4, { ...CRAWL, crawling: true })).toBeNull();
-    // Nor a dash that would never be filled.
-    expect(checkShare(URL_CHECK, 4, { ...CONTINUED, urlsFound: null })).toBeNull();
-    // The file is as the analysis saw it when only the engine or the settings changed.
-    const older = counts(1_661, 40_826, {
-      analysis: { pagesAnalyzed: 1_661, outOfDateReasons: ['engineChanged', 'settingsChanged'] },
-    });
-    expect(checkShare(URL_CHECK, 3_451, older)?.context).toBe('of the 40,826 URLs found');
+  it('says no share of URLs for an analysis that didn’t keep their count: an engine from before the score ran it', () => {
+    // Such an analysis sends no count, or null: there is no total its URL counts are known to be a part of.
+    expect(checkShare(URL_CHECK, 4, { pagesAnalyzed: 152 })).toBeNull();
+    expect(checkShare(URL_CHECK, 4, { pagesAnalyzed: 152, crawledUrlCount: null })).toBeNull();
+    expect(checkShare(UNSAID, 4, { pagesAnalyzed: 152, crawledUrlCount: null })).toBeNull();
+    // Its pages it did keep: a page check's share stands.
+    expect(checkShare(PAGE, 20, { pagesAnalyzed: 152, crawledUrlCount: null })?.context).toBe(
+      'of the 152 pages analysed',
+    );
   });
 
-  it('says which count a share needs, so the URLs found are read only when they will be said', () => {
+  it('says which total a share is of, and that there is none of URLs without their count', () => {
     expect(shareWhole(PAGE, CRAWL)).toBe('pagesAnalysed');
-    expect(shareWhole(PAGE, CONTINUED)).toBe('pagesAnalysed');
-    expect(shareWhole(URL_CHECK, CRAWL)).toBe('urlsFound');
-    expect(shareWhole(UNSAID, CRAWL)).toBe('urlsFound');
-    expect(shareWhole(URL_CHECK, CONTINUED)).toBeNull();
-    expect(shareWhole(URL_CHECK, { ...CRAWL, crawling: true })).toBeNull();
+    expect(shareWhole(PAGE, { pagesAnalyzed: 152, crawledUrlCount: null })).toBe('pagesAnalysed');
+    expect(shareWhole(URL_CHECK, CRAWL)).toBe('urlsCrawled');
+    expect(shareWhole(UNSAID, CRAWL)).toBe('urlsCrawled');
+    expect(shareWhole(URL_CHECK, CONTINUED)).toBe('urlsCrawled');
+    expect(shareWhole(URL_CHECK, { pagesAnalyzed: 152, crawledUrlCount: null })).toBeNull();
+    expect(shareWhole(URL_CHECK, { pagesAnalyzed: 152 })).toBeNull();
   });
 
   it('words a count of one', () => {
     expect(checkShare(PAGE, 1, counts(1, 5))?.context).toBe('of the 1 page analysed');
-    expect(checkShare(URL_CHECK, 1, counts(1, 1))?.context).toBe('of the 1 URL found');
+    expect(checkShare(URL_CHECK, 1, counts(1, 1))?.context).toBe('of the 1 URL crawled');
   });
 
   it('keeps six-digit counts whole, with their separators', () => {
@@ -174,17 +167,7 @@ describe('what a check’s count is a share of', () => {
       value: '32%',
       context: 'of the 987,654 pages analysed',
     });
-    expect(checkShare(URL_CHECK, 312_876, counts(987_654, 1_234_567))?.context).toBe('of the 1,234,567 URLs found');
-  });
-
-  it('keeps its place with a dash until the URLs found are read, saying what it will be of', () => {
-    expect(checkShare(URL_CHECK, 4, counts(152, null))).toEqual({
-      label: 'Share of URLs',
-      value: '–',
-      context: 'of the URLs found',
-    });
-    // The pages analysed come with the analysis: a page check never waits for the crawl's count.
-    expect(checkShare(PAGE, 20, counts(152, null))?.value).toBe('13%');
+    expect(checkShare(URL_CHECK, 312_876, counts(987_654, 1_234_567))?.context).toBe('of the 1,234,567 URLs crawled');
   });
 
   it('says none where it isn’t known to be true', () => {

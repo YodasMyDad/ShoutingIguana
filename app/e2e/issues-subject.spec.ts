@@ -1,8 +1,8 @@
 // What a check's count is called, against the real sidecar and its synthetic crawl. For every check the catalog has,
 // Issues says "pages affected, of the N pages analysed" only where the catalog says the check flags only pages (its
-// `subject`), and "URLs affected, of the N URLs found" for any other; each N is the API's own count (the analysis's
-// `pagesAnalyzed`, the URL grid's total), and no check's count is more than it. Overview's "Fix first" and the inspector word the same counts the same way, and six-digit
-// counts keep their room. Nothing here waits on a clock: every expectation is of what the screen says in the end.
+// `subject`), and "URLs affected, of the N URLs crawled" for any other; each N is the analysis's own total, stored
+// with its counts (`pagesAnalyzed`, `crawledUrlCount`), and no check's count is more than it. Overview's "Fix first"
+// and the inspector word the same counts the same way, and six-digit counts keep their room. Nothing here waits on a clock: every expectation is of what the screen says in the end.
 import { expect, test, type Page } from '@playwright/test';
 
 const env = (name: string) => {
@@ -20,6 +20,8 @@ interface Check {
 }
 interface Analysis {
   pagesAnalyzed: number;
+  /** The URLs crawled when the analysis ran; null or missing for an analysis by an engine from before the score. */
+  crawledUrlCount?: number | null;
   counts: { checkId: string; count: number }[];
   skipped: { checkId: string }[];
 }
@@ -70,7 +72,7 @@ const PAGES: Filter[] = [
 const wordsOf = (check: Check) =>
   check.subject === 'page'
     ? { one: 'page', many: 'pages', Many: 'Pages', of: 'analysed' }
-    : { one: 'URL', many: 'URLs', Many: 'URLs', of: 'found' };
+    : { one: 'URL', many: 'URLs', Many: 'URLs', of: 'crawled' };
 
 const count = (value: number) => value.toLocaleString('en-GB');
 const counted = (value: number, words: { one: string; many: string }) =>
@@ -106,8 +108,11 @@ async function crawlFacts() {
     pagesCrawled: item.pageCount,
     /** The same, counted by the URL grid: the two must agree for "pages" to be one number. */
     gridPages: pages.matching,
+    /** The URLs crawled when the analysis ran: what a URL check's count is a part of. */
+    urlsAnalysed: analysis.crawledUrlCount ?? null,
     /** Every URL the crawl found, crawled or not. */
     urlsFound: all.total,
+    /** The URLs crawled, as the URL grid counts them now: the crawl hasn't changed since its analysis. */
     urlsCrawled: crawled.matching,
   };
 }
@@ -167,18 +172,22 @@ test('every check’s count is called what the check flags, as a share of the AP
   expect(facts.pagesAnalyzed).toBeGreaterThan(0);
   expect(facts.pagesAnalyzed).toBeLessThanOrEqual(facts.pagesCrawled);
   expect(facts.urlsFound).toBeGreaterThanOrEqual(facts.urlsCrawled);
+  // The analysis kept the URLs crawled when it ran, and they are the URL grid's crawled URLs: "of the N URLs crawled"
+  // is a number the grid lands on. It isn't the URLs found, which no analysis keeps.
+  expect(facts.urlsAnalysed, 'the analysis’s URLs crawled are the URL grid’s').toBe(facts.urlsCrawled);
 
-  // What each check that found issues flags, as the URL grid counts it: where its figure leads, and how many of
-  // those URLs are pages.
+  // What each check that found issues flags, as the URL grid counts it: where its figure leads, how many of those
+  // URLs are pages, and how many were crawled.
   const found = checks.filter((check) => !skipped.has(check.id) && (counts.get(check.id) ?? 0) > 0);
   const flagged = new Map(
     await Promise.all(
       found.map(async (check) => {
-        const [every, pages] = await Promise.all([
+        const [every, pages, crawled] = await Promise.all([
           urls(item.id, [flaggedBy(check.id)]),
           urls(item.id, [flaggedBy(check.id), ...PAGES]),
+          urls(item.id, [flaggedBy(check.id), { column: 'fetched', op: 'is', value: true }]),
         ]);
-        return [check.id, { urls: every.matching, pages: pages.matching }] as const;
+        return [check.id, { urls: every.matching, pages: pages.matching, crawled: crawled.matching }] as const;
       }),
     ),
   );
@@ -219,12 +228,14 @@ test('every check’s count is called what the check flags, as a share of the AP
       }
 
       const words = wordsOf(check);
-      const whole = check.subject === 'page' ? facts.pagesAnalyzed : facts.urlsFound;
+      const whole = check.subject === 'page' ? facts.pagesAnalyzed : (facts.urlsAnalysed ?? 0);
       const mine = flagged.get(check.id);
       // The API's own counts: the check's count is the URLs it flags, every one of them a page where the catalog
       // says so, and no more than what the screen says it's a part of.
       expect(mine?.urls, 'the URL grid lists exactly the check’s count').toBe(flaggedCount);
       if (check.subject === 'page') expect(mine?.pages, 'every URL a page check flags is a page').toBe(flaggedCount);
+      // And every URL any check flags was crawled: a URL check's count is a part of the URLs crawled.
+      expect(mine?.crawled, 'every URL a check flags is one the crawl crawled').toBe(flaggedCount);
       expect(flaggedCount, `no more than the ${words.many} ${words.of}`).toBeLessThanOrEqual(whole);
 
       // The count, by what it's of, leading to its URLs.
@@ -242,8 +253,8 @@ test('every check’s count is called what the check flags, as a share of the AP
       expectShare(shown, flaggedCount, whole, check.id);
       // And nothing of it in the other's words.
       await expect(figures).toHaveCount(2);
-      await expect(detail.getByText(check.subject === 'page' ? /URLs found/ : /pages analysed/)).toHaveCount(0);
-      await expect(detail.getByText(/pages crawled/)).toHaveCount(0);
+      await expect(detail.getByText(check.subject === 'page' ? /URLs crawled/ : /pages analysed/)).toHaveCount(0);
+      await expect(detail.getByText(/pages crawled|URLs found/)).toHaveCount(0);
 
       // What it flags, listed under the same word.
       const listed = detail.getByRole('heading', { name: `Affected ${words.many}`, level: 3, exact: true });
@@ -362,9 +373,9 @@ const BIG = { page: 'not-in-sitemap', url: 'internal-client-error', pages: 987_6
 const BIG_COUNTS: Record<string, number> = { [BIG.page]: 654_321, [BIG.url]: 312_876 };
 
 /**
- * The crawl with six-digit counts: the sidecar's own answers with the analysis's counts and the pages it ran on, the
- * library's page count and the URL grid's total made large. The screen then has to hold "654,321" and "of the
- * 1,234,567 URLs found".
+ * The crawl with six-digit counts: the sidecar's own answers with the analysis's counts and its two totals (the pages
+ * it ran on, the URLs crawled when it ran) and the library's page count made large. The screen then has to hold
+ * "654,321" and "of the 1,234,567 URLs crawled".
  */
 async function withSixDigitCounts(page: Page, crawl: string) {
   const answer = async (pattern: RegExp, change: (body: Record<string, unknown>) => unknown) =>
@@ -377,12 +388,12 @@ async function withSixDigitCounts(page: Page, crawl: string) {
   await answer(new RegExp(`/api/crawls/${crawl}/analysis$`), (body) => ({
     ...body,
     pagesAnalyzed: BIG.pages,
+    crawledUrlCount: BIG.urls,
     counts: (body.counts as { checkId: string; count: number }[]).map((entry) =>
       entry.count > 0 ? { ...entry, count: BIG_COUNTS[entry.checkId] ?? 100_000 + entry.count } : entry,
     ),
   }));
   await answer(new RegExp(`/api/crawls/${crawl}$`), (body) => ({ ...body, pageCount: BIG.pages }));
-  await answer(new RegExp(`/api/crawls/${crawl}/urls/facets$`), (body) => ({ ...body, total: BIG.urls }));
 }
 
 /**
@@ -464,10 +475,10 @@ test('six-digit counts keep their room at 1280x720, beside the inspector, and at
   await page.keyboard.press('Escape');
   await expect(inspector).toBeHidden();
 
-  // A check that can flag any URL: a share of the URLs found, a seven-digit count.
+  // A check that can flag any URL: a share of the URLs crawled, a seven-digit count.
   await page.getByRole('listbox', { name: 'Checks' }).locator(`[role="option"][data-check="${BIG.url}"]`).click();
   await expect(figure(page, 'URLs affected')).toHaveText(/^URLs affected\s*312,876\s*Open them in URLs$/);
-  await expect(figure(page, 'Share of URLs')).toHaveText(/^Share of URLs\s*25%\s*of the 1,234,567 URLs found$/);
+  await expect(figure(page, 'Share of URLs')).toHaveText(/^Share of URLs\s*25%\s*of the 1,234,567 URLs crawled$/);
   await expectFiguresFit(page, 'a URL check at 1280x720');
   await detail.locator('header').screenshot({ path: testInfo.outputPath('six-digits-url-check.png') });
 
@@ -480,7 +491,7 @@ test('six-digit counts keep their room at 1280x720, beside the inspector, and at
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect(inspector).toBeVisible();
-  await expect(figure(page, 'Share of URLs')).toHaveText(/of the 1,234,567 URLs found$/);
+  await expect(figure(page, 'Share of URLs')).toHaveText(/of the 1,234,567 URLs crawled$/);
   await expectFiguresFit(page, 'a URL check beside the inspector');
   await detail.locator('header').screenshot({ path: testInfo.outputPath('six-digits-url-check-narrow.png') });
   await page.keyboard.press('Escape');
@@ -488,7 +499,7 @@ test('six-digit counts keep their room at 1280x720, beside the inspector, and at
 
   // The same window at 200% zoom has half the room each way: the figures wrap rather than overprint.
   await page.setViewportSize({ width: 640, height: 360 });
-  await expect(figure(page, 'Share of URLs')).toHaveText(/^Share of URLs\s*25%\s*of the 1,234,567 URLs found$/);
+  await expect(figure(page, 'Share of URLs')).toHaveText(/^Share of URLs\s*25%\s*of the 1,234,567 URLs crawled$/);
   await expectFiguresFit(page, 'a URL check at 200% zoom');
   await detail.locator('header').screenshot({ path: testInfo.outputPath('six-digits-url-check-zoomed.png') });
   await page.getByRole('listbox', { name: 'Checks' }).locator(`[role="option"][data-check="${BIG.page}"]`).click();

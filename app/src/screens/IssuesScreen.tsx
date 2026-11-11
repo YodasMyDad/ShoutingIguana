@@ -14,7 +14,7 @@ import {
 import { GRID_PAGE_GC_MS } from '../app/queryClient';
 import { isCrawling, type Severity } from '../api/types';
 import { continueCrawl } from '../crawl/actions';
-import { affectedCount, shareWhole, type CrawlCounts } from '../crawl/checkSubject';
+import { affectedCount } from '../crawl/checkSubject';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -51,8 +51,6 @@ import { checkUrlsReader, copyUrls } from './issues/copyUrls';
 import { groupRefOf } from './issues/groupTree';
 import { useAnalysisAnswer } from './issues/useAnalysisAnswer';
 import { useAnalysisControl } from './issues/useAnalysisControl';
-import { foundCount } from './overview/statusSplit';
-import { statusFacetsQuery } from './overview/useCrawlFacets';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
@@ -180,21 +178,6 @@ export function IssuesScreen() {
     staleTime: Infinity,
     gcTime: GRID_PAGE_GC_MS,
   });
-
-  // What the selected check's count is a share of (crawl/checkSubject.ts decides it). A page check's is the pages the
-  // analysis ran on, which come with the analysis. Any other's is the URLs found: the URL grid's total, read with
-  // Overview's status breakdown (the same query, so the two screens can't disagree, and coming from Overview costs
-  // nothing), and read only when a share of them can be said: never while the crawl runs or after it was continued,
-  // when the file's count is no longer the one the analysis's counts are a part of.
-  const analysed = analysis.data;
-  const shareOf = useMemo(() => (analysed ? { analysis: analysed, crawling } : null), [analysed, crawling]);
-  const countsUrls = found && shareOf !== null && shareWhole(selected.check, shareOf) === 'urlsFound';
-  const urlFacets = useQuery({ ...statusFacetsQuery(crawlId), enabled: countsUrls });
-  const urlsFound = urlFacets.data ? foundCount(urlFacets.data) : null;
-  const crawlCounts = useMemo<CrawlCounts | null>(
-    () => (shareOf ? { ...shareOf, urlsFound } : null),
-    [shareOf, urlsFound],
-  );
 
   const choose = (next: string, by: SelectedBy) => {
     if (next === checkId) return;
@@ -519,7 +502,6 @@ export function IssuesScreen() {
                 entry={selected}
                 categoryTitle={categoryTitle(checks.data, selected.check)}
                 analysis={analysis.data}
-                crawlCounts={crawlCounts}
                 groupCount={groupsPage.data?.matching ?? null}
                 siteOrigin={siteOriginOf(item?.startUrl)}
                 group={search.group}

@@ -853,13 +853,15 @@ describe('a check’s count, worded by what the check flags', () => {
     expect(facetReads(requests)).toBe(0);
   });
 
-  it('says URLs for a check that can flag any URL, as a share of the URLs found', async () => {
-    sidecar();
+  it('says URLs for a check that can flag any URL, as a share of the URLs crawled when it was analysed', async () => {
+    const { requests } = sidecar();
     const { router } = await open(`${ISSUES}/internal-client-error`);
     await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
     expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2Open them in URLs$/);
-    // 2 of the 41 URLs the crawl found: a broken image or a redirect is no part of its 7 pages.
-    await waitFor(() => expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs4\.9%of the 41 URLs found$/));
+    // 2 of the 40 URLs the analysis saw crawled: a broken image or a redirect is no part of its 6 pages. The total
+    // comes with the analysis, as its pages do: it's there at once, and nothing more is read for it.
+    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs5%of the 40 URLs crawled$/);
+    expect(facetReads(requests)).toBe(0);
     expect(screen.getByRole('heading', { name: 'Affected URLs', level: 3 })).toBeVisible();
     const grid = await screen.findByRole('treegrid', {
       name: 'Internal URL returns 4xx: affected URLs, grouped by detail',
@@ -873,23 +875,17 @@ describe('a check’s count, worded by what the check flags', () => {
     fireEvent.pointerDown(grid.querySelector('[data-tree-toggle]')!, { button: 0 });
     await waitFor(() => expect(router.state.location.search).toHaveProperty('group'));
     expect(await within(grid).findByRole('link', { name: 'Show all 2 in URLs' })).toBeVisible();
+    expect(facetReads(requests)).toBe(0);
   });
 
-  it('keeps the share’s place with a dash until the URLs found are read', async () => {
-    sidecar({ urlsFound: 'pending' });
-    await open(`${ISSUES}/internal-client-error`);
-    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
-    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs–of the URLs found$/);
-  });
-
-  it('says only what’s known of a check that doesn’t say what it flags: URLs, of the URLs found', async () => {
+  it('says only what’s known of a check that doesn’t say what it flags: URLs, of the URLs crawled', async () => {
     const heard: string[] = [];
     const stop = onAnnounce((message) => heard.push(message));
     sidecar({ checks: ISSUES_CHECKS_WITHOUT_SUBJECTS });
     const { router } = await open(`${ISSUES}/title-too-long`);
     await screen.findByRole('heading', { name: 'Title too long', level: 2 });
     expect(figure('URLs affected')).toHaveTextContent(/^URLs affected3Open them in URLs$/);
-    await waitFor(() => expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs7\.3%of the 41 URLs found$/));
+    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs7\.5%of the 40 URLs crawled$/);
     expect(screen.getByRole('heading', { name: 'Affected URLs', level: 3 }).parentElement).toHaveTextContent(
       'Affected URLs3 URLs',
     );
@@ -929,28 +925,24 @@ describe('a check’s count, worded by what the check flags', () => {
     expect(screen.getByText('Likely in the site’s template').parentElement).toHaveTextContent('on 5 of 6 URLs');
   });
 
-  it('says no share of the URLs found while the crawl runs: they are moving, and the analysis is of what they were', async () => {
+  it('keeps both shares while the crawl runs: each is of the analysis’s own total, which doesn’t move', async () => {
     const { requests } = sidecar({ item: { status: 'running' } });
     await open(`${ISSUES}/internal-client-error`);
     await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
     expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
-    expect(share()).toBeNull();
-    expect(screen.queryByText(/URLs found/)).toBeNull();
-    // Nor is the crawl counted for it while it runs.
-    expect(facetReads(requests)).toBe(0);
-    // A page check's share is all the analysis's own, so it stands.
+    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs5%of the 40 URLs crawled$/);
     fireEvent.click(screen.getByRole('option', { name: /Title too long/ }));
     await screen.findByRole('heading', { name: 'Title too long', level: 2 });
     expect(figure('Share of pages')).toHaveTextContent(/^Share of pages50%of the 6 pages analysed$/);
+    // Nothing of the running crawl is counted for either.
     expect(facetReads(requests)).toBe(0);
   });
 
-  it('after the crawl was continued, keeps a page check’s share of the pages analysed and says none of the URLs found', async () => {
-    // Analysed at 6 pages and 41 URLs, then continued: the file has 30 pages and 400 URLs now.
+  it('after the crawl was continued, keeps both shares of what the analysis saw, never of what the file has now', async () => {
+    // Analysed at 6 pages and 40 URLs crawled, then continued: the file has 30 pages and 390 URLs crawled now.
     const { requests } = sidecar({
-      item: { pageCount: 30, fetchedUrlCount: 390, outOfDate: true },
+      item: { pageCount: 30, fetchedUrlCount: 390, crawledUrlCount: 390, outOfDate: true },
       analysis: { ...ISSUES_ANALYSIS, outOfDate: true, outOfDateReasons: ['crawlChanged'] },
-      urlsFound: 400,
     });
     await open(`${ISSUES}/title-too-long`);
     await screen.findByRole('heading', { name: 'Title too long', level: 2 });
@@ -959,28 +951,47 @@ describe('a check’s count, worded by what the check flags', () => {
     fireEvent.click(screen.getByRole('option', { name: /Internal URL returns 4xx/ }));
     await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
     expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
-    // 2 of the 41 URLs there were, which nothing stored: no share of the 400 there are now, and no read for one.
-    expect(share()).toBeNull();
-    expect(screen.queryByText(/URLs found/)).toBeNull();
+    // 2 of the 40 URLs crawled when it was analysed, which the analysis kept: never 0.5% of the 390 crawled now.
+    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs5%of the 40 URLs crawled$/);
+    expect(screen.queryByText(/390/)).toBeNull();
     expect(facetReads(requests)).toBe(0);
   });
 
-  it('keeps the share of the URLs found when the analysis is out of date for another reason: the file is the same', async () => {
-    sidecar({
-      item: { outOfDate: true },
-      analysis: { ...ISSUES_ANALYSIS, outOfDate: true, outOfDateReasons: ['engineChanged', 'settingsChanged'] },
-    });
-    await open(`${ISSUES}/internal-client-error`);
-    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
-    await waitFor(() => expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs4\.9%of the 41 URLs found$/));
-  });
+  // Such an analysis sends null for the count, or leaves it out: its page total it did keep.
+  const { crawledUrlCount: _none, ...WITHOUT_THE_COUNT } = ISSUES_ANALYSIS;
+  it.each([
+    ['sends null for it', { ...ISSUES_ANALYSIS, crawledUrlCount: null }],
+    ['leaves it out', WITHOUT_THE_COUNT],
+  ])(
+    'says no share of URLs for an analysis that kept no count of them (an engine from before the score ran it, and %s)',
+    async (_how, analysis) => {
+      const { requests } = sidecar({
+        item: { outOfDate: true },
+        analysis: { ...analysis, outOfDate: true, outOfDateReasons: ['engineChanged'] },
+      });
+      await open(`${ISSUES}/internal-client-error`);
+      await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+      expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
+      expect(share()).toBeNull();
+      expect(screen.queryByText(/URLs crawled|URLs found/)).toBeNull();
+      // And none is made up from the crawl as it is now: nothing is read for one.
+      expect(facetReads(requests)).toBe(0);
+      fireEvent.click(screen.getByRole('option', { name: /Title too long/ }));
+      await screen.findByRole('heading', { name: 'Title too long', level: 2 });
+      expect(figure('Share of pages')).toHaveTextContent(/^Share of pages50%of the 6 pages analysed$/);
+    },
+  );
 
-  it('never says a share of more than the whole: a count past the pages analysed has none', async () => {
-    // An analysis that says it ran on fewer pages than a check flags: nothing true to say.
-    sidecar({ analysis: { ...ISSUES_ANALYSIS, pagesAnalyzed: 2 } });
+  it('never says a share of more than the whole: a count past its total has none', async () => {
+    // An analysis that says it ran on fewer pages, and saw fewer URLs crawled, than a check flags: nothing true to say.
+    sidecar({ analysis: { ...ISSUES_ANALYSIS, pagesAnalyzed: 2, crawledUrlCount: 1 } });
     await open(`${ISSUES}/title-too-long`);
     await screen.findByRole('heading', { name: 'Title too long', level: 2 });
     expect(figure('Pages affected')).toHaveTextContent(/^Pages affected3/);
+    expect(share()).toBeNull();
+    fireEvent.click(screen.getByRole('option', { name: /Internal URL returns 4xx/ }));
+    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
     expect(share()).toBeNull();
   });
 });

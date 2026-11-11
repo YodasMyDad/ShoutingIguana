@@ -2,7 +2,7 @@ import { Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { useId, type ReactNode, type Ref } from 'react';
 import type { CheckGroupRef, GridSort } from '../../api/grids';
 import type { Analysis } from '../../api/types';
-import { affectedCount, affectedWords, checkShare, type CrawlCounts } from '../../crawl/checkSubject';
+import { affectedCount, affectedWords, checkShare } from '../../crawl/checkSubject';
 import { formatCount } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
@@ -21,11 +21,6 @@ export interface CheckDetailProps {
   entry: CheckEntry;
   categoryTitle: string;
   analysis: Analysis;
-  /**
-   * What the check's count is a share of: the pages the analysis ran on for a check that flags only pages, the URLs
-   * the crawl has found for any other, with what tells whether that count is still the analysis's (`checkShare`).
-   */
-  crawlCounts: CrawlCounts | null;
   /** The check's groups, once the first page says (null before, and for a check that doesn't group). */
   groupCount: number | null;
   siteOrigin: string | null;
@@ -52,7 +47,7 @@ function groupedBy(grouping: CheckEntry['check']['grouping']): string {
  * The selected check (docs/v2-ui-ia.md, Issues): its severity and category, title and actions, its figures, what's
  * wrong, why it matters and how to fix it, then what it flags. That is worded by the check's `subject`
  * (crawl/checkSubject.ts): pages, as a share of the pages analysed, only for a check that flags nothing else; URLs, as
- * a share of the URLs found, for one that can flag any URL or doesn't say. A skipped check shows its reason, never
+ * a share of the URLs crawled, for one that can flag any URL or doesn't say. A skipped check shows its reason, never
  * 0s; a check that passed says so plainly.
  */
 export function CheckDetail({
@@ -60,7 +55,6 @@ export function CheckDetail({
   entry,
   categoryTitle,
   analysis,
-  crawlCounts,
   groupCount,
   siteOrigin,
   group,
@@ -79,7 +73,8 @@ export function CheckDetail({
   const { check, outcome, count } = entry;
   const found = outcome !== 'passed' && outcome !== 'skipped';
   const words = affectedWords(check);
-  const share = found ? checkShare(check, count, crawlCounts) : null;
+  // The share is of the analysis's own totals: the pages it ran on, or the URLs crawled when it ran (`checkShare`).
+  const share = found ? checkShare(check, count, analysis) : null;
   const groups = check.grouping !== 'none';
 
   return (

@@ -2,12 +2,12 @@
 // "Fix first" and the inspector can't word a check two ways.
 // - A `page` check flags only pages, among the pages the analysis ran on: "pages affected", a part of the pages
 //   analysed (the analysis's own `pagesAnalyzed`, stored with the check's count, so the two are of one moment).
-// - A `url` check can flag any URL the crawl has (a missing image, a redirect, a URL a sitemap lists that was never
-//   fetched): "URLs affected", a part of the URLs found. Never of the URLs crawled, as some it flags weren't. Nothing
-//   stores how many URLs the crawl had when it was analysed, so that share is said only while the file is as the
-//   analysis saw it.
+// - A `url` check can flag any URL the crawl has crawled (a missing image, a redirect, a URL on another of the site's
+//   versions): "URLs affected", a part of the URLs crawled when the analysis ran (the analysis's own `crawledUrlCount`,
+//   stored with the counts as `pagesAnalyzed` is). Not the URLs found, which no analysis keeps: the crawl has found
+//   more than it has crawled (6,286 against 4,521 on the garden crawl).
 // - A check that doesn't say (an engine from before E3b, the design fixtures, a catalog not read yet) is worded as a
-//   `url` check: a page is a URL, and every URL it flags is one the crawl found, so it's true whatever it flags.
+//   `url` check: a page is a URL, and every URL it flags is one the crawl crawled, so it's true whatever it flags.
 import type { Analysis, CheckSubject } from '../api/types';
 import { formatCount, formatCountOf, formatPercent } from '../lib/format';
 
@@ -89,33 +89,29 @@ export function showInUrlsWords(check: CountedCheck, count: number): string {
   return count === 1 ? 'Show it in URLs' : `Show all ${formatCount(count)} in URLs`;
 }
 
-/** What a check's count is a part of, and what tells whether each is of the moment the analysis counted the check. */
-export interface CrawlCounts {
-  /**
-   * The analysis the check's count is from: the pages it ran on (`pagesAnalyzed`, stored with the counts), and why it's
-   * out of date, if it is.
-   */
-  analysis: Pick<Analysis, 'pagesAnalyzed' | 'outOfDateReasons'>;
-  /** The crawl is running: what it has found is moving. */
-  crawling: boolean;
-  /** Every URL the crawl has found, crawled or not, as its file is now (the URL grid's `total`). Null until it's read. */
-  urlsFound: number | null;
-}
+/**
+ * The analysis's own totals, which a check's count is a part of: the pages it ran on and the URLs the crawl had
+ * crawled when it ran, both stored by the analysis that counted the check. Never the library's counts or a grid's,
+ * which are of the crawl as it is now.
+ */
+export type CrawlCounts = Pick<Analysis, 'pagesAnalyzed' | 'crawledUrlCount'>;
 
 /** What a check's share is a share of. */
-export type ShareWhole = 'pagesAnalysed' | 'urlsFound';
+export type ShareWhole = 'pagesAnalysed' | 'urlsCrawled';
 
 /**
  * What a check's count can truly be called a share of: the one place that decides it.
- * - A `page` check's: the pages the analysis ran on. Both numbers are the analysis's own, so the share is true however
- *   old the analysis is and whatever the crawl has done since.
- * - Any other check's: the URLs the crawl has found. That is counted in the file as it is now, so there is none once
- *   the file has moved on from the analysis: while the crawl runs, and after it was continued (`crawlChanged`). The old
- *   count over the new total would be a share of nothing (52 of 1,661 pages is 3.1%, never 0.6% of 9,206).
+ * - A `page` check's: the pages the analysis ran on (`pagesAnalyzed`).
+ * - Any other check's: the URLs crawled when the analysis ran (its `crawledUrlCount`, the URL grid's "crawled" as it
+ *   was then; every URL such a check flags is one of them).
+ * Both numbers are the analysis's own, so either share is true however old the analysis is and whatever the crawl has
+ * done since: while it runs again, and after it was continued (52 of the 1,661 pages analysed is 3.1%, never 0.6% of
+ * the 9,206 the file has now). There is none of URLs only where the analysis didn't keep their count: one an engine
+ * from before the score ran, which sends none.
  */
-export function shareWhole(check: CountedCheck, crawl: Pick<CrawlCounts, 'analysis' | 'crawling'>): ShareWhole | null {
+export function shareWhole(check: CountedCheck, analysis: CrawlCounts): ShareWhole | null {
   if (affectedNoun(check) === 'page') return 'pagesAnalysed';
-  return crawl.crawling || crawl.analysis.outOfDateReasons.includes('crawlChanged') ? null : 'urlsFound';
+  return typeof analysis.crawledUrlCount === 'number' ? 'urlsCrawled' : null;
 }
 
 /** A check's share as a figure: its label, the percentage, and the line that says what it's a share of. */
@@ -126,20 +122,22 @@ export interface CheckShare {
 }
 
 /**
- * A check's count as a share of what it's a part of (`shareWhole`): the pages analysed for a `page` check, the URLs
- * found for any other. Until the URLs found are read the share keeps its place with a dash, so nothing moves when they
- * arrive. Null where no share is known to be true: no count (a skipped check), no analysis, a URL count that isn't of
- * the analysis's moment, nothing to be a part of, or a count past it, which is never shown as a whole or more.
+ * A check's count as a share of what it's a part of (`shareWhole`): "of the N pages analysed" for a `page` check, "of
+ * the N URLs crawled" for any other. Null where no share is known to be true: no count (a skipped check), no
+ * analysis, an analysis that didn't keep the URLs' count, nothing to be a part of, or a count past it, which is never
+ * shown as a whole or more.
  */
-export function checkShare(check: CountedCheck, count: number | null, crawl: CrawlCounts | null): CheckShare | null {
-  if (count === null || crawl === null) return null;
-  const whole = shareWhole(check, crawl);
+export function checkShare(check: CountedCheck, count: number | null, analysis: CrawlCounts | null): CheckShare | null {
+  if (count === null || analysis === null) return null;
+  const whole = shareWhole(check, analysis);
   if (whole === null) return null;
   const noun = affectedNoun(check);
-  const label = WORDS[noun].share;
-  const of = whole === 'pagesAnalysed' ? crawl.analysis.pagesAnalyzed : crawl.urlsFound;
-  const what = whole === 'pagesAnalysed' ? 'analysed' : 'found';
-  if (of === null) return { label, value: '–', context: `of the ${WORDS[noun].plural} ${what}` };
+  const of = whole === 'pagesAnalysed' ? analysis.pagesAnalyzed : (analysis.crawledUrlCount ?? 0);
   if (of <= 0 || count > of) return null;
-  return { label, value: formatPercent(count, of), context: `of the ${formatCountOf(of, noun)} ${what}` };
+  const what = whole === 'pagesAnalysed' ? 'analysed' : 'crawled';
+  return {
+    label: WORDS[noun].share,
+    value: formatPercent(count, of),
+    context: `of the ${formatCountOf(of, noun)} ${what}`,
+  };
 }

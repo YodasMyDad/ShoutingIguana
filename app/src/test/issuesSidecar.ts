@@ -1,7 +1,7 @@
 // A sidecar for the Issues screen's tests and stories: a small catalog over three categories, an analysis with a
 // check of each kind (grouped by detail, by related URL, flat, skipped and passed), and groups and rows answered as
 // the real `/groups` and `/rows` do (a group narrows the rows, `after` reads on, `detail` sorts).
-import type { FacetsPage, FacetsQuery, GridPage, GridQuery, IssueGroup, IssueRow } from '../api/grids';
+import type { GridPage, GridQuery, IssueGroup, IssueRow } from '../api/grids';
 import type { Analysis, Check, CheckSubject, Checks, CrawlListItem } from '../api/types';
 import { json, problem, standardRoutes, testCrawlItem, type FakeRoute } from './fakeSidecar';
 
@@ -50,38 +50,18 @@ export const ISSUES_CHECKS_WITHOUT_SUBJECTS: Checks = {
 };
 
 /**
- * The crawl's own counts, which a check's count is a part of: 7 pages crawled (one more than the 6 the analysis
- * audited, as the engine leaves a Cloudflare `/cdn-cgi/` page out of its checks but not out of its page count), and 41
- * URLs found, 40 of them crawled.
+ * The crawl's own counts as its file has them: 7 pages crawled (one more than the 6 the analysis audited, as the
+ * engine leaves a Cloudflare `/cdn-cgi/` page out of its checks but not out of its page count), and 40 URLs crawled,
+ * which is also what the analysis saw (`ISSUES_ANALYSIS.crawledUrlCount`).
  */
-export const ISSUES_CRAWL = { pageCount: 7, fetchedUrlCount: 40, urlsFound: 41 } as const;
-
-/**
- * The URL facets as the status breakdown reads them: `total` is every URL the crawl found, all but one of them
- * crawled. Its second read, of the URLs that weren't checked, matches none.
- */
-export function issuesFacets(query: FacetsQuery, urlsFound: number = ISSUES_CRAWL.urlsFound): FacetsPage {
-  const notChecked = query.filters?.some((filter) => filter.column === 'outcome' && filter.op === 'in') ?? false;
-  return {
-    matching: notChecked ? 0 : urlsFound,
-    total: urlsFound,
-    summary: { available: true, reason: null },
-    unavailable: [],
-    facets: notChecked
-      ? {}
-      : {
-          statusClass: [
-            { value: '2xx', count: urlsFound - 1, filter: { column: 'statusClass', op: 'in', values: ['2xx'] } },
-            { value: null, count: 1, filter: { column: 'statusClass', op: 'isEmpty' } },
-          ],
-        },
-  };
-}
+export const ISSUES_CRAWL = { pageCount: 7, fetchedUrlCount: 40, crawledUrlCount: 40 } as const;
 
 export const ISSUES_ANALYSIS: Analysis = {
   analyzedAt: '2026-11-01T10:21:00Z',
   engineVersion: 'test',
   pagesAnalyzed: 6,
+  // The URLs crawled when it ran: what a URL check's count is a share of (a current engine's analysis keeps it).
+  crawledUrlCount: 40,
   durationMs: 1_000,
   isPartial: true,
   outOfDate: false,
@@ -178,11 +158,6 @@ export interface IssuesSidecarOptions {
   /** The last analysis; null for a crawl never analysed, `error` for one that can't be read, `pending` for never. */
   analysis?: Analysis | null | 'error' | 'pending';
   checks?: Checks;
-  /**
-   * Every URL the crawl found (the URL facets' `total`); `pending` for a read that never answers, `error` for one that
-   * fails.
-   */
-  urlsFound?: number | 'pending' | 'error';
   groups?: Record<string, IssueGroup[]>;
   rows?: Record<string, (IssueRow & { group?: number })[]>;
   onAnalyse?: () => void;
@@ -195,6 +170,7 @@ export function issuesRoutes(options: IssuesSidecarOptions = {}): FakeRoute[] {
   const item = testCrawlItem({
     pageCount: ISSUES_CRAWL.pageCount,
     fetchedUrlCount: ISSUES_CRAWL.fetchedUrlCount,
+    crawledUrlCount: ISSUES_CRAWL.crawledUrlCount,
     ...options.item,
   });
   const analysis = options.analysis === undefined ? ISSUES_ANALYSIS : options.analysis;
@@ -265,16 +241,6 @@ export function issuesRoutes(options: IssuesSidecarOptions = {}): FakeRoute[] {
       'POST',
       /^\/api\/crawls\/[0-9a-f]{16}\/issues\/([a-z0-9-]+)\/rows$/,
       (request, match) => json(issueRowsPage(match[1] ?? '', request.body as GridQuery, rows)),
-    ],
-    [
-      'POST',
-      /^\/api\/crawls\/[0-9a-f]{16}\/urls\/facets$/,
-      (request) =>
-        options.urlsFound === 'pending'
-          ? new Promise<Response>(() => undefined)
-          : options.urlsFound === 'error'
-            ? problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 })
-            : json(issuesFacets(request.body as FacetsQuery, options.urlsFound)),
     ],
     ...standardRoutes(item).filter(([method, pattern]) => !(method === 'GET' && pattern.source.includes('checks'))),
   ];
