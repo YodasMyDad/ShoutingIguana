@@ -11,6 +11,7 @@ import {
   coverageSkippedWords,
   coverageWords,
   foundViaWords,
+  indexBadgeWords,
   indexHoldsWords,
   notReadReason,
   nothingAtDefaultLocation,
@@ -128,16 +129,14 @@ describe('what became of a sitemap', () => {
     );
     // A crawl that stopped first: it has some of them, and can't say how many there are.
     expect(stateWords(index, false, { sitemaps: 1, read: 0, more: true })).toMatchObject({
-      short: 'Read: the crawl has 1 of its sitemaps',
+      short: 'Read, has 1 of its sitemaps',
       sentence:
         'The crawl read this index, and has 1 of the sitemaps it lists, none of them read: it didn’t get to them all. What the index lists in all isn’t known, so it has no counts of its own.',
     });
-    expect(stateWords(index, false, { sitemaps: 0, read: 0, more: true }).short).toBe(
-      'Read: the crawl has none of its sitemaps',
-    );
+    expect(stateWords(index, false, { sitemaps: 0, read: 0, more: true }).short).toBe('Read, none of its sitemaps');
     // A crawl still at it: so far, and its counts are on their way.
     expect(stateWords(index, true, { sitemaps: 4, read: 3, more: true })).toMatchObject({
-      short: 'Read, 4 of its sitemaps so far',
+      short: 'Read, 4 sitemaps so far',
       sentence:
         'The crawl read this index, and has 4 of the sitemaps it lists so far, 3 of them read. Its counts come once it has read them all.',
     });
@@ -148,6 +147,13 @@ describe('what became of a sitemap', () => {
     ]) {
       expect(stateWords(index, false, subtree).sentence).not.toMatch(/and the sitemaps it lists\./);
     }
+    // Its badge counts its sitemaps once the crawl has them all, where there's room for the count.
+    expect(indexBadgeWords({ sitemaps: 12 }, { sitemaps: 12, read: 11, more: false }, true)).toBe('Index of 12');
+    expect(indexBadgeWords({ sitemaps: 1_204 }, { sitemaps: 1_204, read: 1_204, more: false }, true)).toBe(
+      'Index of 1,204',
+    );
+    expect(indexBadgeWords({ sitemaps: 12 }, { sitemaps: 12, read: 12, more: false }, false)).toBe('Index');
+    expect(indexBadgeWords({ sitemaps: 1 }, { sitemaps: 1, read: 0, more: true }, true)).toBe('Index');
     // What its file holds: its sitemaps, as far as the crawl has them.
     expect(indexHoldsWords({ sitemaps: 3 }, { sitemaps: 3, read: 2, more: false })).toBe('3 sitemaps');
     expect(indexHoldsWords({ sitemaps: 1 }, { sitemaps: 1, read: 0, more: true })).toBe(

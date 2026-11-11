@@ -142,20 +142,29 @@ function partIndexWords({ sitemaps: has, read, more }: Subtree, crawling: boolea
             'The crawl read this index, and hasn’t come to the sitemaps it lists yet. Its counts come once it has read them all.',
         }
       : {
-          short: 'Read: the crawl has none of its sitemaps',
+          short: 'Read, none of its sitemaps',
           sentence:
             'The crawl read this index, and has none of the sitemaps it lists: it didn’t get to them. What the index lists isn’t known, so it has no counts of its own.',
         };
   }
   return crawling
     ? {
-        short: `Read, ${formatCount(has)} of its sitemaps so far`,
+        short: `Read, ${formatCountOf(has, 'sitemap')} so far`,
         sentence: `The crawl read this index, and has ${formatCount(has)} of the sitemaps it lists so far, ${readOf} of them read. Its counts come once it has read them all.`,
       }
     : {
-        short: `Read: the crawl has ${formatCount(has)} of its sitemaps`,
+        short: `Read, has ${formatCount(has)} of its sitemaps`,
         sentence: `The crawl read this index, and has ${formatCount(has)} of the sitemaps it lists, ${readOf} of them read: it didn’t get to them all. What the index lists in all isn’t known, so it has no counts of its own.`,
       };
+}
+
+/**
+ * The badge beside an index's address: "Index of 12" once the crawl has every sitemap it lists (until then how many
+ * it lists isn't known), and where there's room for the count beside the address (`roomy`). Else "Index": the rows
+ * under it, its status and its own page say how many.
+ */
+export function indexBadgeWords(sitemap: Pick<Sitemap, 'sitemaps'>, subtree: Subtree, roomy: boolean): string {
+  return subtree.more || !roomy ? 'Index' : `Index of ${formatCount(sitemap.sitemaps)}`;
 }
 
 /** What an index's file holds, for its facts: its sitemaps, as far as the crawl has them. */

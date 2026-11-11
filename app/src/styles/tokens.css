@@ -412,6 +412,7 @@
   --facts-columns: max-content 1fr; /* a list of facts: labels, then values */
   --percent-width: 40px;
   --search-width: 232px;
+  --search-width-min: 144px; /* a search that shares a line with filters gives way down to this before it wraps */
   --search-width-filter: 160px;
   --search-width-library: 260px;
   --library-status-width: 240px; /* Home's status column: a file's error wraps in it */

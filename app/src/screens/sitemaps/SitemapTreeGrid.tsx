@@ -14,7 +14,7 @@ import { Url } from '../../ui/Url';
 import { pressedRow, rememberPlace, rememberedPlace } from '../listPlace';
 import { COUNT_FILTERS, COUNT_WORDS, ENGINE_DOESNT_SAY, countOf, type SitemapCount } from './sitemapLinks';
 import { countsKnown, sitemapRows, type SitemapRow } from './sitemapTree';
-import { foundViaWords, stateWords } from './sitemapWords';
+import { foundViaWords, indexBadgeWords, stateWords } from './sitemapWords';
 
 const ROUTE = '/crawls/$crawl/sitemaps/{-$sitemap}';
 
@@ -24,19 +24,25 @@ const ROUTE = '/crawls/$crawl/sitemaps/{-$sitemap}';
  */
 const LIST_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'blocked', 'notCrawled', 'nonIndexable'];
 
-// The columns are as narrow as their headers and a count in the millions (1,234,567) allow: five counts, how the
-// sitemap was found and what became of it have to fit beside its address in a 1280 px window.
-const FOUND_WIDTH = 124;
-const STATE_WIDTH = 176;
+// Five counts, how the sitemap was found and what became of it have to fit beside its address in a 1280 px window.
+// Each count's column is as wide as a count in the millions (1,234,567) and its name need; "Blocked by robots.txt"
+// takes two lines over its count (`TWO_LINE_HEAD`), which keeps its column as narrow as the others.
+const FOUND_WIDTH = 112;
+/** "Couldn’t be read: HTTP 404", "Read, 11 of its 12 sitemaps", whole. */
+const STATE_WIDTH = 198;
 const COUNT_WIDTHS: Record<SitemapCount, number> = {
   listed: 88,
   crawled: 88,
-  blocked: 156,
-  notCrawled: 100,
+  blocked: 100,
+  notCrawled: 96,
   indexable: 96,
   nonIndexable: 112,
 };
 const MIN_URL_WIDTH = 180;
+/** The address column as wide as this has room for "Index of 12" beside an index's address; narrower, "Index". */
+const BADGE_COUNT_WIDTH = 260;
+/** What a header of two lines of 12 px text adds to the grid's own header height. */
+const TWO_LINE_HEAD = 12;
 /** The grid's edges, and the room its scrollbar takes. */
 const FRAME_SLACK = 18;
 
@@ -75,7 +81,9 @@ export function SitemapTree({
   busy,
   onOpen,
 }: SitemapTreeProps) {
-  const { rowHeight, headerHeight } = useGridMetrics();
+  const metrics = useGridMetrics();
+  const rowHeight = metrics.rowHeight;
+  const headerHeight = metrics.headerHeight + TWO_LINE_HEAD;
   const [measure, width] = useElementWidth();
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(() => new Set());
   const rows = useMemo(() => sitemapRows(sitemaps, collapsed, discovery), [sitemaps, collapsed, discovery]);
@@ -161,8 +169,7 @@ export function SitemapTree({
             </span>
             {row.sitemap.isIndex ? (
               <Badge variant="outline" className="ml-2 shrink-0">
-                {/* How many it lists is known once the crawl has them all: until then it's an index, and no more. */}
-                {row.subtree.more ? 'Index' : `Index of ${formatCount(row.sitemap.sitemaps)}`}
+                {indexBadgeWords(row.sitemap, row.subtree, urlWidth >= BADGE_COUNT_WIDTH)}
               </Badge>
             ) : null}
           </span>
@@ -241,7 +248,7 @@ export function SitemapTree({
           onOpen(row.sitemap, counted ? COUNT_FILTERS[count] : []);
         }}
         busy={busy}
-        className="flex-1 rounded-lg border border-border shadow-1"
+        className="si-grid-frame--two-line-head flex-1 rounded-lg border border-border shadow-1"
       />
     </div>
   );

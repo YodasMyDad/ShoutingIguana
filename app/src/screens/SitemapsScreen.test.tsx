@@ -70,7 +70,7 @@ describe('Sitemaps: the list', () => {
     expect(rows[0]).toHaveAttribute('aria-expanded', 'true');
     expect(rows[0]).toHaveAttribute('aria-level', '1');
     expect(rows.slice(1, 4).map((row) => row.getAttribute('aria-level'))).toEqual(['2', '2', '2']);
-    expect(within(rows[0]!).getByText('Index of 3')).toBeVisible();
+    expect(within(rows[0]!).getByText('Index')).toBeVisible();
     expect(within(rows[0]!).getByText('robots.txt')).toBeVisible();
     expect(within(rowOf(`${SITE}/sitemaps/pages.xml`)).getByText('Sitemap index')).toBeVisible();
     expect(within(rowOf(`${SITE}/news-sitemap.xml`)).getByText('Crawl settings')).toBeVisible();
@@ -277,7 +277,7 @@ describe('Sitemaps: the list', () => {
     // How many sitemaps it lists isn't known either: it's an index, with what the crawl has of it said in words.
     expect(within(row).getByText('Index')).toBeVisible();
     expect(within(row).queryByText(/Index of/)).toBeNull();
-    const state = within(row).getByText('Read: the crawl has 1 of its sitemaps');
+    const state = within(row).getByText('Read, has 1 of its sitemaps');
     expect(state).toHaveAttribute(
       'title',
       'The crawl read this index, and has 1 of the sitemaps it lists, none of them read: it didn’t get to them all. What the index lists in all isn’t known, so it has no counts of its own.',
@@ -298,7 +298,7 @@ describe('Sitemaps: the list', () => {
     });
     const { router } = await open(SITEMAPS);
     const index = await waitFor(() => rowOf(`${SITE}/sitemap.xml`));
-    expect(within(index).getByText('Index of 3')).toBeVisible();
+    expect(within(index).getByText('Index')).toBeVisible();
     expect(within(index).getByText('Read')).toBeVisible();
     fireEvent.click(within(index).getByRole('link', { name: '2 URLs non-indexable' }));
     await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/1`));
@@ -312,7 +312,7 @@ describe('Sitemaps: the list', () => {
     await open(SITEMAPS);
     const index = await waitFor(() => rowOf(`${SITE}/sitemap.xml`));
     expect(within(index).getAllByText('–')).toHaveLength(5);
-    expect(within(index).getByText('Index of 3')).toBeVisible();
+    expect(within(index).getByText('Index')).toBeVisible();
     expect(within(index).getByText('Read, 2 of its 3 sitemaps')).toHaveAttribute(
       'title',
       'The crawl read this index, and 2 of the 3 sitemaps it lists. What the other lists isn’t known, so the index has no counts of its own.',

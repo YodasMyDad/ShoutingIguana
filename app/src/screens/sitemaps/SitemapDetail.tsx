@@ -384,23 +384,27 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
             {chips}
           </span>
         ) : null}
-        {/* Beside the filters, not the title: a sitemap's address needs the title's line to itself. */}
-        <SearchField
-          ref={searchField}
-          label="Search this sitemap’s URLs and titles"
-          placeholder="Search URLs"
-          shortcut="mod+f"
-          // The same field whatever is searched for: Enter applies its text and focus stays in it.
-          value={searchText}
-          onChange={(event) => setSearchText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter') return;
-            const value = event.currentTarget.value.trim();
-            void navigate({ params: here, search: (previous) => ({ ...previous, q: value || undefined }) });
-          }}
-          onClear={() => void navigate({ params: here, search: (previous) => ({ ...previous, q: undefined }) })}
-          className="ml-auto w-(--search-width)"
-        />
+        {/* Beside the filters, not the title: a sitemap's address needs the title's line to itself. It takes what's
+            left of the filters' line, up to its own width, so six filters and the search share one line in a 1280 px
+            window; only with less room than that does it go under them. */}
+        <span className="flex min-w-(--search-width-min) flex-1 justify-end">
+          <SearchField
+            ref={searchField}
+            label="Search this sitemap’s URLs and titles"
+            placeholder="Search URLs"
+            shortcut="mod+f"
+            // The same field whatever is searched for: Enter applies its text and focus stays in it.
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return;
+              const value = event.currentTarget.value.trim();
+              void navigate({ params: here, search: (previous) => ({ ...previous, q: value || undefined }) });
+            }}
+            onClear={() => void navigate({ params: here, search: (previous) => ({ ...previous, q: undefined }) })}
+            className="w-full max-w-(--search-width)"
+          />
+        </span>
       </div>
       {summary && !summary.available && unavailable.length > 0 ? (
         <Banner inset className="mx-6 mb-3">

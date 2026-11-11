@@ -231,6 +231,15 @@
     flex-direction: row-reverse;
   }
 
+  /*
+    A grid whose column names may take two lines (a long name over a narrow count: "Blocked by robots.txt"). The grid
+    gives its header the height for them; the rows' cells stay on one line.
+  */
+  .si-grid-frame--two-line-head .si-grid-head .si-grid-cell {
+    line-height: var(--leading-12);
+    white-space: normal;
+  }
+
   /* A row drawn as one cell: a group's link to all its rows. */
   .si-grid-cell--span {
     grid-column: 1 / -1;

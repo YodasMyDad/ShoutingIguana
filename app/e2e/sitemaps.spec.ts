@@ -79,7 +79,12 @@ test('the list: an index with its sitemaps under it, what became of each, and th
   await expect(row(page, index).getByText('–')).toHaveCount(5);
   await expect(row(page, index).getByRole('link')).toHaveCount(0);
   await expect(row(page, index)).toContainText(`Read, ${read} of its ${under.length} sitemaps`);
-  await expect(row(page, index)).toContainText(`Index of ${under.length}`);
+  // Its badge counts its sitemaps where the window leaves room for the count beside the address.
+  await expect(row(page, index).getByText('Index', { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await expect(row(page, index).getByText(`Index of ${under.length}`, { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(row(page, index).getByText('Index', { exact: true })).toBeVisible();
   // A sitemap that was read: listed and not crawled always; crawled and blocked where the engine counts what
   // robots.txt refused, else a dash that says why, never `fetched` under the name "Crawled".
   const whole = under.find((sitemap) => sitemap.state === 'read' && sitemap.urls.listed > 0);
