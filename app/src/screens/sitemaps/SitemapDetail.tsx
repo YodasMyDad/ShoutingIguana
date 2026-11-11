@@ -53,8 +53,9 @@ import {
   quickFilterOf,
   type QuickFilter,
 } from './sitemapLinks';
+import { countsKnown, subtreeOf, type Subtree } from './sitemapTree';
 import { outcomeWords } from './urlOutcome';
-import { foundViaWords, stateWords } from './sitemapWords';
+import { foundViaWords, indexHoldsWords, stateWords } from './sitemapWords';
 
 const ROUTE = '/crawls/$crawl/sitemaps/{-$sitemap}';
 
@@ -90,6 +91,12 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
 
   const sitemaps = list.data?.sitemaps;
   const sitemap = sitemapId === null ? undefined : sitemaps?.find((candidate) => candidate.id === sitemapId);
+  // An index's words rest on how far the crawl got with the sitemaps under it, which the same list says.
+  const discovery = list.data?.discovery;
+  const subtree = useMemo(
+    () => (sitemap && sitemaps && discovery ? subtreeOf(sitemaps, sitemap.id, discovery) : undefined),
+    [sitemap, sitemaps, discovery],
+  );
   // Its URLs are read once the list says the crawl has it, or when the list couldn't be read: the grid still can be.
   const enabled = sitemapId !== null && (sitemap !== undefined || list.isError);
 
@@ -316,6 +323,7 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
         <SitemapFacts
           sitemap={sitemap}
           parent={sitemaps?.find((other) => other.id === sitemap.parentId)}
+          subtree={subtree}
           crawl={crawl}
           crawlId={crawlId}
         />
@@ -444,7 +452,7 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
                 onClear={clearView}
               />
             ) : (
-              <NothingListed sitemap={sitemap} crawling={crawl.crawling} />
+              <NothingListed sitemap={sitemap} subtree={subtree} crawling={crawl.crawling} />
             )
           }
           className="mx-6 mb-4 flex-1 rounded-lg border border-border shadow-1"
@@ -455,10 +463,19 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
 }
 
 /** A sitemap with no URLs to show says why, by what became of it: never a blank grid. */
-function NothingListed({ sitemap, crawling }: { sitemap: Sitemap | undefined; crawling: boolean }) {
+function NothingListed({
+  sitemap,
+  subtree,
+  crawling,
+}: {
+  sitemap: Sitemap | undefined;
+  subtree: Subtree | undefined;
+  crawling: boolean;
+}) {
   if (!sitemap) return <EmptyState title="This sitemap lists no URLs." level="none" panel />;
-  const state = stateWords(sitemap, crawling);
-  if (sitemap.state === 'read') {
+  const state = stateWords(sitemap, crawling, subtree);
+  // An index lists what the sitemaps under it list: with some of them unread it isn't known to list nothing.
+  if (sitemap.state === 'read' && countsKnown(sitemap, subtree)) {
     return (
       <EmptyState title="This sitemap lists no URLs." level="none" panel>
         {sitemap.isIndex
@@ -487,16 +504,19 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 function SitemapFacts({
   sitemap,
   parent,
+  subtree,
   crawl,
   crawlId,
 }: {
   sitemap: Sitemap;
   parent: Sitemap | undefined;
+  /** How far the crawl got with the sitemaps under it, when the list says. */
+  subtree: Subtree | undefined;
   crawl: CrawlState;
   crawlId: string;
 }) {
   const found = foundViaWords(sitemap.foundVia);
-  const state = stateWords(sitemap, crawl.crawling);
+  const state = stateWords(sitemap, crawl.crawling, subtree);
   return (
     <div className="px-6 pb-2">
       <dl className="flex flex-wrap gap-x-6 gap-y-1 text-12">
@@ -527,7 +547,7 @@ function SitemapFacts({
         </Fact>
         <Fact label="In the file">
           {sitemap.isIndex
-            ? formatCountOf(sitemap.sitemaps, 'sitemap')
+            ? indexHoldsWords(sitemap, subtree)
             : sitemap.state === 'read' || sitemap.entries > 0
               ? formatCountOf(sitemap.entries, 'URL entry', 'URL entries')
               : 'Not known'}

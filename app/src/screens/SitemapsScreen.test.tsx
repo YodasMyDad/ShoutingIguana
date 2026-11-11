@@ -121,13 +121,75 @@ describe('Sitemaps: the list', () => {
   it('lands each count on exactly its URLs: the grid it opens counts what the list said', async () => {
     sidecar();
     const { router } = await open(SITEMAPS);
+    const products = await waitFor(() => rowOf(`${SITE}/sitemaps/products.xml`));
+    fireEvent.click(within(products).getByRole('link', { name: '1 URL non-indexable' }));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/3`));
+    expect(await screen.findByText('of 3 URLs')).toBeVisible();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '2'));
+    expect(searchOf(router).filter).toEqual([{ column: 'indexable', op: 'is', value: false }]);
+  });
+
+  it('shows an index’s counts only once every sitemap under it was read: dashes, never 0, until then', async () => {
+    // A crawl stopped between its index and the sitemaps it lists: the index was read, the one sitemap of its three
+    // the crawl had taken up never was.
+    const index = testSitemap({ id: 11, url: `${SITE}/sitemap.xml`, isIndex: true, sitemaps: 1 });
+    const child = testSitemap({ id: 12, parentId: 11, foundVia: 'index', state: 'pending', statusCode: null });
+    sidecar({
+      sitemaps: { ...TEST_SITEMAP_LIST, discovery: 'unfinished', sitemaps: [index, child] },
+      item: { status: 'stopped' },
+    });
+    const { router } = await open(SITEMAPS);
+    const row = await waitFor(() => rowOf(index.url));
+    // Its counts are its sitemaps', which the crawl never read: not known, so not 0.
+    expect(within(row).getAllByText('–')).toHaveLength(4);
+    expect(within(row).queryByRole('link')).toBeNull();
+    expect(within(row).queryByText('0')).toBeNull();
+    // How many sitemaps it lists isn't known either: it's an index, with what the crawl has of it said in words.
+    expect(within(row).getByText('Index')).toBeVisible();
+    expect(within(row).queryByText(/Index of/)).toBeNull();
+    const state = within(row).getByText('Read: the crawl has 1 of its sitemaps');
+    expect(state).toHaveAttribute(
+      'title',
+      'The crawl read this index, and has 1 of the sitemaps it lists, none of them read: it didn’t get to them all. What the index lists in all isn’t known, so it has no counts of its own.',
+    );
+    // Its page doesn't say it lists no URLs, or that the file holds one sitemap.
+    fireEvent.doubleClick(within(row).getByText(index.url));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/11`));
+    expect(await screen.findByText('No URLs to show for this sitemap.')).toBeVisible();
+    expect(screen.queryByText('This sitemap lists no URLs.')).toBeNull();
+    expect(screen.getByText('sitemaps: the crawl has 1 of them')).toBeVisible();
+    expect(screen.queryByText('1 sitemap')).toBeNull();
+  });
+
+  it('gives an index its counts, as links, when the crawl has read every sitemap under it', async () => {
+    // The test list's index without the sitemap that couldn't be read.
+    sidecar({
+      sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: TEST_SITEMAPS.filter((sitemap) => sitemap.id !== 4) },
+    });
+    const { router } = await open(SITEMAPS);
     const index = await waitFor(() => rowOf(`${SITE}/sitemap.xml`));
+    expect(within(index).getByText('Index of 3')).toBeVisible();
+    expect(within(index).getByText('Read')).toBeVisible();
     fireEvent.click(within(index).getByRole('link', { name: '2 URLs non-indexable' }));
     await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/1`));
     expect(await screen.findByText('of 6 URLs')).toBeVisible();
     const grid = await screen.findByRole('grid');
     await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '3'));
-    expect(searchOf(router).filter).toEqual([{ column: 'indexable', op: 'is', value: false }]);
+  });
+
+  it('gives an index no counts while one of its sitemaps couldn’t be read, and says how many were', async () => {
+    sidecar();
+    await open(SITEMAPS);
+    const index = await waitFor(() => rowOf(`${SITE}/sitemap.xml`));
+    expect(within(index).getAllByText('–')).toHaveLength(4);
+    expect(within(index).getByText('Index of 3')).toBeVisible();
+    expect(within(index).getByText('Read, 2 of its 3 sitemaps')).toHaveAttribute(
+      'title',
+      'The crawl read this index, and 2 of the 3 sitemaps it lists. What the other lists isn’t known, so the index has no counts of its own.',
+    );
+    // Each sitemap under it keeps its own.
+    expect(within(rowOf(`${SITE}/sitemaps/pages.xml`)).getByRole('link', { name: '4 URLs listed' })).toBeVisible();
   });
 
   it('is one Tab stop: its links are reached with the arrows, and Enter does what a click on one does', async () => {
@@ -333,7 +395,7 @@ describe('Sitemaps: what isn’t there', () => {
     expect(note.closest('[role="status"], [role="alert"], [aria-live]')).toBeNull();
     // The counts still show: they need no analysis.
     expect(
-      within(await waitFor(() => rowOf(`${SITE}/sitemap.xml`))).getByRole('link', { name: '6 URLs listed' }),
+      within(await waitFor(() => rowOf(`${SITE}/sitemaps/pages.xml`))).getByRole('link', { name: '4 URLs listed' }),
     ).toBeVisible();
     expect(await screen.findByText(/counted by the analysis: this crawl hasn’t been analysed yet/)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Analyse it' }));
@@ -400,7 +462,7 @@ describe('Sitemaps: live and refreshing', () => {
     // The crawl reads them: the very same note, still there.
     sidecar({ sitemaps: list(TEST_SITEMAPS), item: running });
     act(() => void queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
-    expect(await screen.findByRole('link', { name: '6 URLs listed' })).toBeVisible();
+    expect(await screen.findByRole('link', { name: '4 URLs listed' })).toBeVisible();
     expect(screen.getByText(/the crawl’s own judgement while it runs/)).toBe(note);
     expect(note.closest('[role="status"], [role="alert"], [aria-live]')).toBeNull();
   });

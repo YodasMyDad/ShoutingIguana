@@ -10,6 +10,7 @@ import {
   coverageSkippedWords,
   coverageWords,
   foundViaWords,
+  indexHoldsWords,
   notReadReason,
   nothingAtDefaultLocation,
   sitemapFailure,
@@ -107,6 +108,52 @@ describe('what became of a sitemap', () => {
     }
     expect(notReadReason('Not read: the crawler reads at most 1,000 sitemaps')).toBe(
       'the crawler reads at most 1,000 sitemaps',
+    );
+  });
+
+  it('says of an index that was read how far the crawl got with its sitemaps, never that it read them all', () => {
+    const index = testSitemap({ id: 1, isIndex: true, sitemaps: 3 });
+    // Read whole (or nothing said of its sitemaps): as it was.
+    expect(stateWords(index, false).sentence).toBe('The crawl read this index and the sitemaps it lists.');
+    expect(stateWords(index, false, { sitemaps: 3, read: 3, more: false }).short).toBe('Read');
+    // The crawl has them all, and couldn't read one.
+    expect(stateWords(index, false, { sitemaps: 3, read: 2, more: false })).toMatchObject({
+      short: 'Read, 2 of its 3 sitemaps',
+      sentence:
+        'The crawl read this index, and 2 of the 3 sitemaps it lists. What the other lists isn’t known, so the index has no counts of its own.',
+    });
+    expect(stateWords(index, false, { sitemaps: 12, read: 0, more: false }).sentence).toMatch(
+      /^The crawl read this index, and none of the 12 sitemaps it lists\. What the others list isn’t known/,
+    );
+    // A crawl that stopped first: it has some of them, and can't say how many there are.
+    expect(stateWords(index, false, { sitemaps: 1, read: 0, more: true })).toMatchObject({
+      short: 'Read: the crawl has 1 of its sitemaps',
+      sentence:
+        'The crawl read this index, and has 1 of the sitemaps it lists, none of them read: it didn’t get to them all. What the index lists in all isn’t known, so it has no counts of its own.',
+    });
+    expect(stateWords(index, false, { sitemaps: 0, read: 0, more: true }).short).toBe(
+      'Read: the crawl has none of its sitemaps',
+    );
+    // A crawl still at it: so far, and its counts are on their way.
+    expect(stateWords(index, true, { sitemaps: 4, read: 3, more: true })).toMatchObject({
+      short: 'Read, 4 of its sitemaps so far',
+      sentence:
+        'The crawl read this index, and has 4 of the sitemaps it lists so far, 3 of them read. Its counts come once it has read them all.',
+    });
+    expect(stateWords(index, true, { sitemaps: 0, read: 0, more: true }).short).toBe('Read, its sitemaps to come');
+    for (const subtree of [
+      { sitemaps: 3, read: 2, more: false },
+      { sitemaps: 1, read: 0, more: true },
+    ]) {
+      expect(stateWords(index, false, subtree).sentence).not.toMatch(/and the sitemaps it lists\./);
+    }
+    // What its file holds: its sitemaps, as far as the crawl has them.
+    expect(indexHoldsWords({ sitemaps: 3 }, { sitemaps: 3, read: 2, more: false })).toBe('3 sitemaps');
+    expect(indexHoldsWords({ sitemaps: 1 }, { sitemaps: 1, read: 0, more: true })).toBe(
+      'sitemaps: the crawl has 1 of them',
+    );
+    expect(indexHoldsWords({ sitemaps: 0 }, { sitemaps: 0, read: 0, more: true })).toBe(
+      'sitemaps, none of which the crawl has',
     );
   });
 

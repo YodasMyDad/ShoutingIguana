@@ -1,6 +1,6 @@
 import { ChevronRight } from 'lucide-react';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
-import type { GridFilter, Sitemap } from '../../api/grids';
+import type { GridFilter, Sitemap, SitemapDiscovery } from '../../api/grids';
 import { GridCore } from '../../grid/GridCore';
 import { useGridMetrics } from '../../grid/metrics';
 import type { GridColumn, GridTree } from '../../grid/types';
@@ -38,6 +38,11 @@ const FRAME_SLACK = 18;
 export interface SitemapTreeProps {
   crawlId: string;
   sitemaps: readonly Sitemap[];
+  /**
+   * How far the crawl got with its sitemaps (the list's `discovery`): until it's done, the crawl may not have every
+   * sitemap an index lists, and the index's own counts aren't known. `done` when left out.
+   */
+  discovery?: SitemapDiscovery | undefined;
   /** The crawl's own scheme and host: a sitemap on it shows its path. */
   siteOrigin: string | null;
   /** The crawl is running: a sitemap it hasn't read is still on its way. */
@@ -53,11 +58,19 @@ export interface SitemapTreeProps {
  * became of it, and its URLs counted. Every count opens exactly its URLs. One Tab stop: the arrows move, Right and
  * Left open and close an index, and Enter opens the sitemap, or the count the cursor is on.
  */
-export function SitemapTree({ crawlId, sitemaps, siteOrigin, crawling, busy, onOpen }: SitemapTreeProps) {
+export function SitemapTree({
+  crawlId,
+  sitemaps,
+  discovery = 'done',
+  siteOrigin,
+  crawling,
+  busy,
+  onOpen,
+}: SitemapTreeProps) {
   const { rowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(() => new Set());
-  const rows = useMemo(() => sitemapRows(sitemaps, collapsed), [sitemaps, collapsed]);
+  const rows = useMemo(() => sitemapRows(sitemaps, collapsed, discovery), [sitemaps, collapsed, discovery]);
   // Coming back from a sitemap, the list starts on the row it was opened from.
   const place = `sitemaps:${crawlId}`;
   const [startRow] = useState(() => {
@@ -94,7 +107,8 @@ export function SitemapTree({ crawlId, sitemaps, siteOrigin, crawling, busy, onO
 
   const columns = useMemo<GridColumn<SitemapRow>[]>(() => {
     const countCell = (row: SitemapRow, count: SitemapCount): ReactNode => {
-      if (!countsKnown(row.sitemap)) return <span className="text-text-muted">–</span>;
+      // An index's counts are those of the sitemaps under it: a dash until the crawl has read every one of them.
+      if (!countsKnown(row.sitemap, row.subtree)) return <span className="text-text-muted">–</span>;
       const value = countOf(row.sitemap, count);
       // Nothing to open: the number alone.
       if (value === 0) return formatCount(0);
@@ -130,7 +144,8 @@ export function SitemapTree({ crawlId, sitemaps, siteOrigin, crawling, busy, onO
             </span>
             {row.sitemap.isIndex ? (
               <Badge variant="outline" className="ml-2 shrink-0">
-                {`Index of ${formatCount(row.sitemap.sitemaps)}`}
+                {/* How many it lists is known once the crawl has them all: until then it's an index, and no more. */}
+                {row.subtree.more ? 'Index' : `Index of ${formatCount(row.sitemap.sitemaps)}`}
               </Badge>
             ) : null}
           </span>
@@ -156,11 +171,11 @@ export function SitemapTree({ crawlId, sitemaps, siteOrigin, crawling, busy, onO
         header: 'Status',
         width: STATE_WIDTH,
         cell: (row) => {
-          const words = stateWords(row.sitemap, crawling);
+          const words = stateWords(row.sitemap, crawling, row.subtree);
           // The whole of it is a hover away, with how the crawl recorded a failure behind the plain words.
           return <span title={withRecorded(words.sentence, words.recorded)}>{words.short}</span>;
         },
-        text: (row) => stateWords(row.sitemap, crawling).short,
+        text: (row) => stateWords(row.sitemap, crawling, row.subtree).short,
       },
       ...LIST_COUNTS.map((count): GridColumn<SitemapRow> => ({
         id: count,
@@ -168,7 +183,7 @@ export function SitemapTree({ crawlId, sitemaps, siteOrigin, crawling, busy, onO
         width: COUNT_WIDTHS[count],
         numeric: true,
         cell: (row) => countCell(row, count),
-        text: (row) => (countsKnown(row.sitemap) ? String(countOf(row.sitemap, count)) : ''),
+        text: (row) => (countsKnown(row.sitemap, row.subtree) ? String(countOf(row.sitemap, count)) : ''),
       })),
     ];
   }, [crawlId, siteOrigin, crawling, urlWidth, grouped]);
@@ -202,7 +217,8 @@ export function SitemapTree({ crawlId, sitemaps, siteOrigin, crawling, busy, onO
           rememberPlace(place, row.sitemap.id);
           const count = LIST_COUNTS.find((candidate) => candidate === column);
           // A count that's unknown or nothing has no URLs to open: the sitemap itself, then.
-          const counted = count !== undefined && countsKnown(row.sitemap) && countOf(row.sitemap, count) > 0;
+          const counted =
+            count !== undefined && countsKnown(row.sitemap, row.subtree) && countOf(row.sitemap, count) > 0;
           onOpen(row.sitemap, counted ? COUNT_FILTERS[count] : []);
         }}
         busy={busy}

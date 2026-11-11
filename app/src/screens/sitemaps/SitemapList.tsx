@@ -129,6 +129,7 @@ export function SitemapList({ crawlId, list, crawl, wanted }: SitemapListProps) 
         <SitemapTree
           crawlId={crawlId}
           sitemaps={sitemaps}
+          discovery={data.discovery}
           siteOrigin={crawl.siteOrigin}
           crawling={crawl.crawling}
           busy={list.isFetching && !crawl.crawling}

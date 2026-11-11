@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TEST_SITEMAPS, testSitemap } from '../../test/sitemapsRobotsSidecar';
-import { countsKnown, sitemapRows } from './sitemapTree';
+import { countsKnown, sitemapRows, subtreeOf, wholeSubtree } from './sitemapTree';
 
 const NONE = new Set<number>();
 const shape = (rows: ReturnType<typeof sitemapRows>) =>
@@ -85,5 +85,72 @@ describe('countsKnown', () => {
   it('doesn’t know what one left unread, or not read yet, lists', () => {
     expect(countsKnown({ state: 'notRead', entries: 0, urls: none })).toBe(false);
     expect(countsKnown({ state: 'pending', entries: 0, urls: none })).toBe(false);
+  });
+});
+
+describe('an index’s counts', () => {
+  const none = { listed: 0, fetched: 0, indexable: 0, nonIndexable: 0 };
+  const index = testSitemap({ id: 1, isIndex: true, sitemaps: 3, urls: { ...none, listed: 7 } });
+  const child = (id: number, over: Parameters<typeof testSitemap>[0] | object = {}) =>
+    testSitemap({ id, parentId: 1, foundVia: 'index', ...over });
+
+  it('are known once the crawl has every sitemap under it and has read each', () => {
+    const all = [index, child(2), child(3), child(4)];
+    const subtree = subtreeOf(all, 1, 'done');
+    expect(subtree).toEqual({ sitemaps: 3, read: 3, more: false });
+    expect(wholeSubtree(subtree)).toBe(true);
+    expect(countsKnown(index, subtree)).toBe(true);
+  });
+
+  it('aren’t known, and so aren’t 0, for an index that was read while its sitemaps weren’t', () => {
+    // A crawl stopped between the index and its sitemaps: it has one of the three, unread.
+    const stopped = [{ ...index, sitemaps: 1, urls: none }, child(2, { state: 'pending', statusCode: null })];
+    const subtree = subtreeOf(stopped, 1, 'unfinished');
+    expect(subtree).toEqual({ sitemaps: 1, read: 0, more: true });
+    expect(countsKnown(stopped[0]!, subtree)).toBe(false);
+    // Read before any sitemap under it was taken up: still not 0.
+    const alone = subtreeOf([stopped[0]!], 1, 'running');
+    expect(alone).toEqual({ sitemaps: 0, read: 0, more: true });
+    expect(countsKnown(stopped[0]!, alone)).toBe(false);
+  });
+
+  it('aren’t known while the crawl is still reading sitemaps: it may not have every one the index lists', () => {
+    const sofar = [index, child(2), child(3)];
+    expect(countsKnown(index, subtreeOf(sofar, 1, 'running'))).toBe(false);
+    expect(countsKnown(index, subtreeOf(sofar, 1, 'done'))).toBe(true);
+  });
+
+  it('aren’t known when one under it couldn’t be read, was left unread, or sits under an index of its own', () => {
+    const failed = [index, child(2), child(3, { state: 'failed', statusCode: 404, error: 'HTTP 404' })];
+    expect(subtreeOf(failed, 1, 'done')).toEqual({ sitemaps: 2, read: 1, more: false });
+    expect(countsKnown(index, subtreeOf(failed, 1, 'done'))).toBe(false);
+    // One that failed part-way has counts of its own, as its row shows: it's read as far as it goes.
+    const partly = [index, child(2), child(3, { state: 'failed', error: 'Timed out', entries: 40 })];
+    expect(countsKnown(index, subtreeOf(partly, 1, 'done'))).toBe(true);
+    // Left unread at the crawl's limits: there may be more like it.
+    const limited = [index, child(2), child(3, { state: 'notRead', statusCode: null, error: 'Not read: x' })];
+    expect(subtreeOf(limited, 1, 'done')).toEqual({ sitemaps: 2, read: 1, more: true });
+    // An unread sitemap two levels down counts against the index at the top, and against the one between.
+    const deep = [
+      index,
+      child(2, { isIndex: true }),
+      testSitemap({ id: 3, parentId: 2, state: 'pending', statusCode: null }),
+    ];
+    expect(countsKnown(index, subtreeOf(deep, 1, 'done'))).toBe(false);
+    expect(countsKnown(deep[1]!, subtreeOf(deep, 2, 'done'))).toBe(false);
+  });
+
+  it('leaves a sitemap that’s no index as it was: its own counts, whatever the crawl is doing', () => {
+    const plain = testSitemap({ id: 9 });
+    expect(countsKnown(plain, subtreeOf([plain], 9, 'running'))).toBe(true);
+    expect(countsKnown(plain)).toBe(true);
+  });
+
+  it('gives each row how far the crawl got under it', () => {
+    const rows = sitemapRows(TEST_SITEMAPS, NONE, 'done');
+    // The test list's index has three sitemaps, one of which couldn't be read.
+    expect(rows[0]?.subtree).toEqual({ sitemaps: 3, read: 2, more: false });
+    expect(rows[1]?.subtree).toEqual({ sitemaps: 0, read: 0, more: false });
+    expect(sitemapRows(TEST_SITEMAPS, NONE, 'running')[0]?.subtree.more).toBe(true);
   });
 });

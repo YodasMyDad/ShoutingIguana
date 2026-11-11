@@ -13,6 +13,7 @@ import type {
 import { failureOf, type Failure } from '../../lib/failure';
 import { formatCount, formatCountOf } from '../../lib/format';
 import type { SentencePart } from '../countSentence';
+import { wholeSubtree, type Subtree } from './sitemapTree';
 import { ANSWERED_SITE_PAGES } from '../overview/links';
 
 export interface Words {
@@ -101,10 +102,68 @@ export function stateWords(
   sitemap: Pick<Sitemap, 'state' | 'error' | 'entries' | 'urls' | 'isIndex'> &
     Partial<Pick<Sitemap, 'foundVia' | 'statusCode'>>,
   crawling: boolean,
+  /** An index's: how far the crawl got with the sitemaps under it. Left out, the index is taken as read whole. */
+  subtree?: Subtree,
 ): StateWords {
+  // An index that was read says so of itself only: whether the sitemaps it lists were read is another matter.
+  if (
+    sitemap.state === 'read' &&
+    (sitemap.isIndex || (subtree?.sitemaps ?? 0) > 0) &&
+    subtree &&
+    !wholeSubtree(subtree)
+  ) {
+    return { tone: 'waiting', ...partIndexWords(subtree, crawling), recorded: null };
+  }
   // Only a failure's words carry what the crawl recorded behind them: "Not read: ..." is a limit, said in the open.
   const failure = sitemap.state === 'failed' ? sitemapFailure(sitemap.error) : null;
   return { ...wordsOf(sitemap, crawling, failure), recorded: failure?.recorded ?? null };
+}
+
+/**
+ * An index the crawl read, without every sitemap under it read: the crawl doesn't have them all yet (it's still
+ * reading sitemaps), never will (it stopped first, or left some unread at its limits), or couldn't read some. What
+ * the index lists in all isn't known then, so it has no counts of its own: its row shows dashes, and says why here.
+ */
+function partIndexWords({ sitemaps: has, read, more }: Subtree, crawling: boolean): Words {
+  const readOf = read === 0 ? 'none' : formatCount(read);
+  if (!more) {
+    return {
+      short: `Read, ${readOf} of its ${formatCountOf(has, 'sitemap')}`,
+      sentence: `The crawl read this index, and ${readOf} of the ${formatCountOf(has, 'sitemap')} it lists. What the ${
+        has - read === 1 ? 'other lists' : 'others list'
+      } isn’t known, so the index has no counts of its own.`,
+    };
+  }
+  if (has === 0) {
+    return crawling
+      ? {
+          short: 'Read, its sitemaps to come',
+          sentence:
+            'The crawl read this index, and hasn’t come to the sitemaps it lists yet. Its counts come once it has read them all.',
+        }
+      : {
+          short: 'Read: the crawl has none of its sitemaps',
+          sentence:
+            'The crawl read this index, and has none of the sitemaps it lists: it didn’t get to them. What the index lists isn’t known, so it has no counts of its own.',
+        };
+  }
+  return crawling
+    ? {
+        short: `Read, ${formatCount(has)} of its sitemaps so far`,
+        sentence: `The crawl read this index, and has ${formatCount(has)} of the sitemaps it lists so far, ${readOf} of them read. Its counts come once it has read them all.`,
+      }
+    : {
+        short: `Read: the crawl has ${formatCount(has)} of its sitemaps`,
+        sentence: `The crawl read this index, and has ${formatCount(has)} of the sitemaps it lists, ${readOf} of them read: it didn’t get to them all. What the index lists in all isn’t known, so it has no counts of its own.`,
+      };
+}
+
+/** What an index's file holds, for its facts: its sitemaps, as far as the crawl has them. */
+export function indexHoldsWords(sitemap: Pick<Sitemap, 'sitemaps'>, subtree: Subtree | undefined): string {
+  if (!subtree?.more) return formatCountOf(sitemap.sitemaps, 'sitemap');
+  return sitemap.sitemaps === 0
+    ? 'sitemaps, none of which the crawl has'
+    : `sitemaps: the crawl has ${formatCount(sitemap.sitemaps)} of them`;
 }
 
 /** The words of `stateWords`. `failure`: why a failed sitemap failed, or null. */
