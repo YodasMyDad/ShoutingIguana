@@ -260,6 +260,16 @@ internal sealed class GridReadContext : IDisposable
         return (T)kept;
     }
 
+    /// <summary>
+    /// As <see cref="Cached{T}"/>, for a crawl's URLs and titles held in memory for searching (<see cref="Models.SearchText"/>):
+    /// megabytes for a large crawl, so only <see cref="ReadCache.TEXT_CAPACITY"/> are kept. Without a cache, it's read each time.
+    /// </summary>
+    public T CachedText<T>(string key, Func<T> read) where T : notnull =>
+        Stamp is { } stamp && _cache is { } cache ? cache.GetOrAddText($"{stamp}|{key}", read, MaxAge(stamp), Token) : read();
+
+    /// <summary>Whether one of those is kept for the crawl as it stands (<see cref="CachedText{T}"/> would give it without reading).</summary>
+    public bool HasText(string key) => Stamp is { } stamp && _cache is { } cache && cache.HasText($"{stamp}|{key}", MaxAge(stamp));
+
     /// <summary>Whether one of those is kept already, read by an earlier read, or earlier in this one.</summary>
     public bool HasHuge(string key) =>
         Stamp is { } stamp && _cache is { } cache ? cache.HasHuge($"{stamp}|{key}", MaxAge(stamp)) : _huge.ContainsKey(key);
@@ -457,6 +467,9 @@ internal sealed class GridReadContext : IDisposable
 
     /// <summary>The links a statement is counting by target and shape (<c>si_link</c>, <c>si_links</c>).</summary>
     public LinkTally? LinkTally { get; set; }
+
+    /// <summary>The URLs and titles a statement is reading for searching (<c>si_search_url</c>, <c>si_search_title</c>).</summary>
+    public SearchText? SearchText { get; set; }
 
     /// <summary>The pages whose robots directives say nofollow, which a link read from the links themselves is judged followed by.</summary>
     public UrlIdSet? NofollowPages { get; set; }

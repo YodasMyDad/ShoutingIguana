@@ -30,6 +30,12 @@ public sealed class ReadCache(int capacity = ReadCache.DEFAULT_CAPACITY, int lar
     /// </summary>
     public const int HUGE_CAPACITY = 12;
 
+    /// <summary>
+    /// A crawl's URLs and titles held in memory for searching, some 95 bytes a URL (10 MB for 100,000 URLs, 100 MB for a
+    /// million): two crawls' are kept, the one being searched and the one before it.
+    /// </summary>
+    public const int TEXT_CAPACITY = 2;
+
     /// <summary>Keys longer than this are kept by their hash.</summary>
     private const int MAX_KEY_LENGTH = 256;
 
@@ -39,12 +45,23 @@ public sealed class ReadCache(int capacity = ReadCache.DEFAULT_CAPACITY, int lar
     private readonly Store _entries = new(capacity);
     private readonly Store _large = new(largeCapacity);
     private readonly Store _huge = new(HUGE_CAPACITY);
+    private readonly Store _texts = new(TEXT_CAPACITY);
 
     /// <summary>How many entries it holds, counted or being counted: for tests.</summary>
-    public int Count => _entries.Count + _large.Count + _huge.Count;
+    public int Count => _entries.Count + _large.Count + _huge.Count + _texts.Count;
 
     /// <summary>Tests only: the characters its keys take.</summary>
-    internal long KeyLength => _entries.KeyLength + _large.KeyLength + _huge.KeyLength;
+    internal long KeyLength => _entries.KeyLength + _large.KeyLength + _huge.KeyLength + _texts.KeyLength;
+
+    /// <summary>Tests only: how many crawls' text for searching it holds.</summary>
+    internal int TextCount => _texts.Count;
+
+    /// <summary>As <see cref="GetOrAdd{T}"/>, for a crawl's text held for searching, of which only <see cref="TEXT_CAPACITY"/> are kept.</summary>
+    internal T GetOrAddText<T>(string key, Func<T> read, TimeSpan? maxAge = null, CancellationToken cancellationToken = default) where T : notnull =>
+        _texts.GetOrAdd(Shorten(key), read, maxAge, cancellationToken);
+
+    /// <summary>Whether a crawl's text is kept, read already; one being read isn't.</summary>
+    internal bool HasText(string key, TimeSpan? maxAge = null) => _texts.Has(Shorten(key), maxAge);
 
     /// <summary>The value kept under the key, or <paramref name="read"/>'s, which is then kept; while another request is reading it, its value.</summary>
     /// <param name="maxAge">How long a value is good for; for ever when null.</param>

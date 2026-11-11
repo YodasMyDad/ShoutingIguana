@@ -69,6 +69,12 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
 
     private static readonly UrlSort[] TARGET_SORTS = [new("to.url"), new("to.statusCode", true), new("to.depth")];
 
+    /// <summary>Text only the synthetic site's URLs hold, never a title: a URL's text never changes, so what matched it at any moment the finished file still says.</summary>
+    private const string IN_URLS_ONLY = "/p/1";
+
+    /// <summary>Searches as they're typed: one letter every URL holds, text in titles, text in URLs alone, and text in neither.</summary>
+    private static readonly string[] SEARCHES = ["p", "product", IN_URLS_ONLY, "nothing-holds-this"];
+
     /// <summary>
     /// The filter sets that go by a link alone, each as SQL over the links: what a link is never changes once it's
     /// stored, so an answer given while the crawl ran can be held to the finished file afterwards.
@@ -519,12 +525,13 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
         ConcurrentQueue<string> wrong = new();
         ConcurrentDictionary<long, int> totals = new();
         ConcurrentDictionary<(string Set, long Total), (long Matching, long[] Newest)> answers = new();
+        ConcurrentDictionary<long, long> searched = new();
         var readers = Enumerable.Range(0, READERS).Select(reader => Task.Run(() =>
         {
             var reads = 0;
             for (var round = reader; !job.Completion.IsCompleted && wrong.Count < 20; round++)
             {
-                reads += ReadEverything(path, cache, round, wrong, totals, answers);
+                reads += ReadEverything(path, cache, round, wrong, totals, answers, searched);
             }
 
             return reads;
@@ -560,12 +567,22 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
                 $"{set}, of {total} links: {matching} matched, the newest {string.Join(",", newest.Take(3))}; the file says {string.Join(",", truth.Take(3))}");
         }
 
+        // A search's answer too: the crawl's URLs are numbered as it finds them, none missing, so a moment with so many
+        // URLs had the first so many, and how many of them hold a text the finished file still says.
+        Assert.Equal(TestCrawls.Count(path, "SELECT COUNT(*) FROM urls"), TestCrawls.Count(path, "SELECT MAX(id) FROM urls"));
+        Assert.Equal(0, TestCrawls.Count(path, $"SELECT COUNT(*) FROM responses WHERE instr(lower(COALESCE(title, '')), '{IN_URLS_ONLY}') > 0"));
+        Assert.True(searched.Count >= 3, $"The searches saw the crawl at only {searched.Count} sizes.");
+        foreach (var (total, matching) in searched)
+        {
+            Assert.Equal((total, TestCrawls.Count(path, $"SELECT COUNT(*) FROM urls WHERE id <= {total} AND instr(lower(url), '{IN_URLS_ONLY}') > 0")), (total, matching));
+        }
+
         return folds;
     }
 
     /// <summary>One round of every read, each answer checked against itself; what's wrong is noted, and the reads counted.</summary>
     private static int ReadEverything(string path, ReadCache cache, int round, ConcurrentQueue<string> wrong, ConcurrentDictionary<long, int> totals,
-        ConcurrentDictionary<(string Set, long Total), (long Matching, long[] Newest)> answers)
+        ConcurrentDictionary<(string Set, long Total), (long Matching, long[] Newest)> answers, ConcurrentDictionary<long, long> searched)
     {
         var reads = 0;
         void Read(string what, Func<string?> read)
@@ -642,6 +659,34 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
             }
         }
 
+        foreach (var text in SEARCHES)
+        {
+            Read($"search for '{text}'", () =>
+            {
+                var found = UrlSearchReader.Search(path, text, LIMIT, cache);
+                if (found.Matching > found.Total || found.Results.Count != Math.Min(LIMIT, found.Matching))
+                {
+                    return $"{found.Results.Count} results of {found.Matching} that match, of {found.Total} URLs";
+                }
+
+                if (found.Results.FirstOrDefault(result => !Holds(result.MatchedIn == UrlSearchField.Url ? result.Url : result.Title, text)) is { } stray)
+                {
+                    return $"{stray.Url} ({stray.Title}) doesn't hold the text in its {stray.MatchedIn}";
+                }
+
+                if (!found.Results.Select(result => result.Rank).SequenceEqual(found.Results.Select(result => result.Rank).Order()) ||
+                    found.Results.Select(result => result.Id).Distinct().Count() != found.Results.Count || found.Results.Any(result => result.Id > found.Total))
+                {
+                    return $"the results come as {string.Join(", ", found.Results.Select(result => $"{result.Id} {result.Rank}"))}, of {found.Total} URLs";
+                }
+
+                // Two answers for one moment must be one answer.
+                return text == IN_URLS_ONLY && searched.GetOrAdd(found.Total, found.Matching) is var first && first != found.Matching
+                    ? $"of {found.Total} URLs, {found.Matching} hold the text where {first} did"
+                    : null;
+            });
+        }
+
         Read("robots.txt", () =>
         {
             var origins = RobotsReader.ReadOrigins(path, limit: 1_000, cache: cache);
@@ -678,6 +723,8 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
         });
         return reads;
     }
+
+    private static bool Holds(string? text, string part) => text?.Contains(part, StringComparison.OrdinalIgnoreCase) == true;
 
     /// <summary>What's wrong with a page read by offset, by its own numbers; null when it agrees with itself.</summary>
     private static string? Wrong(LinkGridPage page, UrlQuery query)
