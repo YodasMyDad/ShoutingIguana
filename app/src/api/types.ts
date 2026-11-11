@@ -392,6 +392,13 @@ export interface NoResponseCounts {
  * https, www or not: the URL grid's `source` `siteVersion`), which nothing on the site leads to. Each is shaped as the
  * event's own and counted within it, so a figure less its part here is the URLs the site itself led to: the grid's
  * count with `{ column: 'source', op: 'notIn', values: ['siteVersion'] }` added to the figure's filter.
+ *
+ * The figure's own filter isn't always its class's name (docs/v2-sidecar-api.md, Progress, has the table): the event
+ * counts block pages as `blocked` and the URLs not checked under `noResponse`, where the grid's `statusClass` files a
+ * block page by its status and has a URL not checked in no class. So a class or a status code takes
+ * `{ column: 'outcome', op: 'notIn', values: ['blocked'] }` beside it, `blocked` is `outcome` in `['blocked']`,
+ * `noResponse` is `outcome` in `['robotsDisallowed', 'timeout', 'networkError', 'processingError', 'notChecked']`, and
+ * each `noResponse` reason is `outcome` in that one.
  */
 export interface SiteVersionCounts {
   /** The probes with an outcome: among the event's `fetched`. Its classes add up to it. */
@@ -518,8 +525,10 @@ export interface CrawlHistory {
   /** Oldest first, at most about 600, ending at the latest. */
   points: HistoryPoint[];
   /**
-   * E3c: the time spent crawling over every run, in ms: the runs' added up, and the library item's. Null when it isn't
-   * known (an engine from before E3c made the crawl, or a run of it). Optional here, as such an engine doesn't send it.
+   * E3c: the time spent crawling over every run, in ms: the runs' added up, as the crawl file has it. That's the library
+   * item's for a crawl at rest; while a crawl runs the item's is the progress event's, up to about five seconds ahead
+   * of this one. Null when it isn't known (an engine from before E3c made the crawl, or a run of it). Optional here, as
+   * such an engine doesn't send it.
    */
   crawlingMs?: number | null;
   /**
