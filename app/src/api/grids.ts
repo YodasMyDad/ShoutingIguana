@@ -417,7 +417,14 @@ export interface Sitemap {
    *   `redirect`, `clientError`, `serverError`, `timeout`, `networkError`). Not the ones robots.txt or a firewall kept
    *   the crawl from, nor those not checked.
    */
-  urls: { listed: number; fetched: number; indexable: number; nonIndexable: number; robotsDisallowed?: number; redirectingOrBroken?: number };
+  urls: {
+    listed: number;
+    fetched: number;
+    indexable: number;
+    nonIndexable: number;
+    robotsDisallowed?: number;
+    redirectingOrBroken?: number;
+  };
 }
 
 /** `GET /crawls/{id}/sitemaps`: every sitemap the crawl looked for, in the order it found them. */
