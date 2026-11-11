@@ -542,6 +542,31 @@ describe('robots.txt: an origin without a file to show', () => {
     expect(await screen.findByRole('grid', { name: 'Origins' })).toBeVisible();
   });
 
+  it('says “not so far” of an origin a crawl that hasn’t ended hasn’t asked, and fills in once it does', async () => {
+    const running = { status: 'running', finishedAt: null } as const;
+    const late = 'https://late.example';
+    sidecar({ item: running });
+    const { queryClient } = await open(at(late));
+    expect(
+      await screen.findByRole('heading', { name: 'The crawl hasn’t asked that origin for a robots.txt so far' }),
+    ).toBeVisible();
+    expect(screen.getByText(/It asks each origin when it first comes to a URL on it\./)).toBeVisible();
+    // Never "from before the site was crawled again": the crawl is still at it.
+    expect(screen.queryByText(/crawled again/)).toBeNull();
+    // The crawl comes to a URL on it: the file's read is refreshed with the crawl, and the page is the origin's.
+    sidecar({ item: running, files: { [late]: { ...TEST_FILE, origin: late, isInternal: false } } });
+    act(() => void queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
+    expect(await screen.findByTestId('source-viewer')).toBeVisible();
+    expect(screen.queryByRole('heading', { name: /hasn’t asked that origin/ })).toBeNull();
+  });
+
+  it('says a crawl that has ended has no robots.txt for an origin it never asked', async () => {
+    sidecar();
+    await open(at('https://nowhere.example'));
+    expect(await screen.findByRole('heading', { name: 'This crawl has no robots.txt for that origin' })).toBeVisible();
+    expect(screen.getByText(/It may be from before the site was crawled again\./)).toBeVisible();
+  });
+
   it('keeps the blocked URLs when the file can’t be read, and the file when they can’t', async () => {
     const failing = problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 });
     sidecar({ files: { [SITE]: failing } });

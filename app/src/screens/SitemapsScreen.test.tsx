@@ -537,6 +537,33 @@ describe('Sitemaps: one sitemap', () => {
     expect(await screen.findByRole('treegrid', { name: 'Sitemaps' })).toBeVisible();
   });
 
+  it('says “not so far” of a sitemap a crawl that hasn’t ended doesn’t have, and fills in once it finds it', async () => {
+    const running = { status: 'running', finishedAt: null } as const;
+    const list = (sitemaps: typeof TEST_SITEMAPS): SitemapList => ({
+      discovery: 'running',
+      summary: { available: false, reason: 'crawling' },
+      sitemaps,
+    });
+    sidecar({ sitemaps: list(TEST_SITEMAPS.slice(0, 1)), item: running });
+    const { queryClient } = await open(`${SITEMAPS}/2`);
+    expect(await screen.findByRole('heading', { name: 'The crawl hasn’t found this sitemap so far' })).toBeVisible();
+    expect(screen.getByText(/If it finds it before it ends, it shows here\./)).toBeVisible();
+    // Never "from before the site was crawled again": the crawl is still at it.
+    expect(screen.queryByText(/crawled again/)).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'This sitemap isn’t in this crawl' })).toBeNull();
+    // The crawl finds it: the list is read again with the crawl, and the page is the sitemap's.
+    sidecar({ sitemaps: list(TEST_SITEMAPS), item: running });
+    act(() => void queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
+    expect(await screen.findByText(`${SITE}/about`)).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'The crawl hasn’t found this sitemap so far' })).toBeNull();
+  });
+
+  it('still says a sitemap isn’t in a running crawl when what the path names can’t be a sitemap’s id', async () => {
+    sidecar({ item: { status: 'running', finishedAt: null } });
+    await open(`${SITEMAPS}/not-a-number`);
+    expect(await screen.findByRole('heading', { name: 'This sitemap isn’t in this crawl' })).toBeVisible();
+  });
+
   it('says the same of something in the path that can’t be a sitemap’s id, and asks the engine nothing about it', async () => {
     const { transport } = sidecar();
     await open(`${SITEMAPS}/not-a-number`);

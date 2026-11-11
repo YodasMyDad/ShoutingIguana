@@ -3,7 +3,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ArrowLeft, Copy, ExternalLink, FileX } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState, type FocusEvent } from 'react';
 import { api } from '../../api/client';
-import { STALE_PLACE_WORDS, isProblem } from '../../api/errors';
+import { isProblem, missingPlaceWords } from '../../api/errors';
 import type { RobotsBlockedUrl, RobotsFile } from '../../api/grids';
 import { blockedAsGridPage, robotsFileQuery, robotsKeys } from '../../api/queries';
 import type { CrawlState } from '../../crawl/useCrawlState';
@@ -185,7 +185,9 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
 
   // An origin the crawl has no robots.txt for: a link from before the site was crawled again, or one made by hand.
   if (isProblem(file.error, 'origin-not-found') || isProblem(file.error, 'invalid-query')) {
-    const words = STALE_PLACE_WORDS['origin-not-found'];
+    // While the crawl hasn't ended it may yet come to a URL on this origin: the file's read is refreshed with the
+    // crawl, and this page fills in then. What isn't an origin at all (`invalid-query`) never will be one.
+    const words = missingPlaceWords('origin-not-found', crawl.crawling && isProblem(file.error, 'origin-not-found'));
     return (
       <div className="px-(--page-gutter) pt-7">
         <EmptyState

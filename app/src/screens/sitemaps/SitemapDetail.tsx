@@ -3,7 +3,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ArrowLeft, Copy, ExternalLink, RefreshCw } from 'lucide-react';
 import { useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { api } from '../../api/client';
-import { STALE_PLACE_WORDS, isProblem } from '../../api/errors';
+import { isProblem, missingPlaceWords } from '../../api/errors';
 import type { GridFilter, GridSort, Sitemap, SitemapList, UrlRow } from '../../api/grids';
 import { sitemapKeys, urlColumnsQuery } from '../../api/queries';
 import { analyseCrawl } from '../../crawl/actions';
@@ -240,7 +240,9 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
     (sitemaps !== undefined && sitemap === undefined) ||
     isProblem(rows.error, 'sitemap-not-found');
   if (stale) {
-    const words = STALE_PLACE_WORDS['sitemap-not-found'];
+    // While the crawl hasn't ended it may yet find a sitemap with this id: the list is refreshed with the crawl, and
+    // this page fills in then. What can't be an id at all never will be one.
+    const words = missingPlaceWords('sitemap-not-found', crawl.crawling && sitemapId !== null);
     return (
       <div className="px-(--page-gutter) pt-7">
         <EmptyState

@@ -46,6 +46,33 @@ export const STALE_PLACE_WORDS = {
   },
 } as const satisfies Partial<Record<ProblemType, { title: string; why: string }>>;
 
+/**
+ * The same places while the crawl hasn't ended: it may yet find the sitemap, or come to a URL on the origin, so the
+ * link isn't known to be stale. The place's reads are refreshed with the crawl, and it fills in if the crawl gets
+ * there. The words hold of a crawl that's paused, too: nothing says it's running.
+ */
+export const NOT_YET_PLACE_WORDS = {
+  'sitemap-not-found': {
+    title: 'The crawl hasn’t found this sitemap so far',
+    why: 'The link names a sitemap the crawl doesn’t have yet. If it finds it before it ends, it shows here.',
+  },
+  'origin-not-found': {
+    title: 'The crawl hasn’t asked that origin for a robots.txt so far',
+    why: 'It asks each origin when it first comes to a URL on it. If it comes to one before it ends, the file shows here.',
+  },
+} as const satisfies Record<keyof typeof STALE_PLACE_WORDS, { title: string; why: string }>;
+
+/**
+ * The words for a place the crawl doesn't have. `crawling`: the crawl hasn't ended (running, paused or stopping),
+ * so it's "not yet", never "from before the site was crawled again".
+ */
+export function missingPlaceWords(
+  place: keyof typeof STALE_PLACE_WORDS,
+  crawling: boolean,
+): { title: string; why: string } {
+  return crawling ? NOT_YET_PLACE_WORDS[place] : STALE_PLACE_WORDS[place];
+}
+
 export abstract class ApiError extends Error {
   /** A plain sentence for the UI. */
   abstract readonly title: string;
