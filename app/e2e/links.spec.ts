@@ -55,8 +55,17 @@ test.beforeAll(async () => {
   seeded = await libraryIds();
 });
 
-/** What shows of a URL in a cell: its path on the site, or the whole of a URL that is on another host. */
+/** What a cell shows a URL as: its path on the site, or the whole of a URL that is on another host. */
 const shownOf = (url: string) => (url.startsWith(`${siteOrigin}/`) ? url.slice(siteOrigin.length) : url);
+const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * The text a cell holds for a URL: what it's shown as, whole, or with its middle cut to an ellipsis where the column
+ * hasn't room for it (its start and its end stay): "http://127…/ext-moved".
+ */
+const shownIn = (url: string) => {
+  const whole = shownOf(url);
+  return new RegExp(`^(${literal(whole)}|${literal(whole.slice(0, 4))}.*….*${literal(whole.slice(-4))})$`);
+};
 
 /** The crawl the live test starts is stopped and its file deleted: the library is the seeded crawl again. */
 test.afterEach(() => removeCrawlsNotIn(seeded));
@@ -167,7 +176,7 @@ test('opens from the sidebar on every link, in crawl order, with what each is an
       // The whole URL is the cell's name; what shows of it is its path on the site.
       const url = row.getByRole('gridcell').nth(cell).getByRole('button');
       await expect(url).toHaveAccessibleName(String(link[end]));
-      await expect(url.locator('.si-url__shown')).toHaveText(shownOf(String(link[end])));
+      await expect(url.locator('.si-url__shown')).toHaveText(shownIn(String(link[end])));
     }
     await expect(row.getByRole('gridcell').nth(2)).toHaveText(
       link.text === null || link.text === '' ? 'None' : String(link.text),
@@ -186,13 +195,16 @@ test('shows a link from another host by its whole URL, whichever link the crawl 
   expect(other.matching).toBeGreaterThan(0);
   const first = other.rows[0];
   const source = String(first?.['from.url']);
-  expect(new URL(source).origin).not.toBe(siteOrigin);
   await page.goto(`/crawls/${crawl}/links?filter=${encodeURIComponent(JSON.stringify(filters))}`);
   await expectShown(page, other.matching);
   const cells = grid(page).getByRole('row').nth(1).getByRole('gridcell');
   await expect(cells.nth(0).getByRole('button')).toHaveAccessibleName(source);
-  await expect(cells.nth(0).locator('.si-url__shown')).toHaveText(source);
-  await expect(cells.nth(1).locator('.si-url__shown')).toHaveText(shownOf(String(first?.['to.url'])));
+  // By the site's origin, which is the start URL's: a test that took it from this row would expect a path here.
+  await expect(cells.nth(0).locator('.si-url__shown')).toHaveText(shownIn(source));
+  await expect(cells.nth(1).locator('.si-url__shown')).toHaveText(shownIn(String(first?.['to.url'])));
+  // And that is the whole URL: the link's source isn't on the site.
+  expect(new URL(source).origin).not.toBe(siteOrigin);
+  expect(shownOf(source)).toBe(source);
 });
 
 test('each preset lands on its planted count, with its filters as chips and its planted link among the rows', async ({

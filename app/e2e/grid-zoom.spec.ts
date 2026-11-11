@@ -81,10 +81,11 @@ for (const screen of [
   {
     name: 'URLs',
     path: 'urls',
+    // Three chips long enough to take three lines of a window this narrow, as a check's title does.
     chips: [
-      { column: 'statusClass', op: 'in', values: ['2xx'] },
-      { column: 'isInternal', op: 'is', value: true },
-      { column: 'type', op: 'in', values: ['page'] },
+      { column: 'statusClass', op: 'in', values: ['2xx', '3xx', '4xx', '5xx'] },
+      { column: 'type', op: 'in', values: ['page', 'image', 'script', 'stylesheet'] },
+      { column: 'source', op: 'in', values: ['seed', 'link', 'sitemap'] },
     ] satisfies Filter[],
     none: [
       { column: 'statusClass', op: 'in', values: ['5xx'] },
