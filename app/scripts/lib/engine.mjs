@@ -8,6 +8,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -180,11 +181,40 @@ export async function makeSyntheticCrawl({
 /** A SQLite database's companion files: its write-ahead log and the log's index. */
 const COMPANIONS = ['-wal', '-shm'];
 
+/** Where a path leads once links are followed; as it's written, for one that isn't there (yet). */
+function realPath(file) {
+  try {
+    return realpathSync.native(file);
+  } catch {
+    return path.resolve(file);
+  }
+}
+
 /**
- * Copies a crawl file and its SQLite companions (-wal, -shm) into a folder. Never opens the original. Companions the
- * target has from an earlier copy go first: SQLite would replay a stale write-ahead log onto the new copy.
+ * Refuses the original's own folder as the place for its copy, before anything is touched: there the "copy" is the
+ * original itself, so its write-ahead log and index would be removed as a stale copy's (losing what the log holds)
+ * and the file copied onto itself; or, taken for a copy that's current, opened and changed in place. The folder is
+ * compared as it resolves (`.`, `..`, a link or a junction to it, and on Windows any letter case).
+ * @param {string} source
+ * @param {string} folder
+ */
+function refuseOwnFolder(source, folder) {
+  const [from, to] = [realPath(source), realPath(path.join(folder, path.basename(source)))];
+  const same = process.platform === 'win32' ? from.toLowerCase() === to.toLowerCase() : from === to;
+  if (same) {
+    throw new Error(
+      `A crawl is never copied into its own folder (${path.dirname(from)}): the copy would be the original. Give another folder.`,
+    );
+  }
+}
+
+/**
+ * Copies a crawl file and its SQLite companions (-wal, -shm) into a folder. Never opens the original, and refuses its
+ * own folder. Companions the target has from an earlier copy go first: SQLite would replay a stale write-ahead log
+ * onto the new copy.
  */
 export function copyCrawl(source, folder) {
+  refuseOwnFolder(source, folder);
   mkdirSync(folder, { recursive: true });
   const target = path.join(folder, path.basename(source));
   for (const suffix of COMPANIONS) rmSync(target + suffix, { force: true });
@@ -264,6 +294,9 @@ function readStamp(file) {
  * @returns {{ path: string, copied: boolean }}
  */
 export function keepOrCopyCrawl(source, folder, stamps, onCopy = () => undefined) {
+  // Before the copy that's there is looked at: in its own folder the original would read as a copy that's current,
+  // and be handed to a run that analyses and continues it.
+  refuseOwnFolder(source, folder);
   const target = path.join(folder, path.basename(source));
   const stampFile = path.join(stamps, `${path.basename(source)}.json`);
   const now = sourceStamp(source);

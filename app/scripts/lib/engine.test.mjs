@@ -75,6 +75,33 @@ describe('copying a crawl', () => {
     assert.equal(isCurrentCopy(crawl, copied), false, 'the original has a log the copy hasn’t');
     assert.equal(isCurrentCopy(crawl, path.join(target, 'missing.sicrawl')), false);
   });
+
+  it('refuses the original’s own folder, and leaves the original and its log as they were', () => {
+    const source = folder();
+    const crawl = path.join(source, 'site.sicrawl');
+    writeFileSync(crawl, 'db');
+    writeFileSync(`${crawl}-wal`, 'pages not yet in the file');
+    writeFileSync(`${crawl}-shm`, 'index');
+    // However the folder is written: as it is, with a way round, with a trailing separator, in another case.
+    const spellings = [
+      source,
+      path.join(source, '.'),
+      path.join(source, 'sub', '..'),
+      `${source}${path.sep}`,
+      ...(process.platform === 'win32' ? [source.toUpperCase(), source.toLowerCase()] : []),
+    ];
+    for (const spelling of spellings) {
+      assert.throws(() => copyCrawl(crawl, spelling), /never copied into its own folder/, spelling);
+      assert.equal(readFileSync(crawl, 'utf8'), 'db');
+      // Its write-ahead log isn't removed as a stale copy's would be: it holds what the crawl hasn't checkpointed.
+      assert.equal(readFileSync(`${crawl}-wal`, 'utf8'), 'pages not yet in the file', spelling);
+      assert.equal(readFileSync(`${crawl}-shm`, 'utf8'), 'index');
+    }
+    // Another folder is still copied into, a folder inside the original's among them.
+    const inside = path.join(source, 'copies');
+    assert.equal(copyCrawl(crawl, inside), path.join(inside, 'site.sicrawl'));
+    assert.equal(readFileSync(`${path.join(inside, 'site.sicrawl')}-wal`, 'utf8'), 'pages not yet in the file');
+  });
 });
 
 describe('a dev crawl’s copy from one `npm run dev` to the next', () => {
@@ -94,6 +121,18 @@ describe('a dev crawl’s copy from one `npm run dev` to the next', () => {
     writeFileSync(`${copy}-wal`, 'the analysis’s log');
   }
   const listing = (dir) => readdirSync(dir).map((name) => [name, statSync(path.join(dir, name)).mtimeMs]);
+
+  it('refuses the original’s own folder as the data folder, before the original is taken for its copy', () => {
+    const [source, stamps] = [folder(), folder()];
+    const crawl = path.join(source, 'site.sicrawl');
+    writeFileSync(crawl, 'db');
+    writeFileSync(`${crawl}-wal`, 'log');
+    // There the original reads as a copy that's current: it would be kept, and a dev run would analyse it in place.
+    assert.throws(() => keepOrCopyCrawl(crawl, source, stamps), /never copied into its own folder/);
+    assert.equal(readFileSync(crawl, 'utf8'), 'db');
+    assert.equal(readFileSync(`${crawl}-wal`, 'utf8'), 'log');
+    assert.deepEqual(readdirSync(stamps), [], 'no stamp says the original is a copy');
+  });
 
   it('copies a crawl it has no copy of', () => {
     const { crawl, data, stamps, copy } = setUp();
