@@ -350,6 +350,8 @@ export interface HelloEvent {
   live: string[];
   /** E4: the crawls being analysed here. Their latest `analysis` event follows. */
   analyzing?: string[];
+  /** E5: the exports running here, by id. Their latest `export` event follows. */
+  exports?: string[];
 }
 
 /** E4: what a crawl is doing as a whole. Whether it's paused is its status. */
