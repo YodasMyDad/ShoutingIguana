@@ -396,6 +396,8 @@
   --robots-file-min-height: 240px; /* the file and the blocked URLs keep this much, however short the window */
   --robots-pane-height: 360px; /* each of them where they stack, in a narrow panel */
   --robots-columns: minmax(0, 11fr) minmax(0, 9fr); /* the file, then the URLs it blocked */
+  /* The note over the blocked URLs: room for two lines of 12px text, so the list never moves when it wraps or comes. */
+  --robots-note-height: calc(2 * var(--leading-12) + var(--space-3));
   --divider-height: 20px;
   --spark-height: 28px;
   --spark-height-lg: 36px;

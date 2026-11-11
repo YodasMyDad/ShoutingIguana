@@ -78,11 +78,14 @@ export function SitemapList({ crawlId, list, crawl, wanted }: SitemapListProps) 
   const tally = sitemaps ? tallyOf(sitemaps) : null;
   const summary = data?.summary;
   // The counts of indexable and non-indexable URLs are the crawl's own judgement without a URL summary: said only
-  // where there are counts to qualify.
-  const ownJudgement =
-    summary && !summary.available && sitemaps?.some((sitemap) => sitemap.urls.listed > 0)
-      ? OWN_JUDGEMENT[summary.reason ?? 'notAnalyzed']
-      : null;
+  // where there are counts to qualify. While the crawl runs the counts are on their way, so it's said as soon as
+  // there's a list for them to arrive in: the note is there with the list from the start, and nothing moves when the
+  // first sitemap is read.
+  const counts =
+    summary?.reason === 'crawling'
+      ? (sitemaps?.length ?? 0) > 0
+      : (sitemaps?.some((sitemap) => sitemap.urls.listed > 0) ?? false);
+  const ownJudgement = summary && !summary.available && counts ? OWN_JUDGEMENT[summary.reason ?? 'notAnalyzed'] : null;
 
   let body;
   if (loading) {
@@ -165,6 +168,8 @@ export function SitemapList({ crawlId, list, crawl, wanted }: SitemapListProps) 
       {ownJudgement ? (
         <Banner
           inset
+          // A note on the figures under it, there with them: never read out as news, least of all mid-crawl.
+          role="none"
           actions={
             crawl.canAnalyse && summary?.reason !== 'crawling' ? (
               <Button size="sm" icon={RefreshCw} command="crawl.analyse" onClick={() => void analyseCrawl(crawlId)}>

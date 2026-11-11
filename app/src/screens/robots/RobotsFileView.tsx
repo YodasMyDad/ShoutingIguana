@@ -502,6 +502,13 @@ function BlockedUrls({
   );
 
   const unmatched = file?.unmatched;
+  /** What the list holds, over it: said once there's something in it. */
+  const note =
+    (file?.blocked ?? 0) > 0
+      ? file?.lines.some((line) => (line.blocked ?? 0) > 0)
+        ? 'Every URL this origin’s robots.txt kept the crawl from. Choose a rule in the file for its URLs.'
+        : 'Every URL on this origin that the crawl stored as refused by robots.txt.'
+      : null;
   const chip =
     narrowed === null ? null : (
       <FilterChip field={narrowed.field} value={narrowed.value} truncate onRemove={() => onNarrow({ by: 'none' })} />
@@ -531,14 +538,12 @@ function BlockedUrls({
           </Button>
         }
       />
-      <div className="flex min-h-(--control-height) flex-wrap items-center gap-2 px-4 py-1.5">
+      {/* Two lines' room, whatever it holds: the note wraps in a narrow pane, and comes once the crawl is first kept
+          from a URL here, and the list under it stays where it is either way. */}
+      <div className="flex h-(--robots-note-height) shrink-0 items-center gap-2 overflow-hidden px-4">
         {chip ?? (
-          <p className="text-12 text-text-muted">
-            {(file?.blocked ?? 0) > 0
-              ? file?.lines.some((line) => (line.blocked ?? 0) > 0)
-                ? 'Every URL this origin’s robots.txt kept the crawl from. Choose a rule in the file for its URLs.'
-                : 'Every URL on this origin that the crawl stored as refused by robots.txt.'
-              : ' '}
+          <p className="line-clamp-2 text-12 text-text-muted" title={note ?? undefined}>
+            {note ?? ' '}
           </p>
         )}
       </div>

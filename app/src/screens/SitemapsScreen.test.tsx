@@ -330,6 +330,7 @@ describe('Sitemaps: what isn’t there', () => {
       /Indexable and non-indexable are the crawl’s own judgement: this crawl hasn’t been analysed yet/,
     );
     expect(note).toHaveTextContent('The other counts need no analysis.');
+    expect(note.closest('[role="status"], [role="alert"], [aria-live]')).toBeNull();
     // The counts still show: they need no analysis.
     expect(
       within(await waitFor(() => rowOf(`${SITE}/sitemap.xml`))).getByRole('link', { name: '6 URLs listed' }),
@@ -369,6 +370,62 @@ describe('Sitemaps: live and refreshing', () => {
     expect(screen.getByText(/the crawl’s own judgement while it runs/)).toBeVisible();
     // Nothing offers an analysis while the crawl runs.
     expect(screen.queryByRole('button', { name: /Analyse/ })).toBeNull();
+  });
+
+  it('has the crawl’s-own-judgement note there with a running crawl’s list from the start, and never as a live region', async () => {
+    const running = { status: 'running', finishedAt: null } as const;
+    const list = (sitemaps: SitemapList['sitemaps']): SitemapList => ({
+      discovery: 'running',
+      summary: { available: false, reason: 'crawling' },
+      sitemaps,
+    });
+    // The crawl has found its sitemaps and read none: no count to show yet.
+    const found = TEST_SITEMAPS.slice(0, 3).map((sitemap) => ({
+      ...sitemap,
+      state: 'pending' as const,
+      statusCode: null,
+      isIndex: false,
+      sitemaps: 0,
+      entries: 0,
+      urls: { listed: 0, fetched: 0, indexable: 0, nonIndexable: 0 },
+    }));
+    sidecar({ sitemaps: list(found), item: running });
+    const { queryClient } = await open(SITEMAPS);
+    await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    // The note is there before the first sitemap is read, so the list doesn't move down when one is.
+    const note = screen.getByText(/the crawl’s own judgement while it runs/);
+    expect(note).toBeVisible();
+    // It's a note on the figures, not news: nothing reads it out when it comes, or as the crawl goes on.
+    expect(note.closest('[role="status"], [role="alert"], [aria-live]')).toBeNull();
+    // The crawl reads them: the very same note, still there.
+    sidecar({ sitemaps: list(TEST_SITEMAPS), item: running });
+    act(() => void queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
+    expect(await screen.findByRole('link', { name: '6 URLs listed' })).toBeVisible();
+    expect(screen.getByText(/the crawl’s own judgement while it runs/)).toBe(note);
+    expect(note.closest('[role="status"], [role="alert"], [aria-live]')).toBeNull();
+  });
+
+  it('says nothing of the crawl’s own judgement where there are no counts to qualify', async () => {
+    // A crawl that isn't running, whose only sitemap couldn't be read: no counts, so no note on them.
+    const failed = testSitemap({ id: 1, state: 'failed', statusCode: 503, error: 'HTTP 503' });
+    sidecar({
+      sitemaps: { discovery: 'done', summary: { available: false, reason: 'notAnalyzed' }, sitemaps: [failed] },
+      item: { analyzedAt: null },
+    });
+    await open(SITEMAPS);
+    await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    expect(screen.queryByText(/the crawl’s own judgement/)).toBeNull();
+  });
+
+  it('says nothing of the crawl’s own judgement over a running crawl that has found no sitemap yet', async () => {
+    // There's no list for counts to arrive in: the empty state says where the crawl looks, and no more.
+    sidecar({
+      sitemaps: { discovery: 'running', summary: { available: false, reason: 'crawling' }, sitemaps: [] },
+      item: { status: 'running', finishedAt: null },
+    });
+    await open(SITEMAPS);
+    expect(await screen.findByRole('heading', { name: 'The crawl hasn’t found a sitemap yet.' })).toBeVisible();
+    expect(screen.queryByText(/the crawl’s own judgement/)).toBeNull();
   });
 
   it('keeps the list on screen while it’s read again, and never puts the loading frame over it', async () => {
