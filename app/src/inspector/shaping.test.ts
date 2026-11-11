@@ -420,7 +420,7 @@ describe('the link grids’ words', () => {
 describe('hidden checks', () => {
   const issues = [
     { checkId: 'title-too-long', severity: 'notice' as const, detail: '61 characters', related: null },
-    { checkId: 'internal-client-error', severity: 'error' as const, detail: 'HTTP 404', related: null },
+    { checkId: 'internal-client-error', severity: 'error' as const, detail: '404 Not Found', related: null },
     { checkId: 'low-word-count', severity: 'notice' as const, detail: '85 words', related: null },
   ];
 
@@ -499,10 +499,10 @@ describe('issueLink', () => {
 
     it('groups a detail check by its detail and other URL', () => {
       expect(
-        issueLink(issue({ checkId: 'internal-client-error', detail: 'HTTP 404', related: null }), 'detail'),
+        issueLink(issue({ checkId: 'internal-client-error', detail: '404 Not Found', related: null }), 'detail'),
       ).toEqual({
         checkId: 'internal-client-error',
-        group: { detail: 'HTTP 404', relatedUrlId: null },
+        group: { detail: '404 Not Found', relatedUrlId: null },
       });
       expect(issueLink(issue({ checkId: 'open-graph-missing', detail: 'Missing og:image' }), 'detail').group).toEqual({
         detail: 'Missing og:image',
