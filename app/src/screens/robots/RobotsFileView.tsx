@@ -95,7 +95,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
     // It's read again when what it blocked changes (the list beside it says so, below), and now and then for its
     // answer; one the crawl hasn't come to yet is looked for more often, so its page fills in soon after it does.
     refetchInterval: (query) =>
-      !crawling ? false : query.state.status === 'error' ? FILE_MISSING_MS : FILE_REFRESH_MS,
+      !crawling ? false : isProblem(query.state.error, 'origin-not-found') ? FILE_MISSING_MS : FILE_REFRESH_MS,
   });
   const refetchFile = file.refetch;
   const fileChanged = useCallback(() => void refetchFile(), [refetchFile]);
