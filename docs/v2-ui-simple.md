@@ -459,11 +459,12 @@ both from `GET /api/checks`, so a new check brings its own.
 | Field | What it is | Limit |
 | --- | --- | --- |
 | `plainTitle` | The problem as its owner would say it | 60 characters, sentence case, no count, no jargon |
-| `plainWhat` | What's wrong and why it matters, as 2 to 4 sentences. **Sentence 1** says what is wrong and stands alone: lists and the report's first page show only it. **Sentence 2** says what it costs visitors or search. **The last** says when it is fine, for every Notice and wherever it's true | Sentence 1: 120 characters. All: 70 words |
+| `plainWhat` | What's wrong and why it matters, as 2 to 4 sentences. **Sentence 1** says what is wrong and stands alone: lists and the report's first page show only it. **Sentence 2** says what it costs visitors or search. **The last** says when it is fine, or when it can wait, for every Notice and wherever it's true | Sentence 1: 120 characters. All: 70 words |
 | `plainFix` | How to fix it, as 1 to 4 steps. Each starts with a verb and is one sentence. The first is something the reader can do now | 25 words a step |
 | `fixer` | Who usually does it: `you` ("you, in your site's editor"), `developer` ("your developer or hosting company") or `either` ("you or your developer") | |
 | `plainPassed` | The good news when the check finds nothing, as a fact: "Every page has a title" | 60 characters |
 | `plainOneFix` | Optional. What a template fault usually is, for the "One fix" callout: "That's almost certainly your logo" | One sentence |
+| `plainLooksFor` | Optional. What the check looks for, as a noun phrase: "A rules file that search engines can't read". For a check whose title is a sentence about the site ("Search engines can't read your site's rules file"), which reads as a finding beside "Not checked": the "couldn't be checked" list shows this in the title's place. 12 checks have one | 60 characters, no full stop |
 
 Why `plainPassed`: a problem's title can't serve. "Pages with no title" beside a tick reads as the fault.
 
@@ -473,9 +474,10 @@ working pages" is not. "Every page has a title" is fine: the check read every pa
 draft printed "The sitemap can be read" beside "No sitemap found".
 
 The 17 categories gain a plain title each (Response codes: "Pages that load"; Canonicals: "Duplicate addresses";
-Hreflang: "Languages"; the rest are in `words.mjs`), and each skip reason a plain sentence and what would let the
-check run ("Your site has no sitemap, the list of its pages for search engines, to compare with. Add a sitemap,
-then check the site again.").
+Hreflang: "Languages"; the rest are in the data file named under [Ten checks, written out](#ten-checks-written-out)),
+and each skip reason a plain sentence and what would let the check run ("No sitemap, the list of your pages for
+search engines, could be read, so there was nothing to compare with. Add a sitemap, or fix the one that can't be
+read, then check the site again.").
 
 ### The rules
 
@@ -491,10 +493,16 @@ then check the site again.").
 - **Sitemap and HTTPS stay as they are.** A site owner meets both words in their own site's settings. A text says
   what one is where it first matters: "a sitemap: a file that lists your pages for search engines".
 - **"Google"** where the fact is Google's; "search engines" otherwise. No promise of ranking: say what happens.
-- **Numbers carry their unit and their limit:** "over 200 KB", "more than 1 second".
+- **Numbers carry their unit and their limit:** "over 200 KB", "more than 1 second". A limit that is an analysis
+  setting is written as a token, `{limit:<setting>}`, which the engine fills with the number and its unit from the
+  settings the analysis ran with: "over {limit:largeImageBytes}" reads "over 200 KB", and stays true when the limit
+  is changed in Advanced. A number that is a fixed rule of the check, or Google's, stays a number: "2 MB", "10
+  steps".
 - **Never "investigate", "look into" or "requires further investigation".** Say what to look at, and what each
   answer means.
-- **A Notice always says when it is fine**, and that there is then nothing to do.
+- **A Notice always says when it is fine**, and that there is then nothing to do. Six Notices have no honest
+  "nothing to do", and say when it can wait: `empty-anchor-text`, `h1-missing`, `h1-multiple`,
+  `security-headers-missing`, `lang-missing`, `charset-missing`.
 - **The steps name a place:** "in your site's editor, often under "SEO"". Where the fix is a developer's, the first
   step is something the reader can check themselves, and the next is what to ask for.
 - **Details stay the engine's**, one text for both modes: a fact with its unit, not a sentence ("5,476 ms", "2
@@ -508,9 +516,15 @@ They span ten categories and the hard cases: a site-wide fault, a check on URLs 
 fault, a notice that is usually fine, and a skipped check. Texts for the garden crawl's other nine checks, and the
 `plainTitle` and `plainPassed` of all 86, are drafts in `app/design/simple/build/lib/words.mjs`.
 
+The words of all 87 checks, the categories and the skip reasons, as the engine serves them, are written in one data
+file, `engine/tests/ShoutingIguana.Engine.Tests/Analysis/PlainWords/plain-words.json`, which the engine's are
+generated from. These ten are that file's, word for word, and a test holds the two together. A limit is written
+here as the file has it, as its token: `{limit:largeImageBytes}` reads "200 KB" until the setting is changed.
+
 **1. `robots-txt-unreachable`** (Indexability, Error; a site-wide fault). Fixer: developer.
 
 - Title: Search engines can't read your site's rules file
+- Looks for: A rules file that search engines can't read
 - What: The file that tells search engines where they may go on your site (its "robots.txt") answers with an
   error. Google stops visiting the whole site when that happens, so new and changed pages don't reach search
   results. This is one fault for the whole site, and the first thing to fix.
@@ -530,7 +544,7 @@ fault, a notice that is usually fine, and a skipped check. Texts for the garden 
   page or file back. (3) If it has moved, forward the old address to the new one (a "301 redirect"), in your
   site's redirect settings or through your developer. (4) If it's gone for good, leave it, and remove the links
   that still point to it.
-- Passed: Every page and file on the site can be found
+- Passed: No page or file answers with a "not found" error
 
 **3. `broken-internal-links`** (Links, Error). Fixer: you.
 
@@ -540,19 +554,20 @@ fault, a notice that is usually fine, and a skipped check. Texts for the garden 
   every page, so one bad link can show up hundreds of times.
 - Fix: (1) Open each page in the list in your site's editor and find the link. (2) Point it at the right page, or
   remove it. (3) If the same link is on most pages, it's in your menu, footer or page design: fix it there once.
-- Passed: Every link on the site leads to a working page
+- Passed: Every link between your pages leads to a working page
 
 **4. `empty-anchor-text`** (Links, Notice; a template fault on the garden crawl). Fixer: either.
 
 - Title: Links with nothing to read
 - What: Some links on your pages have no words: usually an image or icon, such as a logo, with no description.
   People who use a screen reader hear only "link", and search engines learn nothing about the page it leads to. A
-  logo or icon in the page design is the usual cause, so one fix often clears every page.
+  logo or icon in the page design is the usual cause, so one fix often clears every page. Pages are still found
+  either way, so it can wait.
 - Fix: (1) Find the link on one of the pages: the list shows where it leads. (2) If it's an image, give the image
   a short description (its "alt text"), such as your site's name for a logo. (3) If it's an icon, ask your
   developer to add a label to the link (an "aria-label").
 - One fix: That's almost certainly your logo, which sits in the part of the site every page shares.
-- Passed: Every link has words to read
+- Passed: Every link between your pages has words to read
 
 **5. `canonicalised-page`** (Canonicals, Notice; usually fine). Fixer: either.
 
@@ -568,6 +583,7 @@ fault, a notice that is usually fine, and a skipped check. Texts for the garden 
 **6. `duplicate-site-version`** (Content, Warning; site-wide, and skipped on the garden crawl). Fixer: developer.
 
 - Title: Your site answers at more than one address
+- Looks for: A site that answers at more than one address
 - What: Your site shows its pages at more than one address, such as with and without "www", or on "http" as well
   as "https". The spare addresses should forward to the main one. As it is, search engines see two copies of
   everything and pick one themselves. Visitors on an "http" copy also browse without encryption.
@@ -581,9 +597,9 @@ fault, a notice that is usually fine, and a skipped check. Texts for the garden 
 **7. `image-too-large`** (Images, Warning). Fixer: you.
 
 - Title: Large images that slow pages down
-- What: Some pages show images whose files are over 200 KB. Big images are the most common reason a page feels
-  slow, most of all on a phone, and people leave slow pages. Photos uploaded straight from a camera or phone are
-  the usual cause.
+- What: Some pages show images whose files are over {limit:largeImageBytes}. Big images are the most common reason
+  a page feels slow, most of all on a phone, and people leave slow pages. Photos uploaded straight from a camera or
+  phone are the usual cause.
 - Fix: (1) Resize each image so it's no bigger than it's shown on the page. (2) Save it as a compressed JPEG or
   WebP, then upload it in place of the old one. (3) If your site has an image-optimising setting or plugin, turn
   it on so new uploads are shrunk for you.
@@ -597,14 +613,14 @@ fault, a notice that is usually fine, and a skipped check. Texts for the garden 
   addresses show the same page, or the site's design leaves out what's different, such as the page number.
 - Fix: (1) Open each page in your site's editor and give it a title that says what's specific to it. (2) If two
   addresses show the same page, keep one and ask your developer to forward the other to it.
-- Passed: Every page has its own title
+- Passed: No two pages share a title
 
 **9. `slow-response`** (Performance, Warning; a measurement). Fixer: developer.
 
 - Title: Pages that are slow to answer
-- What: These pages took more than 1 second to arrive when the check asked for them. Nothing can appear on screen
-  until the page arrives, so visitors wait, and Google visits slow sites less often. One slow reading can be a
-  blip, so try the pages yourself before acting.
+- What: These pages took more than {limit:slowResponseMs} to arrive when the check asked for them. Nothing can
+  appear on screen until the page arrives, so visitors wait, and Google visits slow sites less often. One slow
+  reading can be a blip, so try the pages yourself before acting.
 - Fix: (1) Open two or three of the pages in your browser and see whether they're slow for you too. (2) If they
   are, send the list to your developer or hosting company and ask what the server is waiting for. (3) Ask about
   page caching and a faster hosting plan: they're the usual fixes.
