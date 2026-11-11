@@ -974,7 +974,7 @@ below, or past what an id holds), and `invalid-query` without one.
  "limits":{"titleMin":30,"titleMax":60,"descriptionMin":70,"descriptionMax":155,"minWords":200,"slowResponseMs":1000,
            "largePageBytes":1048576,"largeImageBytes":204800,"imageAltMaxLength":125,"maxUrlLength":115,"fromAnalysis":true},
  "links":{"inlinks":3,"followedInlinks":3,"nofollowInlinks":0,"linkingPages":2,"outlinks":45,"inSitemap":false},
- "linkTotals":{"inlinks":4,"outlinks":63},
+ "linkTotals":{"inlinks":4,"outlinks":63,"hyperlinkInlinks":3},
  "headers":[{"name":"content-type","value":"text/html; charset=utf-8"}],
  "structuredData":[{"valid":true,"types":["BlogPosting"],"json":"{…}","error":null,"truncated":false}],
  "hreflang":[],
@@ -1057,6 +1057,16 @@ below, or past what an id holds), and `invalid-query` without one.
   themselves (the inlinks from the link summary, where there is one), so they're there with or without a URL summary,
   a running crawl's included, where `links` (hyperlinks only, on the pages audited) is null; a running crawl's are
   kept for 2 s, as its other counts are.
+  - **`linkTotals.hyperlinkInlinks`** (E6) is the hyperlinks among those to the URL, every one the crawl stored: the
+    `total` of `/urls/inlinks` with `"kinds": ["hyperlink"]`, and **the links grid's `matching`** under
+    `to.id` `eq` this URL, `kind` `in` `["hyperlink"]`, `selfLink` `is` false. It's the figure to show as a link to
+    Links ("N hyperlinks"), because it lands.
+  - **`links.inlinks` can be less, and isn't that figure.** The analysis counts the hyperlinks on the pages it
+    audited, and it doesn't audit Cloudflare's own pages (a URL with `/cdn-cgi/` in it, such as the email-protection
+    page), which the crawl fetches and parses like any other and whose links it stores. So for a URL such a page
+    links to, `hyperlinkInlinks` is `links.inlinks` plus that page's hyperlinks to it, and for every other URL the
+    two are equal. On the 100k benchmark crawl that is 24 of 112,590 URLs (the menu's targets, each one more, the
+    home page two); on the garden crawl, none. The URL grid's `inlinks` column, sort and filters are the analysis's.
 - **A URL the inspector names carries its `outcome`** (E3c) beside its status, as the URL grid's `outcome` column has
   it: `redirects.final`, a test's `canonical` and `metaRefresh`, and an hreflang's `target`, as each hop of `redirects`
   already did. A status is null both for a URL never fetched and for one that gave no HTTP answer; the outcome tells
