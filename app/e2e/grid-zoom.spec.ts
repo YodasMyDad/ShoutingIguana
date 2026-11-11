@@ -90,7 +90,7 @@ for (const screen of [
     none: [
       { column: 'statusClass', op: 'in', values: ['5xx'] },
       { column: 'isInternal', op: 'is', value: false },
-      { column: 'type', op: 'in', values: ['font'] },
+      { column: 'title', op: 'contains', value: 'a rather long piece of a title that no page of the crawl has' },
     ] satisfies Filter[],
     noMatch: 'No URLs match these filters.',
   },
@@ -135,6 +135,23 @@ for (const screen of [
     const empty = main(page).locator('.si-empty').filter({ hasText: screen.noMatch });
     await expect(empty).toBeInViewport({ ratio: 1 });
     await expect(empty.getByRole('button', { name: /^Clear/ })).toBeInViewport({ ratio: 1 });
+    // Each filter's chip too, with the button that removes it: one longer than the state is cut short in it, not run
+    // out under the grid's edge.
+    const chips = empty.locator('.si-chip');
+    await expect(chips).toHaveCount(3);
+    for (const chip of await chips.all()) {
+      await expect(chip).toBeInViewport({ ratio: 1 });
+      await expect(chip.getByRole('button', { name: /^Remove the filter/ })).toBeInViewport({ ratio: 1 });
+    }
+    expect(
+      await empty.evaluate((element) => {
+        // Against the grid's own frame, which cuts off what runs past it.
+        const edge = element.closest('.si-grid-frame')?.getBoundingClientRect().right ?? 0;
+        return [...element.querySelectorAll('.si-chip')]
+          .filter((chip) => chip.getBoundingClientRect().right > edge + 0.5)
+          .map((chip) => chip.textContent);
+      }),
+    ).toEqual([]);
     // And none of it scrolls inside the grid: the grid made room for it.
     expect(
       await grid.evaluate((element) => {

@@ -1988,6 +1988,8 @@
 
   .si-empty__content {
     display: grid;
+    /* One column no wider than the state itself: a chip longer than that is cut short in it, not run out of it. */
+    grid-template-columns: minmax(0, 1fr);
     justify-items: start;
     gap: var(--space-2);
     min-width: 0;
@@ -2012,6 +2014,9 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
+    /* No wider than the state: a chip that doesn't fit a line of it shortens (its own ellipsis), whole in its name. */
+    min-width: 0;
+    max-width: 100%;
     margin-top: var(--space-1);
   }
 
