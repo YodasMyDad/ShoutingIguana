@@ -658,12 +658,17 @@ describe('robots.txt: an origin without a file to show', () => {
     expect(screen.getByText(/It asks each origin when it first comes to a URL on it\./)).toBeVisible();
     // Never "from before the site was crawled again": the crawl is still at it.
     expect(screen.queryByText(/crawled again/)).toBeNull();
-    // The crawl comes to a URL on it: the file's read is refreshed with the crawl, and the page is the origin's.
-    sidecar({ item: running, files: { [late]: { ...TEST_FILE, origin: late, isInternal: false } } });
-    act(() => void queryClient.invalidateQueries(gridPagesOf(TEST_CRAWL_ID)));
-    expect(await screen.findByTestId('source-viewer')).toBeVisible();
+    // The crawl comes to a URL on it. The once-a-second refresh of the crawl's lists leaves an origin's file out,
+    // so the page looks for it itself, every two seconds: nothing else tells it, and the page is the origin's.
+    const { transport } = sidecar({
+      item: running,
+      files: { [late]: { ...TEST_FILE, origin: late, isInternal: false } },
+    });
+    await act(() => queryClient.invalidateQueries(liveGridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
+    expect(transport.requests.filter((request) => request.path.endsWith('/robots/file'))).toHaveLength(0);
+    expect(await screen.findByTestId('source-viewer', {}, { timeout: 5_000 })).toBeVisible();
     expect(screen.queryByRole('heading', { name: /hasn’t asked that origin/ })).toBeNull();
-  });
+  }, 10_000);
 
   it('says a crawl that has ended has no robots.txt for an origin it never asked', async () => {
     sidecar();
