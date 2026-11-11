@@ -31,6 +31,14 @@ internal sealed class CrawlWriter : IAsyncDisposable
     private const int MAX_COMMANDS_PER_TRANSACTION = 2_000;
     private static readonly TimeSpan MAX_TRANSACTION_AGE = TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// How long the writer leaves a log it couldn't empty (a read outlasted its wait, or another program is part-way
+    /// through the file) before it tries again: a second at first, twice as long each time it still can't, to half a
+    /// minute at most.
+    /// </summary>
+    private static readonly TimeSpan LOG_RETRY = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan LOG_LONGEST_RETRY = TimeSpan.FromSeconds(32);
+
     private readonly Channel<WriterCommand> _commands = Channel.CreateBounded<WriterCommand>(
         new BoundedChannelOptions(CHANNEL_CAPACITY) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
 
@@ -57,6 +65,19 @@ internal sealed class CrawlWriter : IAsyncDisposable
     private bool _keepsRunTime;
     private long _run = 1;
     private bool _crawlStamped;
+
+    // The size the write-ahead log is folded at, when folding it was last tried, and how long it's left before the
+    // next try: no time once it's been emptied, longer after each try that couldn't.
+    private readonly long _logLimit = CrawlDatabase.LogLimitBytes;
+    private long _logTriedAt;
+    private TimeSpan _logLeftFor;
+    private TimeSpan _logRetry = LOG_RETRY;
+
+    // What folding the log cost this run, said once as it closes: how often, how often in vain, and the waits.
+    private int _logFolds;
+    private int _logFoldsInVain;
+    private TimeSpan _logLongestFold;
+    private TimeSpan _logFoldTime;
     private SqliteTransaction? _transaction;
     private Task _loop = Task.CompletedTask;
     private int _nextUrlId = 1;
@@ -278,6 +299,13 @@ internal sealed class CrawlWriter : IAsyncDisposable
         }
         finally
         {
+            if (_logFolds + _logFoldsInVain > 0)
+            {
+                _logger.LogInformation(
+                    "Folded the write-ahead log {Folds} times while the crawl ran ({InVain} more tries couldn't): the crawl waited {TotalMs} ms for it in all, {LongestMs} ms at longest",
+                    _logFolds, _logFoldsInVain, (long)_logFoldTime.TotalMilliseconds, (long)_logLongestFold.TotalMilliseconds);
+            }
+
             _statements.Dispose();
             CrawlDatabase.CloseWriter(_connection, _logger);
             _fileLock.Dispose();
@@ -309,6 +337,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
                         StoreNotices();
                         StoreRunTime();
                         CommitTransaction();
+                        FoldLargeLog();
                         commandsInTransaction = 0;
                     }
                 }
@@ -318,6 +347,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
                     StoreNotices();
                     StoreRunTime();
                     CommitTransaction();
+                    FoldLargeLog();
                     commandsInTransaction = 0;
                 }
             }
@@ -1062,7 +1092,13 @@ internal sealed class CrawlWriter : IAsyncDisposable
         RunTime("UPDATE run_time SET ended = 1 WHERE ended = 0", transaction);
         var lastRun = RunTime("SELECT MAX(run) FROM run_time WHERE typeof(run) = 'integer'", transaction) as long? ?? 0;
         var untimed = RunTime("SELECT 1 FROM run_time WHERE crawled_ms IS NULL LIMIT 1", transaction) is not null;
-        if (earlier is null && !untimed)
+
+        // No stretch kept and nothing fetched: no run has crawled yet, whichever engine made the file (one paused before
+        // it began and then stopped, or whose process died before its first batch was stored), so none went untimed.
+        // A stretch is stored with the first batch that stores a response, so a file with responses and no stretch was
+        // crawled by an engine that keeps no time.
+        var neverCrawled = lastRun == 0 && !untimed && RunTime("SELECT 1 FROM responses LIMIT 1", transaction) is null;
+        if (earlier is null && !untimed && !neverCrawled)
         {
             // From the crawl's start when nothing was ever timed, else from where the last stretch known ended.
             RunTime("""
@@ -1072,7 +1108,7 @@ internal sealed class CrawlWriter : IAsyncDisposable
                 """, transaction, ("$run", ++lastRun));
         }
 
-        TimeCrawledBefore = earlier?.TimeCrawling;
+        TimeCrawledBefore = earlier?.TimeCrawling ?? (neverCrawled ? TimeSpan.Zero : null);
         _run = lastRun + 1;
         transaction.Commit();
     }
@@ -1150,6 +1186,39 @@ internal sealed class CrawlWriter : IAsyncDisposable
         _transaction = null;
         _statements.SetTransaction(null);
         _counters.Publish();
+    }
+
+    /// <summary>
+    /// Between two batches: folds the write-ahead log into the file and empties it once it has passed its limit, which
+    /// SQLite can't do by itself while the grids' reads follow one another closely (<see cref="CrawlDatabase.FoldLog"/>).
+    /// No read is stopped for it: new reads wait while those in flight end, and so does this loop, which stores nothing
+    /// meanwhile, so the log is held to its limit and the batch that took it past. A fold that couldn't be done (a read
+    /// that outlasted the wait, or another program part-way through the file) cost the crawl that wait for nothing, so
+    /// the next is tried a second later, and twice as long after each one that fails, to half a minute at most.
+    /// </summary>
+    private void FoldLargeLog()
+    {
+        if (CrawlDatabase.LogBytes(_connection.DataSource) < _logLimit || (_logTriedAt != 0 && Stopwatch.GetElapsedTime(_logTriedAt) < _logLeftFor))
+        {
+            return;
+        }
+
+        var began = Stopwatch.GetTimestamp();
+        var emptied = CrawlDatabase.FoldLog(_connection, _logger);
+        _logTriedAt = Stopwatch.GetTimestamp();
+        var took = Stopwatch.GetElapsedTime(began, _logTriedAt);
+        (_logFoldTime, _logLongestFold) = (_logFoldTime + took, took > _logLongestFold ? took : _logLongestFold);
+        if (emptied)
+        {
+            _logFolds++;
+            (_logLeftFor, _logRetry) = (TimeSpan.Zero, LOG_RETRY);
+            return;
+        }
+
+        _logFoldsInVain++;
+
+        (_logLeftFor, _logRetry) = (_logRetry, TimeSpan.FromTicks(Math.Min(_logRetry.Ticks * 2, LOG_LONGEST_RETRY.Ticks)));
+        _logger.LogDebug("Readers kept the write-ahead log from being emptied; it is tried again in {Seconds} s", _logLeftFor.TotalSeconds);
     }
 
     /// <summary>Abandons the batch a failure interrupted, so the connection is free to be closed.</summary>

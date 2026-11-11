@@ -1,3 +1,4 @@
+using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 
 namespace ShoutingIguana.Sidecar.Api.Models;
@@ -8,6 +9,21 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 /// <param name="LearnMore">A page that explains the check, or null.</param>
 /// <param name="Grouping">How the check's issues group (E3a): <c>detail</c>, <c>relatedUrl</c> or <c>none</c>.</param>
 /// <param name="Subject">What the URLs it flags are (E3b): <c>page</c> when always pages, <c>url</c> when any URL.</param>
+/// <param name="SiteWide">The check finds one fault of the whole site, which the score counts as the whole site whatever its count.</param>
+/// <param name="ReportedOnce">
+/// The check reports one issue for the whole site (or one for each other version of it), not one a page: its count isn't
+/// a share of the pages. Only for how the count is worded: the score doesn't read it.
+/// </param>
+/// <param name="PlainTitle">
+/// The check in plain words: its title. Null, with every other plain field, while the check has no plain words. Every
+/// plain text comes with its limits filled in ("60 characters") from the analysis settings the request is for.
+/// </param>
+/// <param name="PlainWhat">What's wrong and why it matters, a sentence a string; the first stands alone.</param>
+/// <param name="PlainFix">How to fix it, a step a string.</param>
+/// <param name="Fixer">Who usually makes the fix: <c>you</c>, <c>developer</c> or <c>either</c>.</param>
+/// <param name="PlainPassed">The good news when the check finds nothing.</param>
+/// <param name="PlainOneFix">What a fault in the site's template usually is. Null for most checks, plain words or not.</param>
+/// <param name="PlainLooksFor">What the check looks for, as a short noun phrase ("A missing sitemap"). Optional, as <paramref name="PlainOneFix"/> is.</param>
 internal sealed record CheckDto(
     string Id,
     IssueCategory Category,
@@ -18,4 +34,23 @@ internal sealed record CheckDto(
     string Why,
     string? LearnMore,
     string Grouping,
-    IssueSubject Subject);
+    IssueSubject Subject,
+    bool SiteWide,
+    bool ReportedOnce,
+    string? PlainTitle,
+    IReadOnlyList<string>? PlainWhat,
+    IReadOnlyList<string>? PlainFix,
+    IssueFixer? Fixer,
+    string? PlainPassed,
+    string? PlainOneFix,
+    string? PlainLooksFor)
+{
+    /// <param name="settings">The thresholds the plain words' limits are filled from.</param>
+    public static CheckDto From(IssueDefinition check, AnalysisSettings settings)
+    {
+        var plain = PlainLimits.Fill(check.Plain, settings);
+        return new CheckDto(check.Id, check.Category, check.Severity, check.Title, check.Description, check.Fix, check.Why, check.LearnMore,
+            GridRequests.Grouping(check.Grouping), check.Subject, check.SiteWide, check.ReportedOnce,
+            plain?.Title, plain?.What, plain?.Fix, plain?.Fixer, plain?.Passed, plain?.OneFix, plain?.LooksFor);
+    }
+}

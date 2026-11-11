@@ -158,15 +158,15 @@ public sealed class PageRuleTests
         var links = new LinkRules(urls).Check(page).ToList();
         var images = new ImageRules(SETTINGS, urls).Check(page).ToList();
 
-        Assert.Equal(new IssueHit(IssueCatalog.BROKEN_INTERNAL_LINKS, page.UrlId, "2 broken URLs (the first redirects to a URL that returns HTTP 404)",
+        Assert.Equal(new IssueHit(IssueCatalog.BROKEN_INTERNAL_LINKS, page.UrlId, "2 broken URLs (the first redirects to a URL that returns 404 Not Found)",
             site.Id($"{site.Site}/old")) { Targets = [site.Id($"{site.Site}/old"), site.Id($"{site.Site}/loop-a")] },
             links.Single(hit => hit.Issue == IssueCatalog.BROKEN_INTERNAL_LINKS));
         Assert.Equal(new IssueHit(IssueCatalog.LINKS_TO_REDIRECTS, page.UrlId, "1 redirecting URL", site.Id($"{site.Site}/moved")),
             links.Single(hit => hit.Issue == IssueCatalog.LINKS_TO_REDIRECTS));
 
         // A partner's login redirect ending in a 403 may well work in a browser.
-        Assert.Equal("1 broken URL (it redirects to a URL that returns HTTP 404)", links.Single(hit => hit.Issue == IssueCatalog.BROKEN_EXTERNAL_LINKS).Detail);
-        Assert.Equal("1 image (it redirects to a URL that returns HTTP 404)", images.Single(hit => hit.Issue == IssueCatalog.IMAGE_BROKEN).Detail);
+        Assert.Equal("1 broken URL (it redirects to a URL that returns 404 Not Found)", links.Single(hit => hit.Issue == IssueCatalog.BROKEN_EXTERNAL_LINKS).Detail);
+        Assert.Equal("1 image (it redirects to a URL that returns 404 Not Found)", images.Single(hit => hit.Issue == IssueCatalog.IMAGE_BROKEN).Detail);
         Assert.Equal(site.Id($"{site.Site}/big.jpg"), images.Single(hit => hit.Issue == IssueCatalog.IMAGE_TOO_LARGE).RelatedUrlId);
     }
 

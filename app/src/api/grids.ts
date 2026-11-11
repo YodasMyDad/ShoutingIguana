@@ -415,8 +415,22 @@ export interface Sitemap {
   /**
    * The URLs it lists, each once (an index: those of every sitemap under it), as the URL grid's `fetched` and
    * `indexable` columns judge them: each count opens its rows in `/sitemaps/urls` under that filter.
+   *
+   * From the E3c review's engine on, two more, by the URL grid's `outcome`, each its rows in `/sitemaps/urls` under
+   * the filter named (absent from a sidecar built before it):
+   * - `robotsDisallowed`: those robots.txt kept the crawl from (`outcome` in `robotsDisallowed`);
+   * - `redirectingOrBroken`: those that answered with a redirect or an error, or didn't answer (`outcome` in
+   *   `redirect`, `clientError`, `serverError`, `timeout`, `networkError`). Not the ones robots.txt or a firewall kept
+   *   the crawl from, nor those not checked.
    */
-  urls: { listed: number; fetched: number; indexable: number; nonIndexable: number };
+  urls: {
+    listed: number;
+    fetched: number;
+    indexable: number;
+    nonIndexable: number;
+    robotsDisallowed?: number;
+    redirectingOrBroken?: number;
+  };
 }
 
 /** `GET /crawls/{id}/sitemaps`: every sitemap the crawl looked for, in the order it found them. */

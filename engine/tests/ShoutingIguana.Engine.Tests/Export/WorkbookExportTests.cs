@@ -44,7 +44,7 @@ public sealed class WorkbookExportTests : IDisposable
         var result = CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Workbook, Format = ExportFormat.Xlsx }, path);
 
         var results = IssueReader.ReadResults(_crawl.Path)!;
-        var order = ReportSources.FixFirst(results);
+        var order = results.FixFirst;
         Assert.True(order.Count > 30, $"Only {order.Count} checks found something.");
         var file = XlsxFile.Read(path);
         Assert.Equal(order.Count + 1, file.Sheets.Count);
@@ -52,8 +52,9 @@ public sealed class WorkbookExportTests : IDisposable
         Assert.Equal(order.Sum(id => results.Counts[id]), result.Rows);
         Assert.Equal("Summary", file.Sheets[0].Name);
 
-        // The checks in the order to fix them: the most severe first, then those on the most URLs.
-        Assert.Equal(order, order.OrderBy(id => IssueCatalog.Find(id)!.Severity).ThenByDescending(id => results.Counts[id]).ThenBy(id => id, StringComparer.Ordinal));
+        // The checks in the order to fix them, which is the engine's: a fault of the whole site leads its severity, whatever its count.
+        Assert.Equal(FixFirstOrder.Of(results.Counts), order);
+        Assert.True(IssueCatalog.Find(order[0])!.SiteWide, order[0]);
 
         for (var number = 1; number <= order.Count; number++)
         {
@@ -76,7 +77,7 @@ public sealed class WorkbookExportTests : IDisposable
     public void OneChecksSheetIsAFileOfItsOwn(ExportFormat format)
     {
         var results = IssueReader.ReadResults(_crawl.Path)!;
-        var order = ReportSources.FixFirst(results);
+        var order = results.FixFirst;
         var check = IssueCatalog.Find(order[2])!;
         var path = Path.Combine(_folder, format == ExportFormat.Csv ? "check.csv" : "check.xlsx");
         var result = CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Check, Format = format, CheckId = check.Id }, path);
@@ -172,14 +173,20 @@ public sealed class WorkbookExportTests : IDisposable
         Assert.StartsWith("Website check: ", (string)summary[0][0]!, StringComparison.Ordinal);
         object? Fact(string label) => summary.Single(row => Equals(row[0], label))[1];
         Assert.Equal((double)results.Analysis.PagesAnalyzed, Fact("Pages read"));
-        Assert.Equal((double)TestCrawls.Count(_crawl.Path, "SELECT COUNT(*) FROM responses"), Fact("Addresses checked"));
+        Assert.Equal((double)results.Analysis.CrawledUrlCount!.Value, Fact("Addresses checked"));
         Assert.Equal((double)order.Count(id => IssueCatalog.Find(id)!.Severity == IssueSeverity.Error), Fact("Serious problems"));
         Assert.Equal((double)order.Count(id => IssueCatalog.Find(id)!.Severity == IssueSeverity.Warning), Fact("Problems worth fixing"));
         Assert.Equal((double)order.Count(id => IssueCatalog.Find(id)!.Severity == IssueSeverity.Notice), Fact("Things worth a look"));
         Assert.Equal((double)results.Counts.Count(count => count.Value == 0), Fact("Checks that found nothing wrong"));
         Assert.Equal((double)(IssueCatalog.All.Count - results.Counts.Count), Fact("Checks that couldn’t run"));
         Assert.Equal($"{results.Counts.Count} of {IssueCatalog.All.Count}", Fact("Checks run"));
-        Assert.InRange((double)Fact("Score")!, 0, 100);
+
+        // The score is the analysis's, with its word and its version.
+        var score = results.Score!;
+        var scored = summary.Single(row => Equals(row[0], "Score"));
+        Assert.Equal(((double)score.Value, ReportWords.Band(score.Band)), ((double)scored[1]!, (string)scored[2]!));
+        Assert.Equal((double)ScoreCalculator.VERSION, Fact("Score version"));
+        var settings = results.Analysis.Settings!;
 
         var header = summary.FindIndex(row => Equals(row[0], "Number"));
         Assert.Equal(
@@ -197,26 +204,39 @@ public sealed class WorkbookExportTests : IDisposable
             Assert.Equal("Found", row[2]);
             Assert.Equal(check.Severity switch { IssueSeverity.Error => "Serious", IssueSeverity.Warning => "Worth fixing", _ => "Worth a look" }, row[3]);
             Assert.Equal(check.Severity.ToString(), row[4]);
+            Assert.Equal(PlainLimits.Fill(check.Plain!, settings).Title, row[5]);
             Assert.Equal(check.Title, row[6]);
             Assert.Equal(check.Id, row[7]);
-            Assert.Equal(check.Category.DisplayName(), row[8]);
+            Assert.Equal(PlainWords.CategoryTitle(check.Category), row[8]);
             Assert.Equal((double)results.Counts[check.Id], row[9]);
-            if (row[10] is double of)
+
+            // The share is the score's line: of the pages or the URLs the analysis counted. A check reported once has none.
+            var line = score.Lines[number - 1];
+            Assert.Equal(check.Id, line.CheckId);
+            if (check.ReportedOnce)
             {
-                Assert.Equal(Math.Min(1d, results.Counts[check.Id] / of), (double)row[12]!, 12);
-                Assert.Contains(row[11], new object[] { "pages", "addresses" });
+                Assert.Equal((null, "Checked once, for the whole site", null), (row[10], row[11], row[12]));
             }
             else
             {
-                Assert.Equal("the whole site", row[11]);
+                Assert.Equal(((double)line.Of, line.Unit == ScoreUnit.Pages ? "pages" : "addresses"), ((double)row[10]!, (string)row[11]!));
+                Assert.Equal(Math.Min(1d, (double)line.Count / line.Of), (double)row[12]!, 12);
             }
+
+            Assert.Equal((double)line.Points, row[13]);
         }
+
+        Assert.Contains(order, id => IssueCatalog.Find(id)!.ReportedOnce);
 
         foreach (var row in checks.Skip(order.Count))
         {
             var id = (string)row[7]!;
+            var plain = PlainLimits.Fill(IssueCatalog.Find(id)!.Plain!, settings);
             Assert.Null(row[0]);
             Assert.Null(row[1]);
+
+            // Named by what the check looks for, where it says: "Nothing wrong" beside a title that states a fault would misread.
+            Assert.Equal(plain.LooksFor ?? plain.Title, row[5]);
             if (results.Counts.ContainsKey(id))
             {
                 Assert.Equal("Nothing wrong", row[2]);

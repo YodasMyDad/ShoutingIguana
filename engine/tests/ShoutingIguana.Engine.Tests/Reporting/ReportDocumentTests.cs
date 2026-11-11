@@ -1,24 +1,30 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Export;
 using ShoutingIguana.Engine.Export.Models;
 using ShoutingIguana.Engine.Reporting;
 using ShoutingIguana.Engine.Reporting.Models;
+using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Support;
 using static ShoutingIguana.Engine.Tests.Support.GridQueries;
 
 namespace ShoutingIguana.Engine.Tests.Reporting;
 
 /// <summary>
-/// The report, read back as a browser parses it: its outline and its numbers against the analysis, each state the design
-/// names, both cuts, and that nothing a site sends becomes markup, a link to anything but http or https, or a request.
+/// The report, read back as a browser parses it: its outline and its numbers against the analysis, the score and the
+/// words as the analysis and the catalog have them, each state the design names, both cuts, and that nothing a site
+/// sends becomes markup, a link to anything but http or https, or a request.
 /// </summary>
 [Collection(GridCrawlCollection.NAME)]
 public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
@@ -36,15 +42,23 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     public void TheReportSaysWhatTheAnalysisFound()
     {
         var results = IssueReader.ReadResults(crawl.Path)!;
-        var order = ReportSources.FixFirst(results);
+        var score = results.Score!;
+        var settings = results.Analysis.Settings!;
+
+        // The order to fix them in is the engine's, as the analysis gives it: the report has none of its own.
+        var order = results.FixFirst;
+        Assert.Equal(FixFirstOrder.Of(results.Counts), order);
         var document = Parse(ReportExport.Build(crawl.Path, settings: SETTINGS));
 
         Assert.Equal("en-GB", document.DocumentElement.GetAttribute("lang"));
         Assert.Equal("127.0.0.1", document.QuerySelector("h1")!.TextContent);
         Assert.StartsWith("Website check: 127.0.0.1, ", document.Title, StringComparison.Ordinal);
         var meta = document.QuerySelector("p.meta")!.TextContent;
-        Assert.Contains($"{results.Analysis.PagesAnalyzed:N0} pages read", meta, StringComparison.Ordinal);
-        Assert.Contains($"{TestCrawls.Count(crawl.Path, "SELECT COUNT(*) FROM responses"):N0} addresses checked", meta, StringComparison.Ordinal);
+        Assert.Contains($"{ReportWords.Number(results.Analysis.PagesAnalyzed)} pages read", meta, StringComparison.Ordinal);
+
+        // The addresses are the ones the analysis counted, which its shares are of.
+        Assert.Equal(results.Analysis.CrawledUrlCount, score.Covers.Urls);
+        Assert.Contains($"{ReportWords.Number(score.Covers.Urls)} addresses checked", meta, StringComparison.Ordinal);
         Assert.Contains($"{results.Counts.Count} of {IssueCatalog.All.Count} checks run", meta, StringComparison.Ordinal);
 
         // The outline, in order: what couldn't be checked is there when something couldn't.
@@ -58,14 +72,33 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
             [Of(IssueSeverity.Error), Of(IssueSeverity.Warning), Of(IssueSeverity.Notice), results.Counts.Count(count => count.Value == 0), IssueCatalog.All.Count - results.Counts.Count],
             document.QuerySelectorAll(".tally b").Select(count => int.Parse(count.TextContent)));
 
-        // Every check that found something has its section, numbered in the order to fix them, under its technical name.
+        // Every check that found something has its section, numbered in the order to fix them: its plain words, with its
+        // technical name beside them, how much of the site it is on and what it costs the score.
         var problems = document.QuerySelectorAll("article.problem").ToList();
         Assert.Equal(order.Count, problems.Count);
+        Assert.Contains(order, id => IssueCatalog.Find(id)!.ReportedOnce);
         for (var index = 0; index < order.Count; index++)
         {
             var check = IssueCatalog.Find(order[index])!;
-            Assert.StartsWith($"{index + 1}. ", problems[index].QuerySelector("h3 > span")!.TextContent, StringComparison.Ordinal);
+            var plain = PlainLimits.Fill(check.Plain!, settings);
+            var line = score.Lines[index];
+            Assert.Equal(check.Id, line.CheckId);
+            Assert.Equal($"{index + 1}. {plain.Title}", problems[index].QuerySelector("h3 > span")!.TextContent);
             Assert.Equal($"{check.Title} · {check.Severity}", problems[index].QuerySelector(".problem__tech")!.TextContent);
+
+            // A check reported once for the whole site says so: "1 of 240 pages" would say the fault is one page's.
+            var share = check.ReportedOnce
+                ? "Checked once, for the whole site"
+                : $"{ReportWords.Number(line.Count)} of {ReportWords.Number(line.Of)} {(line.Unit == ScoreUnit.Pages ? (line.Of == 1 ? "page" : "pages") : (line.Of == 1 ? "address" : "addresses"))}";
+            var points = line.Points switch { 0 => "doesn’t change the score", 1 => "takes 1 point off the score", _ => $"takes {line.Points} points off the score" };
+            var who = plain.Fixer switch { IssueFixer.You => "you, in your site’s editor", IssueFixer.Developer => "your developer or hosting company", _ => "you or your developer" };
+            Assert.Equal($"{share} · {points} · usually fixed by {who}", problems[index].QuerySelector(".problem__meta")!.TextContent);
+            Assert.Equal(string.Join(' ', plain.What), problems[index].QuerySelector("h4 + p")!.TextContent);
+            foreach (var step in plain.Fix)
+            {
+                Assert.Contains(step, problems[index].TextContent, StringComparison.Ordinal);
+            }
+
             var listed = problems[index].QuerySelectorAll(".examples tbody tr").Length;
             var most = check.Severity == IssueSeverity.Notice ? ReportOptions.DEFAULT_LOOK_EXAMPLES : ReportOptions.DEFAULT_EXAMPLES;
             Assert.Equal((int)Math.Min(most, results.Counts[check.Id]), listed);
@@ -75,41 +108,121 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
             }
         }
 
-        // The first list is the first five problems to fix, under the same numbers.
+        // The first list is the first five problems to fix, under the same numbers: the ones the score says it would be without.
         var first = document.QuerySelectorAll("ol.first li").ToList();
         Assert.Equal(5, first.Count);
         Assert.Equal(["1", "2", "3", "4", "5"], first.Select(item => item.QuerySelector(".first__n")!.TextContent));
+        Assert.Equal(score.IfFixed.CheckIds, order.Take(5));
+        Assert.Equal(order.Take(5).Select(id => PlainLimits.Fill(IssueCatalog.Find(id)!.Plain!, settings).Title), first.Select(item => item.QuerySelector(".first__title")!.TextContent));
+        Assert.StartsWith(
+            score.IfFixed.Value == score.Value ? $"Fixing these five leaves the score at {score.Value} " : $"Fixing these five takes the score from {score.Value} to {score.IfFixed.Value}. ",
+            document.QuerySelector(".first__foot")!.TextContent, StringComparison.Ordinal);
 
-        // Every check that passed has a line, and every one that couldn't run its reason.
-        Assert.Equal(results.Counts.Count(count => count.Value == 0), document.QuerySelectorAll(".passed li").Length);
+        // Every check that passed has its good news, under its category's plain title; every one that couldn't run has its reason.
+        var passed = IssueCatalog.All.Where(check => results.Counts.GetValueOrDefault(check.Id, -1) == 0).ToList();
+        Assert.Equal(passed.Select(check => PlainLimits.Fill(check.Plain!, settings).Passed), document.QuerySelectorAll(".passed li").Select(item => item.TextContent));
+        Assert.Equal(passed.Select(check => PlainWords.CategoryTitle(check.Category)).Distinct(), document.QuerySelectorAll(".passed h4").Select(title => title.TextContent));
         Assert.Equal(IssueCatalog.All.Count - results.Counts.Count, document.QuerySelectorAll(".plain-list li").Length);
+        Assert.Contains($"Score version {ScoreCalculator.VERSION} · engine ", document.QuerySelector("footer")!.TextContent, StringComparison.Ordinal);
         Assert.Contains("Made with Shouting Iguana", document.QuerySelector("footer")!.TextContent, StringComparison.Ordinal);
         Assert.Contains("on 1 November 2026", document.QuerySelector("footer")!.TextContent, StringComparison.Ordinal);
     }
 
-    /// <summary>The score is the reference's (score.mjs), on the design's own worked examples.</summary>
-    [Theory]
-    [InlineData(new[] { "internal-client-error:9", "broken-internal-links:5", "image-too-large:61", "description-duplicate:8", "title-duplicate:6", "slow-response:3", "noindex-page:40" }, 265, 4521, 85, 98)]
-    [InlineData(new[] { "image-missing-alt:3", "h1-missing:6" }, 48, 612, 98, 100)]
-    [InlineData(new[]
+    /// <summary>
+    /// The score is the one the analysis stored, line for line: the report works none out. A file whose stored score
+    /// says another number has a report that says that number.
+    /// </summary>
+    [Fact]
+    public void TheScoreIsTheOneTheAnalysisStored()
     {
-        "broken-internal-links:1240", "mixed-content:620", "internal-server-error:420", "title-missing:187", "internal-client-error:212", "image-broken:96",
-        "redirect-loop:14", "image-missing-alt:1022", "viewport-missing:1240", "duplicate-site-version:1", "title-duplicate:540", "slow-response:310",
-        "broken-external-links:44"
-    }, 1240, 3870, 36, 74)]
-    [InlineData(new string[0], 1208, 9412, 100, null)]
-    [InlineData(new[] { "title-missing:1" }, 5, 61, 89, 100)]
-    [InlineData(new[] { "no-https:1" }, 100, 500, 40, 100)]
-    [InlineData(new[] { "no-https:1", "robots-txt-unreachable:1" }, 100, 500, 0, 100)]
-    [InlineData(new[] { "internal-client-error:1" }, 100, 500, 89, 100)]
-    public void TheStandInScoreIsTheDesignsVersionOne(string[] found, int pages, int urls, int score, int? onceFixed)
+        var score = IssueReader.ReadResults(crawl.Path)!.Score!;
+        var document = Parse(ReportExport.Build(crawl.Path, settings: SETTINGS));
+
+        Assert.Equal($"Score {score.Value} out of 100", document.QuerySelector("svg.ring")!.GetAttribute("aria-label"));
+        Assert.Equal(ReportWords.Band(score.Band), document.QuerySelector(".summary__word")!.TextContent);
+
+        // What took points off: every error and warning of the score, in its order, with its points; the notices in one line.
+        var costly = score.Lines.Where(line => line.Severity != IssueSeverity.Notice).ToList();
+        var rows = document.QuerySelectorAll("table.score-table tbody tr").ToList();
+        Assert.Equal(costly.Count + (score.Lines.Count > costly.Count ? 1 : 0), rows.Count);
+        Assert.Equal(costly.Select(line => $"−{line.Points}"), rows.Take(costly.Count).Select(row => row.QuerySelector("td.num")!.TextContent));
+        Assert.Equal(["Score", $"100 − {score.Lost}", $"{score.Value}"], document.QuerySelectorAll("table.score-table tfoot td").Select(cell => cell.TextContent));
+
+        // A fault of the whole site is said as one; a check reported once that isn't one says what it counted as.
+        for (var index = 0; index < costly.Count; index++)
+        {
+            var check = IssueCatalog.Find(costly[index].CheckId)!;
+            var howMuch = rows[index].QuerySelectorAll("td")[1].TextContent;
+            if (check.SiteWide)
+            {
+                Assert.Equal("The whole site", howMuch);
+            }
+            else if (check.ReportedOnce)
+            {
+                Assert.StartsWith("Checked once, for the whole site (counts as ", howMuch, StringComparison.Ordinal);
+            }
+            else
+            {
+                Assert.StartsWith($"{ReportWords.Number(costly[index].Count)} of {ReportWords.Number(costly[index].Of)} ", howMuch, StringComparison.Ordinal);
+            }
+        }
+
+        Assert.Contains(costly, line => IssueCatalog.Find(line.CheckId)!.SiteWide);
+        Assert.Equal(score.HeldBySerious, document.QuerySelector(".score-note")!.TextContent.StartsWith($"Held at {ScoreCalculator.SERIOUS_CEILING} ", StringComparison.Ordinal));
+
+        // Another number stored: that is the number, in the report and in the workbook, whatever the counts would give.
+        var other = crawl.Copy();
+        var said = score.Value == 12 ? 13 : 12;
+        Change(other, $"UPDATE analysis SET score = {said}, score_json = replace(score_json, '\"value\":{score.Value},', '\"value\":{said},')");
+        Assert.Equal(said, IssueReader.ReadResults(other)!.Score!.Value);
+        var changed = Parse(ReportExport.Build(other, settings: SETTINGS));
+        Assert.Equal($"Score {said} out of 100", changed.QuerySelector("svg.ring")!.GetAttribute("aria-label"));
+        Assert.Equal($"{said}", changed.QuerySelector("table.score-table tfoot td.num")!.TextContent);
+    }
+
+    /// <summary>
+    /// A limit in a check's words is the one the analysis ran with: a crawl analysed with a title limit of 70 has a report
+    /// that says 70, and no <c>{limit:…}</c> reaches the report, the workbook or a check's CSV.
+    /// </summary>
+    [Fact]
+    public async Task ALimitInACheckSWordsIsTheOneTheAnalysisRanWith()
     {
-        var counts = found.Select(entry => entry.Split(':')).ToDictionary(parts => parts[0], parts => long.Parse(parts[1]), StringComparer.Ordinal);
-        var worked = StandInScore.Of(counts, StandInScore.FixFirst(counts), new ScoreCovers(pages, urls, 86, 0, Complete: true, 0))!;
-        Assert.Equal(score, worked.Value);
-        Assert.Equal(onceFixed, worked.FixedValue);
-        Assert.Equal(Math.Max(0, 100 - worked.Lines.Sum(line => line.Points)), worked.BeforeCeiling);
-        Assert.Null(StandInScore.Of(counts, StandInScore.FixFirst(counts), new ScoreCovers(0, urls, 86, 0, Complete: true, 0)));
+        var copy = crawl.Copy();
+        var thresholds = new AnalysisSettings { TitleMaxLength = 41, TitleMinLength = 17, DescriptionMaxLength = 131, DescriptionMinLength = 59, MinWordCount = 173, MaxUrlLength = 67 };
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(copy, thresholds);
+        var results = IssueReader.ReadResults(copy)!;
+        Assert.Equal(thresholds, results.Analysis.Settings);
+
+        // The checks whose words name a limit, and that this analysis found something for: the test is of them.
+        static bool Names(IssuePlainText plain) => plain.What.Concat(plain.Fix).Append(plain.Title).Append(plain.Passed).Any(text => text.Contains("{limit:", StringComparison.Ordinal));
+        var naming = IssueCatalog.All.Where(check => Names(check.Plain!)).ToList();
+        Assert.Equal(10, naming.Count);
+        var found = naming.Where(check => results.Counts.GetValueOrDefault(check.Id) > 0).ToList();
+        Assert.Contains(found, check => check.Id == "title-too-long");
+
+        var html = ReportExport.Build(copy, settings: SETTINGS);
+        Assert.DoesNotContain("{limit:", html, StringComparison.Ordinal);
+        var text = Parse(html).Body!.TextContent;
+        Assert.Contains("These pages have a title of more than 41 characters.", text, StringComparison.Ordinal);
+        foreach (var check in found)
+        {
+            Assert.Contains(string.Join(' ', PlainLimits.Fill(check.Plain!, thresholds).What), text, StringComparison.Ordinal);
+        }
+
+        // With the default thresholds the same sentence says the default: the number is the analysis's, not the document's.
+        Assert.Contains($"These pages have a title of more than {new AnalysisSettings().TitleMaxLength} characters.", Parse(ReportExport.Build(crawl.Path, settings: SETTINGS)).Body!.TextContent,
+            StringComparison.Ordinal);
+
+        // The workbook, whose summary names every check, and one check's sheet as CSV.
+        var workbook = Path.Combine(_folder, "limits.xlsx");
+        CrawlExporter.Export(copy, new ExportRequest { Kind = ExportKind.Workbook, Format = ExportFormat.Xlsx }, workbook, SETTINGS);
+        var cells = XlsxFile.Read(workbook).Sheets.SelectMany(sheet => sheet.Values.SelectMany(row => row).OfType<string>().Append(sheet.Name)).ToList();
+        Assert.NotEmpty(cells);
+        Assert.DoesNotContain(cells, cell => cell.Contains("{limit:", StringComparison.Ordinal));
+
+        var csv = Path.Combine(_folder, "limits.csv");
+        CrawlExporter.Export(copy, new ExportRequest { Kind = ExportKind.Check, Format = ExportFormat.Csv, CheckId = "title-too-long" }, csv, SETTINGS);
+        Assert.DoesNotContain("{limit:", File.ReadAllText(csv), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -197,7 +310,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     }
 
     [Fact]
-    public void TheSummaryCutIsTheFullReportsFirstPage()
+    public async Task TheSummaryCutIsTheFullReportsFirstPage()
     {
         var full = Parse(ReportExport.Build(crawl.Path, settings: SETTINGS));
         var summary = Parse(ReportExport.Build(crawl.Path, new ReportOptions { Cut = ReportCut.Summary }, SETTINGS));
@@ -216,13 +329,15 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         Assert.Contains("in the full report under the same number", summary.QuerySelector(".first__foot")!.TextContent, StringComparison.Ordinal);
         Assert.Contains("from page 2 under the same number", full.QuerySelector(".first__foot")!.TextContent, StringComparison.Ordinal);
 
-        // A check that couldn't run is listed near the full report's end, which the summary can only point to.
-        var skipped = crawl.Copy();
-        Change(skipped, "DELETE FROM issue_types WHERE id IN ('title-missing', 'h1-missing')");
-        Assert.Contains(" 2 checks couldn’t run: they are listed near the end.", Parse(ReportExport.Build(skipped, settings: SETTINGS)).QuerySelector(".summary__covers")!.TextContent,
+        // Checks that couldn't run are listed near the full report's end, which the summary can only point to.
+        var stopped = await EndedEarlyAsync(CrawlStatus.Stopped);
+        var skipped = IssueReader.ReadResults(stopped)!.Score!.Covers.ChecksSkipped;
+        Assert.True(skipped > 1, $"{skipped} checks skipped");
+        Assert.Contains($" {skipped} checks couldn’t run: they are listed near the end.", Parse(ReportExport.Build(stopped, settings: SETTINGS)).QuerySelector(".summary__covers")!.TextContent,
             StringComparison.Ordinal);
-        Assert.Contains(" 2 checks couldn’t run: the full report lists them.",
-            Parse(ReportExport.Build(skipped, new ReportOptions { Cut = ReportCut.Summary }, SETTINGS)).QuerySelector(".summary__covers")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains($" {skipped} checks couldn’t run: the full report lists them.",
+            Parse(ReportExport.Build(stopped, new ReportOptions { Cut = ReportCut.Summary }, SETTINGS)).QuerySelector(".summary__covers")!.TextContent, StringComparison.Ordinal);
+
     }
 
     [Fact]
@@ -250,25 +365,84 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         }
     }
 
-    [Fact]
-    public void ACrawlStoppedEarlySaysSoAndItsScoreIsSoFar()
+    /// <summary>
+    /// A crawl stopped or failed part-way, analysed as it stands: the report says so, its score is "so far" and says why,
+    /// and the checks that need the whole site are listed as not run, each with why and what would let it, in plain words.
+    /// </summary>
+    [Theory]
+    [InlineData(CrawlStatus.Stopped, "This check was stopped early: ", "read before the check was stopped")]
+    [InlineData(CrawlStatus.Failed, "This check failed before it finished: ", "read before the check failed")]
+    public async Task ACrawlThatEndedEarlySaysSoAndItsScoreIsSoFar(CrawlStatus status, string says, string covers)
     {
-        var stopped = crawl.Copy();
-        Change(stopped, $"UPDATE crawl SET status = {(int)CrawlStatus.Stopped}");
-        Change(stopped, "UPDATE urls SET state = 0 WHERE id IN (SELECT id FROM urls WHERE id NOT IN (SELECT url_id FROM responses) LIMIT 7)");
+        var stopped = await EndedEarlyAsync(status);
+        var results = IssueReader.ReadResults(stopped)!;
+        var score = results.Score!;
+        Assert.Equal((true, (ScoreIncompleteReason?)(status == CrawlStatus.Failed ? ScoreIncompleteReason.Failed : ScoreIncompleteReason.Stopped)), (score.Partial, score.Covers.Reason));
         var queued = TestCrawls.Count(stopped, "SELECT COUNT(*) FROM urls WHERE state = 0");
         var document = Parse(ReportExport.Build(stopped, settings: SETTINGS));
+        AssertInert(document);
 
         var note = document.QuerySelector("header .note")!.TextContent;
-        Assert.StartsWith("This check was stopped early: ", note, StringComparison.Ordinal);
+        Assert.StartsWith(says, note, StringComparison.Ordinal);
         Assert.Contains($"{queued:N0} addresses still to check", note, StringComparison.Ordinal);
         Assert.EndsWith("This report covers only what was read.", note, StringComparison.Ordinal);
-        Assert.EndsWith(", so far", document.QuerySelector(".summary__word")!.TextContent, StringComparison.Ordinal);
-        Assert.EndsWith(", so far", document.QuerySelector("svg.ring")!.GetAttribute("aria-label"), StringComparison.Ordinal);
-        Assert.Contains("read before the check was stopped", document.QuerySelector(".summary__covers")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal($"{ReportWords.Band(score.Band)}, so far", document.QuerySelector(".summary__word")!.TextContent);
+        Assert.Equal($"Score {score.Value} out of 100, so far", document.QuerySelector("svg.ring")!.GetAttribute("aria-label"));
+        Assert.Equal("so far", document.QuerySelectorAll("svg.ring text").Last().TextContent);
+        Assert.Equal("Score, so far", document.QuerySelector("table.score-table tfoot td")!.TextContent);
+        var sentence = document.QuerySelector(".summary__covers")!.TextContent;
+        Assert.StartsWith($"The score covers the {ReportWords.Number(score.Covers.Pages)} pages {covers}, and {score.Covers.ChecksRun} of {IssueCatalog.All.Count} checks.", sentence,
+            StringComparison.Ordinal);
         var finished = document.QuerySelectorAll(".facts dt").Single(term => term.TextContent == "Finished?").NextElementSibling!.TextContent;
-        Assert.StartsWith("No. This check was stopped early", finished, StringComparison.Ordinal);
+        Assert.StartsWith("No. " + says, finished, StringComparison.Ordinal);
         Assert.EndsWith("Continue the check to read the rest.", finished, StringComparison.Ordinal);
+
+        // What couldn't be checked: every check the analysis skipped, named by what it looks for, with the reason's plain words.
+        Assert.NotEmpty(results.Skipped);
+        Assert.Equal(score.Covers.ChecksSkipped, results.Skipped.Count);
+        Assert.Contains("What couldn’t be checked", document.QuerySelectorAll("h2").Select(heading => heading.TextContent));
+        var reasons = results.Skipped.ToDictionary(skip => skip.CheckId, StringComparer.Ordinal);
+        Assert.Equal(
+            IssueCatalog.All.Where(check => reasons.ContainsKey(check.Id)).Select(check =>
+            {
+                var words = PlainWords.SkipReason(reasons[check.Id].Reason)!;
+                return $"{check.Plain!.LooksFor ?? check.Plain.Title}. {words.Text} {words.Action}";
+            }),
+            document.QuerySelectorAll(".plain-list li").Select(item => item.TextContent));
+        Assert.Contains(reasons.Values, skip => skip.Reason == SkippedCheckReasons.CRAWL_UNFINISHED);
+        Assert.Equal($"{results.Skipped.Count}", document.QuerySelectorAll(".tally b").Last().TextContent);
+    }
+
+    /// <summary>
+    /// A crawl that finished at a limit read part of the site: the report says which limit, and the score is of what was
+    /// read. Real crawls of the synthetic site, each with a limit that keeps some of it out.
+    /// </summary>
+    [Fact]
+    public async Task ACrawlThatReachedALimitSaysWhichAndItsScoreIsSoFar()
+    {
+        var limited = await CrawlAsync("limited", options => options with { MaxUrls = 40 });
+        var byUrls = IssueReader.ReadResults(limited)!.Score!;
+        Assert.Equal((true, (ScoreIncompleteReason?)ScoreIncompleteReason.UrlLimit), (byUrls.Partial, byUrls.Covers.Reason));
+        var document = Parse(ReportExport.Build(limited, settings: SETTINGS));
+        var past = TestCrawls.Count(limited, $"SELECT COUNT(*) FROM urls WHERE skip_reason = {(int)SkipReason.UrlLimit}");
+        Assert.Equal(
+            $"This check stopped at its limit of 40 addresses: {ReportWords.Plural(byUrls.Covers.Pages, "page", "pages")} read, {ReportWords.Plural(past, "address", "addresses")} past the limit. This report covers only what was read.",
+            document.QuerySelector("header .note")!.TextContent);
+        Assert.EndsWith(", so far", document.QuerySelector(".summary__word")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains(" read before the check reached its limit, and ", document.QuerySelector(".summary__covers")!.TextContent, StringComparison.Ordinal);
+        var finished = document.QuerySelectorAll(".facts dt").Single(term => term.TextContent == "Finished?").NextElementSibling!.TextContent;
+        Assert.EndsWith("Check the site again with a higher limit to read the rest.", finished, StringComparison.Ordinal);
+
+        var shallow = await CrawlAsync("shallow", options => options with { MaxDepth = 1, DiscoverSitemaps = false });
+        var byDepth = IssueReader.ReadResults(shallow)!.Score!;
+        Assert.Equal((true, (ScoreIncompleteReason?)ScoreIncompleteReason.DepthLimit), (byDepth.Partial, byDepth.Covers.Reason));
+        document = Parse(ReportExport.Build(shallow, settings: SETTINGS));
+        var deeper = TestCrawls.Count(shallow, $"SELECT COUNT(*) FROM urls WHERE skip_reason = {(int)SkipReason.DepthLimit}");
+        Assert.Equal(
+            $"This check stopped at its limit of 1 click from the start: {ReportWords.Plural(byDepth.Covers.Pages, "page", "pages")} read, {ReportWords.Plural(deeper, "address", "addresses")} further in than that. This report covers only what was read.",
+            document.QuerySelector("header .note")!.TextContent);
+        Assert.EndsWith(", so far", document.QuerySelector(".summary__word")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains(" within the check’s limit of clicks from the start, and ", document.QuerySelector(".summary__covers")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -277,6 +451,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         var perfect = crawl.Copy();
         Change(perfect, "DELETE FROM issues");
         Change(perfect, "UPDATE issue_types SET url_count = 0");
+        StoreTheScoreOfItsCounts(perfect);
         var document = Parse(ReportExport.Build(perfect, settings: SETTINGS));
         AssertInert(document);
 
@@ -288,31 +463,124 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         Assert.Equal(outline.Where(heading => skipped > 0 || heading != "What couldn’t be checked"), document.QuerySelectorAll("h2").Select(heading => heading.TextContent));
         Assert.Empty(document.QuerySelectorAll("article.problem"));
         Assert.Equal("100", document.QuerySelector("table.score-table tfoot td.num")!.TextContent);
+        Assert.Equal(["Nothing took points off", string.Empty, "0"], document.QuerySelectorAll("table.score-table tbody td").Select(cell => cell.TextContent));
+        Assert.Equal("No serious problem was found, and nothing worth fixing.", document.QuerySelector("h2 + p.lead")!.TextContent);
+        Assert.Equal(["0", "0", "0"], document.QuerySelectorAll(".tally b").Take(3).Select(count => count.TextContent));
+
+        // A site with nothing but things worth a look is as good: they take nothing off, and the report says where they are.
+        var looks = crawl.Copy();
+        var costly = string.Join(", ", IssueCatalog.All.Where(check => check.Severity != IssueSeverity.Notice).Select(check => $"'{check.Id}'"));
+        Change(looks, $"DELETE FROM issues WHERE issue IN ({costly})");
+        Change(looks, $"UPDATE issue_types SET url_count = 0 WHERE id IN ({costly})");
+        StoreTheScoreOfItsCounts(looks);
+        document = Parse(ReportExport.Build(looks, settings: SETTINGS));
+        var notices = IssueReader.ReadResults(looks)!.FixFirst.Count;
+        Assert.True(notices > 1, $"{notices} notices");
+        Assert.Equal("Score 100 out of 100", document.QuerySelector("svg.ring")!.GetAttribute("aria-label"));
+        Assert.Equal($"This site is in very good shape. Nothing needs fixing, and there are {notices} things worth a look.", document.QuerySelector(".summary__sentence")!.TextContent);
+        Assert.Equal(
+            $"No serious problem was found, and nothing worth fixing. {notices} things are worth a look: they are explained from page 2. Often they’re fine as they are, and they don’t change the score.",
+            document.QuerySelector("h2 + p.lead")!.TextContent);
+        Assert.Equal(notices, document.QuerySelectorAll("article.problem").Length);
     }
 
+    /// <summary>A crawl that read no page has no score, and the report says why: a real crawl whose start URL answers 404.</summary>
     [Fact]
-    public void ACrawlThatReadNoPageHasNoScoreAndSaysWhy()
+    public async Task ACrawlThatReadNoPageHasNoScoreAndSaysWhy()
     {
-        var none = crawl.Copy();
-        Change(none, "UPDATE analysis SET pages = 0");
+        var none = await CrawlAsync("none", options => options with { StartUrl = new Uri(crawl.Server.BaseUri, "/broken/1").AbsoluteUri, DiscoverSitemaps = false });
+        var results = IssueReader.ReadResults(none)!;
+        Assert.Equal(((SiteScore?)null, (NoScoreReason?)NoScoreReason.NoPages, 0L), (results.Score, results.NoScoreReason, results.Analysis.PagesAnalyzed));
         var document = Parse(ReportExport.Build(none, settings: SETTINGS));
+        AssertInert(document);
 
         Assert.Equal("No score", document.QuerySelector("svg.ring")!.GetAttribute("aria-label"));
         Assert.Equal("No score", document.QuerySelector(".summary__word")!.TextContent);
         Assert.Equal("No page could be read, so there is nothing to score.", document.QuerySelector(".summary__sentence")!.TextContent);
-        Assert.DoesNotContain("How the score is worked out", document.QuerySelectorAll("h2").Select(heading => heading.TextContent));
-        Assert.DoesNotContain("Fix these first", document.QuerySelectorAll("h2").Select(heading => heading.TextContent));
+        Assert.Contains("and got no page it could read. Check that the address is right and that the site is up, then check it again.", document.QuerySelector(".summary__covers")!.TextContent,
+            StringComparison.Ordinal);
+        var headings = document.QuerySelectorAll("h2").Select(heading => heading.TextContent).ToList();
+        Assert.DoesNotContain("How the score is worked out", headings);
+        Assert.DoesNotContain("Nothing to fix", headings);
+        Assert.Empty(document.QuerySelectorAll("table.score-table"));
+        Assert.Contains("0 pages read", document.QuerySelector("p.meta")!.TextContent, StringComparison.Ordinal);
+
+        // What it did find is still said, in the engine's order, with no share of a score there isn't: the start URL answers 404.
+        Assert.NotEmpty(results.FixFirst);
+        Assert.Equal(results.FixFirst.Count, document.QuerySelectorAll("article.problem").Length);
+        Assert.Equal(headings.Contains("Fix these first"), results.FixFirst.Any(id => IssueCatalog.Find(id)!.Severity != IssueSeverity.Notice));
+        Assert.All(document.QuerySelectorAll(".problem__meta"), line => Assert.DoesNotContain("the score", line.TextContent, StringComparison.Ordinal));
+
+        // The workbook says the same.
+        Assert.Equal("No score: no page could be read", SummaryFact(none, "Score"));
     }
 
+    /// <summary>
+    /// Results an engine from before the score worked out have no score: the report says so, and to work them out again,
+    /// and still lists what they found, in the engine's order.
+    /// </summary>
+    [Fact]
+    public void ResultsFromBeforeTheScoreHaveNoScoreAndSaySo()
+    {
+        var earlier = crawl.Copy();
+        Change(earlier, "UPDATE analysis SET score_version = NULL, score = NULL, score_partial = NULL, score_json = NULL, crawled_urls = NULL");
+        var results = IssueReader.ReadResults(earlier)!;
+        Assert.Equal(((SiteScore?)null, (NoScoreReason?)NoScoreReason.NotScored), (results.Score, results.NoScoreReason));
+        var document = Parse(ReportExport.Build(earlier, settings: SETTINGS));
+        AssertInert(document);
+
+        Assert.Equal("No score", document.QuerySelector("svg.ring")!.GetAttribute("aria-label"));
+        Assert.Equal("These results were worked out before the score was.", document.QuerySelector(".summary__sentence")!.TextContent);
+        Assert.EndsWith("Work out the results again to score the site.", document.QuerySelector(".summary__covers")!.TextContent, StringComparison.Ordinal);
+        string[] outline = ["Fix these first", "What to fix", "What couldn’t be checked", "What was checked and found nothing wrong", "About this check"];
+        var skipped = IssueCatalog.All.Count - results.Counts.Count;
+        Assert.Equal(outline.Where(heading => skipped > 0 || heading != "What couldn’t be checked"), document.QuerySelectorAll("h2").Select(heading => heading.TextContent));
+
+        // The list follows the engine's order, and each problem says how many it's on: there is no total stored to give a share of.
+        var order = results.FixFirst;
+        Assert.Equal(order.Take(5).Select(id => IssueCatalog.Find(id)!.Plain!.Title), document.QuerySelectorAll("ol.first .first__title").Select(title => title.TextContent));
+        Assert.Equal("Each is explained from page 2 under the same number, with the first pages it’s on.", document.QuerySelector(".first__foot")!.TextContent);
+        var lines = document.QuerySelectorAll(".problem__meta b").Select(line => line.TextContent).ToList();
+        for (var index = 0; index < order.Count; index++)
+        {
+            var check = IssueCatalog.Find(order[index])!;
+            Assert.Equal(
+                check.ReportedOnce ? "Checked once, for the whole site" : ReportWords.Plural(results.Counts[check.Id], check.Subject == IssueSubject.Page ? "page" : "address", check.Subject == IssueSubject.Page ? "pages" : "addresses"),
+                lines[index]);
+        }
+
+        Assert.StartsWith("No score: these results were worked out before the score was.", (string)SummaryFact(earlier, "Score")!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A check that couldn't run is named by what it looks for, where it says: its title, a sentence about the site, would
+    /// read as a finding. Its reason is in plain words with what would let it run; a reason this engine has no words for
+    /// (a later engine's) is said as the analysis stored it.
+    /// </summary>
     [Fact]
     public void ACheckThatCouldNotRunIsListedWithWhy()
     {
         var skipped = crawl.Copy();
-        Change(skipped, "DELETE FROM issue_types WHERE id = 'title-missing'");
-        Change(skipped, "INSERT INTO skipped_checks (check_id, reason, text) VALUES ('title-missing', 'crawl-unfinished', 'The crawl was stopped before it finished.')");
+        Change(skipped, "DELETE FROM skipped_checks");
+        Change(skipped, "DELETE FROM issues WHERE issue IN ('title-missing', 'sitemap-missing', 'h1-missing')");
+        Change(skipped, "DELETE FROM issue_types WHERE id IN ('title-missing', 'sitemap-missing', 'h1-missing')");
+        Change(skipped, """
+            INSERT INTO skipped_checks (check_id, reason, text) VALUES
+                ('title-missing', 'crawl-unfinished', 'The crawl was stopped before it finished.'),
+                ('sitemap-missing', 'sitemaps-off', 'The crawl was set not to read sitemaps.'),
+                ('h1-missing', 'a-later-engines-reason', 'What a later engine said of it.')
+            """);
         var document = Parse(ReportExport.Build(skipped, settings: SETTINGS));
-        Assert.Contains(document.QuerySelectorAll(".plain-list li"), item => item.TextContent == "Missing title. The crawl was stopped before it finished.");
-        Assert.Contains(" 1 check couldn’t run: it is listed near the end.", document.QuerySelector(".summary__covers")!.TextContent, StringComparison.Ordinal);
+
+        var unfinished = PlainWords.SkipReason(SkippedCheckReasons.CRAWL_UNFINISHED)!;
+        var sitemapsOff = PlainWords.SkipReason(SkippedCheckReasons.SITEMAPS_OFF)!;
+        Assert.Equal("sitemaps-off", SkippedCheckReasons.SITEMAPS_OFF);
+        Assert.Null(IssueCatalog.Find("title-missing")!.Plain!.LooksFor);
+        var listed = document.QuerySelectorAll(".plain-list li").Select(item => item.TextContent).ToList();
+        Assert.Contains($"{IssueCatalog.Find("title-missing")!.Plain!.Title}. {unfinished.Text} {unfinished.Action}", listed);
+        Assert.Contains($"A missing sitemap. {sitemapsOff.Text} {sitemapsOff.Action}", listed);
+        Assert.Contains($"{IssueCatalog.Find("h1-missing")!.Plain!.Title}. What a later engine said of it.", listed);
+        Assert.DoesNotContain(listed, item => item.StartsWith(IssueCatalog.Find("sitemap-missing")!.Plain!.Title, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -357,6 +625,51 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     }
 
     private static AngleSharp.Html.Dom.IHtmlDocument Parse(string html) => new HtmlParser().ParseDocument(html);
+
+    /// <summary>A copy of the crawl as one stopped or failed part-way leaves it, with addresses still to check, analysed as it then stands.</summary>
+    private async Task<string> EndedEarlyAsync(CrawlStatus status)
+    {
+        var copy = crawl.Copy();
+        Change(copy, $"UPDATE crawl SET status = {(int)status}");
+        Change(copy, "UPDATE urls SET state = 0 WHERE id IN (SELECT id FROM urls WHERE id NOT IN (SELECT url_id FROM responses) LIMIT 7)");
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(copy);
+        return copy;
+    }
+
+    /// <summary>A crawl of the synthetic site with other options than the shared one's, analysed.</summary>
+    private async Task<string> CrawlAsync(string name, Func<CrawlOptions, CrawlOptions> change)
+    {
+        var path = Path.Combine(_folder, name + ".sicrawl");
+        var summary = await TestCrawls.RunAsync(change(new CrawlOptions { StartUrl = crawl.Server.BaseUri.AbsoluteUri, Concurrency = 8 }), path);
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        return path;
+    }
+
+    /// <summary>
+    /// Stores the score the analysis would have stored for the counts the file now holds, as its writer does. A test that
+    /// changes what was found by hand needs it: the report says the stored score, and works none out.
+    /// </summary>
+    private static void StoreTheScoreOfItsCounts(string path)
+    {
+        var results = IssueReader.ReadResults(path)!;
+        var covers = results.Score!.Covers;
+        List<IssueCount> checks = [.. IssueCatalog.All.Where(check => results.Counts.ContainsKey(check.Id)).Select(check => new IssueCount(check, results.Counts[check.Id]))];
+        var score = ScoreCalculator.Calculate(checks, IssueCatalog.All.Count - checks.Count, covers.Pages, covers.Urls, covers.Reason, covers.BlockedByRobots)!;
+        Change(path, "UPDATE analysis SET score = $score, score_partial = $partial, score_json = $json",
+            ("$score", score.Value), ("$partial", score.Partial ? 1 : 0), ("$json", JsonSerializer.Serialize(score, EngineJsonContext.Default.SiteScore)));
+        Assert.Equal(score.Value, IssueReader.ReadResults(path)!.Score!.Value);
+    }
+
+    /// <summary>A fact of the workbook's summary sheet, by its label.</summary>
+    private object? SummaryFact(string crawlPath, string label)
+    {
+        var path = Path.Combine(_folder, $"{Guid.NewGuid():N}.xlsx");
+        CrawlExporter.Export(crawlPath, new ExportRequest { Kind = ExportKind.Workbook, Format = ExportFormat.Xlsx }, path, SETTINGS);
+        var fact = XlsxFile.Read(path).Sheets[0].Values.Single(row => Equals(row[0], label))[1];
+        File.Delete(path);
+        return fact;
+    }
 
     /// <summary>
     /// Nothing in the document runs or asks for anything: no script, no handler, no style attribute, no frame, image or

@@ -42,7 +42,7 @@ internal sealed record ReportModel
     /// <summary>The pages read.</summary>
     public required long Pages { get; init; }
 
-    /// <summary>The addresses checked: every URL with an answer, or refused one.</summary>
+    /// <summary>The addresses checked, as they stood when the results were worked out: what a check on any address is a share of.</summary>
     public required long Urls { get; init; }
 
     /// <summary>The pages that can appear in search.</summary>
@@ -74,9 +74,10 @@ internal sealed record ReportModel
     /// <summary>The checks that ran and found nothing, in catalog order.</summary>
     public required IReadOnlyList<ReportPassed> Passed { get; init; }
 
-    /// <summary>The score, or null when there is none (<see cref="NoScore"/> says why).</summary>
-    public ReportScore? Score { get; init; }
+    /// <summary>The score the analysis stored, or null when there is none (<see cref="NoScore"/> says why).</summary>
+    public SiteScore? Score { get; init; }
 
+    /// <summary>Why there is no score: the analysis read no page, or an engine from before the score ran it.</summary>
     public NoScoreReason? NoScore { get; init; }
 
     /// <summary>When the document is made, and the time zone its dates are written in.</summary>
@@ -90,6 +91,7 @@ internal sealed record ReportModel
     /// <summary>How many of the checks that found something are of a severity.</summary>
     public int ChecksOf(IssueSeverity severity) => Problems.Count(problem => problem.Check.Severity == severity);
 
-    /// <summary>The crawl read everything it found.</summary>
-    public bool Finished => Status == CrawlStatus.Completed && NotRead.GetValueOrDefault(SkipReason.UrlLimit) == 0;
+    /// <summary>The crawl read all it set out to: it finished, and no limit kept the site's own addresses out.</summary>
+    public bool Finished =>
+        Status == CrawlStatus.Completed && NotRead.GetValueOrDefault(SkipReason.UrlLimit) == 0 && NotRead.GetValueOrDefault(SkipReason.DepthLimit) == 0;
 }

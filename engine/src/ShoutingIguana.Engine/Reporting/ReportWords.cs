@@ -32,11 +32,14 @@ internal static class ReportWords
         _ => Plural(count, "thing worth a look", "things worth a look")
     };
 
+    /// <summary>What stands where a share would, for a check reported once for the whole site: "1 of 265 pages" would say the fault is one page's.</summary>
+    public const string CHECKED_ONCE = "Checked once, for the whole site";
+
     /// <summary>Who usually makes a fix, after "usually fixed by".</summary>
-    public static string FixedBy(Fixer fixer) => fixer switch
+    public static string FixedBy(IssueFixer fixer) => fixer switch
     {
-        Fixer.You => "you, in your site’s editor",
-        Fixer.Developer => "your developer or hosting company",
+        IssueFixer.You => "you, in your site’s editor",
+        IssueFixer.Developer => "your developer or hosting company",
         _ => "you or your developer"
     };
 
@@ -68,13 +71,17 @@ internal static class ReportWords
         _ => "the whole site"
     };
 
-    /// <summary>"5 of 265 pages", "9 of 4,521 addresses", "the whole site".</summary>
-    public static string CountOf(ScoreLine line) => line.Unit switch
-    {
-        ScoreUnit.Site => "the whole site",
-        ScoreUnit.Pages => $"{Number(line.Count)} of {Plural(line.Of, "page", "pages")}",
-        _ => $"{Number(line.Count)} of {Plural(line.Of, "address", "addresses")}"
-    };
+    /// <summary>"5 of 265 pages", "9 of 4,521 addresses"; for a check reported once for the whole site, that it was.</summary>
+    public static string CountOf(ScoreLine line, IssueDefinition check) => check.ReportedOnce || line.Unit == ScoreUnit.Site
+        ? CHECKED_ONCE
+        : line.Unit == ScoreUnit.Pages
+            ? $"{Number(line.Count)} of {Plural(line.Of, "page", "pages")}"
+            : $"{Number(line.Count)} of {Plural(line.Of, "address", "addresses")}";
+
+    /// <summary>A check's count where there is no score to say what it's a share of: "5 pages", "9 addresses".</summary>
+    public static string CountOf(long count, IssueDefinition check) => check.ReportedOnce
+        ? CHECKED_ONCE
+        : check.Subject == IssueSubject.Page ? Plural(count, "page", "pages") : Plural(count, "address", "addresses");
 
     /// <summary>A count with its thousands apart, as the UK writes them: 4,521.</summary>
     public static string Number(long number) => number.ToString("N0", NUMBERS);

@@ -118,7 +118,8 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         Assert.Equal(["id", "url", "parentId", "foundVia", "state", "statusCode", "isIndex", "entries", "sitemaps", "error", "urls"], index.AsObject().Select(property => property.Key));
         Assert.Equal((grid.Url("/sitemap.xml"), "robotsTxt", "read", true, 3), ((string?)index["url"], (string?)index["foundVia"], (string?)index["state"], (bool)index["isIndex"]!, (int)index["sitemaps"]!));
         Assert.Null(index["parentId"]);
-        Assert.Equal(["listed", "fetched", "indexable", "nonIndexable"], index["urls"]!.AsObject().Select(property => property.Key));
+        Assert.Equal(["listed", "fetched", "indexable", "nonIndexable", "robotsDisallowed", "redirectingOrBroken"], index["urls"]!.AsObject().Select(property => property.Key));
+        Assert.Equal((1, 2), ((long)index["urls"]!["robotsDisallowed"]!, (long)index["urls"]!["redirectingOrBroken"]!));
         var missing = sitemaps[^1]!;
         Assert.Equal((grid.Url("/sitemaps/missing.xml"), "index", "failed", 404, "HTTP 404", (int)index["id"]!),
             ((string?)missing["url"], (string?)missing["foundVia"], (string?)missing["state"], (int)missing["statusCode"]!, (string?)missing["error"], (int)missing["parentId"]!));
@@ -132,6 +133,9 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
             Assert.Equal((long)sitemap["urls"]!["fetched"]!, await OpensAsync("""{"column":"fetched","op":"is","value":true}"""));
             Assert.Equal((long)sitemap["urls"]!["indexable"]!, await OpensAsync("""{"column":"indexable","op":"is","value":true}"""));
             Assert.Equal((long)sitemap["urls"]!["nonIndexable"]!, await OpensAsync("""{"column":"indexable","op":"is","value":false}"""));
+            Assert.Equal((long)sitemap["urls"]!["robotsDisallowed"]!, await OpensAsync("""{"column":"outcome","op":"in","values":["robotsDisallowed"]}"""));
+            Assert.Equal((long)sitemap["urls"]!["redirectingOrBroken"]!,
+                await OpensAsync("""{"column":"outcome","op":"in","values":["redirect","clientError","serverError","timeout","networkError"]}"""));
         }
 
         var urls = await PostOkAsync($"api/crawls/{grid.Id}/sitemaps/urls", JsonNode.Parse(
@@ -158,8 +162,8 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
     [Fact]
     public async Task RobotsTxtIsListedShownAndSaysWhatItBlocked()
     {
-        // The site's small crawl found nothing robots.txt refuses, so a copy is given one such URL.
-        var id = grid.Copy(copy => TestCrawlFiles.AddRefusedByRobots(copy, grid.Url("/private/1")));
+        // The site's sitemap lists one URL robots.txt refuses: the only one this small crawl comes to.
+        var id = grid.Id;
         var site = grid.Url(string.Empty);
 
         var origins = await PostOkAsync($"api/crawls/{id}/robots");
@@ -193,7 +197,7 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
         Assert.Equal(["origin", "total", "matching", "offset", "rows"], blocked.AsObject().Select(property => property.Key));
         var row = Assert.Single(blocked["rows"]!.AsArray())!;
         Assert.Equal(["id", "url", "reason", "line", "rule", "error"], row.AsObject().Select(property => property.Key));
-        Assert.Equal((grid.Url("/private/1"), "rule", 2, "Disallow: /private/"), ((string?)row["url"], (string?)row["reason"], (int)row["line"]!, (string?)row["rule"]));
+        Assert.Equal((grid.Url("/private/listed"), "rule", 2, "Disallow: /private/"), ((string?)row["url"], (string?)row["reason"], (int)row["line"]!, (string?)row["rule"]));
         Assert.Equal((1L, 1L), ((long)blocked["total"]!, (long)blocked["matching"]!));
         Assert.Equal((1L, 0L), await MatchingAsync(new JsonObject { ["origin"] = site, ["line"] = 1 }));
         Assert.Equal((1L, 1L), await MatchingAsync(new JsonObject { ["origin"] = site, ["line"] = 2, ["reason"] = "rule" }));

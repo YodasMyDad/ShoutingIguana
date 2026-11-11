@@ -81,6 +81,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 
         long pages = 0;
         UrlTable urls;
+        ScoreIncompleteReason? incomplete;
         using (var reader = AnalysisReader.Open(databasePath))
         {
             var status = reader.ReadStatus();
@@ -93,7 +94,9 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
 
             // Orphans and sitemap coverage need every page and sitemap; a stopped crawl can't tell missing from not yet seen.
             var crawlComplete = status == CrawlStatus.Completed && (reader.ReadSitemapsDone() || !options.DiscoverSitemaps);
-            var linksComplete = crawlComplete && SeesEveryLinkingPage(reader.ReadLimitSkips(), scope, notes, skipped);
+            var limitSkips = reader.ReadLimitSkips();
+            var linksComplete = crawlComplete && SeesEveryLinkingPage(limitSkips, scope, notes, skipped);
+            incomplete = WhyIncomplete(status, limitSkips);
             if (!options.DiscoverSitemaps)
             {
                 Skip(notes, skipped, "Sitemaps weren't read in this crawl, so orphan pages and the sitemap checks weren't run.",
@@ -191,7 +194,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 new InlinkRules(urls, linksComplete), duplicates, new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks), hreflang,
                 new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls),
                 new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList())),
-                new RobotsTxtRules(urls, reader.ReadRobots(), scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions
+                new RobotsTxtRules(urls, reader.ReadRobots(), scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins()), siteVersions,
+                new SiteVisibilityRules(urls)
             ];
 
             writer.AddIndexability(urls.IndexabilityChanges);
@@ -314,14 +318,31 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
         };
         var checks = IssueCatalog.All.Where(issue => !skipped.ContainsKey(issue)).ToList();
         // The not-in-sitemap check runs only when every sitemap was read: then the summary can say a URL isn't in one.
-        var counts = writer.Commit(checks, info, JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings), notes, skips, urls,
-            sitemapsCovered: !skipped.ContainsKey(IssueCatalog.NOT_IN_SITEMAP), progress);
-        var issues = checks.Select(issue => new IssueCount(issue, counts.GetValueOrDefault(issue.Id))).ToList();
+        var committed = writer.Commit(checks, info, JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings), notes, skips, urls,
+            sitemapsCovered: !skipped.ContainsKey(IssueCatalog.NOT_IN_SITEMAP), incomplete, progress);
+        var issues = checks.Select(issue => new IssueCount(issue, committed.Counts.GetValueOrDefault(issue.Id))).ToList();
 
-        _logger.LogInformation("Analysed {Pages} pages in {Elapsed}: {Flagged} issues across {Types} checks",
-            pages, stopwatch.Elapsed, issues.Sum(issue => issue.Count), issues.Count(issue => issue.Count > 0));
-        return new AnalysisSummary(pages, issues, stopwatch.Elapsed, isPartial) { Notes = notes, Skipped = skips };
+        _logger.LogInformation("Analysed {Pages} pages in {Elapsed}: {Flagged} issues across {Types} checks, score {Score}",
+            pages, stopwatch.Elapsed, issues.Sum(issue => issue.Count), issues.Count(issue => issue.Count > 0), committed.Score?.Value);
+        return new AnalysisSummary(pages, issues, stopwatch.Elapsed, isPartial)
+        {
+            Notes = notes, Skipped = skips, CrawledUrlCount = committed.CrawledUrlCount, Score = committed.Score
+        };
     }
+
+    /// <summary>
+    /// Why the crawl didn't read all of the site, for the score to say it is of what was read so far: it was stopped or
+    /// failed, or it finished with a limit keeping internal URLs out. Null when it read all it set out to. A crawl kept to
+    /// its start folder did: that is its scope, not a part of it.
+    /// </summary>
+    private static ScoreIncompleteReason? WhyIncomplete(CrawlStatus status, Dictionary<SkipReason, long> limitSkips) => status switch
+    {
+        CrawlStatus.Failed => ScoreIncompleteReason.Failed,
+        not CrawlStatus.Completed => ScoreIncompleteReason.Stopped,
+        _ when limitSkips.GetValueOrDefault(SkipReason.UrlLimit) > 0 => ScoreIncompleteReason.UrlLimit,
+        _ when limitSkips.GetValueOrDefault(SkipReason.DepthLimit) > 0 => ScoreIncompleteReason.DepthLimit,
+        _ => null
+    };
 
     /// <summary>
     /// Whether the crawl saw every page that could link to a sitemap page, which the orphan check needs. A depth or

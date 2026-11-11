@@ -167,10 +167,23 @@ public sealed class LiveDataTests : IAsyncLifetime
         var started = await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["maxRequestsPerSecond"] = 20, ["concurrency"] = 2 });
         var id = (string)started["id"]!;
         var path = (string)started["path"]!;
-        await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["fetched"] >= 5);
+        var early = await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["fetched"] >= 5);
+
+        // Live, in its first run: the library item's time spent crawling is the progress's, already past what the file
+        // has of a stretch it stores only every few seconds.
+        var running = await _sidecar.GetJsonAsync($"api/crawls/{id}");
+        Assert.Equal("running", (string?)running["status"]);
+        Assert.True((long)early["crawlingMs"]! > 0, early.ToJsonString());
+        Assert.InRange((long?)running["crawlingMs"] ?? -1, (long)early["crawlingMs"]!, long.MaxValue);
 
         var history = await _sidecar.GetJsonAsync($"api/crawls/{id}/history");
         Assert.Equal((string?)history["startedAt"], (string?)history["liveFrom"]);
+
+        // And its history says when it has been crawling: its one run, going on, in one stretch.
+        var firstRuns = history["runs"]!.AsArray();
+        Assert.Null(Assert.Single(firstRuns)!["endedAt"]);
+        Assert.Single(firstRuns[0]!["crawling"]!.AsArray());
+        Assert.NotNull(history["crawlingMs"]);
         var points = history["points"]!.AsArray();
         Assert.True(points.Count >= 2, history.ToJsonString());
         Assert.All(points, point =>
@@ -186,9 +199,24 @@ public sealed class LiveDataTests : IAsyncLifetime
         await events.CrawlStatusAsync(id, "stopped");
         var firstRun = Count(path, "SELECT COUNT(*) FROM responses");
 
+        // One of its URLs as a host that had stopped answering leaves one: stored, and never asked. The crawl is done with
+        // it, and it wasn't crawled.
+        Execute(path, $"""
+            UPDATE responses SET outcome = {(int)FetchOutcome.NetworkError}, status_code = NULL, error = 'Not checked: http://dead.example stopped answering'
+            WHERE url_id = (SELECT MAX(url_id) FROM responses)
+            """);
+
         var continued = await _sidecar.PostAsync($"api/crawls/{id}/continue", new JsonObject { ["maxRequestsPerSecond"] = 20 });
         Assert.Equal(HttpStatusCode.OK, continued.Status);
-        await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["fetched"] >= firstRun + 3);
+        var resumed = await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["fetched"] >= firstRun + 3);
+
+        // Live again: the item's URLs crawled are the progress's, which leaves the URL that wasn't checked out, where the
+        // URLs it's done with count it.
+        Assert.Equal(1, (long?)resumed["noResponse"]!["notChecked"]);
+        var live = await _sidecar.GetJsonAsync($"api/crawls/{id}");
+        Assert.Equal("running", (string?)live["status"]);
+        Assert.Equal(1, (long)live["fetchedUrlCount"]! - (long)live["crawledUrlCount"]!);
+        Assert.InRange((long)live["crawledUrlCount"]!, (long)resumed["crawled"]!, long.MaxValue);
 
         // Before this run, the file's counts: fetched, but not found or queued, which it doesn't keep the time of.
         history = await _sidecar.GetJsonAsync($"api/crawls/{id}/history");

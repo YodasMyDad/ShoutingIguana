@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -171,9 +172,9 @@ internal static class ReportDocument
 
         Head(html, model, checkedOn);
         Summary(html, model, full);
+        FixFirst(html, model, full);
         if (model.Score is not null)
         {
-            FixFirst(html, model, full);
             HowTheScoreIsWorkedOut(html, model);
         }
 
@@ -186,7 +187,7 @@ internal static class ReportDocument
         }
 
         html.Append("  <footer class=\"foot\"><span>Made with Shouting Iguana ").AppendText(model.EngineVersion).Append(" on ").Append(Date(model.MadeAt, model.TimeZone))
-            .Append("</span><span>Score version ").Append(model.Score?.Version ?? ReportSources.ScoreVersion).Append(" · engine ").AppendText(model.AnalysisEngineVersion)
+            .Append("</span><span>Score version ").Append(model.Score?.Version ?? ScoreCalculator.VERSION).Append(" · engine ").AppendText(model.AnalysisEngineVersion)
             .Append("</span></footer>\n</main>\n</body>\n</html>\n");
         return html.ToString();
     }
@@ -220,7 +221,10 @@ internal static class ReportDocument
         var left = model.Queued > 0 ? $", {Plural(model.Queued, "address", "addresses")} still to check" : string.Empty;
         return model.Status switch
         {
-            CrawlStatus.Completed => $"This check stopped at its limit of {Number(model.Options.MaxUrls)} addresses: {read}, {Plural(model.NotRead.GetValueOrDefault(SkipReason.UrlLimit), "address", "addresses")} past the limit.",
+            CrawlStatus.Completed when model.NotRead.GetValueOrDefault(SkipReason.UrlLimit) > 0 =>
+                $"This check stopped at its limit of {Number(model.Options.MaxUrls)} addresses: {read}, {Plural(model.NotRead.GetValueOrDefault(SkipReason.UrlLimit), "address", "addresses")} past the limit.",
+            CrawlStatus.Completed =>
+                $"This check stopped at its limit of {Plural(model.Options.MaxDepth, "click", "clicks")} from the start: {read}, {Plural(model.NotRead.GetValueOrDefault(SkipReason.DepthLimit), "address", "addresses")} further in than that.",
             CrawlStatus.Failed => $"This check failed before it finished: {read}{left}.",
             CrawlStatus.Stopped => $"This check was stopped early: {read}{left}.",
             _ => $"This check hasn’t finished: {read}{left}."
@@ -239,7 +243,13 @@ internal static class ReportDocument
         {
             html.Append("        <p class=\"summary__word\">").Append(Band(score.Band)).Append(score.Partial ? ", so far" : string.Empty).Append("</p>\n")
                 .Append("        <p class=\"summary__sentence\">").Append(Lead(score.Band)).Append(' ').Append(Found(errors, warnings, notices)).Append("</p>\n")
-                .Append("        <p class=\"summary__covers\">").Append(Covers(model, score, full)).Append("</p>\n");
+                .Append("        <p class=\"summary__covers\">").Append(Covers(score, full)).Append("</p>\n");
+        }
+        else if (model.NoScore == NoScoreReason.NotScored)
+        {
+            html.Append("        <p class=\"summary__word\">No score</p>\n")
+                .Append("        <p class=\"summary__sentence\">These results were worked out before the score was.</p>\n")
+                .Append("        <p class=\"summary__covers\">An earlier version of Shouting Iguana worked out these results, and gave no score. Work out the results again to score the site.</p>\n");
         }
         else
         {
@@ -279,7 +289,7 @@ internal static class ReportDocument
     };
 
     /// <summary>What the score covers: the pages and checks it's built from, and what it isn't.</summary>
-    private static string Covers(ReportModel model, ReportScore score, bool full)
+    private static string Covers(SiteScore score, bool full)
     {
         var covers = score.Covers;
         var all = covers.ChecksRun + covers.ChecksSkipped;
@@ -291,13 +301,15 @@ internal static class ReportDocument
         }
         else
         {
-            var until = model.Status switch
+            var read = covers.Reason switch
             {
-                CrawlStatus.Stopped => "before the check was stopped",
-                CrawlStatus.Failed => "before the check failed",
-                _ => "so far"
+                ScoreIncompleteReason.Stopped => "read before the check was stopped",
+                ScoreIncompleteReason.Failed => "read before the check failed",
+                ScoreIncompleteReason.UrlLimit => "read before the check reached its limit",
+                ScoreIncompleteReason.DepthLimit => "within the check’s limit of clicks from the start",
+                _ => "read so far"
             };
-            text.Append("The score covers the ").Append(Plural(covers.Pages, "page", "pages")).Append(" read ").Append(until).Append(", and ").Append(checks).Append('.');
+            text.Append("The score covers the ").Append(Plural(covers.Pages, "page", "pages")).Append(' ').Append(read).Append(", and ").Append(checks).Append('.');
         }
 
         if (covers.ChecksSkipped > 0)
@@ -318,8 +330,13 @@ internal static class ReportDocument
 
     private static void FixFirst(StringBuilder html, ReportModel model, bool full)
     {
-        var score = model.Score!;
+        var score = model.Score;
         var first = model.Problems.Where(problem => problem.Check.Severity != IssueSeverity.Notice).Take(FIRST).ToList();
+        if (first.Count == 0 && score is null)
+        {
+            return;
+        }
+
         if (first.Count == 0)
         {
             var notices = model.ChecksOf(IssueSeverity.Notice);
@@ -327,7 +344,8 @@ internal static class ReportDocument
             if (notices > 0)
             {
                 html.Append(notices == 1 ? " 1 thing is worth a look: it is" : $" {notices} things are worth a look: they are")
-                    .Append(full ? " explained from page 2." : " explained in the full report.").Append(" Often it’s fine as it is, and it doesn’t change the score.");
+                    .Append(full ? " explained from page 2." : " explained in the full report.")
+                    .Append(notices == 1 ? " Often it’s fine as it is, and it doesn’t change the score." : " Often they’re fine as they are, and they don’t change the score.");
             }
 
             html.Append("</p>\n\n");
@@ -340,16 +358,16 @@ internal static class ReportDocument
             html.Append("    <li><span class=\"first__n\">").Append(problem.Number).Append("</span>");
             Mark(html, MarkOf(problem.Check.Severity), 14);
             html.Append("<span class=\"first__title\">").AppendText(problem.Words.Title).Append("</span><span class=\"first__count\">")
-                .Append(problem.Line is { } line ? CountOf(line) : Number(problem.Count)).Append("</span></li>\n");
+                .Append(problem.Line is { } line ? CountOf(line, problem.Check) : CountOf(problem.Count, problem.Check)).Append("</span></li>\n");
         }
 
         html.Append("  </ol>\n  <p class=\"first__foot\">");
         var these = first.Count == 1 ? "this one" : $"these {COUNT_WORDS[first.Count]}";
-        if (score.FixedValue is { } after && after != score.Value)
+        if (score is { IfFixed.CheckIds.Count: > 0 } && score.IfFixed.Value != score.Value)
         {
-            html.Append("Fixing ").Append(these).Append(" takes the score from ").Append(score.Value).Append(" to ").Append(after).Append(". ");
+            html.Append("Fixing ").Append(these).Append(" takes the score from ").Append(score.Value).Append(" to ").Append(score.IfFixed.Value).Append(". ");
         }
-        else if (score.FixedValue is not null)
+        else if (score is { IfFixed.CheckIds.Count: > 0 })
         {
             html.Append("Fixing ").Append(these).Append(" leaves the score at ").Append(score.Value).Append(" until the others are fixed too. ");
         }
@@ -371,11 +389,14 @@ internal static class ReportDocument
             .Append("  <table class=\"score-table\">\n    <thead><tr><th scope=\"col\">What took points off</th><th scope=\"col\">How much of the site</th><th scope=\"col\" class=\"num\">Points</th></tr></thead>\n    <tbody>\n");
         foreach (var problem in model.Problems.Where(problem => problem.Check.Severity != IssueSeverity.Notice))
         {
-            var line = problem.Line!;
+            if (problem.Line is not { } line)
+            {
+                continue;
+            }
+
             html.Append("      <tr><td>");
             Mark(html, MarkOf(problem.Check.Severity), 12);
-            html.Append(' ').AppendText(problem.Words.Title).Append("</td><td>")
-                .Append(line.Unit == ScoreUnit.Site ? "The whole site" : $"{CountOf(line)}: {Extent(line.Extent)}")
+            html.Append(' ').AppendText(problem.Words.Title).Append("</td><td>").Append(HowMuch(line, problem.Check))
                 .Append("</td><td class=\"num\">−").Append(line.Points).Append("</td></tr>\n");
         }
 
@@ -396,7 +417,7 @@ internal static class ReportDocument
             .Append(score.Value).Append("</td></tr></tfoot>\n  </table>\n  <p class=\"score-note\">");
         if (score.HeldBySerious)
         {
-            html.Append("Held at ").Append(score.Ceiling).Append(" while a serious problem stands (").Append(score.BeforeCeiling).Append(" otherwise). ");
+            html.Append("Held at ").Append(ScoreCalculator.SERIOUS_CEILING).Append(" while a serious problem stands (").Append(score.BeforeCeiling).Append(" otherwise). ");
         }
         else if (score.Lost > 100)
         {
@@ -404,8 +425,17 @@ internal static class ReportDocument
         }
 
         html.Append("A few pages is under 1 in 100; some, under 1 in 10; many, under half; most, half or more. While any serious problem stands, the score can’t be above ")
-            .Append(score.Ceiling).Append(". Score version ").Append(score.Version).Append(".</p>\n\n");
+            .Append(ScoreCalculator.SERIOUS_CEILING).Append(". Score version ").Append(score.Version).Append(".</p>\n\n");
     }
+
+    /// <summary>
+    /// How much of the site a line of the score is, which its points follow: "5 of 265 pages: some", "The whole site". A
+    /// check reported once that isn't a fault of the whole site has no share to show, and says what it counted as.
+    /// </summary>
+    private static string HowMuch(ScoreLine line, IssueDefinition check) =>
+        line.Unit == ScoreUnit.Site ? "The whole site"
+        : check.ReportedOnce ? $"{CHECKED_ONCE} (counts as {Extent(line.Extent)})"
+        : $"{CountOf(line, check)}: {Extent(line.Extent)}";
 
     // ---- 5. What to fix.
 
@@ -452,7 +482,7 @@ internal static class ReportDocument
         Mark(html, MarkOf(problem.Check.Severity), 14);
         html.Append("<span>").Append(problem.Number).Append(". ").AppendText(problem.Words.Title).Append("</span><span class=\"problem__tech\">").AppendText(problem.Check.Title)
             .Append(" · ").Append(Technical(problem.Check.Severity)).Append("</span></h3>\n      <p class=\"problem__meta\"><b>")
-            .Append(line is null ? Plural(problem.Count, "address", "addresses") : CountOf(line)).Append("</b>");
+            .Append(line is null ? CountOf(problem.Count, problem.Check) : CountOf(line, problem.Check)).Append("</b>");
         if (line is not null)
         {
             html.Append(" · ").Append(line.Points == 0 ? "doesn’t change the score" : line.Points == 1 ? "takes 1 point off the score" : $"takes {line.Points} points off the score");
@@ -514,22 +544,24 @@ internal static class ReportDocument
         }
 
         html.Append("<p class=\"onefix\"><b>One fix clears ").Append(Number(fix.Pages)).Append(" of these ").Append(Plural(problem.Count, "page", "pages")).Append(".</b> ");
+        var usually = problem.Words.OneFix;
         if (fix.RelatedUrl is { } shared)
         {
             html.Append("They all name the same address, ");
             Url(html, model, shared);
-            html.Append(", so the fault is most likely in the part of the site every page shares.");
+            html.Append(usually is null ? ", so the fault is most likely in the part of the site every page shares." : ".");
         }
         else if (fix.Detail is { } fault)
         {
-            html.Append("They all have the same fault, “").AppendText(HtmlText.Cut(fault, SHOWN_DETAIL)).Append("”, so it is most likely in the part of the site every page shares.");
+            html.Append("They all have the same fault, “").AppendText(HtmlText.Cut(fault, SHOWN_DETAIL))
+                .Append(usually is null ? "”, so it is most likely in the part of the site every page shares." : "”.");
         }
         else
         {
-            html.Append("They share one cause, most likely in the part of the site every page shares.");
+            html.Append(usually is null ? "They share one cause, most likely in the part of the site every page shares." : "They share one cause.");
         }
 
-        if (problem.Words.OneFix is { } usually)
+        if (usually is not null)
         {
             html.Append(' ').AppendText(usually);
         }
@@ -548,7 +580,7 @@ internal static class ReportDocument
         }
 
         var caption = more > 0 ? $"The first {rows.Count} of {Number(problem.Count)}" : problem.Count == 1 ? "Where it is" : $"All {problem.Count}";
-        var isUrl = problem.Line is { } line ? line.Unit != ScoreUnit.Pages : problem.Check.Subject == IssueSubject.Url;
+        var isUrl = problem.Check.Subject == IssueSubject.Url;
         html.Append(compact ? "<table class=\"examples examples--one\">" : "<table class=\"examples\">").Append("\n          <caption>").Append(caption).Append("</caption>\n");
         if (!compact)
         {
@@ -638,7 +670,7 @@ internal static class ReportDocument
         {
             html.Append("    <li>");
             Mark(html, "skipped", 14);
-            html.Append("<span><b>").AppendText(skipped.Words.Title).Append(".</b> ").AppendText(skipped.Why);
+            html.Append("<span><b>").AppendText(skipped.Words.Named).Append(".</b> ").AppendText(skipped.Why);
             if (skipped.Action is { } action)
             {
                 html.Append(' ').AppendText(action);
@@ -808,7 +840,7 @@ internal static class ReportDocument
     /// The score as a ring: an arc of the accent blue on a neutral track, the number inside. Never a severity's colour. A
     /// crawl that didn't finish has a dashed arc and "so far"; a crawl with no score has the track alone.
     /// </summary>
-    private static void Ring(StringBuilder html, ReportScore? score)
+    private static void Ring(StringBuilder html, SiteScore? score)
     {
         var circumference = 2 * Math.PI * RING_RADIUS;
         static string Fixed(double number) => number.ToString("0.#", CultureInfo.InvariantCulture);

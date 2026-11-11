@@ -34,8 +34,12 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     /// text or on the page it's on, a search, and any filter without the link summary) are over the budget at 100k
     /// already, by what they are: held to 2.5 s there, so they can't get slower.</item>
     /// <item>The crawl's headline numbers (<c>stats</c>) pass over the URLs once and the responses once: inside the 300 ms
-    /// budget at 100k on the desktop (174 ms at worst), and held to twice that for the runner. Without the link summary
-    /// (<c>stats-pass</c>) the links are counted and the pages a sitemap led to looked up among them (322 ms at worst).</item>
+    /// budget at 100k on the desktop (174 ms at worst), and held to twice that for the runner. Read again, they're kept
+    /// (<c>stats-kept</c>, under a millisecond): held to 10 ms, so a cache that stopped keeping them fails here.</item>
+    /// <item>Without the link summary (<c>stats-pass</c>: a crawl running, never analysed or continued since) the links are
+    /// counted and the pages a sitemap led to looked up among them, and that <b>misses the 300 ms budget</b> at 100k on
+    /// the desktop: 209 to 366 ms at p95 over nine runs of 20, 188 to 320 ms at p50. It's held to 450 ms, the worst
+    /// measured and a quarter, so it can't get slower unseen; a runner slower than the desktop needs its own figure.</item>
     /// <item>The links grid's reads deep among the links of more targets than are listed for their index
     /// (<c>link-targets</c>) read an index entry for every matching link, once per filter set: inside the 300 ms budget
     /// at 100k on the desktop (265 ms at worst), which the runner's 550 ms is, and held to it so they can't get slower.
@@ -63,7 +67,8 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
         ["sitemaps"] = 200,
         ["robots"] = 200,
         ["stats"] = 350,
-        ["stats-pass"] = 600
+        ["stats-kept"] = 10,
+        ["stats-pass"] = 450
     };
 
     /// <summary>The Overview columns, which every grid read fetches.</summary>
@@ -278,7 +283,7 @@ internal sealed class ReaderBenchmark(string path, int runs, Action<string> prog
     {
         Timed("Stats: the crawl's headline numbers", "stats", "stats", null, () => CrawlStatsReader.Read(path));
         ReadCache kept = new();
-        Timed("Stats: again, kept", "stats", "stats", null, () => CrawlStatsReader.Read(path, kept));
+        Timed("Stats: again, kept", "stats", "stats-kept", null, () => CrawlStatsReader.Read(path, kept));
         GridReadContext.ReadWithoutLinkSummary = true;
         try
         {

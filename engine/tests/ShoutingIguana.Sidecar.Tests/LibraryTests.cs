@@ -273,19 +273,56 @@ public sealed class LibraryTests : IAsyncLifetime
     {
         var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "kept.sicrawl"), analyse: true);
         var id = CrawlIds.For(path);
-        Assert.Equal("completed", (string?)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["status"]);
+        var listed = await _sidecar.GetJsonAsync($"api/crawls/{id}");
+        Assert.Equal("completed", (string?)listed["status"]);
+        Assert.NotNull(listed["score"]);
         await _sidecar.DisposeAsync();
 
-        // Kept on disk, under this engine's version and this crawl's id.
+        // Kept on disk, under this engine's version and this crawl's id, the analysis's score with it.
         var cache = await File.ReadAllTextAsync(Path.Combine(_root, "state", "summaries.json"));
         Assert.Contains(id, cache);
         Assert.Contains(Engine.EngineInfo.Version, cache);
+        var kept = JsonNode.Parse(cache)!["summaries"]!.AsArray().Single()!["summary"]!["analysis"]!;
+        Assert.Equal(listed["score"]!.ToJsonString(), kept["score"]!.ToJsonString());
+        Assert.Equal((Engine.Analysis.ScoreCalculator.VERSION, (long)listed["crawledUrlCount"]!), ((int)kept["scoreVersion"]!, (long)kept["crawledUrlCount"]!));
 
         // A fresh sidecar on the same folder shows the crawl at once; the stamp is unchanged, so the summary is reused.
         _sidecar = await TestSidecar.StartAsync(_root);
         var item = await _sidecar.GetJsonAsync($"api/crawls/{id}");
         Assert.Equal("completed", (string?)item["status"]);
         Assert.NotNull(item["analyzedAt"]);
+        Assert.Equal(listed["score"]!.ToJsonString(), item["score"]!.ToJsonString());
+        Assert.False((bool?)item["outOfDate"]);
+    }
+
+    /// <summary>
+    /// Summaries kept by a build from before the score (the format before this one) aren't used: one would say a scored
+    /// crawl has no score, and that its analysis is out of date. The crawl is read again.
+    /// </summary>
+    [Fact]
+    public async Task SummariesKeptBeforeTheScoreAreReadAgain()
+    {
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "before-the-score.sicrawl"), analyse: true);
+        var id = CrawlIds.For(path);
+        var score = (await _sidecar.GetJsonAsync($"api/crawls/{id}"))["score"]!.ToJsonString();
+        await _sidecar.DisposeAsync();
+
+        // As the build before it left the file: the format before, and no score with the analysis.
+        var file = Path.Combine(_root, "state", "summaries.json");
+        var cache = JsonNode.Parse(await File.ReadAllTextAsync(file))!.AsObject();
+        Assert.Equal(4, (int)cache["format"]!);
+        cache["format"] = 3;
+        foreach (var summary in cache["summaries"]!.AsArray())
+        {
+            var analysis = summary!["summary"]!["analysis"]!.AsObject();
+            Assert.True(analysis.Remove("score") && analysis.Remove("scoreVersion") && analysis.Remove("crawledUrlCount"));
+        }
+
+        await File.WriteAllTextAsync(file, cache.ToJsonString());
+
+        _sidecar = await TestSidecar.StartAsync(_root);
+        var item = await _sidecar.GetJsonAsync($"api/crawls/{id}");
+        Assert.Equal((score, false), (item["score"]!.ToJsonString(), (bool)item["outOfDate"]!));
     }
 
     /// <summary>

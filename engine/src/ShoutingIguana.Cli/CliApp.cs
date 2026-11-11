@@ -13,6 +13,7 @@ internal static class CliApp
         IssuesCommand.Create(),
         ExportCommand.Create(),
         ExportCommand.CreateReport(),
+        ScoreCommand.Create(),
         StatsCommand.Create(),
         TestSiteCommand.Create(),
         BenchCommand.Create(),

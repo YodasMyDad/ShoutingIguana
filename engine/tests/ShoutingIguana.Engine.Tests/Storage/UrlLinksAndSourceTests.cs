@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
@@ -157,6 +158,23 @@ public sealed class UrlLinksAndSourceTests(GridCrawl crawl)
 
         var neverFetched = To("LEFT JOIN responses r ON r.url_id = l.to_id WHERE r.url_id IS NULL AND l.from_id <> l.to_id");
         Assert.Equal(((int?)null, (UrlOutcome?)null, false), (neverFetched.StatusCode, neverFetched.Outcome, neverFetched.Fetched));
+
+        // A URL never asked, its host having stopped answering, is stored as a network error that says so: not checked,
+        // as the URL grid's outcome has it, and not fetched where the crawl's own tables say.
+        var planted = crawl.Copy();
+        if (continuedSinceItsAnalysis)
+        {
+            Stamp(planted);
+        }
+
+        Change(planted, $"UPDATE responses SET outcome = {(int)FetchOutcome.NetworkError}, status_code = NULL, error = 'Not checked: https://dead.example stopped answering' WHERE url_id = {missing.Id}");
+        var from = (int)TestCrawls.Count(crawl.Path, $"SELECT from_id FROM links WHERE to_id = {missing.Id} AND from_id <> to_id ORDER BY rowid LIMIT 1");
+        var notChecked = UrlInspectorReader.ReadLinks(planted, from, LinkDirection.Outlinks, new LinkQuery { Limit = 1_000 })!.Rows.First(link => link.Id == missing.Id);
+        Assert.Equal(UrlOutcome.NotChecked, notChecked.Outcome);
+        if (continuedSinceItsAnalysis)
+        {
+            Assert.Equal(((int?)null, false), (notChecked.StatusCode, notChecked.Fetched));
+        }
 
         // A value no engine writes reads as unknown, as everywhere.
         var odd = crawl.Copy();

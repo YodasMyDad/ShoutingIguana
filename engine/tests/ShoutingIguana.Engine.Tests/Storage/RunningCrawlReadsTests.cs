@@ -4,6 +4,7 @@ using System.Globalization;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Support;
@@ -30,6 +31,24 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
     private const int READERS = 4;
     private const int LIMIT = 50;
 
+    /// <summary>A limit on the write-ahead log that a crawl of a few hundred pages passes after every few it stores.</summary>
+    private const long FOLDED_OFTEN_BYTES = 64 * 1024;
+
+    /// <summary>
+    /// A limit a crawl of a few thousand pages passes many times over, and the most its log may reach with it: the limit
+    /// and the batch that takes it past (a batch of 2,000 commands of a crawl this fast writes up to 7 MB of log), doubled.
+    /// </summary>
+    private const long SMALL_LOG_BYTES = 2 * 1024 * 1024;
+    private const long LARGEST_SMALL_LOG_BYTES = 16 * 1024 * 1024;
+
+    /// <summary>
+    /// How long a reader in relay holds its read at least, and at most: for longer than a fold waits by itself for a
+    /// reader it can't see (a quarter of a second), so that the log is only ever folded because new reads are held while
+    /// these end; and, waiting for the other to begin a read, for far longer than that takes unless new reads are held.
+    /// </summary>
+    private static readonly TimeSpan RELAY_LEAST = TimeSpan.FromMilliseconds(350);
+    private static readonly TimeSpan RELAY_HOLD = TimeSpan.FromMilliseconds(700);
+
     private static readonly string[] SHOWN = ["kind", "to.id"];
 
     /// <summary>Filter sets of every kind the grid reads its own way: on the link, on either end, on text, and a search.</summary>
@@ -49,6 +68,18 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
     ];
 
     private static readonly UrlSort[] TARGET_SORTS = [new("to.url"), new("to.statusCode", true), new("to.depth")];
+
+    /// <summary>
+    /// The filter sets that go by a link alone, each as SQL over the links: what a link is never changes once it's
+    /// stored, so an answer given while the crawl ran can be held to the finished file afterwards.
+    /// </summary>
+    private static readonly Dictionary<string, string> TRUTHS = new(StringComparer.Ordinal)
+    {
+        ["every link"] = "1",
+        ["hyperlinks"] = $"kind = {(int)LinkKind.Hyperlink}",
+        ["in the navigation"] = $"position = {(int)LinkPosition.Navigation}",
+        ["text contains"] = "instr(lower(COALESCE(text, '')), 'product') > 0"
+    };
 
     private readonly CrawlFiles _files = new();
 
@@ -197,6 +228,33 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
                 Assert.Equal(2 * links + 1, LinkGridReader.Facets(running, new UrlFacetQuery(), cache).Facets["kind"].Sum(bucket => bucket.Count));
                 return;
             }
+        }
+    }
+
+    /// <summary>
+    /// The read that takes a moment may not get as far as counting anything (here its filter needs the analysis, and is
+    /// refused): the moment is kept all the same, with the links it had. The total the next read gives is the moment's,
+    /// not the links of its own later snapshot counted because nobody had yet: every link still matches no filter.
+    /// </summary>
+    [Fact]
+    public void TheTotalIsTheMomentsWhenTheReadThatTookItNeverAnswered()
+    {
+        var (running, held) = Running();
+        using (held)
+        {
+            var cache = new ReadCache();
+            var links = TestCrawls.Count(running, "SELECT COUNT(*) FROM links");
+
+            // A read that takes the moment and is then refused: a running crawl has no URL summary to filter on.
+            Assert.Throws<NeedsAnalysisException>(() => LinkGridReader.Query(running, new UrlQuery { Filters = [Number("to.inlinks", FilterOperator.Gt, 5)], Limit = LIMIT }, cache));
+
+            // The crawl goes on: 500 more links.
+            Change(running, "INSERT INTO links (from_id, to_id, kind, flags, position, text, fragment) SELECT from_id, to_id, kind, flags, position, text, fragment FROM links ORDER BY rowid LIMIT 500");
+            var page = LinkGridReader.Query(running, new UrlQuery { Limit = LIMIT }, cache);
+            Assert.Equal((links, links, LIMIT), (page.Matching, page.Total, page.Rows.Count));
+            var filtered = LinkGridReader.Query(running, new UrlQuery { Filters = [Names("kind", FilterOperator.In, "hyperlink")], Limit = LIMIT }, cache);
+            Assert.Equal(links, filtered.Total);
+            Assert.Equal(links, LinkGridReader.Facets(running, new UrlFacetQuery(), cache).Total);
         }
     }
 
@@ -367,7 +425,90 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
     /// is there when more follow, its count is within the total, and each facet's counts add up to the count.
     /// </summary>
     [Fact]
-    public async Task EveryReadOfACrawlAsItGrowsAgreesWithItself()
+    public async Task EveryReadOfACrawlAsItGrowsAgreesWithItself() => await ReadACrawlAsItGrowsAsync();
+
+    /// <summary>
+    /// The same, with the crawl's writer folding its write-ahead log into the file after every few pages it stores
+    /// (it does once the log passes a size, which a crawl this small never reaches): for each fold the new reads wait
+    /// while those part-way through the file end. Still no read fails and each answer agrees with itself, the reads
+    /// still get through many of the crawl's moments, and the log was folded over and over, which only the writer does
+    /// while the crawl runs: nothing else makes the log's file smaller.
+    /// </summary>
+    [Fact]
+    public async Task EveryReadOfACrawlWhoseLogIsFoldedOverAndOverAgreesWithItself()
+    {
+        CrawlDatabase.LogLimitBytes = FOLDED_OFTEN_BYTES;
+        var folds = await ReadACrawlAsItGrowsAsync();
+        Assert.True(folds >= 50, $"The log was seen folded only {folds} times.");
+    }
+
+    /// <summary>
+    /// The crawl's write-ahead log while the links grid is read all through the crawl, a read always part-way through
+    /// the file, as the Links screen's are on a crawl of any size (each a pass over the links, one after another). SQLite
+    /// starts a log again only when no read is part-way through it, so the log grew by everything the crawl wrote, to more
+    /// than the file itself. The writer folds it in once it passes its limit: it stays within a few batches of that, the
+    /// crawl stores what it would have, and the reads, which wait out each fold, all answer.
+    /// </summary>
+    [Fact]
+    public async Task TheLogOfACrawlWhoseLinksAreReadAllTheWhileStaysSmall()
+    {
+        CrawlDatabase.LogLimitBytes = SMALL_LOG_BYTES;
+        await using var site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 4_000 });
+        var path = _files.NewPath();
+        await using var job = TestCrawls.Start(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 8 }, path);
+        await TestCrawls.WaitUntilAsync(path, "SELECT COUNT(*) FROM links");
+
+        // Two readers in relay: each holds its read until the other has begun one, so there's never a moment without one
+        // unless something keeps new reads from beginning, as a fold does: then the read in flight ends by itself.
+        var cache = new ReadCache();
+        var began = 0;
+        long peak = 0;
+        UrlQuery newest = new() { Search = "product", Sort = [new UrlSort("id", true)], Limit = LIMIT };
+        var readers = Enumerable.Range(0, 2).Select(_ => Task.Run(() =>
+        {
+            var reads = 0;
+            while (!job.Completion.IsCompleted)
+            {
+                var page = GridReadContext.Read(path, cache, CancellationToken.None, context =>
+                {
+                    var mine = Interlocked.Increment(ref began);
+                    var read = LinkGridReader.Query(context, newest);
+                    for (var held = Stopwatch.StartNew(); (Volatile.Read(ref began) == mine || held.Elapsed < RELAY_LEAST) && held.Elapsed < RELAY_HOLD && !job.Completion.IsCompleted;)
+                    {
+                        context.Token.ThrowIfCancellationRequested();
+                        InterlockedMax(ref peak, CrawlDatabase.LogBytes(path));
+                        Thread.Sleep(1);
+                    }
+
+                    return read;
+                });
+                Assert.Equal(Math.Min(LIMIT, page.Matching), page.Rows.Count);
+                reads++;
+            }
+
+            return reads;
+        })).ToArray();
+
+        Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
+        var reads = (await Task.WhenAll(readers)).Sum();
+        Assert.True(reads > 8, $"Only {reads} reads were made while the crawl ran.");
+
+        // Left to grow, the log of this crawl reaches about three times the file's size.
+        Assert.True(peak >= SMALL_LOG_BYTES, $"The log only reached {peak:N0} bytes, so it was never due to be folded.");
+        Assert.True(peak <= LARGEST_SMALL_LOG_BYTES, $"The log reached {peak:N0} bytes, with a limit of {SMALL_LOG_BYTES:N0} (the file is {new FileInfo(path).Length:N0} bytes).");
+        Assert.Equal(site.Site.GetExpectations().HtmlPages, CrawlStatsReader.Read(path).HtmlPageCount);
+    }
+
+    private static void InterlockedMax(ref long target, long value)
+    {
+        for (var seen = Volatile.Read(ref target); value > seen; seen = Volatile.Read(ref target))
+        {
+            Interlocked.CompareExchange(ref target, value, seen);
+        }
+    }
+
+    /// <summary>The hammer: every read, over and over, of a crawl of the synthetic site as it grows. How often the log was seen folded.</summary>
+    private async Task<int> ReadACrawlAsItGrowsAsync()
     {
         await using var site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 400 });
         var path = _files.NewPath();
@@ -377,16 +518,26 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
         var cache = new ReadCache();
         ConcurrentQueue<string> wrong = new();
         ConcurrentDictionary<long, int> totals = new();
+        ConcurrentDictionary<(string Set, long Total), (long Matching, long[] Newest)> answers = new();
         var readers = Enumerable.Range(0, READERS).Select(reader => Task.Run(() =>
         {
             var reads = 0;
             for (var round = reader; !job.Completion.IsCompleted && wrong.Count < 20; round++)
             {
-                reads += ReadEverything(path, cache, round, wrong, totals);
+                reads += ReadEverything(path, cache, round, wrong, totals, answers);
             }
 
             return reads;
         })).ToArray();
+
+        // The log's file gets smaller only when the writer folds it in and empties it.
+        var folds = 0;
+        for (long last = 0, now; !job.Completion.IsCompleted; last = now)
+        {
+            now = CrawlDatabase.LogBytes(path);
+            folds += now < last ? 1 : 0;
+            await Task.Delay(2);
+        }
 
         Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
         var reads = (await Task.WhenAll(readers)).Sum();
@@ -396,10 +547,25 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
         Assert.True(reads > 500, $"Only {reads} reads were made while the crawl ran.");
         Assert.True(totals.Count >= 3, $"The reads saw the crawl at only {totals.Count} sizes.");
         Assert.InRange(totals.Keys.Max(), 5_000, TestCrawls.Count(path, "SELECT COUNT(*) FROM links"));
+
+        // And each answer was right, not only at one with itself: this crawl stored every link once and none again (its
+        // links' ids have no gaps), so a moment with so many links had the first so many, and what matched a filter on
+        // the link alone then, and which were the newest of them, the finished file still says.
+        Assert.Equal(TestCrawls.Count(path, "SELECT COUNT(*) FROM links"), TestCrawls.Count(path, "SELECT MAX(rowid) FROM links"));
+        Assert.True(answers.Count >= 2 * TRUTHS.Count, $"Only {answers.Count} answers to hold to the file.");
+        foreach (var ((set, total), (matching, newest)) in answers)
+        {
+            var truth = TestCrawls.Rows(path, $"SELECT printf('%012d', rowid) FROM links WHERE rowid <= {total} AND {TRUTHS[set]} ORDER BY rowid DESC LIMIT {LIMIT}").Select(long.Parse).OrderDescending();
+            Assert.True(matching == TestCrawls.Count(path, $"SELECT COUNT(*) FROM links WHERE rowid <= {total} AND {TRUTHS[set]}") && newest.SequenceEqual(truth),
+                $"{set}, of {total} links: {matching} matched, the newest {string.Join(",", newest.Take(3))}; the file says {string.Join(",", truth.Take(3))}");
+        }
+
+        return folds;
     }
 
     /// <summary>One round of every read, each answer checked against itself; what's wrong is noted, and the reads counted.</summary>
-    private static int ReadEverything(string path, ReadCache cache, int round, ConcurrentQueue<string> wrong, ConcurrentDictionary<long, int> totals)
+    private static int ReadEverything(string path, ReadCache cache, int round, ConcurrentQueue<string> wrong, ConcurrentDictionary<long, int> totals,
+        ConcurrentDictionary<(string Set, long Total), (long Matching, long[] Newest)> answers)
     {
         var reads = 0;
         void Read(string what, Func<string?> read)
@@ -441,7 +607,22 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
                 matching = page.Matching;
                 return Wrong(page, query);
             });
-            Read($"{name}, newest first", () => Wrong(Page(newest), newest));
+            Read($"{name}, newest first", () =>
+            {
+                var page = Page(newest);
+                if (TRUTHS.ContainsKey(name) && page.Summary.Reason == SummaryUnavailableReason.Crawling)
+                {
+                    // Two answers for one moment must be one answer.
+                    var answer = (page.Matching, Newest: page.Rows.Select(row => row.Id).ToArray());
+                    var first = answers.GetOrAdd((name, page.Total), answer);
+                    if (first.Matching != answer.Matching || !first.Newest.SequenceEqual(answer.Newest))
+                    {
+                        return $"of {page.Total} links, {answer.Matching} match where {first.Matching} did";
+                    }
+                }
+
+                return Wrong(page, newest);
+            });
             foreach (var offset in new[] { matching / 2, Math.Max(0, matching - 20), matching + 10 })
             {
                 var at = query with { Offset = (int)offset };

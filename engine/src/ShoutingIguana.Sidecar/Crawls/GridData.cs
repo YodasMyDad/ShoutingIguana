@@ -115,11 +115,15 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
     /// <summary>
     /// The crawl's headline numbers, read as a grid is: in one of the read slots, stopped when its request is given up, and
     /// kept with the grids' counts, so they're read once while the crawl stands still (a running crawl's, every 2 s).
+    /// Kept, they cost a look at the file's stamp, and that takes no slot: Overview's numbers of one crawl don't queue
+    /// behind the link passes of another, on a machine with as few slots as two.
     /// </summary>
     public async Task<CrawlStatsDto> StatsAsync(string id, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);
-        return CrawlStatsDto.From(await ReadAsync(token => CrawlStatsReader.Read(path, cache, token), cancellationToken).ConfigureAwait(false));
+        var stats = await RunAsync(token => CrawlStatsReader.ReadKept(path, cache, token), cancellationToken).ConfigureAwait(false)
+                    ?? await ReadAsync(token => CrawlStatsReader.Read(path, cache, token), cancellationToken).ConfigureAwait(false);
+        return CrawlStatsDto.From(stats);
     }
 
     public async Task<UrlLookup> LookupAsync(string id, UrlLookupRequest request, CancellationToken cancellationToken)
@@ -332,17 +336,21 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOpti
         await _reads.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await Task.Factory.StartNew(() =>
+            return await RunAsync(token =>
             {
-                ReadStarting?.Invoke(cancellationToken);
-                return Read(() => read(cancellationToken));
-            }, cancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default).ConfigureAwait(false);
+                ReadStarting?.Invoke(token);
+                return read(token);
+            }, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             _reads.Release();
         }
     }
+
+    /// <summary>A read on a thread of its own, holding no slot: for one that passes over nothing. Its refusals as <see cref="ReadAsync"/>'s.</summary>
+    private static Task<T> RunAsync<T>(Func<CancellationToken, T> read, CancellationToken cancellationToken) =>
+        Task.Factory.StartNew(() => Read(() => read(cancellationToken)), cancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
     /// <summary>A read, its refusals as the problems the UI keys on.</summary>
     private static T Read<T>(Func<T> read)

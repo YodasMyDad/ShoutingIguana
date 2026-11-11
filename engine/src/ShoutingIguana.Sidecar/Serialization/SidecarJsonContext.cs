@@ -63,7 +63,15 @@ namespace ShoutingIguana.Sidecar.Serialization;
         // Export (E5).
         typeof(CamelCaseEnumConverter<ExportKind>),
         typeof(CamelCaseEnumConverter<ExportFormat>),
-        typeof(CamelCaseEnumConverter<ExportStatus>)
+        typeof(CamelCaseEnumConverter<ExportStatus>),
+
+        // The score and plain words (round 3).
+        typeof(CamelCaseEnumConverter<ScoreBand>),
+        typeof(CamelCaseEnumConverter<ScoreExtent>),
+        typeof(CamelCaseEnumConverter<ScoreUnit>),
+        typeof(CamelCaseEnumConverter<ScoreIncompleteReason>),
+        typeof(CamelCaseEnumConverter<NoScoreReason>),
+        typeof(CamelCaseEnumConverter<IssueFixer>)
     ])]
 [JsonSerializable(typeof(ReadyEvent))]
 [JsonSerializable(typeof(ProblemDto))]

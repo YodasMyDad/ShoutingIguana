@@ -61,7 +61,7 @@ internal static class WorkbookExport
         var results = IssueReader.ReadResults(run.CrawlPath) ?? throw new ExportException(ExportFailure.NotAnalyzed, GridExport.NOT_ANALYZED);
         var check = IssueCatalog.Find(run.Request.CheckId!)!;
         var number = ReportSources.FixFirst(results).ToList().IndexOf(check.Id) + 1;
-        var title = ReportSources.Words(check).Title;
+        var title = ReportSources.Words(check, ReportSources.Settings(results)).Title;
         WriteSheet(run, table, number > 0 ? SheetTitle(number, title) : title, check.Id);
     }
 
@@ -95,7 +95,9 @@ internal static class WorkbookExport
         }
         else
         {
-            Row(Label("Score"), XlsxCell.Text("No score: no page could be read"));
+            Row(Label("Score"), XlsxCell.Text(model.NoScore == NoScoreReason.NotScored
+                ? "No score: these results were worked out before the score was. Work them out again to score the site"
+                : "No score: no page could be read"));
         }
 
         Row();
@@ -117,6 +119,7 @@ internal static class WorkbookExport
         foreach (var problem in model.Problems)
         {
             var line = problem.Line;
+            var once = problem.Check.ReportedOnce || line is { Unit: ScoreUnit.Site };
             Row(
                 XlsxCell.Number(problem.Number),
                 XlsxCell.Text(sheets[problem.Number]),
@@ -128,9 +131,10 @@ internal static class WorkbookExport
                 XlsxCell.Text(problem.Check.Id),
                 XlsxCell.Text(ReportSources.Category(problem.Check.Category)),
                 Count(problem.Count),
-                line is null or { Unit: ScoreUnit.Site } ? XlsxCell.Empty : Count(line.Of),
-                XlsxCell.Text(line?.Unit switch { ScoreUnit.Pages => "pages", ScoreUnit.Urls => "addresses", ScoreUnit.Site => "the whole site", _ => null }),
-                line is null or { Unit: ScoreUnit.Site } ? XlsxCell.Empty : XlsxCell.Number(Math.Min(1d, (double)problem.Count / line.Of), XlsxStyle.Percent),
+                // A check reported once has no share: one issue stands for the whole site, whatever the site's size.
+                line is null || once ? XlsxCell.Empty : Count(line.Of),
+                XlsxCell.Text(once ? ReportWords.CHECKED_ONCE : line?.Unit switch { ScoreUnit.Pages => "pages", ScoreUnit.Urls => "addresses", _ => null }),
+                line is null || once || line.Of <= 0 ? XlsxCell.Empty : XlsxCell.Number(Math.Min(1d, (double)problem.Count / line.Of), XlsxStyle.Percent),
                 line is null ? XlsxCell.Empty : XlsxCell.Number(line.Points));
         }
 
@@ -147,7 +151,10 @@ internal static class WorkbookExport
         workbook.EndSheet();
     }
 
-    /// <summary>The row of a check that found nothing, or couldn't run: no number, no sheet, no share.</summary>
+    /// <summary>
+    /// The row of a check that found nothing, or couldn't run: no number, no sheet, no share. It is named by what it looks
+    /// for where it says (<see cref="CheckWords.Named"/>): a title that is a sentence about the site would read as a finding.
+    /// </summary>
     private static XlsxCell[] Rest(IssueDefinition check, CheckWords words, string result, XlsxCell count, XlsxCell why) =>
     [
         XlsxCell.Empty,
@@ -155,7 +162,7 @@ internal static class WorkbookExport
         XlsxCell.Text(result),
         XlsxCell.Text(ReportWords.Severity(check.Severity)),
         XlsxCell.Text(ReportWords.Technical(check.Severity)),
-        XlsxCell.Text(words.Title),
+        XlsxCell.Text(words.Named),
         XlsxCell.Text(check.Title),
         XlsxCell.Text(check.Id),
         XlsxCell.Text(ReportSources.Category(check.Category)),

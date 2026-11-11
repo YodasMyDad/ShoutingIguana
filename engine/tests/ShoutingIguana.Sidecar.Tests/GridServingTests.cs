@@ -89,6 +89,57 @@ public sealed class GridServingTests(GridSidecar grid) : IClassFixture<GridSidec
         Assert.Equal(2, Volatile.Read(ref started));
     }
 
+    /// <summary>
+    /// The crawl's headline numbers, once kept, take no read slot: with every slot held by another crawl's read (a pass
+    /// over its links, on a machine with few cores), Overview's numbers still answer at once. Numbers not yet read are
+    /// a pass of their own, and queue as any read does.
+    /// </summary>
+    [Fact]
+    public async Task KeptStatsTakeNoReadSlot()
+    {
+        await using var sidecar = await TestSidecar.StartAsync(configure: options => options with { GridReads = 1 });
+        Directory.CreateDirectory(sidecar.DataDirectory);
+        var (kept, unread) = (Path.Combine(sidecar.DataDirectory, "kept.sicrawl"), Path.Combine(sidecar.DataDirectory, "unread.sicrawl"));
+        File.Copy(grid.Path, kept);
+        File.Copy(grid.Path, unread);
+        var first = await sidecar.GetJsonAsync($"api/crawls/{CrawlIds.For(kept)}/stats");
+
+        var data = sidecar.Host.Services.GetRequiredService<GridData>();
+        using var holding = new ManualResetEventSlim();
+        using var held = new SemaphoreSlim(0);
+        var started = 0;
+        data.ReadStarting = _ =>
+        {
+            if (Interlocked.Increment(ref started) == 1)
+            {
+                held.Release();
+                holding.Wait(TimeSpan.FromSeconds(30));
+            }
+        };
+
+        // The one slot is held by a read of the other crawl.
+        var holder = sidecar.PostAsync($"api/crawls/{CrawlIds.For(unread)}/urls");
+        Assert.True(await held.WaitAsync(TimeSpan.FromSeconds(10)));
+        try
+        {
+            var again = await sidecar.GetJsonAsync($"api/crawls/{CrawlIds.For(kept)}/stats").WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(first.ToJsonString(), again.ToJsonString());
+            Assert.Equal(1, Volatile.Read(ref started));
+
+            // The other crawl's numbers were never read: they wait for the slot.
+            var queued = sidecar.GetJsonAsync($"api/crawls/{CrawlIds.For(unread)}/stats");
+            await Task.Delay(300);
+            Assert.False(queued.IsCompleted);
+            holding.Set();
+            Assert.Equal((long?)first["urlCount"], (long?)(await queued.WaitAsync(TimeSpan.FromSeconds(10)))["urlCount"]);
+        }
+        finally
+        {
+            holding.Set();
+            await holder;
+        }
+    }
+
     [Theory]
     [InlineData("urls", """{"columns":[null]}""", "columns[0]")]
     [InlineData("urls", """{"filters":[null]}""", "filters[0]")]

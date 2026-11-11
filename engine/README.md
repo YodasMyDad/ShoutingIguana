@@ -9,7 +9,7 @@ Analytics / Ads integrations later.
 | Project | What it is |
 | --- | --- |
 | `src/ShoutingIguana.Engine` | Crawler library: fetching, robots.txt, sitemaps, parsing, storage, SEO analysis |
-| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `export`, `report`, `stats`, `testsite`, `bench`, `readbench` |
+| `src/ShoutingIguana.Cli` | `si` command-line tool: `crawl`, `analyze`, `issues`, `score`, `export`, `report`, `stats`, `testsite`, `bench`, `readbench` |
 | `src/ShoutingIguana.Sidecar` | `si-sidecar`: the engine as a localhost HTTP API for the desktop app (see [Sidecar](#sidecar)) |
 | `src/ShoutingIguana.TestSite` | Deterministic synthetic shop with planted SEO issues, for tests and benchmarks |
 | `tests/ShoutingIguana.Engine.Tests` | xUnit: unit tests plus end-to-end crawls and analyses of the synthetic site |
@@ -26,6 +26,7 @@ dotnet run --project src/ShoutingIguana.Cli -- crawl https://example.com --db ex
 dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl                           # what was found
 dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl title-too-long            # the URLs for one issue
 dotnet run --project src/ShoutingIguana.Cli -- issues example.sicrawl --csv issues.csv          # everything, for Excel
+dotnet run --project src/ShoutingIguana.Cli -- score example.sicrawl                            # the site's score, and how it was worked out
 dotnet run --project src/ShoutingIguana.Cli -- export example.sicrawl --kind urls --out urls.xlsx   # any grid, as CSV or Excel
 dotnet run --project src/ShoutingIguana.Cli -- export example.sicrawl --kind workbook --out all.xlsx # a sheet for each check
 dotnet run --project src/ShoutingIguana.Cli -- report example.sicrawl --out report.html           # the report
@@ -179,7 +180,7 @@ pages count: a genuine 403 from a site behind one of those firewalls stays a 403
 
 ## SEO analysis
 
-When a crawl completes, `CrawlAnalyzer` runs 86 checks over what was stored and writes the issues into the same
+When a crawl completes, `CrawlAnalyzer` runs 87 checks over what was stored and writes the issues into the same
 file. It never refetches or reparses anything, so any crawl can be analysed again with new rules or thresholds
 (`si analyze`). It refuses a crawl that is still running. A rule that fails on one page (page content is untrusted)
 is logged with the URL and skipped for that page, and the analysis notes say which rule failed on how many pages.
@@ -195,6 +196,34 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   (`IssueDefinition.Grouping`) and what the URLs it flags are (`Subject`): always pages, so its count is a part of the
   pages crawled, or any URL, as a missing image is flagged for answering 404. Every end-to-end analysis holds the page
   checks to it, and each any-URL check is shown flagging something that isn't a page by its own rule.
+  - Two more things a check says of itself, neither stored nor part of the fingerprint. `SiteWide`: it finds one fault
+    of the whole site (robots.txt search engines can't read, no HTTPS, a site hidden from search, a duplicate version
+    of the site), which [the score](#the-score) counts as the whole site. `ReportedOnce`: its rule reports one issue
+    for the whole site, on the home page, or one for each other version of the site, so a host says "checked once"
+    and not "1 of 265 pages": the site-wide checks, and `robots-txt-missing`, `sitemap-error`, `sitemap-missing` and
+    `security-headers-missing`. A test puts each through its rule with the fault several times over.
+- **Plain words.** Beside the catalog's texts, for readers who aren't SEOs (the app's Simple mode, the report):
+  `Analysis/IssuePlainTexts.cs`, by check id (a title, what's wrong as sentences, how to fix it as steps, who fixes
+  it, the good news when nothing is found, and optionally what a template fault usually is and what the check looks
+  for), and `Analysis/PlainWords.cs` (a plain title for each category; a sentence and what would let the check run for
+  a skip reason, by its code). `IssueDefinition.Plain` reads a check's. All 87 checks, the 17 categories and the 15
+  skip reasons have theirs. No analysis goes out of date when one changes, as the words are no part of the
+  fingerprint.
+  - **Both files are generated: don't edit them.** The words are written in
+    `tests/ShoutingIguana.Engine.Tests/Analysis/PlainWords/plain-words.json`, in the API's shapes. To change a text,
+    or to give a new check, category or skip reason its words, edit that file and run
+    `node engine/tests/ShoutingIguana.Engine.Tests/Analysis/PlainWords/generate.mjs` from the repo root, then commit
+    the data file and the two C# files together (`--check` writes nothing and says whether they are current). The
+    generator refuses an id the engine doesn't have, one the data file leaves out, and a field it doesn't know.
+  - Tests hold the compiled words to the data file, every text to the design's template and banned words, and the
+    ten checks [the Simple design](../docs/v2-ui-simple.md#ten-checks-written-out) writes out to the document, word
+    for word: change one of those ten in both places. A check with no entry would say null, never the technical
+    text: a test demands an entry for every check and every skip reason.
+  - A text names a threshold as `{limit:name}` (`{limit:titleMaxLength}`, `{limit:largeImageBytes}`), never as a
+    number. `PlainLimits.Fill` fills it from an `AnalysisSettings` with the value and its unit ("60 characters", "200
+    KB", "1 second"): the settings a crawl's analysis ran with (`AnalysisInfo.Settings`) for that crawl's words, the
+    current ones otherwise. Every numeric threshold has a name, and a name no setting has is an error a test looks for
+    in every text.
 - **Scope.** Content checks (titles, descriptions, headings, word count, duplicates, Open Graph, URL style,
   rich-result requirements, hreflang) look only at indexable pages. Technical checks look at every page the
   crawler parsed; status-checked URLs (outside the start folder, iframes) and Cloudflare's `/cdn-cgi/`
@@ -254,6 +283,10 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   two, as they take about twice the room.
 - **Atomic.** The issues are replaced in one transaction, so a failed or cancelled analysis keeps the
   previous results.
+- **Details name their status codes.** Where a rule writes a status into a detail it carries its standard name: "404
+  Not Found", "301 Moved Permanently" (`Rules/HttpStatusNames`, RFC 9110's reason phrases). A code with no standard
+  name stays "HTTP 599". What the crawl stored with a status in it (a firewall's "Rate limited (HTTP 429)", a
+  sitemap's "HTTP 500") is named the same way when a detail quotes it; the crawl file keeps its own words.
 - **What an issue names.** An issue is one check on one URL, with a short detail and the other URL involved. Where a
   page has several (it links to three broken URLs, shows two large images), `issues` keeps the first and
   `issue_targets` every one, so the Issues screen puts the page in the group of each and the inspector counts each as
@@ -282,9 +315,45 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
     before the summary is out of date this way.
   - `SettingsChanged`: the stored settings differ from the ones an analysis would run with now. A threshold the
     analysing engine didn't have takes its default: one that changes what the checks find comes with a new `VERSION`.
+  - A score worked out by another `ScoreCalculator.VERSION` is `EngineChanged` too.
 
 Categories: response codes, redirects, links, indexability, canonicals, sitemaps, titles, meta descriptions,
 headings, content, images, hreflang, structured data, security, URLs, performance, HTML.
+
+### The score
+
+One number for a site, 0 to 100, to the design's version 1 ([the Simple design](../docs/v2-ui-simple.md#the-score)).
+`Analysis/ScoreCalculator` is the one place it is worked out:
+
+- It starts at 100. Each check that found something takes points off by its severity and how much of the site it
+  affects: a few (under 1 in 100), some (1 in 100 or more), many (1 in 10 or more) or most (half or more) cost an
+  error 2, 4, 7 or 10 points and a warning 1, 2, 3 or 4. A site-wide fault costs 60 (an error) or 4 (a warning)
+  whatever its count. A notice costs nothing.
+- A page check's count is a share of the pages the analysis read; any other check's, of the URLs crawled.
+- While an error check has issues the score can't be above 89. 90 and over is very good, 70 and over good, 50 and
+  over needs work, under 50 poor.
+- No page read is no score. A crawl that was stopped or failed, or whose URL or depth limit kept internal URLs out,
+  gives a partial score: of what was read so far.
+
+**The analysis works it out and stores it** as it commits (`IssueWriter`, the only writer), from the counts it has
+just stored, the pages it read and the URLs crawled as it read them, so every reader gives the same number and no
+count is ever set against a total from another moment. The `analysis` row keeps the URLs crawled (`crawled_urls`),
+the formula's version, the number, whether it is partial, and the whole score as JSON: what it covers, a line for
+every check that found something, and the score with the first five problems fixed. `IssueReader.ReadResults` reads
+it back (`AnalysisResults.Score`, with `NoScoreReason` and `FixFirst`), and `AnalysisInfo.Score` is its headline, for
+a list of crawls. `si score` prints the breakdown.
+
+`Analysis/FixFirstOrder` is the order to fix checks in, for every host: the most severe; within a severity, a fault of
+the whole site (`SiteWide`) before any other, those in catalog order among themselves; then the most URLs flagged;
+then catalog order. A site-wide fault is one issue, so its count would put it last of its severity: it leads however
+small its count. The design's reference code has the same order (`fixFirstOrder` in `score.mjs`).
+
+The tests hold it to the design's tables row by row, and to the design's reference code: `generate.mjs` in
+`tests/ShoutingIguana.Engine.Tests/Analysis/ScoreReference` scores 288 sites with
+`app/design/simple/build/lib/score.mjs` and writes `cases.json`, which the engine then scores line for line. Run it
+again (`node engine/tests/ShoutingIguana.Engine.Tests/Analysis/ScoreReference/generate.mjs`, from the repo root)
+whenever the reference or the catalog's checks change. A changed formula is a new `ScoreCalculator.VERSION`; so is a
+change to which checks are `SiteWide`, or to a check's `Subject`, which a test catches.
 
 ### Near duplicates
 
@@ -354,6 +423,19 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
   crawl (a single file, in rollback-journal mode, so it can be copied and read from anywhere), a writer can't switch
   it to WAL: it gives up as readers do, after a couple of seconds, with a `CrawlFileInUseException` saying the file is
   being read, rather than after Microsoft.Data.Sqlite's 30 s.
+- **The write-ahead log stays small while a crawl runs.** A running crawl's file is in WAL mode, and SQLite starts
+  the log again from its beginning only at a moment when no reader is part-way through it. With nobody reading that
+  is every batch (the log peaks at the largest batch: 38 MB on the 100,000-page benchmark). With the links grid read
+  all the while, each read a pass over the links, that moment never came, and the log grew by everything the crawl
+  wrote, to more than the file. So once the log passes 64 MB (`CrawlDatabase.LOG_LIMIT_BYTES`) the writer folds it
+  into the file between two batches and empties it (`CrawlDatabase.FoldLog`, a `TRUNCATE` checkpoint): the grids' new
+  reads of that file wait while those in flight end by themselves, for two seconds at most, the log is folded, and
+  they read on (`CrawlReadGate.ExclusiveOnceIdle`). No read is stopped, fails or answers differently; a read can wait.
+  The writer waits with them and stores nothing meanwhile, so the log is held to the limit and the batch that took it
+  past. A fold that couldn't be done (a read that outlasted the two seconds, or another program part-way through the
+  file, which is waited for a quarter of a second) is tried again a second later, then twice as long after each one
+  that fails, to half a minute: only then can the log grow past its bound, and it's folded when the crawl closes as
+  ever. The writer says once, as it closes, how often it folded the log and how long the crawl waited for it.
 - **Read back with today's defaults.** Options and thresholds are stored as JSON. One that the engine which stored
   them didn't have reads as its default (`StoredJson`), never 0 or false, so a new option can't change how a resumed
   crawl runs or what an analysis checks.
@@ -375,7 +457,7 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
 | `issue_targets` | Every other URL each issue is about (each broken target of a page's links, the canonical, a duplicate cluster's first page), which the Issues screen groups by and the inspector's "named by" counts; `0` stands for no other URL |
 | `issue_faults` | The fault an issue of `canonical-relative`, `canonical-invalid` or `structured-data-invalid` is an instance of, which its groups are by |
 | `issue_types` | Every check that ran: its title, category, severity, description, fix, and how many URLs it flagged |
-| `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, whether it was partial, what it ran against (the crawl's `updated_at`, the analysis version, the checks' fingerprint), and what it couldn't do and why |
+| `analysis`, `analysis_notes` | When the last analysis ran, with which engine version and settings, whether it was partial, what it ran against (the crawl's `updated_at`, the analysis version, the checks' fingerprint), the URLs crawled as it read them, its [score](#the-score) (the formula's version, the number, whether it is partial, and the whole of it as JSON), and what it couldn't do and why |
 | `skipped_checks` | Each check the last analysis skipped, with a reason code and a sentence |
 | `effective_indexability` | Indexability as analysed, for URLs where it differs from the crawl's (an instant meta refresh, a canonical leading back to the page) |
 | `link_summary`, `link_blocks`, `link_summary_state` | The links counted for the links grid, by the first analysis of the crawl as it stands: by target, and by block of 16,384 consecutive link ids, each by kind, position, flags, whether the link leads to its own page, has text, and sits on a nofollow page; and the crawl row's stamp they were counted under, with the number of links, their highest id, the size of a block and the version of the counting |
@@ -425,6 +507,22 @@ runs, each with its stretches, and their total (`CrawlFileSummary.TimeCrawling`,
   the crawl since, and the next run here adds the row without a time for it. With such a row, or such a stamp, the crawl's time reads as not known, for good: never a part
   of it given for the whole. A table of another shape (another program's) is neither written to nor read, and times
   that can't be true (negative, ten years long) read as not known.
+- **A crawl that hasn't crawled has spent no time.** A run can end without a stretch (paused before it began and
+  then stopped, or its process died before its first batch was stored). A stretch is stored with the first batch that
+  stores a response, so a file with no stretch and no response has been crawled by nobody: continuing it adds no row
+  without a time, and its time is known from zero. A file with responses and no stretch was crawled by an engine
+  that keeps no time, and gets the row.
+- **In order.** A stretch begins by the wall clock and lasts by the clock that only runs forward, so a wall clock set
+  back between two (a time sync) would have the later begin before the earlier ended. `CrawlRunReader` gives each as
+  beginning no earlier than the one before it ended, in one run or across two, each with its length: none overlaps,
+  no run ends before it started, and the total is as stored.
+- **Time asleep isn't crawling.** The clock that only runs forward is `Stopwatch`'s. On Windows it's
+  `QueryPerformanceCounter`, which counts the time a machine spends in standby or hibernation; on Linux
+  (`CLOCK_MONOTONIC`) and macOS (`CLOCK_UPTIME_RAW`) it stops while the machine sleeps (dotnet/runtime#77945). The
+  session reads the run's clock twice a second while it crawls, so `RunClock` takes a gap of more than five minutes
+  between two readings for the machine asleep (or the process held still) and leaves it out of the stretch, on any
+  system. A sleep shorter than that still counts on Windows, and the stretch it's left out of then spans more wall
+  time than its length says: it isn't split in two.
 
 ### URL summary
 
@@ -568,6 +666,12 @@ a page gives to read on. The API, with every column and operator, is in
   process about to switch (an analysis, a continue, a crawl closing back to one file) stops new grid reads of that
   file, stops those in flight, switches, and lets them read again (`CrawlReadGate`): it waits milliseconds. Another
   program reading the file isn't seen, and can still keep it out.
+- **A running crawl's writer waits on them once in a while, and they on it.** To fold its write-ahead log
+  ([above](#crawl-file-sicrawl)) it needs a moment with no read part-way through the file, and nothing forces that
+  one: it holds new reads of the file, lets those in flight end by themselves, folds, and lets the held ones go.
+  Stopping the reads instead and reading them again was measured against it and dropped: it threw work away (with
+  six clients on the links grid of a 40,000-page crawl the slowest read took up to 1.95 s, where it takes 1.1 s
+  this way or with no fold at all), and it needed a rule for leaving reads alone long enough to end.
 - **Cursors** carry the last row's URL id and a hash of its sort values, with a hash of the query: under 100
   characters, whatever the row holds. Reading on reads the row's sort values again in the new snapshot, and a row
   that has gone or changed since is refused (start from an offset again) rather than read on from a place that has
@@ -851,6 +955,11 @@ The e2e tests also crawl these variants:
 - **HTTPS**, with a self-signed certificate. Plain HTTP answers on the same port, as port 80 does on a real site. It
   serves the home page there instead of redirecting: the planted duplicate version of the site.
 - **No sitemaps**, where the checks that need them are skipped.
+- **Hidden from search** (`HiddenFromSearch`, `si testsite --hidden-from-search`). Every product is noindex, as on a
+  site launched with its staging setting left on, so more than half of the pages that stand for themselves are
+  noindex (a canonicalised page is a variant of another, and no part of the count): `site-hidden-from-search` is
+  reported once, on the home page. Off everywhere else, the benchmark included,
+  where the check must flag nothing.
 - **Dead twin** (`DeadTwin`, plain HTTP only). The site links its https:// version on its own port, which doesn't
   answer: once from the plants hub, a URL the crawler asks for and finds unreachable, and five times from the first
   orphan. Only the sitemap leads there, so the crawler reads it once no linked URL is in flight, by when it has
@@ -890,6 +999,24 @@ With E3c (the time spent crawling kept a stretch at a time, a second set of coun
 is the crawler's own probes) four runs on the same machine, still shared, measured a 36–44 s crawl (2,294–2,812
 pages/s), a 188–194 MB peak with no growth (−9 to 0 MB), an 11.4, 11.8, 12.2 and 18.1 s analysis peaking at
 253–327 MB, and a 478–495 MB file: all within the spread of the runs before it.
+
+After the E3c review (the write-ahead log folded once it passes 64 MB, which a crawl nobody reads never reaches: its
+log peaks at 36 to 38 MB; one more planted URL, listed in a sitemap and refused by robots.txt, with its two issues)
+one run measured a 45 s crawl (2,237 pages/s), a 198 MB peak with no growth, a 15.3 s analysis peaking at 276 MB, and
+a 494 MB file. `si bench --read-links` crawls with the links grid read all the while, a read always part-way through
+the file, and `--max-log-mb` fails the run if the write-ahead log passes a size: 100,000 pages in 46 s (2,180
+pages/s) with the log at 89 MB at most, 40,000 pages with it at 76 MB, where without the fold it reached 580 MB. CI
+runs the 40,000-page one with a limit of 128 MB.
+
+With the score (one more cross-page rule, the score worked out as the analysis commits, five more columns of the
+analysis row; nothing in the crawl itself changed) one run on the same machine, heavily shared at the time (the
+crawl's pace fell to a fifth for stretches of it), measured a 79 s crawl (1,273 pages/s), a 198 MB peak with no growth
+(−15 MB), a 22.8 s analysis peaking at 261 MB, and a 479 MB file. The analysis of a 100k crawl, run back to back
+before and after the score on copies of one file, took 12.9 s both times.
+
+After the three changes that followed the score (a site-wide fault leads its severity in the order to fix, the
+hidden-site check counts noindex only, every check has its plain words) one run measured a 56.8 s crawl (1,779
+pages/s), a 193 MB peak with no growth (+1 MB), a 19.6 s analysis peaking at 331 MB, and a 479 MB file.
 
 Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and
 unreachable URL make the crawler back off briefly, as it would on a real site. On real sites, speed is set by the

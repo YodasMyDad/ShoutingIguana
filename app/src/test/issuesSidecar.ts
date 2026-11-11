@@ -83,15 +83,15 @@ export const ISSUE_GROUPS: Record<string, IssueGroup[]> = {
     },
   ],
   'internal-client-error': [
-    { detail: 'HTTP 404', relatedUrlId: null, relatedUrl: null, pages: 2, share: 1, likelyTemplate: false },
+    { detail: '404 Not Found', relatedUrlId: null, relatedUrl: null, pages: 2, share: 1, likelyTemplate: false },
   ],
 };
 
 export const ISSUE_ROWS: Record<string, (IssueRow & { group?: number })[]> = {
   'empty-anchor-text': ANCHOR_ROWS,
   'internal-client-error': [
-    { id: 10, url: 'https://example.com/old/', detail: 'HTTP 404' },
-    { id: 11, url: 'https://example.com/gone/', detail: 'HTTP 404' },
+    { id: 10, url: 'https://example.com/old/', detail: '404 Not Found' },
+    { id: 11, url: 'https://example.com/gone/', detail: '404 Not Found' },
   ],
   'title-too-long': [
     { id: 12, url: 'https://example.com/a/', detail: '78 characters' },

@@ -23,24 +23,25 @@ internal static class ReportReader
     /// <see cref="ExportFailure.NotAnalyzed"/> when the crawl has never been analysed: there is no report of it.
     /// <see cref="ExportFailure.CrawlChanged"/> when it was analysed again while this read it.
     /// </exception>
-    public static ReportModel Read(string crawlPath, Func<IssueSeverity, int> examples, ExportSettings settings, AnalysisSettings? outOfDateBy = null,
+    public static ReportModel Read(string crawlPath, Func<IssueSeverity, int> examples, ExportSettings export, AnalysisSettings? outOfDateBy = null,
         CancellationToken cancellationToken = default)
     {
         var results = IssueReader.ReadResults(crawlPath) ?? throw new ExportException(ExportFailure.NotAnalyzed, NOT_ANALYZED);
-        var stats = CrawlStatsReader.Read(crawlPath, settings.Cache, cancellationToken);
+        var stats = CrawlStatsReader.Read(crawlPath, export.Cache, cancellationToken);
         var summary = CrawlSummaryReader.Read(crawlPath, cancellationToken);
         var options = CrawlDatabase.ReadOptions(crawlPath);
         var reasons = results.Skipped.ToDictionary(skip => skip.CheckId, StringComparer.Ordinal);
         var counts = results.Counts;
 
+        // The analysis's own numbers: the pages it read and the URLs crawled when it ran, which its counts are shares of.
+        var settings = ReportSources.Settings(results);
+        var score = results.Score;
         var pages = results.Analysis.PagesAnalyzed;
-        var urls = summary.FetchedUrlCount ?? stats.Outcomes.Values.Sum();
+        var urls = score?.Covers.Urls ?? results.Analysis.CrawledUrlCount ?? summary.CrawledUrlCount ?? stats.Outcomes.Values.Sum();
         var blocked = stats.Outcomes.GetValueOrDefault(FetchOutcome.RobotsDisallowed);
         var running = stats.Status is CrawlStatus.Running or CrawlStatus.Paused;
-        var complete = stats.Status == CrawlStatus.Completed;
         var ran = IssueCatalog.All.Count(check => counts.ContainsKey(check.Id));
         var fixFirst = ReportSources.FixFirst(results);
-        var (score, noScore) = ReportSources.Score(results, fixFirst, new ScoreCovers(pages, urls, ran, IssueCatalog.All.Count - ran, complete, blocked));
 
         List<ReportProblem> problems = [];
         foreach (var id in fixFirst)
@@ -49,11 +50,11 @@ internal static class ReportReader
             var check = IssueCatalog.Find(id)!;
             var listed = examples(check.Severity);
             var rows = listed > 0 ? IssueReader.ReadIssues(crawlPath, id, listed) : [];
-            var group = check.Grouping == IssueGrouping.None ? null : IssueGroupReader.ReadGroups(crawlPath, id, 0, 1, settings.Cache, cancellationToken)?.Groups.FirstOrDefault();
+            var group = check.Grouping == IssueGrouping.None ? null : IssueGroupReader.ReadGroups(crawlPath, id, 0, 1, export.Cache, cancellationToken)?.Groups.FirstOrDefault();
             problems.Add(new ReportProblem(
                 problems.Count + 1,
                 check,
-                ReportSources.Words(check),
+                ReportSources.Words(check, settings),
                 counts[id],
                 score?.Lines.FirstOrDefault(line => line.CheckId == id),
                 [.. rows.Select(row => new ReportExample(row.Url, row.Detail, row.RelatedUrl))],
@@ -66,7 +67,7 @@ internal static class ReportReader
             throw new ExportException(ExportFailure.CrawlChanged, GridExport.CRAWL_CHANGED);
         }
 
-        var now = settings.Clock.GetUtcNow();
+        var now = export.Clock.GetUtcNow();
         return new ReportModel
         {
             Site = SiteOf(stats.StartUrl),
@@ -95,15 +96,15 @@ internal static class ReportReader
                 .. IssueCatalog.All.Where(check => !counts.ContainsKey(check.Id)).Select(check =>
                 {
                     var reason = reasons.GetValueOrDefault(check.Id);
-                    var (why, action) = ReportSources.Skipped(reason);
-                    return new ReportSkipped(check, ReportSources.Words(check), reason?.Reason, why, action);
+                    var (why, action) = ReportSources.Skipped(reason, settings);
+                    return new ReportSkipped(check, ReportSources.Words(check, settings), reason?.Reason, why, action);
                 })
             ],
-            Passed = [.. IssueCatalog.All.Where(check => counts.GetValueOrDefault(check.Id, -1) == 0).Select(check => new ReportPassed(check, ReportSources.Words(check)))],
+            Passed = [.. IssueCatalog.All.Where(check => counts.GetValueOrDefault(check.Id, -1) == 0).Select(check => new ReportPassed(check, ReportSources.Words(check, settings)))],
             Score = score,
-            NoScore = noScore,
+            NoScore = results.NoScoreReason,
             MadeAt = now,
-            TimeZone = settings.Clock.LocalTimeZone,
+            TimeZone = export.Clock.LocalTimeZone,
             EngineVersion = EngineInfo.Version
         };
     }
