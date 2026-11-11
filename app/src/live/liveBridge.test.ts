@@ -306,4 +306,74 @@ describe('what the live bridge refreshes', () => {
     expect(stale(gridKey(ID, 0))).toBe(false);
     stop();
   });
+
+  it('reads nothing for a window that is hidden, and refreshes once when it is shown again', async () => {
+    const { queryClient, stale } = cachedClient();
+    for (const crawl of [ID, OTHER]) queryClient.setQueryData(queryKeys.urlDetail(crawl, 7), {});
+    const { stop, send } = setup(queryClient);
+    const tick = (fetched: number) => send('progress', { crawlId: ID, status: 'running', fetched });
+    const refreshes = vi.spyOn(queryClient, 'invalidateQueries');
+    let hidden = true;
+    const visibility = vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
+    const show = (shown: boolean) => {
+      hidden = !shown;
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    try {
+      // Hidden from the start: the crawl ticks for three seconds, and nothing is marked to read.
+      for (const fetched of [1, 2, 3]) {
+        tick(fetched);
+        await vi.advanceTimersByTimeAsync(LIVE_GRID_REFRESH_MS);
+      }
+      expect(refreshes).not.toHaveBeenCalled();
+      expect(stale(gridKey(ID, 0))).toBe(false);
+      expect(stale(queryKeys.urlDetail(ID, 7))).toBe(false);
+
+      // Shown again: the crawl's grids and inspected URL refresh at once, without waiting for its next tick.
+      show(true);
+      expect(stale(gridKey(ID, 0))).toBe(true);
+      expect(stale(gridKey(ID, 3))).toBe(true);
+      expect(stale(queryKeys.urlDetail(ID, 7))).toBe(true);
+      // Once, and only the crawl that ticked.
+      expect(refreshes).toHaveBeenCalledTimes(2);
+      expect(stale(gridKey(OTHER, 0))).toBe(false);
+      expect(stale(queryKeys.urlDetail(OTHER, 7))).toBe(false);
+
+      // Hidden and shown again with no tick between: nothing was missed, so nothing is read.
+      queryClient.setQueryData(gridKey(ID, 0), testUrlPage());
+      show(false);
+      show(true);
+      expect(stale(gridKey(ID, 0))).toBe(false);
+      expect(refreshes).toHaveBeenCalledTimes(2);
+
+      // Shown, the ticks refresh as they did, at most once a second from the refresh on showing.
+      tick(4);
+      expect(stale(gridKey(ID, 0))).toBe(false);
+      await vi.advanceTimersByTimeAsync(LIVE_GRID_REFRESH_MS);
+      tick(5);
+      expect(stale(gridKey(ID, 0))).toBe(true);
+
+      // A crawl that ends while the window is hidden is read in full then: showing the window adds no second read.
+      queryClient.setQueryData(gridKey(ID, 0), testUrlPage());
+      show(false);
+      await vi.advanceTimersByTimeAsync(LIVE_GRID_REFRESH_MS);
+      tick(6);
+      expect(stale(gridKey(ID, 0))).toBe(false);
+      send('crawl', { crawlId: ID, status: 'stopped' });
+      expect(stale(gridKey(ID, 0))).toBe(true);
+      queryClient.setQueryData(gridKey(ID, 0), testUrlPage());
+      show(true);
+      expect(stale(gridKey(ID, 0))).toBe(false);
+
+      // Stopped, the bridge no longer listens for the window.
+      show(false);
+      tick(7);
+      stop();
+      show(true);
+      expect(stale(gridKey(ID, 0))).toBe(false);
+    } finally {
+      visibility.mockRestore();
+      stop();
+    }
+  });
 });
