@@ -502,6 +502,20 @@ describe('robots.txt: an origin without a file to show', () => {
     expect(await screen.findByText('The file is empty, so it refuses nothing.')).toBeVisible();
   });
 
+  it('opens an origin spelled another way (capitals, a slash after it) as the origin the crawl has', async () => {
+    const { transport } = sidecar();
+    await open(`${ROBOTS}/${encodeURIComponent('HTTPS://EXAMPLE.com/')}`);
+    expect(await screen.findByTestId('source-viewer')).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'This crawl has no robots.txt for that origin' })).toBeNull();
+    // The engine is asked for the origin as it spells it, by the file and by the list beside it.
+    const asked = transport.requests
+      .filter((request) => /\/robots\/(file|blocked)$/.test(request.path))
+      .map((request) => (request.body as { origin: string }).origin);
+    expect(asked.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(asked)).toEqual(new Set([SITE]));
+    expect(await screen.findByText(`${SITE}/admin/users`)).toBeVisible();
+  });
+
   it('says an origin the crawl has no robots.txt for isn’t there, and offers the list', async () => {
     sidecar();
     const { router } = await open(at('https://nowhere.example'));

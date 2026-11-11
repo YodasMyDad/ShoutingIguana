@@ -2,6 +2,7 @@
 // decided it. The engine says what each line is, whether it's part of the group the crawl obeyed and how many URLs it
 // refused (docs/v2-sidecar-api.md, robots.txt): nothing is parsed or matched again here. Pure, so it's unit-tested.
 import type { RobotsBlockedQuery, RobotsBlockedUrl, RobotsFile, RobotsLine } from '../../api/grids';
+import { robotsOriginOf } from '../../inspector/placeLinks';
 import type { SourceLineMark } from '../../inspector/sourceLines';
 import { formatCount, formatCountOf } from '../../lib/format';
 import type { RobotsReasonSearch, RobotsSearch } from '../../routing/search';
@@ -156,10 +157,14 @@ export function narrowingWords(
 // ------------------------------------------------------------------------------------------- The origin in the route
 
 /**
- * The origin the route's `:origin` names, as the engine spells it (the router encodes and decodes it whole), or null
- * for the list of origins. It's never tidied here: the engine knows its own origins, and says when it has none like
- * it (`origin-not-found`).
+ * The origin the route's `:origin` names (the router encodes and decodes it whole), or null for the list of origins.
+ * A link made by hand can spell an origin the crawl has in another way: in capitals, with a slash or a path after it,
+ * with its scheme's own port, or with an international name as it's written rather than as it's sent. The engine
+ * keeps one spelling (scheme and host in lower case, the host as punycode, no default port), which is a URL's own
+ * `origin`: so the param is read as a URL and its origin is what's asked for. What can't be read as an http(s) URL
+ * is passed on as it is, and the engine says it has no origin like it (`origin-not-found`).
  */
 export function originFromParam(param: string | undefined): string | null {
-  return param === undefined || param.trim() === '' ? null : param;
+  if (param === undefined || param.trim() === '') return null;
+  return robotsOriginOf(param.trim()) ?? param;
 }

@@ -212,8 +212,26 @@ describe('the origin in the route', () => {
     expect(originFromParam('')).toBeNull();
     expect(originFromParam('https://www.example.com')).toBe('https://www.example.com');
     expect(originFromParam('http://127.0.0.1:50196')).toBe('http://127.0.0.1:50196');
-    // Never tidied: the engine says when it has no origin like it.
+    // What can't be an http(s) URL is passed on as it is: the engine says when it has no origin like it.
     expect(originFromParam('not an origin')).toBe('not an origin');
+    expect(originFromParam('www.example.com')).toBe('www.example.com');
+    expect(originFromParam('mailto:someone@example.com')).toBe('mailto:someone@example.com');
+  });
+
+  it('reads an origin spelled another way as the one spelling the engine keeps', () => {
+    // Capitals, a slash or a path after it, the scheme's own port, spaces around it.
+    expect(originFromParam('HTTPS://WWW.Example.COM')).toBe('https://www.example.com');
+    expect(originFromParam('https://www.example.com/')).toBe('https://www.example.com');
+    expect(originFromParam('https://www.example.com/robots.txt')).toBe('https://www.example.com');
+    expect(originFromParam('https://www.example.com:443')).toBe('https://www.example.com');
+    expect(originFromParam('http://www.example.com:80/')).toBe('http://www.example.com');
+    expect(originFromParam('  https://www.example.com ')).toBe('https://www.example.com');
+    // A port that isn't the scheme's own is part of the origin.
+    expect(originFromParam('HTTP://127.0.0.1:50196/')).toBe('http://127.0.0.1:50196');
+    // An international name, as it's written and as it's sent (punycode, which the engine stores): one origin.
+    expect(originFromParam('https://bücher.example')).toBe('https://xn--bcher-kva.example');
+    expect(originFromParam('https://BÜCHER.example/')).toBe('https://xn--bcher-kva.example');
+    expect(originFromParam('https://xn--bcher-kva.example')).toBe('https://xn--bcher-kva.example');
   });
 });
 
