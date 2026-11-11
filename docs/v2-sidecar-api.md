@@ -2047,26 +2047,40 @@ a new field; nothing is taken away. Each has its own tests.
   end-to-end crawl checks none is reported more than once (three times for the duplicate site). A change to
   `siteWide`, or to a check's `subject`, changes what a score is worked out from, so it comes with a new score
   version: a test holds the catalog to the reference's lists.
-- **A new check, `site-hidden-from-search`** (Error, Indexability, site-wide): more than half of the pages read keep
-  themselves out of search results, by noindex or by a canonical to another URL. Without it a site whose every page
-  is noindex scored 100, noindex being a notice. Its detail gives the numbers: "212 of 265 pages: 200 noindex, 12
-  canonicalised". The edges, as settled:
-  - **A page** is one the analysis's page pass reads, as `pagesAnalyzed` counts them. One that moves on with an
-    instant meta refresh is read, and never hidden: search engines treat it as a redirect.
+- **A new check, `site-hidden-from-search`** (Error, Indexability, site-wide): **more than half of the pages that
+  stand for themselves are noindex.** Without it a site whose every page is noindex scored 100, noindex being a
+  notice. Its detail gives the numbers: "212 of 240 pages are noindex" ("1 of 1 page is noindex").
+  - **The first number is the noindex pages**, counted as `noindex-page` counts them: it is that check's count.
+  - **The second is the pages the page pass audits (`pagesAnalyzed`), less those canonicalised to another URL.** A
+    page whose canonical names another URL is a variant of that page, not a page that stands for itself: it counts
+    **neither as hidden nor in the total**. So a shop whose crawl reads more filtered and sorted listings than main
+    pages isn't flagged while its main pages can be indexed, and is when most of those are noindex. (It counted
+    canonicalised pages as hidden at first, which flagged such a shop. No engine shipped with that, so the analysis
+    version stays 7.)
+  - **Which canonicals make a variant**: where the analysis has the page as canonicalised (it is flagged by
+    `canonicalised-page`), so not one that leads back to the page or to a broken URL; and **not one that names the
+    same page on the site's other version** (www or not, http or https): that page stands for itself, at its other
+    address, and the other version answering is `duplicate-site-version`'s to report. Those pages stay in the total.
+  - **A noindex page whose canonical names another URL is noindex**, and in the total: the noindex wins, as it does
+    for the page's indexability (and `noindex-with-canonical` flags the contradiction). So a site most of whose own
+    pages are deliberately noindex still fires, as a private site does: its `why` says to check the noindex pages and
+    ignore it when they are meant.
   - **More than half** is a strict majority: exactly half doesn't count, and a site of one page is hidden when that
-    page is, as it is every page the crawl read.
+    page is. **It never fires with no page to judge**: a site whose every page read is a variant (a mirror that names
+    another site throughout) reports nothing, never "0 of 0".
+  - **A page** that moves on with an instant meta refresh is read and in the total, and never noindex: search engines
+    treat it as a redirect, and `noindex-page` doesn't flag it either.
   - **A crawl stopped early** is judged on the pages it read, as every page check is; its score is partial.
   - **URLs robots.txt blocked** weren't read, so they are neither pages nor hidden. A site blocked whole reads no
     page, and has no score.
-  - **Noindex** is counted as `noindex-page` counts it. **A canonical** counts where the analysis has the page as
-    canonicalised: not one that leads back to the page or to a broken URL, and **not one that names the same page on
-    the site's other version** (www or not, http or https): that page can appear in search, at its other address, and
-    the other version answering is `duplicate-site-version`'s to report.
   - **Where**: the home page, or the start URL when no home page was read (it refused the crawler, and a sitemap led
     to the pages), so its `subject` is `url`.
-  - **A risk, known:** a site whose crawl reads more canonicalised variants (filtered and sorted listings that name
-    their main page) than main pages is flagged, by the design's definition, though its main pages are in search. Its
-    `why` says so, and it wasn't met on the two development crawls; it wants a look on real shops before Simple ships.
+  - Tests, one an edge: a majority reported once on the home page with a variant left out of the total; exactly
+    half; one page; **40 variants with indexable targets beside 3 pages: nothing**; **3 of 5 own pages noindex
+    beside 40 variants: reported, "3 of 5 pages are noindex"**; nothing but variants; a noindex page that names
+    another URL; blocked URLs; the same page on each other version of the site against another host or path; a
+    canonical that leads back or nowhere; an instant refresh; no home page; a start URL that redirects; thousands
+    grouped.
 
   It is planted on the synthetic site by a new option (`SyntheticSiteOptions.HiddenFromSearch`, `si testsite
   --hidden-from-search`: every product noindex), crawled end to end with the whole issues table compared, and is

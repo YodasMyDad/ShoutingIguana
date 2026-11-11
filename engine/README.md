@@ -842,8 +842,9 @@ The e2e tests also crawl these variants:
   serves the home page there instead of redirecting: the planted duplicate version of the site.
 - **No sitemaps**, where the checks that need them are skipped.
 - **Hidden from search** (`HiddenFromSearch`, `si testsite --hidden-from-search`). Every product is noindex, as on a
-  site launched with its staging setting left on, so more than half of the site's pages keep themselves out of
-  search: `site-hidden-from-search` is reported once, on the home page. Off everywhere else, the benchmark included,
+  site launched with its staging setting left on, so more than half of the pages that stand for themselves are
+  noindex (a canonicalised page is a variant of another, and no part of the count): `site-hidden-from-search` is
+  reported once, on the home page. Off everywhere else, the benchmark included,
   where the check must flag nothing.
 - **Dead twin** (`DeadTwin`, plain HTTP only). The site links its https:// version on its own port, which doesn't
   answer: once from the plants hub, a URL the crawler asks for and finds unreachable, and five times from the first
