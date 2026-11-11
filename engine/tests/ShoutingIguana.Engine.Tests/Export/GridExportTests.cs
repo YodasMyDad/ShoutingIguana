@@ -1,0 +1,458 @@
+using System.Globalization;
+using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Export;
+using ShoutingIguana.Engine.Export.Models;
+using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
+using ShoutingIguana.Engine.Tests.Support;
+using static ShoutingIguana.Engine.Tests.Support.GridQueries;
+
+namespace ShoutingIguana.Engine.Tests.Export;
+
+/// <summary>
+/// Each grid's export, read back from the file and held against the grid's own read, row for row and cell for cell: the
+/// URL grid, the links grid, a sitemap's URLs, a check's rows and one group's, an origin's blocked URLs, each as CSV and
+/// as a workbook. The grid is read here through its public reader by offset, a page at a time, as the app reads it; the
+/// export reads on by cursor, in pages of its own size, which the tests make small so every export crosses many.
+/// </summary>
+[Collection(GridCrawlCollection.NAME)]
+public sealed class GridExportTests : IDisposable
+{
+    private static readonly string[] URL_COLUMNS =
+    [
+        "url", "id", "statusCode", "statusClass", "outcome", "indexable", "indexability", "type", "source", "depth", "isInternal", "fetched", "title", "responseMs",
+        "sizeBytes", "inlinks", "issues", "inSitemap", "canonicalUrl", "wordCount"
+    ];
+
+    private static readonly string[] LINK_COLUMNS =
+        ["id", "from.url", "to.url", "kind", "text", "position", "followed", "noFollow", "selfLink", "to.statusCode", "to.indexability", "from.depth", "to.isInternal"];
+
+    private readonly GridCrawl _crawl;
+    private readonly string _folder = Directory.CreateTempSubdirectory("si-export-").FullName;
+    private readonly ReadCache _cache = new();
+    private readonly (int Urls, int Links) _pages = (GridExportReader.UrlPageRows, GridExportReader.LinkPageRows);
+
+    public GridExportTests(GridCrawl crawl)
+    {
+        _crawl = crawl;
+
+        // Small pages, so that an export of this crawl is read on by cursor many times over.
+        (GridExportReader.UrlPageRows, GridExportReader.LinkPageRows) = (97, 211);
+    }
+
+    public void Dispose()
+    {
+        (GridExportReader.UrlPageRows, GridExportReader.LinkPageRows) = _pages;
+        Directory.Delete(_folder, recursive: true);
+    }
+
+    public static TheoryData<string, string[], UrlFilter[], string?, UrlSort[]> UrlQueries() => new()
+    {
+        { "everything, as it comes", [], [], null, [] },
+        { "every column, in crawl order", URL_COLUMNS, [], null, [] },
+        { "pages by inlinks", URL_COLUMNS, [Names("type", FilterOperator.In, "page")], null, [new UrlSort("inlinks", true)] },
+        { "by status then URL", ["url", "statusCode", "title"], [], null, [new UrlSort("statusCode"), new UrlSort("url", true)] },
+        { "errors only", ["url", "statusCode", "statusClass", "outcome"], [Names("statusClass", FilterOperator.In, "4xx", "5xx", "noResponse")], null, [new UrlSort("url")] },
+        { "a search", ["url", "title", "depth"], [], "product", [new UrlSort("depth", true)] },
+        { "nothing matches", ["url", "title"], [Number("statusCode", FilterOperator.Eq, 799)], null, [] }
+    };
+
+    [Theory]
+    [MemberData(nameof(UrlQueries))]
+    public void TheUrlGridIsExportedAsTheGridReadsIt(string name, string[] columns, UrlFilter[] filters, string? search, UrlSort[] sort)
+    {
+        var query = new UrlQuery { Columns = columns, Filters = filters, Search = search, Sort = sort };
+        var shown = Shown(columns.Length == 0 ? ["url"] : columns, UrlGridReader.Columns);
+        var expected = Rows(shown, at => Page(UrlGridReader.Query(_crawl.Path, at, _cache)), query);
+        Assert.True(name == "nothing matches" ? expected.Count == 0 : expected.Count > (filters.Length == 0 && search is null ? GridExportReader.UrlPageRows * 3 : 0), $"{name}: {expected.Count} rows.");
+
+        foreach (var format in new[] { ExportFormat.Csv, ExportFormat.Xlsx })
+        {
+            var (result, rows) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Urls, Format = format, Query = query }, "URLs");
+            AssertSame(shown, expected, rows, format);
+            Assert.Equal(expected.Count, result.Rows);
+            Assert.Empty(result.UnavailableColumns);
+            Assert.False(result.CrawlWasRunning);
+        }
+    }
+
+    /// <summary>The header's words and a row's, as literals: a grid's own titles and value words, a number's unit after its title.</summary>
+    [Fact]
+    public void AFileSaysWhatTheGridSaysInTheGridsWords()
+    {
+        var request = new ExportRequest
+        {
+            Kind = ExportKind.Urls,
+            Format = ExportFormat.Xlsx,
+            Query = new UrlQuery
+            {
+                Columns = ["url", "statusCode", "statusClass", "indexable", "indexability", "type", "source", "isInternal", "responseMs", "sizeBytes", "id"],
+                Filters = [Number("id", FilterOperator.Eq, 1)]
+            }
+        };
+        var (_, rows) = Export(_crawl.Path, request, "URLs");
+        Assert.Equal(
+            ["URL", "Status", "Status class", "Indexable", "Indexability", "Type", "Found by", "On this site", "Response time (ms)", "Size (bytes)", "Crawl order"],
+            rows[0]);
+        var start = Assert.Single(rows.Skip(1));
+        Assert.Equal(_crawl.Server.BaseUri.AbsoluteUri, start[0]);
+        Assert.Equal([200d, "2xx", "Yes", "Indexable", "Page", "The start URL", "Yes"], start[1..8]);
+        Assert.True(start[8] is double && start[9] is double, "A time and a size are numbers.");
+        Assert.Equal(1d, start[10]);
+
+        // And the links grid's: either end's column under "Source" or "Target".
+        var links = new ExportRequest
+        {
+            Kind = ExportKind.Links,
+            Format = ExportFormat.Csv,
+            Query = new UrlQuery
+            {
+                Columns = ["from.url", "to.url", "to.statusCode", "to.h1Count", "from.isInternal", "kind", "text", "selfLink", "to.responseMs", "id"],
+                Filters = [Names("kind", FilterOperator.In, "hyperlink"), Boolean("from.isInternal", true), Number("from.id", FilterOperator.Eq, 1)]
+            }
+        };
+        var (_, link) = Export(_crawl.Path, links, "Links");
+        Assert.Equal(
+            ["Source URL", "Target URL", "Target status", "Target H1s", "Source on this site", "Kind", "Anchor or alt text", "Links to its own page", "Target response time (ms)",
+                "Crawl order"],
+            link[0]);
+        Assert.Equal("Yes", link[1][4]);
+        Assert.Equal("Hyperlink", link[1][5]);
+        Assert.Equal(_crawl.Server.BaseUri.AbsoluteUri, link[1][0]);
+    }
+
+    public static TheoryData<string, string[], UrlFilter[], string?, UrlSort[]> LinkQueries() => new()
+    {
+        { "everything, as it comes", [], [], null, [] },
+        { "every column, in crawl order", LINK_COLUMNS, [], null, [] },
+        { "newest first", ["id", "from.url", "to.url"], [], null, [new UrlSort("id", true)] },
+        { "hyperlinks by target", LINK_COLUMNS, [Names("kind", FilterOperator.In, "hyperlink")], null, [new UrlSort("to.url")] },
+        { "to broken URLs", ["from.url", "to.url", "to.statusCode", "text"], [Names("to.statusClass", FilterOperator.In, "4xx")], null, [] },
+        { "text contains", ["from.url", "text", "kind"], [Text("text", FilterOperator.Contains, "product")], null, [] },
+        { "a search", ["from.url", "to.url", "text"], [], "about", [] }
+    };
+
+    [Theory]
+    [MemberData(nameof(LinkQueries))]
+    public void TheLinksGridIsExportedAsTheGridReadsIt(string name, string[] columns, UrlFilter[] filters, string? search, UrlSort[] sort)
+    {
+        var query = new UrlQuery { Columns = columns, Filters = filters, Search = search, Sort = sort };
+        var shown = Shown(columns.Length == 0 ? ["from.url", "to.url", "kind", "text"] : columns, LinkGridReader.Columns);
+        var expected = Rows(shown, at => Page(LinkGridReader.Query(_crawl.Path, at, _cache)), query);
+        Assert.True(expected.Count > 0, $"{name}: no rows.");
+
+        foreach (var format in new[] { ExportFormat.Csv, ExportFormat.Xlsx })
+        {
+            var (result, rows) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Links, Format = format, Query = query }, "Links");
+            AssertSame(shown, expected, rows, format);
+            Assert.Equal(expected.Count, result.Rows);
+        }
+    }
+
+    [Fact]
+    public void ASitemapsUrlsAreExportedAsItsGridReadsThem()
+    {
+        var sitemap = SitemapListReader.Read(_crawl.Path).Sitemaps.MaxBy(listed => listed.Urls.Listed)!;
+        var query = new UrlQuery { Columns = ["url", "statusCode", "indexable", "indexability"], Sort = [new UrlSort("url")] };
+        var shown = Shown(query.Columns, UrlGridReader.Columns);
+        var expected = Rows(shown, at => Page(UrlGridReader.QuerySitemap(_crawl.Path, sitemap.Id, at, _cache)!), query);
+        Assert.Equal(sitemap.Urls.Listed, expected.Count);
+        Assert.True(expected.Count > GridExportReader.UrlPageRows);
+
+        foreach (var format in new[] { ExportFormat.Csv, ExportFormat.Xlsx })
+        {
+            var (_, rows) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.SitemapUrls, Format = format, Query = query, SitemapId = sitemap.Id }, "Sitemap URLs");
+            AssertSame(shown, expected, rows, format);
+        }
+
+        var missing = Assert.Throws<ExportException>(() => Export(_crawl.Path,
+            new ExportRequest { Kind = ExportKind.SitemapUrls, Format = ExportFormat.Csv, Query = query, SitemapId = 9_999 }, "Sitemap URLs"));
+        Assert.Equal(ExportFailure.SitemapNotFound, missing.Failure);
+    }
+
+    [Fact]
+    public void AChecksRowsAndOneGroupsAreExportedAsItsGridReadsThem()
+    {
+        // The check with the most rows that groups, and its largest group.
+        var counts = IssueReader.ReadCounts(_crawl.Path);
+        var check = IssueCatalog.All.Where(issue => issue.Grouping != IssueGrouping.None && counts.GetValueOrDefault(issue.Id) > 0)
+            .MaxBy(issue => counts[issue.Id])!;
+        var group = IssueGroupReader.ReadGroups(_crawl.Path, check.Id, 0, 10)!.Groups[0];
+        var key = new IssueGroupKey(group.Detail, group.RelatedUrlId);
+        var query = new UrlQuery { Columns = ["url", "detail", "relatedUrl", "title", "inlinks"], Sort = [new UrlSort("inlinks", true)] };
+        var shown = Shown(query.Columns, UrlGridReader.IssueRowColumns);
+
+        foreach (var narrowed in new[] { null, key })
+        {
+            var expected = Rows(shown, at => Page(IssueGroupReader.ReadRows(_crawl.Path, check.Id, at, narrowed, _cache)!.Page!), query);
+            Assert.Equal(narrowed is null ? counts[check.Id] : group.Pages, expected.Count);
+            foreach (var format in new[] { ExportFormat.Csv, ExportFormat.Xlsx })
+            {
+                var request = new ExportRequest { Kind = ExportKind.IssueRows, Format = format, Query = query, CheckId = check.Id, Group = narrowed };
+                var (_, rows) = Export(_crawl.Path, request, XlsxSheetName(check.Title));
+                AssertSame(shown, expected, rows, format);
+            }
+        }
+
+        // With no columns asked for, a check's rows are its URL, detail and other URL.
+        var (_, plain) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.IssueRows, Format = ExportFormat.Csv, CheckId = check.Id }, check.Title);
+        Assert.Equal(["URL", "Detail", "Related URL"], plain[0]);
+        Assert.Equal(counts[check.Id], plain.Count - 1);
+    }
+
+    [Fact]
+    public void ACheckThatDidNotRunOrIsNotOneHasNothingToExport()
+    {
+        var never = _crawl.Copy();
+        Change(never, "DELETE FROM issue_types WHERE id = 'title-missing'");
+        var skipped = Assert.Throws<ExportException>(() => Export(never,
+            new ExportRequest { Kind = ExportKind.IssueRows, Format = ExportFormat.Csv, CheckId = "title-missing" }, "x"));
+        Assert.Equal(ExportFailure.CheckSkipped, skipped.Failure);
+
+        var unknown = Assert.Throws<ExportException>(() => Export(_crawl.Path,
+            new ExportRequest { Kind = ExportKind.IssueRows, Format = ExportFormat.Csv, CheckId = "no-such-check" }, "x"));
+        Assert.Equal(ExportFailure.CheckNotFound, unknown.Failure);
+        Assert.Empty(Directory.GetFiles(_folder));
+    }
+
+    [Fact]
+    public void AnOriginsBlockedUrlsAreExportedAsItsListReadsThem()
+    {
+        var origin = RobotsReader.ReadOrigins(_crawl.Path, limit: 1_000).Origins.MaxBy(listed => listed.Blocked)!;
+        Assert.True(origin.Blocked > 0, "The synthetic site blocks nothing.");
+        var blocked = RobotsReader.ReadBlocked(_crawl.Path, origin.Origin, limit: 1_000)!;
+        Assert.Equal(origin.Blocked, blocked.Rows.Count);
+        List<object?[]> expected =
+        [
+            .. blocked.Rows.Select(url => new object?[]
+            {
+                url.Url,
+                url.Reason switch { RobotsBlockReason.Rule => "A rule", RobotsBlockReason.Unreachable => "robots.txt couldn’t be read", _ => "No rule kept" },
+                url.Line is { } line ? (long)line : null,
+                url.Rule,
+                url.Error
+            })
+        ];
+
+        foreach (var format in new[] { ExportFormat.Csv, ExportFormat.Xlsx })
+        {
+            var (result, rows) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.RobotsBlocked, Format = format, Origin = origin.Origin }, "Blocked URLs");
+            Assert.Equal(["Blocked URL", "Blocked by", "Line", "Rule", "Error"], rows[0]);
+            AssertSameCells(expected, rows, format);
+            Assert.Equal(origin.Blocked, result.Rows);
+        }
+
+        // Narrowed to one line's, as the list narrows.
+        var first = blocked.Rows.First(url => url.Line is not null);
+        var narrowed = RobotsReader.ReadBlocked(_crawl.Path, origin.Origin, first.Line, limit: 1_000)!;
+        var (_, lines) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.RobotsBlocked, Format = ExportFormat.Csv, Origin = origin.Origin, Line = first.Line }, "x");
+        Assert.Equal(narrowed.Matching, lines.Count - 1);
+        Assert.Equal(narrowed.Rows.Select(url => url.Url), lines.Skip(1).Select(row => (string)row[0]!));
+
+        var missing = Assert.Throws<ExportException>(() => Export(_crawl.Path,
+            new ExportRequest { Kind = ExportKind.RobotsBlocked, Format = ExportFormat.Csv, Origin = "https://nowhere.example" }, "x"));
+        Assert.Equal(ExportFailure.OriginNotFound, missing.Failure);
+    }
+
+    /// <summary>
+    /// A crawl continued since its analysis has no URL summary: the columns that need one are in the file with no values,
+    /// and the result names them, as the grid lists them unavailable; a sort on one is refused, as the grid refuses it.
+    /// </summary>
+    [Fact]
+    public void ACrawlWithoutItsSummaryIsExportedAsItsGridReadsIt()
+    {
+        var query = new UrlQuery { Columns = ["url", "statusCode", "inlinks", "title", "issues"], Sort = [new UrlSort("url")] };
+        var page = UrlGridReader.Query(_crawl.Changed, query with { Limit = 1 }, _cache);
+        Assert.Equal(["inlinks", "issues"], page.Unavailable);
+        var shown = Shown(["url", "statusCode", "title"], UrlGridReader.Columns);
+        var expected = Rows(shown, at => Page(UrlGridReader.Query(_crawl.Changed, at, _cache)), query);
+
+        var (result, rows) = Export(_crawl.Changed, new ExportRequest { Kind = ExportKind.Urls, Format = ExportFormat.Csv, Query = query }, "URLs");
+        Assert.Equal(["inlinks", "issues"], result.UnavailableColumns);
+        Assert.Equal(["URL", "Status", "Inlinks", "Title", "Issues"], rows[0]);
+        Assert.All(rows.Skip(1), row => Assert.True(row[2] is null && row[4] is null));
+        AssertSameCells([.. expected], [rows[0], .. rows.Skip(1).Select(row => new[] { row[0], row[1], row[3] })], ExportFormat.Csv, shown);
+
+        Assert.Throws<NeedsAnalysisException>(() => Export(_crawl.Changed,
+            new ExportRequest { Kind = ExportKind.Urls, Format = ExportFormat.Csv, Query = query with { Sort = [new UrlSort("inlinks")] } }, "URLs"));
+
+        // The refused export left nothing, and the file from before is as it was.
+        Assert.Equal(["out.csv"], Directory.GetFiles(_folder).Select(Path.GetFileName));
+        Assert.Equal(rows.Count, CsvFile.Read(Path.Combine(_folder, "out.csv")).Count);
+    }
+
+    /// <summary>
+    /// A site's text in the crawl file: titles and URLs that are formulas, hold quotes, commas and line breaks, control
+    /// characters and emoji. Each comes out of both files as the grid has it, the CSV's guarded.
+    /// </summary>
+    [Fact]
+    public void HostileTitlesAndUrlsComeThroughBothFiles()
+    {
+        var hostile = _crawl.Copy();
+        var texts = TableWriterTests.HOSTILE;
+        for (var index = 0; index < texts.Length; index++)
+        {
+            Change(hostile, "UPDATE responses SET title = $title WHERE url_id = (SELECT url_id FROM responses WHERE title IS NOT NULL ORDER BY url_id LIMIT 1 OFFSET $offset)",
+                ("$title", texts[index]), ("$offset", index));
+            Change(hostile, "UPDATE urls SET url = $url WHERE id = (SELECT MAX(id) FROM urls) - $offset",
+                ("$url", $"https://other.example/{index}?q={texts[index]}"), ("$offset", index));
+        }
+
+        var query = new UrlQuery { Columns = ["title", "url", "depth"] };
+        var shown = Shown(query.Columns, UrlGridReader.Columns);
+        var expected = Rows(shown, at => Page(UrlGridReader.Query(hostile, at)), query);
+        var stored = texts.Select(Encodable).ToHashSet(StringComparer.Ordinal);
+        Assert.Equal(texts.Length, expected.Count(row => row[0] is string title && stored.Contains(title)));
+        foreach (var format in new[] { ExportFormat.Csv, ExportFormat.Xlsx })
+        {
+            var (_, rows) = Export(hostile, new ExportRequest { Kind = ExportKind.Urls, Format = format, Query = query }, "URLs");
+            AssertSame(shown, expected, rows, format);
+        }
+
+        // As a spreadsheet reads the CSV: no title that starts as a formula does, and none is lost.
+        var csv = CsvFile.Read(Path.Combine(_folder, "out.csv"));
+        Assert.DoesNotContain(csv.Skip(1), row => row[0].Length > 0 && "=+-@\t\r".Contains(row[0][0], StringComparison.Ordinal));
+        Assert.Contains(csv, row => row[0] == "'=cmd|' /C calc'!A0");
+    }
+
+    [Fact]
+    public void AnExportSaysHowFarItHasGotAndEndsOnItsCount()
+    {
+        List<ExportProgress> heard = [];
+        var settings = new ExportSettings { Cache = _cache, Progress = new Heard(heard) };
+        var path = Path.Combine(_folder, "progress.csv");
+        var result = CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Links, Format = ExportFormat.Csv }, path, settings);
+
+        Assert.True(heard.Count > 10, $"Heard {heard.Count} times.");
+        Assert.Equal(new ExportProgress(0, result.Rows), heard[0]);
+        Assert.Equal(new ExportProgress(result.Rows, result.Rows), heard[^1]);
+        Assert.All(heard.Zip(heard.Skip(1)), pair => Assert.True(pair.First.RowsWritten <= pair.Second.RowsWritten));
+        Assert.Equal(new FileInfo(path).Length, result.Bytes);
+        Assert.Equal(path, result.Path);
+    }
+
+    [Theory]
+    [InlineData(ExportKind.Urls, ExportFormat.Html, "format")]
+    [InlineData(ExportKind.Workbook, ExportFormat.Csv, "format")]
+    [InlineData(ExportKind.Report, ExportFormat.Xlsx, "format")]
+    [InlineData(ExportKind.SitemapUrls, ExportFormat.Csv, "sitemapId")]
+    [InlineData(ExportKind.RobotsBlocked, ExportFormat.Csv, "origin")]
+    [InlineData(ExportKind.IssueRows, ExportFormat.Csv, "checkId")]
+    [InlineData(ExportKind.Check, ExportFormat.Xlsx, "checkId")]
+    public void ARequestThatLacksWhatItsKindNeedsIsRefusedByField(ExportKind kind, ExportFormat format, string field)
+    {
+        var failure = Assert.Throws<ExportException>(() => CrawlExporter.Check(new ExportRequest { Kind = kind, Format = format }));
+        Assert.Equal(ExportFailure.InvalidRequest, failure.Failure);
+        Assert.Equal(field, failure.Field);
+    }
+
+    [Fact]
+    public void AQueryTheGridWouldRefuseIsRefusedBeforeAnythingIsWritten()
+    {
+        var unknown = Assert.Throws<UrlQueryException>(() => CrawlExporter.Check(new ExportRequest
+        {
+            Kind = ExportKind.Urls, Format = ExportFormat.Csv, Query = new UrlQuery { Columns = ["url", "nope"], Sort = [new UrlSort("title")] }
+        }));
+        Assert.Equal(["columns[1]", "sort[0].column"], unknown.Errors.Keys.Order());
+
+        // A check's own columns are its rows' alone.
+        Assert.Throws<UrlQueryException>(() => CrawlExporter.Check(new ExportRequest { Kind = ExportKind.Urls, Format = ExportFormat.Csv, Query = new UrlQuery { Columns = ["detail"] } }));
+        Assert.Throws<UrlQueryException>(() => CrawlExporter.Check(new ExportRequest
+        {
+            Kind = ExportKind.Links, Format = ExportFormat.Csv, Query = new UrlQuery { Sort = [new UrlSort("from.url")] }
+        }));
+    }
+
+    // ---- Reading the grid, and the files.
+
+    private sealed class Heard(List<ExportProgress> heard) : IProgress<ExportProgress>
+    {
+        public void Report(ExportProgress value) => heard.Add(value);
+    }
+
+    private static string XlsxSheetName(string title) => ShoutingIguana.Engine.Export.Xlsx.XlsxWriter.SheetName(title, []);
+
+    private static List<UrlColumnInfo> Shown(IReadOnlyList<string> ids, IReadOnlyList<UrlColumnInfo> known) => [.. ids.Select(id => known.Single(column => column.Id == id))];
+
+    private static (IReadOnlyList<string> Columns, List<IReadOnlyList<object?>> Rows, long Matching) Page(UrlPage page) =>
+        (page.Columns, [.. page.Rows.Select(row => row.Values)], page.Matching);
+
+    private static (IReadOnlyList<string> Columns, List<IReadOnlyList<object?>> Rows, long Matching) Page(LinkGridPage page) =>
+        (page.Columns, [.. page.Rows.Select(row => row.Values)], page.Matching);
+
+    /// <summary>Every row the grid shows for a query, read by offset a page at a time, each cell as the grid's reader gives it for the columns shown.</summary>
+    private static List<object?[]> Rows(IReadOnlyList<UrlColumnInfo> shown, Func<UrlQuery, (IReadOnlyList<string> Columns, List<IReadOnlyList<object?>> Rows, long Matching)> read,
+        UrlQuery query)
+    {
+        const int LIMIT = 1_000;
+        List<object?[]> rows = [];
+        for (var offset = 0; ; offset += LIMIT)
+        {
+            var page = read(query with { Offset = offset, Limit = LIMIT });
+            var places = shown.Select(column => page.Columns.ToList().IndexOf(column.Id)).ToList();
+            Assert.DoesNotContain(-1, places);
+            rows.AddRange(page.Rows.Select(row => places.Select(place => row[place]).ToArray()));
+            if (rows.Count >= page.Matching || page.Rows.Count == 0)
+            {
+                Assert.Equal(page.Matching, rows.Count);
+                return rows;
+            }
+        }
+    }
+
+    /// <summary>Exports to a file in the test's folder and reads it back: the header, then the rows, a number as a double and text as text.</summary>
+    private (ExportResult Result, List<object?[]> Rows) Export(string crawl, ExportRequest request, string sheet)
+    {
+        var path = Path.Combine(_folder, request.Format == ExportFormat.Csv ? "out.csv" : "out.xlsx");
+        var result = CrawlExporter.Export(crawl, request, path, new ExportSettings { Cache = _cache });
+        Assert.Equal([Path.GetFileName(path)], Directory.GetFiles(_folder).Select(Path.GetFileName).Where(name => name == Path.GetFileName(path)));
+        Assert.DoesNotContain(Directory.GetFiles(_folder), file => file.EndsWith(".tmp", StringComparison.Ordinal) || file.Contains(".tmp.", StringComparison.Ordinal));
+        if (request.Format == ExportFormat.Csv)
+        {
+            Assert.Equal(0, result.Sheets);
+            return (result, [.. CsvFile.Read(path).Select(row => row.Select(field => field.Length == 0 ? null : (object)field).ToArray())]);
+        }
+
+        var file = Assert.Single(XlsxFile.Read(path).Sheets);
+        Assert.Equal(1, result.Sheets);
+        Assert.Equal(sheet.Length > 31 ? XlsxSheetName(sheet) : sheet, file.Name);
+        Assert.Equal(1, file.FrozenRows);
+        Assert.All(file.Rows[0], cell => Assert.Equal(1u, cell.Style));
+        return (result, file.Values);
+    }
+
+    /// <summary>The file's rows are the grid's, in its order, under the grid's titles.</summary>
+    private static void AssertSame(IReadOnlyList<UrlColumnInfo> shown, List<object?[]> grid, List<object?[]> file, ExportFormat format)
+    {
+        Assert.Equal(shown.Select(GridExport.Title), file[0].Select(title => (string)title!));
+        AssertSameCells(grid, file, format, shown);
+    }
+
+    private static void AssertSameCells(List<object?[]> grid, List<object?[]> file, ExportFormat format, IReadOnlyList<UrlColumnInfo>? shown = null)
+    {
+        Assert.Equal(grid.Count, file.Count - 1);
+        for (var row = 0; row < grid.Count; row++)
+        {
+            for (var column = 0; column < grid[row].Length; column++)
+            {
+                var value = shown is null ? grid[row][column] : GridExport.Cell(shown[column], grid[row][column]);
+                var written = column < file[row + 1].Length ? file[row + 1][column] : null;
+                object? expected = (value, format) switch
+                {
+                    (null, _) => null,
+                    (string text, ExportFormat.Csv) => text.Length == 0 ? null : Guarded(Encodable(text)),
+                    (string text, _) => text.Length == 0 ? null : Encodable(text),
+                    (_, ExportFormat.Csv) => Convert.ToString(value, CultureInfo.InvariantCulture),
+                    _ => Convert.ToDouble(value, CultureInfo.InvariantCulture)
+                };
+                Assert.True(Equals(expected, written), $"Row {row + 1}, column {column + 1}: the grid has '{expected}', the file '{written}'.");
+            }
+        }
+    }
+
+    private static string Guarded(string text) => "=+-@\t\r".Contains(text[0], StringComparison.Ordinal) ? "'" + text : text;
+
+    /// <summary>Text as any file holds it: a surrogate with no partner can't be encoded, and is written as U+FFFD.</summary>
+    private static string Encodable(string text) => System.Text.Encoding.UTF8.GetString(System.Text.Encoding.UTF8.GetBytes(text));
+}
