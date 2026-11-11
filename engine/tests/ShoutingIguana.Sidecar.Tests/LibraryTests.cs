@@ -52,6 +52,7 @@ public sealed class LibraryTests : IAsyncLifetime
         Assert.Equal(_site.BaseUri.AbsoluteUri, (string?)a["startUrl"]);
         Assert.Equal("completed", (string?)a["status"]);
         Assert.Equal(stats.Outcomes.Values.Sum(), (long?)a["fetchedUrlCount"]);
+        Assert.Equal(stats.Outcomes.Values.Sum() - stats.NotCheckedCount, (long?)a["crawledUrlCount"]);
         Assert.Equal(stats.HtmlPageCount, (long?)a["pageCount"]);
         Assert.Equal(new FileInfo(inData).Length, (long?)a["sizeBytes"]);
         Assert.NotNull(a["startedAt"]);

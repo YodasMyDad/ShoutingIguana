@@ -70,6 +70,7 @@ internal sealed class GridReadContext : IDisposable
     private readonly Dictionary<string, object> _huge = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object> _large = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object> _once = new(StringComparer.Ordinal);
+    private readonly Dictionary<int, Dictionary<long, long>> _talliesBySlot = [];
     private (long Links, long MaxLinkId, int BlockShift)? _linkSummary;
     private bool _linkSummaryRead;
     private readonly Dictionary<string, Regex> _patterns = new(StringComparer.Ordinal);
@@ -431,6 +432,22 @@ internal sealed class GridReadContext : IDisposable
     public Dictionary<long, long> Tallies { get; } = [];
 
     public void Tally(long value) => CollectionsMarshal.GetValueRefOrAddDefault(Tallies, value, out _)++;
+
+    /// <summary>
+    /// How many rows a statement counted with each value in one of several tallies (<c>si_tally(slot, value)</c>), where
+    /// one pass counts its rows several ways at once; empty for a slot nothing was counted in.
+    /// </summary>
+    public Dictionary<long, long> TalliesIn(int slot)
+    {
+        if (!_talliesBySlot.TryGetValue(slot, out var tallies))
+        {
+            _talliesBySlot[slot] = tallies = [];
+        }
+
+        return tallies;
+    }
+
+    public void Tally(int slot, long value) => CollectionsMarshal.GetValueRefOrAddDefault(TalliesIn(slot), value, out _)++;
 
     /// <summary>The ids of the links a statement is reading (<c>si_link</c>), in the order it reads them.</summary>
     public LinkIdSet? LinkIds { get; set; }

@@ -193,8 +193,25 @@ export interface CrawlListItem {
   startedAt: string | null;
   finishedAt: string | null;
   updatedAt: string | null;
-  /** URLs with a stored outcome, as a running crawl's `fetched` counts them. The library's "URLs". */
+  /**
+   * E3c: the time the crawl has spent crawling, over every run of it, in ms: each run from its start to its end, less
+   * the time it was paused, so neither a pause nor the time between a stop and a continue is in it. A running crawl's
+   * is the progress event's `crawlingMs`. Null when it isn't known: an engine from before E3c made the crawl, or a run
+   * of it. Optional here, as such an engine's sidecar doesn't send it.
+   */
+  crawlingMs?: number | null;
+  /**
+   * URLs with a stored outcome, as a running crawl's `fetched` counts them: the URLs crawled and those that weren't
+   * checked (never asked, their host having stopped answering), which the URL grid has as not fetched. No grid filter
+   * gives this count: `crawledUrlCount` is the grid's.
+   */
   fetchedUrlCount: number;
+  /**
+   * E3c: the URLs crawled, as the URL grid counts them (`fetched` is true): `fetchedUrlCount` less the URLs that
+   * weren't checked. The count to show as "N URLs"; a running crawl's is the progress event's `crawled`. Optional here,
+   * as an engine from before E3c doesn't send it.
+   */
+  crawledUrlCount?: number;
   /** Internal URLs that returned HTML the crawler parsed. */
   pageCount: number;
   /** Null before the first analysis. */
@@ -298,6 +315,20 @@ export interface CrawlStats {
   statusCodes: Record<string, number>;
   skipReasons: Record<string, number>;
   nonIndexableReasons: Record<string, number>;
+  /**
+   * E3c: the part of `outcomes` and `statusCodes` that is the crawler's own probes of the site's other versions (the
+   * URL grid's `source` `siteVersion`), keyed as those are. `outcomes` and `statusCodes` count them among the rest;
+   * the site's own are each less its part here. Optional here, as an engine from before E3c doesn't send it.
+   */
+  siteVersions?: SiteVersionStats;
+}
+
+/** E3c: the crawler's probes of the site's other versions with a stored outcome, by outcome and by status code. */
+export interface SiteVersionStats {
+  fetched: number;
+  outcomes: Record<string, number>;
+  /** Keyed by the status code as a string. */
+  statusCodes: Record<string, number>;
 }
 
 export interface IssueRow {
@@ -356,6 +387,21 @@ export interface NoResponseCounts {
   processingError: number;
 }
 
+/**
+ * E3c: the part of a progress event's figures that is the crawler's own probes of the site's other versions (http or
+ * https, www or not: the URL grid's `source` `siteVersion`), which nothing on the site leads to. Each is shaped as the
+ * event's own and counted within it, so a figure less its part here is the URLs the site itself led to: the grid's
+ * count with `{ column: 'source', op: 'notIn', values: ['siteVersion'] }` added to the figure's filter.
+ */
+export interface SiteVersionCounts {
+  /** The probes with an outcome: among the event's `fetched`. Its classes add up to it. */
+  fetched: number;
+  statusClasses: StatusClassCounts;
+  /** By code as a string: among the event's `statusCodes`. */
+  statusCodes: Record<string, number>;
+  noResponse: NoResponseCounts;
+}
+
 /** E4: `robotsTxt`, `otherSitesRobotsTxt`, `crawlDelay`, `backoff`, `heldBack`, `siteDown` or `robotsTxtCoolDown`. */
 export type CrawlWaitReason =
   'robotsTxt' | 'otherSitesRobotsTxt' | 'crawlDelay' | 'backoff' | 'heldBack' | 'siteDown' | 'robotsTxtCoolDown';
@@ -403,6 +449,20 @@ export interface ProgressEvent {
   waits?: CrawlWait[];
   /** How many more waits there are, by reason, beyond those listed. */
   moreWaits?: Partial<Record<CrawlWaitReason, number>>;
+  // E3c. Optional here, as an engine from before E3c doesn't send them.
+  /**
+   * The URLs crawled so far, as the URL grid counts them (`fetched` is true): `fetched` less `noResponse.notChecked`.
+   * It ends at the library item's `crawledUrlCount`.
+   */
+  crawled?: number;
+  /** The part of the figures above that is the crawler's own probes of the site's other versions. */
+  siteVersions?: SiteVersionCounts;
+  /**
+   * The time spent crawling so far, over every run of the crawl: the earlier runs' time, and this run's without its
+   * pauses, so it stands still while the crawl is paused, where `elapsedMs` (this run's alone) runs on. Null when an
+   * earlier run's time wasn't kept.
+   */
+  crawlingMs?: number | null;
 }
 
 export type AlertLevel = 'info' | 'warning' | 'error';
@@ -457,6 +517,35 @@ export interface CrawlHistory {
   liveFrom: string | null;
   /** Oldest first, at most about 600, ending at the latest. */
   points: HistoryPoint[];
+  /**
+   * E3c: the time spent crawling over every run, in ms: the runs' added up, and the library item's. Null when it isn't
+   * known (an engine from before E3c made the crawl, or a run of it). Optional here, as such an engine doesn't send it.
+   */
+  crawlingMs?: number | null;
+  /**
+   * E3c: when the crawl was crawling: each run, oldest first, with the stretches it spent crawling in. A moment's
+   * place on an axis of time spent crawling is the stretches' time up to it, so the time between runs and the time
+   * paused close up. Null when the crawl's time isn't known, or it was paused too often to list (over 1,000 stretches).
+   */
+  runs?: CrawlRun[] | null;
+}
+
+/** E3c: one run of a crawl, from its start or its being continued to its being stopped or its end. */
+export interface CrawlRun {
+  startedAt: string;
+  /** Null for a run that hasn't ended: the one going now, or one cut short when its process died. */
+  endedAt: string | null;
+  /** The time it spent crawling: its stretches added up. */
+  crawlingMs: number;
+  /** The stretches it was crawling in, oldest first: one for a run never paused, and a pause is the gap between two. */
+  crawling: CrawlingStretch[];
+}
+
+/** E3c: a stretch of time spent crawling, unbroken by a pause or a stop. */
+export interface CrawlingStretch {
+  from: string;
+  /** When it ended; for the one going now, when the engine last stored it, at most about five seconds ago. */
+  to: string;
 }
 
 export interface CrawlEvent {

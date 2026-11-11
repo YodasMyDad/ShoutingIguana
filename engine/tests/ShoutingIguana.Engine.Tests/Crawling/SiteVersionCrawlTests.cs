@@ -62,6 +62,67 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
         Assert.DoesNotContain(IssueReader.ReadAll(path), row => row.Issue is "internal-unreachable" or "robots-txt-unreachable-other-origin");
     }
 
+    /// <summary>
+    /// The crawl's counts count its probes, and say how much of each figure they are: www's redirect and the two dead
+    /// https:// versions here, in the classes, codes and reasons the whole crawl's are counted in. What's left is the
+    /// site's own two pages. The stats of the crawl at rest say the same, and a crawl continued has the part it had.
+    /// </summary>
+    [Fact]
+    public async Task TheCountsSayWhichPartOfThemIsTheProbes()
+    {
+        var path = _files.NewPath();
+        await using var site = await StartAsync(SiteWith(RedirectsHome(301)));
+        var summary = await TestCrawls.RunAsync(Options(site), path);
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+
+        var probes = summary.Progress.SiteVersions;
+        Assert.Equal(3, probes.Fetched);
+        Assert.Equal(new CrawlStatusClasses(Success: 0, Redirect: 1, ClientError: 0, ServerError: 0, OtherStatus: 0, NoResponse: 2, Blocked: 0), probes.StatusClasses);
+        Assert.Equal(new Dictionary<int, long> { [301] = 1 }, probes.StatusCodes);
+        Assert.Equal(new CrawlNoResponseCounts(RobotsDisallowed: 0, Timeout: 0, NetworkError: 2, NotChecked: 0, ProcessingError: 0), probes.NoResponse);
+
+        // Every figure counts them, as the URL grid lists them: the figure less its part is the site's own.
+        Assert.Equal((5L, 5L), (summary.Progress.Fetched, summary.Progress.Crawled));
+        Assert.Equal(new CrawlStatusClasses(2, 1, 0, 0, 0, 2, 0), summary.Progress.StatusClasses);
+        Assert.Equal(2, summary.Progress.NoResponse.NetworkError);
+        Assert.Equal(2, UrlGridReader.Query(path, new UrlQuery
+        {
+            Filters = [GridQueries.Boolean("fetched", true), GridQueries.Names("source", FilterOperator.NotIn, "siteVersion")], Limit = 1
+        }).Matching);
+        ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
+
+        var stats = CrawlStatsReader.Read(path).SiteVersions;
+        Assert.Equal(3, stats.Fetched);
+        Assert.Equal(new Dictionary<FetchOutcome, long> { [FetchOutcome.Redirect] = 1, [FetchOutcome.NetworkError] = 2 }, stats.Outcomes);
+        Assert.Equal(new Dictionary<int, long> { [301] = 1 }, stats.StatusCodes);
+
+        var resumed = await TestCrawls.RunAsync(Options(site), path, resume: true);
+        Assert.Equal(probes.StatusClasses, resumed.Progress.SiteVersions.StatusClasses);
+        Assert.Equal(probes.NoResponse, resumed.Progress.SiteVersions.NoResponse);
+        Assert.Equal(probes.StatusCodes, resumed.Progress.SiteVersions.StatusCodes);
+        ProgressAgreement.AssertMatchesTheFile(resumed.Progress, path);
+    }
+
+    /// <summary>
+    /// A probe the site links to is one of the site's URLs from then on, and no part of the probes' counts: www's
+    /// redirect is fetched again as the site's own, and only the two dead https:// versions are left as probes.
+    /// </summary>
+    [Fact]
+    public async Task AProbeTheSiteLinksToLeavesTheProbesCounts()
+    {
+        var path = _files.NewPath();
+        await using var site = await StartAsync(SiteWith(RedirectsHome(301), home: $"<a href=\"/a\">A</a> <a href=\"{WWW}/\">The www version</a>"));
+        var summary = await TestCrawls.RunAsync(Options(site), path);
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+
+        Assert.Equal(DiscoverySource.Link, (DiscoverySource)TestCrawls.Count(path, $"SELECT source FROM urls WHERE url = '{WWW}/'"));
+        var probes = summary.Progress.SiteVersions;
+        Assert.Equal((2L, new CrawlStatusClasses(0, 0, 0, 0, 0, 2, 0)), (probes.Fetched, probes.StatusClasses));
+        Assert.Empty(probes.StatusCodes);
+        Assert.Equal(new CrawlStatusClasses(2, 1, 0, 0, 0, 2, 0), summary.Progress.StatusClasses);
+        ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
+    }
+
     /// <summary>www answers with its own copy of the home page, links and all. It's flagged, and nothing on it is followed.</summary>
     [Fact]
     public async Task AVersionThatAnswersWithAPageIsADuplicateAndIsNotCrawled()
@@ -191,7 +252,14 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
         {
             await TestCrawls.WaitUntilAsync(path, until);
             Release(held);
-            Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
+            var summary = await job.Completion.WaitAsync(TestCrawls.TIMEOUT);
+            Assert.Equal(CrawlStatus.Completed, summary.Status);
+
+            // Whichever came first, the probe's answers that the site took over are the site's in the counts too (the
+            // page its redirect led to was kept for the site, then fetched again in full): the dead https:// versions
+            // are all that is left of the probes.
+            Assert.Equal((2L, 2L), (summary.Progress.SiteVersions.Fetched, summary.Progress.SiteVersions.NoResponse.NetworkError));
+            ProgressAgreement.AssertMatchesTheFile(summary.Progress, path);
         }
 
         var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);

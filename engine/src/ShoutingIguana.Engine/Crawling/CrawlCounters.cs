@@ -14,30 +14,20 @@ internal sealed class CrawlCounters
     /// <summary>Status codes are three digits: one slot each, so counting one never allocates.</summary>
     private const int STATUS_CODE_SLOTS = 1_000;
 
-    private readonly long[] _statusCodes = new long[STATUS_CODE_SLOTS];
+    /// <summary>Every response, by how it answered; and those of the probes of the site's other versions, which are among them.</summary>
+    private readonly Answers _all = new();
+    private readonly Answers _probes = new();
     private CrawlCounts _current = CrawlCounts.None;
     private long _discovered;
     private long _queued;
     private long _skipped;
     private long _inFlight;
-    private long _fetched;
     private long _htmlPages;
     private long _redirects;
     private long _errors;
-    private long _blocked;
-    private long _robotsDisallowed;
     private long _bytes;
     private long _internalFound;
     private long _internalFetched;
-    private long _status2xx;
-    private long _status3xx;
-    private long _status4xx;
-    private long _status5xx;
-    private long _otherStatus;
-    private long _timeouts;
-    private long _networkErrors;
-    private long _notChecked;
-    private long _processingErrors;
 
     /// <summary>The totals as the writer last published them, after the last batch it stored. Safe from any thread.</summary>
     public CrawlCounts Current => Volatile.Read(ref _current);
@@ -48,21 +38,13 @@ internal sealed class CrawlCounters
     /// </summary>
     public void Publish()
     {
-        var noResponse = new CrawlNoResponseCounts(_robotsDisallowed, _timeouts, _networkErrors, _notChecked, _processingErrors);
-        var classes = new CrawlStatusClasses(_status2xx, _status3xx, _status4xx, _status5xx, _otherStatus,
-            noResponse.RobotsDisallowed + noResponse.Timeout + noResponse.NetworkError + noResponse.NotChecked + noResponse.ProcessingError,
-            _blocked);
-        Dictionary<int, long> codes = [];
-        for (var code = 0; code < STATUS_CODE_SLOTS; code++)
+        var (classes, noResponse, codes) = _all.Publish();
+        var (probeClasses, probeNoResponse, probeCodes) = _probes.Publish();
+        Volatile.Write(ref _current, new CrawlCounts(_discovered, _queued, _skipped, _inFlight, _all.Fetched, _htmlPages, _redirects, _errors,
+            _all.Blocked, _all.RobotsDisallowed, _bytes, _internalFound, _internalFetched, classes, noResponse, codes)
         {
-            if (_statusCodes[code] > 0)
-            {
-                codes[code] = _statusCodes[code];
-            }
-        }
-
-        Volatile.Write(ref _current, new CrawlCounts(_discovered, _queued, _skipped, _inFlight, _fetched, _htmlPages, _redirects, _errors,
-            _blocked, _robotsDisallowed, _bytes, _internalFound, _internalFetched, classes, noResponse, codes));
+            SiteVersions = _probes.Fetched == 0 ? CrawlSiteVersionCounts.None : new CrawlSiteVersionCounts(_probes.Fetched, probeClasses, probeCodes, probeNoResponse)
+        });
     }
 
     /// <param name="isSiteUrl">One of the site's own URLs: internal, and not a probe of the site's other versions.</param>
@@ -116,6 +98,13 @@ internal sealed class CrawlCounters
         _internalFetched += fetched ? 1 : 0;
     }
 
+    /// <summary>
+    /// A probe's stored response is kept for a URL the site itself has now found, on the site or off it: it is still
+    /// counted, and no longer as a probe's.
+    /// </summary>
+    public void OnProbeResponseAdopted(FetchOutcome outcome, int? statusCode, bool isNotChecked) =>
+        _probes.Add(outcome, statusCode, -1, isNotChecked ? -1 : 0);
+
     /// <summary>A claimed URL went back on the queue without a response, to be fetched again in full.</summary>
     public void OnReturned()
     {
@@ -127,7 +116,7 @@ internal sealed class CrawlCounters
     public void OnResponseRemoved(RecordedResponse response)
     {
         AddResponses(response.Outcome, response.StatusCode, -1, response.IsSitePage ? -1 : 0, -response.Bytes,
-            response.IsSiteUrl ? -1 : 0, response.IsNotChecked ? -1 : 0);
+            response.IsSiteUrl ? -1 : 0, response.IsNotChecked ? -1 : 0, response.IsProbe);
         _queued++;
     }
 
@@ -135,7 +124,7 @@ internal sealed class CrawlCounters
     {
         _inFlight--;
         AddResponses(response.Outcome, response.StatusCode, 1, response.IsSitePage ? 1 : 0, response.Bytes,
-            response.IsSiteUrl ? 1 : 0, response.IsNotChecked ? 1 : 0);
+            response.IsSiteUrl ? 1 : 0, response.IsNotChecked ? 1 : 0, response.IsProbe);
     }
 
     /// <summary>Restores URL totals when a crawl resumes; response totals follow via <see cref="AddResponses"/>.</summary>
@@ -152,9 +141,10 @@ internal sealed class CrawlCounters
     /// status code. The other counts say how many of them were parsed pages, the site's own URLs, and network errors that
     /// were never asked (Not checked), and the bytes of their bodies.
     /// </summary>
-    public void AddResponses(FetchOutcome outcome, int? statusCode, long count, long parsedPages, long bytes, long siteUrls = 0, long notChecked = 0)
+    /// <param name="probes">They are the answers of probes of the site's other versions, every one of them.</param>
+    public void AddResponses(FetchOutcome outcome, int? statusCode, long count, long parsedPages, long bytes, long siteUrls = 0, long notChecked = 0,
+        bool probes = false)
     {
-        _fetched += count;
         _htmlPages += parsedPages;
         _bytes += bytes;
         _internalFetched += siteUrls;
@@ -164,68 +154,117 @@ internal sealed class CrawlCounters
             case FetchOutcome.Redirect:
                 _redirects += count;
                 break;
-            case FetchOutcome.Blocked:
-                _blocked += count;
-                break;
-            case FetchOutcome.RobotsDisallowed:
-                _robotsDisallowed += count;
-                break;
             case FetchOutcome.ClientError or FetchOutcome.ServerError or FetchOutcome.Timeout
                 or FetchOutcome.NetworkError or FetchOutcome.ProcessingError:
                 _errors += count;
                 break;
         }
 
-        // A block page's status is the firewall's, so a blocked URL is counted as blocked alone. RobotsDisallowed is
-        // counted above.
-        if (outcome == FetchOutcome.Blocked)
+        _all.Add(outcome, statusCode, count, notChecked);
+        if (probes)
         {
-            return;
-        }
-
-        if (statusCode is not { } code)
-        {
-            switch (outcome)
-            {
-                case FetchOutcome.RobotsDisallowed:
-                    break;
-                case FetchOutcome.Timeout:
-                    _timeouts += count;
-                    break;
-                case FetchOutcome.NetworkError:
-                    _networkErrors += count - notChecked;
-                    _notChecked += notChecked;
-                    break;
-                default:
-                    // A processing error, or a status the file lost: either way, no status was recorded.
-                    _processingErrors += count;
-                    break;
-            }
-
-            return;
-        }
-
-        ClassOf(code) += count;
-        if (code is >= 0 and < STATUS_CODE_SLOTS)
-        {
-            _statusCodes[code] += count;
+            _probes.Add(outcome, statusCode, count, notChecked);
         }
     }
 
-    private ref long ClassOf(int statusCode)
+    /// <summary>Responses counted by how they answered: by status class and code, and why those without a status have none.</summary>
+    private sealed class Answers
     {
-        switch (statusCode)
+        private readonly long[] _statusCodes = new long[STATUS_CODE_SLOTS];
+        private long _status2xx;
+        private long _status3xx;
+        private long _status4xx;
+        private long _status5xx;
+        private long _otherStatus;
+        private long _timeouts;
+        private long _networkErrors;
+        private long _notChecked;
+        private long _processingErrors;
+
+        public long Fetched { get; private set; }
+
+        public long Blocked { get; private set; }
+
+        public long RobotsDisallowed { get; private set; }
+
+        public void Add(FetchOutcome outcome, int? statusCode, long count, long notChecked)
         {
-            case >= 200 and < 300:
-                return ref _status2xx;
-            case >= 300 and < 400:
-                return ref _status3xx;
-            case >= 400 and < 500:
-                return ref _status4xx;
-            case >= 500 and < 600:
-                return ref _status5xx;
-            default:
-                return ref _otherStatus;
+            Fetched += count;
+
+            // A block page's status is the firewall's, so a blocked URL is counted as blocked alone.
+            if (outcome == FetchOutcome.Blocked)
+            {
+                Blocked += count;
+                return;
+            }
+
+            if (outcome == FetchOutcome.RobotsDisallowed)
+            {
+                RobotsDisallowed += count;
+            }
+
+            if (statusCode is not { } code)
+            {
+                switch (outcome)
+                {
+                    case FetchOutcome.RobotsDisallowed:
+                        break;
+                    case FetchOutcome.Timeout:
+                        _timeouts += count;
+                        break;
+                    case FetchOutcome.NetworkError:
+                        _networkErrors += count - notChecked;
+                        _notChecked += notChecked;
+                        break;
+                    default:
+                        // A processing error, or a status the file lost: either way, no status was recorded.
+                        _processingErrors += count;
+                        break;
+                }
+
+                return;
+            }
+
+            ClassOf(code) += count;
+            if (code is >= 0 and < STATUS_CODE_SLOTS)
+            {
+                _statusCodes[code] += count;
+            }
+        }
+
+        public (CrawlStatusClasses Classes, CrawlNoResponseCounts NoResponse, Dictionary<int, long> Codes) Publish()
+        {
+            var noResponse = new CrawlNoResponseCounts(RobotsDisallowed, _timeouts, _networkErrors, _notChecked, _processingErrors);
+            var classes = new CrawlStatusClasses(_status2xx, _status3xx, _status4xx, _status5xx, _otherStatus,
+                noResponse.RobotsDisallowed + noResponse.Timeout + noResponse.NetworkError + noResponse.NotChecked + noResponse.ProcessingError,
+                Blocked);
+            Dictionary<int, long> codes = [];
+            for (var code = 0; code < STATUS_CODE_SLOTS; code++)
+            {
+                if (_statusCodes[code] > 0)
+                {
+                    codes[code] = _statusCodes[code];
+                }
+            }
+
+            return (classes, noResponse, codes);
+        }
+
+        private ref long ClassOf(int statusCode)
+        {
+            switch (statusCode)
+            {
+                case >= 200 and < 300:
+                    return ref _status2xx;
+                case >= 300 and < 400:
+                    return ref _status3xx;
+                case >= 400 and < 500:
+                    return ref _status4xx;
+                case >= 500 and < 600:
+                    return ref _status5xx;
+                default:
+                    return ref _otherStatus;
+            }
         }
     }
 }

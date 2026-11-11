@@ -42,10 +42,12 @@ public static class CrawlSummaryReader
             cancellationToken.ThrowIfCancellationRequested();
             var flagged = analysis is null ? null : FlaggedChecks(connection);
             cancellationToken.ThrowIfCancellationRequested();
-            var (fetched, pages) = withCounts ? Counts(connection) : (null, null);
+            var (fetched, crawled, pages) = withCounts ? Counts(connection) : (null, null, null);
             return summary with
             {
+                TimeCrawling = CrawlRunReader.Read(connection, transaction: null)?.TimeCrawling,
                 FetchedUrlCount = fetched,
+                CrawledUrlCount = crawled,
                 PageCount = pages,
                 AnalyzedAt = analysis?.AnalyzedAt,
                 Analysis = analysis,
@@ -76,16 +78,16 @@ public static class CrawlSummaryReader
             : throw new InvalidOperationException("This file is not a crawl database.");
     }
 
-    /// <summary>The URLs fetched and the pages among them, in one pass over the responses.</summary>
-    private static (long? Fetched, long? Pages) Counts(SqliteConnection connection)
+    /// <summary>The URLs with an outcome, those of them that were asked (not "not checked"), and the pages, in one pass over the responses.</summary>
+    private static (long? Fetched, long? Crawled, long? Pages) Counts(SqliteConnection connection)
     {
         using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT COUNT(*), COALESCE(SUM({CrawlSchema.PAGE}), 0)
+            SELECT COUNT(*), COALESCE(SUM(NOT {AnalysisReader.NOT_CHECKED}), 0), COALESCE(SUM({CrawlSchema.PAGE}), 0)
             FROM responses r LEFT JOIN urls u ON u.id = r.url_id
             """;
         using var reader = command.ExecuteReader();
-        return reader.Read() ? (reader.GetInt64(0), reader.GetInt64(1)) : (0, 0);
+        return reader.Read() ? (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2)) : (0, 0, 0);
     }
 
     private static Dictionary<IssueSeverity, long> FlaggedChecks(SqliteConnection connection)

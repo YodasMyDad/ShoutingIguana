@@ -28,6 +28,11 @@ Built in stages:
 - **E3b, E5 and E6** add the links grid, sitemaps and robots.txt, export, search and the favicon. They come from the
   brief's [engine work the UI needs](v2-ui-brief.md#engine-work-the-ui-needs) and the handoff's
   [what's missing](v2-rebuild.md#whats-missing).
+- **E3c** is marked below where it adds to an answer, each addition a new field and nothing taken away: what the
+  Overview and inspector screens found missing once they were built on the real thing. `/stats` read fast and kept;
+  the crawler's own probes said apart in the counts; the URLs crawled counted as the grid counts them; the time spent
+  crawling; the inspector's totals of every kind of link, the URL's length, and what became of each link's other end.
+  [Engine changes E3c made](#engine-changes-e3c-made) has what changed and what was measured.
 
 ## Process (E1)
 
@@ -242,17 +247,33 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 ```json
 {"id":"…","path":"C:\\…\\example.com-20261101-101500.sicrawl","fileName":"…","site":"example.com",
  "startUrl":"https://www.example.com/","status":"completed","startedAt":"…","finishedAt":"…","updatedAt":"…",
- "fetchedUrlCount":4521,"pageCount":265,"issues":{"error":3,"warning":12,"notice":7},"analyzedAt":"…",
- "outOfDate":false,"sizeBytes":18276352,"missing":false}
+ "crawlingMs":41250,"fetchedUrlCount":4521,"crawledUrlCount":4516,"pageCount":265,"issues":{"error":3,"warning":12,"notice":7},
+ "analyzedAt":"…","outOfDate":false,"sizeBytes":18276352,"missing":false}
 ```
 
 - **`site`** is the host without a leading `www.`. The UI groups crawls by it.
-- **`fetchedUrlCount`** is the URLs with a stored outcome: those the crawl requested, and those robots.txt kept it from
-  requesting (stored as disallowed). URLs it only found (a nofollow link, past a limit) aren't counted. It matches
-  `si stats`'s fetched count and a running crawl's `fetched` progress. (The full count of every URL in the file, fetched
-  or not, is `/stats`'s `urlCount`.) **`pageCount`** is the pages — internal URLs that returned HTML the crawler
-  parsed — as in `si stats`, and the same definition a running crawl's `htmlPages` uses, so the count doesn't shift
-  when a crawl ends.
+- **`crawlingMs`** (E3c) is the time the crawl has spent crawling, over every run of it: each run from its start to its
+  end, less the time it was paused. Neither a pause nor the time between a stop and a continue is in it, so it's the
+  figure for "crawled in 41 seconds", which `finishedAt` less `startedAt` isn't for a crawl stopped and continued. A
+  running crawl's is the progress event's `crawlingMs`. **Null when it isn't known**: a crawl an engine from before
+  E3c made, or made any run of, didn't keep the time that run took, so there's no total, and no part of one is given.
+  A run cut short (the process died) counts up to when the engine last stored it, within about five seconds of its end.
+- **`crawledUrlCount`** (E3c) is the URLs crawled: those the crawl requested, and those robots.txt kept it from
+  requesting (stored as disallowed). It is the URL grid's `fetched` column: `{"column":"fetched","op":"is","value":true}`
+  lists exactly this many, so it's the count to show as "N URLs". A running crawl's is the progress event's `crawled`.
+  It's counted from the file as it's read, so every crawl has it, whichever engine made it.
+- **`fetchedUrlCount`** is the URLs the crawl is done with: every URL with a stored outcome. That is the URLs crawled
+  **and those that weren't checked** (never asked, their host having stopped answering: the grid's `outcome`
+  `notChecked`, which it has as not fetched), so no filter on `fetched` gives it; `crawledUrlCount` is the grid's
+  count. URLs only found (a nofollow link, past a limit) are in neither. It matches `si stats`'s outcomes added up and
+  a running crawl's `fetched` progress. (The full count of every URL in the file is `/stats`'s `urlCount`.)
+  **Why two counts** and not one made smaller: `fetched` is what the live figures add up to (the status classes, and
+  with the queued, in-flight and skipped URLs, every URL found), mid-crawl and at the end, and a URL that wasn't
+  checked has its place in those sums as `noResponse.notChecked`. Taking it out of `fetched` would break every sum a
+  client makes with it, the UI's own among them, to save one subtraction; so the count that leaves it out has its own
+  name.
+- **`pageCount`** is the pages — internal URLs that returned HTML the crawler parsed — as in `si stats`, and the same
+  definition a running crawl's `htmlPages` uses, so the count doesn't shift when a crawl ends.
 - **`status`** is one of:
 
   | Status | Meaning |
@@ -347,7 +368,7 @@ use, as `si crawl --resume` allows. It's analysed when it completes.
 
 | Event | Data | When |
 | --- | --- | --- |
-| `progress` | `{ crawlId, status, elapsedMs, discovered, queued, inFlight, fetched, htmlPages, redirects, errors, blocked, robotsDisallowed, skipped, bytesDownloaded, urlsPerSecond, at, phase, internalFound, internalFetched, maxUrls, statusClasses, statusCodes, noResponse, waits, moreWaits }` | Every 500 ms per live crawl (the engine's pace). The UI batches to 4 renders a second. `urlsPerSecond` is the rate of every URL fetched, pages and the rest alike. The fields from `at` on are E4's, below |
+| `progress` | `{ crawlId, status, elapsedMs, discovered, queued, inFlight, fetched, htmlPages, redirects, errors, blocked, robotsDisallowed, skipped, bytesDownloaded, urlsPerSecond, at, phase, internalFound, internalFetched, maxUrls, statusClasses, statusCodes, noResponse, waits, moreWaits, crawled, siteVersions, crawlingMs }` | Every 500 ms per live crawl (the engine's pace). The UI batches to 4 renders a second. `urlsPerSecond` is the rate of every URL fetched, pages and the rest alike. `elapsedMs` is this run's time, pauses included. The fields from `at` on are E4's, and the last three E3c's, below |
 | `alert` | `{ crawlId, id, level, code, message, at, data }` | Each `CrawlNotice` (see below) |
 | `crawl` | `{ crawlId, status, error?, errorType? }` | Every status change, with the library's statuses. An analysis shows as `analyzing`, then back to `completed` or `stopped` with a `library` event, and `error` if it failed. `errorType` is the problem type when the UI can act on it: `crawl-busy` when the analysis found the file busy (someone reading it, another program writing to it), within seconds, so trying again can work |
 | `library` | `{}` | The library changed. The UI fetches `/api/crawls` again |
@@ -382,6 +403,34 @@ on, mid-crawl as at the end.
   `statusClasses.noResponse`. `robotsDisallowed` is the same count as the top-level field (refused by a rule, or because
   robots.txt couldn't be read). `notChecked` is URLs never asked, their host having stopped answering: unknown, not
   broken, so the UI shouldn't call them errors. `networkError` doesn't include them.
+- **`crawlingMs`** (E3c) is the time spent crawling so far, over every run of the crawl: the earlier runs' time, and
+  this run's without its pauses, so it stands still while the crawl is paused, where `elapsedMs` (this run's alone)
+  runs on. It ends at the library item's `crawlingMs`, to the millisecond. Null when an earlier run's time wasn't
+  kept (see the library item).
+- **`crawled`** (E3c) is the URLs crawled so far, as the URL grid counts them (`fetched` is true): `fetched` less
+  `noResponse.notChecked`. It ends at the library item's `crawledUrlCount`, as `fetched` ends at `fetchedUrlCount`.
+- **`siteVersions`** (E3c) is the part of the event's figures that is the crawler's own probes of the site's other
+  versions (http or https, www or not: the URL grid's `source` `siteVersion`), which nothing on the site leads to:
+  `{ fetched, statusClasses, statusCodes, noResponse }`, each shaped as the event's own and counted within it.
+
+  ```json
+  {"fetched":3,"statusClasses":{"2xx":0,"3xx":2,"4xx":0,"5xx":0,"other":0,"noResponse":1,"blocked":0},
+   "statusCodes":{"301":2},"noResponse":{"robotsDisallowed":0,"timeout":0,"networkError":1,"notChecked":0,"processingError":0}}
+  ```
+
+  - **What the figures count.** Every figure of the event counts every URL the crawl has, its own probes among them,
+    as the URL grid lists them: so each figure lands on its count in the grid, and `fetched`, the classes and what
+    was found add up as they always have. The probes are the crawler's questions, though, not the site's URLs: the
+    https probe of a site served over http only is a network error from the crawl's first seconds, and it isn't the
+    site failing to answer. `siteVersions` says how much of each figure they are, so the UI shows the site's own
+    (the figure less its part here) and says the probes apart, as it does the URLs that weren't checked.
+  - **Each lands on its count.** A figure less its part is the URLs the site itself led to, which the grid lists with
+    `{"column":"source","op":"notIn","values":["siteVersion"]}` added to the figure's filter; the part itself is the
+    grid's count with `"op":"in"`.
+  - **Live and done agree.** `/stats` gives the same part of a crawl at rest (its `siteVersions`), and the URL
+    facets count under any filter, that one included.
+  - A probe the site turns out to link to, list in a sitemap or redirect to becomes one of the site's own URLs (its
+    `source` changes), and leaves these counts as it does.
 - **`internalFound`** and **`internalFetched`** are the site's own URLs (internal, not the crawler's probes of its other
   versions) the crawl means to fetch, queued, in flight or fetched, and those it has fetched. URLs it skipped (nofollow,
   a limit) aren't counted. A URL limit counts these, so a crawl with one heads for the smaller of `internalFound` and
@@ -475,7 +524,11 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 ```json
 {"crawlId":"…","startedAt":"2026-11-01T14:13:02.114Z","liveFrom":"2026-11-01T14:13:02.114Z",
  "points":[{"at":"…","fetched":499,"htmlPages":420,"internalFetched":480,"internalFound":3912,"errors":3,"blocked":0,
-            "elapsedMs":240000,"discovered":5384,"queued":3384,"skipped":1501}]}
+            "elapsedMs":240000,"discovered":5384,"queued":3384,"skipped":1501}],
+ "crawlingMs":251250,
+ "runs":[{"startedAt":"2026-11-01T14:13:02.114Z","endedAt":"2026-11-01T14:18:13.364Z","crawlingMs":251250,
+          "crawling":[{"from":"2026-11-01T14:13:02.114Z","to":"2026-11-01T14:15:02.114Z"},
+                      {"from":"2026-11-01T14:16:02.114Z","to":"2026-11-01T14:18:13.364Z"}]}]}
 ```
 
 - **`startedAt`** is when the crawl first started: the chart's zero.
@@ -484,7 +537,9 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
   on, and the latest. Memory stays flat however long it runs.
 - **`internalFound`** and **`internalFetched`**, on every point, are the progress event's: the chart's "found" and
   "crawled" lines meet the headline and its ETA.
-- **`liveFrom`** is where the points taken live begin: the start of the run this sidecar is watching. Before it, and
+- **`liveFrom`** is where the points taken live begin: the start of the run this sidecar is watching: when the sidecar
+  was asked to run it, a moment before the engine's own start of the run in `runs`, which is when the crawl file was
+  open and crawling began (continuing a big crawl reads its URLs first). Before it, and
   for a crawl not live here (`liveFrom` null), the points are counted back from the crawl file: a zero at `startedAt`,
   then at most 600 evenly spread over the seconds anything was fetched or found in, and the last.
 - **What the file can say.** It keeps when each URL was fetched, so its points have `fetched`, `htmlPages`,
@@ -494,9 +549,22 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
   list, which no page links, from the crawl's start, as the sitemaps are read then. A URL the crawl skipped isn't
   counted at any point, though a live count had one skipped for the URL limit until the limit was reached. The rest of
   what was found (`discovered`, `queued`, `skipped`) can't be counted back, so file points leave it out, and
-  `elapsedMs`. Nor does the file keep when each run began and ended: a stretch where nothing was fetched can be a
-  pause, a stop between sessions, or a site that wasn't answering. A URL fetched twice (a status check made a full
-  fetch) counts from its last fetch.
+  `elapsedMs`. A URL fetched twice (a status check made a full fetch) counts from its last fetch.
+- **`runs`** (E3c) is when the crawl was crawling: each run of it, oldest first, from its `startedAt` to its
+  `endedAt`, with the time it spent crawling (`crawlingMs`) and the stretches it spent it in (`crawling`, each
+  `{ from, to }`): one stretch for a run never paused, and a pause is the gap between two. The top-level
+  **`crawlingMs`** is their sum: the library item's.
+  - **Plotting crawled time.** A moment's place on an axis of time spent crawling is the stretches' time up to it:
+    every stretch that ended before it, and the part of the one it falls in. A moment in no stretch (a pause, the
+    time between runs, a site waited out isn't one: that's crawling) sits where the stretch before it ended, so the
+    gaps close.
+  - **A run that hasn't ended** has `endedAt` null: the run going now, or one cut short when its process died (the
+    item's status says which). Its last stretch's `to` is as the engine last stored it, at most about five seconds
+    before the present for a crawl that's running: a client drawing a live crawl takes the stretch to run on to
+    its latest `progress`.
+  - **Null when not known**, both of them: for a crawl any run of which was made by an engine from before E3c, whose
+    time wasn't kept. A chart then has only clock time, as before. Also null past 1,000 stretches (a crawl paused a
+    thousand times), which aren't listed; `crawlingMs` is still given then.
 - **Cost.** A live crawl's own points cost nothing to serve. Counting back from the file reads every response's time
   and every one of the site's URLs once: about 0.1 s for 100,000 URLs and 1.2 s for a million. It's done once and kept:
   for a live crawl that continued an earlier one, for that run; for a crawl not live here, until its file changes (its
@@ -549,6 +617,26 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 | `GET /api/crawls/{id}/stats` | `CrawlStatsReader.Read`. `nonIndexableReasons` counts the site's URLs as the checks and the URL summary do: the probes of its other versions are left out, and so are the URLs that weren't checked, which `notCheckedCount` gives |
 | `GET /api/crawls/{id}/issues/{checkId}?limit=200&offset=0` | `{ rows: [{ url, detail, relatedUrl }], total }`. `total` is null for a check that was skipped, never 0 |
 
+**`siteVersions`** (E3c), on `/stats`, is the part of `outcomes` and `statusCodes` that is the crawler's probes of the
+site's other versions, `{ "fetched": 3, "outcomes": { "redirect": 2, "networkError": 1 }, "statusCodes": { "301": 2 } }`:
+`outcomes` and `statusCodes` count every stored outcome, the probes' among them, as the live figures do, and this is
+the progress event's `siteVersions` for a crawl at rest (see **Progress**). `fetched` is how many probes have an
+outcome.
+
+**`/stats` is read as a grid is** (E3c), and its other answers are what they always were:
+
+- **One snapshot.** Every number is of the same moment of the file, a running crawl's included.
+- **Kept.** The numbers are kept with the grids' counts, per crawl file, crawl stamp and analysis: they're read once
+  while the crawl stands still, so Overview's call costs a read once per crawl, and a running crawl's are kept for 2 s.
+- **Served as the grids' reads are.** It takes one of the grid read slots, a request given up stops its read, and an
+  analysis or a continue starting never waits on it.
+- **What the first read costs.** One pass over the URLs and one over the responses, whatever is counted from them
+  (it was a pass for each number). Where the analysis's link summary counts the crawl as it stands, no link is read:
+  `linkCount` is the links grid's `total`, and `unlinkedPageCount` comes from the summary's count of each URL's links
+  from other pages. Without it (a crawl running, never analysed, continued since its analysis, or analysed before
+  E3b), the links are counted and each page a sitemap led to is looked up among them. Measured under
+  [Engine changes E3c made](#engine-changes-e3c-made).
+
 E3 replaces the issues endpoint with keyset paging and grouping. Its grid queries are `POST`s to one fixed URL
 per grid (see CORS above). The URL grids read the URL summary each analysis builds (E2, `url_summary` in
 [the engine's README](../engine/README.md#url-summary)): one row per URL, with indexes for the common sorts and
@@ -574,7 +662,7 @@ The GET issues endpoint above stays as it is, for scripts and the design fixture
 ### URLs (E3a)
 
 The URL grid: every URL the crawl found is a row, fetched or not (filter on `fetched` for the library's
-`fetchedUrlCount`), the probes of the site's other versions included (filter on `source`). Each call reads one snapshot
+`crawledUrlCount`), the probes of the site's other versions included (filter on `source`). Each call reads one snapshot
 of the file and holds it for that one page only.
 
 - **A grid never keeps an analysis or a continue waiting.** Starting one here stops the grids' reads of that crawl for
@@ -770,17 +858,17 @@ not the path, so moving from URL to URL costs no preflight. `url-not-found` (404
 below, or past what an id holds), and `invalid-query` without one.
 
 ```json
-{"id":119,"url":"https://www.example.com/blog/?p=2","isInternal":true,"type":"page",
+{"id":119,"url":"https://www.example.com/blog/?p=2","urlLength":33,"isInternal":true,"type":"page",
  "discovery":{"source":"link","depth":2,"foundOn":{"id":7,"url":"https://www.example.com/blog/"},"foundVia":"hyperlink",
               "fetchMode":"crawl","state":"done","notFetchedBecause":null},
  "response":{"fetched":true,"outcome":"success","statusCode":200,"contentType":"text/html; charset=utf-8","httpVersion":"2.0",
              "crawledAt":"2026-10-31T20:15:02Z","ttfbMs":180,"responseMs":240,"sizeBytes":18011,"bodyBytes":96340,
              "blockReason":null,"error":null},
- "redirects":{"hops":[],"final":{"id":119,"url":"https://www.example.com/blog/?p=2","statusCode":200},"loop":false,"tooLong":false},
+ "redirects":{"hops":[],"final":{"id":119,"url":"https://www.example.com/blog/?p=2","statusCode":200,"outcome":"success"},"loop":false,"tooLong":false},
  "indexability":{"indexable":false,"reason":"canonicalised","judgedBy":"analysis",
    "tests":[{"test":"answered","outcome":"pass","statusCode":200},{"test":"robotsTxt","outcome":"pass"},
             {"test":"noindex","outcome":"pass","meta":false,"header":false},
-            {"test":"canonical","outcome":"fail","canonical":{"id":7,"url":"https://www.example.com/blog/","statusCode":200},
+            {"test":"canonical","outcome":"fail","canonical":{"id":7,"url":"https://www.example.com/blog/","statusCode":200,"outcome":"success"},
              "canonicalUrl":"https://www.example.com/blog/"}]},
  "content":{"titles":[{"text":"Blog, page 2","length":12}],"descriptions":[],"h1s":[{"text":"Blog","length":4}],
             "headings":[1,3,0,0,0,0],"wordCount":412,"language":"en-GB","charset":"utf-8","robots":[],"metaRefresh":null,
@@ -788,6 +876,7 @@ below, or past what an id holds), and `invalid-query` without one.
  "limits":{"titleMin":30,"titleMax":60,"descriptionMin":70,"descriptionMax":155,"minWords":200,"slowResponseMs":1000,
            "largePageBytes":1048576,"largeImageBytes":204800,"imageAltMaxLength":125,"maxUrlLength":115,"fromAnalysis":true},
  "links":{"inlinks":3,"followedInlinks":3,"nofollowInlinks":0,"linkingPages":2,"outlinks":45,"inSitemap":false},
+ "linkTotals":{"inlinks":4,"outlinks":63},
  "headers":[{"name":"content-type","value":"text/html; charset=utf-8"}],
  "structuredData":[{"valid":true,"types":["BlogPosting"],"json":"{…}","error":null,"truncated":false}],
  "hreflang":[],
@@ -797,6 +886,11 @@ below, or past what an id holds), and `invalid-query` without one.
  "source":{"stored":false}}
 ```
 
+- **`urlLength`** (E3c) is the URL's length as the check `url-too-long` measures it, to set against
+  `limits.maxUrlLength`: the URL as people read it, its escapes decoded and its host in its own script (`/каталог/` is
+  9 characters, not 42), in characters as a reader counts them. The check and the inspector measure it with the same
+  code. It's given for any URL, though the check looks only at indexable pages; null only for a stored URL that isn't
+  one (a crafted file's).
 - **`discovery`** is how the crawl first found it: `foundVia` is the kind of link (`hyperlink`, `image`, `canonical`,
   `redirect`...), `fetchMode` is `crawl` (fetched, parsed, its links followed) or `check` (status only), `state` is
   `queued`, `fetching`, `done` or `skipped`, and `notFetchedBecause` why a skipped URL wasn't fetched (`none` when no
@@ -838,6 +932,16 @@ below, or past what an id holds), and `invalid-query` without one.
   `image-too-large` goes by, and `imageAltMaxLength`) and a URL's (`maxUrlLength`).
 - **`links`** comes from the URL summary, and is null without one (`summary` says why). `type` is judged as the
   grid's column is.
+- **`linkTotals`** (E3c) is every link to the URL and from it, `{ inlinks, outlinks }`: links of every kind, a page's
+  links to itself left out, which is the `total` that `/urls/inlinks` and `/urls/outlinks` give with no `kinds`. So the
+  inspector's Inlinks and Outlinks tabs have their counts without a read each. They're counted from the links
+  themselves (the inlinks from the link summary, where there is one), so they're there with or without a URL summary,
+  a running crawl's included, where `links` (hyperlinks only, on the pages audited) is null; a running crawl's are
+  kept for 2 s, as its other counts are.
+- **A URL the inspector names carries its `outcome`** (E3c) beside its status, as the URL grid's `outcome` column has
+  it: `redirects.final`, a test's `canonical` and `metaRefresh`, and an hreflang's `target`, as each hop of `redirects`
+  already did. A status is null both for a URL never fetched and for one that gave no HTTP answer; the outcome tells
+  them apart (null, or `robotsDisallowed`, `timeout`, `networkError`, `notChecked`...).
 - **`headers`** are as stored: names lowercased, for internal URLs only. **`structuredData`** is each JSON-LD block,
   `valid` when it parses, with its `@type`s (those in a `@graph` included), or the parser's `error`; `truncated` when
   the page's block was cut at the parser's limit. **`hreflang`** is each annotation `{ language, href, url, target, inHead,
@@ -866,11 +970,14 @@ page's links to itself left out, in the order they were found:
 
 ```json
 {"rows":[{"id":7,"url":"https://www.example.com/blog/","kind":"hyperlink","text":"Older posts","position":"content",
-          "flags":[],"followed":true,"fragment":null,"statusCode":200,"indexable":true,"fetched":true}],
+          "flags":[],"followed":true,"fragment":null,"statusCode":200,"indexable":true,"fetched":true,"outcome":"success"}],
  "offset":0,"total":3,"next":"…"}
 ```
 
 - `id`, `url` and the status columns are the other end's: the linking page for an inlink, the target for an outlink.
+  **`outcome`** (E3c) is what became of the request for it, as the URL grid's `outcome` column: so a link to a URL
+  that robots.txt refused, that timed out or that wasn't checked says which, where `statusCode` is null for each of
+  them as it is for a URL never fetched (`outcome` null).
   `kinds` filters by the kind of link (`hyperlink`, `image`, `script`, `stylesheet`, `iframe`, `media`, `icon`,
   `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect`; every kind by default).
 - `text` is the anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link. `position`
@@ -1083,15 +1190,21 @@ So a page in crawl order is read:
     is closed in on from where an even spread of the links would put it, and the page is read from the ids after
     it: no link is read to be passed over, at any depth, and nothing is kept;
   - with more targets than are listed for the index (20,000), a page near either end is walked to, and deeper in
-    the links' ids are read through the targets once, an index entry a link, and kept; a filter most links pass
-    (the links to the site's own URLs) is kept as every link but the others, which are the fewer to read, on a crawl
-    with no link id missing.
+    the links' ids are read through the targets once, an index entry a link, and kept.
 
   All of that needs the index to hold what the filters ask of a link: its target, and at most one kind (`kind` in
   one value). One target named outright (`to.id` equal to one URL, or `to.url` equal to one) is walked on the index at
   any depth, whatever else is asked.
+- under a filter on the target that **most of the links it could match pass** (E3c), from the blocks again: the links
+  to the site's own URLs, the hyperlinks to URLs that answered, the navigation links to the pages a click from the
+  start. The blocks count links by what they are, so they count the links the rest of the filters match (every
+  link, when the target is all that's asked); the others among those, which lead to the targets that fail, are the
+  fewer, and are read once through those targets. A block's matching links are the difference, so a page anywhere
+  is read from the blocks that hold it, whatever else is asked of the link (its kind, position, flags), nothing is
+  read for every matching link, and link ids missing (a crawl that fetched pages again) change nothing.
 - under filters on the target together with what that index doesn't hold (a link's position, its flags, whether it
-  has text, more kinds than one): through the targets when they have few links in all; otherwise by walking the
+  has text, more kinds than one), **where the fewer links pass**, or the others are too many to read (more than an
+  eighth of the crawl's links): through the targets when they have few links in all; otherwise by walking the
   links from the nearer end when the page is near one; otherwise from a set of the matching links' ids, read once in
   one pass over the links and kept (a bit per link). That pass is over budget, as the next paragraph's are.
 
@@ -1100,8 +1213,8 @@ never analysed, continued since it was last analysed, or last analysed by an eng
 is not out of date for that, and gains the link summary when the crawl is analysed again); on any crawl, a filter
 on the link's text or
 fragment, on its `id`, on the page it's on (`from.*`), or a `search`; and, deep in a grid whose targets have many
-links, a filter on the target together with one on a link's position or flags, whose count and facets the summary
-still gives. One pass then gives the set of matching ids, with the count and the facets where the summary doesn't,
+links, a filter on the target together with one on a link's position or flags that the fewer links of that position
+or those flags pass, whose count and facets the summary still gives. One pass then gives the set of matching ids, with the count and the facets where the summary doesn't,
 kept per filter set (a running crawl's for the 2 s its reads answer for one moment), so the pages that follow cost a
 page. A filter
 that matches few source pages (`from.id`, or `from.*` matching up to a twentieth of the crawl's URLs) reads only their
@@ -1583,3 +1696,140 @@ nothing kept, on a 32-core Windows machine that other work was sharing.
   assertion that fails without the code.
 - **Not changed:** the inspector's `issues[].group` in the client's types (finding 6), which the inspector's own
   branch already has as optional.
+
+## Engine changes E3c made
+
+What the Overview and inspector slices found the engine lacked. Each has its own tests. Measured on the 100k benchmark
+crawl (112,589 URLs, 5,054,060 links), p95 over 20 runs with `si readbench`, each read on a fresh connection with
+nothing kept, on a 32-core Windows machine that other work was sharing.
+
+- **`/stats` in one pass.** `CrawlStatsReader.Read` read the responses six times, a statement a number, and looked
+  every page a sitemap led to up among the links: 0.96 s at p50 and 1.16 s at p95, and nothing was kept. It now reads
+  the URLs once and the responses once (the rows counted as they're read, by outcome, status and reason at once), on
+  one snapshot, through the grids' own way in (`GridReadContext`), so it's stopped, queued and kept as their reads
+  are. With the link summary it reads no link. The answers are the same: the tests hold every number to a statement
+  of its own, as the reader first had them, on a crawl analysed, continued since, never analysed, and holding values
+  no engine writes.
+
+  | Read | Before | Now |
+  | --- | --- | --- |
+  | `/stats`, with the link summary | 0.76 to 0.96 s (0.95 to 1.16 at p95) | 98 to 126 ms (108 to 174 at p95, over six runs of 20) |
+  | `/stats`, without it: the links counted, each sitemap page looked up among them | the same read | 181 to 244 ms (189 to 322) |
+  | `/stats` again, the crawl unchanged | as the first | 1 ms |
+
+  With the link summary, which a crawl analysed and not continued since has, it's inside the 300 ms budget at p95,
+  first read included. Without it (a crawl running, never analysed or continued since) it was inside in five runs of
+  six, and 322 ms at p95 in the other, on a machine other work was loading; a running crawl's is then kept for 2 s.
+  It grows with the URLs, so the first read of a million URLs would take about a second, which wasn't measured; the
+  reads after it are kept. `si readbench` times both (`stats`, `stats-pass`) and holds them to twice the desktop's
+  worst, for CI's runner.
+- **The probes' part of the counts.** A crawl's live figures count its own probes of the site's other versions, as its
+  file and the URL grid have them, so a crawl of a site served over http only showed "No response: Network error × 1"
+  from its first seconds: the https probe. The figures still count them, so each lands on its count in the grid and
+  the sums a client makes hold; the progress event now says how much of each figure the probes are (`siteVersions`:
+  `CrawlProgress.SiteVersions`, a second set of the writer's counters), and `/stats` says the same of a crawl at rest
+  (`CrawlStats.SiteVersions`, two more tallies of its one pass), so the UI can show the site's own figures, live and
+  done, and say the probes apart. A probe the site comes to lead to leaves the part, whether its answer is kept for
+  the site or it's fetched again, and a continued crawl restores it; every end-to-end crawl checks the part of its
+  last progress against SQL over the file, as it does the whole. **Not done:** taking the probes out of the figures
+  themselves. That would move every count of a crawl by its probes (found, fetched, each class, the library's
+  counts), so that none met the URL grid's rows without a filter on `source`: a change to what the user sees
+  everywhere for a handful of URLs, and not one to make behind the UI's back.
+- **Two counts of a crawl's URLs, each named for what it is.** `fetched` and the library's `fetchedUrlCount` count the
+  URLs with a stored outcome, and that includes the URLs never asked because their host had stopped answering, which
+  the URL grid has as not fetched: the API said a filter on `fetched` gave the count, and it didn't. The count that
+  does is new: `crawled` on the progress event (`CrawlProgress.Crawled`) and `crawledUrlCount` on the library item
+  (`CrawlFileSummary.CrawledUrlCount`, counted in the summary's one pass over the responses, so every crawl file has
+  it; the sidecar's kept summaries are read again once, their format having moved on). `fetched` stays as it is, for
+  the sums made with it ([why](#library-e1)).
+- **Time spent crawling.** Nothing said how long a crawl had spent crawling: `elapsedMs` is one run's, pauses
+  included, and the file kept only the crawl's start and end. The crawl writer now keeps it, a stretch of crawling at
+  a time, in a new table, `run_time` ([the engine's README](../engine/README.md#time-spent-crawling)): created
+  whenever the writer opens a file, as `notices` is, so the crawl's schema version is unchanged and either engine
+  reads and continues either file. It's served as `crawlingMs` on the library item, the progress event and
+  `/history`, and as `/history`'s `runs`, each with its stretches, so a chart can close the time between runs and the
+  time paused. It costs a row at each start, pause, resume and end, and one small update every five seconds while a
+  crawl runs, which bounds what a run cut short can lose. **Older files read as null**, and so does any crawl a run
+  of which wasn't timed: a file from before the table that's continued here, or one an engine without it continued
+  since (told by the crawl row's stamp, which every run moves and the last stretch keeps). The time is given whole or
+  not at all. Tested on a clock the test moves: three runs with pauses and an hour between two, to the millisecond,
+  live and from the file.
+- **The inspector's totals of every kind of link, and the URL's length.** `/urls/inspect` counted a URL's hyperlinks
+  only (`links`, from the URL summary), so the inspector's Inlinks and Outlinks tabs read `/urls/inlinks` and
+  `/urls/outlinks` for their counts, on every tick of a running crawl. It now gives both totals (`linkTotals`,
+  `UrlDetail.LinkTotals`), counted where the lists' own totals are and kept under the same key, so the tabs' counts
+  and the lists can't differ; the inlinks come from the link summary where there is one, a few rows where the links'
+  index has an entry for every link (the first page of the start URL's 202,222 inlinks took 5.2 ms and takes 1.8).
+  Inspecting a URL takes 1.8 ms where it took 1.2. `urlLength` is the URL's length by the check's own measure
+  (`UrlRules.MeasuredLength`, which the check now calls too).
+- **What became of a link's other end.** A link row had the other URL's status, null alike for a URL never fetched
+  and for one that robots.txt refused or that timed out. Each row now has its `outcome` (`LinkRow.Outcome`, read from
+  the other end's response with or without the URL summary, as the URL grid's column reads it), and so does every URL
+  the inspector names with a status: `redirects.final`, a test's `canonical` and `metaRefresh`, an hreflang's
+  `target` (`UrlTarget.Outcome`). The tests hold every named URL of the synthetic site, and every link list, to what
+  the URL grid shows of that URL.
+- **A filter most links pass is read from the blocks, link ids missing or not.** Deep in the links to the site's own
+  URLs, the matching ids were kept as every id but the others', which takes a crawl with no link id missing; on one
+  with gaps (pages fetched again) they were read through every target instead, an index entry for each of 4.6
+  million links. Measured cold on a copy of the benchmark crawl with one link id in eleven missing and 100,000 links
+  stored again at the end (`make_gaps.py`, then analysed), that missed the budget. The links are now counted by
+  block as the blocks' own count but for the others, read through the targets that fail
+  ([How the links are read](#how-the-links-are-read)), and the page read from its blocks: nothing is read per
+  matching link, nothing is kept but a few thousand counts, and gaps don't matter. It serves a filter on the target
+  with one on a link's position or flags too, where most links of that position pass: the read the E3b review left
+  over budget (navigation links to pages a click from the start, 565 ms half way down) is one of those.
+
+  | Read, the page half way down | Before | Now |
+  | --- | --- | --- |
+  | Links to the site's own URLs, link ids missing (4.6 million) | 407 to 459 ms (472 to 664 at p95) | 97 to 132 ms (149 to 153) |
+  | Hyperlinks to them, link ids missing (4.0 million) | 386 to 606 ms (430 to 871) | 99 to 111 ms (111 to 147) |
+  | Links to the site's own URLs, no id missing (5.0 million) | 105 ms (157) | 126 ms (149) |
+  | Hyperlinks to them, no id missing (4.4 million) | 249 ms (266 to 289) | 107 ms (113) |
+  | Navigation links to pages a click from the start (2.1 million) | 565 ms | 16 ms (19) |
+
+  **Still one pass:** a filter on the target with one on a link's position or flags that the fewer links of that
+  position pass, or whose others are more than an eighth of the crawl's links, deep among targets with many links:
+  the content links to pages four clicks from the start (1.3 million of 2.2 million content links, the others spread
+  over every other page) take 455 ms half way down, once per filter set. What it would take is the links counted by
+  block and by target at once, which is a row for nearly every link; reading the others, or the matches, through
+  their targets reads as many rows as the pass does. It isn't cheap, and isn't done.
+- **A table of the distinct link texts: measured, and not built.** The design: `link_texts` (an id for each distinct
+  text) and the text's id in the key of `link_summary`, so a filter on a link's text is a set of text ids, counted
+  and faceted from the summary as a filter on the target is; and, to place a page anywhere, the id in the key of
+  `link_blocks` too. Measured on the benchmark crawl, which has 396,932 distinct link texts (some four a page), by a
+  prototype of the tables and by the counting put into the analysis for the measurement, then taken out:
+
+  | Cost | Measured |
+  | --- | --- |
+  | `link_texts` | 10.6 MB, 2.2% of the 478 MB file |
+  | `link_summary` with the text's id | 215,758 rows become 512,454: 3.1 MB becomes 8.0 MB |
+  | `link_blocks` with the text's id | 3,436 rows become 2,096,793: 0.06 MB becomes 30.9 MB |
+  | The file, texts and by target | +15.5 MB, 3.2% (4.1% as the file grew in place) |
+  | The file, by block too | +46.3 MB, 9.7% |
+  | The analysis's time (texts and by target only; seven pairs of runs) | 11.1 to 14.8 s without, 14.9 to 20.9 s with: 2.2 to 3.3 s counting and 1.2 to 2.2 s storing, a quarter more at the very least |
+  | The analysis's peak memory (an analysis of a crawl analysed before) | 155 MB becomes 242 MB |
+
+  What it would buy: the count, the facets and the first page of a text filter in some 60 to 80 ms, from 320 to 530
+  (the distinct texts are scanned in 9 to 18 ms and the summary's rows in 12), and every page of a rare one. **It
+  doesn't pay**, by the measure set for it (the budget met for text `contains`, `equals`, "is empty" and search, for
+  under a tenth more analysis time and a twentieth more file): the analysis takes a quarter to two fifths longer and
+  half as much memory again; a page deep in a common text's links needs the ids by block, which alone are 6.5% of
+  the file; and a search can't be answered from it at all, as it also matches the page a link is on, which no table
+  by target or by text knows. "Is empty" was never slow (the summary holds whether a link has text). A real site's
+  crawl would cost less (the garden crawl has 489 texts for 21,914 links: 0.3% of its file), so the cost is the
+  benchmark site's, where every product's links carry its own name.
+
+  **Known limitation, as measured:** on the 100k crawl a filter on a link's text takes 0.33 to 0.55 s for its first
+  read and a search 0.85 s, once per filter set (a running crawl's, at most every 2 s), and their pages after that
+  cost a page; on a million pages, about ten times that. (This belongs under the rebuild doc's Known limitations,
+  which this work was told to leave alone.)
+
+**After E3c**, on the same machine: the benchmark crawled its 100,000 pages in 36 to 44 s over four runs (36 to 45 s
+before), peaked at 188 to 194 MB with no growth (188 to 196 MB), analysed in 18.1, 12.2, 11.8 and 11.4 s (10.6 to
+14.8 s before; nothing in the analysis changed between the runs, and other work shares the machine), and found every
+planted issue and nothing else each time. `si readbench --gate --runs 20` passed every class twice, the two new ones
+included (`stats` 108 and 174 ms against 350, `stats-pass` 212 and 322 ms against 600), the links grid's slowest read
+from the link summary at 98 and 90 ms (107 ms before). Every number added or changed here was checked against SQL
+written for the check, through a running sidecar: on that crawl, on a copy of it with link ids missing, on the garden
+crawl analysed again, and on a crawl run through the sidecar that was paused, stopped and continued (5 of its 728
+URLs not checked, 1 a probe, 20.7 s spent crawling of 26.3 s on the clock). Nothing differed.

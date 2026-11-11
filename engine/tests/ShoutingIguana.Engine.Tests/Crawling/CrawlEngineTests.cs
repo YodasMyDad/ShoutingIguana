@@ -11,6 +11,7 @@ using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Analysis;
 using ShoutingIguana.Engine.Tests.Storage;
+using ShoutingIguana.Engine.Tests.Support;
 using ShoutingIguana.TestSite;
 using ShoutingIguana.TestSite.Models;
 
@@ -68,6 +69,11 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = VARIANT_PAGES, DeadTwin = true });
         var path = await AssertFindsExactlyThePlantsAsync(server, Options(server));
         Assert.Equal(SyntheticSite.DEAD_TWIN_UNCHECKED, CrawlStatsReader.Read(path).NotCheckedCount);
+
+        // They have an outcome, but weren't crawled: the library's count of URLs crawled leaves them out, as the URL grid does.
+        var listed = CrawlSummaryReader.Read(path);
+        Assert.Equal(listed.FetchedUrlCount - SyntheticSite.DEAD_TWIN_UNCHECKED, listed.CrawledUrlCount);
+        Assert.Equal(listed.CrawledUrlCount, UrlGridReader.Query(path, new UrlQuery { Filters = [GridQueries.Boolean("fetched", true)], Limit = 1 }).Matching);
     }
 
     [Fact]
