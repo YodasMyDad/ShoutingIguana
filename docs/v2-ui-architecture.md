@@ -911,7 +911,10 @@ In `src/grid`, for any grid; Links is the first to use them all, and the URL gri
   filter can be on (`FilterColumn`s in groups), a chip the editor can hold opens it; one it can't (a URL named by
   its id, a check's group) is read and removed. The view can open a chip's editor too (`editing`,
   `onEditingChange`), hand it the filter the engine refused (`refused`), and say how many filters it takes
-  (`maxFilters`: at the limit "Add filter" says why, in place of the editor).
+  (`maxFilters`: at the limit "Add filter" says why, in place of the editor). An open editor is of the filter it was
+  opened on, not of its place: when the view's filters change under it (back, forward, a link) it closes, rather than
+  show whichever filter is in that place now. In an empty state (`FilteredEmptyState`) a chip longer than the state
+  is cut short in it, with its remove button, never run out under the grid's edge.
 - **`FilterEditor`** (`filterEditing.ts` has its rules): what it's on, how it compares, and with what, by the
   column's type: a number or a range, text or a pattern, some of an enum's values, yes or no, empty or not. Nothing
   is applied until Apply or Enter; what the editor can tell is wrong is said under the field it's wrong in, and what
