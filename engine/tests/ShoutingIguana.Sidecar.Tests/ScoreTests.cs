@@ -86,8 +86,9 @@ public sealed class ScoreTests : IAsyncLifetime
 
         // A skip reason comes with its plain words where its code has them: why, and what would let the check run.
         var orphans = analysis["skipped"]!.AsArray().Single(skip => (string)skip!["checkId"]! == IssueCatalog.ORPHAN_PAGE.Id)!["reason"]!;
-        Assert.Equal((SkippedCheckReasons.NO_SITEMAP, "No sitemap could be read.", "Your site has no sitemap, the list of its pages for search engines, to compare with.",
-                "Add a sitemap, then check the site again."),
+        Assert.Equal((SkippedCheckReasons.NO_SITEMAP, "No sitemap could be read.",
+                "No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
+                "Add a sitemap, or fix the one that can't be read, then check the site again."),
             ((string)orphans["code"]!, (string)orphans["text"]!, (string)orphans["plainText"]!, (string)orphans["plainAction"]!));
     }
 
@@ -119,10 +120,37 @@ public sealed class ScoreTests : IAsyncLifetime
         Assert.Equal((true, false, "urlLimit"), ((bool)after["score"]!["partial"]!, (bool)after["score"]!["covers"]!["complete"]!, (string)after["score"]!["covers"]!["reason"]!));
         Assert.True((bool)item["score"]!["partial"]!);
 
-        // A reason whose code has no plain words yet says null for them, never the engine's sentence in their place.
+        // The limit is why the orphan check couldn't run, and its reason comes in plain words too.
         var orphans = after["skipped"]!.AsArray().Single(skip => (string)skip!["checkId"]! == IssueCatalog.ORPHAN_PAGE.Id)!["reason"]!.AsObject();
-        Assert.Equal(SkippedCheckReasons.URL_LIMIT, (string)orphans["code"]!);
+        Assert.Equal(
+            (SkippedCheckReasons.URL_LIMIT, "The site check stopped at its limit of addresses, so it didn't read the whole site.",
+                "Check the site again, and choose \"The whole site\" when you start it."),
+            ((string)orphans["code"]!, (string)orphans["plainText"]!, (string)orphans["plainAction"]!));
+    }
+
+    /// <summary>
+    /// Every reason this engine gives has its plain words. A reason it doesn't know (a later engine's, in a file it
+    /// analysed) is served with its code and its sentence, and null for the plain words: never the engine's sentence in
+    /// their place.
+    /// </summary>
+    [Fact]
+    public async Task AReasonThisEngineHasNoPlainWordsForSaysNullForThem()
+    {
+        var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "later-reason.sicrawl"), maxUrls: 30, analyse: true);
+        TestCrawlFiles.SkippedForAReasonOfALaterEngine(path, IssueCatalog.ORPHAN_PAGE.Id, "reason-of-a-later-engine", "A later engine's sentence.");
+
+        var analysis = await _sidecar.GetJsonAsync($"api/crawls/{CrawlIds.For(path)}/analysis");
+
+        var orphans = analysis["skipped"]!.AsArray().Single(skip => (string)skip!["checkId"]! == IssueCatalog.ORPHAN_PAGE.Id)!["reason"]!.AsObject();
+        Assert.Equal(("reason-of-a-later-engine", "A later engine's sentence."), ((string)orphans["code"]!, (string)orphans["text"]!));
         Assert.True(orphans.ContainsKey("plainText") && orphans["plainText"] is null && orphans.ContainsKey("plainAction") && orphans["plainAction"] is null);
+
+        // Every other skipped check's reason is one this engine knows, and has both.
+        Assert.All(analysis["skipped"]!.AsArray().Where(skip => (string)skip!["checkId"]! != IssueCatalog.ORPHAN_PAGE.Id && skip["reason"] is not null), skip =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace((string?)skip!["reason"]!["plainText"]), (string)skip["checkId"]!);
+            Assert.False(string.IsNullOrWhiteSpace((string?)skip["reason"]!["plainAction"]), (string)skip["checkId"]!);
+        });
     }
 
     /// <summary>A crawl stopped before it finished gives a partial score, "stopped", in the analysis and on the library item.</summary>

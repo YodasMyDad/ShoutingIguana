@@ -9,7 +9,7 @@ namespace ShoutingIguana.Engine.Analysis.Models;
 /// What's wrong and why it matters, 2 to 4 sentences, a sentence a string. The first says what is wrong and stands alone,
 /// in 120 characters at most: lists show only it.
 /// </param>
-/// <param name="Fix">How to fix it, 1 to 4 steps, a step a string: each one sentence that starts with a verb.</param>
+/// <param name="Fix">How to fix it, 1 to 4 steps, a step a string: each one sentence, which starts with a verb or with "If …,".</param>
 /// <param name="Fixer">Who usually makes the fix.</param>
 /// <param name="Passed">The good news when the check finds nothing, as a fact that stays true when it had nothing to look at.</param>
 public sealed record IssuePlainText(string Title, IReadOnlyList<string> What, IReadOnlyList<string> Fix, IssueFixer Fixer, string Passed)

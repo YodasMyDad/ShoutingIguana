@@ -9,8 +9,9 @@ namespace ShoutingIguana.Engine.Tests.Analysis;
 
 /// <summary>
 /// The plain words, held to the design's template and rules (docs/v2-ui-simple.md, "Plain words"): the shape of each
-/// text, its limits, and the words that are never bare. Whoever writes the rest of the checks' words adds entries to
-/// <see cref="IssuePlainTexts"/>; these tests judge each one as it arrives.
+/// text, its limits, and the words that are never bare. The words are written in one data file
+/// (<c>PlainWords/plain-words.json</c>), which <see cref="IssuePlainTexts"/> and <see cref="PlainWords"/> are generated
+/// from; these tests judge every one of them.
 /// </summary>
 public sealed partial class IssuePlainTextsTests
 {
@@ -83,9 +84,10 @@ public sealed partial class IssuePlainTextsTests
         {
             var (id, plain) = (entry.Key, entry.Value);
 
-            // The title: the problem as its owner would say it, in sentence case, with no full stop.
+            // The title: the problem as its owner would say it, in sentence case, with no full stop and no count.
             Assert.True(plain.Title.Length <= TITLE_MAX_CHARACTERS, $"{id}: the title is {plain.Title.Length} characters");
             Assert.True(char.IsUpper(plain.Title[0]) && !plain.Title.EndsWith('.'), $"{id}: {plain.Title}");
+            Assert.False(plain.Title.Any(char.IsAsciiDigit), $"{id}: a number in the title: {plain.Title}");
 
             // What's wrong: 2 to 4 sentences, a sentence a string. The first stands alone, as lists show only it.
             Assert.InRange(plain.What.Count, 2, 4);
@@ -115,6 +117,16 @@ public sealed partial class IssuePlainTextsTests
         });
     }
 
+    /// <summary>The design's reading age: sentences of 20 words on average, across every check's account of what's wrong.</summary>
+    [Fact]
+    public void SentencesAverageTwentyWordsOrFewer()
+    {
+        var sentences = FILLED.Values.SelectMany(plain => plain.What).ToList();
+
+        Assert.True(sentences.Count > 250);
+        Assert.True(sentences.Average(Words) <= 20, $"Sentences average {sentences.Average(Words):F1} words");
+    }
+
     /// <summary>What a check looks for is a short noun phrase ("A missing sitemap"): 60 characters at most, sentence case, no full stop.</summary>
     [Fact]
     public void WhatACheckLooksForIsAShortNounPhrase()
@@ -126,7 +138,9 @@ public sealed partial class IssuePlainTextsTests
         Assert.False(IsANounPhrase(new string('a', LOOKS_FOR_MAX_CHARACTERS + 1)));
         Assert.True(IsANounPhrase("A" + new string('a', LOOKS_FOR_MAX_CHARACTERS - 1)));
 
-        // It is optional even for a check with its other words: the ten written so far have none, and say null.
+        // It is optional: a check whose title already names what it looks for has none, and says null.
+        Assert.Contains(IssuePlainTexts.All.Values, plain => plain.LooksFor is null);
+        Assert.Contains(IssuePlainTexts.All.Values, plain => plain.LooksFor is not null);
         Assert.All(IssuePlainTexts.All.Values, plain => Assert.True(plain.LooksFor is null || IsANounPhrase(PlainLimits.Fill(plain.LooksFor, new AnalysisSettings()))));
     }
 
@@ -209,7 +223,8 @@ public sealed partial class IssuePlainTextsTests
     {
         var titles = Enum.GetValues<IssueCategory>().Select(PlainWords.CategoryTitle).ToList();
 
-        Assert.All(titles, title => Assert.Matches(new Regex("^[A-Z][A-Za-z-]*( [a-z-]+){0,2}$"), title));
+        // A heading of one to four words, in sentence case: "Languages", "Extras in search results".
+        Assert.All(titles, title => Assert.Matches(new Regex("^[A-Z][A-Za-z-]*( [a-z-]+){0,3}$"), title));
         Assert.Equal(titles.Count, titles.Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.Equal(("Pages that load", "Duplicate addresses", "Languages"),
             (PlainWords.CategoryTitle(IssueCategory.ResponseCodes), PlainWords.CategoryTitle(IssueCategory.Canonicals), PlainWords.CategoryTitle(IssueCategory.Hreflang)));
@@ -230,16 +245,16 @@ public sealed partial class IssuePlainTextsTests
             Assert.True(IsOneSentence(entry.Value.Text) && Words(entry.Value.Text) <= SENTENCE_MAX_WORDS, entry.Value.Text);
             Assert.True(IsOneSentence(entry.Value.Action) && Words(entry.Value.Action) <= SENTENCE_MAX_WORDS, entry.Value.Action);
         });
-        Assert.Equal(new SkipReasonPlainText("Your site has no sitemap, the list of its pages for search engines, to compare with.", "Add a sitemap, then check the site again."),
+        Assert.Equal(
+            new SkipReasonPlainText(
+                "No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
+                "Add a sitemap, or fix the one that can't be read, then check the site again."),
             PlainWords.SkipReason(SkippedCheckReasons.NO_SITEMAP));
         Assert.Null(PlainWords.SkipReason("no-such-reason"));
     }
 
-    /// <summary>
-    /// What round 4 turns on, by deleting the Skip: every check, and every reason a check can be skipped for, has its
-    /// plain words.
-    /// </summary>
-    [Fact(Skip = "round 4 writes the texts")]
+    /// <summary>Every check, every category, and every reason a check can be skipped for, has its plain words.</summary>
+    [Fact]
     public void EveryCheckAndEverySkipReasonHasPlainWords()
     {
         var without = IssueCatalog.All.Where(check => check.Plain is null).Select(check => check.Id).ToList();
@@ -247,6 +262,9 @@ public sealed partial class IssuePlainTextsTests
 
         var reasons = SkipReasonCodes().Where(code => PlainWords.SkipReason(code) is null).ToList();
         Assert.True(reasons.Count == 0, $"Skip reasons with no plain words: {string.Join(", ", reasons)}");
+
+        Assert.All(Enum.GetValues<IssueCategory>(), category => Assert.False(string.IsNullOrWhiteSpace(PlainWords.CategoryTitle(category)), category.ToString()));
+        Assert.Equal((87, 15, 17), (IssuePlainTexts.All.Count, PlainWords.SkipReasons.Count, Enum.GetValues<IssueCategory>().Length));
     }
 
     /// <summary>
@@ -261,9 +279,8 @@ public sealed partial class IssuePlainTextsTests
 
         Assert.Equal(fromThoseAlone, AnalysisFreshness.ChecksFingerprint);
 
-        // Checks with words and checks without are both in it.
-        Assert.Contains(IssueCatalog.All, check => check.Plain is not null);
-        Assert.Contains(IssueCatalog.All, check => check.Plain is null);
+        // Every check in it has its words, and they are no part of it.
+        Assert.All(IssueCatalog.All, check => Assert.NotNull(check.Plain));
     }
 
     /// <summary>Every reason code the analysis can store (<see cref="SkippedCheckReasons"/>'s constants).</summary>

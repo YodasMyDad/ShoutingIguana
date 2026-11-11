@@ -1,11 +1,13 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Primitives;
 using ShoutingIguana.Engine;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Sidecar.Api.Models;
 using ShoutingIguana.Sidecar.Crawls;
 using ShoutingIguana.Sidecar.Library;
 using ShoutingIguana.Sidecar.Tests.Support;
@@ -83,8 +85,9 @@ public sealed class AppTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// The plain words beside the technical ones: every part for a check that has them, null in every part for one that
-    /// hasn't (never an empty text, never the technical one), and a plain title for every category.
+    /// The plain words beside the technical ones: every check has them, in every part, and every category a plain title.
+    /// A check with none (one a later catalog adds before its words are written) says null in every part: never an empty
+    /// text, never the technical one.
     /// </summary>
     [Fact]
     public async Task ChecksAndCategoriesComeWithTheirPlainWordsOrNull()
@@ -114,20 +117,40 @@ public sealed class AppTests : IAsyncLifetime
             Assert.All(check["plainWhat"]!.AsArray().Concat(check["plainFix"]!.AsArray()), text => Assert.DoesNotContain("{", (string)text!));
         });
 
-        // The ten the design writes out have theirs; the rest say null until theirs are written.
+        // Every one of the 87 has its words.
         var withWords = listed.Where(check => check!["plainTitle"] is not null).Select(check => (string)check!["id"]!).ToList();
         Assert.Equal(IssuePlainTexts.All.Keys.Order(StringComparer.Ordinal), withWords.Order(StringComparer.Ordinal));
-        Assert.Equal(10, withWords.Count);
+        Assert.Equal(87, withWords.Count);
         var broken = listed.Single(check => (string?)check!["id"] == "broken-internal-links")!;
-        Assert.Equal(("Links that lead to broken pages", "you", "Every link on the site leads to a working page", 3, 3),
+        Assert.Equal(("Links that lead to broken pages", "you", "Every link between your pages leads to a working page", 3, 3),
             ((string)broken["plainTitle"]!, (string)broken["fixer"]!, (string)broken["plainPassed"]!, broken["plainWhat"]!.AsArray().Count, broken["plainFix"]!.AsArray().Count));
         Assert.Equal("That's almost certainly your logo, which sits in the part of the site every page shares.",
             (string?)listed.Single(check => (string?)check!["id"] == "empty-anchor-text")!["plainOneFix"]);
+
+        // The two optional parts: null where a check has none, the words where it has.
+        var unreachable = listed.Single(check => (string?)check!["id"] == "robots-txt-unreachable")!;
+        Assert.Equal(("A rules file that search engines can't read", (string?)null), ((string?)unreachable["plainLooksFor"], (string?)unreachable["plainOneFix"]));
+        Assert.Equal(12, listed.Count(check => check!["plainLooksFor"] is not null));
+        Assert.Equal(26, listed.Count(check => check!["plainOneFix"] is not null));
+
+        // A check with no words says null in every part.
+        IssueDefinition unwritten = new("check-of-a-later-catalog", IssueCategory.Links, IssueSeverity.Warning, "A later check", "What it is.", "How to fix it.")
+        {
+            Why = "Why it matters.",
+            Subject = IssueSubject.Page,
+            Grouping = IssueGrouping.None
+        };
+        var later = CheckDto.From(unwritten, new AnalysisSettings());
+        Assert.Equal("A later check", later.Title);
+        Assert.True(later is { PlainTitle: null, PlainWhat: null, PlainFix: null, Fixer: null, PlainPassed: null, PlainOneFix: null, PlainLooksFor: null });
 
         var categories = checks["categories"]!.AsArray();
         Assert.All(categories, category => Assert.False(string.IsNullOrWhiteSpace((string?)category!["plainTitle"])));
         Assert.Contains(categories, category => (string?)category!["id"] == "responseCodes" && (string?)category["plainTitle"] == "Pages that load");
         Assert.Contains(categories, category => (string?)category!["id"] == "canonicals" && (string?)category["plainTitle"] == "Duplicate addresses");
+        Assert.Equal(
+            Enum.GetValues<IssueCategory>().Select(PlainWords.CategoryTitle),
+            Enum.GetValues<IssueCategory>().Select(category => (string?)categories.Single(served => (string?)served!["id"] == JsonNamingPolicy.CamelCase.ConvertName(category.ToString()))!["plainTitle"]));
     }
 
     /// <summary>
@@ -156,7 +179,24 @@ public sealed class AppTests : IAsyncLifetime
         var settings = new AnalysisSettings { TitleMaxLength = 70, SlowResponseMs = 2_500 };
         Assert.All(forCrawl["checks"]!.AsArray(), check => Assert.Equal(
             PlainLimits.Fill(IssueCatalog.Find((string)check!["id"]!)!.Plain, settings)?.What, check["plainWhat"]?.AsArray().Select(sentence => (string)sentence!)));
-        Assert.Equal(HttpStatusCode.OK, (await _sidecar.SendAsync(HttpMethod.Get, $"api/checks?crawl={CrawlIds.For(never)}")).Status);
+
+        // What a reader gets differs, sentence for sentence: this crawl's analysis took titles to 70 characters and gave
+        // pages 2.5 seconds to answer, so its checks say so, while the current settings' say 60 and 1 second.
+        static string FirstSentence(JsonNode checks, string id) => (string)checks["checks"]!.AsArray().Single(check => (string)check!["id"]! == id)!["plainWhat"]![0]!;
+        Assert.Equal("These pages have a title of more than 60 characters.", FirstSentence(current, "title-too-long"));
+        Assert.Equal("These pages have a title of more than 70 characters.", FirstSentence(forCrawl, "title-too-long"));
+        Assert.Equal("These pages took more than 1 second to arrive when the check asked for them.", FirstSentence(current, "slow-response"));
+        Assert.Equal("These pages took more than 2.5 seconds to arrive when the check asked for them.", FirstSentence(forCrawl, "slow-response"));
+
+        // A limit that analysis left as it was reads the same for both, and no token is served as written.
+        Assert.Equal("Some pages show images whose files are over 200 KB.", FirstSentence(forCrawl, "image-too-large"));
+        Assert.Equal(FirstSentence(current, "image-too-large"), FirstSentence(forCrawl, "image-too-large"));
+        Assert.DoesNotContain("{limit:", forCrawl.ToJsonString());
+        Assert.DoesNotContain("{limit:", current.ToJsonString());
+
+        // A crawl never analysed has no settings of its own: the current ones.
+        var forNever = await _sidecar.GetJsonAsync($"api/checks?crawl={CrawlIds.For(never)}");
+        Assert.Equal(FirstSentence(current, "title-too-long"), FirstSentence(forNever, "title-too-long"));
 
         TestSidecar.AssertProblem(await _sidecar.SendAsync(HttpMethod.Get, "api/checks?crawl=0123456789abcdef"), HttpStatusCode.NotFound, "crawl-not-found");
         TestSidecar.AssertProblem(await _sidecar.SendAsync(HttpMethod.Get, "api/checks?crawl="), HttpStatusCode.BadRequest, "bad-request");
