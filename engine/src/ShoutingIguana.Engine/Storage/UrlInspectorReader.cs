@@ -33,6 +33,9 @@ public static class UrlInspectorReader
         [nameof(IssueSeverity.Error)] = 0, [nameof(IssueSeverity.Warning)] = 1, [nameof(IssueSeverity.Notice)] = 2
     };
 
+    /// <summary>The most sitemaps the inspector names of those that list a URL; their number is given whole.</summary>
+    public const int MAX_SITEMAPS_NAMED = 20;
+
     /// <summary>Tests only: each page of links as its query runs, with its parameters, so its plan can be asked for.</summary>
     internal static Action<string, IReadOnlyList<KeyValuePair<string, object>>>? Ran { get; set; }
 
@@ -106,9 +109,33 @@ public static class UrlInspectorReader
             Hreflang = facts is null ? [] : [.. facts.Hreflangs.Select(entry => Hreflang(context, entry))],
             Issues = context.Analysis is null ? null : Issues(context, urlId),
             NamedBy = context.Analysis is null ? null : NamedBy(context, urlId),
+            ListedIn = ListedIn(context, urlId),
             Summary = context.Summary,
             SourceStored = row.GetBoolean(26)
         };
+    }
+
+    /// <summary>
+    /// The sitemaps that list a URL, in the order the crawl found them. What each sitemap lists is keyed by sitemap, then
+    /// URL, so each sitemap is asked whether it lists this one: a lookup a sitemap (a crawl reads at most a thousand), where
+    /// finding the URL's rows without their sitemap would read every row of every sitemap.
+    /// </summary>
+    private static UrlSitemaps ListedIn(GridReadContext context, int urlId)
+    {
+        List<SitemapRef> sitemaps = [];
+        long total = 0;
+        using var command = context.Command(
+            "SELECT s.id, s.url FROM sitemaps s WHERE EXISTS (SELECT 1 FROM sitemap_urls m WHERE m.sitemap_id = s.id AND m.url_id = $id) ORDER BY s.id", [new("$id", urlId)]);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            if (total++ < MAX_SITEMAPS_NAMED)
+            {
+                sitemaps.Add(new SitemapRef(reader.GetInt32(0), reader.GetString(1)));
+            }
+        }
+
+        return new UrlSitemaps(total, sitemaps);
     }
 
     /// <summary>
@@ -524,14 +551,25 @@ public static class UrlInspectorReader
             answered = new IndexabilityTest(IndexabilityTestKind.Answered, TestOutcome.Fail) { StatusCode = self.Status };
         }
 
-        var robotsTxt = !self.Fetched
+        // The origin whose robots.txt decides the URL, named where the crawl has a file for it to show; for a URL it
+        // refused, with why, and the line when a rule did: what the origin's own list of blocked URLs says of it.
+        var url = row.GetString(0);
+        var origin = RobotsReader.OriginOf(url);
+        var why = refused ? RobotsReader.WhyRefused(context, self.Id, url, error) : null;
+        var robotsTxt = (!self.Fetched
             ? new IndexabilityTest(IndexabilityTestKind.RobotsTxt, TestOutcome.NotChecked)
             : refused
                 ? new IndexabilityTest(IndexabilityTestKind.RobotsTxt, TestOutcome.Fail)
                 {
-                    Unreachable = error?.StartsWith(RobotsTxt.UNREACHABLE_ERROR, StringComparison.Ordinal) == true
+                    Unreachable = error?.StartsWith(RobotsTxt.UNREACHABLE_ERROR, StringComparison.Ordinal) == true,
+                    Reason = why!.Reason,
+                    Line = why.Line,
+                    Rule = why.Rule
                 }
-                : new IndexabilityTest(IndexabilityTestKind.RobotsTxt, context.Options.RespectRobotsTxt ? TestOutcome.Pass : TestOutcome.NotChecked);
+                : new IndexabilityTest(IndexabilityTestKind.RobotsTxt, context.Options.RespectRobotsTxt ? TestOutcome.Pass : TestOutcome.NotChecked)) with
+        {
+            Origin = origin is not null && (refused || RobotsReader.HasAnswer(context, origin)) ? origin : null
+        };
 
         // A noindex or a canonical is only read from a page that answered; one that didn't makes them moot. A file that answered
         // has nothing but its headers to say either, and they were read when its details were stored.

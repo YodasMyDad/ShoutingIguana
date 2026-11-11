@@ -140,7 +140,10 @@ internal sealed class CrawlWriter : IAsyncDisposable
 
             // The columns for lanes 1 to 3 of the content fingerprint are added here, to a new file as to one an earlier engine
             // made, whose pages so far have none.
-            AddMissingResponseColumns(connection);
+            AddMissingColumns(connection, "responses", CrawlSchema.RESPONSE_COLUMNS);
+
+            // And the count of the sitemaps an index's file lists.
+            AddMissingColumns(connection, "sitemaps", CrawlSchema.SITEMAP_COLUMNS);
             var writer = new CrawlWriter(connection, fileLock, options, counters, logger);
             if (created)
             {
@@ -204,13 +207,16 @@ internal sealed class CrawlWriter : IAsyncDisposable
         }
     }
 
-    /// <summary>Adds the <c>responses</c> columns a file made by an earlier engine lacks (<see cref="CrawlSchema.RESPONSE_COLUMNS"/>).</summary>
-    private static void AddMissingResponseColumns(SqliteConnection connection)
+    /// <summary>
+    /// Adds the columns of a crawl-time table that a file made by an earlier engine lacks (<see cref="CrawlSchema.RESPONSE_COLUMNS"/>,
+    /// <see cref="CrawlSchema.SITEMAP_COLUMNS"/>): each may be null, so the rows the file has keep none.
+    /// </summary>
+    private static void AddMissingColumns(SqliteConnection connection, string table, (string Name, string Type)[] columns)
     {
         HashSet<string> existing = new(StringComparer.OrdinalIgnoreCase);
         using (var command = connection.CreateCommand())
         {
-            command.CommandText = "SELECT name FROM pragma_table_info('responses')";
+            command.CommandText = $"SELECT name FROM pragma_table_info('{table}')";
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
@@ -218,9 +224,9 @@ internal sealed class CrawlWriter : IAsyncDisposable
             }
         }
 
-        foreach (var (name, type) in CrawlSchema.RESPONSE_COLUMNS.Where(column => !existing.Contains(column.Name)))
+        foreach (var (name, type) in columns.Where(column => !existing.Contains(column.Name)))
         {
-            CrawlDatabase.Execute(connection, $"ALTER TABLE responses ADD COLUMN {name} {type}");
+            CrawlDatabase.Execute(connection, $"ALTER TABLE {table} ADD COLUMN {name} {type}");
         }
     }
 

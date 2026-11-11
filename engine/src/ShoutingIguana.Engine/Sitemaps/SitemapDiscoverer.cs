@@ -143,6 +143,7 @@ internal sealed class SitemapDiscoverer(
         var batch = new List<OutLink>(BATCH_SIZE);
         var urlCount = 0;
         var isIndex = false;
+        var bodyRead = false;
         int? statusCode = null;
         string? error = null;
 
@@ -167,6 +168,8 @@ internal sealed class SitemapDiscoverer(
                 var isText = MediaTypeOf(response.Content.Headers) == "text/plain" ||
                              uri.AbsolutePath.EndsWith(".txt", StringComparison.OrdinalIgnoreCase);
 
+                // From here on the file is being read: what it lists is counted, to its end or to where it fails.
+                bodyRead = true;
                 await foreach (var entry in SitemapReader.ReadAsync(content, isText, timeout.Token).ConfigureAwait(false))
                 {
                     if (entry.IsSitemap)
@@ -207,7 +210,10 @@ internal sealed class SitemapDiscoverer(
             await writer.DiscoverAsync(batch, DiscoverySource.Sitemap, sitemapId, cancellationToken).ConfigureAwait(false);
         }
 
-        await writer.CompleteSitemapAsync(new SitemapRecord(sitemapId, statusCode, isIndex, urlCount, error, isProbe), cancellationToken).ConfigureAwait(false);
+        // Every sitemap the file lists is counted, whether or not the crawl goes on to read it: past its limit of sitemaps,
+        // or of nesting, an index still says how many it names.
+        await writer.CompleteSitemapAsync(new SitemapRecord(sitemapId, statusCode, isIndex, urlCount, error, isProbe, bodyRead ? children.Count : null), cancellationToken)
+            .ConfigureAwait(false);
         return (children, urlCount);
     }
 

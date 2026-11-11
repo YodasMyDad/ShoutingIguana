@@ -190,6 +190,18 @@ internal static class CrawlSchema
     public static readonly (string Name, string Type)[] RESPONSE_COLUMNS = [("simhash_1", "INTEGER"), ("simhash_2", "INTEGER"), ("simhash_3", "INTEGER")];
 
     /// <summary>
+    /// The <c>sitemaps</c> columns added since the table was first created, which the writer adds whenever it opens a file,
+    /// as it does <see cref="RESPONSE_COLUMNS"/>:
+    /// <list type="bullet">
+    /// <item><c>listed_sitemaps</c> is how many sitemaps the file lists (its <c>&lt;sitemap&gt;</c> entries, as read: repeats
+    /// and entries that aren't URLs included), so an index says how many it names beside how many of them the crawl has;
+    /// 0 for a sitemap that lists only URLs. Null when the file's body was never read (it failed first, or was left
+    /// unread), and for every sitemap an engine from before the column read.</item>
+    /// </list>
+    /// </summary>
+    public static readonly (string Name, string Type)[] SITEMAP_COLUMNS = [("listed_sitemaps", "INTEGER")];
+
+    /// <summary>
     /// Analysis results, created on first analysis and replaced as a whole by every later one. Severity and
     /// category are stored as text so the file explains itself in any SQLite browser. A file analysed by an earlier
     /// engine gets what it lacks on its next analysis: new tables here, new columns from <see cref="ANALYSIS_COLUMNS"/>.
