@@ -197,6 +197,9 @@ public sealed class ScoreStorageTests : IAsyncLifetime
     [InlineData("score_json = replace(score_json, '\"band\":\"', '\"band\":\"Better')")]
     [InlineData("score_json = replace(score_json, '\"lines\":[', '\"lines\":[null,')")]
     [InlineData("score_json = replace(score_json, '\"checkIds\":[', '\"checkIds\":[null,')")]
+    [InlineData("score_json = 85")]
+    [InlineData("score = 100 - score")]
+    [InlineData("score_partial = 1 - score_partial")]
     public async Task AScoreThatCantBeReadIsNoScoreNeverAnError(string change)
     {
         var path = await CrawlAsync(Options() with { MaxUrls = 30 });
@@ -211,6 +214,20 @@ public sealed class ScoreStorageTests : IAsyncLifetime
         Assert.Equal(counts, results.Counts);
         Assert.Equal(FixFirstOrder.Of(counts), results.FixFirst);
         _ = CrawlSummaryReader.Read(path);
+    }
+
+    /// <summary>A file whose analysis has the score's number but not the column for the rest of it reads as having no score.</summary>
+    [Fact]
+    public async Task AScoreWithoutItsBreakdownIsNoScore()
+    {
+        var path = await CrawlAsync(Options() with { MaxUrls = 30 });
+        await AnalyseAsync(path);
+
+        Change(path, "ALTER TABLE analysis DROP COLUMN score_json");
+
+        var results = IssueReader.ReadResults(path)!;
+        Assert.NotNull(results.Analysis.Score);
+        Assert.Equal(((SiteScore?)null, (NoScoreReason?)NoScoreReason.NotScored), (results.Score, results.NoScoreReason));
     }
 
     private CrawlOptions Options() => new() { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 8 };

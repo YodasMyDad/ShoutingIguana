@@ -237,18 +237,31 @@ public static class IssueReader
 
     /// <summary>
     /// The whole score the analysis stored, or null when it stored none (it read no page, or an engine from before the
-    /// score ran it) or stored one this engine can't read (a later engine's, with values it doesn't know).
+    /// score ran it) or stored one this engine can't read (a later engine's, with values it doesn't know). It is the
+    /// headline's own: one that says another number, which no analysis stores, is no score either, so a list of crawls and
+    /// the analysis never give two.
     /// </summary>
     private static SiteScore? ReadScore(SqliteConnection connection, SqliteTransaction? transaction, AnalysisInfo analysis)
     {
         // The headline is read from the same row: without one there is no score, whatever else the row holds.
-        if (analysis.Score is null)
+        if (analysis.Score is not { } headline)
         {
             return null;
         }
 
-        using var command = Command(connection, transaction, "SELECT score_json FROM analysis WHERE id = 1");
-        if (command.ExecuteScalar() is not string json)
+        // By name, as the analysis itself is read: a file may lack the column.
+        string? json = null;
+        using (var command = Command(connection, transaction, "SELECT * FROM analysis WHERE id = 1"))
+        using (var reader = command.ExecuteReader())
+        {
+            if (reader.Read())
+            {
+                var column = Enumerable.Range(0, reader.FieldCount).FirstOrDefault(ordinal => reader.GetName(ordinal).Equals("score_json", StringComparison.OrdinalIgnoreCase), -1);
+                json = column >= 0 && !reader.IsDBNull(column) ? reader.GetValue(column) as string : null;
+            }
+        }
+
+        if (json is null)
         {
             return null;
         }
@@ -256,7 +269,8 @@ public static class IssueReader
         try
         {
             return JsonSerializer.Deserialize(json, EngineJsonContext.Default.SiteScore) is { Covers: not null, Lines: not null, IfFixed.CheckIds: not null } score &&
-                   score.Lines.All(line => line?.CheckId is not null) && score.IfFixed.CheckIds.All(id => id is not null)
+                   score.Lines.All(line => line?.CheckId is not null) && score.IfFixed.CheckIds.All(id => id is not null) &&
+                   (score.Value, score.Partial) == (headline.Value, headline.Partial)
                 ? score
                 : null;
         }
