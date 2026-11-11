@@ -237,6 +237,60 @@ test('the file runs on the keyboard: Enter on a rule lists its URLs, and Ctrl+F 
   await expect(text).toContainText(rule.text);
 });
 
+test('Ctrl+F reaches the file’s search from the blocked URLs and the title, and the palette has the command', async ({
+  page,
+}) => {
+  const { at } = await planted();
+  await page.goto(at);
+  await expect(blocked(page).getByRole('row').nth(1)).toBeVisible();
+  const search = file(page).getByRole('searchbox', { name: 'Search the file' });
+  await expect(search).toBeVisible();
+  // From the list beside the file.
+  await blocked(page).focus();
+  await page.keyboard.press('Control+f');
+  await expect(search).toBeFocused();
+  await page.keyboard.type('private');
+  await expect(file(page).locator('.cm-si-match-current')).toHaveCount(1);
+  // From the page's title: what was searched for is selected, to type over.
+  await page.getByRole('heading', { level: 1 }).focus();
+  await page.keyboard.press('Control+f');
+  await expect(search).toBeFocused();
+  await page.keyboard.type('user-agent');
+  await expect(search).toHaveValue('user-agent');
+  // From the palette, and focus stays in the field once the palette has closed.
+  await blocked(page).focus();
+  await page.keyboard.press('Control+k');
+  const palette = page.getByRole('dialog', { name: 'Command palette' });
+  await palette.getByRole('combobox').fill('search the file');
+  await expect(palette.getByRole('option', { name: /Search the file/ })).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(palette).toBeHidden();
+  await expect(search).toBeFocused();
+});
+
+test('the blocked URLs stay where they are whether the note over them wraps or not', async ({ page }) => {
+  const { at } = await planted();
+  const section = main(page).getByRole('region', { name: 'Blocked URLs' });
+  const measured = async (width: number) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(at);
+    await expect(blocked(page).getByRole('row').nth(1)).toBeVisible();
+    const note = section.getByText(/^Every URL this origin’s robots\.txt kept the crawl from/);
+    await expect(note).toBeVisible();
+    const lines = await note.evaluate((element) =>
+      Math.round(element.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(element).lineHeight)),
+    );
+    const top = ((await blocked(page).boundingBox())?.y ?? 0) - ((await section.boundingBox())?.y ?? 0);
+    return { lines, top };
+  };
+  const wide = await measured(1920);
+  const narrow = await measured(1280);
+  // The note is on one line in the wide window and two in the narrow one, and the list hasn't moved for it.
+  expect(wide.lines).toBe(1);
+  expect(narrow.lines).toBe(2);
+  expect(narrow.top).toBe(wide.top);
+});
+
 test('a deep link to an origin and its line survives a reload; an origin the crawl never asked says so', async ({
   page,
 }) => {
@@ -248,6 +302,12 @@ test('a deep link to an origin and its line survives a reload; an origin the cra
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(`robots.txt of ${own.origin}`);
   await expect(shown(page)).toHaveText(String(rule.blocked));
   await expect(file(page).locator('.cm-si-line-chosen')).toContainText(rule.text);
+
+  // The same origin spelled another way (in capitals, with a slash after it) is the origin the crawl has.
+  await page.goto(`/crawls/${crawl}/robots/${encodeURIComponent(`${own.origin.toUpperCase()}/`)}`);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(`robots.txt of ${own.origin}`);
+  await expect(shown(page)).toHaveText(String(own.blocked));
+  await expect(file(page).getByRole('textbox')).toContainText(rule.text);
 
   await page.goto(`/crawls/${crawl}/robots/${encodeURIComponent('https://never-asked.example')}`);
   await expect(page.getByRole('heading', { name: 'This crawl has no robots.txt for that origin' })).toBeVisible();

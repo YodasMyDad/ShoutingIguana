@@ -12,7 +12,8 @@ interface Sitemap {
   parentId: number | null;
   state: string;
   isIndex: boolean;
-  urls: { listed: number; fetched: number; indexable: number; nonIndexable: number };
+  /** `robotsDisallowed`: only from an engine that counts, for the list, the URLs robots.txt refused. */
+  urls: { listed: number; fetched: number; indexable: number; nonIndexable: number; robotsDisallowed?: number };
 }
 
 const main = (page: Page) => page.getByRole('main');
@@ -59,7 +60,43 @@ test('the list: an index with its sitemaps under it, what became of each, and th
   await expect(row(page, failed)).toContainText('Couldn’t be read: HTTP 404');
   // What it lists isn't known: dashes, never 0.
   await expect(row(page, failed).getByRole('link')).toHaveCount(0);
-  await expect(row(page, failed).getByText('–')).toHaveCount(4);
+  await expect(row(page, failed).getByText('–')).toHaveCount(5);
+  // Five counts: what was crawled, what robots.txt blocked and what wasn't crawled add up to what's listed.
+  await expect(tree(page).getByRole('columnheader')).toHaveText([
+    'Sitemap',
+    'Found via',
+    'Status',
+    'Listed',
+    'Crawled',
+    'Blocked by robots.txt',
+    'Not crawled',
+    'Non-indexable',
+  ]);
+  // The index was read, and one of the sitemaps under it couldn't be: what it lists in all isn't known, so its own
+  // row has dashes too, and says how many of its sitemaps the crawl read.
+  const under = sitemaps.filter((sitemap) => sitemap.parentId === index.id);
+  const read = under.filter((sitemap) => sitemap.state === 'read').length;
+  await expect(row(page, index).getByText('–')).toHaveCount(5);
+  await expect(row(page, index).getByRole('link')).toHaveCount(0);
+  await expect(row(page, index)).toContainText(`Read, ${read} of its ${under.length} sitemaps`);
+  await expect(row(page, index)).toContainText(`Index of ${under.length}`);
+  // A sitemap that was read: listed and not crawled always; crawled and blocked where the engine counts what
+  // robots.txt refused, else a dash that says why, never `fetched` under the name "Crawled".
+  const whole = under.find((sitemap) => sitemap.state === 'read' && sitemap.urls.listed > 0);
+  expect(whole, 'the synthetic site has a sitemap that lists URLs').toBeTruthy();
+  if (!whole) return;
+  const cells = row(page, whole).getByRole('gridcell');
+  await expect(cells.nth(3)).toHaveText(whole.urls.listed.toLocaleString('en-GB'));
+  await expect(cells.nth(6)).toHaveText((whole.urls.listed - whole.urls.fetched).toLocaleString('en-GB'));
+  if (whole.urls.robotsDisallowed === undefined) {
+    for (const at of [4, 5]) {
+      await expect(cells.nth(at)).toHaveText('–');
+      await expect(cells.nth(at).locator('[title]')).toHaveAttribute('title', /doesn’t count, for each sitemap/);
+    }
+  } else {
+    await expect(cells.nth(4)).toHaveText((whole.urls.fetched - whole.urls.robotsDisallowed).toLocaleString('en-GB'));
+    await expect(cells.nth(5)).toHaveText(whole.urls.robotsDisallowed.toLocaleString('en-GB'));
+  }
   // The site's pages no sitemap lists, as a link to exactly them.
   await expect(main(page).getByText(/of the site’s [\d,]+ pages (aren’t|isn’t) in any sitemap\./)).toBeVisible();
 });
@@ -67,8 +104,9 @@ test('the list: an index with its sitemaps under it, what became of each, and th
 test('every count in the list lands on exactly its URLs, and back returns to the list', async ({ page }) => {
   const { sitemaps } = await sitemapsOf();
   await openSitemaps(page);
-  // The index, and the first two sitemaps that list something: each of their counts that opens anything.
-  const walked = sitemaps.filter((sitemap) => sitemap.urls.listed > 0).slice(0, 3);
+  // The first sitemaps that list something: each of their counts that opens anything. (The index has none of its
+  // own to follow: one of its sitemaps couldn't be read.)
+  const walked = sitemaps.filter((sitemap) => !sitemap.isIndex && sitemap.urls.listed > 0).slice(0, 3);
   expect(walked.length).toBeGreaterThan(0);
   let landings = 0;
   for (const sitemap of walked) {
@@ -85,7 +123,7 @@ test('every count in the list lands on exactly its URLs, and back returns to the
       await expect(tree(page).getByRole('row').nth(1)).toBeVisible();
     }
   }
-  expect(landings).toBeGreaterThanOrEqual(3);
+  expect(landings).toBeGreaterThanOrEqual(walked.length);
 });
 
 test('the pages no sitemap lists land on exactly those pages in URLs', async ({ page }) => {
@@ -161,6 +199,45 @@ test('one sitemap: its grid filters with a quick filter, sorts from a header and
   // None of those is indexable.
   await expect(grid.getByRole('row').nth(1)).toBeVisible();
   await expect(grid.getByRole('gridcell', { name: 'Indexable', exact: true })).toHaveCount(0);
+
+  // Crawled, blocked by robots.txt and not crawled are all of them, each a filter with its count; what's blocked is
+  // exactly what the engine stored as refused by robots.txt, and none of it counts as crawled.
+  const countOn = async (name: RegExp) => {
+    const count = show.getByRole('radio', { name }).locator('.si-segment__count');
+    await expect(count).toBeVisible();
+    return countOf(await count.innerText());
+  };
+  await show.getByRole('radio', { name: /^All/ }).click();
+  await expect(shown(page)).toHaveText(index.urls.listed.toLocaleString('en-GB'));
+  const refused = await read<{ matching: number }>(`/api/crawls/${crawl}/sitemaps/urls`, {
+    sitemapId: index.id,
+    filters: [{ column: 'outcome', op: 'in', values: ['robotsDisallowed'] }],
+    sort: [],
+    limit: 1,
+  });
+  expect(await countOn(/^Blocked by robots\.txt/)).toBe(refused.matching);
+  expect(await countOn(/^Crawled/)).toBe(index.urls.fetched - refused.matching);
+  expect((await countOn(/^Crawled/)) + refused.matching + (await countOn(/^Not crawled/))).toBe(index.urls.listed);
+  await show.getByRole('radio', { name: /^Crawled/ }).click();
+  await expect(shown(page)).toHaveText((index.urls.fetched - refused.matching).toLocaleString('en-GB'));
+  // A URL that answered says "Answered" in its Outcome: "Crawled" is the count's word, not an outcome's.
+  await expect(grid.getByRole('row').nth(1)).toBeVisible();
+  await expect(grid.getByRole('gridcell', { name: 'Crawled', exact: true })).toHaveCount(0);
+  await expect(grid.getByRole('gridcell', { name: 'Answered', exact: true }).first()).toBeVisible();
+
+  // The search keeps focus when Enter applies it, and Ctrl+F comes back to the same field.
+  const search = main(page).getByRole('searchbox', { name: 'Search this sitemap’s URLs and titles' });
+  await page.keyboard.press('Control+f');
+  await expect(search).toBeFocused();
+  await page.keyboard.type('product');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/q=product/);
+  await expect(search).toBeFocused();
+  await expect(search).toHaveValue('product');
+  await page.keyboard.press('Escape');
+  await expect(page).not.toHaveURL(/q=product/);
+  await show.getByRole('radio', { name: /Non-indexable/ }).click();
+  await expect(shown(page)).toHaveText(index.urls.nonIndexable.toLocaleString('en-GB'));
 
   // Sort by status from its header: ascending, then descending, in the route.
   const status = grid.getByRole('columnheader', { name: /Status/ });
