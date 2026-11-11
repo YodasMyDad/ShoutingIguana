@@ -253,8 +253,8 @@ describe('robots.txt: one origin’s file', () => {
     expect(blockedRequests(transport).at(-1)).toMatchObject({ origin: SITE, line: 6 });
     expect(viewer()).toHaveAttribute('data-chosen', '6');
     expect(screen.queryByText(`${SITE}/old-private`)).toBeNull();
-    const chip = screen.getByText('line 6: Disallow: /admin/').closest('.si-chip')!;
-    expect(chip).toHaveTextContent('Rule is line 6: Disallow: /admin/');
+    const chip = screen.getByText('6: Disallow: /admin/').closest('.si-chip')!;
+    expect(chip).toHaveTextContent('Line is 6: Disallow: /admin/');
     await waitFor(() => expect(said).toEqual(['3 of 4 blocked URLs']));
     stop();
   });
@@ -293,7 +293,7 @@ describe('robots.txt: one origin’s file', () => {
   it('gives the list back when the chip goes, and focus to the title rather than to nothing', async () => {
     sidecar();
     const { router } = await open(`${FILE}?line=6`);
-    const remove = await screen.findByRole('button', { name: 'Remove the filter Rule is line 6: Disallow: /admin/' });
+    const remove = await screen.findByRole('button', { name: 'Remove the filter Line is 6: Disallow: /admin/' });
     act(() => remove.focus());
     fireEvent.click(remove);
     await waitFor(() => expect(searchOf(router).line).toBeUndefined());
@@ -330,6 +330,23 @@ describe('robots.txt: one origin’s file', () => {
     expect(await screen.findByText('Line 7 blocked no URLs.')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'List every blocked URL' }));
     await waitFor(() => expect(searchOf(router).line).toBeUndefined());
+  });
+
+  it('never calls a line that isn’t a rule one, and says so of a line the file doesn’t have', async () => {
+    sidecar();
+    // Line 2 is "User-agent: *": no rule, so it blocked nothing, and the chip doesn't call it a rule.
+    const { router } = await open(`${FILE}?line=2`);
+    expect(await screen.findByText('Line 2 isn’t a rule, so it blocked no URLs.')).toBeVisible();
+    const blocked = screen.getByRole('region', { name: 'Blocked URLs' });
+    await waitFor(() => expect(blocked.querySelector('.si-chip')).toHaveTextContent('Line is 2: User-agent: *'));
+    expect(blocked).not.toHaveTextContent(/Rule is/);
+    // A line past the file's end (a link from before the site was crawled again).
+    act(() => {
+      router.history.push(`${FILE}?line=999`);
+    });
+    expect(await screen.findByText('This file has no line 999.')).toBeVisible();
+    await waitFor(() => expect(blocked.querySelector('.si-chip')).toHaveTextContent('Line is 999'));
+    expect(screen.queryByText(/Line 999 blocked no URLs/)).toBeNull();
   });
 
   it('copies the file as it is from its button', async () => {

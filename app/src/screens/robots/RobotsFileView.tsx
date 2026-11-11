@@ -23,7 +23,7 @@ import { useSourceViewer } from '../../inspector/sourceViewerLoader';
 import { useCommands } from '../../keyboard/registry';
 import { copyText } from '../../lib/clipboard';
 import { withRecorded } from '../../lib/failure';
-import { formatBytes, formatCount, formatCountOf, formatExactTime, formatShownOf } from '../../lib/format';
+import { formatBytes, formatCountOf, formatExactTime, formatShownOf } from '../../lib/format';
 import { useInspector } from '../../routing/inspector';
 import { openInBrowser } from '../../shell/os';
 import { Banner } from '../../ui/Banner';
@@ -42,6 +42,7 @@ import { copyUrls } from '../issues/copyUrls';
 import { blockedUrlsReader } from './copyBlocked';
 import {
   blockedQueryOf,
+  emptyLineWords,
   fileMarks,
   fileText,
   markedLine,
@@ -555,9 +556,7 @@ function BlockedUrls({
             ) : (
               <FilteredEmptyState
                 title={
-                  narrowing.by === 'line'
-                    ? `Line ${formatCount(narrowing.line)} blocked no URLs.`
-                    : 'No blocked URLs like that here.'
+                  narrowing.by === 'line' ? emptyLineWords(file, narrowing.line) : 'No blocked URLs like that here.'
                 }
                 level="none"
                 filters={chip}

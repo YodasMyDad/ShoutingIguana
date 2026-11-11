@@ -9,6 +9,7 @@ import {
   lineOf,
   markedLine,
   narrowingOf,
+  emptyLineWords,
   narrowingWords,
   obeyedLines,
   obeyedWords,
@@ -186,16 +187,32 @@ describe('a URL and its line, both ways', () => {
   it('words what the list is narrowed to, with the line’s own text when the file has it', () => {
     expect(narrowingWords({ by: 'none' }, TEST_FILE)).toBeNull();
     expect(narrowingWords({ by: 'line', line: 6 }, TEST_FILE)).toEqual({
-      field: 'Rule',
-      value: 'line 6: Disallow: /admin/',
+      field: 'Line',
+      value: '6: Disallow: /admin/',
     });
     // A line the file doesn't have (a link from before the site was crawled again), or a file not read yet.
-    expect(narrowingWords({ by: 'line', line: 99 }, TEST_FILE)).toEqual({ field: 'Rule', value: 'line 99' });
-    expect(narrowingWords({ by: 'line', line: 6 }, undefined)).toEqual({ field: 'Rule', value: 'line 6' });
+    expect(narrowingWords({ by: 'line', line: 99 }, TEST_FILE)).toEqual({ field: 'Line', value: '99' });
+    expect(narrowingWords({ by: 'line', line: 6 }, undefined)).toEqual({ field: 'Line', value: '6' });
+    // A line that's no rule is never called one: a User-agent line, a blank one.
+    expect(narrowingWords({ by: 'line', line: 2 }, TEST_FILE)).toEqual({ field: 'Line', value: '2: User-agent: *' });
+    expect(narrowingWords({ by: 'line', line: 4 }, TEST_FILE)).toEqual({ field: 'Line', value: '4' });
+    expect(narrowingWords({ by: 'line', line: 2_483 }, undefined)?.value).toBe('2,483');
     expect(narrowingWords({ by: 'reason', reason: 'unreachable' }, TEST_FILE)?.value).toBe(
       'robots.txt couldn’t be read',
     );
     expect(narrowingWords({ by: 'reason', reason: 'unknown' }, TEST_FILE)?.value).toBe('no rule kept');
+  });
+
+  it('says why no URLs are listed for a line: no such line, no rule, or a rule that blocked nothing', () => {
+    expect(emptyLineWords(TEST_FILE, 999)).toBe('This file has no line 999.');
+    expect(emptyLineWords(TEST_FILE, 0)).toBe('This file has no line 0.');
+    expect(emptyLineWords(TEST_FILE, 2)).toBe('Line 2 isn’t a rule, so it blocked no URLs.');
+    expect(emptyLineWords(TEST_FILE, 1)).toBe('Line 1 isn’t a rule, so it blocked no URLs.');
+    expect(emptyLineWords(TEST_FILE, 7)).toBe('Line 7 blocked no URLs.');
+    expect(emptyLineWords(TEST_FILE, 8)).toBe('Line 8 blocked no URLs.');
+    // A file with no text kept has no lines at all; one that couldn't be read says no more than is known.
+    expect(emptyLineWords({ lines: [] }, 3)).toBe('This file has no line 3.');
+    expect(emptyLineWords(undefined, 3)).toBe('No blocked URLs are listed for line 3.');
   });
 
   it('finds a line by its number, wherever it is in the list', () => {

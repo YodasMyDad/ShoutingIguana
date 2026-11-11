@@ -133,7 +133,11 @@ export function lineAt(file: Pick<RobotsFile, 'lines'>, number: number): RobotsL
   return at?.number === number ? at : file.lines.find((line) => line.number === number);
 }
 
-/** What the list is narrowed to, as its chip reads: "Rule is line 2: Disallow: /private/". Null for all of them. */
+/**
+ * What the list is narrowed to, as its chip reads: "Line is 2: Disallow: /private/". Null for all of them. A link can
+ * name any line: one that's no rule (a User-agent line, a comment), or one the file doesn't have. So the chip says
+ * "Line", which is true of them all, never "Rule".
+ */
 export function narrowingWords(
   narrowing: Narrowing,
   file: Pick<RobotsFile, 'lines'> | undefined,
@@ -141,8 +145,9 @@ export function narrowingWords(
   switch (narrowing.by) {
     case 'line': {
       const line = file ? lineAt(file, narrowing.line) : undefined;
-      const at = `line ${formatCount(narrowing.line)}`;
-      return { field: 'Rule', value: line ? `${at}: ${line.text.trim()}` : at };
+      const at = formatCount(narrowing.line);
+      const text = line?.text.trim() ?? '';
+      return { field: 'Line', value: text === '' ? at : `${at}: ${text}` };
     }
     case 'reason':
       return {
@@ -152,6 +157,21 @@ export function narrowingWords(
     default:
       return null;
   }
+}
+
+/**
+ * Why no URLs are listed for the line the list is narrowed to: the file has no such line, the line isn't a rule (only
+ * an Allow or a Disallow line is), or it's a rule that blocked nothing. `file` undefined: the file isn't there to
+ * say which, so no more is said than that nothing is listed.
+ */
+export function emptyLineWords(file: Pick<RobotsFile, 'lines'> | undefined, number: number): string {
+  const at = formatCount(number);
+  if (!file) return `No blocked URLs are listed for line ${at}.`;
+  const line = lineAt(file, number);
+  if (!line) return `This file has no line ${at}.`;
+  return line.kind === 'allow' || line.kind === 'disallow'
+    ? `Line ${at} blocked no URLs.`
+    : `Line ${at} isn’t a rule, so it blocked no URLs.`;
 }
 
 // ------------------------------------------------------------------------------------------- The origin in the route

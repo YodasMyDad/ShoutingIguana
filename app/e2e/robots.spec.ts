@@ -172,12 +172,12 @@ test('the file shows the line that blocked a planted URL, and choosing the line 
   await expect(page).toHaveURL(new RegExp(`line=${rule.number}`));
   await expect(shown(page)).toHaveText(String(rule.blocked));
   await expect(file(page).locator('.cm-si-line-chosen')).toContainText(rule.text);
-  await expect(main(page).locator('.si-chip')).toHaveText(new RegExp(`^Rule is line ${rule.number}: `));
+  await expect(main(page).locator('.si-chip')).toHaveText(new RegExp(`^Line is ${rule.number}: `));
   await expect(blocked(page).getByRole('row')).toHaveCount((rule.blocked ?? 0) + 1);
 
   // The chip gives the whole list back, and focus goes to the title, not to nothing.
   await main(page)
-    .getByRole('button', { name: /^Remove the filter Rule is line/ })
+    .getByRole('button', { name: /^Remove the filter Line is/ })
     .click();
   await expect(page).not.toHaveURL(/line=/);
   await expect(shown(page)).toHaveText(String(own.blocked));
