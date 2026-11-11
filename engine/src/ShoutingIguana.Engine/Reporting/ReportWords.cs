@@ -1,0 +1,98 @@
+using System.Globalization;
+using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Reporting.Models;
+
+namespace ShoutingIguana.Engine.Reporting;
+
+/// <summary>
+/// The report's own words, which aren't any check's: what it calls each severity, who usually fixes a thing, how it says a
+/// count and a date. One document serves both readers, so the plain word leads and the technical one is beside it
+/// ("Serious" is the checks' "Error").
+/// </summary>
+internal static class ReportWords
+{
+    private static readonly CultureInfo NUMBERS = CultureInfo.GetCultureInfo("en-GB");
+
+    /// <summary>A severity as the report names it: "Serious", "Worth fixing", "Worth a look".</summary>
+    public static string Severity(IssueSeverity severity) => severity switch
+    {
+        IssueSeverity.Error => "Serious",
+        IssueSeverity.Warning => "Worth fixing",
+        _ => "Worth a look"
+    };
+
+    /// <summary>A severity as the checks name it: "Error", "Warning", "Notice".</summary>
+    public static string Technical(IssueSeverity severity) => severity.ToString();
+
+    /// <summary>"2 serious problems", "1 problem worth fixing", "13 things worth a look".</summary>
+    public static string Counted(IssueSeverity severity, long count) => severity switch
+    {
+        IssueSeverity.Error => Plural(count, "serious problem", "serious problems"),
+        IssueSeverity.Warning => Plural(count, "problem worth fixing", "problems worth fixing"),
+        _ => Plural(count, "thing worth a look", "things worth a look")
+    };
+
+    /// <summary>Who usually makes a fix, after "usually fixed by".</summary>
+    public static string FixedBy(Fixer fixer) => fixer switch
+    {
+        Fixer.You => "you, in your site’s editor",
+        Fixer.Developer => "your developer or hosting company",
+        _ => "you or your developer"
+    };
+
+    /// <summary>The score's word.</summary>
+    public static string Band(ScoreBand band) => band switch
+    {
+        ScoreBand.VeryGood => "Very good",
+        ScoreBand.Good => "Good",
+        ScoreBand.NeedsWork => "Needs work",
+        _ => "Poor"
+    };
+
+    /// <summary>The summary's first sentence, by the score's word.</summary>
+    public static string Lead(ScoreBand band) => band switch
+    {
+        ScoreBand.VeryGood => "This site is in very good shape.",
+        ScoreBand.Good => "This site is in good shape.",
+        ScoreBand.NeedsWork => "This site needs some work.",
+        _ => "This site has problems that will hold it back in search."
+    };
+
+    /// <summary>How much of the site, as the breakdown says it: "a few", "the whole site".</summary>
+    public static string Extent(ScoreExtent extent) => extent switch
+    {
+        ScoreExtent.Few => "a few",
+        ScoreExtent.Some => "some",
+        ScoreExtent.Many => "many",
+        ScoreExtent.Most => "most",
+        _ => "the whole site"
+    };
+
+    /// <summary>"5 of 265 pages", "9 of 4,521 addresses", "the whole site".</summary>
+    public static string CountOf(ScoreLine line) => line.Unit switch
+    {
+        ScoreUnit.Site => "the whole site",
+        ScoreUnit.Pages => $"{Number(line.Count)} of {Plural(line.Of, "page", "pages")}",
+        _ => $"{Number(line.Count)} of {Plural(line.Of, "address", "addresses")}"
+    };
+
+    /// <summary>A count with its thousands apart, as the UK writes them: 4,521.</summary>
+    public static string Number(long number) => number.ToString("N0", NUMBERS);
+
+    /// <summary>"1 page", "265 pages".</summary>
+    public static string Plural(long count, string one, string many) => $"{Number(count)} {(count == 1 ? one : many)}";
+
+    /// <summary>"31 October 2026".</summary>
+    public static string Date(DateTimeOffset moment, TimeZoneInfo zone) => TimeZoneInfo.ConvertTime(moment, zone).ToString("d MMMM yyyy", CultureInfo.InvariantCulture);
+
+    /// <summary>"14:13".</summary>
+    public static string Time(DateTimeOffset moment, TimeZoneInfo zone) => TimeZoneInfo.ConvertTime(moment, zone).ToString("HH:mm", CultureInfo.InvariantCulture);
+
+    /// <summary>"37 min 25 s", "1 h 2 min", "48 s": the two largest units.</summary>
+    public static string Duration(TimeSpan time)
+    {
+        var seconds = (long)Math.Round(time.TotalSeconds);
+        var (hours, minutes, rest) = (seconds / 3_600, seconds % 3_600 / 60, seconds % 60);
+        return hours > 0 ? $"{Number(hours)} h {minutes} min" : minutes > 0 ? $"{minutes} min {rest} s" : $"{rest} s";
+    }
+}

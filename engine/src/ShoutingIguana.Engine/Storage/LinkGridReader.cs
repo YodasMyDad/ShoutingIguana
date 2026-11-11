@@ -324,7 +324,7 @@ public static class LinkGridReader
 
     // ---- The query, checked.
 
-    private static Dictionary<string, List<string>> Validate(UrlQuery query)
+    internal static Dictionary<string, List<string>> Validate(UrlQuery query)
     {
         Dictionary<string, List<string>> errors = new(StringComparer.Ordinal);
         for (var index = 0; index < query.Columns.Count; index++)
