@@ -245,8 +245,11 @@ public sealed class CliTests : IAsyncLifetime
         Assert.Equal(["facets", "grid", "groups", "inspector", "links", "links-grid", "lookup", "robots", "rows", "sitemaps", "stats"],
             result["cases"]!.AsArray().Select(read => (string)read!["kind"]!).Distinct().Order(StringComparer.Ordinal));
 
-        // The crawl's headline numbers: read, read again from what was kept, and without the link summary.
-        Assert.Equal(["stats", "stats", "stats-pass"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "stats").Select(read => (string)read!["class"]!));
+        // The crawl's headline numbers: read, read again from what was kept, and without the link summary, each held to
+        // a gate of its own: the kept read to a few milliseconds, which numbers read all over again would miss.
+        Assert.Equal(["stats", "stats-kept", "stats-pass"], result["cases"]!.AsArray().Where(read => (string)read!["kind"]! == "stats").Select(read => (string)read!["class"]!));
+        Assert.InRange(ReaderBenchmark.GATE_MS["stats-kept"], 1, 20);
+        Assert.InRange(ReaderBenchmark.GATE_MS["stats-pass"], ReaderBenchmark.GATE_MS["stats"], 500);
 
         // The links grid is timed with its link summary and without, and so are the sitemaps and robots.txt.
         Assert.All(new[] { "Links grid: ", "Without the link summary: ", "Sitemaps: ", "robots.txt: " }, name =>
