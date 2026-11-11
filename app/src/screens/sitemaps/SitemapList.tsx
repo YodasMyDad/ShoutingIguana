@@ -3,7 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { Network, Play, RefreshCw } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { GridFilter, Sitemap, SitemapList as SitemapListData } from '../../api/grids';
-import { urlFacetsQuery } from '../../api/queries';
+import { analysisQuery, urlFacetsQuery } from '../../api/queries';
 import { analyseCrawl, continueCrawl } from '../../crawl/actions';
 import type { CrawlState } from '../../crawl/useCrawlState';
 import { ErrorState } from '../../feedback/ErrorState';
@@ -19,12 +19,14 @@ import { PageHeader } from '../../ui/PageHeader';
 import { CountSentence } from '../SentenceWithCounts';
 import { SitemapTree } from './SitemapTreeGrid';
 import {
+  COVERAGE_CHECK,
   COVERAGE_FACETS,
   COVERAGE_NEEDS,
   OWN_JUDGEMENT,
   WHERE_THE_CRAWL_LOOKS,
   answerSentence,
   coverageOf,
+  coverageSkippedWords,
   coverageWords,
   tallyOf,
 } from './sitemapWords';
@@ -200,10 +202,28 @@ function NotInAnySitemap({ crawlId }: { crawlId: string }) {
     );
   }
   const coverage = coverageOf(facets.data);
-  if (!coverage.known) return <p className="text-13 text-text-secondary">{COVERAGE_NEEDS[coverage.reason]}</p>;
+  if (!coverage.known) {
+    return coverage.reason === 'checkSkipped' ? (
+      <CoverageSkipped crawlId={crawlId} />
+    ) : (
+      <p className="text-13 text-text-secondary">{COVERAGE_NEEDS[coverage.reason]}</p>
+    );
+  }
   return (
     <p className="text-13 text-text-secondary">
       <CountSentence crawlId={crawlId} parts={coverageWords(coverage)} />
     </p>
   );
+}
+
+/**
+ * The analysis left the comparison out, so no page is known to be in a sitemap or out of one: the line says so, with
+ * the analysis's own reason for skipping the check.
+ */
+function CoverageSkipped({ crawlId }: { crawlId: string }) {
+  const analysis = useQuery(analysisQuery(crawlId));
+  // The line's room is kept while the reason is read; without one (the read failed) the line still says what's true.
+  if (analysis.isPending) return <p aria-busy="true" className="min-h-(--leading-13) text-13" />;
+  const why = analysis.data?.skipped.find((check) => check.checkId === COVERAGE_CHECK)?.reason?.text ?? null;
+  return <p className="text-13 text-text-secondary">{coverageSkippedWords(why)}</p>;
 }

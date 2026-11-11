@@ -202,6 +202,52 @@ describe('Sitemaps: the list', () => {
     expect(filter).toEqual([...ANSWERED_SITE_PAGES, { column: 'inSitemap', op: 'is', value: false }]);
   });
 
+  it('says the analysis didn’t count them, and why, when the engine can’t place the site’s pages: never “in a sitemap”', async () => {
+    // A crawl stopped before its sitemaps were read, then analysed: the check that compares pages with sitemaps was
+    // skipped, so the engine answers null for every page, never false.
+    sidecar({
+      sitemaps: {
+        ...TEST_SITEMAP_LIST,
+        discovery: 'unfinished',
+        sitemaps: [
+          testSitemap({ id: 1, isIndex: true, sitemaps: 1 }),
+          testSitemap({ id: 2, parentId: 1, foundVia: 'index', state: 'pending', statusCode: null }),
+        ],
+      },
+      coverage: {
+        ...COVERAGE_PAGE,
+        matching: 1,
+        facets: { inSitemap: [{ value: null, count: 1, filter: { column: 'inSitemap', op: 'isEmpty' } }] },
+      },
+      analysis: {
+        skipped: [
+          { checkId: 'not-in-sitemap', reason: { code: 'crawl-unfinished', text: 'The crawl didn’t finish.' } },
+        ],
+      },
+      item: { status: 'stopped' },
+    });
+    await open(SITEMAPS);
+    expect(
+      await screen.findByText('The analysis didn’t count the site’s pages no sitemap lists. The crawl didn’t finish.'),
+    ).toBeVisible();
+    expect(screen.queryByText(/in a sitemap\./)).toBeNull();
+    expect(screen.queryByText(/in any sitemap/)).toBeNull();
+  });
+
+  it('still says the analysis didn’t count them when its reason can’t be read', async () => {
+    sidecar({
+      coverage: {
+        ...COVERAGE_PAGE,
+        facets: { inSitemap: [{ value: null, count: 9, filter: { column: 'inSitemap', op: 'isEmpty' } }] },
+      },
+    });
+    await open(SITEMAPS, createQueryClientWithoutBackoff());
+    expect(
+      await screen.findByText(/The analysis didn’t count the site’s pages no sitemap lists: it couldn’t compare/),
+    ).toBeVisible();
+    expect(screen.queryByText(/in a sitemap\./)).toBeNull();
+  });
+
   it('keeps the list when the pages no sitemap lists can’t be counted, and says so with Try again', async () => {
     sidecar({ coverage: problem({ type: 'internal', title: 'Something went wrong in the engine.', status: 500 }) });
     await open(SITEMAPS, createQueryClientWithoutBackoff());

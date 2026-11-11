@@ -7,6 +7,7 @@ import {
   COVERAGE_NEEDS,
   answerSentence,
   coverageOf,
+  coverageSkippedWords,
   coverageWords,
   foundViaWords,
   stateWords,
@@ -146,6 +147,44 @@ describe('the site’s pages no sitemap lists', () => {
     expect(one.known && sentenceText(coverageWords(one))).toBe('1 of the site’s 9 pages isn’t in any sitemap.');
     const single = coverageOf({ ...COVERAGE_PAGE, matching: 1, facets: { inSitemap: [] } });
     expect(single.known && sentenceText(coverageWords(single))).toBe('The site’s 1 page is in a sitemap.');
+  });
+
+  it('never tells a page the engine couldn’t place that it’s in a sitemap: the analysis skipped the comparison', () => {
+    const unplaced = (count: number) => ({
+      value: null,
+      count,
+      filter: { column: 'inSitemap', op: 'isEmpty' } as const,
+    });
+    // A crawl stopped before its sitemaps were read, then analysed: its one page is in neither bucket.
+    const stopped: FacetsPage = { ...COVERAGE_PAGE, matching: 1, facets: { inSitemap: [unplaced(1)] } };
+    expect(coverageOf(stopped)).toEqual({ known: false, reason: 'checkSkipped' });
+    // One sitemap read and another that failed: the pages the read one lists are placed, the rest aren't.
+    const partial: FacetsPage = {
+      ...COVERAGE_PAGE,
+      matching: 6_172,
+      facets: {
+        inSitemap: [
+          unplaced(1_172),
+          { value: true, count: 5_000, filter: { column: 'inSitemap', op: 'is', value: true } },
+        ],
+      },
+    };
+    expect(coverageOf(partial)).toEqual({ known: false, reason: 'checkSkipped' });
+    // A bucket of none changes nothing: every page was placed.
+    const placed = coverageOf({
+      ...COVERAGE_PAGE,
+      facets: { inSitemap: [unplaced(0), ...(COVERAGE_PAGE.facets.inSitemap ?? [])] },
+    });
+    expect(placed).toMatchObject({ known: true, missing: 2, pages: 9 });
+  });
+
+  it('says the analysis left the count out, with the analysis’s own reason when it gave one', () => {
+    expect(coverageSkippedWords('The crawl didn’t finish.')).toBe(
+      'The analysis didn’t count the site’s pages no sitemap lists. The crawl didn’t finish.',
+    );
+    expect(coverageSkippedWords(null)).toBe(
+      'The analysis didn’t count the site’s pages no sitemap lists: it couldn’t compare every page with the sitemaps.',
+    );
   });
 
   it('says what it needs when the analysis that counts it isn’t there: never 0', () => {

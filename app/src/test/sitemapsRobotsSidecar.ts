@@ -18,7 +18,7 @@ import type {
   UrlColumn,
   UrlRow,
 } from '../api/grids';
-import type { CrawlListItem } from '../api/types';
+import type { Analysis, CrawlListItem } from '../api/types';
 import { json, problem, standardRoutes, testCrawlItem, type FakeRoute } from './fakeSidecar';
 
 export const SITE = 'https://example.com';
@@ -413,6 +413,8 @@ export interface SitemapsRobotsOptions {
   sitemaps?: SitemapList | Response;
   /** The site's pages by whether a sitemap lists them, or a failure. */
   coverage?: FacetsPage | Response;
+  /** The last analysis: which checks it skipped, and why. Without one, the engine has none to give (404). */
+  analysis?: Pick<Analysis, 'skipped'> | Response;
   origins?: readonly RobotsOrigin[];
   respected?: boolean;
   /** Each origin's file, by origin; an origin without one is `origin-not-found`. */
@@ -459,6 +461,9 @@ export function sitemapsRobotsRoutes(options: SitemapsRobotsOptions = {}): FakeR
     ],
     ['GET', /^\/api\/url-columns$/, () => json(TEST_URL_COLUMNS)],
     ['POST', new RegExp(`${crawl}/urls/facets$`), () => answer(options.coverage ?? COVERAGE_PAGE)],
+    ...(options.analysis === undefined
+      ? []
+      : [['GET', new RegExp(`${crawl}/analysis$`), () => answer(options.analysis)] satisfies FakeRoute]),
     [
       'POST',
       new RegExp(`${crawl}/robots$`),

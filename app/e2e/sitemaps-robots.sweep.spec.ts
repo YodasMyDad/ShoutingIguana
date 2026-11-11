@@ -161,8 +161,14 @@ test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }
       facets: { inSitemap?: { value: boolean | null; count: number }[] };
     }>(`/api/crawls/${crawl.id}/urls/facets`, { filters: ANSWERED_SITE_PAGES, facets: ['inSitemap'] });
     await page.goto(`/crawls/${crawl.id}/sitemaps`);
+    const unplaced = facets.facets.inSitemap?.find((bucket) => bucket.value === null)?.count ?? 0;
     if (facets.unavailable.includes('inSitemap')) {
       await expect(main(page).getByText(/^How many of the site’s pages no sitemap lists is counted/)).toBeVisible();
+    } else if (unplaced > 0) {
+      // Pages the engine couldn't place (the analysis skipped the comparison): the line says so, and never counts
+      // them as in a sitemap.
+      await expect(main(page).getByText(/^The analysis didn’t count the site’s pages no sitemap lists/)).toBeVisible();
+      await expect(main(page).getByText(/in (a|any) sitemap\./)).toHaveCount(0);
     } else if (facets.matching === 0) {
       await expect(main(page).getByText(/^The crawl read no pages on this site/)).toBeVisible();
     } else {

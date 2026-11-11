@@ -186,14 +186,25 @@ export const COVERAGE_FACETS = { filters: [...ANSWERED_SITE_PAGES], facets: ['in
 export type Coverage =
   /** The site's pages no sitemap lists, of all its pages, and the filters that open exactly them in URLs. */
   | { known: true; missing: number; pages: number; filters: GridFilter[] }
-  /** The analysis counts it, and there's none to read: why. */
-  | { known: false; reason: SummaryReason };
+  /**
+   * The analysis counts it, and there's none to read (why), or the analysis left the comparison out (`checkSkipped`:
+   * the crawl didn't finish, a sitemap wasn't read), and says why itself.
+   */
+  | { known: false; reason: SummaryReason | 'checkSkipped' };
+
+/** The check that compares the site's pages with its sitemaps: when the analysis skips it, no page is placed. */
+export const COVERAGE_CHECK = 'not-in-sitemap';
 
 /** How many of the site's pages no sitemap lists, from the facets, or why that can't be said yet. */
 export function coverageOf(facets: FacetsPage): Coverage {
   const buckets = facets.facets.inSitemap;
   if (!buckets || facets.unavailable.includes('inSitemap')) {
     return { known: false, reason: facets.summary.reason ?? 'notAnalyzed' };
+  }
+  // A page the engine can't place (null) is neither in a sitemap nor known to be out of one: it answers so, never
+  // false, when the analysis skipped the comparison. Counting those as "in a sitemap" would be a guess.
+  if (buckets.some((bucket) => bucket.value === null && bucket.count > 0)) {
+    return { known: false, reason: 'checkSkipped' };
   }
   const missing = buckets.find((bucket) => bucket.value === false);
   return {
@@ -213,6 +224,17 @@ export const COVERAGE_NEEDS: Record<SummaryReason, string> = {
   crawlChanged:
     'How many of the site’s pages no sitemap lists is counted by the analysis: this crawl was continued after its last one.',
 };
+
+/**
+ * The analysis ran and left the comparison out. `why` is its own sentence for that ("The crawl didn't finish.", "Not
+ * every sitemap was read."), or null when it gave none.
+ */
+export function coverageSkippedWords(why: string | null): string {
+  const said = 'The analysis didn’t count the site’s pages no sitemap lists';
+  return why && why.trim() !== ''
+    ? `${said}. ${why.trim()}`
+    : `${said}: it couldn’t compare every page with the sitemaps.`;
+}
 
 /** The words either side of the count that opens the pages no sitemap lists: "264", " of the site’s 265 pages aren’t in any sitemap." */
 export function coverageWords(coverage: Extract<Coverage, { known: true }>): SentencePart[] {
