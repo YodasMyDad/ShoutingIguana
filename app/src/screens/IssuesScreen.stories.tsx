@@ -92,7 +92,7 @@ export const GardenFlatCheck: Story = {
 
 /** The group a story opens: the pages that link to the home page without text. */
 const HOME_GROUP = `?group=${encodeURIComponent(JSON.stringify({ detail: null, relatedUrlId: 1 }))}`;
-const NOT_FOUND_GROUP = `?group=${encodeURIComponent(JSON.stringify({ detail: 'HTTP 404', relatedUrlId: null }))}`;
+const NOT_FOUND_GROUP = `?group=${encodeURIComponent(JSON.stringify({ detail: '404 Not Found', relatedUrlId: null }))}`;
 
 /**
  * A check that flags only pages (the catalog's `subject` is `page`): "Pages affected", as a share of the pages
@@ -165,8 +165,15 @@ const BIG_GROUPS: Record<string, IssueGroup[]> = {
     },
   ],
   'internal-client-error': [
-    { detail: 'HTTP 404', relatedUrlId: null, relatedUrl: null, pages: 300_000, share: 0.9588, likelyTemplate: false },
-    { detail: 'HTTP 410', relatedUrlId: null, relatedUrl: null, pages: 12_876, share: 0.0412, likelyTemplate: false },
+    {
+      detail: '404 Not Found',
+      relatedUrlId: null,
+      relatedUrl: null,
+      pages: 300_000,
+      share: 0.9588,
+      likelyTemplate: false,
+    },
+    { detail: '410 Gone', relatedUrlId: null, relatedUrl: null, pages: 12_876, share: 0.0412, likelyTemplate: false },
   ],
 };
 

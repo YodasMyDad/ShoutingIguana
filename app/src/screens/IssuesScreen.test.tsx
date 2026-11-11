@@ -869,7 +869,7 @@ describe('a check’s count, worded by what the check flags', () => {
     expect(row(/^Error Internal URL returns 4xx 2 ?URLs$/)).toBeVisible();
     expect(screen.queryByText(/Pages affected|Share of pages|Affected pages/)).toBeNull();
     // Its group's link doesn't call them pages, nor say "URLs in URLs".
-    await within(grid).findByText('HTTP 404');
+    await within(grid).findByText('404 Not Found');
     fireEvent.pointerDown(grid.querySelector('[data-tree-toggle]')!, { button: 0 });
     await waitFor(() => expect(router.state.location.search).toHaveProperty('group'));
     expect(await within(grid).findByRole('link', { name: 'Show all 2 in URLs' })).toBeVisible();

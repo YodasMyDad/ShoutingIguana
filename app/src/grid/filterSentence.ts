@@ -61,7 +61,7 @@ function either(values: readonly string[]): string {
 }
 
 /**
- * The chips a filter reads as. A check's group is a chip of its own, "Detail is HTTP 404" or "Related URL is /", and
+ * The chips a filter reads as. A check's group is a chip of its own, "Detail is 404 Not Found" or "Related URL is /", and
  * a group that has both (a temporary redirect's "302" and where it goes) is both, so the check and its group can be
  * read, and removed, one at a time. `relatedUrl` gives a related URL's words: the URL, `LOOKING_UP`, or plain words for
  * one that couldn't be read; without it, "another URL".
