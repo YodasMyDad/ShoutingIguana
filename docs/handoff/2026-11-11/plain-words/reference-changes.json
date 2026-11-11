@@ -1,0 +1,102 @@
+{
+  "about": "Where the ten reference checks in plain-words.json differ from docs/v2-ui-simple.md, \"Ten checks, written out\", so the document can be edited to match. `field` is the JSON's (plainWhat[n] and plainFix[n] count from 0), `documentLine` the document's label. `old` is the document's text, null where the document has none; `new` is the text to put there. A check with an empty list is still the document's, word for word. Built by reference_changes.py from the two files, not typed.",
+  "checks": {
+    "robots-txt-unreachable": [
+      {
+        "field": "plainLooksFor",
+        "documentLine": "Looks for",
+        "old": null,
+        "new": "A rules file that search engines can't read",
+        "why": "New optional field. The title is a sentence about the site, which reads as a finding beside \"Not checked\" in the \"couldn't be checked\" list; this noun phrase is shown there in its place."
+      }
+    ],
+    "internal-client-error": [
+      {
+        "field": "plainPassed",
+        "documentLine": "Passed",
+        "old": "Every page and file on the site can be found",
+        "new": "No page or file answers with a \"not found\" error",
+        "why": "Review, accepted. Beside a failing \"Pages or files that don't answer\" or \"Pages or files that fail with a server error\", the old line reads as untrue. The new one says only what this check tested."
+      }
+    ],
+    "broken-internal-links": [
+      {
+        "field": "plainPassed",
+        "documentLine": "Passed",
+        "old": "Every link on the site leads to a working page",
+        "new": "Every link between your pages leads to a working page",
+        "why": "Review, accepted. The check covers links between the site's own pages only, so the old line sat, untrue, beside a failing \"Links to other websites that don't work\"."
+      }
+    ],
+    "empty-anchor-text": [
+      {
+        "field": "plainPassed",
+        "documentLine": "Passed",
+        "old": "Every link has words to read",
+        "new": "Every link between your pages has words to read",
+        "why": "Review, accepted. The rule tests only links to the site's own addresses, so a site whose links to other websites have no words passes, and \"Every link has words to read\" was then untrue."
+      },
+      {
+        "field": "plainWhat[3]",
+        "documentLine": "What",
+        "old": null,
+        "new": "Pages are still found either way, so it can wait.",
+        "why": "Asked for with the review: a Notice says when it is fine, and this one didn't. No honest \"then there is nothing to do\" exists for a link with no words (it is always a fault for screen-reader users), so the sentence says it can wait, as the five other Notices of that kind do. 69 words in all, inside the 70."
+      }
+    ],
+    "canonicalised-page": [],
+    "duplicate-site-version": [
+      {
+        "field": "plainLooksFor",
+        "documentLine": "Looks for",
+        "old": null,
+        "new": "A site that answers at more than one address",
+        "why": "New optional field. The title is a sentence about the site, which reads as a finding beside \"Not checked\" in the \"couldn't be checked\" list; this noun phrase is shown there in its place."
+      }
+    ],
+    "image-too-large": [
+      {
+        "field": "plainWhat[0]",
+        "documentLine": "What",
+        "old": "Some pages show images whose files are over 200 KB.",
+        "new": "Some pages show images whose files are over {limit:largeImageBytes}.",
+        "readsWithTheDefault": "Some pages show images whose files are over 200 KB.",
+        "why": "200 KB is the default of the analysis setting largeImageBytes, which Advanced can change: the sentence was untrue once it is. The engine fills the token with the number and its unit, so with the default it reads exactly as the document's sentence does."
+      }
+    ],
+    "title-duplicate": [
+      {
+        "field": "plainPassed",
+        "documentLine": "Passed",
+        "old": "Every page has its own title",
+        "new": "No two pages share a title",
+        "why": "Review, accepted. The old line is printed as good news on a site whose pages have no title at all (title-missing fails, this check passes). The other duplicates have the same form: \"No two pages share a search description\"."
+      }
+    ],
+    "slow-response": [
+      {
+        "field": "plainWhat[0]",
+        "documentLine": "What",
+        "old": "These pages took more than 1 second to arrive when the check asked for them.",
+        "new": "These pages took more than {limit:slowResponseMs} to arrive when the check asked for them.",
+        "readsWithTheDefault": "These pages took more than 1 second to arrive when the check asked for them.",
+        "why": "1 second is the default of the analysis setting slowResponseMs, which Advanced can change: the sentence was untrue once it is. The engine fills the token with the number and its unit, so with the default it reads exactly as the document's sentence does."
+      }
+    ],
+    "description-missing": []
+  },
+  "alsoInTheDocument": [
+    {
+      "where": "The template",
+      "change": "A row for `plainLooksFor`: optional; a noun phrase for what the check looks for, shown in the \"couldn't be checked\" list where the title is a sentence; 60 characters, no full stop. 12 checks have one."
+    },
+    {
+      "where": "The rules, \"Numbers carry their unit and their limit\"",
+      "change": "A limit that is an analysis setting is written as a token, `{limit:<setting>}`, which the engine fills with the number and its unit (\"over 200 KB\", \"more than 1 second\"). A number that is a fixed rule of the check, or Google's, stays a number (\"2 MB\", \"10 steps\")."
+    },
+    {
+      "where": "The rules, \"A Notice always says when it is fine\"",
+      "change": "Six Notices have no honest \"nothing to do\" and say when it can wait: empty-anchor-text, h1-missing, h1-multiple, security-headers-missing, lang-missing, charset-missing."
+    }
+  ]
+}

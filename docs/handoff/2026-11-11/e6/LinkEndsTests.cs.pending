@@ -1,0 +1,271 @@
+using System.Globalization;
+using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Storage;
+using ShoutingIguana.Engine.Storage.Models;
+using ShoutingIguana.Engine.Tests.Support;
+using static ShoutingIguana.Engine.Tests.Support.GridQueries;
+
+namespace ShoutingIguana.Engine.Tests.Storage;
+
+/// <summary>
+/// From a view of the links grid to its URLs: the URLs at either end of the links the view matches, each once with its
+/// links counted, as a list; and the URL grid narrowed to them, to exactly the list's count, alone and beside its own
+/// filters, search and sorts, with a URL summary and without. Held to the links themselves: the view's links are listed
+/// by the links grid, and their ends grouped by SQL written here.
+/// </summary>
+[Collection(GridCrawlCollection.NAME)]
+public sealed class LinkEndsTests(GridCrawl crawl) : IDisposable
+{
+    private readonly long _splitFrom = LinkGridReader.SplitFrom;
+
+    public void Dispose() => (LinkGridReader.SplitFrom, LinkGridReader.Split) = (_splitFrom, null);
+
+    /// <summary>Views of the links grid: every link, what the link summary answers, what takes a pass, and what matches nothing.</summary>
+    private static readonly (string Name, UrlFilter[] Filters, string? Search, bool NeedsSummary)[] VIEWS =
+    [
+        ("every link", [], null, false),
+        ("hyperlinks", [Names("kind", FilterOperator.In, "hyperlink")], null, false),
+        ("nofollow", [Boolean("noFollow", true)], null, false),
+        ("images without alt text", [Names("kind", FilterOperator.In, "image"), new UrlFilter("text", FilterOperator.IsEmpty)], null, false),
+        ("to broken URLs", [Names("to.statusClass", FilterOperator.In, "4xx", "5xx")], null, false),
+        ("to other sites", [Boolean("to.isInternal", false)], null, false),
+        ("hyperlinks in the content to pages that redirect", [Names("kind", FilterOperator.In, "hyperlink"), Names("position", FilterOperator.In, "content"), Names("to.statusClass", FilterOperator.In, "3xx")], null, false),
+        ("to non-indexable pages", [Boolean("to.indexable", false)], null, false),
+        ("to URLs with few inlinks", [Number("to.inlinks", FilterOperator.Lte, 3)], null, true),
+        ("text contains", [Text("text", FilterOperator.Contains, "product")], null, false),
+        ("from products", [Text("from.url", FilterOperator.Contains, "/p/")], null, false),
+        ("from one page", [Number("from.id", FilterOperator.Eq, 1)], null, false),
+        ("from pages two clicks in, to working pages", [Number("from.depth", FilterOperator.Eq, 2), Names("to.statusClass", FilterOperator.In, "2xx")], null, false),
+        ("not to their own page", [Boolean("selfLink", false)], null, false),
+        ("search", [], "about", false),
+        ("nothing", [Text("text", FilterOperator.Contains, "no link says this at all")], null, false)
+    ];
+
+    [Fact]
+    public void TheEndsOfAViewAreItsLinksPagesAndTargetsEachOnceWithItsLinks()
+    {
+        var views = 0;
+        foreach (var path in new[] { crawl.Path, crawl.Changed })
+        {
+            ReadCache cache = new();
+            var urls = TestCrawls.Rows(path, "SELECT id, url FROM urls").Select(row => row.Split(" | ", 2)).ToDictionary(parts => int.Parse(parts[0], CultureInfo.InvariantCulture), parts => parts[1]);
+            foreach (var (name, filters, search, needsSummary) in VIEWS.Where(view => path == crawl.Path || !view.NeedsSummary))
+            {
+                var links = Links(path, filters, search, cache);
+                foreach (var end in new[] { LinkEnd.From, LinkEnd.To })
+                {
+                    var expected = Grouped(path, links, end == LinkEnd.From ? "from_id" : "to_id");
+                    List<LinkEndRow> read = [];
+                    for (var offset = 0; ; offset += 37)
+                    {
+                        var page = LinkGridReader.Ends(path, new LinkEndQuery { End = end, Filters = filters, Search = search, Offset = offset, Limit = 37 }, cache);
+                        Assert.Equal((end, (long)expected.Count, (long)links.Count, offset), (page.End, page.Total, page.Links, page.Offset));
+                        Assert.Equal(path == crawl.Path, page.Summary.Available);
+                        read.AddRange(page.Rows);
+                        if (page.Rows.Count < 37)
+                        {
+                            break;
+                        }
+                    }
+
+                    Assert.True(expected.Select(entry => new LinkEndRow(entry.Id, urls[entry.Id], entry.Links)).SequenceEqual(read),
+                        $"{name}, {end}, {System.IO.Path.GetFileName(path)}: {expected.Count} ends expected, {read.Count} read");
+
+                    // The same without anything kept, and past the end: no rows, the same counts.
+                    var cold = LinkGridReader.Ends(path, new LinkEndQuery { End = end, Filters = filters, Search = search, Limit = 1_000 });
+                    Assert.Equal(read.Take(1_000), cold.Rows);
+                    Assert.Empty(LinkGridReader.Ends(path, new LinkEndQuery { End = end, Filters = filters, Search = search, Offset = expected.Count }, cache).Rows);
+                    views++;
+                }
+            }
+        }
+
+        Assert.True(views >= 60, $"Only {views} views' ends were read.");
+    }
+
+    /// <summary>
+    /// The URL grid narrowed to a view's pages, or its targets, lists exactly them: its count is the list's, so "Show
+    /// these pages in URLs" lands on the number the links view states. Beside the grid's own filters, search and sort it
+    /// narrows as any filter does, and its facets count the same URLs.
+    /// </summary>
+    [Fact]
+    public void TheUrlGridNarrowedToAViewsEndsListsExactlyThem()
+    {
+        foreach (var path in new[] { crawl.Path, crawl.Changed })
+        {
+            ReadCache cache = new();
+            foreach (var (name, filters, search, _) in VIEWS.Where(view => path == crawl.Path || !view.NeedsSummary))
+            {
+                foreach (var end in new[] { LinkEnd.From, LinkEnd.To })
+                {
+                    var ends = LinkGridReader.Ends(path, new LinkEndQuery { End = end, Filters = filters, Search = search, Limit = 1_000 }, cache);
+                    Assert.True(ends.Total <= 1_000);
+                    var expected = ends.Rows.Select(row => row.Id).ToList();
+                    UrlLinkEnds narrowed = new(end, filters, search);
+
+                    // Alone: the same URLs, in crawl order; the count the list gives.
+                    var all = UrlGridReader.Query(path, new UrlQuery { LinkEnds = narrowed, Limit = 1_000 }, cache);
+                    Assert.True(expected.SequenceEqual(all.Rows.Select(row => row.Id)), $"{name}, {end}: the grid lists {all.Rows.Count} URLs, the view has {expected.Count}");
+                    Assert.Equal((ends.Total, (long)crawl.Reference.Rows.Count), (all.Matching, all.Total));
+                    Assert.Equal(ends.Total, UrlGridReader.Query(path, new UrlQuery { LinkEnds = narrowed, Limit = 1 }).Matching);
+
+                    // Beside a filter, a search and a sort of the grid's own: those of them that pass, in the order asked.
+                    UrlFilter[] own = [Boolean("isInternal", true), Names("statusClass", FilterOperator.In, "2xx", "3xx")];
+                    var passing = crawl.Reference.Matching(own, "p").ToHashSet();
+                    var sorted = crawl.Reference.Order([new UrlSort("url", true)], expected.Where(passing.Contains));
+                    Assert.Equal(sorted, Walk(path, new UrlQuery { LinkEnds = narrowed, Filters = own, Search = "p", Sort = [new UrlSort("url", true)], Limit = 23 }, cache));
+
+                    // Its facets count the same URLs.
+                    var facets = UrlGridReader.Facets(path, new UrlFacetQuery { LinkEnds = narrowed, Facets = ["statusClass", "type", "depth"] }, cache);
+                    Assert.Equal(ends.Total, facets.Matching);
+                    Assert.All(facets.Facets.Values, buckets => Assert.Equal(ends.Total, buckets.Sum(bucket => bucket.Count)));
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The narrowing holds wherever the URL grid is read: one sitemap's URLs, and one check's rows, are narrowed to the
+    /// ends among them. A cursor is the query's own: one read under other links is refused.
+    /// </summary>
+    [Fact]
+    public void TheNarrowingHoldsInASitemapsGridAndACheckRowsAndACursorIsItsOwn()
+    {
+        UrlLinkEnds toProducts = new(LinkEnd.To, [Text("to.url", FilterOperator.Contains, "/p/")]);
+        UrlLinkEnds fromHome = new(LinkEnd.From, [Number("from.id", FilterOperator.Eq, 1)]);
+        var targets = LinkGridReader.Ends(crawl.Path, new LinkEndQuery { End = LinkEnd.To, Filters = toProducts.Filters, Limit = 1_000 }).Rows.Select(row => row.Id).ToHashSet();
+        Assert.InRange(targets.Count, 50, 999);
+
+        var sitemap = SitemapListReader.Read(crawl.Path).Sitemaps[1];
+        var listed = TestCrawls.Rows(crawl.Path, $"SELECT printf('%09d', url_id) FROM sitemap_urls WHERE sitemap_id = {sitemap.Id}").Select(int.Parse).ToList();
+        var inSitemap = UrlGridReader.QuerySitemap(crawl.Path, sitemap.Id, new UrlQuery { LinkEnds = toProducts, Limit = 1_000 })!;
+        Assert.Equal(listed.Where(targets.Contains).Order(), inSitemap.Rows.Select(row => row.Id));
+        Assert.Equal((inSitemap.Rows.Count, listed.Count), (inSitemap.Matching, inSitemap.Total));
+
+        var check = IssueReader.ReadCounts(crawl.Path).Where(count => count.Value > 5).Select(count => count.Key).First(id => crawl.Reference.Issues.Any(url => targets.Contains(url.Key) && url.Value.Any(issue => issue.Issue == id)));
+        var flagged = crawl.Reference.Issues.Where(url => url.Value.Any(issue => issue.Issue == check)).Select(url => url.Key).ToList();
+        var rows = IssueGroupReader.ReadRows(crawl.Path, check, new UrlQuery { LinkEnds = toProducts, Limit = 1_000 })!.Page!;
+        Assert.Equal(flagged.Where(targets.Contains).Order(), rows.Rows.Select(row => row.Id));
+        Assert.Equal((rows.Rows.Count, flagged.Count), (rows.Matching, rows.Total));
+
+        var first = UrlGridReader.Query(crawl.Path, new UrlQuery { LinkEnds = toProducts, Limit = 5 });
+        Assert.NotNull(first.Next);
+        Assert.Equal(targets.Order().Skip(5).Take(5), UrlGridReader.Query(crawl.Path, new UrlQuery { LinkEnds = toProducts, Limit = 5, After = first.Next }).Rows.Select(row => row.Id));
+        Assert.Contains("after", Assert.Throws<UrlQueryException>(() => UrlGridReader.Query(crawl.Path, new UrlQuery { LinkEnds = fromHome, Limit = 5, After = first.Next })).Errors.Keys);
+        Assert.Contains("after", Assert.Throws<UrlQueryException>(() => UrlGridReader.Query(crawl.Path, new UrlQuery { LinkEnds = toProducts with { End = LinkEnd.From }, Limit = 5, After = first.Next })).Errors.Keys);
+        Assert.Contains("after", Assert.Throws<UrlQueryException>(() => UrlGridReader.Query(crawl.Path, new UrlQuery { Limit = 5, After = first.Next })).Errors.Keys);
+    }
+
+    [Fact]
+    public void WhatTheLinksGridRefusesIsRefusedOfTheEndsToo()
+    {
+        void Refused(UrlLinkEnds ends, string field)
+        {
+            Assert.Equal([field], Assert.Throws<UrlQueryException>(() => LinkGridReader.Ends(crawl.Path, new LinkEndQuery { End = ends.End, Filters = ends.Filters, Search = ends.Search })).Errors.Keys);
+            Assert.Equal(["linkEnds." + field], Assert.Throws<UrlQueryException>(() => UrlGridReader.Query(crawl.Path, new UrlQuery { LinkEnds = ends })).Errors.Keys);
+            Assert.Equal(["linkEnds." + field], Assert.Throws<UrlQueryException>(() => UrlGridReader.Facets(crawl.Path, new UrlFacetQuery { LinkEnds = ends })).Errors.Keys);
+        }
+
+        Refused(new UrlLinkEnds(LinkEnd.To, [Text("no.such", FilterOperator.Contains, "a")]), "filters[0].column");
+        Refused(new UrlLinkEnds(LinkEnd.From, [Names("kind", FilterOperator.In, "hyperlink"), Number("text", FilterOperator.Gt, 4)]), "filters[1].op");
+        Refused(new UrlLinkEnds(LinkEnd.To, [], new string('a', 1_001)), "search");
+        Refused(new UrlLinkEnds(LinkEnd.To, [Text("text", FilterOperator.Regex, "(")]), "filters[0].value");
+        Assert.Contains("limit", Assert.Throws<UrlQueryException>(() => LinkGridReader.Ends(crawl.Path, new LinkEndQuery { Limit = 0 })).Errors.Keys);
+        Assert.Contains("offset", Assert.Throws<UrlQueryException>(() => LinkGridReader.Ends(crawl.Path, new LinkEndQuery { Offset = -1 })).Errors.Keys);
+
+        // A link filter on what only the analysis knows, of a crawl continued since: refused by the column's name as asked.
+        UrlLinkEnds needs = new(LinkEnd.From, [Number("to.inlinks", FilterOperator.Gt, 5)]);
+        Assert.Equal(["to.inlinks"], Assert.Throws<NeedsAnalysisException>(() => LinkGridReader.Ends(crawl.Changed, new LinkEndQuery { End = needs.End, Filters = needs.Filters })).Columns);
+        Assert.Equal(["to.inlinks"], Assert.Throws<NeedsAnalysisException>(() => UrlGridReader.Query(crawl.Changed, new UrlQuery { LinkEnds = needs })).Columns);
+    }
+
+    /// <summary>
+    /// The pages a view's links are on are counted in a pass over the links, split over the connections a host lends as
+    /// any pass is: to the same answer. A running crawl's are of one moment: the list and the grid it opens agree.
+    /// </summary>
+    [Fact]
+    public void ThePagesAreCountedInAPassThatSplitsAndARunningCrawlsAgree()
+    {
+        LinkGridReader.SplitFrom = 1;
+        List<int> split = [];
+        LinkGridReader.Split = connections =>
+        {
+            lock (split)
+            {
+                split.Add(connections);
+            }
+        };
+        var expected = LinkGridReader.Ends(crawl.Path, new LinkEndQuery { End = LinkEnd.From, Limit = 1_000 });
+        Assert.Equal([1], split);
+        var several = LinkGridReader.Ends(crawl.Path, new LinkEndQuery { End = LinkEnd.From, Limit = 1_000 }, new ReadCache { Helpers = ReadHelpers.UpTo(3) });
+        Assert.Equal(4, split[^1]);
+        Assert.Equal((expected.Total, expected.Links), (several.Total, several.Links));
+        Assert.Equal(expected.Rows, several.Rows);
+        Assert.Equal(TestCrawls.Count(crawl.Path, "SELECT COUNT(DISTINCT from_id) FROM links"), expected.Total);
+
+        var running = crawl.Copy();
+        Change(running, $"UPDATE crawl SET status = {(int)CrawlStatus.Running}, updated_at = updated_at + 1");
+        using (CrawlFileLock.Acquire(running))
+        {
+            ReadCache cache = new();
+            foreach (var end in new[] { LinkEnd.From, LinkEnd.To })
+            {
+                UrlFilter[] filters = [Names("kind", FilterOperator.In, "hyperlink")];
+                var ends = LinkGridReader.Ends(running, new LinkEndQuery { End = end, Filters = filters, Limit = 1_000 }, cache);
+                var grid = UrlGridReader.Query(running, new UrlQuery { LinkEnds = new UrlLinkEnds(end, filters), Limit = 1_000 }, cache);
+                Assert.Equal(SummaryUnavailableReason.Crawling, ends.Summary.Reason);
+                Assert.Equal((ends.Total, ends.Rows.Count), (grid.Matching, grid.Rows.Count));
+                Assert.Equal(ends.Rows.Select(row => row.Id), grid.Rows.Select(row => row.Id));
+                Assert.Equal(TestCrawls.Count(running, $"SELECT COUNT(DISTINCT {(end == LinkEnd.From ? "from_id" : "to_id")}) FROM links WHERE kind = 0"), ends.Total);
+            }
+        }
+    }
+
+    /// <summary>The ids of every link a view matches, as the links grid lists them.</summary>
+    private static List<long> Links(string path, UrlFilter[] filters, string? search, ReadCache cache)
+    {
+        List<long> ids = [];
+        for (var offset = 0; ; offset += 1_000)
+        {
+            var page = LinkGridReader.Query(path, new UrlQuery { Columns = ["kind"], Filters = filters, Search = search, Offset = offset, Limit = 1_000 }, cache);
+            ids.AddRange(page.Rows.Select(row => row.Id));
+            if (page.Next is null)
+            {
+                Assert.Equal(page.Matching, ids.Count);
+                return ids;
+            }
+        }
+    }
+
+    /// <summary>Those links' ends, each with how many of them it has, in id order: grouped by SQL over the links themselves.</summary>
+    private static List<(int Id, long Links)> Grouped(string path, List<long> links, string end)
+    {
+        Dictionary<int, long> counts = [];
+        foreach (var chunk in links.Chunk(5_000))
+        {
+            foreach (var row in TestCrawls.Rows(path, $"SELECT {end}, COUNT(*) FROM links WHERE rowid IN ({string.Join(",", chunk)}) GROUP BY 1"))
+            {
+                var parts = row.Split(" | ");
+                var id = int.Parse(parts[0], CultureInfo.InvariantCulture);
+                counts[id] = counts.GetValueOrDefault(id) + long.Parse(parts[1], CultureInfo.InvariantCulture);
+            }
+        }
+
+        return [.. counts.OrderBy(entry => entry.Key).Select(entry => (entry.Key, entry.Value))];
+    }
+
+    private static List<int> Walk(string path, UrlQuery query, ReadCache cache)
+    {
+        List<int> ids = [];
+        for (var offset = 0; ; offset += query.Limit)
+        {
+            var page = UrlGridReader.Query(path, query with { Offset = offset }, cache);
+            ids.AddRange(page.Rows.Select(row => row.Id));
+            if (page.Next is null)
+            {
+                Assert.Equal(page.Matching, ids.Count);
+                return ids;
+            }
+        }
+    }
+}

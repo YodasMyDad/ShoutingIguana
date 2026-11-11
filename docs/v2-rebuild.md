@@ -137,13 +137,31 @@ to finish where they had got to and for everything to be saved, so that it is ea
 resets. Nothing was launched after that, and nothing is running. Merging to `master` or releasing still needs an
 explicit yes.
 
-A new session needs this section and one folder:
-`C:\Projects\ShoutingIguana\.claude\worktrees\_handoff\2026-11-11\` (outside git, on this machine). It holds
-`checkpoint.md` (the session's log, with a PAUSE section at its end that has each branch's head), every brief
-(`brief-*.md`), `ui-slice-rules.md` (the rules every UI slice follows), `tools\verify-app.sh` and
-`tools\verify-engine.sh`, the reviews' findings (`reviews\`), and each agent's own checkpoint
-(`checkpoint-<name>.md`). Subagents can't be resumed across sessions: relaunch each from its brief and its
-checkpoint.
+**Everything is on GitHub**: this branch, and every working branch under its own name (`ui/links`,
+`ui/sitemaps-robots`, `ui/e5`, `ui/e6`, and the merged `ui/e3c`, `ui/score` and `ui/simple-design`). Work can go on
+from any computer.
+
+A new session needs this section and one folder in the repo: [`docs/handoff/2026-11-11/`](handoff/2026-11-11/). It
+holds `checkpoint.md` (the session's log, with a PAUSE section at its end), every brief (`brief-*.md`),
+`ui-slice-rules.md` (the rules every UI slice follows), `tools/verify-app.sh` and `tools/verify-engine.sh`, the
+reviews' findings (`reviews/`), each agent's own checkpoint (`checkpoint-<name>.md`, and `e5/` and `e6/` with their
+`HANDOFF` sections), and the plain words' notes. The files name paths on the first machine (a scratchpad under
+`%LOCALAPPDATA%\Temp\claude`, and `C:\Projects\ShoutingIguana\.claude\worktrees\...`): on another computer, read
+those as "this folder" and "a worktree of that branch". Subagents can't be resumed across sessions: relaunch each
+from its brief and its checkpoint.
+
+### On another computer
+
+- Clone, and check out `ui/step-3`. For a branch an agent works on, `git worktree add .claude/worktrees/<name>
+  <branch>` keeps each agent in its own folder, as the briefs assume.
+- It needs the .NET 10 SDK, Node with `npm ci` in `app/`, and Rust for the Tauri shell.
+- Two things aren't in the repo. **The test crawls** live in `%LOCALAPPDATA%\ShoutingIguana\dev-crawls` on the
+  first machine: a real crawl of the garden site and a 100k synthetic one, which `npm run dev` and several briefs
+  use. The synthetic one can be made again with `si bench --pages 100000 --db <file>`; the garden one has to be
+  copied across, or the site crawled again. **The design fixtures** (`app/design/data/fixtures`, git-ignored) are
+  extracted from those crawls: `app/design/data/README.md` says how. The e2e suite needs neither: it crawls the
+  engine's own test site.
+- The owner's memory file is per machine. `CLAUDE.md` points a new session here.
 
 ### Merged on this branch on 2026-11-11
 
@@ -173,7 +191,14 @@ checkpoint.
     reviewed against each rule by a second agent and corrected. They are generated from one data file,
     `engine/tests/ShoutingIguana.Engine.Tests/Analysis/PlainWords/plain-words.json`. Ten texts name a limit as a
     token the engine fills from the settings the analysis used. `GET /api/checks` serves them.
-- **Verified on the last merge by the orchestrator:** the engine build and 1,353 tests (1,156 engine, 176 sidecar, 21 CLI), the 100k bench (every planted issue, flat memory), and the app's typecheck, lint, format, unit tests, script tests and stories. The app's e2e was still running at the time of writing: its result is in the handoff folder's `checkpoint.md`, PAUSE section.
+- **The Links screen** (`ui/links`, with its review's 14 fixes and four smaller ones, each with a test seen
+  failing without it): every link in one grid, with presets, facets read only while a menu is open, a filter
+  editor the engine judges, a column chooser, a whole-view copy and "All N in Links" from the inspector. Shared
+  with URLs: the `GridScreen` frame and `minRows` (a grid keeps five rows at 200% zoom), no reads while the window
+  is hidden. On Issues, a check's count is worded by its subject: a page check's share is "of the N pages
+  analysed" and a URL check's "of the N URLs crawled", both from the analysis's own counts. `npm run dev` keeps a
+  crawl's analysed copy while its original hasn't changed.
+- **Verified on the score merge by the orchestrator:** the engine build and 1,353 tests (1,156 engine, 176 sidecar, 21 CLI), the 100k bench (every planted issue, flat memory), and the app's typecheck, lint, format, 877 unit tests, script tests, 167 stories in both themes, forced colours and reduced motion, and e2e 62 of 62. On the Links merge, the full app checks were being run again when this was written: their result is the last line of the PAUSE section of `handoff/2026-11-11/checkpoint.md`, or missing if the session ended first.
   - The first run of these checks found two faults that every agent's own run had missed: the merged tree didn't
     compile its sidecar tests (the score's test used a helper the E3c fixes had removed), and one file came
     unformatted from the E3c fixes. Both are fixed. `verify-engine.sh` now stops when the build fails, where it had
@@ -183,32 +208,32 @@ checkpoint.
     245.7 ms against 245 in a facets class), and each class passed when run again alone. Owed: one whole run of
     the gate with nothing else running.
 
-### Built on local branches, not merged
+### Built on their own branches, not merged
 
-None of these is pushed.
+Each is pushed under its own name. None is merged here: Sitemaps needs a merge with real conflicts, and the two
+engine branches are part-built and haven't been reviewed.
 
 | Work | Branch and worktree | State at the pause |
 | --- | --- | --- |
-| Links, with the Issues wording and the dev script | `ui/links`, `links` | All 14 findings and four smaller notes are fixed, each with a test seen failing without it (`7d896d5`). Its fixer was merging `ui/step-3` into the branch when the pause came: read the branch's log and `checkpoint-links-fixes.md` |
-| Sitemaps and robots.txt | `ui/sitemaps-robots`, `sitemaps-robots` | All 17 findings are fixed the same way (`fe51eb0`). `ui/step-3` is not merged into it yet |
-| Engine: export, the workbook and the report (E5) | `ui/e5`, `e5` | Phase one is done (`6edf697`): CSV and Excel export of every grid, the workbook, and the report on the technical texts, with `si export` and `si report`. Phase two (merging `ui/step-3`, then the report on the real score, order and plain words) was under way at the pause: its `HANDOFF` is at the top of `checkpoint-e5.md` |
-| Engine: fast search, the favicon, the limits' API, and what round 2 found the engine lacks (E6) | `ui/e6`, `e6` | Under way at the pause, told to stop at a clean point: its `HANDOFF`, item by item, is at the top of `checkpoint-e6.md` |
+| Sitemaps and robots.txt | `ui/sitemaps-robots`, `sitemaps-robots` | At `fe51eb0`. All 17 of its review's findings are fixed, each with a test seen failing without it (unit 1,105, stories 245, e2e 86 on its own branch). `ui/step-3` is not merged into it yet |
+| Engine: export, the workbook and the report (E5) | `ui/e5`, `e5` | At `03877b6`, with `ui/step-3` merged in. Built: CSV and Excel export of every grid, the workbook, and the report on the real score, order and plain words, with `si export` and `si report`; the branch builds and its tests pass (1,259 engine, 219 sidecar, 23 CLI; 880 app unit tests). Not done: the 100k bench and the read gate, the report measured again on the 100k crawl, the printed pages looked at past page 1, the API doc for the last changes, and any review. Its `HANDOFF` is at the top of `e5/checkpoint.md` |
+| Engine: fast search, the favicon, the limits' API, and what round 2 found the engine lacks (E6) | `ui/e6`, `e6` | At `87e3ff5`. Nine of its twelve items are built and tested (1,042 engine, 177 sidecar, 17 CLI): `POST /search` for the palette, link passes split over four connections, robots.txt origins searched and filtered, the inspector's exact links, `urls` beside `pages` on a check's groups, `linkTotals.hyperlinkInlinks`, `GET` and `PUT /api/analysis-settings`, a sitemap index's `listedSitemaps`, `respected` on `/robots/file`. Not started: the favicon. Part-done: "links to URLs" and a view's distinct ends (written, never applied or compiled: `e6/LinkEndsTests.cs.pending` and `e6/specs/link-ends-*.py`), and the docs and TypeScript types. Not run: the 100k bench, the read gate, anything in `app/`. No review. Its `HANDOFF`, item by item, is at the top of `e6/checkpoint.md` |
 
 ### To resume, in this order
 
-1. **Links.** Finish merging `ui/step-3` into `ui/links` if the branch's log shows it isn't done (87 checks and
-   "404 Not Found" will break tests that count 86 or match "HTTP 404"; a URL check's share takes the analysis's
-   `crawledUrlCount`). Then merge `ui/links` into `ui/step-3`, run `verify-app.sh`, push.
-2. **Sitemaps and robots.txt.** Its fixer merges `ui/step-3` into `ui/sitemaps-robots` (expect conflicts in
+1. **Sitemaps and robots.txt.** An agent merges `ui/step-3` into `ui/sitemaps-robots` (expect conflicts in
    `GridCore.tsx`, `api/queries.ts`, `keyboard/registry.ts`, `e2e/overview.spec.ts`, `UrlsScreen.tsx` and both UI
-   docs). Its two screens take the Links slice's `GridScreen` frame and `minRows`. The list's Crawled and Blocked
-   columns have only been seen against a mock: check them against the real sidecar, which now sends the two
-   counts. Then merge, `verify-app.sh`, push.
-3. **Export (E5).** Finish phase two from its `HANDOFF`, then a fresh-eyes review of the whole branch (it has had
-   none), fixes, the merge, both verify scripts, push.
-4. **E6.** Finish its list from its `HANDOFF`, then review, fixes, merge `ui/step-3` in, the merge, both verify
-   scripts, push.
-5. **The catalog's fixes**, an engine job that isn't briefed yet:
+   docs; `checkpoint-sitemaps-fixes.md` has its fixer's notes for this merge). 87 checks and "404 Not Found" may
+   break tests that count 86 or match "HTTP 404". Its two screens take the Links slice's `GridScreen` frame and
+   `minRows`. The list's Crawled and Blocked columns have only been seen against a mock: check them against the
+   real sidecar, which now sends the two counts. Then merge, `verify-app.sh`, push.
+2. **Export (E5).** Finish from its `HANDOFF`, then a fresh-eyes review of the whole branch (it has had none),
+   fixes, the merge, both verify scripts, push.
+3. **E6.** Finish its list from its `HANDOFF` (the favicon, "links to URLs", the types and docs, the measurements
+   on a quiet machine), then review, fixes, merge `ui/step-3` in, the merge, both verify scripts, push. Two traps
+   its agent left: the pending `bySource` edit to `Scan` must be redone by hand, and a sidecar test demands that
+   every analysis setting has a described limit in `Sidecar/Options/AnalysisLimits.cs`.
+4. **The catalog's fixes**, an engine job that isn't briefed yet:
    - `site-hidden-from-search` must also require the home page (or the start URL's page) to be noindex. As built
      it counts noindex pages only, and a shop with many noindexed filter pages could still be told its site is
      hidden, which costs 60 points.
@@ -216,13 +241,13 @@ None of these is pushed.
      `reviews\plain-words-review.json` and `plain-words\notes.md` in the handoff folder).
    - Three behaviours: `charset-missing` ignores a byte-order mark; `blocked-by-robots` reads as passed, where it
      should be skipped, when the crawl was told to ignore robots.txt; `canonical-to-redirect` gives no final URL.
-6. **Three UI slices, briefed and not started**, to run at once after items 1 and 2 (they touch the shell those
-   two change): `brief-urls-grid.md` (the URL grid to the IA: filter bar, columns and presets, header sort,
+5. **Three UI slices, briefed and not started**, to run at once after item 1 (they touch the shell and the grid
+   that Sitemaps changes): `brief-urls-grid.md` (the URL grid to the IA: filter bar, columns and presets, header sort,
    Ctrl+F, a row menu on every grid, saved views), `brief-round3-ui.md` (the mode and its switch, the top bar's
    order of giving way, Settings, New crawl in both modes, the crawl's settings, and the frame round 4 plugs
    Simple's screens into), `brief-e3c-takeup.md` (the UI takes up E3c's fields and the engine's `fixFirst`, and
    three of the real shell's findings).
-7. **Not briefed yet:**
+6. **Not briefed yet:**
    - After E5 and E6 merge: export on every grid (Ctrl+E, the save dialog, the progress toast), "The report…" and
      "Spreadsheet of everything…", the palette's search, favicons, Settings > Analysis, the inspector's exact links
      to a sitemap and a robots.txt line, "Show these pages in URLs" from Links. Two notes from E5: the `export`
@@ -231,7 +256,7 @@ None of these is pushed.
    - Round 4, on the frame `brief-round3-ui.md` builds, three agents at once: the Simple shell, Home and "checking
      a site"; the Summary, the score's breakdown, What to fix and one problem; the Report screen in both modes,
      the finished toast, and the score on Advanced's Overview. The design's "What round 4 builds" is the list.
-8. Re-shoot the screenshot gallery, then the closing audit in both modes (items 7 and 8 of the list below).
+7. Re-shoot the screenshot gallery, then the closing audit in both modes (items 7 and 8 of the list below).
 
 The machine sets the pace: with four heavy agents and a verify run it was at 50 of 57 GB of committed memory and
 90% of its processors, and timings went wrong. Run at most four heavy agents, and one verify run at a time.
@@ -258,8 +283,8 @@ Each is the owner's to overturn.
 - **Simple's severity words:** Serious, Worth fixing and Worth a look, one to one with Error, Warning and Notice.
 - **"Fix first":** a fault of the whole site leads its severity, in Advanced as well. The app still uses its own
   order until `brief-e3c-takeup.md` is built.
-- **A check's share:** a page check is over the pages the analysis ran on; a URL check is over the URL count as it
-  was at the analysis.
+- **A check's share:** a page check is over the pages the analysis ran on; a URL check is over the URLs crawled
+  when the analysis ran.
 - **"Crawled" on Sitemaps** means the crawl requested the URL. URLs robots.txt refused have their own column.
 - **Plain words** are new texts beside the technical ones. A limit in one is filled in from the analysis's
   settings. A check reported once for the site says so, where it would have said "1 of 265 pages".
@@ -385,7 +410,7 @@ Done on this branch, on top of `v2`:
 
 Left, in this order. Where each stands is above.
 
-1. Round 2: E3c is merged. Links, and Sitemaps and robots.txt, are fixed and not merged.
+1. Round 2: E3c and Links are merged. Sitemaps and robots.txt is fixed and not merged.
 2. The UI takes up E3c's fields, and the shell pass's open findings are fixed: briefed, not started.
 3. Done: the comparison.
 4. Done: the Simple design, with its mockups published for the owner.
