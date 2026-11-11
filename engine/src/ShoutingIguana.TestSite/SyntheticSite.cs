@@ -393,10 +393,11 @@ public sealed partial class SyntheticSite
         var htmlPages = 1 + products + CATEGORY_COUNT + STATIC_PAGES.Length + orphans + _plants.Count(plant => plant is { Status: 200, IsPage: true });
         var analysedPages = htmlPages - _plants.Count(plant => plant is { Status: 200, IsPage: true, IsAnalysed: false });
 
-        // A site more than half of whose pages keep themselves out of search is hidden as a whole, which is reported once,
-        // on the home page. Every noindex page counts, and every canonicalised one: no planted canonical names its own
-        // page on another version of the site. Only a site with HiddenFromSearch gets there.
-        if ((Count(issues, "noindex-page") + Count(issues, "canonicalised-page")) * 2 > analysedPages)
+        // A site more than half of whose pages are noindex is hidden as a whole, which is reported once, on the home
+        // page. A canonicalised page is a variant of another, and no part of the count: no planted canonical names its
+        // own page on another version of the site, so every one of them is out. Only a site with HiddenFromSearch gets
+        // there.
+        if (Count(issues, "noindex-page") * 2 > analysedPages - Count(issues, "canonicalised-page"))
         {
             Flag("site-hidden-from-search", "/");
         }
