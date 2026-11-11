@@ -328,6 +328,26 @@ describe('what Links says of a crawl with no current analysis', () => {
     });
   });
 
+  it('says a crawl is being analysed while it is, with nothing to press: never that it hasn’t been', () => {
+    // The summary's reason is still the one from before the analysis began.
+    for (const reason of ['notAnalyzed', 'crawlChanged', 'engineChanged'] as const) {
+      const note = analysisNote({ available: false, reason }, [], true);
+      expect(note?.text, reason).toBe(
+        'This crawl is being analysed. Every link is here to search, filter and sort meanwhile, though each filter reads every link until it’s done. The columns an analysis fills (inlinks, issues, where redirects end) fill in when the analysis that’s running is done.',
+      );
+      expect(note?.text).not.toMatch(/hasn’t been analysed|continued after|Another version/);
+      expect(note?.action).toBeNull();
+    }
+    expect(analysisNote({ available: false, reason: 'notAnalyzed' }, ['Target inlinks'], true)?.text).toContain(
+      'Target inlinks fill in when the analysis that’s running is done.',
+    );
+    // With its analysis read, there's nothing to say; and a crawl still running is said as before.
+    expect(analysisNote(READY, [], true)).toBeNull();
+    expect(analysisNote({ available: false, reason: 'crawling' }, ['Target inlinks'], true)?.text).toBe(
+      'Target inlinks fill in once the crawl has finished and been analysed.',
+    );
+  });
+
   it('words an empty grid by why it is empty', () => {
     expect(noLinksWords(true).title).toBe('No links yet');
     expect(noLinksWords(false).why).toBe('The crawl stored none: it read no page with a link on it.');

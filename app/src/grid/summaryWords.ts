@@ -11,6 +11,13 @@ export const UNAVAILABLE_BECAUSE: Record<SummaryReason, string> = {
   crawlChanged: 'need this crawl analysed again: it was continued after its last analysis',
 };
 
+/**
+ * The same while the crawl is being analysed (the analysis that follows a crawl, or one the user asked for): the
+ * summary's reason still says what was true before it began, but there's nothing to press, and "hasn't been analysed
+ * yet" would be the wrong words for a crawl that is.
+ */
+export const UNAVAILABLE_WHILE_ANALYSING = 'fill in when the analysis that’s running is done';
+
 /** What the button that mends it says: a crawl never analysed is analysed, any other is analysed again. */
 export type AnalyseWords = 'Analyse it' | 'Analyse again';
 

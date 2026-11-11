@@ -223,7 +223,7 @@ export function LinksScreen() {
   const summary = first?.summary;
   const summaryAvailable = summary?.available ?? true;
   const emptyColumns = (first?.unavailable ?? []).filter((id) => shown.includes(id));
-  const note = analysisNote(summary, emptyColumns.map(linkColumnName));
+  const note = analysisNote(summary, emptyColumns.map(linkColumnName), crawlStatus === 'analyzing');
   const editor = useMemo(
     () =>
       catalogue.data

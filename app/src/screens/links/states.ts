@@ -3,7 +3,13 @@
 // analysis adds is the link summary (which makes filters quick) and the URL summary (which fills some of each end's
 // columns). Pure, so each state's words are tested.
 import type { SummaryReason, SummaryState } from '../../api/grids';
-import { UNAVAILABLE_BECAUSE, analyseWords, listOfNames, type AnalyseWords } from '../../grid/summaryWords';
+import {
+  UNAVAILABLE_BECAUSE,
+  UNAVAILABLE_WHILE_ANALYSING,
+  analyseWords,
+  listOfNames,
+  type AnalyseWords,
+} from '../../grid/summaryWords';
 
 export interface AnalysisNote {
   /** What's true of the crawl now, and what that means here. */
@@ -25,11 +31,27 @@ const STATE: Record<Exclude<SummaryReason, 'crawling'>, string> = {
  * The note over the grid, or null when there's nothing to say: the crawl has its analysis, or it's running and no
  * column shown waits for one (a running crawl is said by its status and the Live mark, not here).
  *
- * `emptyColumns` are the names of the columns shown that have no values without the analysis.
+ * `emptyColumns` are the names of the columns shown that have no values without the analysis. `analysing` is the
+ * crawl being analysed now: the summary still gives the reason from before it began ("never analysed"), which is no
+ * longer what's true, and there's nothing to press.
  */
-export function analysisNote(summary: SummaryState | undefined, emptyColumns: readonly string[]): AnalysisNote | null {
+export function analysisNote(
+  summary: SummaryState | undefined,
+  emptyColumns: readonly string[],
+  analysing = false,
+): AnalysisNote | null {
   if (!summary || summary.available) return null;
   const reason = summary.reason ?? 'notAnalyzed';
+  if (analysing && reason !== 'crawling') {
+    const filled =
+      emptyColumns.length > 0
+        ? `${listOfNames(emptyColumns)} ${UNAVAILABLE_WHILE_ANALYSING}`
+        : `The columns an analysis fills (inlinks, issues, where redirects end) ${UNAVAILABLE_WHILE_ANALYSING}`;
+    return {
+      text: `This crawl is being analysed. Every link is here to search, filter and sort meanwhile, though each filter reads every link until it’s done. ${filled}.`,
+      action: null,
+    };
+  }
   if (reason === 'crawling') {
     if (emptyColumns.length === 0) return null;
     return { text: `${listOfNames(emptyColumns)} ${UNAVAILABLE_BECAUSE.crawling}.`, action: null };

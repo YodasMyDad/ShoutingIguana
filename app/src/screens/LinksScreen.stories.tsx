@@ -204,6 +204,18 @@ export const NeverAnalysed: Story = {
   render: () => <LinksApp path={LINKS} />,
 };
 
+/**
+ * Being analysed (the analysis that follows a crawl): the links are all here meanwhile, and the note says the crawl
+ * is being analysed, with nothing to press. Never "hasn't been analysed yet".
+ */
+export const BeingAnalysed: Story = {
+  loaders: [
+    () =>
+      own({ item: { status: 'analyzing', analyzedAt: null }, summary: { available: false, reason: 'notAnalyzed' } }),
+  ],
+  render: () => <LinksApp path={LINKS} />,
+};
+
 /** Continued after its last analysis: the same, with Analyse again. */
 export const OutOfDate: Story = {
   loaders: [() => own({ item: { outOfDate: true }, summary: { available: false, reason: 'crawlChanged' } })],

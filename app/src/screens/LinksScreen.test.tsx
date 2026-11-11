@@ -697,6 +697,18 @@ describe('the Links grid’s states', () => {
     expect(within(main).queryByRole('button', { name: 'Analyse again' })).toBeNull();
   });
 
+  it('says the crawl is being analysed while it is, with nothing to press', async () => {
+    sidecar({
+      item: { status: 'analyzing', analyzedAt: null },
+      summary: { available: false, reason: 'notAnalyzed' },
+    });
+    await open(LINKS);
+    await counted('13 links');
+    expect(await screen.findByText(/^This crawl is being analysed\. Every link is here to search/)).toBeVisible();
+    expect(screen.queryByText(/hasn’t been analysed yet/)).toBeNull();
+    expect(within(screen.getByRole('main')).queryByRole('button', { name: /^Analyse/ })).toBeNull();
+  });
+
   it('still lists the links when the engine’s list of columns can’t be read, and says what isn’t there', async () => {
     sidecar({ columnsFail: true });
     const { user } = await open(LINKS, createQueryClientWithoutBackoff());

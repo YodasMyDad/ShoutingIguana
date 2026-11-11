@@ -107,6 +107,14 @@ describe('the URL grid without the URL summary', () => {
     expect(within(notice).queryByRole('button')).toBeNull();
   });
 
+  it('says the columns fill in when the analysis that’s running is done, with nothing to press, while it runs', async () => {
+    sidecar({ status: 'analyzing', analyzedAt: null, summary: { available: false, reason: 'notAnalyzed' } });
+    await open(URLS);
+    const notice = await screen.findByText(/Inlinks and Issues fill in when the analysis that’s running is done/);
+    expect(within(notice).queryByRole('button')).toBeNull();
+    expect(screen.queryByText(/hasn’t been analysed yet/)).toBeNull();
+  });
+
   it('turns a sort on such a column into the engine’s reason, with what can work instead of Try again', async () => {
     sidecar({ analyzedAt: null, summary: { available: false, reason: 'notAnalyzed' } });
     const { router } = await open(`${URLS}?sort=-issues`);

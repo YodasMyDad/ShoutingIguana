@@ -17,7 +17,7 @@ import { LOOKING_UP } from '../grid/filterSentence';
 import { GridCore, type GridCopyResult } from '../grid/GridCore';
 import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
-import { analyseWords, UNAVAILABLE_BECAUSE, listOfNames } from '../grid/summaryWords';
+import { UNAVAILABLE_BECAUSE, UNAVAILABLE_WHILE_ANALYSING, analyseWords, listOfNames } from '../grid/summaryWords';
 import type { GridColumn } from '../grid/types';
 import { usePagedRows } from '../grid/usePagedRows';
 import { useUrlWords } from '../grid/useUrlWords';
@@ -191,6 +191,13 @@ export function UrlsScreen() {
         {label}
       </Button>
     ) : null;
+  // While the crawl is being analysed the summary still gives the reason from before (never analysed, out of date):
+  // what's true now is that the analysis under way fills the columns, and there's nothing to press.
+  const analysing = crawlStatus === 'analyzing';
+  const unavailableBecause =
+    analysing && summary?.reason !== 'crawling'
+      ? UNAVAILABLE_WHILE_ANALYSING
+      : UNAVAILABLE_BECAUSE[summary?.reason ?? 'notAnalyzed'];
   const clearView = () => void navigate({ search: {} });
   const chips = (
     <ActiveFilters
@@ -234,8 +241,8 @@ export function UrlsScreen() {
       {summary && !summary.available && unavailable.length > 0 ? (
         <Banner inset className="mx-6 mb-3">
           <span className="inline-flex flex-wrap items-center gap-3">
-            {namesOf(unavailable)} {UNAVAILABLE_BECAUSE[summary.reason ?? 'notAnalyzed']}.
-            {summary.reason === 'crawling' ? null : analyse(analyseWords(summary.reason))}
+            {namesOf(unavailable)} {unavailableBecause}.
+            {summary.reason === 'crawling' || analysing ? null : analyse(analyseWords(summary.reason))}
           </span>
         </Banner>
       ) : null}
