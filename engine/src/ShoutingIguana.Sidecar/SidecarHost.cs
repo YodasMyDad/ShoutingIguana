@@ -158,7 +158,10 @@ internal sealed class SidecarHost : IAsyncDisposable
         builder.Services.AddSingleton<AnalysisSettingsStore>();
         builder.Services.AddSingleton<CrawlManager>();
         builder.Services.AddSingleton<CrawlData>();
-        builder.Services.AddSingleton(new ReadCache());
+        // The grids' reads keep what they count in one cache, and a pass over a large crawl's links may use the read
+        // slots that are free beside its own.
+        builder.Services.AddSingleton<ReadSlots>();
+        builder.Services.AddSingleton(services => new ReadCache { Helpers = services.GetRequiredService<ReadSlots>().Helpers });
         builder.Services.AddSingleton<GridData>();
 
         // Crawls are told to stop as soon as shutdown begins, before the web server waits for requests in flight.

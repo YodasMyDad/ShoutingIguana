@@ -20,9 +20,9 @@ namespace ShoutingIguana.Sidecar.Crawls;
 /// no thread, so the API's other calls never wait behind them, and one given up while it queues never runs.</item>
 /// </list>
 /// </summary>
-internal sealed class GridData(CrawlManager crawls, ReadCache cache, SidecarOptions options)
+internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots slots)
 {
-    private readonly SemaphoreSlim _reads = new(options.GridReads, options.GridReads);
+    private readonly SemaphoreSlim _reads = slots.Free;
 
     /// <summary>The columns for the column chooser and the filter bar, a check's own last.</summary>
     public static IReadOnlyList<UrlColumnDto> Columns { get; } =
