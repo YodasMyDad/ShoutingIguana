@@ -42,13 +42,21 @@ async function api<T>(route: string, body?: unknown): Promise<T> {
 }
 
 let crawl = '';
+/** The site's origin: the crawl's start URL's, as the app takes it. Never a row's: a link can be on another host. */
+let siteOrigin = '';
 let seeded: string[] = [];
 test.beforeAll(async () => {
-  const library = await api<{ id: string; site: string | null; fileName: string }[]>('/api/crawls');
-  crawl = library.find((item) => (item.site ?? item.fileName) === site())?.id ?? '';
+  const library =
+    await api<{ id: string; site: string | null; fileName: string; startUrl: string | null }[]>('/api/crawls');
+  const item = library.find((candidate) => (candidate.site ?? candidate.fileName) === site());
+  crawl = item?.id ?? '';
   expect(crawl).not.toBe('');
+  siteOrigin = new URL(String(item?.startUrl)).origin;
   seeded = await libraryIds();
 });
+
+/** What shows of a URL in a cell: its path on the site, or the whole of a URL that is on another host. */
+const shownOf = (url: string) => (url.startsWith(`${siteOrigin}/`) ? url.slice(siteOrigin.length) : url);
 
 /** The crawl the live test starts is stopped and its file deleted: the library is the seeded crawl again. */
 test.afterEach(() => removeCrawlsNotIn(seeded));
@@ -145,7 +153,6 @@ test('opens from the sidebar on every link, in crawl order, with what each is an
       .evaluateAll((cells) => cells.map((cell) => cell.textContent)),
   ).resolves.toEqual(['Source URL', 'Target URL', 'Anchor or alt text', 'Kind', 'Position', 'Follow', 'Target status']);
   // The first rows are the crawl's first links, each end by its path on the site.
-  const origin = new URL(String(all.rows[0]?.['from.url'])).origin;
   for (const [index, link] of all.rows.slice(0, 5).entries()) {
     const row = grid(page)
       .getByRole('row')
@@ -157,7 +164,7 @@ test('opens from the sidebar on every link, in crawl order, with what each is an
       // The whole URL is the cell's name; what shows of it is its path on the site.
       const url = row.getByRole('gridcell').nth(cell).getByRole('button');
       await expect(url).toHaveAccessibleName(String(link[end]));
-      await expect(url.locator('.si-url__shown')).toHaveText(String(link[end]).replace(origin, ''));
+      await expect(url.locator('.si-url__shown')).toHaveText(shownOf(String(link[end])));
     }
     await expect(row.getByRole('gridcell').nth(2)).toHaveText(
       link.text === null || link.text === '' ? 'None' : String(link.text),
@@ -166,6 +173,23 @@ test('opens from the sidebar on every link, in crawl order, with what each is an
   // All links is the view: no filter, and its preset says so.
   await expect(main(page).getByRole('button', { name: 'All links' })).toHaveAttribute('aria-pressed', 'true');
   await expect(main(page).getByRole('button', { name: 'Add filter' })).toBeVisible();
+});
+
+test('shows a link from another host by its whole URL, whichever link the crawl stored first', async ({ page }) => {
+  // The partner site's redirect: its source is on the test site's other host. The crawl may store it first or
+  // five-thousandth, so the view is filtered to it rather than left to the order the pages happened to answer in.
+  const filters: Filter[] = [{ column: 'from.isInternal', op: 'is', value: false }];
+  const other = await links(filters, { columns: ['from.url', 'to.url'] });
+  expect(other.matching).toBeGreaterThan(0);
+  const first = other.rows[0];
+  const source = String(first?.['from.url']);
+  expect(new URL(source).origin).not.toBe(siteOrigin);
+  await page.goto(`/crawls/${crawl}/links?filter=${encodeURIComponent(JSON.stringify(filters))}`);
+  await expectShown(page, other.matching);
+  const cells = grid(page).getByRole('row').nth(1).getByRole('gridcell');
+  await expect(cells.nth(0).getByRole('button')).toHaveAccessibleName(source);
+  await expect(cells.nth(0).locator('.si-url__shown')).toHaveText(source);
+  await expect(cells.nth(1).locator('.si-url__shown')).toHaveText(shownOf(String(first?.['to.url'])));
 });
 
 test('each preset lands on its planted count, with its filters as chips and its planted link among the rows', async ({
