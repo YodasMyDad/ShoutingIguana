@@ -783,6 +783,74 @@ describe('the Links grid while the crawl runs', () => {
     await user.click(screen.getByRole('button', { name: 'Filter by kind' }));
     expect(await within(await screen.findByRole('menu')).findByText('Kind, of 14 links')).toBeVisible();
   });
+
+  it('counts the links by value only while a facet’s menu is open, however the crawl ticks', async () => {
+    const { state, transport } = sidecar({
+      item: { status: 'running', analyzedAt: null },
+      summary: { available: false, reason: 'crawling' },
+    });
+    const facetReads = () => transport.requests.filter((request) => request.path.endsWith('/links/facets')).length;
+    const pageReads = () => linkRequests(transport).length;
+    const stored = [...LINKS_FACTS];
+    /** What the live bridge does on a crawl's progress tick, with one more link stored. */
+    const tick = async (text: string) => {
+      stored.push({ ...LINKS_FACTS[1]!, text });
+      state.links = testLinkRows(stored, LINKS_URLS);
+      await act(() => queryClient.invalidateQueries(liveGridPagesOf(TEST_CRAWL_ID), { cancelRefetch: false }));
+    };
+    const { queryClient, user } = await open(LINKS);
+    await counted('13 links');
+    // The presets and the facets' buttons are drawn, and nothing has been counted by value: no menu is open.
+    expect(screen.getByRole('button', { name: 'Broken links' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Filter by kind' })).toBeVisible();
+    expect(facetReads()).toBe(0);
+    // The crawl ticks, and ticks again: the rows are read each time, the facets never.
+    const before = pageReads();
+    await tick('One more');
+    await counted('14 links');
+    await tick('And another');
+    await counted('15 links');
+    expect(pageReads()).toBeGreaterThan(before);
+    expect(facetReads()).toBe(0);
+
+    // A menu opens: now they are counted, once.
+    await user.click(screen.getByRole('button', { name: 'Filter by kind' }));
+    const menu = await screen.findByRole('menu');
+    expect(await within(menu).findByText('Kind, of 15 links')).toBeVisible();
+    expect(facetReads()).toBe(1);
+    // And kept fresh while it's open.
+    await tick('A third');
+    expect(await within(menu).findByText('Kind, of 16 links')).toBeVisible();
+    expect(facetReads()).toBe(2);
+
+    // Closed again, the ticks read the rows only.
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    await tick('A fourth');
+    await counted('17 links');
+    await tick('A fifth');
+    await counted('18 links');
+    expect(facetReads()).toBe(2);
+    // Opened again, the count is read again: what it had is of a crawl five links ago.
+    await user.click(screen.getByRole('button', { name: 'Filter by position' }));
+    expect(await within(await screen.findByRole('menu')).findByText('Position, of 18 links')).toBeVisible();
+    expect(facetReads()).toBe(3);
+  });
+
+  it('reads no facets for a view until a menu is opened on it, on a crawl that stands still too', async () => {
+    const { transport } = sidecar();
+    const facetReads = () => transport.requests.filter((request) => request.path.endsWith('/links/facets')).length;
+    const { user } = await open(LINKS);
+    await counted('13 links');
+    await user.click(screen.getByRole('button', { name: 'Broken links' }));
+    await counted('3 of 13 links');
+    await user.click(screen.getByRole('button', { name: 'External links' }));
+    await counted('1 of 13 links');
+    expect(facetReads()).toBe(0);
+    await user.click(screen.getByRole('button', { name: 'Filter by kind' }));
+    expect(await within(await screen.findByRole('menu')).findByText('Kind, of 1 link')).toBeVisible();
+    expect(facetReads()).toBe(1);
+  });
 });
 
 describe('a read of the links that takes a while', () => {

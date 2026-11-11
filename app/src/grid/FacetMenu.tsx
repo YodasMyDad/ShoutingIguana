@@ -28,11 +28,18 @@ export interface FacetMenuProps<Value extends FacetMenuValue> {
   onChoose: (value: Value) => void;
   /** Whether the menu is open, when something other than its button says (a story). */
   open?: boolean | undefined;
+  /**
+   * The menu opened or closed: the view counts the values while it's open, and not before (a count is a pass over
+   * the view's rows, which nobody sees with the menu closed).
+   */
+  onOpenChange?: ((open: boolean) => void) | undefined;
 }
 
 /**
  * A facet as a quick filter: a menu of a column's values, each with how many of the rows in view have it. Choosing
  * one narrows the view to exactly that many. The counts are of the view as it is filtered now, so they add up to it.
+ * They are the view's to read, and it reads them when a menu opens (`onOpenChange`): until they come the menu says
+ * "Counting…", and the button needs none of them to draw.
  */
 export function FacetMenu<Value extends FacetMenuValue>({
   title,
@@ -43,10 +50,12 @@ export function FacetMenu<Value extends FacetMenuValue>({
   onRetry,
   onChoose,
   open,
+  onOpenChange,
 }: FacetMenuProps<Value>) {
   return (
     <DropdownMenu
       {...(open === undefined ? {} : { open })}
+      {...(onOpenChange ? { onOpenChange } : {})}
       trigger={
         <Button variant="ghost" size="sm" iconEnd={ChevronDown} aria-label={`Filter by ${title.toLowerCase()}`}>
           {title}

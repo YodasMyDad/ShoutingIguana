@@ -4,7 +4,7 @@ import { Copy, Link2Off, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
-import type { GridFilter, LinkRow, SummaryReason } from '../api/grids';
+import type { GridFilter, LinkFacetId, LinkRow, SummaryReason } from '../api/grids';
 import { crawlQuery, linkColumnsQuery, linkFacetsQuery, queryKeys } from '../api/queries';
 import { isCrawling } from '../api/types';
 import { analyseCrawl } from '../crawl/actions';
@@ -145,8 +145,13 @@ export function LinksScreen() {
   const rowCount = rows.rowCount ?? kept?.matching ?? null;
   const total = rows.unfilteredTotal ?? kept?.total ?? null;
 
+  // The facets are counted while one of their menus is open, and never before: a count is a pass over the view's
+  // links (about 200 ms a million on a running crawl, every second it runs), and nothing on the screen but an open
+  // menu shows it. The presets and the facets' buttons draw without it. While a menu is open the count is among the
+  // crawl's live grids, so a running crawl keeps it fresh; closed, it is only marked stale, and read again on opening.
+  const [openFacet, setOpenFacet] = useState<LinkFacetId | null>(null);
   const facetsQuery = useMemo(() => ({ filters: [...filters], ...(q ? { search: q } : {}) }), [filters, q]);
-  const facetsRead = useQuery(linkFacetsQuery(crawlId, facetsQuery));
+  const facetsRead = useQuery({ ...linkFacetsQuery(crawlId, facetsQuery), enabled: openFacet !== null });
   const facets = useMemo(
     () => (facetsRead.data ? buildFacets(facetsRead.data, filters) : null),
     [facetsRead.data, filters],
@@ -502,6 +507,7 @@ export function LinksScreen() {
             failed={facetsRead.isError && !facetsRead.data}
             onRetry={() => void facetsRead.refetch()}
             onChoose={chooseFacet}
+            onOpenChange={(open) => setOpenFacet((current) => (open ? id : current === id ? null : current))}
           />
         ))}
       </FilterBar>
