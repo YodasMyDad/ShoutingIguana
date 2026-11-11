@@ -351,6 +351,19 @@ One SQLite file per crawl. It is a single self-contained file once the crawl clo
   crawl (a single file, in rollback-journal mode, so it can be copied and read from anywhere), a writer can't switch
   it to WAL: it gives up as readers do, after a couple of seconds, with a `CrawlFileInUseException` saying the file is
   being read, rather than after Microsoft.Data.Sqlite's 30 s.
+- **The write-ahead log stays small while a crawl runs.** A running crawl's file is in WAL mode, and SQLite starts
+  the log again from its beginning only at a moment when no reader is part-way through it. With nobody reading that
+  is every batch (the log peaks at the largest batch: 38 MB on the 100,000-page benchmark). With the links grid read
+  all the while, each read a pass over the links, that moment never came, and the log grew by everything the crawl
+  wrote, to more than the file. So once the log passes 64 MB (`CrawlDatabase.LOG_LIMIT_BYTES`) the writer folds it
+  into the file between two batches and empties it (`CrawlDatabase.FoldLog`, a `TRUNCATE` checkpoint): the grids' new
+  reads of that file wait while those in flight end by themselves, for two seconds at most, the log is folded, and
+  they read on (`CrawlReadGate.ExclusiveOnceIdle`). No read is stopped, fails or answers differently; a read can wait.
+  The writer waits with them and stores nothing meanwhile, so the log is held to the limit and the batch that took it
+  past. A fold that couldn't be done (a read that outlasted the two seconds, or another program part-way through the
+  file, which is waited for a quarter of a second) is tried again a second later, then twice as long after each one
+  that fails, to half a minute: only then can the log grow past its bound, and it's folded when the crawl closes as
+  ever. The writer says once, as it closes, how often it folded the log and how long the crawl waited for it.
 - **Read back with today's defaults.** Options and thresholds are stored as JSON. One that the engine which stored
   them didn't have reads as its default (`StoredJson`), never 0 or false, so a new option can't change how a resumed
   crawl runs or what an analysis checks.
@@ -422,6 +435,22 @@ runs, each with its stretches, and their total (`CrawlFileSummary.TimeCrawling`,
   the crawl since, and the next run here adds the row without a time for it. With such a row, or such a stamp, the crawl's time reads as not known, for good: never a part
   of it given for the whole. A table of another shape (another program's) is neither written to nor read, and times
   that can't be true (negative, ten years long) read as not known.
+- **A crawl that hasn't crawled has spent no time.** A run can end without a stretch (paused before it began and
+  then stopped, or its process died before its first batch was stored). A stretch is stored with the first batch that
+  stores a response, so a file with no stretch and no response has been crawled by nobody: continuing it adds no row
+  without a time, and its time is known from zero. A file with responses and no stretch was crawled by an engine
+  that keeps no time, and gets the row.
+- **In order.** A stretch begins by the wall clock and lasts by the clock that only runs forward, so a wall clock set
+  back between two (a time sync) would have the later begin before the earlier ended. `CrawlRunReader` gives each as
+  beginning no earlier than the one before it ended, in one run or across two, each with its length: none overlaps,
+  no run ends before it started, and the total is as stored.
+- **Time asleep isn't crawling.** The clock that only runs forward is `Stopwatch`'s. On Windows it's
+  `QueryPerformanceCounter`, which counts the time a machine spends in standby or hibernation; on Linux
+  (`CLOCK_MONOTONIC`) and macOS (`CLOCK_UPTIME_RAW`) it stops while the machine sleeps (dotnet/runtime#77945). The
+  session reads the run's clock twice a second while it crawls, so `RunClock` takes a gap of more than five minutes
+  between two readings for the machine asleep (or the process held still) and leaves it out of the stretch, on any
+  system. A sleep shorter than that still counts on Windows, and the stretch it's left out of then spans more wall
+  time than its length says: it isn't split in two.
 
 ### URL summary
 
@@ -565,6 +594,12 @@ a page gives to read on. The API, with every column and operator, is in
   process about to switch (an analysis, a continue, a crawl closing back to one file) stops new grid reads of that
   file, stops those in flight, switches, and lets them read again (`CrawlReadGate`): it waits milliseconds. Another
   program reading the file isn't seen, and can still keep it out.
+- **A running crawl's writer waits on them once in a while, and they on it.** To fold its write-ahead log
+  ([above](#crawl-file-sicrawl)) it needs a moment with no read part-way through the file, and nothing forces that
+  one: it holds new reads of the file, lets those in flight end by themselves, folds, and lets the held ones go.
+  Stopping the reads instead and reading them again was measured against it and dropped: it threw work away (with
+  six clients on the links grid of a 40,000-page crawl the slowest read took up to 1.95 s, where it takes 1.1 s
+  this way or with no fold at all), and it needed a rule for leaving reads alone long enough to end.
 - **Cursors** carry the last row's URL id and a hash of its sort values, with a hash of the query: under 100
   characters, whatever the row holds. Reading on reads the row's sort values again in the new snapshot, and a row
   that has gone or changed since is refused (start from an offset again) rather than read on from a place that has
@@ -819,6 +854,14 @@ With E3c (the time spent crawling kept a stretch at a time, a second set of coun
 is the crawler's own probes) four runs on the same machine, still shared, measured a 36–44 s crawl (2,294–2,812
 pages/s), a 188–194 MB peak with no growth (−9 to 0 MB), an 11.4, 11.8, 12.2 and 18.1 s analysis peaking at
 253–327 MB, and a 478–495 MB file: all within the spread of the runs before it.
+
+After the E3c review (the write-ahead log folded once it passes 64 MB, which a crawl nobody reads never reaches: its
+log peaks at 36 to 38 MB; one more planted URL, listed in a sitemap and refused by robots.txt, with its two issues)
+one run measured a 45 s crawl (2,237 pages/s), a 198 MB peak with no growth, a 15.3 s analysis peaking at 276 MB, and
+a 494 MB file. `si bench --read-links` crawls with the links grid read all the while, a read always part-way through
+the file, and `--max-log-mb` fails the run if the write-ahead log passes a size: 100,000 pages in 46 s (2,180
+pages/s) with the log at 89 MB at most, 40,000 pages with it at 76 MB, where without the fold it reached 580 MB. CI
+runs the 40,000-page one with a limit of 128 MB.
 
 Every planted page and issue was found, and nothing else was flagged. The planted slow page, firewall block and
 unreachable URL make the crawler back off briefly, as it would on a real site. On real sites, speed is set by the

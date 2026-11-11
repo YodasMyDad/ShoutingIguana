@@ -419,14 +419,32 @@ on, mid-crawl as at the end.
   ```
 
   - **What the figures count.** Every figure of the event counts every URL the crawl has, its own probes among them,
-    as the URL grid lists them: so each figure lands on its count in the grid, and `fetched`, the classes and what
-    was found add up as they always have. The probes are the crawler's questions, though, not the site's URLs: the
-    https probe of a site served over http only is a network error from the crawl's first seconds, and it isn't the
-    site failing to answer. `siteVersions` says how much of each figure they are, so the UI shows the site's own
-    (the figure less its part here) and says the probes apart, as it does the URLs that weren't checked.
-  - **Each lands on its count.** A figure less its part is the URLs the site itself led to, which the grid lists with
-    `{"column":"source","op":"notIn","values":["siteVersion"]}` added to the figure's filter; the part itself is the
-    grid's count with `"op":"in"`.
+    as the URL grid lists them: so each figure lands on a count in the grid, under the filter below, and `fetched`,
+    the classes and what was found add up as they always have. The probes are the crawler's questions, though, not
+    the site's URLs: the https probe of a site served over http only is a network error from the crawl's first
+    seconds, and it isn't the site failing to answer. `siteVersions` says how much of each figure they are, so the UI
+    shows the site's own (the figure less its part here) and says the probes apart, as it does the URLs that weren't
+    checked.
+  - **Each lands on its count, under its own filter.** The event's classes aren't the grid's `statusClass` values:
+    the event has a class for block pages, which the grid files by their status (a firewall's 403 is among the grid's
+    `4xx`), and it counts the URLs that weren't checked under `noResponse`, which the grid has as not fetched and so
+    in no class. The grid's `outcome` column tells both apart, so each figure is the grid's `matching` under:
+
+    | Figure | Filters on the URL grid |
+    | --- | --- |
+    | `crawled` | `fetched` is true |
+    | `fetched` | No single filter: `crawled`, and the URLs under `noResponse.notChecked` |
+    | `statusClasses["2xx"]`, `["3xx"]`, `["4xx"]`, `["5xx"]`, `.other` | `statusClass` in that class, **and** `outcome` notIn `blocked` |
+    | `statusClasses.blocked` | `outcome` in `blocked` |
+    | `statusClasses.noResponse` | `outcome` in `robotsDisallowed`, `timeout`, `networkError`, `processingError`, `notChecked`. (`statusClass` in `noResponse` gives it less `noResponse.notChecked`) |
+    | `statusCodes["404"]` | `statusCode` eq 404, **and** `outcome` notIn `blocked` |
+    | `noResponse.robotsDisallowed`, `.timeout`, `.networkError`, `.processingError`, `.notChecked` | `outcome` in that one. The grid's `networkError` leaves the URLs not checked out, as the event's does |
+    | Any figure's part in `siteVersions` | The figure's filters, and `source` in `siteVersion` |
+    | Any figure less that part: the site's own | The figure's filters, and `source` notIn `siteVersion` |
+
+    Without the filter on `outcome` a class is out by the block pages with a status in it, and `noResponse` by the
+    URLs not checked: on a crawl of the test site with one block page and five URLs not checked, `4xx` is 21 where
+    the grid's `statusClass` gives 22, and `noResponse` 14 where it gives 9.
   - **Live and done agree.** `/stats` gives the same part of a crawl at rest (its `siteVersions`), and the URL
     facets count under any filter, that one included.
   - A probe the site turns out to link to, list in a sitemap or redirect to becomes one of the site's own URLs (its
@@ -553,7 +571,17 @@ opens mid-crawl draws it, then adds each `progress` event at its `at`.
 - **`runs`** (E3c) is when the crawl was crawling: each run of it, oldest first, from its `startedAt` to its
   `endedAt`, with the time it spent crawling (`crawlingMs`) and the stretches it spent it in (`crawling`, each
   `{ from, to }`): one stretch for a run never paused, and a pause is the gap between two. The top-level
-  **`crawlingMs`** is their sum: the library item's.
+  **`crawlingMs`** is their sum, as the crawl file has it: the library item's for a crawl at rest. While a crawl runs
+  the item's is the progress event's, which is ahead of the file's by up to about five seconds (the stretch going on
+  is stored that often), so the two differ until the run ends, and a client showing a live crawl's time takes the
+  progress event's.
+  - **In order, never overlapping.** A stretch begins by the wall clock and lasts by a clock that only runs forward.
+    Where the wall clock was set back between two (a time sync), the later is given as beginning when the one before
+    it ended, in one run or across two: none begins before the last ended, no run ends before it started, and each
+    keeps its length, so the total is as stored.
+  - **Time asleep isn't crawling.** A stretch leaves out any time the machine spent asleep in it (a gap of more
+    than five minutes between two readings of its clock, which is read twice a second), so it can be shorter than
+    the wall time from its `from` to the next thing that happened.
   - **Plotting crawled time.** A moment's place on an axis of time spent crawling is the stretches' time up to it:
     every stretch that ended before it, and the part of the one it falls in. A moment in no stretch (a pause, the
     time between runs, a site waited out isn't one: that's crawling) sits where the stretch before it ended, so the
@@ -1231,10 +1259,10 @@ runs (a crawl that fetched a page again has gaps in its link ids: without a link
 {"discovery":"done","summary":{"available":true,"reason":null},
  "sitemaps":[{"id":1,"url":"https://www.example.com/sitemap.xml","parentId":null,"foundVia":"robotsTxt","state":"read",
               "statusCode":200,"isIndex":true,"entries":0,"sitemaps":3,"error":null,
-              "urls":{"listed":265,"fetched":262,"indexable":250,"nonIndexable":12}},
+              "urls":{"listed":265,"fetched":262,"indexable":250,"nonIndexable":12,"robotsDisallowed":1,"redirectingOrBroken":4}},
              {"id":4,"url":"https://www.example.com/sitemaps/missing.xml","parentId":1,"foundVia":"index","state":"failed",
               "statusCode":404,"isIndex":false,"entries":0,"sitemaps":0,"error":"HTTP 404",
-              "urls":{"listed":0,"fetched":0,"indexable":0,"nonIndexable":0}}]}
+              "urls":{"listed":0,"fetched":0,"indexable":0,"nonIndexable":0,"robotsDisallowed":0,"redirectingOrBroken":0}}]}
 ```
 
 - **`discovery`** says how far the crawl got with its sitemaps: `off` (it was told not to read them), `running` (it's
@@ -1256,6 +1284,19 @@ runs (a crawl that fetched a page again has gaps in its link ids: without a link
   `indexable` columns judge them, so each count opens its URLs in the grid below with that filter (`fetched` is true,
   `indexable` is true or false); the listed URLs with neither verdict weren't fetched, or were only status-checked.
   Without a URL summary they are the crawl's own judgement, as in the URL grid.
+  - **`robotsDisallowed`** and **`redirectingOrBroken`** (the E3c review) count the listed URLs by what became of the
+    request for each, as the URL grid's `outcome` column has it, read from each URL's response with the URL summary or
+    without. Each is its rows in the sitemap's grid under one filter:
+
+    | Count | The listed URLs | Filter on `/sitemaps/urls` |
+    | --- | --- | --- |
+    | `robotsDisallowed` | robots.txt kept the crawl from | `{"column":"outcome","op":"in","values":["robotsDisallowed"]}` |
+    | `redirectingOrBroken` | that answered with a redirect or an error, or didn't answer | `{"column":"outcome","op":"in","values":["redirect","clientError","serverError","timeout","networkError"]}` |
+
+    `redirectingOrBroken` leaves out the URLs robots.txt or a firewall kept the crawl from, and those not checked
+    (their host had stopped answering): none of those is known to be broken. Both are among `fetched` (the crawl is
+    done with them), so "crawled and answered" is `fetched` less `robotsDisallowed`. An index's are of every sitemap
+    under it, each URL once, as its other counts are. A sidecar from before the review sends neither.
 - A sitemap is stored under the URL it was found at; where that redirects to, and when it was fetched, isn't stored.
 - A crawl with no sitemaps answers with an empty list, never an error.
 
@@ -1300,6 +1341,20 @@ every origin it asks for a URL on, other sites' included, so a crawl can have th
 
   `error` is the failure when there was no status. An engine from before the E3b review said `unreachable` for both
   of the last two.
+- **The state is the last answer's; `blocked` is the whole crawl's.** Only the last answer from an origin is kept,
+  while a URL refused stays refused in the file until it's fetched. So an origin can read `unanswered` (or `missing`,
+  or `read` with rules that refuse nothing) **and still have blocked URLs**, and that isn't a contradiction:
+  - **A crawl continued later.** An earlier run read a file that refused those URLs (or couldn't read it, and
+    refused them as `unreachable`); the later run asked again, got no answer, and kept that. The URLs were refused
+    earlier in the crawl, by an answer the file no longer has: the lines that refused them aren't there to show, so
+    the origin's file (below) counts them under `unmatched`, as `unreachable` or `unknown`.
+  - **A file made by the first engine** (before `111c7f3`, 31 October 2026), which refused an origin's URLs on no
+    answer whichever origin it was. This engine reads that stored answer as `unanswered` for any origin but the start
+    URL's, as it would now treat it, though the engine that made the file did refuse them.
+
+  A UI can say of both "refused earlier in the crawl": `blocked` over zero beside a state that refuses nothing
+  means exactly that. The engine doesn't keep which of the two it was, nor the earlier answer: that would take a row
+  for every answer an origin gave, for a sentence the count already backs.
 - **`fetchedAt`** is when it was last read. A crawl continued later reads each robots.txt again, and keeps the last.
 - **`bytes`** is the size of the text kept (at most 512 KB is read), or null when none was.
 - **`blocked`** is the URLs on the origin that the crawl stored as refused by robots.txt (the URL grid's `outcome`
@@ -1714,15 +1769,23 @@ nothing kept, on a 32-core Windows machine that other work was sharing.
   | Read | Before | Now |
   | --- | --- | --- |
   | `/stats`, with the link summary | 0.76 to 0.96 s (0.95 to 1.16 at p95) | 98 to 126 ms (108 to 174 at p95, over six runs of 20) |
-  | `/stats`, without it: the links counted, each sitemap page looked up among them | the same read | 181 to 244 ms (189 to 322) |
-  | `/stats` again, the crawl unchanged | as the first | 1 ms |
+  | `/stats`, without it: the links counted, each sitemap page looked up among them | the same read | 188 to 320 ms (209 to 366 at p95, over nine runs of 20) |
+  | `/stats` again, the crawl unchanged | as the first | under 1 ms |
 
   With the link summary, which a crawl analysed and not continued since has, it's inside the 300 ms budget at p95,
-  first read included. Without it (a crawl running, never analysed or continued since) it was inside in five runs of
-  six, and 322 ms at p95 in the other, on a machine other work was loading; a running crawl's is then kept for 2 s.
-  It grows with the URLs, so the first read of a million URLs would take about a second, which wasn't measured; the
-  reads after it are kept. `si readbench` times both (`stats`, `stats-pass`) and holds them to twice the desktop's
-  worst, for CI's runner.
+  first read included. **Without it, it isn't** (a crawl running, never analysed or continued since): the review's
+  three runs gave 327, 329 and 366 ms at p95 (318 to 320 at p50), and through the sidecar the first `/stats` of such
+  a crawl took 246 to 329 ms; the six runs made here, on a machine other work was loading and on two crawl files,
+  gave 189 to 322 and, after the review, 209 to 287. So the first read of a running or never-analysed 100k crawl's
+  headline numbers takes about a third of a second, and a running crawl's is then kept for 2 s: a **known
+  limitation**, not met by anything cheap that was found (the time is the links counted and each page a sitemap led
+  to looked up among them; the link summary is what makes both free, and a running crawl has none). It grows with
+  the URLs, so the first read of a million URLs would take about a second with the link summary and some three
+  without, neither measured; the reads after it are kept. `si readbench` times all three and holds each to its own
+  gate: `stats` to twice the desktop's worst, for CI's runner; `stats-pass` to 450 ms, the worst measured and a
+  quarter, where the first gate of 600 would have let it double unseen (a runner slower than this desktop needs its
+  own figure, which no CI run has yet given); and the kept read, `stats-kept`, to 10 ms, which it sat under the 350
+  of `stats` before, so that numbers read all over again could never have failed it.
 - **The probes' part of the counts.** A crawl's live figures count its own probes of the site's other versions, as its
   file and the URL grid have them, so a crawl of a site served over http only showed "No response: Network error × 1"
   from its first seconds: the https probe. The figures still count them, so each lands on its count in the grid and
@@ -1833,3 +1896,103 @@ from the link summary at 98 and 90 ms (107 ms before). Every number added or cha
 written for the check, through a running sidecar: on that crawl, on a copy of it with link ids missing, on the garden
 crawl analysed again, and on a crawl run through the sidecar that was paused, stopped and continued (5 of its 728
 URLs not checked, 1 a probe, 20.7 s spent crawling of 26.3 s on the clock). Nothing differed.
+
+## Engine changes from the E3c review
+
+A review of E3c found one defect of weight and six small ones; the Sitemaps screen asked for two counts beside them.
+Each fix has a test that fails without it. Measured on the same 32-core Windows machine, shared with other work, so
+every timing is a range over runs, and where two builds are compared their runs were interleaved.
+
+- **A running crawl's write-ahead log stays small while its links are read.** A crawl's file is in WAL mode while it
+  runs, and SQLite starts the log again from its beginning only at a moment when no reader is part-way through it.
+  The links grid's reads of a running crawl are passes over the links, a new one for each filter set every 2 s, so
+  with the Links screen open that moment never came, and the log grew by everything the crawl wrote: 106 to 160 MB on
+  a 40,000-page crawl with one client reading (more than the file at the time), and without limit on a longer one.
+  The writer now folds the log into the file between two batches once it passes 64 MB, and empties it
+  (`CrawlDatabase.FoldLog`, a `TRUNCATE` checkpoint, from `CrawlWriter` as only `Storage/` writes).
+  - **What a reader can observe: a read that waits. Never an error, and never another answer.** For a fold, the
+    grids' new reads of that crawl wait while those in flight end by themselves, the log is folded, and the reads
+    that waited go on (`CrawlReadGate.ExclusiveOnceIdle`). No read is stopped, and none is read again, so a running
+    crawl's reads still answer for one moment exactly as they did. A read waits for the reads ahead of it, two
+    seconds at most, and the fold itself (a quarter of a second at most for a reader the gate can't see; milliseconds
+    otherwise). Measured over 40,000-page crawls with one and with six clients reading the links grid all the while,
+    the slowest read took 745 to 1,103 ms where it took 644 to 1,103 ms with no fold at all: no longer, to within
+    the spread of the runs.
+  - **What the crawl pays.** The writer waits with the readers, and stores nothing meanwhile. Over those crawls it
+    folded the log one to four times each, waiting 7 to 724 ms a time and at most 1.4 s in a crawl of 20 s; pages
+    per second were 2,010 to 2,543 against 1,941 to 2,546 without the fold, the runs interleaved. With nobody reading
+    there is no fold (the log restarts by itself, peaking at the largest batch: 22 MB at 40,000 pages, 38 MB at
+    100,000), so the benchmark is as it was.
+  - **The log's bound, honestly.** While folds succeed, the limit and the batch that took the log past it: 70 to
+    87 MB on those crawls, against 92 to 160 MB before, at the thousands of pages a second a local test site answers.
+    A real site answers tens of pages a second: a batch is a megabyte or two, the log takes minutes to reach
+    64 MB, and a fold's wait is lost in the crawler's own queue (derived from the batch's size and the rate, not
+    measured: no real site was crawled). **Where the bound doesn't hold:** a fold gives up when a read in flight
+    outlasts two seconds (a link pass over a crawl of several hundred thousand pages) or another program is part-way
+    through the file, and is tried again a second later, then 2, 4 … 32 s; with link passes that long following one
+    another, most tries fail and the log grows as it did until one lands in a gap or the crawl closes. Nothing at
+    that size was measured.
+  - **Measured against stopping the reads.** The first design stopped the reads in flight and read them again, then
+    left reads alone for twice as long as the longest it had stopped. Interleaved with this one, it threw work away
+    (the slowest read 978 to 1,953 ms; with six clients 7,878 to 10,476 reads answered where this answers 11,856 to
+    12,283) for a log no smaller (58 to 97 MB), and needed the rule about leaving reads alone. Dropped.
+  - **The analysis** was measured too: its log is its two commits (the results, then the links' index on a first
+    analysis), 26 MB on the 40,000-page crawl with nobody reading and 34 to 35 MB with one or six clients passing over
+    the links throughout: a reader makes the two add up, and can't make it grow past what the analysis writes. Left
+    as it is.
+  - **Held by a gate.** A test crawls with two readers in relay, a read always part-way through the file and each
+    lasting longer than a fold would wait by itself, and fails if the log passes its bound (without the fold it
+    reached 207 MB beside a 16 MB file); the growing-crawl test runs again with a fold after every few pages and
+    holds every answer to the finished file, not only to itself. `si bench --read-links --max-log-mb` does the same at
+    the real limit, and CI runs it.
+- **`/stats` without the link summary misses the budget, and says so.** [Above](#engine-changes-e3c-made): the gate
+  of 600 hid it, and the kept read shared a gate it could never fail. `stats-pass` is held to 450 ms and `stats-kept`
+  to 10 ms.
+- **A kept `/stats` takes no read slot.** `/stats` queued for one of the grid reads' slots, one a core, shared by
+  every crawl. With two slots (a two-core machine, emulated) and two clients asking for link passes of a running
+  crawl, another crawl's kept numbers, a 2 ms read, took 30 ms at the median and up to 248 ms. The kept answer is now
+  asked for first, without a slot (`CrawlStatsReader.ReadKept`: it opens the file and reads its stamp); numbers not
+  yet read still queue as a pass does.
+- **A crawl that hasn't crawled has spent no time.** A new crawl's first run can end having stored no stretch
+  (paused before it began and then stopped, or its process died before its first batch). Continuing it took the
+  empty table for a file from before the time was kept, and marked the crawl's time unknown for good. A file with no
+  stretch and no response has been crawled by nobody, so nothing went untimed: its time is known, from zero.
+- **Stretches in order; time asleep left out.** A stretch begins by the wall clock and lasts by a clock that only
+  runs forward, so a wall clock set back between two (a time sync) had the later begin before the earlier ended,
+  and a chart placing moments by them counted that time twice. They're read back in order, each beginning no earlier
+  than the one before it ended, in one run or across two ([History](#history-e4)). And the forward clock is
+  `Stopwatch`'s, which on Windows counts the time a machine spends asleep (`QueryPerformanceCounter` "including the
+  time when the machine was in a sleep state such as standby, hibernate, or connected standby") and on Linux and
+  macOS doesn't (`CLOCK_MONOTONIC`, `CLOCK_UPTIME_RAW`; dotnet/runtime#77945): a gap of over five minutes between two
+  of the session's twice-a-second readings is now left out of the stretch on any of them. A sleep shorter than that
+  still counts on Windows, and a stretch a sleep was left out of spans more wall time than its length.
+- **Tests the review's mutations got past.** Each of the eight has one that fails without the code: a link row's
+  `notChecked` outcome; a running crawl's item taking the live time and the live count of URLs crawled (with a URL
+  not checked in the crawl, as only then do the two counts differ); a live first run's `/history` carrying its
+  runs; the longest time heard of a stretch standing; the links grid reading the others through their targets only
+  up to an eighth of the links, either side of it by one target's links, with the way each side was read asserted;
+  the blocks' counts having to add up, on a file whose counts were changed; and a moment's total being the moment's
+  when the read that took it never counted.
+- **What the contract said loosely.** Which filter each figure of the progress event lands on
+  ([Progress](#progress-e4): a table, checked figure by figure against a crawl with a block page and URLs not
+  checked); that `/history`'s `crawlingMs` is the library item's at rest, and behind it by up to five seconds while a
+  crawl runs; the `stats-pass` figures.
+- **Two more counts for each sitemap** ([Sitemaps](#sitemaps-e3b)): `robotsDisallowed` and `redirectingOrBroken`, by
+  the URL grid's `outcome`, each the rows of the sitemap's grid under its filter (tested on the test site, which now
+  lists a URL its robots.txt refuses, with the URL summary and without, on six pages given every other end, and
+  checked on the 100k benchmark crawl and three other files against SQL written for the check). With the URL
+  summary a listed URL's response is looked up only where the summary's status says it may count, so the list of a
+  100,000-URL sitemap takes 29 to 30 ms where it took 18 to 22 ms (31 to 34 ms at p95, from 20 to 29): 10 ms more, for
+  the two sums over every listed URL, and inside its gate of 200.
+- **robots.txt: `unanswered` with blocked URLs** ([robots.txt](#robotstxt-e3b)): said, with why. No code: the count
+  already backs the UI's sentence.
+
+**After the review**, on the same machine: the benchmark crawled its 100,000 pages in 45.2 s (2,237 pages a second),
+peaked at 198 MB with no growth, analysed in 15.3 s, and found every planted issue and nothing else: 32,410 issues on
+110,264 URLs, two issues and one URL more than before, which are the listed URL robots.txt refuses. Its log peaked at
+36 MB while it crawled, so nothing was folded. With the links grid read all the while (`--read-links`) it crawled
+them in 46.4 s (2,180 a second) with the log at 89 MB at most and the slowest of 9,419 reads at 1.5 s, and 40,000
+pages in 16.5 s with the log at 76 MB; with the fold taken out, those 40,000 pages took the log to 580 MB, and the
+benchmark failed on it. `si readbench --gate --runs 20` passed every class on the new 100k crawl: `stats` 107 ms
+against 350, `stats-kept` 0.8 against 10, `stats-pass` 207 against 450, `sitemaps` 45 against 200, the links grid's
+slowest read from the link summary 135 against 200, a pass over the links 1,068 against 2,500.
