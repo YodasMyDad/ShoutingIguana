@@ -428,3 +428,82 @@ export const FileInspecting: Story = {
   ],
   render: () => <ScreenApp path={at(SITE, '?inspect=22')} />,
 };
+
+// ------------------------------------------------------------------------------------ What the review's fixes added
+
+/** No answer when the crawl last asked, and a URL stored as refused all the same: only the last answer is kept. */
+const REFUSED_EARLIER = testOrigin({
+  origin: 'https://www.shop.example',
+  state: 'unanswered',
+  statusCode: null,
+  error: 'DNS lookup failed',
+  bytes: null,
+  blocked: 1,
+});
+
+/** No answer, as the engine recorded a failed handshake: plain words in the sentence, its own text a hover away. */
+const NO_SECURE_CONNECTION = testOrigin({
+  origin: 'https://secure.example',
+  state: 'unanswered',
+  statusCode: null,
+  error: 'TLS handshake failed: Cannot determine the frame size or a corrupted frame was received.',
+  bytes: null,
+});
+
+const AFTER_THE_REVIEW: SitemapsRobotsOptions = {
+  origins: [TEST_ORIGINS[0]!, REFUSED_EARLIER, NO_SECURE_CONNECTION],
+  files: {
+    [SITE]: TEST_FILE,
+    [REFUSED_EARLIER.origin]: { ...fileOf(REFUSED_EARLIER), unmatched: { unreachable: 0, unknown: 1 } },
+    [NO_SECURE_CONNECTION.origin]: fileOf(NO_SECURE_CONNECTION),
+  },
+  blocked: {
+    [SITE]: TEST_BLOCKED,
+    [REFUSED_EARLIER.origin]: [
+      {
+        id: 41,
+        url: 'https://www.shop.example/blogs/news/a-brief-history',
+        reason: 'unknown',
+        line: null,
+        rule: null,
+        error: null,
+      },
+    ],
+  },
+};
+
+/** The origins: one whose last answer refuses nothing though a URL is stored as refused, one that failed. */
+export const OriginsRefusedEarlier: Story = {
+  loaders: [() => own(AFTER_THE_REVIEW)],
+  render: () => <ScreenApp path={LIST} />,
+};
+
+/** Its page: the last answer, then where the stored URL comes from. Never "crawled anyway" beside it. */
+export const FileRefusedEarlier: Story = {
+  loaders: [() => own(AFTER_THE_REVIEW)],
+  render: () => <ScreenApp path={at(REFUSED_EARLIER.origin)} />,
+};
+
+/** A failure in plain words: "a secure connection couldn’t be made", with what the crawl recorded in the tooltip. */
+export const FileNoSecureConnection: Story = {
+  loaders: [() => own(AFTER_THE_REVIEW)],
+  render: () => <ScreenApp path={at(NO_SECURE_CONNECTION.origin)} />,
+};
+
+/** A link to a line that's no rule: the chip says "Line", and the list says why it's empty. */
+export const FileLineNotARule: Story = {
+  loaders: [() => own(EVERY_STATE)],
+  render: () => <ScreenApp path={`${at(SITE)}?line=2`} />,
+};
+
+/** A link to a line the file doesn't have. */
+export const FileNoSuchLine: Story = {
+  loaders: [() => own(EVERY_STATE)],
+  render: () => <ScreenApp path={`${at(SITE)}?line=999`} />,
+};
+
+/** An origin a crawl that hasn't ended hasn't asked: "not so far", and the page fills in once it does. */
+export const FileNotFoundYet: Story = {
+  loaders: [() => own({ ...EVERY_STATE, item: { status: 'running', finishedAt: null } })],
+  render: () => <ScreenApp path={at('https://nowhere.example')} live={{}} />,
+};

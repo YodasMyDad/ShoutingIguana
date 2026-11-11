@@ -10,6 +10,7 @@ import {
   TEST_SITEMAP_LIST,
   sitemapsRobotsRoutes,
   testSitemap,
+  withoutNewCounts,
   type SitemapsRobotsOptions,
 } from '../test/sitemapsRobotsSidecar';
 
@@ -433,4 +434,174 @@ export const OneSitemapInspecting: Story = {
       ]),
   ],
   render: () => <ScreenApp path={`${LIST}/2?inspect=2`} />,
+};
+
+// ------------------------------------------------------------------------------------ What the review's fixes added
+
+const BLOCKED = encodeURIComponent(JSON.stringify([{ column: 'outcome', op: 'in', values: ['robotsDisallowed'] }]));
+
+/**
+ * A crawl that stopped between an index and the sitemaps it lists: the index was read, the one sitemap of its the
+ * crawl had taken up never was. Its counts are its sitemaps', so they're dashes, never 0; its badge can't say how
+ * many it lists; and its status says how far the crawl got.
+ */
+export const IndexOfAStoppedCrawl: Story = {
+  loaders: [
+    () =>
+      own({
+        sitemaps: {
+          discovery: 'unfinished',
+          summary: { available: true, reason: null },
+          sitemaps: [
+            testSitemap({ id: 1, url: `${SITE}/sitemap.xml`, isIndex: true, sitemaps: 1 }),
+            testSitemap({
+              id: 2,
+              url: `${SITE}/sitemaps/pages.xml`,
+              parentId: 1,
+              foundVia: 'index',
+              state: 'pending',
+              statusCode: null,
+            }),
+          ],
+        },
+        // The analysis skipped the comparison of pages with sitemaps, and says why.
+        coverage: {
+          ...COVERAGE_PAGE,
+          matching: 1,
+          facets: { inSitemap: [{ value: null, count: 1, filter: { column: 'inSitemap', op: 'isEmpty' } }] },
+        },
+        analysis: {
+          skipped: [
+            { checkId: 'not-in-sitemap', reason: { code: 'crawl-unfinished', text: 'The crawl didn’t finish.' } },
+          ],
+        },
+        item: { status: 'stopped' },
+      }),
+  ],
+  render: () => <ScreenApp path={LIST} />,
+};
+
+/** The same index, opened: no URLs to show, and why, never "This sitemap lists no URLs". */
+export const OneIndexOfAStoppedCrawl: Story = {
+  loaders: [
+    () =>
+      own({
+        sitemaps: {
+          discovery: 'unfinished',
+          summary: { available: true, reason: null },
+          sitemaps: [
+            testSitemap({ id: 11, url: `${SITE}/sitemap.xml`, isIndex: true, sitemaps: 1 }),
+            testSitemap({ id: 12, parentId: 11, foundVia: 'index', state: 'pending', statusCode: null }),
+          ],
+        },
+        item: { status: 'stopped' },
+      }),
+  ],
+  render: () => <ScreenApp path={`${LIST}/11`} />,
+};
+
+/** An index with every sitemap under it read: its own counts, as links. */
+export const IndexReadWhole: Story = {
+  loaders: [
+    () => own({ sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: TEST_SITEMAPS.filter((sitemap) => sitemap.id !== 4) } }),
+  ],
+  render: () => <ScreenApp path={LIST} />,
+};
+
+/**
+ * An engine from before the list counted, for each sitemap, the URLs robots.txt refused: "Crawled" and "Blocked by
+ * robots.txt" are dashes that say why, never the engine's "done with" number under the name "Crawled".
+ */
+export const EngineWithoutTheNewCounts: Story = {
+  loaders: [() => own({ sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: TEST_SITEMAPS.map(withoutNewCounts) } })],
+  render: () => <ScreenApp path={LIST} />,
+};
+
+/** One sitemap under that engine: its page counts the crawled and the blocked itself. */
+export const OneSitemapCountsItself: Story = {
+  loaders: [() => own({ sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: TEST_SITEMAPS.map(withoutNewCounts) } })],
+  render: () => <ScreenApp path={`${LIST}/6`} />,
+};
+
+/** What robots.txt blocked of one sitemap's URLs: the count's link from the list lands here. */
+export const OneSitemapBlockedByRobots: Story = {
+  loaders: [() => own()],
+  render: () => <ScreenApp path={`${LIST}/6?filter=${BLOCKED}`} />,
+};
+
+/** Nothing declared a sitemap, and the default location has none: no sitemap found, not one that failed. */
+export const NothingAtTheDefaultLocation: Story = {
+  loaders: [
+    () =>
+      own({
+        sitemaps: {
+          ...TEST_SITEMAP_LIST,
+          sitemaps: [
+            testSitemap({
+              id: 1,
+              url: `${SITE}/sitemap.xml`,
+              foundVia: 'defaultLocation',
+              state: 'failed',
+              statusCode: 404,
+              error: 'HTTP 404',
+            }),
+          ],
+        },
+      }),
+  ],
+  render: () => <ScreenApp path={LIST} />,
+};
+
+/** Sitemaps that failed in ways the engine records in its own text: said by their kind, the text a hover away. */
+export const FailedInWords: Story = {
+  loaders: [
+    () =>
+      own({
+        sitemaps: {
+          ...TEST_SITEMAP_LIST,
+          sitemaps: [
+            testSitemap({ id: 1, entries: 4, urls: TEST_SITEMAPS[1]?.urls ?? TEST_SITEMAPS[0]!.urls }),
+            testSitemap({
+              id: 2,
+              state: 'failed',
+              statusCode: null,
+              error:
+                'Unexpected end of file has occurred. The following elements are not closed: urlset. Line 1217, position 3.',
+            }),
+            testSitemap({
+              id: 3,
+              state: 'failed',
+              statusCode: null,
+              error: 'No such host is known. (cdn.example.net:443)',
+            }),
+            testSitemap({
+              id: 4,
+              state: 'failed',
+              statusCode: null,
+              error: 'The SSL connection could not be established, see inner exception.',
+            }),
+            testSitemap({ id: 5, state: 'failed', statusCode: null, error: 'Timed out', entries: 40 }),
+            testSitemap({
+              id: 6,
+              state: 'notRead',
+              statusCode: null,
+              error: 'Not read: sitemap indexes nested more than 3 deep aren’t followed',
+            }),
+          ],
+        },
+      }),
+  ],
+  render: () => <ScreenApp path={LIST} />,
+};
+
+/** A sitemap a crawl that hasn't ended doesn't have: "not so far", and the page fills in if the crawl finds it. */
+export const OneSitemapNotFoundYet: Story = {
+  loaders: [
+    () =>
+      own({
+        sitemaps: { ...TEST_SITEMAP_LIST, discovery: 'running', summary: without('crawling') },
+        item: { status: 'running', finishedAt: null, analyzedAt: null, issues: null },
+      }),
+  ],
+  render: () => <ScreenApp path={`${LIST}/999`} live={{}} />,
 };
