@@ -6,6 +6,7 @@ using ShoutingIguana.Sidecar.Api;
 using ShoutingIguana.Sidecar.Crawls;
 using ShoutingIguana.Sidecar.Errors;
 using ShoutingIguana.Sidecar.Events;
+using ShoutingIguana.Sidecar.Exports;
 using ShoutingIguana.Sidecar.Hosting;
 using ShoutingIguana.Sidecar.Library;
 using ShoutingIguana.Sidecar.Models;
@@ -159,6 +160,7 @@ internal sealed class SidecarHost : IAsyncDisposable
         builder.Services.AddSingleton<CrawlData>();
         builder.Services.AddSingleton(new ReadCache());
         builder.Services.AddSingleton<GridData>();
+        builder.Services.AddSingleton<ExportManager>();
 
         // Crawls are told to stop as soon as shutdown begins, before the web server waits for requests in flight.
         builder.Services.AddHostedService<CrawlShutdown>();
@@ -183,6 +185,7 @@ internal sealed class SidecarHost : IAsyncDisposable
         CrawlEndpoints.Map(app);
         AnalysisEndpoints.Map(app);
         GridEndpoints.Map(app);
+        ExportEndpoints.Map(app);
         endpoint = bound!;
         return app;
     }

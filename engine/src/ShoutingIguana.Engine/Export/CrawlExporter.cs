@@ -96,6 +96,14 @@ public static class CrawlExporter
     /// <exception cref="ExportException"><see cref="ExportFailure.InvalidPath"/>, saying what's wrong with it.</exception>
     public static string CheckPath(string targetPath, ExportFormat format, string crawlPath) => ExportTarget.Check(targetPath, format, crawlPath);
 
+    /// <summary>
+    /// Says, before anything is read or written, when a file can't be written at a path <see cref="CheckPath"/> gave: its
+    /// folder isn't there, or a file of that name is read-only or open in another program. An export finds the same out
+    /// for itself as it starts; this is for a caller that would rather refuse at once than start one.
+    /// </summary>
+    /// <exception cref="ExportException"><see cref="ExportFailure.NotWritable"/> or <see cref="ExportFailure.FileInUse"/>, with why.</exception>
+    public static void CheckWritable(string path) => ExportTarget.CheckWritable(path);
+
     /// <summary>Writes the export to <paramref name="targetPath"/>, in place of any file there, and says what it wrote.</summary>
     /// <param name="crawlPath">The crawl file, which is only read.</param>
     /// <param name="targetPath">The file to write. Its extension is the format's.</param>

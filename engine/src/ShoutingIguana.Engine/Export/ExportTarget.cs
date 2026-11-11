@@ -113,13 +113,7 @@ internal sealed class ExportTarget : IDisposable
     /// <exception cref="ExportException">The file can't be written there, with why.</exception>
     public static ExportTarget Open(string path)
     {
-        var folder = System.IO.Path.GetDirectoryName(path);
-        if (folder is null || !Directory.Exists(folder))
-        {
-            throw new ExportException(ExportFailure.NotWritable, "The folder for this file isn't there. Choose another place.");
-        }
-
-        ProbeExisting(path);
+        var folder = CheckWritable(path);
         var temporary = System.IO.Path.Combine(folder, $".{System.IO.Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
@@ -130,6 +124,20 @@ internal sealed class ExportTarget : IDisposable
         {
             throw Failed(exception, path);
         }
+    }
+
+    /// <summary>The folder a file at the path would be written in, once it's known to be there and any file of that name to be one this can replace.</summary>
+    /// <exception cref="ExportException">The folder isn't there, or the file is read-only or open in another program.</exception>
+    public static string CheckWritable(string path)
+    {
+        var folder = System.IO.Path.GetDirectoryName(path);
+        if (folder is null || !Directory.Exists(folder))
+        {
+            throw new ExportException(ExportFailure.NotWritable, "The folder for this file isn't there. Choose another place.");
+        }
+
+        ProbeExisting(path);
+        return folder;
     }
 
     /// <summary>
