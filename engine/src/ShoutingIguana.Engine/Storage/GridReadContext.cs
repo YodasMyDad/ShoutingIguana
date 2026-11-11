@@ -181,6 +181,59 @@ internal sealed class GridReadContext : IDisposable
         }
     }
 
+    /// <summary>
+    /// The helpers this read may use for a pass split over several connections: as many of <paramref name="most"/> as the
+    /// host has free right now (<see cref="ReadCache.Helpers"/>), given back when the result is disposed. None for a read
+    /// with no cache, or whose host gives none.
+    /// </summary>
+    public ReadHelpers.Borrowed? BorrowHelpers(int most) => most > 0 && _cache?.Helpers is { } helpers ? helpers.Borrow(most) : null;
+
+    /// <summary>
+    /// Another read of the same file alongside this one, on a connection of its own, for one part of a pass split between
+    /// them: it sees this read's sets of URL ids in the same slots, so the same SQL runs on either, and has its own
+    /// functions, its own patterns and their time. It's a read as any other to a writer here that wants the file: stopped
+    /// with this one, and gone before the writer has it. Null when the file it opened isn't the file as this read has it
+    /// (another program changed it in between): the pass is then this read's alone.
+    /// </summary>
+    /// <param name="stop">Stops it: this read's own token, or one cancelled with it.</param>
+    /// <exception cref="OperationCanceledException">The token was cancelled before it opened.</exception>
+    public Alongside? OpenAlongside(CancellationToken stop)
+    {
+        var lease = CrawlReadGate.Enter(Path, stop);
+        GridReadContext? helper = null;
+        try
+        {
+            helper = Open(Path, _cache, stop);
+            if (helper.Stamp != Stamp)
+            {
+                helper.Dispose();
+                lease.Dispose();
+                return null;
+            }
+
+            helper._sets.AddRange(_sets);
+            return new Alongside(helper, lease);
+        }
+        catch
+        {
+            helper?.Dispose();
+            lease.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>A read alongside another (<see cref="OpenAlongside"/>): closed, and its place among the file's reads given up, when disposed.</summary>
+    public sealed class Alongside(GridReadContext context, CrawlReadGate.ReadLease lease) : IDisposable
+    {
+        public GridReadContext Context { get; } = context;
+
+        public void Dispose()
+        {
+            Context.Dispose();
+            lease.Dispose();
+        }
+    }
+
     private static GridReadContext Open(string path, ReadCache? cache, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

@@ -91,6 +91,22 @@ public static class LinkGridReader
     /// </summary>
     internal static int WalkRows { get; set; } = 200_000;
 
+    /// <summary>
+    /// The most helpers a pass over every link takes beside its own connection (<see cref="ReadHelpers"/>): four
+    /// connections in all. Measured on the 100k benchmark's 5 million links, a pass split in four takes a quarter of the
+    /// time, and one in eight a fifth to a sixth, for twice the cores kept from other reads. Tests change it.
+    /// </summary>
+    internal static int PassHelpers { get; set; } = 3;
+
+    /// <summary>
+    /// From this many links on, a pass over all of them is worth splitting: below it the pass takes tens of milliseconds
+    /// by itself, and opening the connections to split it a few. Tests lower it.
+    /// </summary>
+    internal static long SplitFrom { get; set; } = 500_000;
+
+    /// <summary>Tests only: how many connections each pass over the links ran on, in order.</summary>
+    internal static Action<int>? Split { get; set; }
+
     /// <summary>Unknown, among the status classes a URL's facts hold.</summary>
     private const int NO_STATUS_CLASS = 7;
 
@@ -753,24 +769,119 @@ public static class LinkGridReader
     /// </param>
     private static (LinkIdSet? Ids, LinkTally? Tally) Scan(GridReadContext context, Filters filters, long total, bool ids, bool tally, bool indexed = true)
     {
-        var found = ids ? new LinkIdSet(LargestLinkId(context), total) : null;
-        var counted = tally ? NewTally(context) : null;
-        (context.LinkIds, context.LinkTally, context.NofollowPages) = (found, counted, tally ? NofollowPages(context) : null);
-        try
+        var largest = LargestLinkId(context);
+        LinkIdSet? NewIds() => ids ? new LinkIdSet(largest, total) : null;
+        var nofollow = tally ? NofollowPages(context) : null;
+
+        // With nothing to count, the id is all that's passed on.
+        var each = tally ? $"{ReaderFunctions.LINK}(l.rowid, l.to_id, l.from_id, l.kind, l.position, l.flags)" : $"{ReaderFunctions.LINK_ID}(l.rowid)";
+        var inOrder = !indexed || !filters.Direct;
+        var from = inOrder ? "links l NOT INDEXED" : filters.From;
+
+        // One part of the pass, on one read's connection: the links between two ids (all of them, with no bounds), kept
+        // and counted by that read.
+        (LinkIdSet? Ids, LinkTally? Tally) Part(GridReadContext read, string? bounds)
         {
-            // With nothing to count, the id is all that's passed on.
-            var each = tally ? $"{ReaderFunctions.LINK}(l.rowid, l.to_id, l.from_id, l.kind, l.position, l.flags)" : $"{ReaderFunctions.LINK_ID}(l.rowid)";
-            var sql = $"SELECT COUNT({each}) FROM {(indexed ? filters.From : "links l NOT INDEXED")}{filters.Where(Within(context))}";
-            Ran?.Invoke(sql);
-            using var command = context.Command(sql, filters.Parameters);
-            command.ExecuteScalar();
-        }
-        finally
-        {
-            (context.LinkIds, context.LinkTally, context.NofollowPages) = (null, null, null);
+            var (found, counted) = (NewIds(), tally ? NewTally(context) : null);
+            (read.LinkIds, read.LinkTally, read.NofollowPages) = (found, counted, nofollow);
+            try
+            {
+                var sql = $"SELECT COUNT({each}) FROM {from}{filters.Where(bounds is null ? Within(context) : bounds)}";
+                Ran?.Invoke(sql);
+                using var command = read.Command(sql, filters.Parameters);
+                command.ExecuteScalar();
+            }
+            finally
+            {
+                (read.LinkIds, read.LinkTally, read.NofollowPages) = (null, null, null);
+            }
+
+            return (found, counted);
         }
 
-        return (found?.Seal(), counted);
+        // Every link read in order, of a crawl that stands still, and many of them: split by link id over as many
+        // connections as the host has room for, each on a thread of its own. A running crawl's pass stays on the one
+        // connection and its one snapshot, which is the moment it answers for.
+        using var helpers = inOrder && largest >= SplitFrom && context.Stamp is { Live: false } ? context.BorrowHelpers(PassHelpers) : null;
+        if (helpers is not { Count: > 0 })
+        {
+            Split?.Invoke(1);
+            var (found, counted) = Part(context, null);
+            return (found?.Seal(), counted);
+        }
+
+        var parts = helpers.Count + 1;
+        string Bounds(int part) => string.Create(CultureInfo.InvariantCulture, $"{(part == 0 ? string.Empty : $"l.rowid > {largest * part / parts}")}{(part is 0 || part == parts - 1 ? string.Empty : " AND ")}{(part == parts - 1 ? string.Empty : $"l.rowid <= {largest * (part + 1) / parts}")}");
+
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(context.Token);
+        var others = Enumerable.Range(1, helpers.Count).Select(part => Task.Factory.StartNew(() =>
+        {
+            try
+            {
+                using var alongside = context.OpenAlongside(stop.Token);
+                try
+                {
+                    return alongside is null ? ((LinkIdSet? Ids, LinkTally? Tally)?)null : Part(alongside.Context, Bounds(part));
+                }
+                catch (Exception exception) when (alongside?.Context.RefusedPattern is { } pattern && exception is not RegexTooComplexException)
+                {
+                    // A pattern this part gave up on: the read's refusal, as when the read's own connection gives up on it.
+                    throw new RegexTooComplexException(pattern, exception);
+                }
+            }
+            catch
+            {
+                // One part failed, so the pass has: the others stop.
+                stop.Cancel();
+                throw;
+            }
+        }, stop.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default)).ToArray();
+
+        (LinkIdSet? Ids, LinkTally? Tally) mine;
+        try
+        {
+            mine = Part(context, Bounds(0));
+        }
+        catch
+        {
+            stop.Cancel();
+            Task.WaitAll(others.Select(other => other.ContinueWith(_ => { }, TaskScheduler.Default)).ToArray());
+            throw;
+        }
+
+        try
+        {
+            Task.WaitAll(others);
+        }
+        catch (AggregateException failed)
+        {
+            // What a part failed with is what the pass fails with: a pattern too complex before the parts stopped for it.
+            throw failed.Flatten().InnerExceptions.FirstOrDefault(exception => exception is not OperationCanceledException) ?? failed.InnerExceptions[0];
+        }
+
+        if (others.Any(other => other.Result is null))
+        {
+            // A connection found the file changed under the read: the pass again, on this read's own.
+            Split?.Invoke(1);
+            var (found, counted) = Part(context, null);
+            return (found?.Seal(), counted);
+        }
+
+        Split?.Invoke(parts);
+        foreach (var other in others.Select(other => other.Result!.Value))
+        {
+            if (other.Ids is not null)
+            {
+                mine.Ids!.Merge(other.Ids);
+            }
+
+            if (other.Tally is not null)
+            {
+                mine.Tally!.Merge(other.Tally);
+            }
+        }
+
+        return (mine.Ids?.Seal(), mine.Tally);
     }
 
     /// <summary>

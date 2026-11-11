@@ -42,6 +42,12 @@ public sealed class ReadCache(int capacity = ReadCache.DEFAULT_CAPACITY, int lar
     /// <summary>How long a running crawl's counts are kept before they're counted again: the UI shows live counts at most four times a second.</summary>
     public static readonly TimeSpan LIVE_FOR = TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// The host's room for a read to use several connections at once (<see cref="ReadHelpers"/>); none unless the host
+    /// gives some, and a read without any reads on one connection.
+    /// </summary>
+    public ReadHelpers? Helpers { get; init; }
+
     private readonly Store _entries = new(capacity);
     private readonly Store _large = new(largeCapacity);
     private readonly Store _huge = new(HUGE_CAPACITY);
