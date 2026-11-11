@@ -12,26 +12,31 @@ import { Icon } from '../../ui/Icon';
 import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
 import { pressedRow, rememberPlace, rememberedPlace } from '../listPlace';
-import { COUNT_FILTERS, COUNT_WORDS, countOf, type SitemapCount } from './sitemapLinks';
+import { COUNT_FILTERS, COUNT_WORDS, ENGINE_DOESNT_SAY, countOf, type SitemapCount } from './sitemapLinks';
 import { countsKnown, sitemapRows, type SitemapRow } from './sitemapTree';
 import { foundViaWords, stateWords } from './sitemapWords';
 
 const ROUTE = '/crawls/$crawl/sitemaps/{-$sitemap}';
 
-/** The counts the list shows, each in a column of its own. */
-const LIST_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'notCrawled', 'nonIndexable'];
+/**
+ * The counts the list shows, each in a column of its own. Listed is the three after it added up: what the crawl
+ * requested, what robots.txt kept it from, and what it didn't get to.
+ */
+const LIST_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'blocked', 'notCrawled', 'nonIndexable'];
 
-const FOUND_WIDTH = 132;
-const STATE_WIDTH = 200;
-/** Room for a count in the millions, whole: 1,234,567. */
+// The columns are as narrow as their headers and a count in the millions (1,234,567) allow: five counts, how the
+// sitemap was found and what became of it have to fit beside its address in a 1280 px window.
+const FOUND_WIDTH = 124;
+const STATE_WIDTH = 176;
 const COUNT_WIDTHS: Record<SitemapCount, number> = {
-  listed: 96,
-  crawled: 96,
-  notCrawled: 104,
+  listed: 88,
+  crawled: 88,
+  blocked: 156,
+  notCrawled: 100,
   indexable: 96,
-  nonIndexable: 120,
+  nonIndexable: 112,
 };
-const MIN_URL_WIDTH = 220;
+const MIN_URL_WIDTH = 180;
 /** The grid's edges, and the room its scrollbar takes. */
 const FRAME_SLACK = 18;
 
@@ -110,6 +115,15 @@ export function SitemapTree({
       // An index's counts are those of the sitemaps under it: a dash until the crawl has read every one of them.
       if (!countsKnown(row.sitemap, row.subtree)) return <span className="text-text-muted">–</span>;
       const value = countOf(row.sitemap, count);
+      // The engine doesn't count it for the list (the URLs robots.txt refused, which "Crawled" leaves out): a dash
+      // that says so, never the number of URLs it's done with under the name "Crawled".
+      if (value === null) {
+        return (
+          <span className="text-text-muted" title={ENGINE_DOESNT_SAY}>
+            –
+          </span>
+        );
+      }
       // Nothing to open: the number alone.
       if (value === 0) return formatCount(0);
       return (
@@ -183,7 +197,7 @@ export function SitemapTree({
         width: COUNT_WIDTHS[count],
         numeric: true,
         cell: (row) => countCell(row, count),
-        text: (row) => (countsKnown(row.sitemap, row.subtree) ? String(countOf(row.sitemap, count)) : ''),
+        text: (row) => (countsKnown(row.sitemap, row.subtree) ? String(countOf(row.sitemap, count) ?? '') : ''),
       })),
     ];
   }, [crawlId, siteOrigin, crawling, urlWidth, grouped]);
@@ -218,7 +232,7 @@ export function SitemapTree({
           const count = LIST_COUNTS.find((candidate) => candidate === column);
           // A count that's unknown or nothing has no URLs to open: the sitemap itself, then.
           const counted =
-            count !== undefined && countsKnown(row.sitemap, row.subtree) && countOf(row.sitemap, count) > 0;
+            count !== undefined && countsKnown(row.sitemap, row.subtree) && (countOf(row.sitemap, count) ?? 0) > 0;
           onOpen(row.sitemap, counted ? COUNT_FILTERS[count] : []);
         }}
         busy={busy}

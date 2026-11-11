@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { FacetsPage, Sitemap, SitemapList } from '../../api/grids';
+import type { FacetsPage, Sitemap, SitemapList, UrlOutcome } from '../../api/grids';
+import { OUTCOME_WORDS } from '../../inspector/words';
 import { COVERAGE_PAGE, TEST_SITEMAP_LIST, testSitemap } from '../../test/sitemapsRobotsSidecar';
 import { sentenceText } from '../countSentence';
 import { ANSWERED_SITE_PAGES } from '../overview/links';
@@ -327,8 +328,14 @@ describe('the site’s pages no sitemap lists', () => {
 });
 
 describe('what the crawl did with a listed URL', () => {
-  it('goes by the outcome, not by whether it was fetched', () => {
-    expect(outcomeWords({ fetched: true, outcome: 'success' }, false)).toBe('Crawled');
+  it('goes by the outcome, not by whether it was fetched, in the inspector’s words', () => {
+    // A URL that answered says "Answered": "Crawled" is no outcome, it's that the crawl requested the URL.
+    expect(outcomeWords({ fetched: true, outcome: 'success' }, false)).toBe('Answered');
+    expect(outcomeWords({ fetched: true, outcome: 'timeout' }, false)).toBe('Timed out');
+    for (const outcome of Object.keys(OUTCOME_WORDS) as (keyof typeof OUTCOME_WORDS)[]) {
+      expect(outcomeWords({ fetched: true, outcome }, false)).toBe(OUTCOME_WORDS[outcome]);
+      expect(outcomeWords({ fetched: true, outcome }, false)).not.toBe('Crawled');
+    }
     expect(outcomeWords({ fetched: true, outcome: 'robotsDisallowed' }, false)).toBe('Blocked by robots.txt');
     expect(outcomeWords({ fetched: false, outcome: 'notChecked' }, false)).toBe('Not checked');
     expect(outcomeWords({ fetched: true, outcome: 'redirect' }, false)).toBe('Redirect');
@@ -340,7 +347,9 @@ describe('what the crawl did with a listed URL', () => {
     expect(outcomeWords({}, false)).toBe('Not crawled');
   });
 
-  it('reads an outcome this version has no name for as crawled', () => {
-    expect(outcomeWords({ fetched: true, outcome: null }, false)).toBe('Crawled');
+  it('doesn’t call a URL crawled when it’s done with and how isn’t said, or is said in a word this version lacks', () => {
+    // It may have been requested or refused: no more is said than is known.
+    expect(outcomeWords({ fetched: true, outcome: null }, false)).toBe('Unknown');
+    expect(outcomeWords({ fetched: true, outcome: 'somethingNew' as UrlOutcome }, false)).toBe('Unknown');
   });
 });

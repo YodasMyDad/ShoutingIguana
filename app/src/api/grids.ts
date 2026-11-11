@@ -410,7 +410,21 @@ export interface Sitemap {
    * The URLs it lists, each once (an index: those of every sitemap under it), as the URL grid's `fetched` and
    * `indexable` columns judge them: each count opens its rows in `/sitemaps/urls` under that filter.
    */
-  urls: { listed: number; fetched: number; indexable: number; nonIndexable: number };
+  urls: {
+    listed: number;
+    /** Every listed URL the crawl is done with: those it requested, and those robots.txt refused. */
+    fetched: number;
+    indexable: number;
+    nonIndexable: number;
+    /**
+     * The listed URLs robots.txt refused (`outcome` `robotsDisallowed`), which `fetched` counts in. Left out by an
+     * engine from before it: not known then, never 0. (The engine's name for it is being settled: it's read in
+     * screens/sitemaps/sitemapLinks.ts only.)
+     */
+    robotsDisallowed?: number;
+    /** The listed URLs that redirect, answer with an error or don't answer. Left out by an engine from before it. */
+    redirectingOrBroken?: number;
+  };
 }
 
 /** `GET /crawls/{id}/sitemaps`: every sitemap the crawl looked for, in the order it found them. */

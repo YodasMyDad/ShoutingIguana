@@ -36,9 +36,15 @@ export function testSitemap(overrides: Partial<Sitemap> & Pick<Sitemap, 'id'>): 
     entries: 0,
     sitemaps: 0,
     error: null,
-    urls: { listed: 0, fetched: 0, indexable: 0, nonIndexable: 0 },
+    urls: { listed: 0, fetched: 0, indexable: 0, nonIndexable: 0, robotsDisallowed: 0, redirectingOrBroken: 0 },
     ...overrides,
   };
+}
+
+/** A sitemap as an engine from before the two new counts sends it: without them. */
+export function withoutNewCounts(sitemap: Sitemap): Sitemap {
+  const { robotsDisallowed: _refused, redirectingOrBroken: _broken, ...urls } = sitemap.urls;
+  return { ...sitemap, urls };
 }
 
 /** An index with three sitemaps under it (one failed), a sitemap given in the settings, and one of unknown origin. */
@@ -48,7 +54,7 @@ export const TEST_SITEMAPS: Sitemap[] = [
     url: `${SITE}/sitemap.xml`,
     isIndex: true,
     sitemaps: 3,
-    urls: { listed: 6, fetched: 5, indexable: 3, nonIndexable: 2 },
+    urls: { listed: 6, fetched: 5, indexable: 3, nonIndexable: 2, robotsDisallowed: 0, redirectingOrBroken: 2 },
   }),
   testSitemap({
     id: 2,
@@ -56,7 +62,7 @@ export const TEST_SITEMAPS: Sitemap[] = [
     parentId: 1,
     foundVia: 'index',
     entries: 4,
-    urls: { listed: 4, fetched: 4, indexable: 3, nonIndexable: 1 },
+    urls: { listed: 4, fetched: 4, indexable: 3, nonIndexable: 1, robotsDisallowed: 0, redirectingOrBroken: 1 },
   }),
   testSitemap({
     id: 3,
@@ -64,7 +70,7 @@ export const TEST_SITEMAPS: Sitemap[] = [
     parentId: 1,
     foundVia: 'index',
     entries: 3,
-    urls: { listed: 3, fetched: 2, indexable: 1, nonIndexable: 1 },
+    urls: { listed: 3, fetched: 2, indexable: 1, nonIndexable: 1, robotsDisallowed: 0, redirectingOrBroken: 1 },
   }),
   testSitemap({
     id: 4,
@@ -80,14 +86,15 @@ export const TEST_SITEMAPS: Sitemap[] = [
     url: `${SITE}/news-sitemap.xml`,
     foundVia: 'options',
     entries: 2,
-    urls: { listed: 2, fetched: 2, indexable: 2, nonIndexable: 0 },
+    urls: { listed: 2, fetched: 2, indexable: 2, nonIndexable: 0, robotsDisallowed: 0, redirectingOrBroken: 0 },
   }),
   testSitemap({
     id: 6,
     url: `${SITE}/old-sitemap.xml`,
     foundVia: null,
-    entries: 1,
-    urls: { listed: 1, fetched: 0, indexable: 0, nonIndexable: 0 },
+    // One never reached, one robots.txt refused (done with, and never requested), one that timed out (requested).
+    entries: 3,
+    urls: { listed: 3, fetched: 2, indexable: 0, nonIndexable: 2, robotsDisallowed: 1, redirectingOrBroken: 1 },
   }),
 ];
 
@@ -212,6 +219,32 @@ export const SITEMAP_URL_ROWS: (UrlRow & { sitemaps: number[] })[] = [
     depth: 1,
     sitemaps: [6],
   },
+  {
+    id: 10,
+    url: `${SITE}/legacy/private`,
+    fetched: true,
+    outcome: 'robotsDisallowed',
+    statusCode: null,
+    statusClass: null,
+    indexable: false,
+    indexability: 'blockedByRobots',
+    title: null,
+    depth: 2,
+    sitemaps: [6],
+  },
+  {
+    id: 11,
+    url: `${SITE}/legacy/slow`,
+    fetched: true,
+    outcome: 'timeout',
+    statusCode: null,
+    statusClass: null,
+    indexable: false,
+    indexability: 'unreachable',
+    title: null,
+    depth: 2,
+    sitemaps: [6],
+  },
 ];
 
 /** The sitemaps whose URLs a sitemap's grid shows: its own, and every sitemap's under it. */
@@ -234,6 +267,7 @@ export function sitemapUrlsPage(
     body.filters.every((filter) => {
       if (filter.op === 'is') return value(row, filter.column) === filter.value;
       if (filter.op === 'in') return filter.values.includes(value(row, filter.column) as string | number);
+      if (filter.op === 'notIn') return !filter.values.includes(value(row, filter.column) as string | number);
       return true;
     }),
   );

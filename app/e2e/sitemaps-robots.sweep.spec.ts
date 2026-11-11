@@ -67,18 +67,51 @@ async function walk(page: Page, grid: Locator, rowCount: number): Promise<Walked
 interface Sitemap {
   id: number;
   url: string;
+  parentId: number | null;
   state: string;
   entries: number;
   isIndex: boolean;
-  urls: { listed: number; fetched: number; indexable: number; nonIndexable: number };
+  /** `robotsDisallowed` and `redirectingOrBroken`: only from an engine that counts them for the list. */
+  urls: {
+    listed: number;
+    fetched: number;
+    indexable: number;
+    nonIndexable: number;
+    robotsDisallowed?: number;
+    redirectingOrBroken?: number;
+  };
 }
 
-const LIST_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'notCrawled', 'nonIndexable'];
+const LIST_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'blocked', 'notCrawled', 'nonIndexable'];
+
+/**
+ * What each count must be, from the API's own numbers and the screen's stated meaning (never the app's code):
+ * "Crawled" is what the crawl requested, so `fetched` less the URLs robots.txt refused; "Blocked by robots.txt" is
+ * those; "Not crawled" is what's listed and not `fetched`. Null where the engine doesn't count the refused URLs for
+ * the list: the screen must then show a dash, never `fetched` under the name "Crawled".
+ */
+function expectedCount(sitemap: Sitemap, count: SitemapCount): number | null {
+  const { listed, fetched, nonIndexable, indexable, robotsDisallowed } = sitemap.urls;
+  switch (count) {
+    case 'listed':
+      return listed;
+    case 'crawled':
+      return robotsDisallowed === undefined ? null : fetched - robotsDisallowed;
+    case 'blocked':
+      return robotsDisallowed ?? null;
+    case 'notCrawled':
+      return listed - fetched;
+    case 'indexable':
+      return indexable;
+    case 'nonIndexable':
+      return nonIndexable;
+  }
+}
 
 test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }) => {
   test.setTimeout(600_000);
   const crawl = await sweptCrawl();
-  const list = await read<{ sitemaps: Sitemap[] }>(`/api/crawls/${crawl.id}/sitemaps`);
+  const list = await read<{ discovery: string; sitemaps: Sitemap[] }>(`/api/crawls/${crawl.id}/sitemaps`);
   const matching = async (sitemapId: number, filters: readonly unknown[]) =>
     (
       await read<{ matching: number }>(`/api/crawls/${crawl.id}/sitemaps/urls`, {
@@ -89,10 +122,28 @@ test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }
       })
     ).matching;
 
+  // Whether a sitemap's counts are known: its own, once it was read (or failed after an entry); an index's, which
+  // are those of the sitemaps under it, only once the crawl has them all and has read each.
+  const ownKnown = (sitemap: Sitemap) => sitemap.state === 'read' || sitemap.entries > 0 || sitemap.urls.listed > 0;
+  const under = (id: number, seen = new Set<number>([id])): Sitemap[] =>
+    list.sitemaps
+      .filter((sitemap) => sitemap.parentId === id && !seen.has(sitemap.id))
+      .flatMap((child) => {
+        seen.add(child.id);
+        return [child, ...under(child.id, seen)];
+      });
+  const known = (sitemap: Sitemap) => {
+    if (!ownKnown(sitemap)) return false;
+    const below = under(sitemap.id);
+    if (!sitemap.isIndex && below.length === 0) return true;
+    return list.discovery === 'done' && below.every((each) => each.state !== 'notRead' && ownKnown(each));
+  };
+
   await page.goto(`/crawls/${crawl.id}/sitemaps`);
   await expect(page.getByRole('heading', { name: 'Sitemaps', level: 1 })).toBeVisible();
   let landings = 0;
   let asked = 0;
+  let dashes = 0;
   if (list.sitemaps.length > 0) {
     const tree = page.getByRole('treegrid', { name: 'Sitemaps' });
     await expect(tree.getByRole('row').nth(1)).toBeVisible();
@@ -103,18 +154,22 @@ test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }
       const sitemap = list.sitemaps.find((candidate) => candidate.url === row.cells[0]?.trim());
       expect(sitemap, `the row for ${row.cells[0] ?? ''}`).toBeTruthy();
       if (!sitemap) continue;
-      const known = sitemap.state === 'read' || sitemap.entries > 0 || sitemap.urls.listed > 0;
+      const said: Partial<Record<SitemapCount, number>> = {};
       for (const [at, count] of LIST_COUNTS.entries()) {
         const cell = (row.cells[3 + at] ?? '').trim();
         const where = `${sitemap.url}: ${count}`;
-        if (!known) {
-          // What it lists isn't known: a dash, never a 0, and nothing to follow.
+        const expected = known(sitemap) ? expectedCount(sitemap, count) : null;
+        const link = row.links.find((candidate) => candidate.name.endsWith(` ${labelOf(count)}`));
+        if (expected === null) {
+          // What it lists isn't known, or the engine doesn't count it: a dash, never a 0, and nothing to follow.
           expect(cell, where).toBe('–');
+          expect(link, where).toBeUndefined();
+          dashes++;
           continue;
         }
-        const said = countOf(cell);
-        const link = row.links.find((candidate) => candidate.name.endsWith(` ${labelOf(count)}`));
-        if (said === 0) {
+        expect(countOf(cell), where).toBe(expected);
+        said[count] = expected;
+        if (expected === 0) {
           // Nothing to open, so no link: what its link would open must be nothing.
           expect(link, where).toBeUndefined();
           expect(await matching(sitemap.id, COUNT_FILTERS[count]), where).toBe(0);
@@ -123,33 +178,54 @@ test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }
         }
         expect(link, where).toBeTruthy();
         if (!link) continue;
-        expect(countOf(link.text), where).toBe(said);
+        expect(countOf(link.text), where).toBe(expected);
         if (landings < MAX_LANDINGS) {
           await page.goto(link.href);
-          await expect(shownIn(main(page)), where).toHaveText(number(said));
+          await expect(shownIn(main(page)), where).toHaveText(number(expected));
           landings++;
         } else {
           const filter = new URL(link.href, 'http://app').searchParams.get('filter');
-          expect(await matching(sitemap.id, filter ? (JSON.parse(filter) as unknown[]) : []), where).toBe(said);
+          expect(await matching(sitemap.id, filter ? (JSON.parse(filter) as unknown[]) : []), where).toBe(expected);
           asked++;
         }
+      }
+      // Listed is what was crawled, what robots.txt blocked and what wasn't crawled, added up.
+      if (said.crawled !== undefined && said.blocked !== undefined && said.notCrawled !== undefined) {
+        expect(said.crawled + said.blocked + said.notCrawled, `${sitemap.url}: the three add up`).toBe(said.listed);
       }
     }
   }
 
-  // One sitemap's quick filters: each count on a filter is what choosing it lists.
+  // One sitemap's quick filters: each count on a filter is what choosing it lists, and "All" is the three that make
+  // it up. Where the list doesn't carry "Crawled" and "Blocked by robots.txt", the page counts them itself.
   for (const sitemap of list.sitemaps.filter((candidate) => candidate.urls.listed > 0).slice(0, 15)) {
     await page.goto(`/crawls/${crawl.id}/sitemaps/${sitemap.id}`);
     const show = main(page).getByRole('radiogroup', { name: 'Show' });
     await expect(shownIn(main(page))).toHaveText(number(sitemap.urls.listed));
-    for (const name of [/^All/, /^Not crawled/, /^Non-indexable/]) {
-      const option = show.getByRole('radio', { name });
+    const saidOf: Record<string, number> = {};
+    for (const name of ['All', 'Crawled', 'Blocked by robots.txt', 'Not crawled', 'Non-indexable']) {
+      const option = show.getByRole('radio', { name: new RegExp(`^${name.replace('.', '\\.')}`) });
+      // A count the page reads for itself comes a moment after the page.
+      await expect(option.locator('.si-segment__count'), `${sitemap.url}: ${name}`).toBeVisible();
       const said = countOf(await option.locator('.si-segment__count').innerText());
+      saidOf[name] = said;
       await option.click();
       await expect(option).toHaveAttribute('aria-checked', 'true');
-      await expect(shownIn(main(page)), `${sitemap.url}: ${String(name)}`).toHaveText(number(said));
+      await expect(shownIn(main(page)), `${sitemap.url}: ${name}`).toHaveText(number(said));
       landings++;
     }
+    expect(
+      (saidOf.Crawled ?? 0) + (saidOf['Blocked by robots.txt'] ?? 0) + (saidOf['Not crawled'] ?? 0),
+      `${sitemap.url}: crawled, blocked and not crawled add up to all`,
+    ).toBe(saidOf.All);
+    // What robots.txt blocked is exactly the URLs the engine stored as refused, and none of them is "crawled".
+    expect(saidOf['Blocked by robots.txt'], `${sitemap.url}: blocked`).toBe(
+      await matching(sitemap.id, [{ column: 'outcome', op: 'in', values: ['robotsDisallowed'] }]),
+    );
+    expect(saidOf.Crawled, `${sitemap.url}: crawled`).toBe(
+      (await matching(sitemap.id, [{ column: 'fetched', op: 'is', value: true }])) -
+        (saidOf['Blocked by robots.txt'] ?? 0),
+    );
   }
 
   // The site's pages no sitemap lists: said once a sitemap was read. What the sentence must say is the engine's own
@@ -194,7 +270,7 @@ test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }
     }
   }
   report(
-    `Sitemaps sweep: ${list.sitemaps.length} sitemaps, ${landings} landings followed, ${asked} asked of the engine`,
+    `Sitemaps sweep: ${list.sitemaps.length} sitemaps, ${landings} landings followed, ${asked} asked of the engine, ${dashes} dashes`,
   );
 });
 
@@ -202,6 +278,7 @@ function labelOf(count: SitemapCount): string {
   return {
     listed: 'listed',
     crawled: 'crawled',
+    blocked: 'blocked by robots.txt',
     notCrawled: 'not crawled',
     indexable: 'indexable',
     nonIndexable: 'non-indexable',

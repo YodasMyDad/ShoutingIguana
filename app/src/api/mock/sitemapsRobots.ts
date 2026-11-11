@@ -68,6 +68,9 @@ const NO_ORIGINS: RobotsOriginPage = {
   origins: [],
 };
 
+/** The outcomes of a listed URL that redirects or is broken, as the quick filter has them. */
+const BROKEN: readonly string[] = ['redirect', 'clientError', 'serverError', 'timeout', 'networkError'];
+
 /** A sitemap and every sitemap under it: what its grid lists. */
 function withDescendants(sitemaps: readonly Sitemap[], id: number, seen = new Set<number>()): number[] {
   if (seen.has(id)) return [];
@@ -113,6 +116,9 @@ export function sitemapsRobotsRoutes(mock: MockCrawls): MockRoute[] {
             fetched: count('fetched', true),
             indexable: count('indexable', true),
             nonIndexable: count('indexable', false),
+            // The two counts the engine is adding to the list (screens/sitemaps/sitemapLinks.ts reads them).
+            robotsDisallowed: rows.filter((row) => row.outcome === 'robotsDisallowed').length,
+            redirectingOrBroken: rows.filter((row) => row.outcome !== null && BROKEN.includes(row.outcome)).length,
           },
         };
       }),

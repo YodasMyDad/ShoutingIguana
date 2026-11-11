@@ -5,6 +5,7 @@ import { api } from './client';
 import type {
   CheckGroupRef,
   FacetsQuery,
+  GridFilter,
   GridPage,
   GridQuery,
   GridSort,
@@ -282,6 +283,9 @@ export const sitemapKeys = {
   /** One sitemap's URLs, as grid pages. */
   urls: (id: string, sitemapId: number, query: { sort: readonly GridSort[]; filters: readonly unknown[]; q: string }) =>
     ['grid', 'sitemapUrls', id, { sitemapId, ...query }] as const,
+  /** How many of one sitemap's URLs a filter selects: a count the list doesn't carry, read by the sitemap's page. */
+  count: (id: string, sitemapId: number, filters: readonly unknown[]) =>
+    ['grid', 'sitemapCount', id, { sitemapId, filters }] as const,
 };
 
 export const robotsKeys = {
@@ -309,6 +313,25 @@ export const sitemapsQuery = (id: string) =>
   queryOptions({
     queryKey: sitemapKeys.list(id),
     queryFn: ({ signal }) => api.sitemaps(id, signal),
+    staleTime: Infinity,
+  });
+
+/**
+ * How many of a sitemap's URLs a filter selects: the grid's own read, for its count alone. Keyed as a grid, so a
+ * running crawl refreshes it in place with the rows it counts.
+ */
+export const sitemapCountQuery = (id: string, sitemapId: number, filters: readonly GridFilter[]) =>
+  queryOptions({
+    queryKey: sitemapKeys.count(id, sitemapId, filters),
+    queryFn: async ({ signal }) =>
+      (
+        await api.sitemapUrls(
+          id,
+          sitemapId,
+          { columns: ['url'], filters: [...filters], sort: [], offset: 0, limit: 1 },
+          signal,
+        )
+      ).matching,
     staleTime: Infinity,
   });
 

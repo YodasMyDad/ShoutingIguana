@@ -79,20 +79,27 @@ function liveList(tick: number): SitemapList {
         state: 'pending',
         statusCode: null,
         entries: 0,
-        urls: { listed: 0, fetched: 0, indexable: 0, nonIndexable: 0 },
+        urls: { listed: 0, fetched: 0, indexable: 0, nonIndexable: 0, robotsDisallowed: 0, redirectingOrBroken: 0 },
       };
     const listed = sitemap.urls.listed * 1_000;
     const fetched = Math.min(listed, (tick - at) * 137);
     return {
       ...sitemap,
       entries: listed,
-      urls: { listed, fetched, indexable: Math.round(fetched * 0.9), nonIndexable: Math.round(fetched * 0.1) },
+      urls: {
+        listed,
+        fetched,
+        indexable: Math.round(fetched * 0.9),
+        nonIndexable: Math.round(fetched * 0.1),
+        robotsDisallowed: Math.round(fetched * 0.02),
+        redirectingOrBroken: Math.round(fetched * 0.05),
+      },
     };
   };
   const children = TEST_SITEMAPS.filter((sitemap) => sitemap.parentId === 1 && sitemap.state === 'read').map(
     (sitemap, index) => grow(sitemap, index * 3),
   );
-  const sum = (key: keyof Sitemap['urls']) => children.reduce((total, child) => total + child.urls[key], 0);
+  const sum = (key: keyof Sitemap['urls']) => children.reduce((total, child) => total + (child.urls[key] ?? 0), 0);
   const index: Sitemap = {
     ...TEST_SITEMAPS[0]!,
     sitemaps: children.length,
@@ -101,6 +108,8 @@ function liveList(tick: number): SitemapList {
       fetched: sum('fetched'),
       indexable: sum('indexable'),
       nonIndexable: sum('nonIndexable'),
+      robotsDisallowed: sum('robotsDisallowed'),
+      redirectingOrBroken: sum('redirectingOrBroken'),
     },
   };
   return { discovery: 'running', summary: without('crawling'), sitemaps: [index, ...children] };

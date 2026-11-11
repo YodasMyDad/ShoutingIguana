@@ -5,7 +5,7 @@ import { useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { api } from '../../api/client';
 import { isProblem, missingPlaceWords } from '../../api/errors';
 import type { GridFilter, GridSort, Sitemap, SitemapList, UrlRow } from '../../api/grids';
-import { sitemapKeys, urlColumnsQuery } from '../../api/queries';
+import { sitemapCountQuery, sitemapKeys, urlColumnsQuery } from '../../api/queries';
 import { analyseCrawl } from '../../crawl/actions';
 import type { CrawlState } from '../../crawl/useCrawlState';
 import { announce } from '../../feedback/announce';
@@ -153,12 +153,28 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
   const clearView = () => void navigate({ params: here, search: (previous) => ({ inspect: previous.inspect }) });
 
   const quick = quickFilterOf(filters);
+  // "Crawled" and "Blocked by robots.txt" need the engine's count of the URLs robots.txt refused. An engine that
+  // doesn't give it with the list leaves this page to count the two itself: the grid's own read under each filter,
+  // for its count alone, refreshed with the crawl as the grid is. With the count in the list, nothing more is read.
+  const countsHere = sitemapId !== null && sitemap !== undefined && quickFilterCount(sitemap, 'blocked') === null;
+  const crawledHere = useQuery({
+    ...sitemapCountQuery(crawlId, sitemapId ?? 0, quickFilterFilters('crawled')),
+    enabled: countsHere,
+  }).data;
+  const blockedHere = useQuery({
+    ...sitemapCountQuery(crawlId, sitemapId ?? 0, quickFilterFilters('blocked')),
+    enabled: countsHere,
+  }).data;
   // A count on a quick filter and the header's count of the same URLs are one read's: the grid's own, once it's
   // known. The others are the list's, which nothing else on screen states.
   const quickCount = (option: QuickFilter): number | null => {
     if (option === 'listed' && rows.unfilteredTotal !== null) return rows.unfilteredTotal;
     if (option === quick && !q && rows.rowCount !== null) return rows.rowCount;
-    return sitemap ? quickFilterCount(sitemap, option) : null;
+    const listed = sitemap ? quickFilterCount(sitemap, option) : null;
+    if (listed !== null) return listed;
+    if (option === 'crawled') return crawledHere ?? null;
+    if (option === 'blocked') return blockedHere ?? null;
+    return null;
   };
 
   const onCopy = (result: GridCopyResult) => {

@@ -19,6 +19,7 @@ import {
   TEST_SITEMAP_LIST,
   sitemapsRobotsRoutes,
   testSitemap,
+  withoutNewCounts,
   type SitemapsRobotsOptions,
 } from '../test/sitemapsRobotsSidecar';
 import { resetPlaces } from './listPlace';
@@ -87,7 +88,7 @@ describe('Sitemaps: the list', () => {
     sidecar();
     await open(SITEMAPS);
     const failed = await waitFor(() => rowOf(`${SITE}/sitemaps/missing.xml`));
-    expect(within(failed).getAllByText('–')).toHaveLength(4);
+    expect(within(failed).getAllByText('–')).toHaveLength(5);
     expect(within(failed).queryByRole('link')).toBeNull();
   });
 
@@ -105,17 +106,145 @@ describe('Sitemaps: the list', () => {
     ]);
     const hrefs = links.map((link) => decodeURIComponent(link.getAttribute('href') ?? ''));
     expect(hrefs[0]).toBe(`${SITEMAPS}/3`);
-    expect(hrefs[2]).toContain(`${SITEMAPS}/3?filter=`);
+    // Crawled: what the crawl is done with, less what robots.txt refused.
+    expect(hrefs[1]).toContain(`${SITEMAPS}/3?filter=`);
+    expect(hrefs[1]).toContain('"column":"fetched","op":"is","value":true');
+    expect(hrefs[1]).toContain('"column":"outcome","op":"notIn","values":["robotsDisallowed"]');
     expect(hrefs[2]).toContain('"column":"fetched","op":"is","value":false');
     expect(hrefs[3]).toContain('"column":"indexable","op":"is","value":false');
-    // The news sitemap's URLs were all crawled: nothing to open behind "not crawled".
+    // The news sitemap's URLs were all crawled: nothing to open behind "blocked", "not crawled" or "non-indexable".
     const news = rowOf(`${SITE}/news-sitemap.xml`);
     expect(
       within(news)
         .getAllByRole('link')
         .map((link) => link.textContent),
     ).toEqual(['2', '2']);
-    expect(within(news).getAllByText('0')).toHaveLength(2);
+    expect(within(news).getAllByText('0')).toHaveLength(3);
+  });
+
+  it('counts what the crawl requested as crawled, and what robots.txt kept it from apart: the three add up to listed', async () => {
+    sidecar();
+    const { router } = await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    expect(
+      within(tree)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual([
+      'Sitemap',
+      'Found via',
+      'Status',
+      'Listed',
+      'Crawled',
+      'Blocked by robots.txt',
+      'Not crawled',
+      'Non-indexable',
+    ]);
+    // The old sitemap lists three URLs: one that timed out (requested, so crawled), one robots.txt refused (the
+    // engine is done with it, and never requested it) and one never reached.
+    const old = await waitFor(() => rowOf(`${SITE}/old-sitemap.xml`));
+    const links = within(old).getAllByRole('link');
+    expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
+      '3 URLs listed',
+      '1 URL crawled',
+      '1 URL blocked by robots.txt',
+      '1 URL not crawled',
+      '2 URLs non-indexable',
+    ]);
+    // The engine's `fetched` is 2: it's never shown as "crawled".
+    expect(within(old).queryByRole('link', { name: '2 URLs crawled' })).toBeNull();
+    // What robots.txt blocked lands on exactly that URL, under the filter of that name.
+    fireEvent.click(within(old).getByRole('link', { name: '1 URL blocked by robots.txt' }));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/6`));
+    expect(searchOf(router).filter).toEqual([{ column: 'outcome', op: 'in', values: ['robotsDisallowed'] }]);
+    const show = await screen.findByRole('radiogroup', { name: 'Show' });
+    expect(within(show).getByRole('radio', { name: /^Blocked by robots\.txt/ })).toBeChecked();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() => expect(grid).toHaveAttribute('aria-rowcount', '2'));
+    expect(rowOf(`${SITE}/legacy/private`).querySelector('[aria-colindex="2"]')).toHaveTextContent(
+      'Blocked by robots.txt',
+    );
+    // And "crawled" on the one that was requested, which says what became of it: never "Crawled" for an outcome.
+    fireEvent.click(within(show).getByRole('radio', { name: /^Crawled/ }));
+    await waitFor(() =>
+      expect(searchOf(router).filter).toEqual([
+        { column: 'fetched', op: 'is', value: true },
+        { column: 'outcome', op: 'notIn', values: ['robotsDisallowed'] },
+      ]),
+    );
+    await waitFor(() => expect(screen.queryByText(`${SITE}/legacy/private`)).toBeNull());
+    expect(rowOf(`${SITE}/legacy/slow`).querySelector('[aria-colindex="2"]')).toHaveTextContent('Timed out');
+    // Each quick filter carries its count, the list's: all, crawled, blocked, not crawled, non-indexable, broken.
+    expect(
+      within(show)
+        .getAllByRole('radio')
+        .map((radio) => radio.textContent),
+    ).toEqual([
+      'All 3',
+      'Crawled 1',
+      'Blocked by robots.txt 1',
+      'Not crawled 1',
+      'Non-indexable 2',
+      'Redirecting or broken 1',
+    ]);
+  });
+
+  it('shows a dash that says why, never the engine’s “done with” number, where the engine doesn’t count what robots.txt refused', async () => {
+    // An engine from before the list carried the two counts.
+    const { transport } = sidecar({
+      sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: TEST_SITEMAPS.map(withoutNewCounts) },
+    });
+    const { router } = await open(SITEMAPS);
+    const old = await waitFor(() => rowOf(`${SITE}/old-sitemap.xml`));
+    const cells = [...old.querySelectorAll('[role="gridcell"]')].slice(3).map((cell) => cell.textContent);
+    // Listed, Crawled, Blocked by robots.txt, Not crawled, Non-indexable.
+    expect(cells).toEqual(['3', '–', '–', '1', '2']);
+    for (const dash of within(old).getAllByText('–')) {
+      expect(dash).toHaveAttribute(
+        'title',
+        expect.stringContaining('doesn’t count, for each sitemap, the URLs robots.txt refused'),
+      );
+    }
+    expect(
+      within(old)
+        .queryByRole('link', { name: /crawled$/ })
+        ?.getAttribute('aria-label'),
+    ).toBe('1 URL not crawled');
+    // Its own page counts them, each by a read of its own under that filter.
+    fireEvent.doubleClick(within(old).getByText(`${SITE}/old-sitemap.xml`));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/6`));
+    const show = await screen.findByRole('radiogroup', { name: 'Show' });
+    await waitFor(() =>
+      expect(
+        within(show)
+          .getAllByRole('radio')
+          .map((radio) => radio.textContent),
+      ).toEqual([
+        'All 3',
+        'Crawled 1',
+        'Blocked by robots.txt 1',
+        'Not crawled 1',
+        'Non-indexable 2',
+        'Redirecting or broken',
+      ]),
+    );
+    const counted = gridRequests(transport).filter((request) => request.limit === 1);
+    expect(counted.map((request) => request.filters)).toEqual(
+      expect.arrayContaining([
+        [{ column: 'outcome', op: 'in', values: ['robotsDisallowed'] }],
+        [
+          { column: 'fetched', op: 'is', value: true },
+          { column: 'outcome', op: 'notIn', values: ['robotsDisallowed'] },
+        ],
+      ]),
+    );
+  });
+
+  it('asks for no count of its own when the list carries them', async () => {
+    const { transport } = sidecar();
+    await open(`${SITEMAPS}/6`);
+    await screen.findByText(`${SITE}/legacy/slow`);
+    expect(gridRequests(transport).filter((request) => request.limit === 1)).toEqual([]);
   });
 
   it('lands each count on exactly its URLs: the grid it opens counts what the list said', async () => {
@@ -142,7 +271,7 @@ describe('Sitemaps: the list', () => {
     const { router } = await open(SITEMAPS);
     const row = await waitFor(() => rowOf(index.url));
     // Its counts are its sitemaps', which the crawl never read: not known, so not 0.
-    expect(within(row).getAllByText('–')).toHaveLength(4);
+    expect(within(row).getAllByText('–')).toHaveLength(5);
     expect(within(row).queryByRole('link')).toBeNull();
     expect(within(row).queryByText('0')).toBeNull();
     // How many sitemaps it lists isn't known either: it's an index, with what the crawl has of it said in words.
@@ -182,7 +311,7 @@ describe('Sitemaps: the list', () => {
     sidecar();
     await open(SITEMAPS);
     const index = await waitFor(() => rowOf(`${SITE}/sitemap.xml`));
-    expect(within(index).getAllByText('–')).toHaveLength(4);
+    expect(within(index).getAllByText('–')).toHaveLength(5);
     expect(within(index).getByText('Index of 3')).toBeVisible();
     expect(within(index).getByText('Read, 2 of its 3 sitemaps')).toHaveAttribute(
       'title',
@@ -536,7 +665,8 @@ describe('Sitemaps: one sitemap', () => {
     expect(within(rowOf(`${SITE}/p/unreached`)).getByText('Not crawled')).toBeVisible();
     const outcome = (url: string) => rowOf(url).querySelector('[aria-colindex="2"]');
     expect(outcome(`${SITE}/p/gone`)).toHaveTextContent('Client error');
-    expect(outcome(`${SITE}/contact`)).toHaveTextContent('Crawled');
+    // The inspector's word for a URL that answered: "Crawled" is the count's, for what the crawl requested.
+    expect(outcome(`${SITE}/contact`)).toHaveTextContent('Answered');
   });
 
   it('narrows to what people come for with a quick filter, says the count once, and keeps it in the route', async () => {
