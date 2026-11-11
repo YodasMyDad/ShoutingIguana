@@ -203,7 +203,9 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
 - While a crawl runs, its open grids' counts and rows refresh in place at most once a second (the bridge, on
   `progress`): never cancelling a page still on its way, with no skeleton and no progress line, and a "Live" mark by
   the count. The URL open in the inspector (`['crawl', id, 'inspect', …]`) refreshes with them, so a queued URL fills
-  in once it's fetched, and its tabs' link counts with it; its links are grids, and refresh as grids do.
+  in once it's fetched, and its tabs' link counts with it; its links are grids, and refresh as grids do. A window
+  nobody can see (`document.hidden`) is left alone, for every grid: the bridge reads nothing for it, as the live store
+  holds its renders back, and the crawls that ticked meanwhile refresh once, at the moment the window is shown again.
 - A count the stream sends malformed is null, shown as "–", never 0. A status the contract doesn't have is dropped.
 - E4's part of a progress event is read at the same boundary (`LiveProgressDetail`): when it was taken, the phase,
   the site's own counts, the URL limit (null is "no limit", undefined "not said"), the status classes and codes, why
@@ -426,7 +428,7 @@ screen, and one that a second screen needs moves here.
 | A hint | `Tooltip`: on hover after a rest, at once on keyboard focus, with the command's keys. Never the only place something is said. It describes its trigger by what the trigger's name lacks (`triggerName`: the hint, the keys), or not at all, so nothing is read twice; keycaps inside a control are `aria-hidden`, its keys given as `aria-keyshortcuts` |
 | Text input | `TextField` (label, description, inline error, read-only, disabled, `lg` for Home's URL field) and `SearchField` (clear and Esc, the key that focuses it). Errors are inline, never toasts |
 | A choice | `Checkbox` for a form's choice, `Switch` for one that applies at once, `SegmentedControl` for one of a few in view (counts and icon-only segments, a `description` per segment for what it means; the arrows choose), `Select` for one of a short list, `Tabs` for views of one thing |
-| More actions | `DropdownMenu` and `ContextMenu` share `MenuItem` (with `command`, its keys on the right and disabled when it can't run), `MenuCheckboxItem`, `MenuRadioItem`, `MenuSeparator`, `MenuLabel`; a `MenuItem`'s `detail` is what it would give (a facet value's count), read with its name. `Popover` for content from a button, or from an `anchor` that something else opens (a filter chip's editor; focus goes back to the anchor); `Dialog` for what can't wait, `ConfirmDialog` only for what can't be undone (a failed action keeps it open, saying why inside it) |
+| More actions | `DropdownMenu` and `ContextMenu` share `MenuItem` (with `command`, its keys on the right and disabled when it can't run), `MenuCheckboxItem`, `MenuRadioItem`, `MenuSeparator`, `MenuLabel`; a `MenuItem`'s `detail` is what it would give (a facet value's count), read with its name. `Popover` for content from a button, or from an `anchor` that something else opens (a filter chip's editor; focus goes back to the anchor); it opens with the keyboard in the first control of what it holds, or the one its content marks `data-autofocus` (the value of a filter being changed), never on its head's Close button; `Dialog` for what can't wait, `ConfirmDialog` only for what can't be undone (a failed action keeps it open, saying why inside it) |
 | Severity | `SeverityMark` (shape and colour, the word its name) in dense rows; `SeverityBadge` (with the word) wherever there's room; `SeverityCount(s)` for counts. Notices are the quietest |
 | Status | `StatusPill` for a crawl's status (the words of `crawl/status.ts`), `LiveBadge` and `LiveDot` for what updates live, `StatusCode` for a status code's class (only that meaning), `Badge` for a label without colour (`dashed`: what didn't happen) |
 | Filters | `FilterChip` reads as a sentence, opens its editor, goes with ✕ or Delete (focus moves on to the next chip, else the one before, else Add filter); `AddFilterChip`; the `preview` chip beside a number that opens its URLs |
@@ -789,9 +791,15 @@ full grid's pieces, which are any grid's (below). What it settled:
   a sentence), `linkColumns.tsx` (what's shown, what the query asks for to draw it, how each cell reads),
   `presets.ts`, `facets.ts`, `readCost.ts` (which reads pass over every link), `states.ts` (what each state says) and
   `linkPlaces.ts` (where other screens land here). All unit-tested (`links.test.ts`).
-- **The route holds the view**: `filter`, `q`, `sort`, `cols` and `inspect`, checked by `validateLinksSearch`, which
-  takes the links' columns (`to.statusClass`, `from.depth`) and one sort key, as the engine sorts links. A filter, a
-  search, a preset and a facet's value are each a new place (back retraces them); a sort and the columns replace.
+- **The route holds the view**: `filter`, `q`, `sort`, `cols`, `inspect` and `end`, checked by `validateLinksSearch`,
+  which takes the links' columns (`to.statusClass`, `from.depth`) and one sort key, as the engine sorts links. A
+  filter, a search, a preset and a facet's value are each a new place (back retraces them); a sort and the columns
+  replace. `end=from` beside `inspect` says the inspector is on the page a link is on, and follows the cursor down the
+  sources; a target, the default, has no word. It is set in the same step as the URL (`Inspector.open(urlId, more)`),
+  so a reload, back, forward and a link to the view keep following the end they were on.
+- **A sort goes with its column.** A sort is seen and changed at its column's header, so hiding the column drops a
+  sort by it in the same step (`sortShown`), and a view that arrives sorted by a column it doesn't show has the sort
+  dropped from its route, in place, before anything is read by it.
 - **The columns are the engine's** (`/api/link-columns`): their types say how a cell is drawn, which sort and which
   need the analysis. Their names are the app's: a link's own, and each end's as the URL grid names that column under
   "Source" or "Target" ("Target status", "Source H1": `grid/urlFilterWords.ts` now names every URL grid column). A
@@ -812,14 +820,20 @@ full grid's pieces, which are any grid's (below). What it settled:
 - **Facets are one read** of `/links/facets` under the view's own filters and search, so each facet's counts add up
   to the links in view and are of one moment of a running crawl. Choosing a value puts the engine's own `filter` for
   it in the route, in place of any filter on the same column (the values counted are the ones that filter left, so
-  the new one says all the old one did): the grid then holds exactly the value's count. The facets' key is among
-  the grids' (`['grid', 'linkFacets', …]`), so a running crawl's refresh moves them with the rows.
+  the new one says all the old one did): the grid then holds exactly the value's count. **They are read when a facet
+  menu opens, and never before**: a count is a pass over the view's links (on a running crawl about 200 ms a million:
+  46 ms at 43k links, 200 ms at 1M, 298 to 386 ms at 1.6M, measured on a crawl of the test site, against 2 to 33 ms
+  for page 0), and nothing but an open menu shows it. The presets and the facets' buttons draw without it; the menu
+  says "Counting…" until it comes. The facets' key is among the grids' (`['grid', 'linkFacets', …]`), so while a menu
+  is open a running crawl's refresh keeps the counts fresh, and with the menus closed it only marks them stale.
 - **Each end is a place.** A URL in a row opens the inspector on it; Enter opens the end the cursor's column is of
   (the page the link is on from one of its columns, the target from anywhere else), a double-click likewise. While
-  the inspector is open it follows the cursor down the same end, in place, as it follows the URL grid's rows.
-- **From the inspector**: Inlinks and Outlinks have "All N in Links", the same links here: `to.id` (or `from.id`) is
-  the URL, the kind chosen stays, and `selfLink` is no, because the inspector's lists leave out a page's links to
-  itself and the links grid doesn't. N is the section's own count, and the grid's (the sweep checks it). The
+  the inspector is open it follows the cursor down the same end, in place, as it follows the URL grid's rows. Which
+  end is the route's (`end`), never the screen's own state.
+- **From the inspector**: Inlinks and Outlinks have "All N in Links" ("Show it in Links" for one link, never "All
+  1"), the same links here: `to.id` (or `from.id`) is the URL, the kind chosen stays, and `selfLink` is no, because
+  the inspector's lists leave out a page's links to itself and the links grid doesn't. N is the section's own count,
+  and the grid's (the sweep checks it). The
   summary's "N hyperlinks" is not a link here: it is the analysis's count, of the links on the pages it audited, and
   differs from the links stored by one or two for a heavily linked page (24 of 200 URLs sampled on the 100k crawl).
 - **No "show these pages in URLs".** The source pages or the targets of a filtered set of links can't be asked of
@@ -834,17 +848,39 @@ full grid's pieces, which are any grid's (below). What it settled:
   read up (its request is aborted, as any page nobody waits for is).
 - **Another column keeps the grid's place.** The rows are asked for again with it, and the count of the same view
   stands meanwhile, so the grid keeps its scroll, its cursor and its rows' places instead of a skeleton.
+- **The engine is the judge of a filter.** The editor checks only what it can know (a number, a range's ends, some
+  text of at most 1,000 characters); a pattern goes to the engine as typed, which runs .NET's regular expressions
+  (inline options such as `(?m)`, `(?s)`, `(?x)` and `a(?i)b` among them, which a browser can't compile). One the
+  engine won't run comes back as `invalid-query` with its sentence keyed by the filter's path (`filters[1].value`):
+  the rows' place then names the filter and shows the engine's own sentence, with "Change the filter" (the chip's
+  editor opens on the value, the sentence under it until it's changed) and "Remove the filter". The other filters,
+  the search, the sort and the columns stay. A query refused for anything else shows the engine's sentence with
+  "Reset the view". A filter by an end's check (`to.check`) reads as the check's title, as the URL grid's chip does
+  (`grid/useCheckWords.ts`). A view takes the 20 filters a query does: at 20, "Add filter" says why it takes no more,
+  and a facet's value that would be the twenty-first says so in a toast instead of being dropped on the way to the
+  route.
+- **A short window scrolls the screen.** Links and URLs share a frame (`grid/GridScreen.tsx`): the toolbars keep
+  their own height, and the grid takes the rest, never less than its header, five rows and its scrollbar (`GridCore`'s
+  `minRows`), nor less than all its empty state says. At 200% zoom of 1280x720 (640x360) the toolbars wrap onto four
+  rows and the screen is taller than the window: the main region scrolls to the grid, where five rows are whole, and
+  "No links match" with its Clear is whole in the window (`e2e/grid-zoom.spec.ts` measures both screens there).
 - **States**, each a story under Screens/Links: first load, refreshing, live (links arrive, the count and the
-  facets move, nothing jumps, the cursor stays), never analysed, continued since its analysis, analysed by another
-  version (each says what still works here and what waits, with Analyse it or Analyse again), a filter that needs an
-  analysis there isn't, no links, none yet, none matching (the filters, and one press to clear them), a slow read, a
-  read error, the engine's list of columns unreadable (the links are still listed; sorting, Add filter and Columns
-  aren't offered, and a banner says so with Try again), a huge anchor text, a link to a URL never fetched, and five
-  million links.
+  facets move, nothing jumps, the cursor stays), never analysed, being analysed (it says so, with nothing to press:
+  never "hasn't been analysed yet"), continued since its analysis, analysed by another version (each says what still
+  works here and what waits, with Analyse it or Analyse again), a filter that needs an analysis there isn't (its
+  button worded by the reason, `analyseWords`: "Analyse again" for a crawl analysed before), a filter the engine
+  refuses and its editor, a query it refuses, a view with all the filters it takes, no links, none yet, none matching
+  (the filters, and one press to clear them), a slow read, a read error, the engine's list of columns unreadable (the
+  links are still listed; sorting, Add filter and Columns aren't offered, and a banner says so with Try again), a
+  huge anchor text, a link to a URL never fetched, and five million links.
 - **Its commands** are the registry's Links group: Ctrl+F searches the links, Ctrl+Shift+C copies the target URLs,
   and the palette has the source URLs, the column the cursor is in, each preset ("Show broken links"), Add a filter,
   Choose the columns and Clear. A copy reads the whole view by cursor, 1,000 rows at a time as far as 10,000
-  (`grid/copyAll.ts`), with progress and Cancel in a toast when it takes more than a moment.
+  (`grid/copyAll.ts`), with progress and Cancel in a toast when it takes more than a moment. The URLs copied are the
+  distinct ends of the links it read, so on a view of more than 10,000 links each copy is named for what it is ("Copy
+  the first 10,000 links' target URLs", `links/copyWords.ts`) and says whose URLs it copied before how many ("Copied
+  the first 10,000 links' target URLs. 1 URL, each once. The view has 583,554 links…"). A view's distinct ends need
+  the engine.
 - **Tested** against the real sidecar (`e2e/links.spec.ts`, on the synthetic crawl's planted links) and swept
   (`e2e/links-sweep.spec.ts`): the header's count under each view, every value of every facet under each view, and
   "All N in Links" both ways, each against where it lands and against the sidecar's own count for that view. It runs
@@ -873,16 +909,34 @@ In `src/grid`, for any grid; Links is the first to use them all, and the URL gri
 - **`FilterBar` and `FilterChips`**: a view's filters as chips that read as sentences, each removable (focus goes
   to the next chip, else Add filter), its quick filters before them, "Add filter" and "Clear filters". Given what a
   filter can be on (`FilterColumn`s in groups), a chip the editor can hold opens it; one it can't (a URL named by
-  its id, a check's group) is read and removed.
+  its id, a check's group) is read and removed. The view can open a chip's editor too (`editing`,
+  `onEditingChange`), hand it the filter the engine refused (`refused`), and say how many filters it takes
+  (`maxFilters`: at the limit "Add filter" says why, in place of the editor).
 - **`FilterEditor`** (`filterEditing.ts` has its rules): what it's on, how it compares, and with what, by the
   column's type: a number or a range, text or a pattern, some of an enum's values, yes or no, empty or not. Nothing
-  is applied until Apply or Enter; what's wrong is said under the field it's wrong in. A column the analysis fills
-  is listed, and can't be chosen without one. It sits in a `Popover` that floats from the chip (`anchor`: something
-  else opens it, and focus goes back to the chip when it closes) or from Add filter.
+  is applied until Apply or Enter; what the editor can tell is wrong is said under the field it's wrong in, and what
+  only the engine can judge (a pattern) is applied: `refusal` is the engine's sentence for a filter it wouldn't run,
+  shown under the value until the filter is changed. Under a text value it says how the engine matches it
+  (`matchHint`): A to Z in either case, every other letter only as typed, which is SQLite's `LIKE` (on a crawl with
+  accented anchor texts "contains menu" found "MENU" and "contains été" didn't find "ÉTÉ"); a pattern tells capitals
+  from small letters unless it starts `(?i)`, which folds every letter. A column the analysis fills is listed, and
+  can't be chosen without one. It sits in a `Popover` that floats from the chip (`anchor`: something else opens it,
+  and focus goes back to the chip when it closes) or from Add filter; a new filter starts in its first field, a
+  filter being changed in its value.
+- **`RefusedFilter`** and `refusedFilter` (`filterEditing.ts`): a filter the engine wouldn't run, found from the
+  `invalid-query` answer's field paths, as a state in the rows' place: the filter as its chip reads, the engine's
+  sentence, "Change the filter" and "Remove the filter". `ErrorState` takes a plain `description` for it.
+- **`GridScreen` and `GridScreenBody`**, with `GridCore`'s `minRows`: the frame of a screen that is one grid under
+  its toolbars. The toolbars keep their height; the grid takes the rest and never less than `minRows` rows (and all
+  its empty state says); a window too short for both scrolls the main region. Any screen laid out as toolbars over a
+  grid takes them instead of its own `flex h-full` column.
 - **`ColumnChooser`**: every column the view can show, grouped, with a search; a tick applies at once and a column
   ticked goes last. The last column shown can't be unticked.
 - **`FacetMenu`**: a facet as a menu of values with their counts (`MenuItem`'s `detail`), read with each value's
-  name; counting, failed (with Try again) and nothing to count each say so.
-- **`copyAll`**: what a whole view holds, read by cursor.
-- **`NeedsAnalysis`, `summaryWords.ts`, `useUrlWords`**: the URL grid's words for a column that waits for an
-  analysis, its state for a filter on one, and a URL's words by its id, moved here from the URL grid's screen.
+  name; counting, failed (with Try again) and nothing to count each say so. `onOpenChange` tells the view when to
+  count: only while a menu is open.
+- **`copyAll`**: what a whole view holds, read by cursor. `truncated` words a copy of a part of the view whose count
+  isn't a count of rows.
+- **`NeedsAnalysis`, `summaryWords.ts`, `useUrlWords`, `useCheckWords`**: the URL grid's words for a column that
+  waits for an analysis (and for one being analysed now), its state for a filter on one, with the button worded by
+  the reason (`analyseWords`), and a URL's or a check's words by its id, moved here from the URL grid's screen.
