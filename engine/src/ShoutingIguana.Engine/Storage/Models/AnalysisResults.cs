@@ -1,5 +1,6 @@
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using NoScore = ShoutingIguana.Engine.Analysis.Models.NoScoreReason;
 
 namespace ShoutingIguana.Engine.Storage.Models;
 
@@ -17,6 +18,24 @@ public sealed record AnalysisResults(
     IReadOnlyList<string> Notes,
     IReadOnlyList<SkippedCheck> Skipped)
 {
+    /// <summary>
+    /// The score the analysis stored, with all it takes to show how it was worked out. Null when there is none:
+    /// <see cref="NoScoreReason"/> says why.
+    /// </summary>
+    public SiteScore? Score { get; init; }
+
+    /// <summary>
+    /// Why there's no score, or null when there is one: as <see cref="AnalysisInfo.NoScoreReason"/> says, and a score
+    /// this engine can't read (a later engine's) is no score either.
+    /// </summary>
+    public NoScoreReason? NoScoreReason => Score is not null ? null : Analysis.NoScoreReason ?? NoScore.NotScored;
+
+    /// <summary>
+    /// The checks that found something, in the order to fix them (<see cref="FixFirstOrder"/>): the most severe, then the
+    /// most URLs flagged, then catalog order. Checks the user has hidden in the app are in it.
+    /// </summary>
+    public IReadOnlyList<string> FixFirst => FixFirstOrder.Of(Counts);
+
     /// <summary>Why the analysis no longer stands, if it doesn't, as of the snapshot.</summary>
     /// <param name="settings">The thresholds an analysis would run with now.</param>
     public IReadOnlyList<OutOfDateReason> OutOfDate(AnalysisSettings settings) => AnalysisFreshness.Check(Analysis, CrawlUpdatedAt, settings);

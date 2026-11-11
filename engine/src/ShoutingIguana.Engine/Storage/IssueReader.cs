@@ -77,7 +77,10 @@ public static class IssueReader
             ReadCrawlUpdatedAt(connection, snapshot),
             ReadCounts(connection, snapshot),
             ReadNotes(connection, snapshot),
-            ReadSkippedChecks(connection, snapshot, analysis));
+            ReadSkippedChecks(connection, snapshot, analysis))
+        {
+            Score = ReadScore(connection, snapshot, analysis)
+        };
     }
 
     /// <summary>One page of the URLs flagged with an issue, in crawl order.</summary>
@@ -221,8 +224,46 @@ public static class IssueReader
             Settings = ReadSettings(Text("settings_json")),
             CrawlUpdatedAt = Number("crawl_updated_at") is { } updatedAt ? DateTimeOffset.FromUnixTimeMilliseconds(updatedAt) : null,
             AnalysisVersion = Number("analysis_version") is { } version ? (int)version : null,
-            ChecksFingerprint = Text("checks_fingerprint")
+            ChecksFingerprint = Text("checks_fingerprint"),
+            CrawledUrlCount = Number("crawled_urls"),
+            ScoreVersion = Number("score_version") is { } scoreVersion ? (int)scoreVersion : null,
+
+            // A number no engine stores (a crafted file's) is no score.
+            Score = Number("score") is >= 0 and <= 100 and var score
+                ? new SiteScoreSummary((int)score, ScoreCalculator.BandOf((int)score), Number("score_partial") is not (null or 0))
+                : null
         };
+    }
+
+    /// <summary>
+    /// The whole score the analysis stored, or null when it stored none (it read no page, or an engine from before the
+    /// score ran it) or stored one this engine can't read (a later engine's, with values it doesn't know).
+    /// </summary>
+    private static SiteScore? ReadScore(SqliteConnection connection, SqliteTransaction? transaction, AnalysisInfo analysis)
+    {
+        // The headline is read from the same row: without one there is no score, whatever else the row holds.
+        if (analysis.Score is null)
+        {
+            return null;
+        }
+
+        using var command = Command(connection, transaction, "SELECT score_json FROM analysis WHERE id = 1");
+        if (command.ExecuteScalar() is not string json)
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize(json, EngineJsonContext.Default.SiteScore) is { Covers: not null, Lines: not null, IfFixed.CheckIds: not null } score &&
+                   score.Lines.All(line => line?.CheckId is not null) && score.IfFixed.CheckIds.All(id => id is not null)
+                ? score
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Files analysed by an older engine may lack tables added since.</summary>
