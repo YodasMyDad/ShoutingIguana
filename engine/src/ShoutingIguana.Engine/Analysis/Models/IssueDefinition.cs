@@ -45,6 +45,12 @@ public sealed record IssueDefinition(
     public bool SiteWide { get; init; }
 
     /// <summary>
+    /// The check in plain words (<see cref="IssuePlainTexts"/>), or null while it has none. Not part of
+    /// <see cref="AnalysisFreshness.ChecksFingerprint"/>, nor of what an analysis stores.
+    /// </summary>
+    public IssuePlainText? Plain => IssuePlainTexts.Find(Id);
+
+    /// <summary>
     /// For a check grouped by detail whose detail is each page's own instance of a fault (the href of its relative canonical,
     /// a JSON parser's message saying where in the block it failed): the fault the detail shows, which its groups are by
     /// instead, so a fault in the site's template is one group. The analysis stores it beside each issue, and the issue keeps
