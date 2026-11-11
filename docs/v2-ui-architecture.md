@@ -959,6 +959,17 @@ the engine's own answers): a sitemap index's counts filled in place, the origin'
 and list went from 0 to 10 within about a second of the engine, the Live mark showed throughout, the list of
 sitemaps kept its height, and the loading frame never came back.
 
+Watched again on 11 Nov 2026, after the review's fixes (the dev build and the real sidecar, sampled four times a
+second): through a crawl of the synthetic site the list of sitemaps kept its top edge (208 px from the first frame
+with rows; before, it moved from 156 to 208 px when the note on the crawl's own judgement mounted) and no banner
+was a live region; the blocked URLs kept theirs (243 px) while the list went from none to ten. On a crawl of a
+small local site with a robots.txt of 500 KB (10,468 lines, 1.36 MB as the engine answers it) the file was read 4
+times in 25 s, where the once-a-second refresh read it 25 times, and its rule and the list still moved together
+(5 URLs, then 10). That site's sitemap lists ten URLs its robots.txt disallows: the engine's `fetched` is 312 of
+312, and the sitemap's page says Crawled 302, Blocked by robots.txt 10, Not crawled 0. While the engine doesn't
+count the refused URLs for the list, one sitemap's page makes up to 4 reads of its grid a second during a crawl
+(the rows, and a count each for crawled and blocked) where it made 2.
+
 ### The sweep
 
 `e2e/sitemaps-robots.sweep.spec.ts` reads every count off both screens and follows it: each sitemap's five counts
