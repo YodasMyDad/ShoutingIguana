@@ -1043,12 +1043,16 @@ The UI lists a `none` check's URLs flat (`/rows` below), with the detail as a co
 
 ```json
 {"checkId":"empty-anchor-text","grouping":"relatedUrl","total":265,"groupCount":2,"offset":0,
- "groups":[{"detail":null,"relatedUrlId":1,"relatedUrl":"https://www.example.com/","pages":264,"share":0.9962,"likelyTemplate":true},
-           {"detail":null,"relatedUrlId":31,"relatedUrl":"https://www.example.com/greenhouses/","pages":1,"share":0.0038,"likelyTemplate":false}]}
+ "groups":[{"detail":null,"relatedUrlId":1,"relatedUrl":"https://www.example.com/","pages":264,"share":0.9962,"likelyTemplate":true,"urls":264},
+           {"detail":null,"relatedUrlId":31,"relatedUrl":"https://www.example.com/greenhouses/","pages":1,"share":0.0038,"likelyTemplate":false,"urls":1}]}
 ```
 
 - Groups come largest first, then by detail and related URL. `total` is the check's flagged URLs, and `share` a
   group's part of them. A `relatedUrl` check's groups have no `detail`; a `none` check has no groups.
+- **`urls`** (E6) is how many URLs the group holds, and is the name to read: it's true of every check. **`pages` is
+  the same number under its first name**, kept for what already reads it: for a check whose `subject` is `url`
+  (`internal-client-error` flags a missing image) the URLs it counts aren't all pages, so word the count by the
+  check's `subject`, as its `total` is worded. Where this section says a group's `pages`, it's that count.
 - **A `relatedUrl` check groups a page under every URL its issue names**, not just the first one `/rows` and the
   inspector show. A page linking to three broken URLs is in the group of each, and a broken link in the footer of
   every page is one group of every page. So the groups' `pages` add up to more than `total`, and their shares to more

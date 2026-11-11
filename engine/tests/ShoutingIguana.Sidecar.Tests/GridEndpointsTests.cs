@@ -348,7 +348,8 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Equal(counts[related], (long?)groups["total"]);
         foreach (var group in groups["groups"]!.AsArray())
         {
-            Assert.Equal(["detail", "relatedUrlId", "relatedUrl", "pages", "share", "likelyTemplate"], group!.AsObject().Select(property => property.Key));
+            Assert.Equal(["detail", "relatedUrlId", "relatedUrl", "pages", "share", "likelyTemplate", "urls"], group!.AsObject().Select(property => property.Key));
+            Assert.Equal((long?)group["pages"], (long?)group["urls"]);
             var key = new JsonObject { ["detail"] = group["detail"]?.DeepClone(), ["relatedUrlId"] = group["relatedUrlId"]?.DeepClone() };
             var rows = await PostOkAsync($"api/crawls/{grid.Id}/issues/{related}/rows", new JsonObject { ["group"] = key, ["limit"] = 1000 });
             Assert.Equal((long?)group["pages"], (long?)rows["total"]);
@@ -385,6 +386,13 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
         Assert.Null((long?)rows["total"]);
         Assert.Null((long?)rows["matching"]);
         Assert.Empty(rows["rows"]!.AsArray());
+
+        // A check that can flag any URL counts its groups in URLs: a missing image's group is no page. The count has that
+        // name, and its old one beside it.
+        var anyUrl = await PostOkAsync($"api/crawls/{grid.Id}/issues/internal-client-error/groups");
+        Assert.NotEmpty(anyUrl["groups"]!.AsArray());
+        Assert.All(anyUrl["groups"]!.AsArray(), group => Assert.True((long?)group!["urls"] > 0 && (long?)group["urls"] == (long?)group["pages"]));
+        Assert.Equal((long?)anyUrl["total"], anyUrl["groups"]!.AsArray().Sum(group => (long)group!["urls"]!));
 
         foreach (var path in new[] { "groups", "rows" })
         {
