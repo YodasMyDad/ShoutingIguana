@@ -66,6 +66,7 @@ internal static class IssuesCommand
             }
 
             Console.WriteLine($"Analysed {analysis.AnalyzedAt.ToLocalTime():g} by engine {analysis.EngineVersion}: {Format.Count(analysis.PagesAnalyzed, "page", "pages")}");
+            Console.WriteLine(ScorePrinter.Headline(analysis));
             foreach (var note in IssueReader.ReadNotes(path))
             {
                 Console.WriteLine($"  {Format.Printable(note)}");
