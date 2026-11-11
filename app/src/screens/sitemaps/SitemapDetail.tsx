@@ -165,6 +165,13 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
   };
   const toList = () => void navigate({ params: { crawl: crawlId, sitemap: undefined }, search: {} });
 
+  // A stale id: the list was read and has no such sitemap, or the engine says so of the grid. There's then no
+  // sitemap on the page to search, filter or open: only the way back to the list can run.
+  const stale =
+    sitemapId === null ||
+    (sitemaps !== undefined && sitemap === undefined) ||
+    isProblem(rows.error, 'sitemap-not-found');
+
   useCommands(
     () => [
       {
@@ -173,6 +180,7 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
         group: 'Sitemaps',
         keys: ['mod+f'],
         inInputs: true,
+        enabled: () => !stale,
         run: () => {
           searchField.current?.focus();
           searchField.current?.select();
@@ -200,11 +208,11 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
             ? 'Show every URL the sitemap lists'
             : `Show the sitemap’s URLs: ${QUICK_FILTER_WORDS[option].toLowerCase()}`,
         group: 'Sitemaps' as const,
-        enabled: () => quick !== option,
+        enabled: () => !stale && quick !== option,
         run: () => setFilters(quickFilterFilters(option)),
       })),
     ],
-    [sitemap, quick, crawlId, navigate],
+    [sitemap, quick, stale, crawlId, navigate],
   );
 
   const count =
@@ -234,11 +242,6 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
     </TextLink>
   );
 
-  // A stale id: the list was read and has no such sitemap, or the engine says so of the grid.
-  const stale =
-    sitemapId === null ||
-    (sitemaps !== undefined && sitemap === undefined) ||
-    isProblem(rows.error, 'sitemap-not-found');
   if (stale) {
     // While the crawl hasn't ended it may yet find a sitemap with this id: the list is refreshed with the crawl, and
     // this page fills in then. What can't be an id at all never will be one.

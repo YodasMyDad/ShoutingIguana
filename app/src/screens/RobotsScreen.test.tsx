@@ -9,7 +9,7 @@ import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { onAnnounce } from '../feedback/announce';
 import type { SourceViewerProps } from '../inspector/SourceViewer';
-import { installKeyboard } from '../keyboard/registry';
+import { commands, installKeyboard } from '../keyboard/registry';
 import { TEST_CRAWL_ID, fakeSidecar, json, problem } from '../test/fakeSidecar';
 import { resetPlaces } from './listPlace';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
@@ -565,6 +565,26 @@ describe('robots.txt: an origin without a file to show', () => {
     await open(at('https://nowhere.example'));
     expect(await screen.findByRole('heading', { name: 'This crawl has no robots.txt for that origin' })).toBeVisible();
     expect(screen.getByText(/It may be from before the site was crawled again\./)).toBeVisible();
+  });
+
+  it('offers, on an origin the crawl has no robots.txt for, only the command that can run: the way back', async () => {
+    sidecar();
+    const { router } = await open(`${at('https://nowhere.example')}?line=3`);
+    await screen.findByRole('heading', { name: 'This crawl has no robots.txt for that origin' });
+    const mine = commands.list().filter((command) => command.group === 'robots.txt');
+    expect(mine.length).toBeGreaterThan(3);
+    // No file to copy, open or list the URLs of: each is greyed in the palette, and its key does nothing.
+    expect(mine.filter((command) => commands.isEnabled(command)).map((command) => command.id)).toEqual(['robots.list']);
+    expect(commands.run('robots.open')).toBe(false);
+    expect(commands.run('robots.allBlocked')).toBe(false);
+    expect(searchOf(router).line).toBe(3);
+    // On an origin the crawl has, they run.
+    act(() => {
+      router.history.push(`${FILE}?line=6`);
+    });
+    await screen.findByTestId('source-viewer');
+    expect(commands.isEnabled(commands.get('robots.open')!)).toBe(true);
+    expect(commands.isEnabled(commands.get('robots.allBlocked')!)).toBe(true);
   });
 
   it('keeps the blocked URLs when the file can’t be read, and the file when they can’t', async () => {

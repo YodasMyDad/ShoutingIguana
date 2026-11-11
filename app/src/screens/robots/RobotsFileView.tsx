@@ -133,6 +133,9 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
     }
   };
   const blockedCount = data?.blocked ?? 0;
+  // An origin the crawl has no robots.txt for (a link from before the site was crawled again, one made by hand, or
+  // one the crawl hasn't come to yet): there's no file on the page, so only the way back to the list can run.
+  const missing = isProblem(file.error, 'origin-not-found') || isProblem(file.error, 'invalid-query');
 
   useCommands(
     () => [
@@ -157,17 +160,18 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
         id: 'robots.open',
         title: 'Open this robots.txt in the browser',
         group: 'robots.txt',
+        enabled: () => !missing,
         run: () => openInBrowser(fileUrl),
       },
       {
         id: 'robots.allBlocked',
         title: 'List every URL this robots.txt blocked',
         group: 'robots.txt',
-        enabled: () => narrowing.by !== 'none',
+        enabled: () => !missing && narrowing.by !== 'none',
         run: () => narrow({ by: 'none' }),
       },
     ],
-    [data, narrowing, blockedCount, copying, crawlId, origin, navigate],
+    [data, narrowing, blockedCount, copying, missing, crawlId, origin, navigate],
   );
 
   const back = (
@@ -183,8 +187,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
     </TextLink>
   );
 
-  // An origin the crawl has no robots.txt for: a link from before the site was crawled again, or one made by hand.
-  if (isProblem(file.error, 'origin-not-found') || isProblem(file.error, 'invalid-query')) {
+  if (missing) {
     // While the crawl hasn't ended it may yet come to a URL on this origin: the file's read is refreshed with the
     // crawl, and this page fills in then. What isn't an origin at all (`invalid-query`) never will be one.
     const words = missingPlaceWords('origin-not-found', crawl.crawling && isProblem(file.error, 'origin-not-found'));

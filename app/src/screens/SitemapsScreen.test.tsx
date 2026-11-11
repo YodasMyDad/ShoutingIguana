@@ -8,7 +8,7 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { onAnnounce } from '../feedback/announce';
-import { installKeyboard } from '../keyboard/registry';
+import { commands, installKeyboard } from '../keyboard/registry';
 import { TEST_CRAWL_ID, fakeSidecar, json, problem } from '../test/fakeSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { wholeText } from '../test/text';
@@ -562,6 +562,28 @@ describe('Sitemaps: one sitemap', () => {
     sidecar({ item: { status: 'running', finishedAt: null } });
     await open(`${SITEMAPS}/not-a-number`);
     expect(await screen.findByRole('heading', { name: 'This sitemap isn’t in this crawl' })).toBeVisible();
+  });
+
+  it('offers, on a sitemap the crawl doesn’t have, only the command that can run: the way back to the list', async () => {
+    sidecar();
+    const { router } = await open(`${SITEMAPS}/999`);
+    await screen.findByRole('heading', { name: 'This sitemap isn’t in this crawl' });
+    const mine = commands.list().filter((command) => command.group === 'Sitemaps');
+    expect(mine.length).toBeGreaterThan(4);
+    // Nothing to search, filter, copy or open: each is greyed in the palette, and its key does nothing.
+    expect(mine.filter((command) => commands.isEnabled(command)).map((command) => command.id)).toEqual([
+      'sitemaps.list',
+    ]);
+    expect(commands.run('sitemaps.search')).toBe(false);
+    expect(commands.run('sitemaps.show.notCrawled')).toBe(false);
+    expect(searchOf(router).filter).toBeUndefined();
+    // On a sitemap the crawl has, they run.
+    act(() => {
+      router.history.push(`${SITEMAPS}/2`);
+    });
+    await screen.findByText(`${SITE}/about`);
+    expect(commands.isEnabled(commands.get('sitemaps.search')!)).toBe(true);
+    expect(commands.isEnabled(commands.get('sitemaps.show.notCrawled')!)).toBe(true);
   });
 
   it('says the same of something in the path that can’t be a sitemap’s id, and asks the engine nothing about it', async () => {
