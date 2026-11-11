@@ -98,9 +98,9 @@ public sealed class NetworkFailureCrawlTests : IAsyncLifetime
         Assert.Equal(1, issues.GetValueOrDefault(IssueCatalog.ROBOTS_TXT_UNREACHABLE.Id));
         Assert.Equal(1, issues.GetValueOrDefault(IssueCatalog.BLOCKED_BY_ROBOTS.Id));
 
-        // The blocked URL says it wasn't a robots.txt rule.
+        // The blocked URL says it wasn't a robots.txt rule, the status by its name: the crawl file keeps its own words.
         var blocked = Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.BLOCKED_BY_ROBOTS.Id, 10));
-        Assert.Equal($"{RobotsTxt.UNREACHABLE_ERROR}: HTTP 503", blocked.Detail);
+        Assert.Equal($"{RobotsTxt.UNREACHABLE_ERROR}: 503 Service Unavailable", blocked.Detail);
     }
 
     [Fact]

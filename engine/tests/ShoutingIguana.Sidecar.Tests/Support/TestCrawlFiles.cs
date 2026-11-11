@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -38,9 +39,24 @@ internal static class TestCrawlFiles
         ALTER TABLE analysis DROP COLUMN crawl_updated_at;
         ALTER TABLE analysis DROP COLUMN analysis_version;
         ALTER TABLE analysis DROP COLUMN checks_fingerprint;
+        ALTER TABLE analysis DROP COLUMN crawled_urls;
+        ALTER TABLE analysis DROP COLUMN score_version;
+        ALTER TABLE analysis DROP COLUMN score;
+        ALTER TABLE analysis DROP COLUMN score_partial;
+        ALTER TABLE analysis DROP COLUMN score_json;
         DROP TABLE url_summary;
         DROP TABLE skipped_checks;
         """);
+
+    /// <summary>What an engine with another score formula leaves: the same analysis, its score worked out by another version.</summary>
+    public static void ScoredByAnotherVersion(string path) => Assert.Equal(1, Execute(path, "UPDATE analysis SET score_version = score_version + 1"));
+
+    /// <summary>The crawl analysed again with other thresholds than the default ones, as another program could.</summary>
+    public static Task AnalyseWithAsync(string path, AnalysisSettings settings) => new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path, settings);
+
+    /// <summary>A check skipped for a reason this engine doesn't have: what a file analysed by a later engine can hold.</summary>
+    public static void SkippedForAReasonOfALaterEngine(string path, string checkId, string reason, string text) =>
+        Assert.Equal(1, Execute(path, $"UPDATE skipped_checks SET reason = '{reason}', text = '{text.Replace("'", "''")}' WHERE check_id = '{checkId}'"));
 
     /// <summary>What a crawl run by another program leaves: the crawl row stamped again.</summary>
     public static void StampAsCrawledAgain(string path) => Assert.Equal(1, Execute(path, "UPDATE crawl SET updated_at = updated_at + 1000"));

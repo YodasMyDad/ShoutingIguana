@@ -143,11 +143,11 @@ public sealed class RuleConditionTests
 
         Assert.Equal(
         [
-            new IssueHit(IssueCatalog.INTERNAL_CLIENT_ERROR, notFound, "HTTP 404"),
-            new IssueHit(IssueCatalog.INTERNAL_SERVER_ERROR, failing, "HTTP 502"),
+            new IssueHit(IssueCatalog.INTERNAL_CLIENT_ERROR, notFound, "404 Not Found"),
+            new IssueHit(IssueCatalog.INTERNAL_SERVER_ERROR, failing, "502 Bad Gateway"),
             new IssueHit(IssueCatalog.INTERNAL_UNREACHABLE, slow, "Timed out"),
             new IssueHit(IssueCatalog.INTERNAL_UNREACHABLE, refused, "Connection failed"),
-            new IssueHit(IssueCatalog.INTERNAL_BLOCKED, blocked, "HTTP 403"),
+            new IssueHit(IssueCatalog.INTERNAL_BLOCKED, blocked, "403 Forbidden"),
             new IssueHit(IssueCatalog.INTERNAL_BLOCKED, challenged, "Cloudflare challenge"),
             new IssueHit(IssueCatalog.BLOCKED_BY_ROBOTS, disallowed)
         ], hits);

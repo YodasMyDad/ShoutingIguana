@@ -361,7 +361,7 @@ describe('the Issues screen', () => {
   it('shows both parts of a group that has a detail and a URL, and one wording for a group with no detail', async () => {
     const groups: IssueGroup[] = [
       {
-        detail: 'HTTP 404',
+        detail: '404 Not Found',
         relatedUrlId: 9,
         relatedUrl: 'https://example.com/garden/',
         pages: 1,
@@ -371,13 +371,15 @@ describe('the Issues screen', () => {
       { detail: null, relatedUrlId: null, relatedUrl: null, pages: 1, share: 0.5, likelyTemplate: false },
     ];
     sidecar({ groups: { ...ISSUE_GROUPS, 'internal-client-error': groups } });
-    await open(`${ISSUES}/internal-client-error?group=${encodeURIComponent('{"detail":"HTTP 404","relatedUrlId":9}')}`);
+    await open(
+      `${ISSUES}/internal-client-error?group=${encodeURIComponent('{"detail":"404 Not Found","relatedUrlId":9}')}`,
+    );
     const grid = await screen.findByRole('treegrid');
     const more = (await within(grid).findByRole('link', { name: 'Show the page in URLs' })).closest<HTMLElement>(
       '[role="gridcell"]',
     );
     if (!more) throw new Error('No link row');
-    expect(more).toHaveTextContent('Detail is HTTP 404');
+    expect(more).toHaveTextContent('Detail is 404 Not Found');
     expect(more).toHaveTextContent('Related URL is /garden/');
     // The group without a detail reads as the URL grid's chip will: "none".
     expect(within(grid).getByText('None')).toBeVisible();
@@ -800,7 +802,7 @@ describe('the Issues screen', () => {
   it('moves the selection to the first to fix when the severity chosen leaves the selected check out', async () => {
     sidecar();
     const { router, history } = await open(
-      `${ISSUES}/internal-client-error?group=${encodeURIComponent('{"detail":"HTTP 404","relatedUrlId":null}')}`,
+      `${ISSUES}/internal-client-error?group=${encodeURIComponent('{"detail":"404 Not Found","relatedUrlId":null}')}`,
     );
     fireEvent.click(await screen.findByRole('radio', { name: /Notices/ }));
     await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));

@@ -209,7 +209,15 @@ internal static class CrawlSchema
             is_partial INTEGER,
             crawl_updated_at INTEGER,
             analysis_version INTEGER,
-            checks_fingerprint TEXT
+            checks_fingerprint TEXT,
+            -- The URLs crawled as they stood (responses, less the ones never asked): what a URL check's count is a share of.
+            crawled_urls INTEGER,
+            -- The score: the version of the formula, the number (null when no page was read), whether it is of a crawl
+            -- that didn't read all of the site, and the whole of it with every line, as JSON.
+            score_version INTEGER,
+            score INTEGER,
+            score_partial INTEGER,
+            score_json TEXT
         );
 
         -- What the last analysis couldn't do and why (checks this crawl can't support, rules that failed), in order.
@@ -392,7 +400,10 @@ internal static class CrawlSchema
 
     /// <summary>The <c>analysis</c> columns added since the table was first created, which files analysed earlier lack.</summary>
     public static readonly (string Name, string Type)[] ANALYSIS_COLUMNS =
-        [("is_partial", "INTEGER"), ("crawl_updated_at", "INTEGER"), ("analysis_version", "INTEGER"), ("checks_fingerprint", "TEXT")];
+    [
+        ("is_partial", "INTEGER"), ("crawl_updated_at", "INTEGER"), ("analysis_version", "INTEGER"), ("checks_fingerprint", "TEXT"),
+        ("crawled_urls", "INTEGER"), ("score_version", "INTEGER"), ("score", "INTEGER"), ("score_partial", "INTEGER"), ("score_json", "TEXT")
+    ];
 
     /// <summary>
     /// The URL grids' table: one row per URL, rebuilt by every analysis (dropped and created again, so a later engine

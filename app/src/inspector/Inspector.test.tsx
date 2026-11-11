@@ -357,14 +357,14 @@ describe('the summary', () => {
           severity: 'error',
           detail: 'its own detail',
           related: null,
-          group: { detail: 'HTTP 404', relatedUrlId: null },
+          group: { detail: '404 Not Found', relatedUrlId: null },
         },
       ],
     });
     const { inspector } = await open(`${URLS}?inspect=2`, { urls: { 2: grouped } });
     const link = await within(inspector).findByRole('link', { name: 'Internal URL returns 4xx' });
     expect(link.getAttribute('href')).toContain(`/crawls/${TEST_CRAWL_ID}/issues/internal-client-error?group=`);
-    expect(groupOf(link)).toEqual({ detail: 'HTTP 404', relatedUrlId: null });
+    expect(groupOf(link)).toEqual({ detail: '404 Not Found', relatedUrlId: null });
   });
 });
 

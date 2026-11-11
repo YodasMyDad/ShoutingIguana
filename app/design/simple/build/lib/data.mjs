@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { score, scoreWithout } from './score.mjs';
+import { score, scoreWithout, fixFirstOrder, firstToFix } from './score.mjs';
 import { TITLE, PLAIN, SEVERITY } from './words.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -14,11 +14,11 @@ export const SITE = 'gardenfurnituresets.co.uk';
 export const HOST = 'https://www.gardenfurnituresets.co.uk';
 export const NOW = '2026-11-01T17:42:00Z';   // "now" for every screen, as in the clarity mockups
 
-const ORDER = { error: 0, warning: 1, notice: 2 };
-// "Fix first" order, the same in both modes: the most severe first, then the most affected.
-export const problems = garden.checks
-  .map(c => ({ ...c, plainTitle: TITLE[c.id], plain: PLAIN[c.id], sev: SEVERITY[c.severity] }))
-  .sort((a, b) => ORDER[a.severity] - ORDER[b.severity] || b.count - a.count || a.id.localeCompare(b.id));
+// "Fix first" order, the same in both modes (score.mjs, fixFirstOrder): the most severe first, a fault of the whole
+// site leading its severity, then the most affected. garden.json lists its checks by id, so checks level on all of
+// that fall by id here; the engine's fall in catalog order.
+export const problems = fixFirstOrder(garden.checks)
+  .map(c => ({ ...c, plainTitle: TITLE[c.id], plain: PLAIN[c.id], sev: SEVERITY[c.severity] }));
 
 export const facts = garden.facts;
 export const totals = garden.totals;
@@ -27,7 +27,7 @@ export const gardenScore = score(scoreInput);
 export const lineOf = id => gardenScore.lines.find(l => l.checkId === id);
 export const toFix = problems.filter(p => p.severity !== 'notice');
 export const toLook = problems.filter(p => p.severity === 'notice');
-export const fixFirst = toFix.slice(0, 5);
+export const fixFirst = firstToFix(problems);
 export const scoreAfterFirst = scoreWithout(scoreInput, fixFirst.map(p => p.id)).value;
 
 export const path = url => (url ?? '').replace(HOST, '') || '/';

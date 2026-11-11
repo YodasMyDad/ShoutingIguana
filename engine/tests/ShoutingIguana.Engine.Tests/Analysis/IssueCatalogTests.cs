@@ -28,7 +28,8 @@ public sealed class IssueCatalogTests
         "hreflang-missing-x-default", "hreflang-outside-head", "structured-data-invalid", "structured-data-missing-required",
         "no-https", "http-page", "mixed-content", "security-headers-missing", "url-uppercase", "url-underscores", "url-too-long",
         "slow-response", "large-page", "html-past-crawl-limit", "viewport-missing", "lang-missing", "charset-missing", "open-graph-missing",
-        "sitemap-url-other-host", "noindex-with-canonical", "robots-txt-unreachable-other-origin", "duplicate-site-version"
+        "sitemap-url-other-host", "noindex-with-canonical", "robots-txt-unreachable-other-origin", "duplicate-site-version",
+        "site-hidden-from-search"
     ];
 
     [Fact]
@@ -74,6 +75,36 @@ public sealed class IssueCatalogTests
             Assert.Same(issue, IssueCatalog.Find(issue.Id));
         });
         Assert.Null(IssueCatalog.Find("no-such-issue"));
+    }
+
+    /// <summary>
+    /// The checks that find one fault of the whole site, which the score counts as the whole site whatever their count.
+    /// Each is reported on a URL that stands for the site (the home page, or the start URL without one), or on each other
+    /// version of the site that answers: never on the site's pages one by one.
+    /// </summary>
+    [Fact]
+    public void TheSiteWideChecksAreTheFaultsOfTheWholeSite()
+    {
+        Assert.Equal(87, IssueCatalog.All.Count);
+        Assert.Equal(["duplicate-site-version", "no-https", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "site-hidden-from-search"],
+            IssueCatalog.All.Where(check => check.SiteWide).Select(check => check.Id).Order(StringComparer.Ordinal));
+        Assert.Equal(
+            [
+                (IssueCatalog.ROBOTS_TXT_UNREACHABLE, IssueSeverity.Error), (IssueCatalog.NO_HTTPS, IssueSeverity.Error),
+                (IssueCatalog.SITE_HIDDEN_FROM_SEARCH, IssueSeverity.Error), (IssueCatalog.DUPLICATE_SITE_VERSION, IssueSeverity.Warning),
+                (IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN, IssueSeverity.Warning)
+            ],
+            new[]
+            {
+                IssueCatalog.ROBOTS_TXT_UNREACHABLE, IssueCatalog.NO_HTTPS, IssueCatalog.SITE_HIDDEN_FROM_SEARCH, IssueCatalog.DUPLICATE_SITE_VERSION,
+                IssueCatalog.ROBOTS_TXT_UNREACHABLE_OTHER_ORIGIN
+            }.Select(check => (check, check.Severity)));
+
+        // The new check sits with the site's other faults of indexability, after robots.txt's: level with one of them in
+        // the order to fix, an unreadable robots.txt comes first.
+        var order = IssueCatalog.All.Select(check => check.Id).ToList();
+        Assert.Equal(order.IndexOf("robots-txt-missing") + 1, order.IndexOf("site-hidden-from-search"));
+        Assert.Equal(IssueCategory.Indexability, IssueCatalog.SITE_HIDDEN_FROM_SEARCH.Category);
     }
 
     /// <summary>Hosts show the titles as they are, so every category needs a plain name of its own, never its identifier.</summary>

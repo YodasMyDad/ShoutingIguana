@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using ShoutingIguana.Cli.Benchmarking;
 using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -61,6 +62,56 @@ public sealed class CliTests : IAsyncLifetime
         await cancelled.CancelAsync();
         Assert.Equal(130, (await RunAsync(cancelled.Token, "analyze", crawl)).ExitCode);
         Assert.Contains($"{_server.BaseUri}plants/title-long", (await RunAsync("issues", crawl, "title-too-long")).Output);
+    }
+
+    /// <summary>
+    /// The score on the command line is the one the analysis stored: si issues leads with it, and si score shows how it
+    /// was worked out, a line for each check that took points off.
+    /// </summary>
+    [Fact]
+    public async Task TheScoreIsTheAnalysissOwnInIssuesAndInScore()
+    {
+        var crawl = await CrawlAsync();
+        var stored = IssueReader.ReadResults(crawl)!.Score!;
+        var word = stored.Band switch { ScoreBand.VeryGood => "Very good", ScoreBand.Good => "Good", ScoreBand.NeedsWork => "Needs work", _ => "Poor" };
+        var headline = $"Score {stored.Value} of 100: {word}";
+
+        var issues = await RunAsync("issues", crawl);
+        Assert.Contains(headline + Environment.NewLine, issues.Output);
+
+        var score = await RunAsync("score", crawl);
+        Assert.Equal(0, score.ExitCode);
+        Assert.StartsWith(headline + Environment.NewLine, score.Output);
+        Assert.Contains($"Covers {stored.Covers.Pages:N0} pages and {stored.Covers.Urls:N0} URLs. {stored.Covers.ChecksRun} of {IssueCatalog.All.Count} checks ran.", score.Output);
+
+        // The site is served over plain HTTP: a fault of the whole site, whatever its count.
+        Assert.Matches(new Regex(@"Error\s+Site not on HTTPS\s+the whole site\s+-60\s+no-https\r?\n"), score.Output);
+
+        // Every check that took points off has its line, with its count, what it is a share of, and its points.
+        var costly = stored.Lines.Where(line => line.Points > 0).ToList();
+        Assert.True(costly.Count > 5);
+        Assert.All(costly, line => Assert.Matches(new Regex($@"-{line.Points}\s+{Regex.Escape(line.CheckId)}\r?\n"), score.Output));
+        Assert.All(costly.Where(line => line.Unit != ScoreUnit.Site), line =>
+            Assert.Contains($"{line.Count:N0} of {line.Of:N0} {(line.Unit == ScoreUnit.Pages ? "pages" : "URLs")}: ", score.Output));
+        Assert.Contains($"Notices take nothing off: {stored.Lines.Count - costly.Count} notice checks found something.", score.Output);
+        Assert.Contains($"100 - {stored.Lost} = {stored.BeforeCeiling}", score.Output);
+        Assert.Equal(5, stored.IfFixed.CheckIds.Count);
+        Assert.Contains($"Fix first: {string.Join(", ", stored.IfFixed.CheckIds)}. Without them the score would be {stored.IfFixed.Value}.", score.Output);
+        Assert.Contains("Score version 1.", score.Output);
+
+        // A crawl that read no page has no score, and both commands say why.
+        var nowhere = Path.Combine(_folder, "nowhere.sicrawl");
+        Assert.Equal(0, (await RunAsync("crawl", new Uri(_server.BaseUri, "/broken/1").AbsoluteUri, "--db", nowhere, "--no-sitemaps", "-q")).ExitCode);
+        const string NO_PAGE = "No score: the crawl read no page, so there is nothing to score.";
+        var none = await RunAsync("score", nowhere);
+        Assert.Equal((0, NO_PAGE + Environment.NewLine), (none.ExitCode, none.Output));
+        Assert.Contains(NO_PAGE, (await RunAsync("issues", nowhere)).Output);
+
+        // Never analysed, or no file at all: nothing to show, said in one line.
+        var unanalysed = Path.Combine(_folder, "unscored.sicrawl");
+        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", unanalysed, "--max-urls", "20", "-q", "--no-analyze")).ExitCode);
+        AssertFails(await RunAsync("score", unanalysed), "hasn't been analysed yet");
+        AssertFails(await RunAsync("score", Path.Combine(_folder, "missing.sicrawl")), "No crawl file");
     }
 
     [Fact]

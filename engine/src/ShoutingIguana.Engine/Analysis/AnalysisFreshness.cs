@@ -24,9 +24,10 @@ public static class AnalysisFreshness
     /// 6 drops the FAQPage rich-result requirement (Google removed FAQ rich results), rejects UN M.49 hreflang
     /// regions, parses JSON-LD strictly, requires a JobPosting location or <c>jobLocationType</c>, flags HTML past
     /// Googlebot's crawl limit, and changes the severity of <c>blocked-by-robots</c>, <c>description-missing</c>,
-    /// <c>h1-missing</c> and <c>duplicate-site-version</c>.
+    /// <c>h1-missing</c> and <c>duplicate-site-version</c>. 7 gives a status code its name in details ("404 Not Found" where
+    /// 6 wrote "HTTP 404"), and stores the URLs crawled and the site's score with the analysis.
     /// </summary>
-    public const int VERSION = 6;
+    public const int VERSION = 7;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and
@@ -49,7 +50,8 @@ public static class AnalysisFreshness
             reasons.Add(OutOfDateReason.CrawlChanged);
         }
 
-        if (analysis.AnalysisVersion != VERSION || analysis.ChecksFingerprint != ChecksFingerprint)
+        // The score is the analysis's too: one worked out by another version of the formula isn't the score it would get now.
+        if (analysis.AnalysisVersion != VERSION || analysis.ChecksFingerprint != ChecksFingerprint || analysis.ScoreVersion != ScoreCalculator.VERSION)
         {
             reasons.Add(OutOfDateReason.EngineChanged);
         }
