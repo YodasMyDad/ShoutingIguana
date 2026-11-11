@@ -1348,6 +1348,25 @@ So a page in crawl order is read:
   links from the nearer end when the page is near one; otherwise from a set of the matching links' ids, read once in
   one pass over the links and kept (a bit per link). That pass is over budget, as the next paragraph's are.
 
+**A pass over every link is split over several connections** (E6) where the sidecar has read slots free: the links
+are divided by id into as many stretches as there are connections (four at most: the read's own and up to three
+more), each read on a thread of its own, and what each kept and counted is put together. The answer is the one
+connection's, to the link. Measured on the 100k crawl on a machine other work was loading, the first read of a view
+took about a third of the time: a text filter 294 ms where one connection took 870, rare text 175 for 478, a pattern
+396 for 1,253, a search 294 for 897, a filter on the source's depth 333 to 476 for 934 to 1,478. So those reads come
+inside or near the 300 ms budget when cores are free, and are as they were when none is.
+
+- **No more read slots than the rule allows.** A connection more is a read slot more, taken only from those free at
+  that moment, never waited for, and never the last one free, so a read arriving meanwhile starts at once; with none
+  free the pass runs on its own connection. On a two-core machine it never splits.
+- **A running crawl's pass is never split.** It stays on the read's one connection and one snapshot, which is the
+  moment it answers for, so the time a running crawl's log goes unfolded is what it was.
+- **Only for crawls worth it**: from 500,000 links. Nothing is stored for it, in the file or by the analysis.
+- **A writer still never waits.** Each connection is a read like any other to an analysis or a continue starting:
+  all are stopped together, and the read runs again after.
+- A regular expression's time limit (3 s for a read's matches) is each connection's own, so a pattern near the limit
+  on one connection may pass on four.
+
 **Without the link summary, or beyond it, every link is read once per filter set.** That is: a crawl that's running,
 never analysed, continued since it was last analysed, or last analysed by an engine from before E3b (whose analysis
 is not out of date for that, and gains the link summary when the crawl is analysed again); on any crawl, a filter
